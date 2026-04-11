@@ -6,7 +6,7 @@
 
 **Repository:** https://github.com/lacattano/AI-Playwright-Test-Generator
 
-**Current Status:** Active development — CI green. Streamlit UI working, LLM pipeline connected, page context scraper wired in, all report formats generating. AI-002 (user story parser) in progress via Cline.
+**Current Status:** Active development — CI green. Streamlit UI working, LLM pipeline connected (with multi-provider support), page context scraper wired in with anchor link extraction, all report formats generating. Pipeline architecture implemented. AI-002 (user story parser) and AI-005 (coverage utils extraction) are complete.
 
 ---
 
@@ -168,21 +168,32 @@ AI-Playwright-Test-Generator/
 │   ├── report_generator.py
 │   ├── story_analyzer.py
 │   └── test_orchestrator.py
+├── docs/                               # Architecture and session documentation
 ├── generated_tests/                    # Output: tests produced BY the tool
 │   ├── mock_insurance_site.html        # Mock test environment
 │   └── test_*.py                       # Generated test files
 ├── screenshots/                        # Screenshot evidence storage
 ├── src/
 │   ├── __init__.py
-│   ├── code_validator.py               # PLANNED (B-009) — ast.parse() guard before saving tests
+│   ├── code_validator.py               # ast.parse() guard before saving tests
 │   ├── file_utils.py                   # save_generated_test, rename_test_file, normalise_code_newlines
 │   ├── llm_client.py                   # PROTECTED — Ollama API client
+│   ├── orchestrator.py                 # Core pipeline orchestrator
+│   ├── page_object_builder.py          # Builds Page Object Models
+│   ├── pipeline_models.py              # Foundational data models
+│   ├── pipeline_report_service.py      # Generates output reports
+│   ├── pipeline_run_service.py         # Test execution service
+│   ├── pipeline_writer.py              # Test writing components
+│   ├── placeholder_resolver.py         # Resolves placeholders within generated scripts
+│   ├── scraper.py                      # Interacts with DOM for metadata
+│   ├── semantic_candidate_ranker.py    # Optimizes and ranks DOM search spaces
+│   ├── skeleton_parser.py              # Handles skeleton scripts
 │   ├── page_context_scraper.py         # Headless scraper, returns PageContext (subprocess-based)
 │   ├── prompt_utils.py                 # _PAGE_CONTEXT_RULES, prompt assembly helpers
 │   ├── pytest_output_parser.py         # parse pytest stdout → RunResult / TestResult
 │   ├── report_utils.py                 # generate_local_report, generate_jira_report, generate_html_report
 │   ├── test_generator.py               # PROTECTED — Test generation logic
-│   └── user_story_parser.py            # IN PROGRESS (AI-002) — parse user stories into criteria
+│   └── user_story_parser.py            # parse user stories into criteria
 ├── tests/                              # Unit tests FOR the tool itself
 │   ├── fixtures/
 │   │   └── user_stories/               # PLANNED (AI-006) — 10-15 varied user story examples
@@ -838,9 +849,13 @@ Ollama is already running — this is fine, ignore the error.
   - Spec analysis stage (boundary derivation, ambiguity surfacing) designed
   - Evidence tracker feature block integrated into BACKLOG.md
   - Evidence pipeline implementation details integrated into PROJECT_KNOWLEDGE.md
+- **2026-04-04:** Added anchor link extraction to page context scraper.
+- **2026-04-05:** Added multi-provider LLM support, fixed coverage_utils stub, tightened gitignore for tmp files and PNGs, and cleaned up Cline artefacts.
+- **2026-04-08:** Refactor: implemented pipeline architecture and updated dependencies.
+- **2026-04-10:** Utils fix and pip to uv transitions documented.
 
 ---
 
-*Last Updated: 2026-04-04*
-*Project Status: CI green — AI-002 and AI-003 complete; Evidence tracker designed*
+*Last Updated: 2026-04-10*
+*Project Status: CI green — Pipeline architecture, multi-provider LLM, and anchor link extraction implemented.*
 *Next Phase: AI-018 → AI-022 implementation in sequence*

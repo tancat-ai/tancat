@@ -33,6 +33,8 @@ class PipelineRunResult:
 class TestOrchestrator:
     """Coordinate skeleton generation, scraping, and placeholder replacement."""
 
+    __test__ = False
+
     def __init__(self, test_generator: TestGenerator) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()

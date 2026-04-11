@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-03-29
+Last updated: 2026-04-10
 
 ---
 
@@ -38,6 +38,9 @@ writing if code fails syntax check.
 ### BREAK-2 — Session state wipe blanks run results panel
 **Fixed (Session 9):** Reset lines removed from `display_run_button()`.
 
+### B-008 — Run Status column shows ⏳ for all rows (never updates)
+**Fixed (Session 13):** Coverage x Run Results now maps run outcomes through shared coverage utilities.
+
 ---
 
 ## 🔴 Open Bugs
@@ -47,16 +50,6 @@ writing if code fails syntax check.
 **Fix (short term):** Use `page.locator("#specificId")` instead of `get_by_label`
 **Fix (long term):** Multi-page scraping (AI-009) injects real selectors
 **Priority:** Medium — AI-009 should prevent recurrence
-
-### B-008 — Run Status column shows ⏳ for all rows (never updates)
-**Symptom:** Coverage x Run Results table shows pending icon for every row even after
-a completed run
-**Cause:** `RunResult` from `pytest_output_parser` is not being passed to `display_coverage()`
-or the name-matching between `RunResult.results` and `RequirementCoverage.linked_tests` is
-failing silently
-**Fix:** Wire `st.session_state.last_run_result` through to `display_coverage()` and verify
-name matching logic — see FEATURE_SPEC_run_results.md for the intended integration
-**Priority:** High — Coverage x Run Results is the key demo feature
 
 ---
 
@@ -354,12 +347,9 @@ before committing. Do not combine sessions.
 format support: Gherkin, Jira AC bullets, numbered, free-form
 **Status:** Complete — Session 11 (2026-03-29)
 
-### AI-005 — Move coverage helpers to `src/coverage_utils.py`
+### ✅ AI-005 — Move coverage helpers to `src/coverage_utils.py` (COMPLETE)
 **What:** Extract remaining coverage helpers out of `streamlit_app.py`
-**Why:** Cannot be unit tested without triggering Streamlit import crash
-**Note:** `src/coverage_utils.py` and `tests/test_coverage_utils.py` already exist with
-core functions extracted. Remaining work: verify no coverage logic is still in `streamlit_app.py`
-**Priority:** High — also required to properly fix B-008
+**Status:** Complete — Session 13/April 2026. All display-mapping logic moved explicitly to `src/coverage_utils.py` and stubs fixed.
 
 ### AI-004 — Phase C Run Now gaps
 **What:** Three gaps in the Run Now workflow:
@@ -537,7 +527,7 @@ the list. Depends on AI-011 and AI-012 being in place first.
 ### Cloud LLM Providers
 **Goal:** Support OpenRouter, OpenAI, Anthropic alongside Ollama
 **Spec:** `LLM_PROVIDER` env var, provider-specific API keys in sidebar, fallback to Ollama
-**Status:** Deferred — local-first flow must be stable first
+**Status:** Complete — Added multi-provider LLM support architecture.
 
 ### n8n Integration
 **Goal:** Trigger generation from Jira webhooks, report to Slack
@@ -615,3 +605,10 @@ the list. Depends on AI-011 and AI-012 being in place first.
   - Command construction extracted to `src/run_utils.py` with unit tests.
 - Multi-page scraper failure tracking improved to typed structured failures (`failed_pages`) with backward compatibility for legacy `failed_urls` consumers.
 - Runtime logic further generalized to site-agnostic behavior (removed site-specific validator/prompt/scraper assumptions).
+
+### April 2026 Updates (Sessions 14+)
+- Add anchor link extraction to page context scraper (2026-04-04).
+- Add multi-provider LLM support, fix coverage_utils stub, clean up Cline artefacts (2026-04-05).
+- Remove Cline scratch files, tighten gitignore for tmp files and PNGs (2026-04-05).
+- Refactor: implement pipeline architecture and update dependencies (2026-04-08).
+- Utils fix and pip to uv migrations resolved (2026-04-10).

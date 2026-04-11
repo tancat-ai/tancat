@@ -180,3 +180,25 @@ done before testing. Issues introduced:
 | 1.3.0 | 2026-03-06 | Streamlit UI, Phase A/B/C (save/coverage/run), B-001/002/003/005 fixed |
 | 1.4.0 | 2026-03-07 | Page context scraper (AI-001), coverage mapping fix, Jira download, git hygiene |
 | 1.5.0 | 2026-03-21 | B-006/007 fixed, AI-003 closed, AI-009 Phase A complete (multi-page scraper UI) |
+| 1.6.0 | 2026-04-10 | Pipeline architecture added, multi-provider LLM support, anchor link extraction, transitioned pip to uv |
+
+---
+
+## April Updates and Fixes (2026-04-01 to 2026-04-10)
+
+### 27. Missing Links in Page Context Scraper 🆕
+**Problem:** The page context scraper was not capturing navigation links (`<a>` tags), resulting in missed elements on some pages.
+**Fix:** Added anchor link extraction to `src/page_context_scraper.py`.
+**Impact:** Elements found increased significantly, enabling the LLM to access hidden flows and deep links.
+
+### 28. Single-Provider Limitation 🆕
+**Problem:** The tool was hardcoded to use Ollama, preventing users from leveraging more powerful models (e.g., GPT-4 or Claude) externally.
+**Fix:** Implemented multi-provider LLM architecture, falling back gracefully to Ollama when necessary.
+
+### 29. Monolithic Architecture Bottlenecks 🆕
+**Problem:** As logic became complex, test orchestration and CLI modules were tightly coupled.
+**Fix:** Implemented pipeline architecture to improve component separation and update outdated dependencies.
+
+### 30. pip Dependency Residue 🆕
+**Problem:** Remnants of `pip` were still lingering in instructions or utility scripts despite the project transition to `uv`.
+**Fix:** Fixed utility scripts to strictly adhere to the `uv` adoption constraints and tightened gitignore for `.tmp` and PNG files.

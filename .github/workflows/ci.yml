@@ -18,21 +18,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          cache: 'pip'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
         run: |
-          uv sync --all-extras --no-dev
-          # We still need these for the specific lint/type steps in other jobs
-          uv run pip install pytest-cov ruff mypy types-requests
+          uv sync --all-extras
+
+      - name: Install Playwright browsers
+        run: |
+          uv run playwright install --with-deps chromium
 
       - name: Run tests with coverage
         run: |
           echo "CI environment detected: ${{ env.CI }}"
-          pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml
+          uv run pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=xml
         
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
@@ -45,26 +46,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install linting tools
-        run: pip install ruff
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --all-extras
       - name: Run Ruff linter
-        run: ruff check .
+        run: uv run ruff check .
       - name: Run Ruff formatter check
-        run: ruff format --check .
+        run: uv run ruff format --check .
 
   type-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Install type checking tools
-        run: |
-          pip install mypy types-requests  # <--- ADDED types-requests HERE
-          pip install -r requirements.txt  # Mypy needs your code's requirements to check types
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --all-extras
       - name: Run mypy
-        run: mypy src/
+        run: uv run mypy src/

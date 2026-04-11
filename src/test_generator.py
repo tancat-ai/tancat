@@ -15,6 +15,8 @@ from src.prompt_utils import build_page_context_prompt_block, get_skeleton_promp
 class TestGenerator:
     """Generate test code and persist it when needed."""
 
+    __test__ = False
+
     def __init__(
         self,
         client: LLMClient | None = None,

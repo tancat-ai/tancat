@@ -38,6 +38,8 @@ _ASSERTION_RE = re.compile(r"^(AssertionError|Error|Exception|TimeoutError): (.+
 class TestResult:
     """Result for a single test function."""
 
+    __test__ = False
+
     name: str
     status: str  # "passed" | "failed" | "skipped" | "error"
     duration: float  # seconds; 0.0 when not available

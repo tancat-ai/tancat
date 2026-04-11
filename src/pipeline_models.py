@@ -25,6 +25,8 @@ class PlaceholderUse:
 class TestStep:
     """An ordered step within a generated pytest test function."""
 
+    __test__ = False
+
     line_number: int
     raw_line: str
     placeholders: list[PlaceholderUse] = field(default_factory=list)
@@ -53,6 +55,8 @@ class PageRequirement:
 @dataclass(frozen=True)
 class TestJourney:
     """A structured representation of one generated pytest test function."""
+
+    __test__ = False
 
     test_name: str
     start_line: int

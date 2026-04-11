@@ -84,9 +84,20 @@ AI-Playwright-Test-Generator/
 │   ├── test_orchestrator.py
 │   ├── evidence_generator.py
 │   └── report_generator.py
+├── docs/                        # Architecture and session documentation
 ├── src/                         # Core modules — tested via tests/
 │   ├── llm_client.py            # PROTECTED
 │   ├── test_generator.py        # PROTECTED
+│   ├── orchestrator.py          # Core pipeline orchestrator
+│   ├── pipeline_models.py       # Data models for the pipeline
+│   ├── placeholder_resolver.py  # Resolves LLM generated placeholders
+│   ├── skeleton_parser.py       # Parses basic skeletons
+│   ├── scraper.py               # DOM metadata scraper
+│   ├── page_object_builder.py   # Page Object Model generation
+│   ├── semantic_candidate_ranker.py # Context candidate prioritization
+│   ├── pipeline_report_service.py
+│   ├── pipeline_run_service.py
+│   ├── pipeline_writer.py
 │   ├── file_utils.py            # save_generated_test, rename, normalise helpers
 │   └── page_context_scraper.py  # DOM scraper for real locator injection
 ├── tests/                       # Unit tests FOR the tool (not generated tests)
@@ -204,11 +215,10 @@ These rules exist because of real failures. Follow them.
 
 | ID | Feature | Files to Create |
 |----|---------|----------------|
-| AI-001 | Page Context Scraper — visit URL, inject real DOM selectors into prompt | `src/page_context_scraper.py`, `tests/test_page_context_scraper.py` |
-| AI-002 | User Story Parser — move criteria extraction out of `streamlit_app.py` | `src/user_story_parser.py`, `tests/test_user_story_parser.py` |
-| AI-005 | Coverage Utils Extract — move coverage dataclasses to `src/` | `src/coverage_utils.py`, `tests/test_coverage_utils.py` |
+| AI-018 | Evidence Tracker Module — wraps Playwright interactions to record data | `src/evidence_tracker.py`, `tests/test_evidence_tracker.py` |
+| AI-019 | Prompt Update: EvidenceTracker Methods | `src/prompt_utils.py` |
 
 ---
 
-*Last updated: 2026-03-07*
+*Last updated: 2026-04-10*
 *Supersedes: PROJECT_KNOWLEDGE.md for LLM/AI use. PROJECT_KNOWLEDGE.md remains the human reference.*

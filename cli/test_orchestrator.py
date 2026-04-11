@@ -37,6 +37,8 @@ class TestOrchestrationResult:
 class TestCaseOrchestrator:
     """Orchestrate test case flow from analysis to generation."""
 
+    __test__ = False
+
     def __init__(self, analysis_mode: AnalysisMode | None = None) -> None:
         """Initialize orchestrator."""
         self.analysis_mode: AnalysisMode = analysis_mode or config.LLM_ANALYSIS_MODE

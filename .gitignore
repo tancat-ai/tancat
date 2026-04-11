@@ -87,3 +87,6 @@ ISSUES_FOUND_AND_FIXES.md
 !assets/*.png
 !screenshots/.gitkeep
 .tmp/
+
+# ── Private / Commercial Strategy Docs ────────────────────────────────────────
+docs/private/
