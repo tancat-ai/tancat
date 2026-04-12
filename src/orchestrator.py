@@ -47,16 +47,16 @@ class TestOrchestrator:
     async def run_pipeline(
         self,
         user_story: str,
-        criteria: str,
+        conditions: str,
         target_urls: list[str] | None = None,
         consent_mode: str = "auto-dismiss",
     ) -> str:
         """Execute the full intelligent pipeline and return final code."""
-        expected_test_count = self._count_criteria(criteria)
-        prepared_criteria = self._prepare_criteria_for_generation(criteria)
+        expected_test_count = self._count_conditions(conditions)
+        prepared_conditions = self._prepare_conditions_for_generation(conditions)
         skeleton_code = await self.test_generator.generate_skeleton(
             user_story,
-            prepared_criteria,
+            prepared_conditions,
             target_urls=target_urls,
         )
         skeleton_error = self.parser.validate_skeleton(skeleton_code)
@@ -66,10 +66,10 @@ class TestOrchestrator:
         placeholders = self.parser.parse_placeholders(skeleton_code)
         journeys = self.parser.parse_test_journeys(skeleton_code)
         if expected_test_count and len(journeys) != expected_test_count:
-            retry_criteria = self._build_retry_criteria(prepared_criteria, expected_test_count)
+            retry_conditions = self._build_retry_conditions(prepared_conditions, expected_test_count)
             skeleton_code = await self.test_generator.generate_skeleton(
                 user_story,
-                retry_criteria,
+                retry_conditions,
                 target_urls=target_urls,
             )
             skeleton_error = self.parser.validate_skeleton(skeleton_code)
@@ -89,7 +89,7 @@ class TestOrchestrator:
             page_requirements=page_requirements,
             journeys=journeys,
             user_story=user_story,
-            criteria=criteria,
+            conditions=conditions,
         )
         scraped_data = await self.scraper.scrape_all(pages_to_scrape) if pages_to_scrape else {}
         scraped_page_records = self._build_scraped_page_records(pages_to_scrape, scraped_data)
@@ -121,39 +121,39 @@ class TestOrchestrator:
         return final_code
 
     @staticmethod
-    def _count_criteria(criteria: str) -> int:
-        """Return the number of non-empty acceptance criteria lines."""
-        return len([line.strip() for line in criteria.splitlines() if line.strip()])
+    def _count_conditions(conditions: str) -> int:
+        """Return the number of non-empty condition lines."""
+        return len([line.strip() for line in conditions.splitlines() if line.strip()])
 
-    def _prepare_criteria_for_generation(self, criteria: str) -> str:
-        """Return reinforced criteria text that emphasizes one test per criterion."""
-        criteria_lines = [line.strip() for line in criteria.splitlines() if line.strip()]
+    def _prepare_conditions_for_generation(self, conditions: str) -> str:
+        """Return reinforced condition text that emphasizes one test per condition."""
+        condition_lines = [line.strip() for line in conditions.splitlines() if line.strip()]
         normalized_lines: list[str] = []
 
-        for index, line in enumerate(criteria_lines, start=1):
+        for index, line in enumerate(condition_lines, start=1):
             stripped_line = re.sub(r"^\d+[.)]\s*", "", line).strip()
             normalized_lines.append(f"{index}. {stripped_line}")
 
         total_count = len(normalized_lines)
         if total_count == 0:
-            return criteria
+            return conditions
 
         return (
-            f"There are exactly {total_count} acceptance criteria below.\n"
+            f"There are exactly {total_count} test conditions below.\n"
             f"Generate EXACTLY {total_count} pytest test functions.\n"
-            "Generate ONE test function per criterion.\n"
-            "Do NOT combine multiple criteria into one test.\n"
+            "Generate ONE test function per condition.\n"
+            "Do NOT combine multiple conditions into one test.\n"
             "Name the tests in order such as test_01_..., test_02_..., test_03_....\n\n" + "\n".join(normalized_lines)
         )
 
     @staticmethod
-    def _build_retry_criteria(prepared_criteria: str, expected_test_count: int) -> str:
-        """Return a stricter criteria prompt for a one-time skeleton retry."""
+    def _build_retry_conditions(prepared_conditions: str, expected_test_count: int) -> str:
+        """Return a stricter condition prompt for a one-time skeleton retry."""
         return (
-            prepared_criteria
+            prepared_conditions
             + "\n\nCRITICAL CORRECTION:\n"
             + f"The previous answer did not produce exactly {expected_test_count} separate pytest test functions.\n"
-            + "Regenerate the file with one test function per numbered criterion and do not merge them."
+            + "Regenerate the file with one test function per numbered condition and do not merge them."
         )
 
     @staticmethod
@@ -361,14 +361,14 @@ class TestOrchestrator:
         page_requirements: list[PageRequirement],
         journeys: list[TestJourney],
         user_story: str,
-        criteria: str,
+        conditions: str,
     ) -> list[str]:
         """Return a tightly-scoped list of URLs needed for the current journeys."""
         required_urls = [page_requirement.url for page_requirement in page_requirements]
         placeholder_descriptions = [
             placeholder.description for journey in journeys for placeholder in journey.placeholders
         ]
-        concepts = self._extract_route_concepts([user_story, criteria, *placeholder_descriptions])
+        concepts = self._extract_route_concepts([user_story, conditions, *placeholder_descriptions])
         return list(dict.fromkeys(seed_urls + required_urls + self._build_common_path_candidates(seed_urls, concepts)))
 
     @staticmethod
@@ -570,6 +570,7 @@ class TestOrchestrator:
         """Replace bare `page.` references with `self.page.` inside instance methods."""
         rewritten_lines: list[str] = []
         inside_class = False
+        is_test_class = False
         class_indent = 0
         inside_instance_method = False
         method_indent = 0
@@ -582,11 +583,14 @@ class TestOrchestrator:
                 inside_class = True
                 class_indent = indent
                 inside_instance_method = False
+                class_name = stripped[6:].split(":", 1)[0].split("(", 1)[0].strip()
+                is_test_class = class_name.startswith("Test") or class_name.endswith("Test")
             elif inside_class and stripped and indent <= class_indent and not stripped.startswith("#"):
                 inside_class = False
+                is_test_class = False
                 inside_instance_method = False
 
-            if inside_class and stripped.startswith("def "):
+            if inside_class and not is_test_class and stripped.startswith("def "):
                 signature = stripped.split("(", maxsplit=1)[1] if "(" in stripped else ""
                 inside_instance_method = signature.startswith("self,") or signature.startswith("self)")
                 method_indent = indent

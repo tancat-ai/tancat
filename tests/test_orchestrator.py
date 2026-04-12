@@ -43,7 +43,7 @@ def test_checkout(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a customer I want to add a product to the cart",
-            criteria="1. User can add an item to cart",
+            conditions="1. User can add an item to cart",
             target_urls=["https://example.com/"],
         )
     )
@@ -85,7 +85,7 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
 
     try:
-        asyncio.run(orchestrator.run_pipeline(user_story="story", criteria="1. criterion"))
+        asyncio.run(orchestrator.run_pipeline(user_story="story", conditions="1. criterion"))
         raise AssertionError("Expected malformed skeleton to raise ValueError")
     except ValueError as exc:
         assert "single-brace placeholders" in str(exc) or "invalid page entries" in str(exc)
@@ -129,7 +129,7 @@ def test_checkout(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to go to cart",
-            criteria="1. Go to cart",
+            conditions="1. Go to cart",
             target_urls=["https://example.com/"],
         )
     )
@@ -163,7 +163,7 @@ def test_02_go_to_cart(page: Page):
         page_requirements=[],
         journeys=journeys,
         user_story="As a shopper I want to add items to cart",
-        criteria="1. Go to cart\n2. Check out",
+        conditions="1. Go to cart\n2. Check out",
     )
 
     assert discovered[0] == "https://example.com/"
@@ -201,7 +201,7 @@ def test_checkout(page: Page):
     asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a customer I want to buy products",
-            criteria="1. Add product to cart",
+            conditions="1. Add product to cart",
             target_urls=["https://example.com/"],
         )
     )
@@ -244,7 +244,7 @@ def test_02_go_to_cart(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to add to cart and go to cart",
-            criteria="1. Add to cart\n2. Go to cart",
+            conditions="1. Add to cart\n2. Go to cart",
             target_urls=["https://example.com/"],
         )
     )
@@ -278,7 +278,7 @@ def test_checkout(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a customer I want to add a product to the cart",
-            criteria="1. Add to cart",
+            conditions="1. Add to cart",
             target_urls=["https://example.com/products"],
         )
     )
@@ -331,7 +331,7 @@ def test_02_verify_cart(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to go to cart",
-            criteria="1. Go to cart\n2. Verify cart",
+            conditions="1. Go to cart\n2. Verify cart",
             target_urls=["https://example.com/"],
         )
     )
@@ -376,7 +376,7 @@ def test_01_verify_cart(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to verify cart contents",
-            criteria="1. Verify items in cart",
+            conditions="1. Verify items in cart",
             target_urls=["https://example.com/view_cart"],
         )
     )
@@ -406,7 +406,7 @@ def test_checkout(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to check out",
-            criteria="1. Check out",
+            conditions="1. Check out",
             target_urls=[],
         )
     )
@@ -437,7 +437,7 @@ def test_01_checkout(page: Note):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to check out",
-            criteria="1. Check out",
+            conditions="1. Check out",
             target_urls=[],
         )
     )
@@ -476,7 +476,7 @@ def test_checkout(page: Page):
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to go to cart",
-            criteria="1. Go to cart",
+            conditions="1. Go to cart",
             target_urls=["https://example.com/"],
             consent_mode="auto-dismiss",
         )

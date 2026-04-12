@@ -16,6 +16,7 @@ from src.pipeline_report_service import PipelineReportBundle, PipelineReportServ
 from src.pipeline_run_service import PipelineRunService
 from src.pipeline_writer import PipelineArtifactWriter
 from src.pytest_output_parser import RunResult
+from src.spec_analyzer import SpecAnalyzer
 from src.test_generator import TestGenerator
 from src.user_story_parser import FeatureParser
 
@@ -33,6 +34,7 @@ def _init_session_state() -> None:
         "pipeline_scraped_pages": {},
         "pipeline_urls": [],
         "pipeline_criteria": "",
+        "pipeline_conditions": [],
         "pipeline_run_result": None,
         "pipeline_run_output": "",
         "pipeline_run_command": "",
@@ -120,12 +122,25 @@ async def _run_pipeline(
     consent_mode: str,
 ) -> None:
     client = LLMClient(provider=provider, model=model_name, base_url=provider_base_url)
+
+    analyzer = SpecAnalyzer(llm_client=client)
+    spec_text = f"User Story:\n{user_story}\n\nAcceptance Criteria:\n{criteria}"
+    conditions = analyzer.analyze(spec_text)
+    st.session_state.pipeline_conditions = conditions
+
+    if conditions:
+        conditions_text = "\n".join(
+            f"{i}. [{c.id}] {c.text} -> Expected: {c.expected}" for i, c in enumerate(conditions, 1)
+        )
+    else:
+        conditions_text = criteria
+
     generator = TestGenerator(client=client, model_name=model_name)
     orchestrator = TestOrchestrator(generator)
 
     final_code = await orchestrator.run_pipeline(
         user_story=user_story,
-        criteria=criteria,
+        conditions=conditions_text,
         target_urls=target_urls,
         consent_mode=consent_mode,
     )
@@ -136,7 +151,7 @@ async def _run_pipeline(
     st.session_state.pipeline_urls = last_result.pages_to_scrape if last_result else target_urls
     st.session_state.pipeline_scraped_pages = last_result.scraped_pages if last_result else {}
     st.session_state.pipeline_unresolved = last_result.unresolved_placeholders if last_result else []
-    st.session_state.pipeline_criteria = criteria
+    st.session_state.pipeline_criteria = conditions_text
     st.session_state.pipeline_run_result = None
     st.session_state.pipeline_run_output = ""
     st.session_state.pipeline_run_command = ""

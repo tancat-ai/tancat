@@ -13,7 +13,7 @@ def test_streamlit_prompt_contains_placeholders() -> None:
     """Template should contain expected placeholders."""
     template = get_streamlit_system_prompt_template()
     assert "{user_story}" in template
-    assert "{criteria}" in template
+    assert "{conditions}" in template
     assert "{count}" in template
 
 
@@ -54,7 +54,7 @@ def test_streamlit_prompt_format_resolves_without_error() -> None:
     that would cause a runtime crash when the prompt is rendered.
     """
     template = get_streamlit_system_prompt_template()
-    rendered = template.format(user_story="story", criteria="- do thing", count=3)
+    rendered = template.format(user_story="story", conditions="- do thing", count=3)
     assert "story" in rendered
     assert "do thing" in rendered
 
@@ -64,7 +64,7 @@ def test_skeleton_prompt_format_resolves_without_error() -> None:
     template = get_skeleton_prompt_template()
     rendered = template.format(
         user_story="story",
-        criteria="1. Add to cart",
+        conditions="1. Add to cart",
         known_urls_block="- https://example.com/",
     )
     assert "{{CLICK:cart link}}" in rendered

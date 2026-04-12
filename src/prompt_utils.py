@@ -5,6 +5,15 @@ from __future__ import annotations
 import re
 from typing import Any
 
+_EVIDENCE_TRACKER_RULES = """=== EVIDENCE TRACKER RULES ===
+1. Use evidence_tracker.navigate(url) instead of page.goto(url)
+2. Use evidence_tracker.fill(locator, value, label=...) instead of page.locator(locator).fill(value)
+3. Use evidence_tracker.click(locator, label=...) instead of page.locator(locator).click()
+4. Use evidence_tracker.assert_visible(locator, label=...) instead of expect(page.locator(locator)).to_be_visible()
+5. Always add @pytest.mark.evidence(condition_ref=..., story_ref=...) to every generated test function
+6. Never call page.screenshot() directly
+"""
+
 
 def get_skeleton_prompt_template() -> str:
     """Return the Phase 1 skeleton-generation prompt."""
@@ -46,30 +55,35 @@ Known Target URLs:
 User Story:
 {user_story}
 
-Acceptance Criteria:
-{criteria}
+Derived Test Conditions:
+{conditions}
 """
 
 
 def get_streamlit_system_prompt_template() -> str:
     """Return the fallback prompt used when running standard direct generation."""
-    return """You are an expert QA engineer writing Playwright Python tests in pytest format using the sync API.
+    return (
+        """You are an expert QA engineer writing Playwright Python tests in pytest format using the sync API.
 
 REQUIREMENTS:
 - Generate exactly {count} test functions from the acceptance criteria below.
 - Use pytest format and Playwright sync API only.
 - Do not use async/await or async_playwright.
 - Each test runs in a FRESH browser context, so never assume login or cart state carries across tests.
-- Use page.goto(...) when navigation is required and make assertions with `expect(page)` or `expect(locator)`.
 - Use ONLY LOCATORS LISTED IN THE PAGE CONTEXT ABOVE.
 - NEVER invent, guess, or create locators that are not present in the PAGE CONTEXT.
+
+"""
+        + _EVIDENCE_TRACKER_RULES
+        + """
 
 User Story:
 {user_story}
 
-Acceptance Criteria:
-{criteria}
+Derived Test Conditions:
+{conditions}
 """
+    )
 
 
 def build_page_context_prompt_block(page_context: Any) -> str:

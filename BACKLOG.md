@@ -88,7 +88,7 @@ Three new outputs are produced per test run:
 
 ---
 
-### AI-016 — Spec Analysis Stage
+### ~~AI-016 — Spec Analysis Stage~~
 
 **What:** A new pipeline stage that runs before test generation. Reads the
 user's input (spec, user story, or acceptance criteria), extracts business rules,

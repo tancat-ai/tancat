@@ -16,10 +16,11 @@ from dataclasses import dataclass, field
 # Regex patterns — matched against raw pytest -v output lines
 # ---------------------------------------------------------------------------
 
-_PASSED_RE = re.compile(r"(\S+\.py)::(\S+)\s+PASSED")
-_FAILED_RE = re.compile(r"(\S+\.py)::(\S+)\s+FAILED")
-_SKIPPED_RE = re.compile(r"(\S+\.py)::(\S+)\s+SKIPPED")
-_SUMMARY_LINE_RE = re.compile(r" in ([\d.]+)s\s*=")
+# Note: We capture the test name, and optionally skip over the [browser] marker to find the status.
+_PASSED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+PASSED")
+_FAILED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+FAILED")
+_SKIPPED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+SKIPPED")
+_SUMMARY_LINE_RE = re.compile(r" in ([\d.]+)s(?: \([\d:]+\))?\s*=")
 _PASSED_COUNT_RE = re.compile(r"(\d+) passed")
 _FAILED_COUNT_RE = re.compile(r"(\d+) failed")
 _SKIPPED_COUNT_RE = re.compile(r"(\d+) skipped")
@@ -186,11 +187,15 @@ def parse_pytest_output(raw: str) -> RunResult:
                 run.duration = float(dur_m.group(1))
 
     run.results = list(results_by_name.values())
-    run.total = len(run.results)
 
-    if run.passed + run.failed == 0 and run.total > 0:
+    if run.passed + run.failed == 0 and len(run.results) > 0:
+        # Summary line wasn't parsed — derive counts from per-test entries
         run.passed = sum(1 for r in run.results if r.status == "passed")
         run.failed = sum(1 for r in run.results if r.status == "failed")
+        run.skipped = sum(1 for r in run.results if r.status == "skipped")
+
+    # Always derive total from the authoritative counts so Total == Passed + Failed + Skipped
+    run.total = run.passed + run.failed + run.skipped
 
     return run
 

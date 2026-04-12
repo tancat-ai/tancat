@@ -349,3 +349,60 @@ ERROR generated_tests/test_bad.py
         assert "ERROR collecting generated_tests/test_bad.py" in filtered
         assert "NameError: name 'Payable' is not defined" in filtered
         assert "1 error in 0.13s" in filtered
+
+
+class TestTotalConsistency:
+    """Total must always equal Passed + Failed + Skipped.
+
+    Guards the regression where run.total was set to len(run.results) (per-test
+    regex count) independently of run.passed / run.failed / run.skipped (summary
+    line counts), which could produce a Total that did not add up in the UI.
+    """
+
+    def test_total_equals_passed_plus_failed_plus_skipped_all_pass(self) -> None:
+        raw = """============================= test session starts =============================
+collected 3 items
+
+t.py::test_a PASSED [ 33%]
+t.py::test_b PASSED [ 66%]
+t.py::test_c PASSED [100%]
+
+============================== 3 passed in 1.0s =============================="""
+        result = parse_pytest_output(raw)
+        assert result.total == result.passed + result.failed + result.skipped
+        assert result.total == 3
+
+    def test_total_equals_passed_plus_failed_plus_skipped_mixed(self) -> None:
+        raw = """============================= test session starts =============================
+collected 3 items
+
+t.py::test_a PASSED [ 33%]
+t.py::test_b FAILED [ 66%]
+t.py::test_c PASSED [100%]
+
+========================= 2 passed, 1 failed in 2.0s =========================="""
+        result = parse_pytest_output(raw)
+        assert result.total == result.passed + result.failed + result.skipped
+        assert result.total == 3
+        assert result.passed == 2
+        assert result.failed == 1
+
+    def test_total_equals_passed_when_no_per_test_lines_matched(self) -> None:
+        """Edge case: summary line parses fine but per-test lines were missed.
+
+        Previously this would give Total=0 but Passed=2, which is confusing in the UI.
+        With the fix, Total is always derived from the summary counts.
+        """
+        # Deliberately malformed PASSED lines that the regex cannot match,
+        # but the summary line is clean.
+        raw = """============================= test session starts =============================
+collected 2 items
+
+[CUSTOM_RUNNER] test_a ... ok
+[CUSTOM_RUNNER] test_b ... ok
+
+============================== 2 passed in 0.5s =============================="""
+        result = parse_pytest_output(raw)
+        assert result.passed == 2
+        assert result.total == result.passed + result.failed + result.skipped
+        assert result.total == 2

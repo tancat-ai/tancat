@@ -37,11 +37,12 @@ class PipelineRunService:
         pytest_command = build_pytest_run_command(saved_path, failed_nodeids=failed_nodeids or None)
         command = [sys.executable, "-m", *pytest_command]
 
+        project_root = str(Path(__file__).resolve().parent.parent)
         completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            cwd=cwd or str(Path(saved_path).resolve().parent.parent),
+            cwd=cwd or project_root,
             check=False,
         )
 

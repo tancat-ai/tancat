@@ -44,7 +44,7 @@ class TestGenerator:
     async def generate_skeleton(
         self,
         user_story: str,
-        criteria: str,
+        conditions: str,
         target_urls: list[str] | None = None,
     ) -> str:
         """Generate placeholder-based skeleton code for the intelligent pipeline."""
@@ -52,7 +52,7 @@ class TestGenerator:
         known_urls_block = "\n".join(f"- {url}" for url in urls) if urls else "- No URLs were supplied."
         prompt = get_skeleton_prompt_template().format(
             user_story=user_story,
-            criteria=criteria,
+            conditions=conditions,
             known_urls_block=known_urls_block,
         )
         return await self.client.generate(prompt)

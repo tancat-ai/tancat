@@ -2,7 +2,7 @@
 
 This module centralises the logic for turning acceptance criteria and
 generated test code into structured coverage information that can be
-reused by different frontends (Streamlit UI, CLI, reports).
+reused by different frontends (Streamli UI, CLI, reports).
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class RunTestLike(Protocol):
 
 @dataclass
 class CoverageDisplayRow:
-    """Display-ready coverage row for UI tables."""
+    """Display-compatible coverage row for UI tables."""
 
     id_cell: str
     requirement: str
@@ -71,20 +71,36 @@ def extract_test_names(generated_code: str) -> list[str]:
     return _TEST_DEF_pattern.findall(generated_code)
 
 
+def _get_base_test_name(name: str) -> str:
+    """Strip browser markers and path separators to get the core test name."""
+    clean = name.split("::")[-1]
+    return clean.split("[")[0].split("(")[0].strip()
+
+
 def build_requirement_coverages(
     acceptance_criteria_lines: list[str],
     generated_code: str,
 ) -> list[RequirementCoverage]:
     """Build RequirementCoverage objects from criteria and generated test code."""
-    test_names = extract_test_names(generated_code)
+    test_names_in_code = extract_test_names(generated_code)
+
     requirements: list[RequirementCoverage] = []
     for index, criterion in enumerate(acceptance_criteria_lines, start=1):
         req_id = f"TC-{index:03d}"
-        num_str = f"{index:02d}"
-        linked = [name for name in test_names if f"test_{num_str}_" in name or f"test_{index}_" in name]
+        prefix_p, prefix_s = f"test_{index:02d}_", f"test_{index}_"
+
+        linked = []
+        for name in test_names_in_code:
+            if name.startswith(prefix_p) or name.startswith(prefix_s):
+                linked.append(name)
+
         if not linked:
-            words = {word for word in criterion.lower().split() if word}
-            linked = [name for name in test_names if len(words & set(name.lower().split("_"))) >= 2]
+            words = {word for word in criterion.lower().split() if len(word) > 3}
+            for name in test_names_in_code:
+                test_words = set(name.lower().replace("_", " ").split())
+                if words and (words & test_words):
+                    linked.append(name)
+
         status = "covered" if linked else "not_covered"
         requirements.append(
             RequirementCoverage(
@@ -115,7 +131,7 @@ def _status_emoji(status: str) -> str:
 
 
 def _result_icon(status: str) -> str:
-    """Return run-result icon for a single linked test status."""
+    """Return a visual status marker for test execution result."""
     if status == "passed":
         return "✅"
     if status == "failed":
@@ -129,22 +145,12 @@ def build_coverage_display_rows(
     requirements: list[RequirementCoverage],
     run_results: Sequence[RunTestLike] | None = None,
 ) -> list[CoverageDisplayRow]:
-    """Build display-ready rows from RequirementCoverage objects.
-
-    Args:
-        requirements: List of RequirementCoverage objects.
-        run_results: Optional sequence of run result objects satisfying RunTestLike.
-
-    Returns:
-        List of CoverageDisplayRow objects ready for UI table rendering.
-    """
-    # Build a lookup from base test name to run status.
-    # pytest appends [chromium] etc., so we strip the bracket suffix for matching.
+    """Build display-ready rows from RequirementCoverage objects."""
     run_map: dict[str, str] = {}
     if run_results:
         for tr in run_results:
-            base_name = tr.name.split("[")[0]
-            run_map[base_name] = tr.status
+            base = _get_base_test_name(tr.name)
+            run_map[base] = tr.status
 
     rows: list[CoverageDisplayRow] = []
     for req in requirements:
@@ -156,16 +162,18 @@ def build_coverage_display_rows(
         if len(req.linked_tests) > 3:
             tests_cell += "..."
 
-        # Build result cell from run_results if available.
         result_cell = ""
-        if run_results is not None and req.linked_tests:
+        if run_results and req.linked_tests:
             icons: list[str] = []
             for test_name in req.linked_tests:
-                base_name = test_name.split("[")[0]
-                if base_name in run_map:
-                    icons.append(_result_icon(run_map[base_name]))
-                # If linked test not found in run map, emit nothing (test not yet run).
+                base = _get_base_test_name(test_name)
+                if base in run_map:
+                    icons.append(_result_icon(run_map[base]))
+                else:
+                    icons.append(_result_icon("not_run"))
             result_cell = ", ".join(icons)
+        elif not req.linked_tests:
+            result_cell = "N/A"
 
         rows.append(
             CoverageDisplayRow(

@@ -40,7 +40,7 @@ async def run_uat() -> bool:
 
         print("... Generating Skeleton ...")
         # For this test, we assume the orchestrator uses the internal scraping/resolver logic.
-        result_code = await orchestr_engine.run_pipeline(user_story=user_story, criteria=criteria)
+        result_code = await orchestr_engine.run_pipeline(user_story=user_story, conditions=criteria)
 
         print("[STEP 3/3] Pipeline Execution Finished.\n")
 
