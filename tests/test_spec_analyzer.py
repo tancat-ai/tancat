@@ -71,6 +71,50 @@ def test_spec_analyzer_invalid_json() -> None:
         analyzer.analyze("Some spec text")
 
 
+def test_spec_analyzer_repairs_unquoted_keys_and_trailing_commas() -> None:
+    mock_llm = MagicMock()
+    mock_llm.generate_test.return_value = """[
+      { id: "TC01.01", type: "happy_path", text: "ok", expected: "ok", source: "spec", flagged: false, src: "ai", },
+    ]"""
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze("Some spec text")
+    assert len(conditions) == 1
+    assert conditions[0].id == "TC01.01"
+
+
+def test_spec_analyzer_repairs_raw_newlines_inside_string_values() -> None:
+    mock_llm = MagicMock()
+    # This is invalid JSON because it contains a raw newline inside a quoted string.
+    mock_llm.generate_test.return_value = """[
+      {
+        "id": "TC01.01",
+        "type": "happy_path",
+        "text": "Line1
+Line2",
+        "expected": "ok",
+        "source": "spec",
+        "flagged": false,
+        "src": "ai"
+      }
+    ]"""
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze("Some spec text")
+    assert len(conditions) == 1
+    assert "Line1" in conditions[0].text
+
+
+def test_spec_analyzer_salvages_objects_when_array_is_malformed() -> None:
+    mock_llm = MagicMock()
+    # Missing comma between objects -> malformed array, but objects are individually valid.
+    mock_llm.generate_test.return_value = """[
+      { "id": "TC01.01", "type": "happy_path", "text": "A", "expected": "ok", "source": "s", "flagged": false, "src": "ai" }
+      { "id": "TC01.02", "type": "happy_path", "text": "B", "expected": "ok", "source": "s", "flagged": false, "src": "ai" }
+    ]"""
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze("Some spec text")
+    assert [c.id for c in conditions] == ["TC01.01", "TC01.02"]
+
+
 def test_spec_analyzer_empty_input() -> None:
     """Test that empty input returns an empty list immediately without LLM call."""
     mock_llm = MagicMock()
@@ -78,4 +122,22 @@ def test_spec_analyzer_empty_input() -> None:
 
     conditions = analyzer.analyze("   ")
     assert conditions == []
+    mock_llm.generate_test.assert_not_called()
+
+
+def test_spec_analyzer_prefers_explicit_numbered_acceptance_criteria() -> None:
+    mock_llm = MagicMock()
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+
+    spec_text = """## User Story
+As a customer I want X
+
+## Acceptance Criteria
+1. do thing A
+2. do thing B
+3. verify thing C
+"""
+    conditions = analyzer.analyze(spec_text)
+    assert [c.id for c in conditions] == ["TC01.01", "TC01.02", "TC01.03"]
+    assert [c.text for c in conditions] == ["do thing A", "do thing B", "verify thing C"]
     mock_llm.generate_test.assert_not_called()

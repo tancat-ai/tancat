@@ -7,17 +7,22 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.code_validator import validate_python_syntax
 from src.coverage_utils import build_coverage_analysis, build_coverage_display_rows
+from src.gantt_utils import build_gantt_summary_sentences, load_gantt_entries
+from src.heatmap_utils import build_story_confidence
 from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportBundle, PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pipeline_writer import PipelineArtifactWriter
 from src.pytest_output_parser import RunResult
-from src.spec_analyzer import SpecAnalyzer
+from src.report_utils import generate_annotated_journey, generate_suite_heatmap
+from src.spec_analyzer import SpecAnalyzer, TestCondition
 from src.test_generator import TestGenerator
+from src.test_plan import TestPlan, apply_editor_rows, build_story_ref
 from src.user_story_parser import FeatureParser
 
 st.set_page_config(page_title="AI Playwright Generator", page_icon=":test_tube:", layout="wide")
@@ -45,6 +50,8 @@ def _init_session_state() -> None:
         "pipeline_local_report_path": "",
         "pipeline_jira_report_path": "",
         "pipeline_html_report_path": "",
+        "test_plan": None,
+        "plan_confirmed": False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -112,6 +119,43 @@ def _parse_requirements_text(raw_text: str) -> tuple[str, str]:
     return cleaned, cleaned
 
 
+def _build_test_plan(
+    *,
+    user_story: str,
+    criteria: str,
+    provider: str,
+    provider_base_url: str,
+    model_name: str,
+) -> TestPlan:
+    """Analyze requirements and return a living test plan for review."""
+    client = LLMClient(provider=provider, model=model_name, base_url=provider_base_url)
+    analyzer = SpecAnalyzer(llm_client=client)
+    spec_text = f"User Story:\n{user_story}\n\nAcceptance Criteria:\n{criteria}"
+    conditions = analyzer.analyze(spec_text)
+    return TestPlan.from_conditions(
+        story_ref=build_story_ref(user_story),
+        sprint="Backlog",
+        conditions=conditions,
+    )
+
+
+def _plan_rows_from_plan(plan: TestPlan) -> list[dict[str, object]]:
+    """Return editable table rows for the current plan."""
+    return [
+        {
+            "reviewed": condition.id in plan.reviewed_ids,
+            "id": condition.id,
+            "type": condition.type,
+            "text": condition.text,
+            "expected": condition.expected,
+            "source": condition.source,
+            "flagged": condition.flagged,
+            "src": condition.src,
+        }
+        for condition in plan.conditions
+    ]
+
+
 async def _run_pipeline(
     user_story: str,
     criteria: str,
@@ -120,12 +164,15 @@ async def _run_pipeline(
     model_name: str,
     target_urls: list[str],
     consent_mode: str,
+    reviewed_conditions: list[TestCondition] | None = None,
 ) -> None:
     client = LLMClient(provider=provider, model=model_name, base_url=provider_base_url)
 
-    analyzer = SpecAnalyzer(llm_client=client)
-    spec_text = f"User Story:\n{user_story}\n\nAcceptance Criteria:\n{criteria}"
-    conditions = analyzer.analyze(spec_text)
+    conditions = list(reviewed_conditions or [])
+    if not conditions:
+        analyzer = SpecAnalyzer(llm_client=client)
+        spec_text = f"User Story:\n{user_story}\n\nAcceptance Criteria:\n{criteria}"
+        conditions = analyzer.analyze(spec_text)
     st.session_state.pipeline_conditions = conditions
 
     if conditions:
@@ -210,12 +257,60 @@ else:
 
 st.sidebar.divider()
 st.sidebar.title("Pages To Scrape")
-base_url = st.sidebar.text_input("Starting URL", placeholder="https://your-site.example/")
+
+# Quick baseline preset for reproducible debugging runs.
+_BASELINE_STARTING_URL = "https://automationexercise.com/"
+_BASELINE_ADDITIONAL_URLS = ""
+_BASELINE_REQUIREMENTS = """## User Story
+As a customer I want to add items to cart
+
+## Acceptance Criteria
+1. add items to cart
+2. go to cart
+3. check the items have been added correctly
+4. go to check out
+5. check out
+
+(Total: 5 criteria)
+"""
+
+if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):
+    st.session_state.starting_url = _BASELINE_STARTING_URL
+    st.session_state.additional_urls = _BASELINE_ADDITIONAL_URLS
+    st.session_state.requirements_text = _BASELINE_REQUIREMENTS
+    # Keep the UI clean and deterministic after loading baseline inputs.
+    st.session_state.pipeline_error = ""
+    st.session_state.pipeline_results = ""
+    st.session_state.pipeline_skeleton = ""
+    st.session_state.pipeline_scrape_summary = ""
+    st.session_state.pipeline_saved_path = ""
+    st.session_state.pipeline_manifest_path = ""
+    st.rerun()
+
+# Migrate legacy auto-keys (label-based) into stable keys.
+if not st.session_state.get("starting_url") and st.session_state.get("Starting URL"):
+    st.session_state.starting_url = st.session_state.get("Starting URL")
+if not st.session_state.get("additional_urls") and st.session_state.get("Additional URLs"):
+    st.session_state.additional_urls = st.session_state.get("Additional URLs")
+
+base_url = st.sidebar.text_input(
+    "Starting URL",
+    placeholder="https://your-site.example/",
+    key="starting_url",
+)
 urls_input = st.sidebar.text_area(
     "Additional URLs",
     placeholder="https://your-site.example/products\nhttps://your-site.example/cart",
     height=120,
+    key="additional_urls",
 )
+
+# Persist the latest non-empty values so a rerun doesn't accidentally
+# wipe the run configuration during button-triggered rerenders.
+if base_url.strip():
+    st.session_state.last_starting_url = base_url
+if urls_input.strip():
+    st.session_state.last_additional_urls = urls_input
 consent_mode = st.sidebar.selectbox(
     "Consent Handling",
     ["auto-dismiss", "leave-as-is", "test-consent-flow"],
@@ -243,6 +338,13 @@ with col1:
             "Requirements",
             placeholder="## User Story\nAs a customer I want to add items to cart\n\n## Acceptance Criteria\n1. Add item to cart\n2. Go to cart\n3. Check out",
             height=260,
+            key="requirements_text",
+        )
+
+    # Ensure we use the committed widget value on reruns.
+    if input_mode == "Paste Text":
+        raw_requirements = str(
+            st.session_state.get("requirements_text") or st.session_state.get("Requirements") or raw_requirements
         )
 
     user_story, criteria = _parse_requirements_text(raw_requirements) if raw_requirements.strip() else ("", "")
@@ -262,17 +364,141 @@ with col2:
     )
     st.caption("The intelligent pipeline is now the only generation path in this UI.")
 
-if st.button("Run Intelligent Pipeline", type="primary"):
+if raw_requirements.strip():
+    st.divider()
+    st.subheader("Living Test Plan")
+    st.caption("Review, edit, and sign off all derived conditions before generation is unlocked.")
+
+    build_plan_col, plan_state_col = st.columns([1, 2])
+    with build_plan_col:
+        if st.button("Build Living Test Plan", type="secondary"):
+            try:
+                st.session_state.test_plan = _build_test_plan(
+                    user_story=user_story,
+                    criteria=criteria,
+                    provider=provider,
+                    provider_base_url=provider_base_url,
+                    model_name=model_name,
+                )
+                st.session_state.plan_confirmed = False
+                st.session_state.pipeline_error = ""
+            except Exception as exc:
+                st.session_state.pipeline_error = f"Failed to build living test plan: {exc}"
+    with plan_state_col:
+        current_plan = st.session_state.test_plan
+        if isinstance(current_plan, TestPlan):
+            reviewed_count = len(current_plan.reviewed_ids)
+            total_count = len(current_plan.conditions)
+            status_text = "Ready for generation" if current_plan.is_ready_for_generation else "Review pending"
+            st.write(f"Story Ref: `{current_plan.story_ref}`")
+            st.write(f"Conditions reviewed: `{reviewed_count}/{total_count}`")
+            st.write(f"Status: `{status_text}`")
+        else:
+            st.write("Build the plan to review AI-derived conditions before generation.")
+
+    current_plan = st.session_state.test_plan
+    if isinstance(current_plan, TestPlan):
+        edited_rows_raw = st.data_editor(
+            _plan_rows_from_plan(current_plan),
+            use_container_width=True,
+            num_rows="dynamic",
+            key="living_test_plan_editor",
+            column_config={
+                "reviewed": st.column_config.CheckboxColumn("Reviewed"),
+                "id": st.column_config.TextColumn("ID", disabled=True),
+                "type": st.column_config.SelectboxColumn(
+                    "Type",
+                    options=["happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"],
+                ),
+                "text": st.column_config.TextColumn("Condition"),
+                "expected": st.column_config.TextColumn("Expected"),
+                "source": st.column_config.TextColumn("Source"),
+                "flagged": st.column_config.CheckboxColumn("Flagged"),
+                "src": st.column_config.SelectboxColumn("Source Kind", options=["ai", "manual", "automation"]),
+            },
+        )
+        if hasattr(edited_rows_raw, "to_dict"):
+            edited_rows = edited_rows_raw.to_dict("records")
+        else:
+            edited_rows = list(edited_rows_raw)
+
+        plan_action_col, signoff_col = st.columns([3, 2])
+        with plan_action_col:
+            st.caption("Optional: save edits without signing off.")
+            if st.button("Save Test Plan Edits", type="secondary"):
+                st.session_state.test_plan = apply_editor_rows(current_plan, edited_rows)
+                st.session_state.plan_confirmed = st.session_state.test_plan.is_ready_for_generation
+
+        with signoff_col:
+            tester_name = st.text_input("Tester Name", value=current_plan.tester_name, key="test_plan_tester_name")
+            sign_off_notes = st.text_area(
+                "Sign-off Notes",
+                value=current_plan.sign_off_notes,
+                height=90,
+                key="test_plan_signoff_notes",
+            )
+            if st.button("Save And Sign Off Test Plan", type="primary"):
+                signed_plan = apply_editor_rows(current_plan, edited_rows).sign_off(
+                    tester_name=tester_name,
+                    sign_off_notes=sign_off_notes,
+                )
+                st.session_state.test_plan = signed_plan
+                st.session_state.plan_confirmed = signed_plan.is_ready_for_generation
+
+        if current_plan.unreviewed_ids:
+            pending_ids = ", ".join(sorted(current_plan.unreviewed_ids))
+            st.warning(f"Generation remains locked until every condition is reviewed. Pending: {pending_ids}")
+        elif not current_plan.is_ready_for_generation:
+            st.info("All conditions are reviewed. Add tester sign-off to unlock generation.")
+        else:
+            st.success("The living test plan is signed off and generation is unlocked.")
+
+run_disabled = bool(raw_requirements.strip()) and not bool(st.session_state.plan_confirmed)
+if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
     st.session_state.pipeline_error = ""
-    target_urls = _parse_target_urls(base_url, urls_input)
+    # Re-read requirements at click time to avoid cases where the UI shows
+    # text but the rerun that handles the click sees an empty widget value.
+    raw_requirements_for_run = str(
+        st.session_state.get("requirements_text") or st.session_state.get("Requirements") or raw_requirements or ""
+    )
+    user_story, criteria = (
+        _parse_requirements_text(raw_requirements_for_run) if raw_requirements_for_run.strip() else ("", "")
+    )
+
+    # Read URL inputs from session_state so the run uses
+    # the latest typed values even across Streamlit reruns.
+    # (Some Streamlit versions/components may still populate legacy auto-keys
+    # based on label text, so we fall back to those too.)
+    starting_url_value = (
+        st.session_state.get("starting_url")
+        or st.session_state.get("Starting URL")
+        or st.session_state.get("last_starting_url")
+        or base_url
+    )
+    additional_urls_value = (
+        st.session_state.get("additional_urls")
+        or st.session_state.get("Additional URLs")
+        or st.session_state.get("last_additional_urls")
+        or urls_input
+    )
+    target_urls = _parse_target_urls(
+        str(starting_url_value),
+        str(additional_urls_value),
+    )
 
     if not user_story.strip():
         st.session_state.pipeline_error = "Please provide a user story."
     elif not criteria.strip():
         st.session_state.pipeline_error = "Please provide acceptance criteria."
+    elif not st.session_state.plan_confirmed:
+        st.session_state.pipeline_error = "Build, review, and sign off the Living Test Plan before generation."
     else:
         try:
             with st.status("Executing intelligent pipeline...", expanded=True) as status:
+                st.write(f"Requirements raw length: {len(raw_requirements_for_run)}")
+                st.write(f"Starting URL raw: {starting_url_value!r}")
+                st.write(f"Additional URLs raw: {additional_urls_value!r}")
+                st.write(f"Target URLs ({len(target_urls)}): {target_urls}")
                 st.write("Phase 1: Generating placeholder skeleton")
                 st.write("Phase 2: Scraping target pages")
                 st.write("Phase 3: Resolving placeholders into real selectors")
@@ -285,6 +511,11 @@ if st.button("Run Intelligent Pipeline", type="primary"):
                         model_name=model_name,
                         target_urls=target_urls,
                         consent_mode=consent_mode,
+                        reviewed_conditions=(
+                            st.session_state.test_plan.conditions
+                            if isinstance(st.session_state.test_plan, TestPlan)
+                            else None
+                        ),
                     )
                 )
                 status.update(label="Pipeline complete", state="complete", expanded=False)
@@ -439,3 +670,111 @@ if st.session_state.pipeline_results:
             st.caption(f"Jira report: {st.session_state.pipeline_jira_report_path}")
         if st.session_state.pipeline_html_report_path:
             st.caption(f"HTML report: {st.session_state.pipeline_html_report_path}")
+
+        st.divider()
+        st.subheader("Evidence Viewer")
+        # Anchor evidence to the repo root so the UI can always find it even if
+        # Streamlit was launched from a different working directory.
+        evidence_dir = Path(__file__).resolve().parent / "evidence"
+        if not evidence_dir.exists():
+            st.info("No evidence sidecars found yet. Run generated tests to produce `evidence/*.evidence.json`.")
+        else:
+            sidecars = sorted(evidence_dir.glob("*.evidence.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if not sidecars:
+                st.info("No evidence sidecars found yet. Run generated tests to produce `evidence/*.evidence.json`.")
+            else:
+                evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map"])
+
+                with evidence_tabs[0]:
+                    selected = st.selectbox(
+                        "Select evidence sidecar",
+                        options=sidecars,
+                        format_func=lambda p: p.name,
+                    )
+                    view_mode = st.selectbox(
+                        "View mode",
+                        options=["annotated", "heatmap", "clean"],
+                        index=0,
+                        help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
+                    )
+                    html = generate_annotated_journey(
+                        sidecar_path=Path(selected),
+                        view_mode=view_mode,  # type: ignore[arg-type]
+                        title=selected.stem,
+                    )
+                    components.html(html, height=900, scrolling=True)
+
+                with evidence_tabs[1]:
+                    entries = load_gantt_entries(evidence_dir)
+                    if not entries:
+                        st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
+                    else:
+                        fastest, slowest, coverage = build_gantt_summary_sentences(entries)
+                        st.write(f"- {fastest}")
+                        st.write(f"- {slowest}")
+                        st.write(f"- {coverage}")
+                        st.dataframe(
+                            [
+                                {
+                                    "condition_ref": e.condition_ref,
+                                    "story_ref": e.story_ref,
+                                    "status": e.status,
+                                    "duration_s": e.duration_s,
+                                    "test_name": e.test_name,
+                                }
+                                for e in sorted(entries, key=lambda e: (-e.duration_s, e.condition_ref))
+                            ],
+                            use_container_width=True,
+                        )
+
+                with evidence_tabs[2]:
+                    stories = build_story_confidence(evidence_dir)
+                    if not stories:
+                        st.info("No heat map data yet. Run generated tests to produce `.evidence.json` sidecars.")
+                    else:
+                        st.dataframe(
+                            [
+                                {
+                                    "story_ref": s.story_ref,
+                                    "confidence": s.level,
+                                    "color": s.color,
+                                    "conditions_with_evidence": s.total_conditions_with_evidence,
+                                    "passed": s.passed_conditions,
+                                    "failed": s.failed_conditions,
+                                    "skipped": s.skipped_conditions,
+                                }
+                                for s in stories
+                            ],
+                            use_container_width=True,
+                        )
+
+                st.divider()
+                st.subheader("Suite Heatmap (Coverage Overview)")
+                # Build URL options from all sidecars by using the `navigate` steps.
+                import json
+
+                url_options: set[str] = set()
+                for sidecar_path in sidecars:
+                    try:
+                        sidecar_obj = json.loads(sidecar_path.read_text(encoding="utf-8"))
+                    except Exception:
+                        continue
+                    steps = sidecar_obj.get("steps", [])
+                    if not isinstance(steps, list):
+                        continue
+                    for step in steps:
+                        if not isinstance(step, dict):
+                            continue
+                        if str(step.get("type", "")).lower() != "navigate":
+                            continue
+                        val = str(step.get("value", "") or "")
+                        if val.startswith("http"):
+                            url_options.add(val)
+                url_list = sorted(url_options)
+
+                if not url_list:
+                    st.info("No navigated URLs found in sidecars yet.")
+                else:
+                    selected_url = st.selectbox("Select page URL", options=url_list)
+                    suite_html = generate_suite_heatmap(evidence_dir=evidence_dir, page_url=selected_url)
+                    components.html(suite_html, height=850, scrolling=True)

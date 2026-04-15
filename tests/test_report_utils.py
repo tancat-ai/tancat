@@ -12,9 +12,11 @@ from src.coverage_utils import RequirementCoverage
 from src.pytest_output_parser import RunResult, TestResult
 from src.report_utils import (
     build_report_dicts,
+    generate_annotated_journey,
     generate_html_report,
     generate_jira_report,
     generate_local_report,
+    generate_suite_heatmap,
 )
 
 
@@ -311,6 +313,63 @@ def test_build_report_dicts_maps_parameterized_run_statuses() -> None:
     rows = build_report_dicts(coverage_analysis=coverage, run_result=run_result)
     assert rows[0]["status"] == "passed"
     assert rows[0]["duration"] == 5.4
+
+
+def test_generate_annotated_journey_cleans_placeholder_labels(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    screenshot = evidence_dir / "shot.png"
+    screenshot.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x1dIEND\xaeB`\x82"
+    )
+    sidecar = evidence_dir / "test.evidence.json"
+    sidecar.write_text(
+        """{
+  "schema_version": "1.0",
+  "test": {"name": "test_example", "condition_ref": "TC01.01", "story_ref": "S1", "status": "passed", "duration_s": 1.0},
+  "page": {"url": "https://example.com/"},
+  "run_history": {"total_runs": 1, "passed_runs": 1, "failed_runs": 0},
+  "steps": [
+    {"step": 1, "type": "navigate", "label": "Navigate to https://example.com/", "value": "https://example.com/", "screenshot": "evidence/shot.png", "element": {}, "result": {"status": "passed", "run_count": 1}},
+    {"step": 2, "type": "click", "label": "{{CLICK:view cart link}}", "locator": "#cart", "screenshot": null, "element": {"viewport_pct": {"x": 40, "y": 20}}, "result": {"status": "passed", "run_count": 1}}
+  ]
+}""",
+        encoding="utf-8",
+    )
+
+    html = generate_annotated_journey(sidecar_path=sidecar, view_mode="annotated", title="demo")
+    assert "Click: view cart link" in html
+    assert "{{CLICK:view cart link}}" not in html
+
+
+def test_generate_suite_heatmap_counts_navigation_arrivals_as_page_evidence(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    screenshot = evidence_dir / "shot.png"
+    screenshot.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x1dIEND\xaeB`\x82"
+    )
+    sidecar = evidence_dir / "test.evidence.json"
+    sidecar.write_text(
+        """{
+  "schema_version": "1.0",
+  "test": {"name": "test_example", "condition_ref": "TC01.02", "story_ref": "S1", "status": "passed", "duration_s": 1.0},
+  "page": {"url": "https://example.com/view_cart"},
+  "run_history": {"total_runs": 1, "passed_runs": 1, "failed_runs": 0},
+  "steps": [
+    {"step": 1, "type": "navigate", "label": "Navigate to https://example.com/", "value": "https://example.com/", "screenshot": "evidence/shot.png", "element": {}, "result": {"status": "passed", "run_count": 1}},
+    {"step": 2, "type": "click", "label": "Click: view cart link", "locator": "#cart", "screenshot": null, "element": {"viewport_pct": {"x": 54, "y": 5}}, "result": {"status": "passed", "run_count": 1}},
+    {"step": 3, "type": "navigate", "label": "Navigate to https://example.com/view_cart", "value": "https://example.com/view_cart", "screenshot": "evidence/shot.png", "element": {}, "result": {"status": "passed", "run_count": 1}}
+  ]
+}""",
+        encoding="utf-8",
+    )
+
+    html = generate_suite_heatmap(evidence_dir=evidence_dir, page_url="https://example.com/view_cart")
+    assert "No evidence points found" not in html
+    assert "Points" in html
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,8 @@ class EvidenceTracker:
         test_name: str,
         condition_ref: str = "unknown",
         story_ref: str = "unknown",
+        *,
+        evidence_root: Path | None = None,
     ) -> None:
         self.page = page
         self.test_name = test_name
@@ -21,8 +24,11 @@ class EvidenceTracker:
 
         self.steps: list[dict[str, Any]] = []
         self.start_time = time.time()
-        self.evidence_dir = Path("evidence")
-        self.evidence_dir.mkdir(exist_ok=True)
+        # Anchor evidence artifacts to the repo root so Streamlit and pytest agree
+        # regardless of current working directory. Allow tests/tools to override.
+        repo_root = evidence_root if evidence_root is not None else Path(__file__).resolve().parents[1]
+        self.evidence_dir = repo_root / "evidence"
+        self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.sidecar_path = self.evidence_dir / f"{self.test_name}.evidence.json"
 
         # Load run history immediately so we can increment during steps if needed
@@ -30,6 +36,43 @@ class EvidenceTracker:
 
         # We also need to map previous steps to increment their individual run counts run_count
         self.previous_steps_data = self._load_previous_steps()
+
+    @staticmethod
+    def _clean_label(label: str) -> str:
+        """Convert raw placeholder tokens into cleaner user-facing labels."""
+        raw = str(label or "").strip()
+        match = re.fullmatch(r"\{\{([A-Z_]+):(.+)\}\}", raw)
+        if not match:
+            return raw
+
+        action = match.group(1).strip().lower().replace("_", " ")
+        description = match.group(2).strip()
+        if not description:
+            return raw
+        return f"{action.title()}: {description}"
+
+    def _dismiss_consent_overlays(self) -> None:
+        """Best-effort consent dismissal before evidence screenshots."""
+        selectors = [
+            "button:has-text('Consent')",
+            "button:has-text('Accept')",
+            "button:has-text('Continue')",
+            "button:has-text('OK')",
+            "button:has-text('Got it')",
+            "button:has-text('I Agree')",
+            "button:has-text('Agree')",
+            "button[aria-label='Close']",
+            "button[aria-label='close']",
+        ]
+        for selector in selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.count() > 0 and loc.is_visible():
+                    loc.click(timeout=2000)
+                    self.page.wait_for_timeout(300)
+                    break
+            except Exception:
+                continue
 
     def _load_previous_history(self) -> dict[str, int]:
         if self.sidecar_path.exists():
@@ -77,6 +120,12 @@ class EvidenceTracker:
         viewport_pct = None
 
         try:
+            # Best effort: bring into view so bbox is meaningful.
+            try:
+                loc.scroll_into_view_if_needed(timeout=2000)
+            except Exception:
+                pass
+
             raw_bbox = loc.bounding_box()
             if raw_bbox:
                 # Calculate center points
@@ -146,7 +195,7 @@ class EvidenceTracker:
             {
                 "step": step_idx + 1,
                 "type": step_type,
-                "label": label,
+                "label": self._clean_label(label),
                 "locator": locator,
                 "value": value,
                 "screenshot": screenshot_path,
@@ -164,6 +213,7 @@ class EvidenceTracker:
     def navigate(self, url: str) -> None:
         try:
             self.page.goto(url)
+            self._dismiss_consent_overlays()
             self._record_step("navigate", f"Navigate to {url}", value=url, take_screenshot=True)
         except Exception as e:
             self._record_step("navigate", f"Navigate to {url}", value=url, take_screenshot=True, error=str(e))
@@ -185,18 +235,30 @@ class EvidenceTracker:
         try:
             # We record metadata BEFORE clicking in case navigation clears it
             el_metadata = self._get_element_metadata(locator)
-            self.page.locator(locator).click()
+            # Always click `first` to avoid strict-mode failures when a locator is
+            # valid but matches multiple elements (common on e-commerce grids).
+            loc = self.page.locator(locator).first
+            try:
+                loc.scroll_into_view_if_needed(timeout=2000)
+            except Exception:
+                # Scrolling is best-effort; clicking may still succeed without it.
+                pass
+            loc.click()
             self._record_step("click", label, locator=locator)
             self.steps[-1]["element"] = el_metadata
         except Exception as e:
-            self._record_step("click", label, locator=locator, error=str(e))
+            # Always screenshot on click failure; this is the single most useful
+            # artifact for evidence viewer + heatmaps.
+            self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e))
             raise
 
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:
             label = f"Assert visible: {locator}"
         try:
-            loc = self.page.locator(locator)
+            # Use `first` to avoid strict-mode violations when multiple elements
+            # match (common with overlays/duplicate buttons in e-commerce UIs).
+            loc = self.page.locator(locator).first
             loc.wait_for(state="visible", timeout=5000)
             matched_text = loc.text_content()
             self._record_step("assertion", label, locator=locator, take_screenshot=True, matched_text=matched_text)
