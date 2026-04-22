@@ -8,6 +8,7 @@ This module manages the orchestration of test generation workflow including:
 - Generating executable Playwright test files
 """
 
+import asyncio
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -191,21 +192,21 @@ class TestCaseOrchestrator:
         # If URL provided, use TestGenerator with page context for each case
         if url:
             print(f"🌐 Using page context from: {url}")
-            from src.page_context_scraper import scrape_page_context
+            from src.scraper import PageScraper
             from src.test_generator import TestGenerator
 
-            # Scrape page context once
-            page_context, scrape_error = scrape_page_context(url)
-            if page_context:
-                print(f"✅ Successfully scraped {page_context.element_count()} interactive elements")
-                print(f"   Page title: {page_context.page_title}")
+            # Scrape page context once using the modern PageScraper
+            scraper = PageScraper()
+            elements, scrape_error, _final_url = asyncio.run(scraper.scrape_url(url))
+            if elements:
+                print(f"✅ Successfully scraped {len(elements)} interactive elements")
 
             # Generate tests for each case with page context
             generator = TestGenerator(output_dir=output_dir)
             for case in cases:
                 user_request = f"{case.title}\n{case.description}\nExpected: {case.expected_outcome}"
                 try:
-                    generator.generate_and_save(user_request, page_context)
+                    generator.generate_and_save(user_request, None)
                     # Add the newly generated file from this iteration
                     if generator.generated_files:
                         generated.append(generator.generated_files[-1])
