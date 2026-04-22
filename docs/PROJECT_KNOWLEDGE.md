@@ -40,7 +40,7 @@
 
 ## Retired Modules (DO NOT RESTORE)
 
-### `src/page_context_scraper.py` — DEPRECATED
+### `src/page_context_scraper.py` — DELETED (2026-04-22)
 - **Reason:** Injected real selectors into LLM prompts via `to_prompt_block()`,
   causing the LLM to hallucinate variations of those selectors
 - **Replaced by:** skeleton-first two-phase pipeline
@@ -127,6 +127,21 @@ tracker.write(status: str = "passed") -> str  # returns sidecar path
 - The resolver matches placeholder descriptions against scraped DOM element metadata
 - Priority: ID > class > role+name > text match
 
+## Test Folder Coverage
+
+| src/ File | Test File | Status |
+|-----------|-----------|--------|
+| `code_postprocessor.py` | — | ❌ Missing — core pipeline logic |
+| `url_utils.py` | — | ❌ Missing — newly extracted pure functions |
+| `analyzer.py` | — | ⚠️ Only indirectly tested via CLI |
+| `evidence_report.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
+| `report_builder.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
+| `report_formatters.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
+| `llm_providers/__init__.py` | — | ❌ Missing |
+| `config.py` | — | ❌ Missing (trivial) |
+
+All other `src/` modules have 1:1 test files in `tests/`.
+
 ## Planned Work
 
 | ID | Feature | Files to Create |
@@ -144,6 +159,9 @@ tracker.write(status: str = "passed") -> str  # returns sidecar path
 - **2026-04-08:** Pipeline architecture refactor, multi-provider LLM support
 - **2026-04-12:** Documentation refactoring — consolidated overlapping docs
 - **2026-04-22:** CLI module split — removed `story_analyzer.py`, added `analyzer.py` and `config.py`
+- **2026-04-22:** Test folder cleanup — removed stale `tests/src/` (duplicates of src/ files),
+  `tests/example_test.py`, `tests/uat_pipeline_test.py`, `tests/coverage.xml`.
+  Deleted deprecated `src/page_context_scraper.py`. 299 tests passing.
 
 ---
 
