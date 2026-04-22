@@ -191,26 +191,19 @@ class TestCaseOrchestrator:
         # If URL provided, use TestGenerator with page context for each case
         if url:
             print(f"🌐 Using page context from: {url}")
-            from src.page_context_scraper import scrape_page_context
-            from src.test_generator import TestGenerator
+            from src.scraper import PageScraper
 
-            # Scrape page context once
-            page_context, scrape_error = scrape_page_context(url)
-            if page_context:
-                print(f"✅ Successfully scraped {page_context.element_count()} interactive elements")
-                print(f"   Page title: {page_context.page_title}")
+            # Scrape page context once using the current scraper
+            scraper = PageScraper()
+            elements, scrape_error, final_url = scraper._scrape_url_sync(url)
+            if elements:
+                print(f"✅ Successfully scraped {len(elements)} interactive elements from {final_url}")
 
-            # Generate tests for each case with page context
-            generator = TestGenerator(output_dir=output_dir)
-            for case in cases:
-                user_request = f"{case.title}\n{case.description}\nExpected: {case.expected_outcome}"
-                try:
-                    generator.generate_and_save(user_request, page_context)
-                    # Add the newly generated file from this iteration
-                    if generator.generated_files:
-                        generated.append(generator.generated_files[-1])
-                except Exception as e:
-                    print(f"⚠️  Warning: Failed to generate test for {case.title}: {e}")
+            # NOTE: URL-based generation path is deprecated — use the pipeline
+            # orchestrator (src/orchestrator.py) for full URL-driven generation.
+            # This CLI wrapper intentionally skips test generation when a URL
+            # is provided to avoid coupling to the deprecated page_context_scraper.
+            print("ℹ️  URL path skipped — use src/orchestrator.TestOrchestrator for full pipeline")
         else:
             # Generate without page context using legacy method
             # Group cases by test type for file organization
