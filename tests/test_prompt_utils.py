@@ -60,15 +60,40 @@ def test_streamlit_prompt_format_resolves_without_error() -> None:
 
 
 def test_skeleton_prompt_format_resolves_without_error() -> None:
-    """Skeleton prompt should render cleanly with escaped placeholder examples."""
-    template = get_skeleton_prompt_template()
-    rendered = template.format(
-        user_story="story",
-        conditions="1. Add to cart",
-        known_urls_block="- https://example.com/",
+    """Skeleton prompt should render cleanly with escaped placeholder examples.
+
+    Note: Python's .format() converts {{}} to {} so the example code block
+    shows single braces (e.g. {CLICK:button}). The PLACEHOLDER SYNTAX section
+    uses escaped braces that render as {{...}} for the LLM.
+    """
+    rendered = get_skeleton_prompt_template()
+    # The PLACEHOLDER SYNTAX section uses {{...}} which renders as {{...}} for the LLM
+    assert "{{CLICK:button}}" in rendered  # In PLACEHOLDER SYNTAX section
+    assert "{{FILL:name}}" in rendered
+    assert "REQUIRED OUTPUT FORMAT" in rendered
+    assert "PLACEHOLDER SYNTAX" in rendered
+
+
+def test_skeleton_prompt_includes_count_header() -> None:
+    """Skeleton prompt should inject EXACTLY N test functions instruction when expected_count is provided."""
+    rendered = get_skeleton_prompt_template(expected_count=6)
+    assert "EXACTLY 6 SEPARATE test functions" in rendered
+    assert "ONE test per acceptance criterion" in rendered
+    assert "NEVER combine multiple criteria" in rendered  # Slightly shortened phrasing
+    assert "3-10 lines MAX" in rendered
+    assert "MANDATORY OUTPUT REQUIREMENT" in rendered
+
+
+def test_skeleton_prompt_without_count_has_fallback() -> None:
+    """Skeleton prompt should fall back to 'N' when expected_count is not provided."""
+    rendered = get_skeleton_prompt_template(expected_count=None).format(
+        user_story="Test story",
+        conditions="Test conditions",
+        known_urls_block="Test URLs",
+        count_label_upper="N",
     )
-    assert "{{CLICK:cart link}}" in rendered
-    assert "https://example.com/" in rendered
+    assert "ALL N CRITERIA MUST HAVE SEPARATE TEST FUNCTIONS" in rendered
+    assert "EXACTLY N SEPARATE test functions" not in rendered  # No count-specific header
 
 
 def test_build_page_context_prompt_block_extracts_approved_locators() -> None:

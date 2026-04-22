@@ -126,9 +126,17 @@ class EvidenceTracker:
             except Exception:
                 pass
 
+            # Capture full document size so coordinates relative to frame always match.
+            doc_size = self.page.evaluate(
+                "() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
+            )
+            dw = doc_size["width"]
+            dh = doc_size["height"]
+
             raw_bbox = loc.bounding_box()
             if raw_bbox:
-                # Calculate center points
+                # bounding_box() is relative to the main frame (the whole page).
+                # We record these coordinates as a percentage of the WHOLE document.
                 center_x = raw_bbox["x"] + (raw_bbox["width"] / 2)
                 center_y = raw_bbox["y"] + (raw_bbox["height"] / 2)
 
@@ -141,14 +149,11 @@ class EvidenceTracker:
                     "center_y": center_y,
                 }
 
-                viewport_size = self.page.viewport_size
-                if viewport_size:
-                    vw = viewport_size["width"]
-                    vh = viewport_size["height"]
-                    viewport_pct = {
-                        "x": (center_x / vw) * 100,
-                        "y": (center_y / vh) * 100,
-                    }
+                # Record center point as percentage of FULL document
+                viewport_pct = {
+                    "x": (center_x / dw) * 100,
+                    "y": (center_y / dh) * 100,
+                }
         except Exception:
             pass
 
@@ -184,7 +189,8 @@ class EvidenceTracker:
             screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}.png"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
-                self.page.screenshot(path=str(screenshot_full_path))
+                # Take full page screenshot so coordinates relative to frame always match.
+                self.page.screenshot(path=str(screenshot_full_path), full_page=True)
                 screenshot_path = f"evidence/{screenshot_name}"
             except Exception:
                 pass

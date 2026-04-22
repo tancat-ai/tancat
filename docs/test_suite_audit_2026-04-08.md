@@ -72,7 +72,7 @@ Examples:
 
 - old flat generated files like `generated_tests/test_20260405_221034_PAGE_CONTEXT__use_these_locato.py`
 - old package folders from multiple UAT attempts
-- sample/demo files such as `generated_tests/example_test.py` and `generated_tests/test_happy_path.py`
+- sample/demo files such as `tests/example_test.py` and `generated_tests/test_happy_path.py`
 
 These are not part of the maintained unit suite because `pytest.ini` points test discovery at `tests/` only.
 

@@ -222,3 +222,43 @@ No PAGE CONTEXT is available, so only generate structural test logic and leave u
 === APPROVED LOCATORS ===
 {locators_block}
 """
+
+
+def count_conditions(conditions: str) -> int:
+    """Return the number of non-empty condition lines."""
+    return len([line.strip() for line in conditions.splitlines() if line.strip()])
+
+
+def prepare_conditions_for_generation(conditions: str) -> str:
+    """Enumerate conditions with line numbers for clear LLM referencing."""
+    condition_lines = [line.strip() for line in conditions.splitlines() if line.strip()]
+    normalized_lines: list[str] = []
+
+    for index, line in enumerate(condition_lines, start=1):
+        stripped_line = re.sub(r"^\d+[.)]\s*", "", line).strip()
+        normalized_lines.append(f"{index}. {stripped_line}")
+
+    total_count = len(normalized_lines)
+    if total_count == 0:
+        return conditions
+
+    return (
+        f"There are exactly {total_count} test conditions below.\n"
+        f"Generate EXACTLY {total_count} pytest test functions.\n"
+        "Generate ONE test function per condition.\n"
+        "Do NOT combine multiple conditions into one test.\n"
+        "Name the tests in order such as test_01_..., test_02_..., test_03_....\n\n" + "\n".join(normalized_lines)
+    )
+
+
+def build_retry_conditions(
+    prepared_conditions: str,
+    expected_test_count: int,
+) -> str:
+    """Return a stricter condition prompt for a one-time skeleton retry."""
+    return (
+        prepared_conditions
+        + "\n\nCRITICAL CORRECTION:\n"
+        + f"The previous answer did not produce exactly {expected_test_count} separate pytest test functions.\n"
+        + "Regenerate the file with one test function per numbered condition and do not merge them."
+    )

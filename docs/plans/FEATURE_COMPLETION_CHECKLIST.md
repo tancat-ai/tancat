@@ -5,18 +5,18 @@
 | Feature Doc | Status | Key Remaining Work |
 |---|---|---|
 | `docs/session_02_placeholder_resolver.md` | Implemented | Monitor only |
-| `docs/session_03_orchestrator.md` | Partial | Add scraper retry/backoff and partial-failure reporting |
-| `docs/session_04_final_polish.md` | Partial | Close debug cleanup and align docs with shipped behavior |
+| `docs/session_03_orchestrator.md` | Implemented | Monitor only |
+| `docs/session_04_final_polish.md` | Implemented | Monitor only |
 | `docs/plans/AI-016_plan.md` | Implemented | Monitor only |
 | `docs/plans/AI-017_plan.md` | Not implemented | Build living test plan module, tests, and Streamlit sign-off flow |
 | `docs/plans/AI-018_plan.md` | Implemented | Monitor only |
-| `docs/plans/AI-019_plan.md` | Implemented | Complete end-to-end validation evidence |
+| `docs/plans/AI-019_plan.md` | Implemented | Monitor only |
 | `docs/plans/AI019_section1_audit.md` | Implemented | None |
 | `docs/plans/AI019_section2_prompts.md` | Implemented | None |
-| `docs/plans/AI019_section3_validation.md` | Partial | Run full validation flow and capture outputs |
+| `docs/plans/AI019_section3_validation.md` | Implemented | None |
 | `docs/plans/AI-020_plan.md` | Implemented | Minor UI polish only |
-| `docs/plans/AI-021_plan.md` | Partial | Build real Gantt UI and expose grouping/detail modes |
-| `docs/plans/AI-022_plan.md` | Partial | Build richer heat map grouping/trend UI |
+| `docs/plans/AI-021_plan.md` | Implemented | None |
+| `docs/plans/AI-022_plan.md` | Implemented | None |
 | `docs/session_05_pipeline_rebuild_plan.md` | Partial | Complete page-object execution path, package completeness, UAT, and validation |
 
 ## Phase 1: Missing Foundation
@@ -37,25 +37,25 @@
 
 ## Phase 3: Validation And Hardening
 
-- [ ] Complete AI-019 end-to-end validation checklist
-- [ ] Add scraper retry/backoff support
-- [ ] Add scraper partial-failure metadata/reporting
-- [ ] Reduce remaining debug-only prints in core paths
+- [x] Complete AI-019 end-to-end validation checklist
+- [x] Add scraper retry/backoff support
+- [x] Add scraper partial-failure metadata/reporting
+- [x] Reduce remaining debug-only prints in core paths
 - [x] Replace Windows-fragile stateful scraper thread launch with a subprocess-backed implementation
 - [x] Make test plan sign-off act as the primary save-and-approve action in the UI
 
 ## Phase 4: Evidence UX Completion
 
-- [ ] Upgrade AI-021 to a real Gantt visualization
-- [ ] Expose Gantt grouping modes in the UI
-- [ ] Add per-bar detail cards for evidence context
-- [ ] Upgrade AI-022 to a richer grouped heat map
-- [ ] Feed test-plan confirmation state into heat map confidence views
-- [ ] Add trend/summary panels after grouped data is stable
-- [ ] Fix evidence viewer screenshot selection so segments prefer meaningful post-action states over consent-blocked or pre-action captures
+- [x] Upgrade AI-021 to a real Gantt visualization
+- [x] Expose Gantt grouping modes in the UI
+- [x] Add per-bar detail cards for evidence context
+- [x] Upgrade AI-022 to a richer grouped heat map
+- [x] Feed test-plan confirmation state into heat map confidence views
+- [x] Add trend/summary panels after grouped data is stable
+- [x] Fix evidence viewer screenshot selection so segments prefer meaningful post-action states over consent-blocked or pre-action captures
 - [x] Replace raw placeholder-token labels in evidence views with cleaner user-facing step descriptions
 - [x] Fix multi-page evidence attribution so downstream URLs like `/view_cart` and `/checkout` reliably receive their own interaction points
-- [ ] Fix suite heatmap background/image selection so the selected page and its evidence points stay in sync
+- [x] Fix suite heatmap background/image selection so the selected page and its evidence points stay in sync
 - [x] Add focused tests for consent-overlay-heavy runs and multi-page evidence segmentation
 - [x] Improve navigate screenshots by dismissing common consent overlays before evidence capture when possible
 

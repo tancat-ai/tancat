@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -38,11 +39,18 @@ class PipelineRunService:
         command = [sys.executable, "-m", *pytest_command]
 
         project_root = str(Path(__file__).resolve().parent.parent)
+        package_dir = str(Path(saved_path).parent.absolute())
+
+        env = os.environ.copy()
+        # Add both project root and package directory to PYTHONPATH
+        env["PYTHONPATH"] = os.pathsep.join([project_root, package_dir, env.get("PYTHONPATH", "")])
+
         completed = subprocess.run(
             command,
             capture_output=True,
             text=True,
             cwd=cwd or project_root,
+            env=env,
             check=False,
         )
 

@@ -1,10 +1,10 @@
-# Demo Guide — AI Playwright Test Generator
+﻿# Demo Guide â€” AI Playwright Test Generator
 
 This guide provides a step-by-step walkthrough for demonstrating the AI Playwright Test Generator to stakeholders.
 
 ---
 
-## 🎯 Demo Objective
+## ðŸŽ¯ Demo Objective
 
 Show how non-technical QA testers can create automated Playwright tests from user stories in under 5 minutes using an LLM.
 
@@ -14,7 +14,7 @@ Show how non-technical QA testers can create automated Playwright tests from use
 
 ---
 
-## 📋 Pre-Demo Checklist
+## ðŸ“‹ Pre-Demo Checklist
 
 Run these checks before the demo:
 
@@ -54,7 +54,7 @@ All should show installed versions.
 
 ---
 
-## 🎬 Demo Script
+## ðŸŽ¬ Demo Script
 
 ### Step 1: Launch the Application (30 seconds)
 
@@ -65,7 +65,7 @@ streamlit run streamlit_app.py
 
 **What Happens:**
 - Browser opens automatically to `http://localhost:8501`
-- Title displays: "🎭 AI Playwright Test Generator"
+- Title displays: "ðŸŽ­ AI Playwright Test Generator"
 - Dark terminal-themed UI loads
 
 **Talking Points:**
@@ -80,12 +80,12 @@ streamlit run streamlit_app.py
 
 **Expected Display:**
 ```
-✅ Page Context Scraper Active
+âœ… Page Context Scraper Active
 The scraper will attempt to scan the page at https://www.saucedemo.com to extract real DOM elements.
 ```
 
 **Talking Points:**
-> "Notice the scraper is active — it will extract real DOM elements from the page. This means the generated tests use actual selectors, not placeholder values."
+> "Notice the scraper is active â€” it will extract real DOM elements from the page. This means the generated tests use actual selectors, not placeholder values."
 
 ---
 
@@ -113,7 +113,7 @@ Acceptance Criteria:
 ### Step 4: Generate Test (1-3 minutes depending on LLM speed)
 
 **UI Action:**
-- Click the "✨ Generate Test" button
+- Click the "âœ¨ Generate Test" button
 
 **What Happens:**
 1. Page scraper activates (if URL was set)
@@ -121,7 +121,7 @@ Acceptance Criteria:
 3. Test is auto-saved to `generated_tests/` directory
 
 **Expected Display:**
-- Success toast: "✅ Test generated successfully!"
+- Success toast: "âœ… Test generated successfully!"
 - Code display with tabs for "Python Code" and "Preview"
 
 **Expected Generated Test (similar to):**
@@ -154,40 +154,40 @@ def test_01_login_page_displayed(page: Page) -> None:
 
 **Expected Display:**
 ```
-📊 Coverage Analysis
-┌─────────────────────────────┬───────┬───────────┬──────────┐
-│ Overall Coverage            │ 4/5   │ 4         │ 20%      │
-├─────────────────────────────┼───────┼───────────┼──────────┤
-│ ████████████████░░ 80%      │ Covered│ Tests      │ Pending  │
-└─────────────────────────────┴───────┴───────────┴──────────┘
+ðŸ“Š Coverage Analysis
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Overall Coverage            â”‚ 4/5   â”‚ 4         â”‚ 20%      â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚ â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–‘â–‘ 80%      â”‚ Coveredâ”‚ Tests      â”‚ Pending  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 **UI Action:**
-- Click "📋 Detailed Coverage Report" to expand
+- Click "ðŸ“‹ Detailed Coverage Report" to expand
 
 **Expected Display:**
 ```
-┌─────────────────────────────────────────────────────────────────┬────────┬──────────┐
-│ Requirement                                                    │ Status │ Coverage │
-├─────────────────────────────────────────────────────────────────┼────────┼──────────┤
-│ Login form fields visible                                      │ ✅     │ 100%     │
-│ Enter username and password                                    │ ✅     │ 100%     │
-│ LOGIN button present                                           │ ✅     │ 100%     │
-│ Valid credentials redirect                                     │ ✅     │ 100%     │
-│ Inventory displays product cards                               │ ⚠️     │ 60%      │
-└─────────────────────────────────────────────────────────────────┴────────┴──────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Requirement                                                    â”‚ Status â”‚ Coverage â”‚
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”¼â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚ Login form fields visible                                      â”‚ âœ…     â”‚ 100%     â”‚
+â”‚ Enter username and password                                    â”‚ âœ…     â”‚ 100%     â”‚
+â”‚ LOGIN button present                                           â”‚ âœ…     â”‚ 100%     â”‚
+â”‚ Valid credentials redirect                                     â”‚ âœ…     â”‚ 100%     â”‚
+â”‚ Inventory displays product cards                               â”‚ âš ï¸     â”‚ 60%      â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 
-🎯 Generated Test Functions:
-┌─────────────────────────────────────────────────────────────────┐
-│ ✓ test_01_login_page_displayed                                  │
-│   - TC-1: Verify login form is visible                         │
-│   - TC-2: User can enter username and password                 │
-│   - TC-3: LOGIN button is present                              │
-│   - TC-4: Redirect on valid credentials                        │
-│                                                                 │
-│ ✓ test_02_inventory_displayed                                   │
-│   - TC-5: Inventory displays product cards                     │
-└─────────────────────────────────────────────────────────────────┘
+ðŸŽ¯ Generated Test Functions:
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ âœ“ test_01_login_page_displayed                                  â”‚
+â”‚   - TC-1: Verify login form is visible                         â”‚
+â”‚   - TC-2: User can enter username and password                 â”‚
+â”‚   - TC-3: LOGIN button is present                              â”‚
+â”‚   - TC-4: Redirect on valid credentials                        â”‚
+â”‚                                                                 â”‚
+â”‚ âœ“ test_02_inventory_displayed                                   â”‚
+â”‚   - TC-5: Inventory displays product cards                     â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 **Talking Points:**
@@ -198,7 +198,7 @@ def test_01_login_page_displayed(page: Page) -> None:
 ### Step 6: Run the Test (1 minute)
 
 **UI Action:**
-- Click "▶️ Run Now" button
+- Click "â–¶ï¸ Run Now" button
 
 **What Happens:**
 1. Spinner displays: "Running tests..."
@@ -207,7 +207,7 @@ def test_01_login_page_displayed(page: Page) -> None:
 
 **Expected Output (on success):**
 ```
-✅ All tests passed!
+âœ… All tests passed!
 
 === pytest test session starts =============================
 collected 2 items
@@ -220,7 +220,7 @@ test_20260308_125114_as_a_visitor_to_saucedemo_com_i_want_to_log_in_wi.py::test_
 
 **Expected Output (on failure - if site changes):**
 ```
-❌ Some tests failed
+âŒ Some tests failed
 
 === pytest test session starts =============================
 collected 2 items
@@ -255,9 +255,9 @@ E        +    where is_visible = <Playwright ElementHandle for text='Backpack'>.
 - Show the three download buttons at the bottom:
 
 **Expected Buttons:**
-1. **"🐍 Python (.py)"** — Original test file with all imports and code
-2. **"📋 JSON Report"** — Structured coverage data for CI/CD integration
-3. **"🌐 HTML Report"** — Standalone HTML report (can be opened in any browser)
+1. **"ðŸ Python (.py)"** â€” Original test file with all imports and code
+2. **"ðŸ“‹ JSON Report"** â€” Structured coverage data for CI/CD integration
+3. **"ðŸŒ HTML Report"** â€” Standalone HTML report (can be opened in any browser)
 
 **Expected Behavior:**
 - Each button triggers a file download
@@ -268,20 +268,20 @@ E        +    where is_visible = <Playwright ElementHandle for text='Backpack'>.
 
 ---
 
-## 📊 Demo Success Criteria
+## ðŸ“Š Demo Success Criteria
 
 | Feature | Expected Result | Verification |
 |---------|-----------------|--------------|
-| Page scraper active | Green status box shows scraper info | ✅ |
-| Test generation | Python code displayed in tab | ✅ |
-| Coverage analysis | Metrics + detailed report expandable | ✅ |
-| Test execution | Pass/Fail with pytest output | ✅ |
-| Download options | 3 file formats available | ✅ |
-| Auto-save | Test file appears in `generated_tests/` | ✅ |
+| Page scraper active | Green status box shows scraper info | âœ… |
+| Test generation | Python code displayed in tab | âœ… |
+| Coverage analysis | Metrics + detailed report expandable | âœ… |
+| Test execution | Pass/Fail with pytest output | âœ… |
+| Download options | 3 file formats available | âœ… |
+| Auto-save | Test file appears in `generated_tests/` | âœ… |
 
 ---
 
-## ⚠️ Potential Issues & Mitigations
+## âš ï¸ Potential Issues & Mitigations
 
 | Issue | Cause | Mitigation |
 |-------|-------|------------|
@@ -294,7 +294,7 @@ E        +    where is_visible = <Playwright ElementHandle for text='Backpack'>.
 
 ---
 
-## 🧪 Alternative Demo Sites
+## ðŸ§ª Alternative Demo Sites
 
 If saucedemo.com is unavailable, try:
 
@@ -306,7 +306,7 @@ If saucedemo.com is unavailable, try:
 
 ---
 
-## 📝 Quick Reference Commands
+## ðŸ“ Quick Reference Commands
 
 ```bash
 # Start demo
@@ -327,26 +327,26 @@ streamlit run streamlit_app.py --server.enableCORS false
 
 ---
 
-## 🎤 Key Talking Points Summary
+## ðŸŽ¤ Key Talking Points Summary
 
-1. **"From user story to test in minutes"** — Highlight speed of workflow
-2. **"No test automation knowledge required"** — Emphasize accessibility for non-developers
-3. **"Real selectors, real tests"** — Explain scraper integration
-4. **"Coverage tracking out of the box"** — Show requirement mapping
-5. **"CI/CD ready outputs"** — Mention multiple export formats
-
----
-
-## 📚 Related Documentation
-
-- [README.md](README.md) — Full project documentation
-- [FEATURE_SPEC_page_context_scraper.md](FEATURE_SPEC_page_context_scraper.md) — Technical specifications
-- [PROJECT_KNOWLEDGE.md](PROJECT_KNOWLEDGE.md) — Implementation details
-- [BACKLOG.md](BACKLOG.md) — Known issues and improvements
+1. **"From user story to test in minutes"** â€” Highlight speed of workflow
+2. **"No test automation knowledge required"** â€” Emphasize accessibility for non-developers
+3. **"Real selectors, real tests"** â€” Explain scraper integration
+4. **"Coverage tracking out of the box"** â€” Show requirement mapping
+5. **"CI/CD ready outputs"** â€” Mention multiple export formats
 
 ---
 
-## 🎬 Post-Demo Discussion Points
+## ðŸ“š Related Documentation
+
+- [README.md](README.md) â€” Full project documentation
+- [docs/specs/FEATURE_SPEC_page_context_scraper.md](docs/specs/FEATURE_SPEC_page_context_scraper.md) â€” Technical specifications
+- [docs/PROJECT_KNOWLEDGE.md](docs/PROJECT_KNOWLEDGE.md) â€” Implementation details
+- [BACKLOG.md](BACKLOG.md) â€” Known issues and improvements
+
+---
+
+## ðŸŽ¬ Post-Demo Discussion Points
 
 **Q: How does this integrate with existing CI/CD?**
 > A: Export the JSON report for CI pipelines, or simply commit the generated Python test files to your repository.

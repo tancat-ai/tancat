@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import random
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -20,12 +22,24 @@ from src.scraper import PageScraper
 
 
 class StatefulPageScraper:
-    """Scrape pages using a Playwright browser context with a cart session."""
+    """Scrape pages using a Playwright browser context with a cart session.
 
-    def __init__(self, starting_url: str, *, timeout_ms: int = 30_000) -> None:
+    Supports retry/backoff for transient failures via max_retries and base_backoff_ms parameters.
+    """
+
+    def __init__(
+        self,
+        starting_url: str,
+        *,
+        timeout_ms: int = 30_000,
+        max_retries: int = 2,
+        base_backoff_ms: int = 1000,
+    ) -> None:
         self.starting_url = starting_url.strip()
         self.timeout_ms = timeout_ms
-        self._html_scraper = PageScraper(timeout=30.0)
+        self.max_retries = max_retries
+        self.base_backoff_ms = base_backoff_ms
+        self._html_scraper = PageScraper(timeout_ms=30000)
 
     async def scrape_url(self, url: str) -> list[dict[str, Any]]:
         """Async wrapper around the subprocess-backed scrape implementation."""
@@ -75,7 +89,7 @@ class StatefulPageScraper:
         return output
 
     def _scrape_urls_sync(self, urls: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """Sync implementation for multi-URL session scrape."""
+        """Sync implementation for multi-URL session scrape with retry/backoff support."""
         output: dict[str, list[dict[str, Any]]] = {}
 
         with sync_playwright() as playwright:
@@ -87,11 +101,27 @@ class StatefulPageScraper:
             try:
                 self._seed_cart_session(page)
                 for url in urls:
-                    try:
-                        page.goto(url, wait_until="domcontentloaded")
-                        html = page.content()
-                        output[url] = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-                    except Exception:
+                    last_error: Exception | None = None
+
+                    for attempt in range(1, self.max_retries + 1):
+                        try:
+                            # Wait for network idle to ensure dynamic content (cart items) is loaded
+                            page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
+                            # Extra wait for stable DOM
+                            page.wait_for_timeout(1000)
+                            html = page.content()
+                            result = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
+                            output[url] = result
+                            last_error = None
+                            break
+                        except Exception as e:
+                            last_error = e
+                            if attempt < self.max_retries:
+                                backoff = self.base_backoff_ms * (2 ** (attempt - 1)) + random.uniform(0, 100)
+                                time.sleep(backoff / 1000.0)
+
+                    # If all retries exhausted and we still have an error, record empty result
+                    if last_error is not None and url not in output:
                         output[url] = []
             finally:
                 context.close()

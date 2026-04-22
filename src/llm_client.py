@@ -129,6 +129,11 @@ CRITICAL REQUIREMENTS:
 
         return cleaned
 
+    def _debug(self, message: str) -> None:
+        """Print debug message if logging is enabled."""
+        if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
+            print(f"[llm_client] {message}", flush=True)
+
     def _complete_sync(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> ChatCompletion:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
@@ -136,15 +141,28 @@ CRITICAL REQUIREMENTS:
         self.reset_conversation(system_prompt=system_prompt)
         self._conversation_history.append(ChatMessage(role="user", content=prompt))
 
+        import time
+
+        start_time = time.time()
         try:
+            self._debug(f"Calling provider={self.provider_name} model={self._model} timeout={timeout}")
             completion = self._provider.complete(
                 messages=self._conversation_history,
                 model=self._model,
                 timeout=timeout,
             )
+            elapsed = time.time() - start_time
+            content_len = len(completion.content) if completion.content else 0
+            self._debug(f"Received completion in {elapsed:.2f}s, length={content_len} chars")
+
+            if not completion.content or content_len < 10:
+                print(f"Warning: LLM returned suspiciously short response: '{completion.content}'")
+
             self._conversation_history.append(ChatMessage(role="assistant", content=completion.content))
             return completion
-        except Exception:
+        except Exception as e:
+            elapsed = time.time() - start_time
+            self._debug(f"LLM call failed after {elapsed:.2f}s: {e}")
             self._conversation_history.pop()
             raise
 

@@ -88,6 +88,7 @@ class ScrapedPage:
     url: str
     element_count: int
     elements: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly representation."""

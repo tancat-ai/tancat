@@ -46,14 +46,26 @@ class TestGenerator:
         user_story: str,
         conditions: str,
         target_urls: list[str] | None = None,
+        expected_count: int | None = None,
     ) -> str:
         """Generate placeholder-based skeleton code for the intelligent pipeline."""
         urls = target_urls or []
         known_urls_block = "\n".join(f"- {url}" for url in urls) if urls else "- No URLs were supplied."
-        prompt = get_skeleton_prompt_template().format(
-            user_story=user_story,
-            conditions=conditions,
-            known_urls_block=known_urls_block,
+        count_note = (
+            f"\n\nIMPORTANT: You must generate exactly {expected_count} test functions (one per criterion)."
+            if expected_count
+            else ""
+        )
+        # Compute count_label_upper for the template's {count_label_upper} placeholder
+        count_label_upper = str(expected_count).upper() if expected_count is not None else "N"
+        prompt = (
+            get_skeleton_prompt_template().format(
+                user_story=user_story,
+                conditions=conditions,
+                known_urls_block=known_urls_block,
+                count_label_upper=count_label_upper,
+            )
+            + count_note
         )
         return await self.client.generate(prompt)
 

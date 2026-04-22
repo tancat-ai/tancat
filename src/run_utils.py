@@ -60,7 +60,6 @@ def build_pytest_run_command(saved_path: str, failed_nodeids: Sequence[str] | No
         "--screenshot=only-on-failure",
         "-v",
         "--tb=short",
-        "--maxfail=5",
     ]
     if failed_nodeids:
         command.extend(failed_nodeids)

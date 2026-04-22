@@ -1,9 +1,9 @@
-# Session 05: Intelligent Pipeline Rebuild Plan
+﻿# Session 05: Intelligent Pipeline Rebuild Plan
 
 ## Why This Session Exists
 
 The current intelligent pipeline is only partially aligned with the intended design in
-[FEATURE_SPEC_intelligent_scraping_pipeline.md](c:/Users/l_a_c/code/AI-Playwright-Test-Generator/FEATURE_SPEC_intelligent_scraping_pipeline.md).
+[docs/specs/FEATURE_SPEC_intelligent_scraping_pipeline.md](c:/Users/l_a_c/code/AI-Playwright-Test-Generator/docs/specs/FEATURE_SPEC_intelligent_scraping_pipeline.md).
 
 What was intended:
 - Generate a placeholder-first skeleton from the story.
@@ -144,7 +144,7 @@ Required behavior:
 - Then evaluate test 2 for missing pieces only.
 
 Important:
-- This should no longer be “all placeholders vs all pages globally”.
+- This should no longer be â€œall placeholders vs all pages globallyâ€.
 
 Acceptance:
 - A multi-step cart journey resolves in order and records which page each step belongs to.

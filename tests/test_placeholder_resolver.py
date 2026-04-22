@@ -147,3 +147,28 @@ def test_click_add_to_cart_does_not_match_cart_navigation_link() -> None:
     }
 
     assert resolver.resolve_all(placeholders, pages) == ["'[data-product-id=\"11\"]'"]
+
+
+def test_click_checkout_prefers_checkout_over_payment() -> None:
+    resolver = PlaceholderResolver(match_threshold=1)
+    placeholders = [("CLICK", "proceed to checkout button")]
+    pages = {
+        "https://example.com/view_cart": [
+            {
+                "selector": 'a[href="/payment"]',
+                "text": "Payment",
+                "role": "a",
+                "href": "https://example.com/payment",
+                "classes": "",
+            },
+            {
+                "selector": 'a[href="/checkout"]',
+                "text": "Proceed To Checkout",
+                "role": "a",
+                "href": "https://example.com/checkout",
+                "classes": "btn btn-default check_out",
+            },
+        ]
+    }
+
+    assert resolver.resolve_all(placeholders, pages) == ["'a[href=\"/checkout\"]'"]

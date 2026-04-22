@@ -26,17 +26,23 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/products": [
-                {"selector": "#add-to-cart", "text": "Add To Cart Button", "role": "button"},
-            ],
-            "https://example.com/view_cart": [
-                {
-                    "selector": "#cart-summary",
-                    "text": "Items in cart",
-                    "role": "region",
-                    "href": "https://example.com/view_cart",
-                }
-            ],
+            "https://example.com/products": (
+                [{"selector": "#add-to-cart", "text": "Add To Cart Button", "role": "button"}],
+                None,
+                "https://example.com/products",
+            ),
+            "https://example.com/view_cart": (
+                [
+                    {
+                        "selector": "#cart-summary",
+                        "text": "Items in cart",
+                        "role": "region",
+                        "href": "https://example.com/view_cart",
+                    }
+                ],
+                None,
+                "https://example.com/view_cart",
+            ),
         }
     )
 
@@ -48,10 +54,10 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "page.locator('#add-to-cart:visible').click()" in final_code
-    assert "page.goto(" in final_code
+    assert "evidence_tracker.click('#add-to-cart:visible'" in final_code
+    assert "evidence_tracker.navigate(" in final_code
     assert "https://example.com/view_cart" in final_code
-    assert "expect(page.locator('#cart-summary')).to_be_visible()" in final_code
+    assert "evidence_tracker.assert_visible('#cart-summary'" in final_code
     assert orchestrator.last_result is not None
     assert [journey.test_name for journey in orchestrator.last_result.journeys] == ["test_checkout"]
     scraped_urls = [page.url for page in orchestrator.last_result.scraped_page_records]
@@ -115,16 +121,25 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/": [
-                {
-                    "selector": 'a[href="/view_cart"]',
-                    "text": "Cart",
-                    "role": "a",
-                    "href": "https://example.com/view_cart",
-                }
-            ]
+            "https://example.com/": (
+                [
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    }
+                ],
+                None,
+                "https://example.com/",
+            )
         }
     )
+
+    async def fake_scrape_url(url: str) -> tuple[list[dict[str, str]], str | None, str]:
+        return [], None, url
+
+    orchestrator.scraper.scrape_url = fake_scrape_url  # type: ignore[assignment]
 
     final_code = asyncio.run(
         orchestrator.run_pipeline(
@@ -135,9 +150,9 @@ def test_checkout(page: Page):
     )
 
     assert "import pytest" in final_code
-    assert "page.goto(" in final_code
+    assert "evidence_tracker.navigate(" in final_code
     assert "https://example.com/" in final_code
-    assert "self.page.locator('a[href=\"/view_cart\"]:visible').click()" in final_code
+    assert "evidence_tracker.click('a[href=\"/view_cart\"]:visible'" in final_code
     assert "pytest.skip" in final_code
 
 
@@ -193,8 +208,16 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/": [{"selector": "#hero", "text": "Hero", "role": "region"}],
-            "https://example.com/products": [{"selector": "#buy", "text": "Add to Cart", "role": "button"}],
+            "https://example.com/": (
+                [{"selector": "#hero", "text": "Hero", "role": "region"}],
+                None,
+                "https://example.com/",
+            ),
+            "https://example.com/products": (
+                [{"selector": "#buy", "text": "Add to Cart", "role": "button"}],
+                None,
+                "https://example.com/products",
+            ),
         }
     )
 
@@ -238,7 +261,13 @@ def test_02_go_to_cart(page: Page):
 
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
-        return_value={"https://example.com/": [{"selector": "#cart", "text": "Cart", "role": "button"}]}
+        return_value={
+            "https://example.com/": (
+                [{"selector": "#cart", "text": "Cart", "role": "button"}],
+                None,
+                "https://example.com/",
+            )
+        }
     )
 
     final_code = asyncio.run(
@@ -252,6 +281,62 @@ def test_02_go_to_cart(page: Page):
     assert generator.generate_skeleton.await_count == 2  # type: ignore[attr-defined]
     assert "def test_01_add_to_cart" in final_code
     assert "def test_02_go_to_cart" in final_code
+
+
+def test_run_pipeline_normalises_unsupported_placeholder_actions_before_validation() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
+        return_value="""
+from playwright.sync_api import Page
+
+def test_01_add(page: Page):
+    {{ADD:add a product to cart}}
+"""
+    )
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="story",
+            conditions="1. add to cart",
+            target_urls=[],
+        )
+    )
+    # ADD should be normalised to CLICK so placeholder replacement runs.
+    assert "{{ADD:" not in final_code
+
+
+def test_run_pipeline_normalises_placeholder_whitespace_that_breaks_token_matching() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
+        return_value="""
+from playwright.sync_api import Page
+
+def test_01_example(page: Page):
+    {{CLICK:product named }}.click()
+"""
+    )
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "https://example.com/": (
+                [{"selector": "#buy", "text": "Buy", "role": "button"}],
+                None,
+                "https://example.com/",
+            )
+        }
+    )
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="story",
+            conditions="1. click product",
+            target_urls=["https://example.com/"],
+            consent_mode="leave-as-is",
+        )
+    )
+    assert "evidence_tracker.click('#buy:visible'" in final_code
 
 
 def test_run_pipeline_uses_first_for_duplicate_click_selectors() -> None:
@@ -268,10 +353,14 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/products": [
-                {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
-                {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
-            ]
+            "https://example.com/products": (
+                [
+                    {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
+                    {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
+                ],
+                None,
+                "https://example.com/products",
+            )
         }
     )
 
@@ -283,7 +372,7 @@ def test_checkout(page: Page):
         )
     )
 
-    assert ".locator('[data-product-id=\"1\"]:visible').first.click()" in final_code
+    assert "evidence_tracker.click('[data-product-id=\"1\"]:visible'" in final_code
 
 
 def test_run_pipeline_resolves_steps_against_the_current_journey_page() -> None:
@@ -305,26 +394,34 @@ def test_02_verify_cart(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/": [
-                {
-                    "selector": 'a[href="/view_cart"]',
-                    "text": "Cart",
-                    "role": "a",
-                    "href": "https://example.com/view_cart",
-                },
-                {
-                    "selector": "#hero-summary",
-                    "text": "Summary",
-                    "role": "region",
-                },
-            ],
-            "https://example.com/view_cart": [
-                {
-                    "selector": "#cart-summary",
-                    "text": "Cart Summary",
-                    "role": "region",
-                }
-            ],
+            "https://example.com/": (
+                [
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    },
+                    {
+                        "selector": "#hero-summary",
+                        "text": "Summary",
+                        "role": "region",
+                    },
+                ],
+                None,
+                "https://example.com/",
+            ),
+            "https://example.com/view_cart": (
+                [
+                    {
+                        "selector": "#cart-summary",
+                        "text": "Cart Summary",
+                        "role": "region",
+                    }
+                ],
+                None,
+                "https://example.com/view_cart",
+            ),
         }
     )
 
@@ -336,10 +433,10 @@ def test_02_verify_cart(page: Page):
         )
     )
 
-    assert "page.goto('https://example.com/')" in final_code
-    assert "page.locator('a[href=\"/view_cart\"]:visible').click()" in final_code
-    assert "page.goto('https://example.com/view_cart')" in final_code
-    assert "expect(page.locator('#cart-summary')).to_be_visible()" in final_code
+    assert "evidence_tracker.navigate('https://example.com/')" in final_code
+    assert "evidence_tracker.click('a[href=\"/view_cart\"]:visible'" in final_code
+    assert "evidence_tracker.navigate('https://example.com/view_cart')" in final_code
+    assert "evidence_tracker.assert_visible('#cart-summary'" in final_code
     assert "#hero-summary" not in final_code
 
 
@@ -358,15 +455,19 @@ def test_01_verify_cart(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/view_cart": [
-                {
-                    "selector": 'a[href="/view_cart"]',
-                    "text": "Cart",
-                    "role": "a",
-                    "href": "https://example.com/view_cart",
-                },
-                {"selector": ".cart_description", "text": "Blue Top", "role": "div", "href": ""},
-            ]
+            "https://example.com/view_cart": (
+                [
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    },
+                    {"selector": ".cart_description", "text": "Blue Top", "role": "div", "href": ""},
+                ],
+                None,
+                "https://example.com/view_cart",
+            )
         }
     )
     orchestrator.semantic_ranker.choose_best_candidate = AsyncMock(  # type: ignore[method-assign]
@@ -381,7 +482,7 @@ def test_01_verify_cart(page: Page):
         )
     )
 
-    assert "expect(page.locator('.cart_description')).to_be_visible()" in final_code
+    assert "evidence_tracker.assert_visible('.cart_description'" in final_code
 
 
 def test_run_pipeline_normalises_payable_type_to_page() -> None:
@@ -462,16 +563,25 @@ def test_checkout(page: Page):
     orchestrator = TestOrchestrator(generator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
-            "https://example.com/": [
-                {
-                    "selector": 'a[href="/view_cart"]',
-                    "text": "Cart",
-                    "role": "a",
-                    "href": "https://example.com/view_cart",
-                }
-            ]
+            "https://example.com/": (
+                [
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    }
+                ],
+                None,
+                "https://example.com/",
+            )
         }
     )
+
+    async def fake_scrape_url(url: str) -> tuple[list[dict[str, str]], str | None, str]:
+        return [], None, url
+
+    orchestrator.scraper.scrape_url = fake_scrape_url  # type: ignore[assignment]
 
     final_code = asyncio.run(
         orchestrator.run_pipeline(
@@ -483,5 +593,178 @@ def test_checkout(page: Page):
     )
 
     assert "def dismiss_consent_overlays(page: Page) -> None:" in final_code
-    assert 'page.goto("https://example.com/")' in final_code
+    assert 'evidence_tracker.navigate("https://example.com/")' in final_code
     assert "dismiss_consent_overlays(page)" in final_code
+
+
+def test_normalise_generated_code_strips_invalid_pytest_mark_assignment() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+@pytest.markelse = None # Placeholder to keep structure clean
+@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok(page: Page, evidence_tracker) -> None:
+    pass
+"""
+    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "@pytest.markelse" not in fixed
+    assert "@pytest.mark.evidence" in fixed
+
+
+def test_normalise_generated_code_repairs_hallucinated_page_object_constructor_and_callsite() -> None:
+    broken = """
+from playwright.sync_api import Page, expect
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+class CartPage:
+    def __larry(self, page: Page):
+        self.page = page
+
+    def go(self) -> None:
+        dismiss_consent_overlays(page)
+        page.goto("https://example.com/")
+
+def test_01_checkout(page: Page):
+    cart = CartPage(project=page) # Note: using placeholder logic
+    cart.go()
+"""
+    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "def __init__(self, page: Page) -> None:" in fixed
+    assert "CartPage(page)" in fixed
+    assert "dismiss_consent_overlays(self.page)" in fixed
+    assert 'evidence_tracker.navigate("https://example.com/")' in fixed
+
+
+def test_normalise_generated_code_rewrites_hallucinated_evidence_launcher_fixture() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok(page: Page, evidence_launcher) -> None:
+    evidence_launcher.step("hello")
+"""
+    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "evidence_launcher" not in fixed
+    assert "evidence_tracker" in fixed
+
+
+def test_normalise_generated_code_repairs_pytest_mark_slash_typo() -> None:
+    broken = """
+import pytest
+
+@pytest.mark/evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok() -> None:
+    assert True
+"""
+    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "@pytest.mark/evidence" not in fixed
+    assert "@pytest.mark.evidence" in fixed
+
+
+def test_normalise_generated_code_rewrites_consent_helper_page_reference_in_page_objects() -> None:
+    broken = """
+from playwright.sync_api import Page
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+class ProductPage:
+    def __init__(self, page: Page):
+        self.page = page
+
+    def navigate(self, evidence_tracker) -> None:
+        evidence_tracker.navigate("https://example.com/")
+        dismiss_consent_overlays(page)
+"""
+    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "dismiss_consent_overlays(self.page)" in fixed
+
+
+def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
+    """Ensure evidence labels use the plain description, not the bracketed token."""
+    orchestrator = TestOrchestrator(AsyncMock())
+    line = "evidence_tracker.click('{{CLICK:basket}}')"
+
+    fixed = orchestrator._replace_token_in_line(
+        line=line,
+        action="CLICK",
+        token="{{CLICK:basket}}",
+        resolved_value="'#cart-btn'",
+        duplicate_selectors=set(),
+        description="shopping basket",
+    )
+
+    assert "label='shopping basket'" in fixed
+    assert "{{CLICK:basket}}" not in fixed
+
+
+def test_replace_remaining_placeholders_ignores_placeholders_inside_quotes() -> None:
+    """The safety net must not corrupt labels that already contain placeholders."""
+    code = "evidence_tracker.click('#id', label='{{CLICK:basket}}')"
+    fixed = TestOrchestrator._replace_remaining_placeholders(code)
+
+    # It should NOT be wrapped in pytest.skip() because it's inside quotes
+    assert fixed == code
+    assert "pytest.skip" not in fixed
+
+
+def test_replace_token_in_line_with_skip_replaces_whole_line() -> None:
+    """Unresolved steps should become standalone skips, not invalid parameter injections."""
+    orchestrator = TestOrchestrator(AsyncMock())
+    line = "    evidence_tracker.click('{{CLICK:missing}}')"
+
+    fixed = orchestrator._replace_token_in_line(
+        line=line,
+        action="CLICK",
+        token="{{CLICK:missing}}",
+        resolved_value='pytest.skip("not found")',
+        duplicate_selectors=set(),
+        description="missing button",
+    )
+
+    assert fixed.strip() == 'pytest.skip("not found")'
+    assert "evidence_tracker.click" not in fixed
+
+
+def test_replace_remaining_placeholders_converts_raw_placeholder_to_skip() -> None:
+    """Unresolved {{...}} placeholders (e.g. those with Python variable syntax) must be
+    replaced with pytest.skip() so they never produce a SyntaxError."""
+    code_with_unresolved = """\
+def test_something(page, evidence_tracker):
+    {{ASSERT:item {item_name} is present in cart}}
+    {{CLICK:add to cart button}}
+"""
+    fixed = TestOrchestrator._replace_remaining_placeholders(code_with_unresolved)
+    assert "pytest.skip(" in fixed
+    # Confirm no line starts with a raw placeholder (which would be invalid Python syntax)
+    for line in fixed.splitlines():
+        assert not line.lstrip().startswith("{{"), f"Raw placeholder still present: {line!r}"
+    # Indentation must be preserved
+    for line in fixed.splitlines():
+        if "pytest.skip" in line:
+            assert line.startswith("    "), f"Expected indented skip, got: {line!r}"
+
+
+def test_skeleton_validator_rejects_python_variable_syntax_in_placeholder() -> None:
+    """Reject skeleton code where a placeholder description contains Python variable
+    syntax like {item_name} — the resolver regex can't match those tokens."""
+    from src.skeleton_parser import SkeletonParser
+
+    bad_skeleton = """\
+import pytest
+from playwright.sync_api import Page
+
+# PAGES_NEEDED:
+# https://example.com/
+
+def test_01(page: Page, evidence_tracker) -> None:
+    {{ASSERT:item {item_name} is present in cart}}
+"""
+    parser = SkeletonParser()
+    error = parser.validate_skeleton(bad_skeleton)
+    assert error is not None
+    assert "Python variable syntax" in error

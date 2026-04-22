@@ -59,7 +59,7 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 | Directory | Reason |
 |-----------|--------|
 | `src/llm_providers/` | Provider implementations — stable after initial implementation |
-| `FEATURE_SPEC_multi_provider_llm.md` | Multi-provider architecture spec — do not modify without explicit instruction |
+| `docs/specs/FEATURE_SPEC_multi_provider_llm.md` | Multi-provider architecture spec — do not modify without explicit instruction |
 
 **Rule:** New protected files created during the multi-provider refactor are automatically covered by this rule.
 
@@ -84,7 +84,33 @@ AI-Playwright-Test-Generator/
 │   ├── test_orchestrator.py
 │   ├── evidence_generator.py
 │   └── report_generator.py
-├── docs/                        # Architecture and session documentation
+├── docs/                        # Documentation hub
+│   ├── specs/                   # Feature specification documents
+│   │   ├── FEATURE_SPEC_intelligent_scraping_pipeline.md
+│   │   ├── FEATURE_SPEC_multi_page_scraping.md
+│   │   ├── FEATURE_SPEC_multi_provider_llm.md
+│   │   ├── FEATURE_SPEC_page_context_scraper.md
+│   │   ├── FEATURE_SPEC_run_results.md
+│   │   └── FEATURE_SPEC_AI009_phase_b.md
+│   ├── ARCHITECTURE.md
+│   ├── PROJECT_KNOWLEDGE.md
+│   ├── PROMPT_EXAMPLES.md
+│   ├── DEMO_GUIDE.md
+│   ├── implementation_plan.md
+│   ├── walkthrough.md
+│   ├── nodes.csv                # 3D map node data
+│   ├── links.csv                # 3D map link data
+│   ├── session_*.md             # Session documentation
+│   ├── test_suite_audit_*.md    # Test suite audit reports
+│   ├── plans/                   # Implementation plans
+│   └── private/                 # GTM strategy and other private docs
+├── scripts/                     # Utility and UAT scripts
+│   ├── generate_3d_map.py       # 3D documentation map generator
+│   ├── run_lmstudio_pipeline_once.py
+│   ├── 3d_map_data.json         # Generated 3D map data
+│   ├── uat_full_pipeline.py     # UAT script
+│   ├── uat_llm_call.py          # UAT script
+│   └── uat_reproducible_failure.py # UAT script
 ├── src/                         # Core modules — tested via tests/
 │   ├── llm_client.py            # PROTECTED
 │   ├── test_generator.py        # PROTECTED
@@ -99,7 +125,7 @@ AI-Playwright-Test-Generator/
 │   ├── pipeline_run_service.py
 │   ├── pipeline_writer.py
 │   ├── file_utils.py            # save_generated_test, rename, normalise helpers
-│   └── page_context_scraper.py  # DOM scraper for real locator injection
+│   └── stateful_scraper.py      # State-aware scraping (deprecated)
 ├── tests/                       # Unit tests FOR the tool (not generated tests)
 ├── generated_tests/             # OUTPUT — tests produced by the tool
 │   └── mock_insurance_site.html # Mock insurance environment
@@ -134,7 +160,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 **Setup:**
 ```bash
 uv sync
-source .venv/Scripts/activate   # Git Bash / Windows
+.venv\Scripts\activate   # Windows
 playwright install chromium
 ```
 
@@ -167,21 +193,29 @@ pytest generated_tests/test_X.py -v  # Run a specific generated test explicitly
 | Generated tests fail in CI: `ERR_CONNECTION_REFUSED` | `generated_tests/` was in `testpaths` | `pytest.ini` — `testpaths = tests` only. Run generated tests explicitly. |
 | Wrong venv active | Old venv from renamed project | `rm -rf .venv && uv sync && source .venv/Scripts/activate` |
 | `bash` not found | Running in PowerShell | Switch to Git Bash, or: `uv run streamlit run streamlit_app.py` |
+| mypy `import-untyped` for pandas | `pandas-stubs` not installed | `uv add --dev pandas-stubs` |
+| mypy `import-untyped` for plotly | No official stubs exist | Add `[[tool.mypy.overrides]]` with `module = "plotly.*"` and `ignore_missing_imports = true` in `pyproject.toml` |
+| mypy `grouping_mode` Literal type mismatch | `st.selectbox` returns `str`, not `Literal` | Add `# type: ignore[arg-type]` at call site (values are correct at runtime) |
 
 ---
 
-## 8. LLM Prompt Rules (for Generated Tests)
+## 8. LLM Prompt Rules (for Skeleton-First Pipeline)
 
-When writing or modifying prompts that generate test code:
+When writing or modifying prompts that generate test skeletons:
 
 - ✅ Enumerate acceptance criteria with numbers: `1. Criterion`, `2. Criterion`
 - ✅ State total count: `(Total: N criteria)`
-- ✅ Add explicit: `"Generate ONE test function per criterion"`
+- ✅ Add explicit: `"Generate ONE skeleton function per criterion"`
 - ✅ Add explicit: `"DO NOT use async def — use pytest sync format"`
 - ✅ Add explicit: `"DO NOT skip, combine, or omit any criteria"`
-- ✅ Add closing warning: `"All N criteria must have tests"`
-- ❌ NEVER use XML tags in prompts for this LLM — it ignores them
+- ✅ Add closing warning: `"All N criteria must have placeholders"`
+- ✅ ALWAYS use placeholder syntax `{{{{ACTION:description}}}}` for unknown locators
+- ✅ NEVER instruct the LLM to write real CSS selectors or XPath
+- ✅ Add explicit: `"Use ONLY the placeholder types listed in ALLOWED PLACEHOLDERS section"`
+- ❌ NEVER use XML tags in prompts — the LLM ignores them
 - ❌ NEVER make prompts verbose — clear numbered requirements outperform long prose
+
+**CRITICAL:** The skeleton pipeline uses TWO PHASES. Phase 1 generates skeletons with placeholders. Phase 2 resolves placeholders using scraped DOM data. Prompts must reflect this architecture — never ask for direct locators in Phase 1.
 
 ---
 
@@ -215,10 +249,9 @@ These rules exist because of real failures. Follow them.
 
 | ID | Feature | Files to Create |
 |----|---------|----------------|
-| AI-018 | Evidence Tracker Module — wraps Playwright interactions to record data | `src/evidence_tracker.py`, `tests/test_evidence_tracker.py` |
 | AI-019 | Prompt Update: EvidenceTracker Methods | `src/prompt_utils.py` |
 
 ---
 
-*Last updated: 2026-04-10*
-*Supersedes: PROJECT_KNOWLEDGE.md for LLM/AI use. PROJECT_KNOWLEDGE.md remains the human reference.*
+*Last updated: 2026-04-21*
+*Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

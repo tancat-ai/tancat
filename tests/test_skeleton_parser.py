@@ -109,6 +109,37 @@ def test_checkout(page):
     assert "single-brace placeholders" in error
 
 
+def test_single_to_double_brace_converts_single_to_double() -> None:
+    # Single-brace placeholders should be converted to double-brace.
+    code = 'page.click({CLICK:login_button})\npage.fill({FILL:email}, "a")'
+    result = SkeletonParser._single_to_double_brace(code)
+    assert result == 'page.click({{CLICK:login_button}})\npage.fill({{FILL:email}}, "a")'
+
+
+def test_single_to_double_brace_ignores_already_double_braced() -> None:
+    # Double-brace placeholders should not be modified.
+    code = "page.click({{CLICK:login_button}})"
+    result = SkeletonParser._single_to_double_brace(code)
+    assert result == "page.click({{CLICK:login_button}})"
+
+
+def test_single_to_double_brace_ignores_non_placeholder_braces() -> None:
+    # Regular single braces that are not placeholders should not be modified.
+    code = 'x = {key: "value"}'
+    result = SkeletonParser._single_to_double_brace(code)
+    assert result == 'x = {key: "value"}'
+
+
+def test_normalise_placeholder_actions_handles_single_brace_input() -> None:
+    # When the LLM emits single-brace placeholders, normalise_placeholder_actions
+    # should convert them to double-brace before rewriting action synonyms.
+    code = "page.click({ADD:login_button})\npage.click({CLICK:login_button})"
+    result = SkeletonParser.normalise_placeholder_actions(code)
+    # Both should become double-brace CLICK placeholders.
+    assert "{{CLICK:login_button}}" in result
+    assert "{{CLICK:login_button}}" in result  # Both lines produce CLICK
+
+
 def test_validate_skeleton_rejects_non_url_pages_needed_entries() -> None:
     parser = SkeletonParser()
     code = """

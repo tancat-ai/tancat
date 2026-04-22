@@ -11,8 +11,13 @@ import streamlit.components.v1 as components
 
 from src.code_validator import validate_python_syntax
 from src.coverage_utils import build_coverage_analysis, build_coverage_display_rows
-from src.gantt_utils import build_gantt_summary_sentences, load_gantt_entries
-from src.heatmap_utils import build_story_confidence
+from src.gantt_utils import (
+    build_gantt_chart,
+    build_gantt_summary_sentences,
+    load_gantt_entries,
+    safe_read_sidecar,
+)
+from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
 from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportBundle, PipelineReportService
@@ -400,7 +405,7 @@ if raw_requirements.strip():
     if isinstance(current_plan, TestPlan):
         edited_rows_raw = st.data_editor(
             _plan_rows_from_plan(current_plan),
-            use_container_width=True,
+            width="stretch",
             num_rows="dynamic",
             key="living_test_plan_editor",
             column_config={
@@ -628,7 +633,7 @@ if st.session_state.pipeline_results:
         coverage_analysis = build_coverage_analysis(criteria_lines, st.session_state.pipeline_results)
         coverage_rows = build_coverage_display_rows(coverage_analysis["requirements"], run_result.results)
         if coverage_rows:
-            st.dataframe([row.to_dict() for row in coverage_rows], use_container_width=True)
+            st.dataframe([row.to_dict() for row in coverage_rows], width="stretch")
 
         if st.session_state.pipeline_run_output:
             with st.expander("Pytest Output", expanded=run_result.errors > 0):
@@ -709,10 +714,68 @@ if st.session_state.pipeline_results:
                     if not entries:
                         st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
                     else:
-                        fastest, slowest, coverage = build_gantt_summary_sentences(entries)
-                        st.write(f"- {fastest}")
-                        st.write(f"- {slowest}")
-                        st.write(f"- {coverage}")
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            group_mode = st.selectbox(
+                                "Grouping Mode",
+                                options=["condition_type", "sprint", "source"],
+                                index=0,
+                                key="gantt_group_mode",
+                            )
+                            fastest, slowest, coverage = build_gantt_summary_sentences(entries)
+                            st.write(f"- {fastest}")
+                            st.write(f"- {slowest}")
+                            st.write(f"- {coverage}")
+
+                        with col2:
+                            # Extract condition metadata from test_plan if available
+                            condition_meta = {}
+                            if st.session_state.test_plan:
+                                for c in st.session_state.test_plan.conditions:
+                                    condition_meta[c.id] = {
+                                        "type": c.type,
+                                        "sprint": getattr(st.session_state.test_plan, "sprint", "Backlog"),
+                                        "source": c.src,
+                                    }
+
+                            fig = build_gantt_chart(
+                                entries,
+                                grouping_mode=group_mode,  # type: ignore[arg-type]
+                                condition_meta=condition_meta,
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                        st.divider()
+                        st.subheader("Test Execution Details")
+                        selected_test = st.selectbox(
+                            "Select test for details",
+                            options=sorted(entries, key=lambda e: e.condition_ref),
+                            format_func=lambda e: f"{e.condition_ref} ({e.status})",
+                        )
+
+                        if selected_test:
+                            sidecar_path = evidence_dir / f"{selected_test.test_name}.evidence.json"
+                            sidecar = safe_read_sidecar(sidecar_path)
+                            if sidecar:
+                                test_info = sidecar.get("test", {})
+                                col_a, colb = st.columns(2)
+                                with col_a:
+                                    st.write(f"**Condition Ref:** {test_info.get('condition_ref')}")
+                                    st.write(f"**Story Ref:** {test_info.get('story_ref')}")
+                                    st.write(f"**Status:** {test_info.get('status')}")
+                                with colb:
+                                    st.write(f"**Duration:** {test_info.get('duration_s')}s")
+                                    st.write(f"**Test Name:** {test_info.get('name')}")
+
+                                st.write("**Steps:**")
+                                for step in sidecar.get("steps", []):
+                                    status_icon = "✅" if step.get("result", {}).get("status") == "passed" else "❌"
+                                    st.write(f"- {status_icon} **{step.get('type').upper()}**: {step.get('label')}")
+                                    if step.get("result", {}).get("error"):
+                                        st.error(step.get("result", {}).get("error"))
+
+                        st.divider()
+                        st.subheader("Raw Execution Data")
                         st.dataframe(
                             [
                                 {
@@ -724,14 +787,36 @@ if st.session_state.pipeline_results:
                                 }
                                 for e in sorted(entries, key=lambda e: (-e.duration_s, e.condition_ref))
                             ],
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                 with evidence_tabs[2]:
-                    stories = build_story_confidence(evidence_dir)
+                    # Feed test plan confirmation state into heatmap
+                    test_plan_state = None
+                    if st.session_state.test_plan:
+                        test_plan_state = {"confirmed_ids": list(st.session_state.test_plan.reviewed_ids)}
+
+                    stories = build_story_confidence(evidence_dir, test_plan_state=test_plan_state)
                     if not stories:
                         st.info("No heat map data yet. Run generated tests to produce `.evidence.json` sidecars.")
                     else:
+                        # Summary panels
+                        total_stories = len(stories)
+                        confirmed = len([s for s in stories if s.level == "tester_confirmed"])
+                        gaps = len([s for s in stories if s.level == "gap_open_question"])
+                        unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
+
+                        m1, m2, m3, m4 = st.columns(4)
+                        m1.metric("Total Stories", total_stories)
+                        m2.metric("Tester Confirmed", confirmed)
+                        m3.metric("Gaps/Failures", gaps)
+                        m4.metric("Unreviewed", unreviewed)
+
+                        fig = build_confidence_heatmap(stories)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                        st.divider()
+                        st.subheader("Story Confidence Details")
                         st.dataframe(
                             [
                                 {
@@ -745,7 +830,7 @@ if st.session_state.pipeline_results:
                                 }
                                 for s in stories
                             ],
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                 st.divider()

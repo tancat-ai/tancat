@@ -41,7 +41,7 @@ def test_build_page_object_maps_cart_navigation_and_checkout_actions() -> None:
 
     assert page_object.class_name == "ProductsPage"
     assert page_object.file_path.endswith("products_page.py")
-    assert page_object.methods == ["add_to_cart", "navigate_to_cart", "proceed_to_checkout"]
+    assert page_object.methods == ["add_item_to_cart", "navigate_to_cart", "proceed_to_checkout"]
     assert "self.page.locator('[data-product-id=\"1\"]').click()" in page_object.module_source
     assert "def navigate_to_cart(self) -> None" in page_object.module_source
     assert "def proceed_to_checkout(self) -> None" in page_object.module_source

@@ -262,13 +262,31 @@ AI-Playwright-Test-Generator/
 - Generated code + Coverage tabs persist after any button click (rendered from `session_state`)
 - Three download buttons always visible: `local.md`, `jira.md`, `standalone.html`
 
-### `src/page_context_scraper.py` — How It Works
-- Runs Playwright in a **subprocess** (bypasses Streamlit's Windows ProactorEventLoop issue)
-- Returns `tuple[PageContext | None, str | None]` — always unpack as `ctx, err = scrape_page_context(url)`
-- Failure is non-fatal — generation continues without page context if scraper fails
-- `PageContext.to_prompt_block()` formats elements as plain text for LLM prompt injection
-- **Known limitation:** Single-page only. No session state — authenticated pages redirect to login,
-  producing useless repeated context. AI-009 will address this.
+### ⚠️ Retired Module: page_context_scraper.py
+
+**Status:** DEPRECATED and REPLACED by the skeleton-first pipeline (see below).  
+**Reason for retirement:** This scraper injects real selectors into LLM prompts via `PageContext.to_prompt_block()`. The LLM then misreads, combines, or varies these selectors — causing **locator hallucination**.
+
+The current architecture uses a two-phase approach:
+1. Phase 1 (LLM): Generates skeletons with placeholder syntax like `{{CLICK:description}}`
+2. Phase 2 (Resolver): Fills placeholders from scraped DOM elements without exposing selectors to the LLM
+
+**Do not use or restore this module.** The hallucination-prone path was removed intentionally.
+
+---
+
+### ⚠️ Retired: page_context_scraper.py Section Removed
+
+The following section describing the old single-phase flow with direct locator injection has been removed as it is no longer accurate and causes confusion for new LLMs joining the project:
+
+> **Old content that was here:**
+> - Runs Playwright in a subprocess...
+> - `PageContext.to_prompt_block()` formats elements as plain text for LLM prompt injection
+> - etc.
+
+This retired documentation was the source of hallucination-restoration attempts by new AI sessions.
+
+---
 
 ### `src/prompt_utils.py` — Locator Rules
 - Contains `_PAGE_CONTEXT_RULES` — rules injected into LLM prompt to guide selector generation
@@ -640,7 +658,8 @@ No external database required.
 
 ---
 
-### File Structure — New Files
+### Planned Evidence Pipeline Architecture (AI-017 to AI-022)
+*Note: These files are defined in the design spec and will be created as the evidence pipeline is implemented.*
 
 ```
 src/
@@ -762,6 +781,11 @@ Ollama is already running — this is fine, ignore the error.
 | BREAK-2: Session state wipe in `display_run_button()` | Fixed |
 | AI-002: User story parser (`src/user_story_parser.py`) | Done (2026-03-29) |
 | AI-003: `.env.example` updated with correct defaults | Done (2026-03-29) |
+| AI-005: `src/coverage_utils.py` extraction | Done |
+| B-009: `src/code_validator.py` AST guard | Done |
+| AI-018: Evidence Tracker Module | Done |
+| Pipeline Architecture Refactor | Done |
+| Multi-provider LLM Support | Done |
 
 ### R-001 to R-006 Detail
 
@@ -776,9 +800,7 @@ Ollama is already running — this is fine, ignore the error.
 
 ### In Progress
 
-| ID | Feature |
-|----|---------|
-| B-009 | `src/code_validator.py` — `ast.parse()` guard before saving — **next Cline task** |
+*Currently no active features in progress. Moving to next phase of evidence pipeline.*
 
 ### Logged Bugs (Non-Blocking)
 
@@ -790,7 +812,7 @@ Ollama is already running — this is fine, ignore the error.
 | B-006 | Parser banner shows wrong result on mixed pass/fail runs | Logged |
 | B-007 | Duplicate error panels in run results UI | Logged |
 | B-008 | Run Status column never populates in results table | Logged |
-| B-009 | No `ast.parse()` validation before saving generated test files — truncated LLM output saved silently | Logged — planned `src/code_validator.py` |
+| B-009 | No `ast.parse()` validation before saving generated test files — truncated LLM output saved silently | Fixed (`src/code_validator.py`) |
 | E-001 | Tracker not injected | `evidence_tracker` fixture not found | Check `generated_tests/conftest.py` exists and is importable |
 | E-002 | Sidecar not written on failure | Failed tests produce no `.evidence.json` | Verify `pytest_runtest_makereport` hook is in conftest |
 | E-003 | Circles all same size | `run_count` always 1 | Tracker not reading existing sidecar before writing — check `_load_run_count()` |
@@ -804,9 +826,7 @@ Ollama is already running — this is fine, ignore the error.
 
 | ID | Feature | Notes |
 |----|---------|-------|
-| B-009 | `src/code_validator.py` — `ast.parse()` guard before saving | Follows AGENTS.md Section 9 conventions — **next** |
 | AI-004 | Phase C UI gaps (env dropdown, re-run failed, screenshot viewer) | |
-| AI-005 | Extract coverage helpers to `src/coverage_utils.py` | |
 | AI-006 | Create `tests/fixtures/user_stories/` with 10-15 format examples | Feeds AI-002 validation |
 | AI-007 | Remove `_generate_test_content()` from CLI orchestrator | |
 | AI-009 Phase A | Multi-page scraping: user-provided URL list | Prerequisite for Phase B |
@@ -856,6 +876,6 @@ Ollama is already running — this is fine, ignore the error.
 
 ---
 
-*Last Updated: 2026-04-10*
-*Project Status: CI green — Pipeline architecture, multi-provider LLM, and anchor link extraction implemented.*
-*Next Phase: AI-018 → AI-022 implementation in sequence*
+*Last Updated: 2026-04-12*
+*Project Status: CI green — Pipeline architecture, multi-provider LLM, Evidence Tracker (AI-018), and anchor link extraction implemented.*
+*Next Phase: AI-019 → AI-022 implementation in sequence*

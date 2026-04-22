@@ -12,33 +12,111 @@ class SkeletonParser:
 
     def __init__(self) -> None:
         self.placeholder_pattern = re.compile(r"\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}")
-        self.pages_pattern = re.compile(r"#\s*-\s*(https?://[^\s]+)(?:\s+\((.*?)\))?")
+        self.any_double_brace_placeholder_pattern = re.compile(r"\{\{([A-Z_]+):([^}]+)\}\}")
+        self.pages_pattern = re.compile(r"#\s*[-*]?\s*`?(https?://[^`\s]+)`?(?:\s+\((.*?)\))?")
         self.single_brace_placeholder_pattern = re.compile(r"(?<!\{)\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}(?!\})")
         self.test_definition_pattern = re.compile(r"^\s*def\s+(test_\w+)\s*\(", re.M)
         self.page_object_reference_pattern = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*\(")
+
+    @staticmethod
+    def normalise_placeholder_actions(code: str) -> str:
+        """Rewrite common placeholder action synonyms into the allowed action set.
+
+        The LLM sometimes emits verbs like ADD/REMOVE/SELECT/SUBMIT. The pipeline only
+        supports CLICK/FILL/GOTO/URL/ASSERT, so we conservatively map synonyms.
+        """
+        # Step 1: Convert single-brace placeholders to double-brace first.
+        # LLMs trained on Python f-strings interpret {{ as an escaped literal brace,
+        # so they frequently emit {ACTION:desc} when the prompt shows {{ACTION:desc}}.
+        code = SkeletonParser._single_to_double_brace(code)
+
+        # Step 2: Rewrite action synonyms (ADD->CLICK, VERIFY->ASSERT, etc.)
+        aliases: dict[str, str] = {
+            # navigation synonyms
+            "NAVIGATE": "GOTO",
+            "GO": "GOTO",
+            "OPEN": "GOTO",
+            "VISIT": "GOTO",
+            # click-like verbs
+            "ADD": "CLICK",
+            "REMOVE": "CLICK",
+            "DELETE": "CLICK",
+            "SUBMIT": "CLICK",
+            "PRESS": "CLICK",
+            "TAP": "CLICK",
+            "SELECT": "CLICK",
+            "CHOOSE": "CLICK",
+            # assertion-like verbs
+            "VERIFY": "ASSERT",
+            "CHECK": "ASSERT",
+            "CONFIRM": "ASSERT",
+            "ENSURE": "ASSERT",
+            # fill-like verbs
+            "TYPE": "FILL",
+            "ENTER": "FILL",
+        }
+
+        def _rewrite(match: re.Match[str]) -> str:
+            action = match.group(1)
+            # Normalise whitespace inside placeholders so token matching works even if
+            # the model emits `{{CLICK:thing }}` with trailing spaces.
+            description = match.group(2).strip()
+            mapped = aliases.get(action, action)
+            return f"{{{{{mapped}:{description}}}}}"
+
+        # Replace any double-brace placeholder actions we recognize.
+        code = re.sub(r"\{\{([A-Z_]+):([^}]+)\}\}", _rewrite, code)
+
+        # CRITICAL: Also handle single-brace placeholders that were NOT caught
+        # by _single_to_double_brace. This catches cases where the LLM writes
+        # {CLICK:x} or {FILL:x} with single braces.
+        code = re.sub(r"(?<!\{)\{([A-Z_]+):([^}]+)\}(?!\})", _rewrite, code)
+
+        return code
+
+    @staticmethod
+    def _single_to_double_brace(code: str) -> str:
+        """Convert single-brace placeholders {ACTION:desc} to double-brace {{ACTION:desc}}.
+
+        LLMs trained on Python f-strings interpret {{ as an escaped literal brace,
+        so they frequently emit {ACTION:desc} when the prompt shows {{ACTION:desc}}.
+        This method repairs that common mistake.
+
+        IMPORTANT: Uses a WILD CARD pattern ([A-Z_]+) to match ANY uppercase action,
+        not just the five allowed actions. This catches synonyms like VERIFY, CHECK,
+        NAVIGATE, etc. that the LLM may emit. The action synonym mapping in
+        normalise_placeholder_actions handles the actual conversion afterwards.
+        """
+        single_pattern = re.compile(r"(?<!\{)\{([A-Z_]+):([^}]+)\}(?!\})")
+
+        def _convert(match: re.Match) -> str:
+            action = match.group(1)
+            description = match.group(2).strip()
+            return f"{{{{{action}:{description}}}}}"
+
+        return single_pattern.sub(_convert, code)
 
     def parse_placeholders(self, code: str) -> list[tuple[str, str]]:
         """Return all placeholder action-description pairs."""
         return [(action, description.strip()) for action, description in self.placeholder_pattern.findall(code)]
 
     def parse_placeholder_uses(self, code: str) -> list[PlaceholderUse]:
-        """Return structured placeholder occurrences with line information."""
-        placeholder_uses: list[PlaceholderUse] = []
-
-        for line_number, line in enumerate(code.splitlines(), start=1):
+        """Return all placeholder uses found in the code, including Page Objects."""
+        lines = code.splitlines()
+        uses: list[PlaceholderUse] = []
+        for index, line in enumerate(lines, start=1):
             for action, description in self.placeholder_pattern.findall(line):
                 clean_description = description.strip()
-                placeholder_uses.append(
+                uses.append(
                     PlaceholderUse(
                         action=action,
                         description=clean_description,
                         token=f"{{{{{action}:{clean_description}}}}}",
-                        line_number=line_number,
+                        line_number=index,
                         raw_line=line,
                     )
                 )
-
-        return placeholder_uses
+        return uses
 
     def parse_pages_needed(self, code: str) -> list[tuple[str, str]]:
         """Return the pages listed in the `# PAGES_NEEDED:` block."""
@@ -170,6 +248,34 @@ class SkeletonParser:
                 f"Skeleton output used invalid single-brace placeholders instead of `{{{{...}}}}`. Examples: {preview}"
             )
 
+        allowed_actions = {"CLICK", "FILL", "GOTO", "URL", "ASSERT"}
+        unknown_actions = []
+        for action, description in self.any_double_brace_placeholder_pattern.findall(code):
+            if action not in allowed_actions:
+                unknown_actions.append(f"{{{{{action}:{description.strip()}}}}}")
+        if unknown_actions:
+            preview = ", ".join(unknown_actions[:3])
+            return (
+                "Skeleton output used unsupported placeholder actions. "
+                "Only CLICK, FILL, GOTO, URL, ASSERT are allowed. "
+                f"Examples: {preview}"
+            )
+
+        # Reject placeholders whose descriptions contain Python format-string
+        # variable references like {item_name}.  Those curly braces break the
+        # resolver's [^}]+ regex so the placeholder is never substituted and
+        # the raw text causes a SyntaxError at validation time.
+        python_var_in_placeholder = re.compile(r"\{\{[A-Z_]+:[^}]*\{[^}]+\}[^}]*\}\}")
+        bad_placeholders = python_var_in_placeholder.findall(code)
+        if bad_placeholders:
+            preview = ", ".join(bad_placeholders[:3])
+            return (
+                "Skeleton output used Python variable syntax inside placeholder descriptions "
+                "(e.g. {{ASSERT:item {item_name} is in cart}}). "
+                "Use a literal description instead, e.g. {{ASSERT:Blue Top is in cart}}. "
+                f"Examples: {preview}"
+            )
+
         pages_needed_block = re.search(r"#\s*PAGES_NEEDED:\s*(.*)", code, re.S)
         if pages_needed_block:
             page_lines = re.findall(r"^\s*#\s*-\s*(.+)$", pages_needed_block.group(1), re.M)
@@ -184,4 +290,55 @@ class SkeletonParser:
                     f"Examples: {preview}"
                 )
 
+        # Hallucination check: Reject raw strings that look like CSS selectors or IDs
+        # in evidence_tracker calls, or raw Playwright calls.
+        # We allow URLs starting with http.
+        hallucination_pattern = re.compile(
+            r"(?:page\.locator|expect\(.*?page\.locator|evidence_tracker\.(?:click|fill|assert_visible))\(['\"]([^'\"{}]*)['\"]",
+            re.S,
+        )
+        for match in hallucination_pattern.finditer(code):
+            content = match.group(1).strip()
+            # If it's a hardcoded selector (not starting with {{ and not a URL), it's a hallucination
+            if content and not content.startswith("{{") and not content.startswith("http"):
+                return (
+                    "Skeleton output violated the NEVER GUESS LOCATORS rule. "
+                    "You must use placeholders like `{{CLICK:description}}` instead of raw selectors. "
+                    f"Guessed selector found: '{content}'"
+                )
+        # Reject skeletons where the LLM has written pytest.skip() directly into a
+        # non-statement position (e.g. as a label= value or as a string literal in
+        # any argument slot).  When this happens the test runs silently instead of
+        # skipping, and the label shows confusing text in the evidence viewer.
+        #
+        # Two forms to catch:
+        #   label=pytest.skip("...")          ← unquoted call as keyword value
+        #   label='pytest.skip("...")'        ← quoted string containing the call text
+        #
+        # A legitimate standalone statement like:
+        #   pytest.skip("reason")
+        # is on its own line with no surrounding call context and is NOT rejected.
+
+        _PYTEST_SKIP_NON_STATEMENT_PATTERN = re.compile(
+            r"""
+            (?:                         # Either:
+                \w+\s*=\s*              #   keyword=   (label=pytest.skip(...))
+                |                       # or
+                ,\s*                    #   , prefix   (arg, pytest.skip(...))
+                |                       # or
+                ['"]\s*                 #   open quote ('pytest.skip(...)')
+            )
+            pytest\.skip\s*\(           # followed by pytest.skip(
+            """,
+            re.VERBOSE | re.MULTILINE,
+        )
+
+        pytest_skip_non_statement_matches = _PYTEST_SKIP_NON_STATEMENT_PATTERN.findall(code)
+        if pytest_skip_non_statement_matches:
+            return (
+                "Skeleton output contained pytest.skip() in a non-statement position "
+                "(e.g. as a label= value or inside a string argument). "
+                "pytest.skip() must only appear as a standalone statement. "
+                "Use a placeholder like {{CLICK:description}} instead of pre-writing skip calls."
+            )
         return None

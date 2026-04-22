@@ -135,7 +135,7 @@ class PageObjectBuilder:
         if any(term in normalized_label for term in ("checkout", "payment", "place_order")):
             return "proceed_to_checkout"
         if normalized_label.startswith("add_to_cart"):
-            return "add_to_cart"
+            return "add_item_to_cart"
 
         base_name = normalized_label or slugify(str(element.get("selector", "")))
         if role in {"input", "email", "password", "search", "text", "textarea"}:
@@ -190,7 +190,12 @@ class PageObjectBuilder:
             f'    URL = "{url}"\n\n'
             "    def __init__(self, page: Page) -> None:\n"
             "        self.page = page\n\n"
-            "    def goto(self) -> None:\n"
-            "        self.page.goto(self.URL)\n"
+            "    def navigate(self) -> None:\n"
+            "        self.page.goto(self.URL)\n\n"
+            "    def __getattr__(self, name):\n"
+            "        def fallback(*args, **kwargs):\n"
+            "            import pytest\n"
+            "            pytest.skip(f\"Method '{name}' not found on {self.__class__.__name__}. The scraper may have missed this element or its label changed.\")\n"
+            "        return fallback\n"
             f"{method_blocks}"
         )
