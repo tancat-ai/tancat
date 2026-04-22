@@ -10,9 +10,9 @@ import json
 import sys
 from datetime import datetime
 
-from cli.config import ReportFormat, config
+from cli.config import ReportFormat
 from cli.input_parser import InputParser, ParsedInput
-from cli.story_analyzer import AnalysisResult, UserStoryAnalyzer
+from src.analyzer import AnalysisResult, KeywordAnalyzer
 
 
 def cmd_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -92,8 +92,7 @@ def cmd_help(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
 def run_analysis(parsed: ParsedInput) -> AnalysisResult:
     """Run analysis on parsed input."""
-    analyzer = UserStoryAnalyzer(config.LLM_ANALYSIS_MODE)
-    result = analyzer.analyze(parsed)
+    result = KeywordAnalyzer.analyze_parsed(parsed)
 
     summary = result.analysis_summary
     print(f"   Total Test Cases: {summary['total_cases']}")

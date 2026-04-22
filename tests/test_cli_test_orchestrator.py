@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from cli.config import AnalysisMode
-from cli.story_analyzer import AnalyzedTestCase
 from cli.test_orchestrator import TestCaseOrchestrator
+from src.analyzer import AnalyzedTestCase
+from src.config import AnalysisMode
 
 
 def _make_case(title: str, deps: list[str] | None = None, complexity: str = "medium") -> AnalyzedTestCase:

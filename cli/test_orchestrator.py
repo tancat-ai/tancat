@@ -1,5 +1,4 @@
-"""
-Test Orchestrator for AI Playwright Test Generator.
+"""Test Orchestrator for AI Playwright Test Generator.
 
 This module manages the orchestration of test generation workflow including:
 - Coordinating between analysis and generation stages
@@ -13,8 +12,10 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from cli.config import AnalysisMode, config
-from cli.story_analyzer import AnalysisResult, AnalyzedTestCase, UserStoryAnalyzer
+from cli.config import AnalysisMode
+from src.analyzer import AnalysisResult, AnalyzedTestCase, KeywordAnalyzer
+
+GENERATED_TESTS_DIR: str = "generated_tests"
 
 
 @dataclass
@@ -42,8 +43,8 @@ class TestCaseOrchestrator:
 
     def __init__(self, analysis_mode: AnalysisMode | None = None) -> None:
         """Initialize orchestrator."""
-        self.analysis_mode: AnalysisMode = analysis_mode or config.LLM_ANALYSIS_MODE
-        self.analyzer = UserStoryAnalyzer(self.analysis_mode)
+        self.analysis_mode: AnalysisMode = analysis_mode or AnalysisMode.FAST
+        self.analyzer = KeywordAnalyzer()
         self.generated_files: list[str] = []
 
     def process(
@@ -70,7 +71,7 @@ class TestCaseOrchestrator:
             parsed = parser.parse(raw_input, explicit_format)
 
             # Step 2: Analyze test cases
-            analysis_result = self.analyzer.analyze(parsed)
+            analysis_result = self._analyze_input(parsed)
 
             # Step 3: Order test cases by dependencies
             ordered_cases = self._order_test_cases(analysis_result.analyzed_test_cases)
@@ -87,6 +88,47 @@ class TestCaseOrchestrator:
 
         return result
 
+    def _analyze_input(self, parsed: object) -> AnalysisResult:
+        """Analyze parsed input using the keyword analyzer.
+
+        Args:
+            parsed: ParsedInput from cli.input_parser.InputParser
+
+        Returns:
+            AnalysisResult with analyzed test cases.
+        """
+        analyzed_cases: list[AnalyzedTestCase] = []
+        detected_patterns: list[str] = []
+
+        if hasattr(parsed, "test_cases") and parsed.test_cases:  # type: ignore[attr-defined]
+            for tc in parsed.test_cases:  # type: ignore[attr-defined]
+                title = tc.title if hasattr(tc, "title") else tc.name if hasattr(tc, "name") else "Untitled"  # type: ignore[attr-defined]
+                desc = tc.description if hasattr(tc, "description") else tc.step if hasattr(tc, "step") else ""  # type: ignore[attr-defined]
+                analyzed = KeywordAnalyzer.analyze(title, desc)
+                analyzed_cases.append(analyzed)
+                detected_patterns.extend(analyzed.identified_actions)
+        elif hasattr(parsed, "story"):
+            story = parsed.story if hasattr(parsed, "story") else str(parsed)  # type: ignore[attr-defined]
+            title = "User Story"
+            analyzed = KeywordAnalyzer.analyze(title, str(story))
+            analyzed_cases.append(analyzed)
+            detected_patterns.extend(analyzed.identified_actions)
+        else:
+            story = str(parsed)
+            title = "Input"
+            analyzed = KeywordAnalyzer.analyze(title, story)
+            analyzed_cases.append(analyzed)
+            detected_patterns.extend(analyzed.identified_actions)
+
+        return AnalysisResult(
+            analyzed_test_cases=analyzed_cases,
+            analysis_summary={
+                "complexity_distribution": {},
+                "requires_auth": False,
+            },
+            detected_patterns=detected_patterns,
+        )
+
     def _order_test_cases(self, cases: list[AnalyzedTestCase]) -> list[AnalyzedTestCase]:
         """
         Order test cases based on dependencies and complexity.
@@ -99,7 +141,7 @@ class TestCaseOrchestrator:
         if not cases:
             return []
 
-        ordered = []
+        ordered: list[AnalyzedTestCase] = []
         remaining = list(cases)
         completed_ids: set[int] = set()
 
@@ -136,36 +178,20 @@ class TestCaseOrchestrator:
         """Check if all dependencies for a case are satisfied.
 
         The ``AnalyzedTestCase.dependencies`` field is a list of human-readable
-        strings that may contain markers such as ``\"Depends on: <title>\"``.
+        strings that may contain markers such as ``"Depends on: <title>"``.
         For orchestration we only care whether a dependency refers to some case
         that has already been scheduled.
-
-        Since we do not retain a case registry here, we treat ``completed_ids``
-        as the source of truth: if any dependency string mentions the title of a
-        case whose id is in ``completed_ids``, we consider that dependency
-        satisfied. Dependencies that do not match any completed case keep the
-        current case in the ``not_ready`` set so it can be revisited in the
-        next iteration of the ordering loop.
         """
         if not case.dependencies:
             return True
-        # If we have not completed anything yet, and the case declares deps,
-        # then the dependencies are not yet satisfied.
         if not completed_ids:
             return False
         for dep in case.dependencies:
             text = dep or ""
             if "depends on:" not in text.lower():
-                # Non-structured note; ignore for strict ordering.
                 continue
-            # If we get here, this is a structured dependency. Require that at
-            # least one completed case title appears in the dependency text.
             found = False
             for completed in completed_ids:
-                # completed_ids are instance ids; matching of titles happens in
-                # the ordering loop where ids are assigned. Here we only
-                # enforce that some dependency was declared; details are
-                # handled by the caller.
                 if completed in completed_ids:
                     found = True
                     break
@@ -175,7 +201,7 @@ class TestCaseOrchestrator:
 
     def _complexity_score(self, complexity: str) -> int:
         """Convert complexity to numeric score for sorting."""
-        scores = {"low": 1, "medium": 2, "high": 3}
+        scores: dict[str, int] = {"low": 1, "medium": 2, "high": 3}
         return scores.get(complexity, 2)
 
     def _generate_test_files(self, cases: list[AnalyzedTestCase], url: str | None = None) -> list[str]:
@@ -184,14 +210,14 @@ class TestCaseOrchestrator:
             return []
 
         generated: list[str] = []
-        output_dir = config.GENERATED_TESTS_DIR
+        output_dir = GENERATED_TESTS_DIR
 
         # Create output directory if needed
         os.makedirs(output_dir, exist_ok=True)
 
         # If URL provided, use TestGenerator with page context for each case
         if url:
-            print(f"🌐 Using page context from: {url}")
+            print(f"Using page context from: {url}")
             from src.scraper import PageScraper
             from src.test_generator import TestGenerator
 
@@ -199,7 +225,7 @@ class TestCaseOrchestrator:
             scraper = PageScraper()
             elements, scrape_error, _final_url = asyncio.run(scraper.scrape_url(url))
             if elements:
-                print(f"✅ Successfully scraped {len(elements)} interactive elements")
+                print(f"Successfully scraped {len(elements)} interactive elements")
 
             # Generate tests for each case with page context
             generator = TestGenerator(output_dir=output_dir)
@@ -207,11 +233,10 @@ class TestCaseOrchestrator:
                 user_request = f"{case.title}\n{case.description}\nExpected: {case.expected_outcome}"
                 try:
                     generator.generate_and_save(user_request, None)
-                    # Add the newly generated file from this iteration
                     if generator.generated_files:
                         generated.append(generator.generated_files[-1])
                 except Exception as e:
-                    print(f"⚠️  Warning: Failed to generate test for {case.title}: {e}")
+                    print(f"Warning: Failed to generate test for {case.title}: {e}")
         else:
             # Generate without page context using legacy method
             # Group cases by test type for file organization
@@ -238,7 +263,7 @@ class TestCaseOrchestrator:
 
     def _generate_test_content(self, test_type: str, cases: list[AnalyzedTestCase]) -> str:
         """Generate Playwright test file content."""
-        timestamp: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Generate imports
         imports: list[str] = [
@@ -278,7 +303,7 @@ class TestCaseOrchestrator:
         class_header = "\n".join(class_lines)
 
         # Generate test methods
-        test_methods = []
+        test_methods: list[str] = []
         for idx, case in enumerate(cases, 1):
             test_method = self._generate_test_method(idx, case, len(cases))
             test_methods.append(test_method)
@@ -290,29 +315,23 @@ class TestCaseOrchestrator:
 
     def _generate_test_method(self, idx: int, case: AnalyzedTestCase, total: int) -> str:
         """Generate a single test method from an analyzed test case."""
-        # Generate method name
         method_name = f"test_{self._sanitize_name(case.title)}"
 
-        # Build test method content
-        method_lines = [
+        method_lines: list[str] = [
             f'        """Test: {case.title}\n        Description: {case.description}\n        Expected: {case.expected_outcome}."""',
             "",
         ]
 
-        # Add precondition if present
         if case.preconditions:
             method_lines.append(f"        # Precondition: {case.preconditions}")
 
-        # Generate main test steps from description
         method_lines.extend(self._generate_steps_from_description(case))
 
-        # Add assertions based on identified expectations
         if case.identified_expectations:
             method_lines.append(f"        # Verify expectations: {', '.join(case.identified_expectations)}")
-            for _exp in case.identified_expectations[:2]:  # Add key assertions
+            for _exp in case.identified_expectations[:2]:
                 method_lines.append("        expect(page).to_be_visible()")
 
-        # Add navigation step if needed and not last case
         if idx < total:
             method_lines.append("        # Navigate to next step")
             method_lines.append("        pass")
@@ -325,10 +344,9 @@ class TestCaseOrchestrator:
 
     def _generate_steps_from_description(self, case: AnalyzedTestCase) -> list[str]:
         """Generate Playwright steps from test case description."""
-        steps = []
+        steps: list[str] = []
         description = case.description.lower()
 
-        # Navigation steps
         if "navigate" in description or "go to" in description or "open" in description:
             url = self._extract_url(case.description)
             if url:
@@ -336,7 +354,6 @@ class TestCaseOrchestrator:
             else:
                 steps.append("        # Navigate to target page")
 
-        # Login actions
         if "login" in description or "sign in" in description:
             steps.append("        # Login steps")
             if case.suggested_data.get("email"):
@@ -345,38 +362,30 @@ class TestCaseOrchestrator:
                 steps.append(f"        page.fill('[data-testid=password]', '{case.suggested_data['password']}')")
             steps.append("        page.click('[data-testid=login-button]')")
 
-        # Form actions
         if "form" in description or "fill" in description:
             steps.append("        # Fill form fields")
             if case.suggested_data.get("form_data"):
                 for field_name, value in case.suggested_data["form_data"].items():
                     steps.append(f"        page.fill('[data-testid={field_name}]', '{value}')")
 
-        # Click actions
         if "click" in description or "submit" in description:
             steps.append("        page.click('[data-testid=submit-button]')")
 
-        # Search actions
         if "search" in description:
             steps.append("        # Search action")
             steps.append("        page.fill('[data-testid=search]', 'search term')")
             steps.append("        page.click('[data-testid=search-button]')")
 
-        # If no specific actions identified, add generic step
         if not steps:
             steps.append("        # Test step placeholder")
-            # Add pass statement
             steps.append("        pass")
 
         return steps
 
     def _sanitize_name(self, name: str) -> str:
         """Convert name to valid Python identifier."""
-        # Remove special characters and spaces
         sanitized = "".join(c if c.isalnum() or c == "_" else "_" for c in name)
-        # Remove leading/trailing underscores and convert to lowercase
         sanitized = sanitized.strip("_").lower()
-        # Ensure it starts with underscore or letter
         if not sanitized or sanitized[0].isdigit():
             sanitized = f"test_{sanitized}"
         return sanitized
@@ -385,7 +394,7 @@ class TestCaseOrchestrator:
         """Extract URL from text if present."""
         import re
 
-        url_pattern = r'https?://[^\s<>"\']+|http://[^\s<>"\']+'
+        url_pattern = r"https?://[^\s<>\"']+"
         match = re.search(url_pattern, text)
         return match.group(0) if match else None
 

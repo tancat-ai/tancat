@@ -87,7 +87,8 @@ def build_report_dicts(
             tc_id = str(req.get("id", req.get("tc_id", "")))
             description = str(req.get("description", req.get("test_name", "unknown")))
             cov_status = str(req.get("status", "unknown"))
-            linked_tests = req.get("linked_tests", req.get("test_name", []))
+            _lt = req.get("linked_tests", req.get("test_name"))
+            linked_tests = list(_lt) if _lt is not None else []  # type: ignore[no-redef]
             if isinstance(linked_tests, str):
                 linked_tests = [linked_tests]
         else:

@@ -15,8 +15,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from cli.config import CaptureLevel, ScreenshotNaming, config
-from cli.story_analyzer import AnalyzedTestCase
+from cli.config import CaptureLevel
+from src.analyzer import AnalyzedTestCase
+from src.config import (
+    CAPTURE_LEVEL,
+    NAMING_CONVENTION,
+    SCREENSHOT_DIR,
+    STORAGE_MODE,
+    ScreenshotNaming,
+)
 
 try:
     from PIL import Image
@@ -77,10 +84,10 @@ class ScreenshotCapturer:
     """Handle screenshot capture and storage."""
 
     def __init__(self) -> None:
-        self.storage_mode = config.STORAGE_MODE
-        self.naming_convention = config.NAMING_CONVENTION
-        self.capture_level = config.CAPTURE_LEVEL
-        self.screenshots_dir = config.SCREENSHOT_DIR
+        self.storage_mode = STORAGE_MODE
+        self.naming_convention = NAMING_CONVENTION
+        self.capture_level = CAPTURE_LEVEL
+        self.screenshots_dir = SCREENSHOT_DIR
         self.screenshot_count = 0
         self.metadata: list[ScreenshotMetadata] = []
         os.makedirs(self.screenshots_dir, exist_ok=True)
@@ -172,7 +179,7 @@ class EvidenceGenerator:
     """Generate comprehensive test evidence package."""
 
     def __init__(self, capture_level: CaptureLevel | None = None) -> None:
-        self.capture_level = capture_level or config.CAPTURE_LEVEL
+        self.capture_level = capture_level or CAPTURE_LEVEL
         self.capturer = ScreenshotCapturer()
         self.evidence: EvidenceCollection = EvidenceCollection()
         self.test_cases_processed = 0

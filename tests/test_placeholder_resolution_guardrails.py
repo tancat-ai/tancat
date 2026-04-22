@@ -62,15 +62,15 @@ class TestSkipNeverInsideStringArgument:
         This test exercises the real _replace_token_in_line logic to verify
         that the actual pipeline handles this case correctly.
         """
-        from src.orchestrator import TestOrchestrator
+        from src.code_postprocessor import replace_token_in_line
 
         # Simulate a line where the ASSERT placeholder (resolved to pytest.skip)
         # is embedded inside a label= argument
         line = "    evidence_tracker.click('a[href=\"/view_cart\"]', label='{{ASSERT:verify cart page is displayed}}')"
 
-        # _replace_token_in_line with a resolved value of pytest.skip should
+        # replace_token_in_line with a resolved value of pytest.skip should
         # replace the entire line with the skip statement, not embed it in label=
-        resolved = TestOrchestrator._replace_token_in_line(
+        resolved = replace_token_in_line(
             line,
             action="ASSERT",
             token="{{ASSERT:verify cart page is displayed}}",

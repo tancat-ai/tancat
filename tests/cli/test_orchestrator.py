@@ -12,8 +12,8 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from cli.config import AnalysisMode, config
-from cli.story_analyzer import AnalysisResult, AnalyzedTestCase, UserStoryAnalyzer
+from src.analyzer import AnalysisResult, AnalyzedTestCase, KeywordAnalyzer
+from src.config import GENERATED_TESTS_DIR, LLM_ANALYSIS_MODE, AnalysisMode
 
 
 @dataclass
@@ -41,8 +41,8 @@ class TestCaseOrchestrator:
 
     def __init__(self, analysis_mode: AnalysisMode | None = None) -> None:
         """Initialize orchestrator."""
-        self.analysis_mode: AnalysisMode = analysis_mode or config.LLM_ANALYSIS_MODE
-        self.analyzer = UserStoryAnalyzer(self.analysis_mode)
+        self.analysis_mode: AnalysisMode = analysis_mode or LLM_ANALYSIS_MODE
+        self.analyzer = KeywordAnalyzer()
         self.generated_files: list[str] = []
 
     def process(
@@ -69,7 +69,7 @@ class TestCaseOrchestrator:
             parsed = parser.parse(raw_input, explicit_format)
 
             # Step 2: Analyze test cases
-            analysis_result = self.analyzer.analyze(parsed)
+            analysis_result = KeywordAnalyzer.analyze_parsed(parsed)
 
             # Step 3: Order test cases by dependencies
             ordered_cases = self._order_test_cases(analysis_result.analyzed_test_cases)
@@ -183,7 +183,7 @@ class TestCaseOrchestrator:
             return []
 
         generated: list[str] = []
-        output_dir = config.GENERATED_TESTS_DIR
+        output_dir = GENERATED_TESTS_DIR
 
         # Create output directory if needed
         os.makedirs(output_dir, exist_ok=True)

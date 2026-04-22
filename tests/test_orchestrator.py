@@ -3,6 +3,11 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+from src.code_postprocessor import (
+    normalise_generated_code,
+    replace_remaining_placeholders,
+    replace_token_in_line,
+)
 from src.orchestrator import TestOrchestrator
 from src.test_generator import TestGenerator
 
@@ -607,7 +612,7 @@ from playwright.sync_api import Page
 def test_01_ok(page: Page, evidence_tracker) -> None:
     pass
 """
-    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "@pytest.markelse" not in fixed
     assert "@pytest.mark.evidence" in fixed
 
@@ -631,7 +636,7 @@ def test_01_checkout(page: Page):
     cart = CartPage(project=page) # Note: using placeholder logic
     cart.go()
 """
-    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "def __init__(self, page: Page) -> None:" in fixed
     assert "CartPage(page)" in fixed
     assert "dismiss_consent_overlays(self.page)" in fixed
@@ -647,7 +652,7 @@ from playwright.sync_api import Page
 def test_01_ok(page: Page, evidence_launcher) -> None:
     evidence_launcher.step("hello")
 """
-    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "evidence_launcher" not in fixed
     assert "evidence_tracker" in fixed
 
@@ -660,7 +665,7 @@ import pytest
 def test_01_ok() -> None:
     assert True
 """
-    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "@pytest.mark/evidence" not in fixed
     assert "@pytest.mark.evidence" in fixed
 
@@ -680,16 +685,15 @@ class ProductPage:
         evidence_tracker.navigate("https://example.com/")
         dismiss_consent_overlays(page)
 """
-    fixed = TestOrchestrator._normalise_generated_code(broken, consent_mode="leave-as-is")
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "dismiss_consent_overlays(self.page)" in fixed
 
 
 def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
     """Ensure evidence labels use the plain description, not the bracketed token."""
-    orchestrator = TestOrchestrator(AsyncMock())
     line = "evidence_tracker.click('{{CLICK:basket}}')"
 
-    fixed = orchestrator._replace_token_in_line(
+    fixed = replace_token_in_line(
         line=line,
         action="CLICK",
         token="{{CLICK:basket}}",
@@ -705,7 +709,7 @@ def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
 def test_replace_remaining_placeholders_ignores_placeholders_inside_quotes() -> None:
     """The safety net must not corrupt labels that already contain placeholders."""
     code = "evidence_tracker.click('#id', label='{{CLICK:basket}}')"
-    fixed = TestOrchestrator._replace_remaining_placeholders(code)
+    fixed = replace_remaining_placeholders(code)
 
     # It should NOT be wrapped in pytest.skip() because it's inside quotes
     assert fixed == code
@@ -714,10 +718,9 @@ def test_replace_remaining_placeholders_ignores_placeholders_inside_quotes() -> 
 
 def test_replace_token_in_line_with_skip_replaces_whole_line() -> None:
     """Unresolved steps should become standalone skips, not invalid parameter injections."""
-    orchestrator = TestOrchestrator(AsyncMock())
     line = "    evidence_tracker.click('{{CLICK:missing}}')"
 
-    fixed = orchestrator._replace_token_in_line(
+    fixed = replace_token_in_line(
         line=line,
         action="CLICK",
         token="{{CLICK:missing}}",
@@ -738,7 +741,7 @@ def test_something(page, evidence_tracker):
     {{ASSERT:item {item_name} is present in cart}}
     {{CLICK:add to cart button}}
 """
-    fixed = TestOrchestrator._replace_remaining_placeholders(code_with_unresolved)
+    fixed = replace_remaining_placeholders(code_with_unresolved)
     assert "pytest.skip(" in fixed
     # Confirm no line starts with a raw placeholder (which would be invalid Python syntax)
     for line in fixed.splitlines():

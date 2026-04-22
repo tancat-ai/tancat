@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from cli.config import JIRA_PROJECT_KEY, ReportFormat
-from cli.story_analyzer import AnalyzedTestCase
+from cli.config import ReportFormat
+from src.analyzer import AnalyzedTestCase
+from src.config import JIRA_PROJECT_KEY
 
 
 @dataclass

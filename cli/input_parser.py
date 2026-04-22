@@ -17,7 +17,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cli.config import DetectionMode, config
+from cli.config import DetectionMode
+
+EVIDENCE_DIR: str = "screenshots"
 
 
 @dataclass
@@ -112,7 +114,7 @@ class FormatDetector:
     }
 
     @classmethod
-    def detect(cls, text: str, method: DetectionMode = config.LLM_DETECTION_MODE) -> tuple[str, float]:
+    def detect(cls, text: str, method: DetectionMode = DetectionMode.AUTO) -> tuple[str, float]:
         """
         Detect input format.
 
@@ -438,7 +440,7 @@ class InputParser:
         Args:
             detection_method: How to detect input format
         """
-        self.detection_method: DetectionMode = detection_method or config.LLM_DETECTION_MODE
+        self.detection_method: DetectionMode = detection_method or DetectionMode.AUTO
 
     def parse(self, text: str, explicit_format: str | None = None) -> ParsedInput:
         """
@@ -550,7 +552,7 @@ class InputParser:
         if output_dir:
             output_path = Path(output_dir) / f"parsed_input_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         else:
-            output_path = Path(config.EVIDENCE_DIR) / f"parsed_input_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            output_path = Path(EVIDENCE_DIR) / f"parsed_input_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
         parsed.save_to_json(str(output_path))
         return str(output_path)
