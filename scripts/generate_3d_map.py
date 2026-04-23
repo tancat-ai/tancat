@@ -87,6 +87,7 @@ SKIP_DIRS = {
     ".streamlit",
     ".cache",
     "cline-mcp-memory-bank",
+    "memory-bank",
 }
 for root, dirs, files in os.walk("."):
     # Filter out skip dirs (modify in-place for os.walk)
@@ -162,7 +163,7 @@ for subdir in ["cli", "src", "tests", "docs", "docs/plans", "scripts"]:
 ALL_FILES = {f for f in ALL_FILES if not f.endswith((".xml", ".lock"))}
 ALL_FILES = {f for f in ALL_FILES if "mock_insurance_site" not in f and "cart.html" not in f}
 # Skip MCP server memory bank (not project code)
-ALL_FILES = {f for f in ALL_FILES if "cline-mcp-memory-bank" not in f}
+ALL_FILES = {f for f in ALL_FILES if "cline-mcp-memory-bank" not in f or "memory-bank" not in f}
 # Skip generated/temp output files
 ALL_FILES = {f for f in ALL_FILES if not f.endswith((".txt", ".log", ".err")) or f in (".env.example",)}
 # Skip the map generation artifacts themselves (with or without ./ prefix)

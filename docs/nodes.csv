@@ -7,7 +7,7 @@ label,group,size,color
 ./.python-version,Configuration,1,#BB8FCE
 ./AGENTS.md,Documentation,257,#F7DC6F
 ./BACKLOG.md,Documentation,694,#F7DC6F
-./CHANGELOG.md,Documentation,86,#F7DC6F
+./CHANGELOG.md,Documentation,108,#F7DC6F
 ./CONTRIBUTING.md,Documentation,165,#F7DC6F
 ./Dockerfile,Configuration,29,#BB8FCE
 ./LICENSE,Configuration,201,#BB8FCE
@@ -77,14 +77,10 @@ label,group,size,color
 ./launch_dev.sh,Configuration,85,#BB8FCE
 ./launch_ui.sh,Configuration,51,#BB8FCE
 ./main.py,utility,266,#98D8C8
-./memory-bank/activeContext.md,Documentation,24,#F7DC6F
-./memory-bank/decisionLog.md,Documentation,38,#F7DC6F
-./memory-bank/progress.md,Documentation,33,#F7DC6F
-./memory-bank/projectContext.md,Documentation,48,#F7DC6F
-./pyproject.toml,Configuration,69,#BB8FCE
+./pyproject.toml,Configuration,74,#BB8FCE
 ./pytest.ini,Configuration,9,#BB8FCE
 ./scripts/3d_map_data.json,Other,4575,#AEB6BF
-./scripts/generate_3d_map.py,utility,851,#98D8C8
+./scripts/generate_3d_map.py,utility,852,#98D8C8
 ./scripts/project_sanitizer.py,utility,435,#98D8C8
 ./scripts/run_lmstudio_pipeline_once.py,utility,113,#98D8C8
 ./scripts/uat_full_pipeline.py,utility,43,#98D8C8
