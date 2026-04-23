@@ -161,6 +161,8 @@ for subdir in ["cli", "src", "tests", "docs", "docs/plans", "scripts"]:
 # Filter out unwanted files — skip generated artifacts, temp files, and external submodules
 ALL_FILES = {f for f in ALL_FILES if not f.endswith((".xml", ".lock"))}
 ALL_FILES = {f for f in ALL_FILES if "mock_insurance_site" not in f and "cart.html" not in f}
+# Skip MCP server memory bank (not project code)
+ALL_FILES = {f for f in ALL_FILES if "cline-mcp-memory-bank" not in f}
 # Skip generated/temp output files
 ALL_FILES = {f for f in ALL_FILES if not f.endswith((".txt", ".log", ".err")) or f in (".env.example",)}
 # Skip the map generation artifacts themselves (with or without ./ prefix)
