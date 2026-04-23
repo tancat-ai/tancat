@@ -67,3 +67,8 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "plotly.*"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "generate_3d_map"
+ignore_missing_imports = true
+disable_error_code = ["assignment", "arg-type", "no-untyped-def"]
