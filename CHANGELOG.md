@@ -15,6 +15,28 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - `CHANGELOG.md` — this file
 - `CODE_OF_CONDUCT.md` — Contributor Covenant v2.1
 - GitHub issue templates for bug reports and feature requests
+- `src/analyzer.py` — CLI analysis module (replaces `cli/story_analyzer.py`)
+- `src/config.py` — `AnalysisMode` and `ReportFormat` enums for CLI
+- `src/code_postprocessor.py` — code string transformation helpers (extracted from `orchestrator.py`)
+- `src/url_utils.py` — pure URL manipulation helpers (extracted from `orchestrator.py`)
+- `src/report_builder.py` — report data preparation (extracted from `report_utils.py`)
+- `src/report_formatters.py` — standard report renderers (extracted from `report_utils.py`)
+- `src/evidence_report.py` — annotated screenshot/heatmap/journey generators (extracted from `report_utils.py`)
+
+### Changed
+- `cli/story_analyzer.py` → `cli/analyzer.py` — renamed for clarity
+- `src/orchestrator.py` — extracted URL helpers to `src/url_utils.py` and code postprocessors to `src/code_postprocessor.py`
+- `src/report_utils.py` — replaced with backwards-compatible re-export shim; logic moved to `report_builder.py`, `report_formatters.py`, and `evidence_report.py`
+
+### Removed
+- `cli/story_analyzer.py` — replaced by `cli/analyzer.py` + `src/config.py`
+- `src/page_context_scraper.py` — deleted (deprecated, caused selector hallucination)
+- Deprecated test files: `tests/src/`, `tests/example_test.py`, `tests/uat_pipeline_test.py`
+
+### Fixed
+- mypy `import-untyped` for pandas via `pandas-stubs` dev dependency
+- mypy `import-untyped` for plotly via per-module override in `pyproject.toml`
+- pre-commit hook failures from variable shadowing in `generate_3d_map.py` via mypy override
 
 ---
 

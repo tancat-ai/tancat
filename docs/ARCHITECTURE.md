@@ -14,7 +14,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
     *   **`cli/main.py`**: CLI entry point (argparse-based).
     *   **`cli/config.py`**: `AnalysisMode`, `ReportFormat` enums and CLI config.
     *   **`cli/input_parser.py`**: Parses user story input and file arguments.
-    *   **`cli/story_analyzer.py`**: Wraps `SpecAnalyzer` for CLI invocation.
+    *   **`cli/analyzer.py`**: Wraps `SpecAnalyzer` for CLI invocation.
     *   **`cli/test_orchestrator.py`**: CLI-specific test orchestration wrapper.
     *   **`cli/evidence_generator.py`**: CLI evidence collection and export.
     *   **`cli/report_generator.py`**: CLI report generation (HTML/Markdown/Jira).
