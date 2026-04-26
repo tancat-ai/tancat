@@ -32,7 +32,7 @@ class RequirementCoverage:
         }
 
 
-class RunTestLike(Protocol):
+class CoverageRunResult(Protocol):
     """Protocol for minimal test-run result objects used in coverage mapping."""
 
     name: str
@@ -143,7 +143,7 @@ def _result_icon(status: str) -> str:
 
 def build_coverage_display_rows(
     requirements: list[RequirementCoverage],
-    run_results: Sequence[RunTestLike] | None = None,
+    run_results: Sequence[CoverageRunResult] | None = None,
 ) -> list[CoverageDisplayRow]:
     """Build display-ready rows from RequirementCoverage objects."""
     run_map: dict[str, str] = {}

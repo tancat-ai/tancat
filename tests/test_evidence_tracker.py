@@ -94,3 +94,95 @@ def test_evidence_tracker_cleans_placeholder_labels(tmp_path: Any) -> None:
     tracker.click("#thing", label="{{CLICK:view cart link}}")
 
     assert tracker.steps[-1]["label"] == "Click: view cart link"
+
+
+class TestLocatorFallback:
+    """Tier 2: Locator scoring + controlled fallback tests.
+
+    NOTE: These tests verify the _record_step integration with fallback_used
+    and fallback_chain parameters. Full end-to-end fallback testing requires
+    real browser interactions which are beyond unit test scope.
+    """
+
+    def test_record_step_sets_partial_pass_when_fallback_used(self, tmp_path: Any) -> None:
+        """_record_step should set status='partial_pass' when fallback_used=True."""
+        page_mock = MagicMock()
+        tracker = EvidenceTracker(page_mock, "test_partial", evidence_root=Path(tmp_path))
+
+        # Directly call _record_step with fallback_used=True
+        tracker._record_step(
+            "click",
+            "Click button",
+            locator=".btn",
+            fallback_used=True,
+            fallback_chain=[
+                {
+                    "locator": ".btn",
+                    "type": "css-class",
+                    "score": 35,
+                    "confidence": "medium-low",
+                    "result": "failed",
+                },
+                {
+                    "locator": "#addToCart",
+                    "type": "id",
+                    "score": 85,
+                    "confidence": "high",
+                    "result": "success",
+                },
+            ],
+        )
+
+        assert tracker.steps[-1]["type"] == "click"
+        assert tracker.steps[-1]["result"]["status"] == "partial_pass"
+        assert tracker.steps[-1]["result"]["fallback_used"] is True
+        assert len(tracker.steps[-1]["result"]["fallback_chain"]) == 2
+
+    def test_record_step_sets_passed_when_no_fallback(self, tmp_path: Any) -> None:
+        """_record_step should set status='passed' when no error and no fallback."""
+        page_mock = MagicMock()
+        tracker = EvidenceTracker(page_mock, "test_passed", evidence_root=Path(tmp_path))
+
+        tracker._record_step("click", "Click button", locator="#btn")
+
+        assert tracker.steps[-1]["result"]["status"] == "passed"
+        assert "fallback_used" not in tracker.steps[-1]["result"]
+
+    def test_record_step_sets_failed_when_error_no_fallback(self, tmp_path: Any) -> None:
+        """_record_step should set status='failed' when there's an error."""
+        page_mock = MagicMock()
+        tracker = EvidenceTracker(page_mock, "test_failed", evidence_root=Path(tmp_path))
+
+        tracker._record_step("click", "Click button", locator="#btn", error="timeout")
+
+        assert tracker.steps[-1]["result"]["status"] == "failed"
+        assert "fallback_used" not in tracker.steps[-1]["result"]
+
+    def test_fallback_chain_structure(self, tmp_path: Any) -> None:
+        """Fallback chain entries should contain locator, type, score, confidence, result."""
+        page_mock = MagicMock()
+        tracker = EvidenceTracker(page_mock, "test_chain", evidence_root=Path(tmp_path))
+
+        fallback_chain = [
+            {"locator": ".btn", "type": "css-class", "score": 35, "confidence": "medium-low", "result": "failed"},
+            {"locator": "#addToCart", "type": "id", "score": 85, "confidence": "high", "result": "success"},
+        ]
+
+        tracker._record_step(
+            "click",
+            "Click button",
+            locator=".btn",
+            fallback_used=True,
+            fallback_chain=fallback_chain,
+        )
+
+        chain = tracker.steps[-1]["result"]["fallback_chain"]
+        assert len(chain) == 2
+        for entry in chain:
+            assert "locator" in entry
+            assert "type" in entry
+            assert "score" in entry
+            assert "confidence" in entry
+            assert "result" in entry
+        assert chain[0]["result"] == "failed"
+        assert chain[1]["result"] == "success"

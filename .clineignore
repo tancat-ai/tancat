@@ -7,8 +7,6 @@ htmlcov/
 .venv/
 
 # Generated output
-generated_tests/
-screenshots/
 
 # Build/misc
 *.pyc

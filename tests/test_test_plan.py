@@ -42,6 +42,7 @@ def test_build_manual_condition_assigns_next_manual_id() -> None:
     assert condition.id == "MAN02"
     assert condition.type == "exploratory"
     assert condition.src == "manual"
+    assert condition.intent == "journey_step"
 
 
 def test_test_plan_tracks_review_state_and_signoff_readiness() -> None:
@@ -114,6 +115,7 @@ def test_apply_editor_rows_updates_conditions_assigns_ids_and_review_state() -> 
             {
                 "id": "TC01.01",
                 "type": "boundary",
+                "intent": "state_assertion",
                 "text": "Updated condition",
                 "expected": "Updated expected",
                 "source": "Edited",
@@ -136,4 +138,5 @@ def test_apply_editor_rows_updates_conditions_assigns_ids_and_review_state() -> 
 
     assert [condition.id for condition in updated.conditions] == ["TC01.01", "MAN01"]
     assert updated.conditions[0].type == "boundary"
+    assert updated.conditions[0].intent == "state_assertion"
     assert updated.reviewed_ids == {"TC01.01"}

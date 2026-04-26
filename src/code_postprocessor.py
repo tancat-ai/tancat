@@ -4,10 +4,144 @@ from __future__ import annotations
 
 import re
 
+# Patterns that match common LLM reasoning/thinking text that leaks into code output.
+# These are English sentences, questions, or self-references that are not valid Python.
+_LLM_REASONING_PREFIXES = (
+    "Wait,",
+    "Note,",
+    "Actually,",
+    "Hmm,",
+    "Okay,",
+    "Sure,",
+    "Let's ",
+    "That's ",
+    "This is ",
+    "The prompt ",
+    "The example ",
+    "I will ",
+    "I need ",
+    "I should ",
+    "All constraints",
+    "Matches all",
+    "Output matches",
+    "Proceeds",
+    "Self-Correction",
+    "Refinement",
+    "One minor",
+    "One check",
+    "Final check",
+    "Self check",
+    "Edge case",
+    "Corner case",
+    "In the example",
+    "To be safe",
+    "To avoid",
+)
+
+_LLM_REASONING_PATTERNS = [
+    re.compile(r"^\s*#\s*[A-Z][a-z]+,\s", re.IGNORECASE),  # # Note, ... # Wait,
+    re.compile(r"^\s*(?:Wait|Note|Actually|Hmm|Okay|Sure|Let's|That's|This is)\b", re.IGNORECASE),
+    re.compile(r"^\s*# - \d+\.\s+[A-Z][a-z]+,\s"),  # numbered list items that are reasoning
+]
+
+
+def _is_llm_reasoning_line(line: str) -> bool:
+    """Return True if the line looks like LLM reasoning text rather than Python code.
+
+    Heuristics:
+    - Starts with common LLM reasoning prefixes
+    - Is a short English sentence (under 80 chars) with punctuation that Python
+      code would not normally have at the start of a line (commas after sentence starters)
+    - Contains no valid Python keywords and is not a comment, string, or docstring
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    # Skip lines that are valid Python constructs
+    python_keywords = (
+        "def ",
+        "class ",
+        "import ",
+        "from ",
+        "return ",
+        "if ",
+        "elif ",
+        "else:",
+        "for ",
+        "while ",
+        "try:",
+        "except",
+        "finally:",
+        "with ",
+        "assert ",
+        "raise ",
+        "yield ",
+        "lambda ",
+        "pass",
+        "break",
+        "continue",
+        "@pytest",
+        "@",
+        "# PAGES_NEEDED",
+        "# - https",
+        "# -http",
+        '"""',
+        "'''",
+        "pytest.",
+        "evidence_tracker",
+        "dismiss_consent",
+        "page.",
+        "self.",
+    )
+    if any(stripped.startswith(kw) for kw in python_keywords):
+        return False
+
+    # Check for LLM reasoning prefixes
+    for prefix in _LLM_REASONING_PREFIXES:
+        if stripped.startswith(prefix):
+            return True
+
+    # Check for reasoning patterns
+    for pattern in _LLM_REASONING_PATTERNS:
+        if pattern.match(stripped):
+            return True
+
+    # Heuristic: short lines with sentence-like punctuation that aren't Python
+    if len(stripped) < 80 and any(c in stripped for c in (",", ".")):
+        # Lines that start with a capital letter followed by a comma are likely reasoning
+        if re.match(r"^[A-Z][a-z]+,", stripped):
+            # But allow valid Python like "Page," in type hints (unlikely at line start)
+            if not re.match(r"^[A-Z][A-Za-z]*\s*[:=]", stripped):
+                return True
+
+    return False
+
+
+def _strip_llm_reasoning_text(code: str) -> str:
+    """Remove lines that look like LLM reasoning/thinking text.
+
+    LLMs sometimes output their internal chain-of-thought as part of the code
+    block. This function detects and removes such lines while preserving valid
+    Python code, comments, and blank lines.
+    """
+    lines = code.splitlines()
+    cleaned_lines: list[str] = []
+
+    for line in lines:
+        if _is_llm_reasoning_line(line):
+            continue
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines)
+
 
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
     """Apply small deterministic fixes to common skeleton-generation mistakes."""
     fixed_code = code
+
+    # First: strip LLM reasoning text that may have leaked into the code block
+    fixed_code = _strip_llm_reasoning_text(fixed_code)
 
     # Clean up malformed decorators if the LLM added spaces
     fixed_code = re.sub(r"@\s*pytest\s*\.\s*mark\s*\.\s*evidence", "@pytest.mark.evidence", fixed_code)
@@ -16,6 +150,8 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # _inject_import handles deduplication by removing any existing copies first.
     if "pytest.skip(" in fixed_code or "pytest.mark." in fixed_code:
         fixed_code = inject_import(fixed_code, "import pytest")
+    if re.search(r"\bPage\b", fixed_code) or "expect(" in fixed_code:
+        fixed_code = inject_import(fixed_code, "from playwright.sync_api import Page, expect")
 
     # The tool ships an `evidence_tracker` fixture for generated tests.
     # Some LLMs hallucinate a non-existent `evidence_launcher` fixture name.
@@ -64,6 +200,22 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # But we can at least strip it to avoid runtime errors.
     fixed_code = re.sub(r"(?m)^\s*evidence_tracker\.record_condition\(.*?\)\s*$", "", fixed_code)
 
+    # Fix misplaced closing parenthesis in evidence_tracker method calls.
+    # Common LLM mistake: evidence_tracker.assert_visible(...'), label="...")
+    #                          ^-- extra ) before , label=
+    # Pattern: closing paren followed by comma and label= (or other kwarg)
+    fixed_code = re.sub(
+        r"(evidence_tracker\.\w+\([^)]*)\)'(\s*,\s*label=)",
+        r"\1\2",
+        fixed_code,
+    )
+    # Also handle nested parens like evidence_tracker.click(..., label=...)')
+    fixed_code = re.sub(
+        r"(evidence_tracker\.\w+\([^)]*\)[^)]*)\)'(\s*,\s*\w+=)",
+        r"\1\2",
+        fixed_code,
+    )
+
     # Ensure every test starts with a navigation if none present
     fixed_code = _ensure_test_navigation(fixed_code)
 
@@ -77,8 +229,15 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # break the resolver's regex and therefore were never substituted.
     fixed_code = replace_remaining_placeholders(fixed_code)
 
+    # Some models indent entire top-level test blocks after helper functions,
+    # producing invalid syntax like `    @pytest.mark.evidence(...)` at module scope.
+    fixed_code = _dedent_indented_test_blocks(fixed_code)
+
     # Fix inconsistent indentation inside test functions and class methods
     fixed_code = _fix_indentation(fixed_code)
+
+    # Deduplicate consecutive pytest.skip() calls in the same test block
+    fixed_code = _deduplicate_skip_calls(fixed_code)
 
     return fixed_code
 
@@ -94,9 +253,9 @@ def replace_token_in_line(
     """Replace a single placeholder token within a code line."""
     stripped = line.strip()
     indent = line[: len(line) - len(line.lstrip())]
-    selector_value = resolved_value.strip("'\"")
-    prefer_visible = action == "CLICK"
     # Duplicate selector disambiguation is handled by EvidenceTracker at runtime.
+    # NOTE: Playwright auto-waits for elements to be actionable before clicking,
+    # so we no longer append `:visible` to click selectors (it's invalid CSS).
 
     if "pytest.skip" in resolved_value:
         # If the resolution is a skip, replace the WHOLE line to ensure it executes.
@@ -113,8 +272,9 @@ def replace_token_in_line(
 
     if action == "CLICK":
         selector_literal = resolved_value
-        if prefer_visible and ":not(:has-text(''))" not in selector_value:
-            selector_literal = repr(f"{selector_value}:visible")
+        # NOTE: Playwright auto-waits for elements to be actionable before clicking.
+        # Appending `:visible` as a CSS pseudo-selector is invalid and causes failures.
+        # See: https://playwright.dev/python/docs/actionability
         if stripped == token:
             return f"{indent}evidence_tracker.click({selector_literal}, label={repr(step_label)})"
         if stripped == f"{token}.click()":
@@ -187,9 +347,20 @@ def replace_token_in_line(
         goto_patterns = {
             f"page.goto({token})",
             f"self.page.goto({token})",
+            f"evidence_tracker.navigate({token})",
+            f'page.goto("{token}")',
+            f"page.goto('{token}')",
+            f'self.page.goto("{token}")',
+            f"self.page.goto('{token}')",
+            f'evidence_tracker.navigate("{token}")',
+            f"evidence_tracker.navigate('{token}')",
         }
         if stripped in goto_patterns:
             return f"{indent}evidence_tracker.navigate({resolved_value})"
+        if f'"{token}"' in line:
+            return line.replace(f'"{token}"', resolved_value)
+        if f"'{token}'" in line:
+            return line.replace(f"'{token}'", resolved_value)
         return line.replace(token, resolved_value)
 
     return line.replace(token, resolved_value)
@@ -259,10 +430,9 @@ def replace_remaining_placeholders(code: str) -> str:
 
         if has_function_call:
             # Replace the entire line with a skip statement
-            output_lines.append(
-                f'{indent}pytest.skip("Unresolved placeholder in this step. " '
-                f"+ \", \".join([m.group(0) for m in placeholder_pattern.finditer('{the_content}'])[:3]))"
-            )
+            preview = ", ".join(match.group(0) for match in matches[:3])
+            reason = f"Unresolved placeholder in this step. {preview}"
+            output_lines.append(f"{indent}pytest.skip({reason!r})")
         else:
             # Placeholder is standalone — replace it directly
             def _handle_match(m: re.Match) -> str:
@@ -312,6 +482,42 @@ def _fix_indentation(code: str) -> str:
                 continue
 
         updated_lines.append(line)
+
+    return "\n".join(updated_lines)
+
+
+def _dedent_indented_test_blocks(code: str) -> str:
+    """Dedent malformed top-level test blocks that were shifted right as a unit."""
+    lines = code.splitlines()
+    updated_lines: list[str] = []
+    index = 0
+
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+
+        if indent > 0 and re.match(r"^(?:@pytest\.mark\.evidence|def\s+test_)", stripped):
+            block_indent = indent
+            while index < len(lines):
+                current = lines[index]
+                current_stripped = current.lstrip()
+                current_indent = len(current) - len(current_stripped)
+
+                if not current_stripped:
+                    updated_lines.append("")
+                    index += 1
+                    continue
+
+                if current_indent < block_indent:
+                    break
+
+                updated_lines.append(current[block_indent:])
+                index += 1
+            continue
+
+        updated_lines.append(line)
+        index += 1
 
     return "\n".join(updated_lines)
 
@@ -537,6 +743,51 @@ def dismiss_consent_overlays(page: Page) -> None:
             # Check if next line is already a call to avoid duplicates
             updated_lines.append(f"{indent}{helper_name}(page)")
 
+    return "\n".join(updated_lines)
+
+
+def _deduplicate_skip_calls(code: str) -> str:
+    """Remove duplicate consecutive pytest.skip() calls in test blocks.
+
+    When both the orchestrator and the postprocessor inject skips for the same
+    placeholder, you get two skip() calls in a row.  Keep only the first one.
+    """
+    lines = code.splitlines()
+    updated_lines: list[str] = []
+    pending_skips: list[str] = []
+    in_test = False
+
+    def _flush_skips() -> None:
+        if pending_skips:
+            updated_lines.append(pending_skips[0])
+            pending_skips.clear()
+
+    for line in lines:
+        stripped = line.lstrip()
+        indent = line[: len(line) - len(line.lstrip())]
+
+        # Detect test function start
+        if stripped.startswith("def test_"):
+            _flush_skips()
+            in_test = True
+            updated_lines.append(line)
+            continue
+
+        # Detect end of test function (another def at same or lesser indent, or class)
+        if in_test and stripped and indent == 0:
+            _flush_skips()
+            if stripped.startswith("def ") or stripped.startswith("class ") or stripped.startswith("@"):
+                in_test = False
+
+        # Collect consecutive skip calls
+        if in_test and stripped.startswith("pytest.skip("):
+            pending_skips.append(line)
+            continue
+
+        _flush_skips()
+        updated_lines.append(line)
+
+    _flush_skips()
     return "\n".join(updated_lines)
 
 

@@ -107,12 +107,27 @@ def get_skeleton_prompt_template(
     )
 
     placeholder_syntax_section = (
-        "=== PLACEHOLDER SYNTAX (STRICT) ===\n"
+        "=== PLACEHOLDER SYNTAX (STRICT — VIOLATION = REJECTION) ===\n"
         "Use ONLY double-brace placeholders with EXACTLY 2 braces each side.\n"
-        "Format: {{{{ACTION:description}}}} where ACTION is one of: CLICK, FILL, GOTO, URL, ASSERT\n"
-        f"Examples: {_show('CLICK:button')}  {_show('FILL:name')}  {_show('GOTO:url')}  {_show('ASSERT:visible')}\n"
-        "NEVER use single braces, CSS selectors, XPath, or guess locators.\n"
-        "NEVER write {{{{ACTION:description}}}} literally — replace ACTION with CLICK/FILL/GOTO/URL/ASSERT.\n"
+        "Use one of these exact placeholder forms only:\n"
+        f"- {_show('CLICK:button description')}\n"
+        f"- {_show('FILL:input description')}\n"
+        f"- {_show('GOTO:page url description')}\n"
+        f"- {_show('URL:page url description')}\n"
+        f"- {_show('ASSERT:visible result description')}\n"
+        "\n"
+        "=== FORBIDDEN IN SKELETON OUTPUT (ABSOLUTELY NO EXCEPTIONS) ===\n"
+        "NEVER write real CSS selectors, XPath, or any locator in the skeleton.\n"
+        "FORBIDDEN patterns (your output will be REJECTED if any appear):\n"
+        "  - CSS selectors: '.btn.btn-success', '#elementId', 'a[href=\"/path\"]'\n"
+        "  - XPath: '//button', '//a[@class=\"test\"]'\n"
+        "  - Playwright methods: 'page.locator(...)', 'page.get_by_role(...)', 'page.click(...)'\n"
+        "  - Any real locator pattern: '.class', '#id', '[attribute]', 'tag > child'\n"
+        "If you need a locator -> USE A PLACEHOLDER INSTEAD.\n"
+        "Example: Instead of '.btn.btn-success.close-checkout-modal.btn-block'\n"
+        "         USE: {{{{ASSERT:success confirmation message}}}}\n"
+        "Example: Instead of 'a[href=\"/view_cart\"]'\n"
+        "         USE: {{{{CLICK:view cart link}}}}\n"
         "\n"
         "=== ALLOWED PLACEHOLDERS (NO OTHER ACTIONS ARE VALID) ===\n"
         "The ONLY allowed ACTION values are: CLICK, FILL, GOTO, URL, ASSERT\n"
@@ -261,4 +276,51 @@ def build_retry_conditions(
         + "\n\nCRITICAL CORRECTION:\n"
         + f"The previous answer did not produce exactly {expected_test_count} separate pytest test functions.\n"
         + "Regenerate the file with one test function per numbered condition and do not merge them."
+    )
+
+
+def build_single_condition_skeleton_prompt(
+    *,
+    user_story: str,
+    known_urls_block: str,
+    ordered_conditions: list[str],
+    target_condition_ref: str,
+    target_condition_text: str,
+    target_condition_expected: str,
+    target_condition_intent: str,
+) -> str:
+    """Return a prompt that generates exactly one skeleton test for one condition."""
+    all_conditions_block = "\n".join(
+        f"{index}. {condition}" for index, condition in enumerate(ordered_conditions, start=1)
+    )
+    intent_guidance = {
+        "element_presence": "Keep setup minimal. Prefer one focused visibility assertion after navigation.",
+        "element_behavior": "Focus on one main element interaction and one clear result assertion.",
+        "state_assertion": "Include prerequisite setup actions needed to make the asserted state true within this test.",
+        "journey_step": "Include all prerequisite user actions needed to reach this step independently.",
+        "journey_outcome": "Include the full prerequisite journey needed to reach the final outcome independently.",
+    }
+    prompt = get_skeleton_prompt_template(expected_count=1).format(
+        user_story=user_story,
+        conditions=(
+            "Ordered reviewed conditions for context:\n"
+            f"{all_conditions_block}\n\n"
+            "Generate exactly ONE test function for this target condition only:\n"
+            f"- Ref: {target_condition_ref}\n"
+            f"- Condition: {target_condition_text}\n"
+            f"- Expected: {target_condition_expected}\n"
+            f"- Intent: {target_condition_intent}\n"
+        ),
+        known_urls_block=known_urls_block,
+    )
+    return (
+        prompt
+        + "\n"
+        + "ADDITIONAL TARGETING RULES:\n"
+        + "- Output exactly one pytest test function for the target condition only.\n"
+        + "- Use the full ordered condition list as context, but do not generate tests for the other conditions.\n"
+        + "- Do not assume browser, cart, or login state carries across tests.\n"
+        + "- Include prerequisite setup steps when needed to make this target condition independently executable.\n"
+        + f"- Intent-specific rule: {intent_guidance.get(target_condition_intent, intent_guidance['journey_step'])}\n"
+        + f'- Use @pytest.mark.evidence(condition_ref="{target_condition_ref}", story_ref="S01") on the test.\n'
     )

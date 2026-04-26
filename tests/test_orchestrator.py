@@ -1,5 +1,6 @@
 """Tests for the intelligent pipeline orchestrator."""
 
+import ast
 import asyncio
 from unittest.mock import AsyncMock
 
@@ -9,6 +10,7 @@ from src.code_postprocessor import (
     replace_token_in_line,
 )
 from src.orchestrator import TestOrchestrator
+from src.spec_analyzer import TestCondition
 from src.test_generator import TestGenerator
 
 
@@ -59,7 +61,8 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "evidence_tracker.click('#add-to-cart:visible'" in final_code
+    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
+    assert "evidence_tracker.click('#add-to-cart'" in final_code
     assert "evidence_tracker.navigate(" in final_code
     assert "https://example.com/view_cart" in final_code
     assert "evidence_tracker.assert_visible('#cart-summary'" in final_code
@@ -157,7 +160,8 @@ def test_checkout(page: Page):
     assert "import pytest" in final_code
     assert "evidence_tracker.navigate(" in final_code
     assert "https://example.com/" in final_code
-    assert "evidence_tracker.click('a[href=\"/view_cart\"]:visible'" in final_code
+    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
+    assert "evidence_tracker.click('a[href=\"/view_cart\"]'" in final_code
     assert "pytest.skip" in final_code
 
 
@@ -288,6 +292,98 @@ def test_02_go_to_cart(page: Page):
     assert "def test_02_go_to_cart" in final_code
 
 
+def test_run_pipeline_generates_one_fragment_per_reviewed_condition_and_combines_results() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.client.generate = AsyncMock(  # type: ignore[method-assign]
+        side_effect=[
+            """
+from playwright.sync_api import Page, expect
+import pytest
+
+@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S01")
+def test_01_add_to_cart(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate("{{GOTO:home page}}")
+    evidence_tracker.click({{CLICK:add to cart button}}, label="add to cart")
+
+# PAGES_NEEDED:
+# - https://example.com/ (home)
+""",
+            """
+from playwright.sync_api import Page, expect
+import pytest
+
+@pytest.mark.evidence(condition_ref="TC01.02", story_ref="S01")
+def test_02_go_to_cart(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate("{{GOTO:home page}}")
+    evidence_tracker.click({{CLICK:cart link}}, label="cart")
+
+# PAGES_NEEDED:
+# - https://example.com/view_cart (cart)
+""",
+        ]
+    )
+
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "https://example.com/": (
+                [{"selector": "#buy", "text": "Add to cart", "role": "button"}],
+                None,
+                "https://example.com/",
+            ),
+            "https://example.com/view_cart": (
+                [{"selector": "#cart-link", "text": "Cart", "role": "a", "href": "https://example.com/view_cart"}],
+                None,
+                "https://example.com/view_cart",
+            ),
+        }
+    )
+    reviewed_conditions = [
+        TestCondition(
+            id="TC01.01",
+            type="happy_path",
+            text="add items to cart",
+            expected="Meets acceptance criteria.",
+            source="Acceptance Criteria 1",
+            flagged=False,
+            src="manual",
+            intent="element_behavior",
+        ),
+        TestCondition(
+            id="TC01.02",
+            type="happy_path",
+            text="go to cart",
+            expected="Meets acceptance criteria.",
+            source="Acceptance Criteria 2",
+            flagged=False,
+            src="manual",
+            intent="journey_step",
+        ),
+    ]
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="As a shopper I want to add to cart and go to cart",
+            conditions=(
+                "1. [TC01.01] add items to cart -> Expected: Meets acceptance criteria.\n"
+                "2. [TC01.02] go to cart -> Expected: Meets acceptance criteria."
+            ),
+            target_urls=["https://example.com/"],
+            reviewed_conditions=reviewed_conditions,
+        )
+    )
+
+    assert generator.client.generate.await_count == 2  # type: ignore[attr-defined]
+    assert "def test_01_add_to_cart" in orchestrator.last_result.skeleton_code  # type: ignore[union-attr]
+    assert "def test_02_go_to_cart" in orchestrator.last_result.skeleton_code  # type: ignore[union-attr]
+    assert orchestrator.last_result is not None
+    assert [journey.test_name for journey in orchestrator.last_result.journeys] == [
+        "test_01_add_to_cart",
+        "test_02_go_to_cart",
+    ]
+    assert "https://example.com/view_cart" in final_code
+
+
 def test_run_pipeline_normalises_unsupported_placeholder_actions_before_validation() -> None:
     generator = TestGenerator(output_dir="generated_tests")
     generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
@@ -341,7 +437,8 @@ def test_01_example(page: Page):
             consent_mode="leave-as-is",
         )
     )
-    assert "evidence_tracker.click('#buy:visible'" in final_code
+    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
+    assert "evidence_tracker.click('#buy'" in final_code
 
 
 def test_run_pipeline_uses_first_for_duplicate_click_selectors() -> None:
@@ -377,7 +474,8 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "evidence_tracker.click('[data-product-id=\"1\"]:visible'" in final_code
+    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
+    assert "evidence_tracker.click('[data-product-id=\"1\"]'" in final_code
 
 
 def test_run_pipeline_resolves_steps_against_the_current_journey_page() -> None:
@@ -439,7 +537,8 @@ def test_02_verify_cart(page: Page):
     )
 
     assert "evidence_tracker.navigate('https://example.com/')" in final_code
-    assert "evidence_tracker.click('a[href=\"/view_cart\"]:visible'" in final_code
+    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
+    assert "evidence_tracker.click('a[href=\"/view_cart\"]'" in final_code
     assert "evidence_tracker.navigate('https://example.com/view_cart')" in final_code
     assert "evidence_tracker.assert_visible('#cart-summary'" in final_code
     assert "#hero-summary" not in final_code
@@ -689,6 +788,38 @@ class ProductPage:
     assert "dismiss_consent_overlays(self.page)" in fixed
 
 
+def test_normalise_generated_code_dedents_top_level_test_block_after_helper() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+     @pytest.mark.evidence(condition_ref="TC01.01", story_ref="S01")
+     def test_01_ok(page: Page, evidence_tracker) -> None:
+         evidence_tracker.navigate("https://example.com/")
+         assert True
+
+     # PAGES_NEEDED:
+     # - https://example.com/
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "\n@pytest.mark.evidence" in fixed
+    assert "\n     @pytest.mark.evidence" not in fixed
+    assert "\ndef test_01_ok" in fixed
+
+
+def test_normalise_generated_code_injects_playwright_import_when_page_annotations_exist() -> None:
+    broken = """
+def test_01_ok(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate("https://example.com/")
+"""
+    fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
+    assert "from playwright.sync_api import Page, expect" in fixed
+    assert "def dismiss_consent_overlays(page: Page) -> None:" in fixed
+
+
 def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
     """Ensure evidence labels use the plain description, not the bracketed token."""
     line = "evidence_tracker.click('{{CLICK:basket}}')"
@@ -733,6 +864,21 @@ def test_replace_token_in_line_with_skip_replaces_whole_line() -> None:
     assert "evidence_tracker.click" not in fixed
 
 
+def test_replace_token_in_line_goto_replaces_quoted_placeholder_without_double_quotes() -> None:
+    line = '    evidence_tracker.navigate("{{GOTO:products page}}")'
+
+    fixed = replace_token_in_line(
+        line=line,
+        action="GOTO",
+        token="{{GOTO:products page}}",
+        resolved_value="'https://example.com/products'",
+        duplicate_selectors=set(),
+        description="products page",
+    )
+
+    assert fixed.strip() == "evidence_tracker.navigate('https://example.com/products')"
+
+
 def test_replace_remaining_placeholders_converts_raw_placeholder_to_skip() -> None:
     """Unresolved {{...}} placeholders (e.g. those with Python variable syntax) must be
     replaced with pytest.skip() so they never produce a SyntaxError."""
@@ -750,6 +896,21 @@ def test_something(page, evidence_tracker):
     for line in fixed.splitlines():
         if "pytest.skip" in line:
             assert line.startswith("    "), f"Expected indented skip, got: {line!r}"
+
+
+def test_replace_remaining_placeholders_replaces_function_call_line_with_valid_skip() -> None:
+    """Unresolved placeholders inside function calls must become valid standalone skips."""
+    code_with_unresolved = """\
+import pytest
+
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.fill({{FILL:email}}, '', label="email")
+    """
+    fixed = replace_remaining_placeholders(code_with_unresolved)
+    assert "evidence_tracker.fill(" not in fixed
+    assert "Unresolved placeholder in this step." in fixed
+    assert "pytest.skip(" in fixed
+    ast.parse(fixed)
 
 
 def test_skeleton_validator_rejects_python_variable_syntax_in_placeholder() -> None:

@@ -3,8 +3,134 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+
+@dataclass
+class SkeletonValidationResult:
+    """Result of validating a skeleton for forbidden patterns."""
+
+    is_valid: bool
+    violations: list[str]
+    suggestion: str
+
+
+class SkeletonValidator:
+    """Validate skeleton output for forbidden patterns (CSS selectors, XPath, etc.)."""
+
+    def _is_url_context(self, text: str) -> bool:
+        """Check if the text contains a URL context (https://, http://)."""
+        return "://" in text
+
+    def _extract_string_args(self, line: str) -> list[str]:
+        """Extract string arguments from a line of Python code."""
+        strings: list[str] = []
+        current = ""
+        in_quote = None
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if in_quote is None:
+                if ch in ('"', "'"):
+                    in_quote = ch
+                elif ch == " ":
+                    if current.strip():
+                        strings.append(current.strip())
+                    current = ""
+            else:
+                if ch == in_quote and (i == 0 or line[i - 1] != "\\"):
+                    strings.append(current)
+                    current = ""
+                    in_quote = None
+                else:
+                    current += ch
+            i += 1
+        if current.strip():
+            strings.append(current.strip())
+        return strings
+
+    def validate(self, skeleton_code: str) -> SkeletonValidationResult:
+        """Validate skeleton code for forbidden locator patterns.
+
+        Returns a result indicating whether the skeleton is valid, what violations
+        were found, and a suggestion for fixing them.
+        """
+        violations: list[str] = []
+
+        # CSS class selector pattern
+        css_class_pattern = re.compile(r"\.btn\.\w+")
+        # CSS ID selector pattern
+        css_id_pattern = re.compile(r"(?<!['\\])#\w+")
+        # CSS attribute selector pattern
+        css_attr_pattern = re.compile(r"\[href=")
+        # XPath pattern — matches //tag but we'll filter URLs
+        xpath_pattern = re.compile(r"(?<!['\\])//[a-zA-Z]")
+        # CSS descendant combinator
+        css_descendant_pattern = re.compile(r"\w+\s*>\s*\w+")
+        # page.locator with real selector
+        page_locator_pattern = re.compile(r"page\.locator\(['\"](?!{{)")
+        # get_by_role/get_by_text with real selector
+        get_by_pattern = re.compile(r"page\.(get_by_role|get_by_text|get_by_label)\(['\"]")
+
+        for line in skeleton_code.splitlines():
+            stripped = line.strip()
+            # Skip comment lines, import lines, and lines with placeholders
+            if stripped.startswith("#") or stripped.startswith("from ") or stripped.startswith("import "):
+                continue
+            if "{{" in line and "}}" in line:
+                continue
+
+            # Skip URL-only lines (e.g. evidence_tracker.navigate("https://..."))
+            if self._is_url_context(line):
+                # For XPath: URLs like https:// should NOT match
+                # Check if the // is part of :// (URL scheme)
+                if xpath_pattern.search(line):
+                    # Filter out matches that are part of URL schemes
+                    for m in xpath_pattern.finditer(line):
+                        # Check if preceded by : (making it ://)
+                        if m.start() > 0 and line[m.start() - 1] == ":":
+                            continue  # This is part of a URL, skip
+                        violations.append(f"Found XPath starting with //: {stripped[:120]}")
+                        break
+            else:
+                if xpath_pattern.search(line):
+                    violations.append(f"Found XPath starting with //: {stripped[:120]}")
+
+            if css_class_pattern.search(line):
+                violations.append(f"Found CSS class selector: {stripped[:120]}")
+            if css_id_pattern.search(line):
+                violations.append(f"Found CSS ID selector: {stripped[:120]}")
+            if css_attr_pattern.search(line):
+                violations.append(f"Found CSS attribute selector: {stripped[:120]}")
+            if css_descendant_pattern.search(line):
+                violations.append(f"Found CSS descendant combinator: {stripped[:120]}")
+            if page_locator_pattern.search(line):
+                violations.append(f"Found page.locator with real selector: {stripped[:120]}")
+            if get_by_pattern.search(line):
+                violations.append(f"Found get_by_role/get_by_text with real selector: {stripped[:120]}")
+
+        if violations:
+            unique_violations = list(dict.fromkeys(violations))  # Dedupe while preserving order
+            suggestion = (
+                "The skeleton contains real CSS selectors or XPath expressions. "
+                "Replace ALL real locators with placeholders. "
+                "Use {{CLICK:description}}, {{ASSERT:description}}, {{FILL:description}}, "
+                "{{GOTO:description}}, or {{URL:description}} for ALL element interactions. "
+                "The placeholder resolver will substitute real selectors during Phase 2."
+            )
+            return SkeletonValidationResult(
+                is_valid=False,
+                violations=unique_violations,
+                suggestion=suggestion,
+            )
+
+        return SkeletonValidationResult(
+            is_valid=True,
+            violations=[],
+            suggestion="",
+        )
 
 
 class SkeletonParser:
@@ -72,7 +198,55 @@ class SkeletonParser:
         # {CLICK:x} or {FILL:x} with single braces.
         code = re.sub(r"(?<!\{)\{([A-Z_]+):([^}]+)\}(?!\})", _rewrite, code)
 
-        return code
+        return SkeletonParser._replace_unsupported_placeholder_actions(code)
+
+    @staticmethod
+    def _replace_unsupported_placeholder_actions(code: str) -> str:
+        """Replace unsupported placeholder-action lines with standalone pytest skips.
+
+        This keeps the pipeline runnable when the model echoes teaching examples like
+        ``{{ACTION:description}}`` or invents unsupported actions such as WAIT/CLOSE.
+        """
+        allowed_actions = {"CLICK", "FILL", "GOTO", "URL", "ASSERT"}
+        placeholder_pattern = re.compile(r"\{\{([A-Z_]+):(.+?)\}\}", re.DOTALL)
+
+        def _is_inside_quotes(text_before: str) -> bool:
+            in_single = False
+            in_double = False
+            for ch in text_before:
+                if ch == "'" and not in_double:
+                    in_single = not in_single
+                elif ch == '"' and not in_single:
+                    in_double = not in_double
+            return in_single or in_double
+
+        output_lines: list[str] = []
+        for line in code.splitlines():
+            if "{{" not in line:
+                output_lines.append(line)
+                continue
+
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                output_lines.append(line)
+                continue
+
+            matches = list(placeholder_pattern.finditer(stripped))
+            unsupported = [
+                match
+                for match in matches
+                if match.group(1) not in allowed_actions and not _is_inside_quotes(stripped[: match.start()])
+            ]
+            if not unsupported:
+                output_lines.append(line)
+                continue
+
+            indent = line[: len(line) - len(line.lstrip())]
+            preview = ", ".join(match.group(1) for match in unsupported[:3])
+            reason = f"Unsupported placeholder action emitted by model: {preview}."
+            output_lines.append(f"{indent}pytest.skip({reason!r})")
+
+        return "\n".join(output_lines)
 
     @staticmethod
     def _single_to_double_brace(code: str) -> str:
@@ -293,19 +467,63 @@ class SkeletonParser:
         # Hallucination check: Reject raw strings that look like CSS selectors or IDs
         # in evidence_tracker calls, or raw Playwright calls.
         # We allow URLs starting with http.
-        hallucination_pattern = re.compile(
-            r"(?:page\.locator|expect\(.*?page\.locator|evidence_tracker\.(?:click|fill|assert_visible))\(['\"]([^'\"{}]*)['\"]",
-            re.S,
-        )
-        for match in hallucination_pattern.finditer(code):
-            content = match.group(1).strip()
+        #
+        # Strategy: find evidence_tracker.click/fill/assert_visible(page.locator|expect) calls,
+        # extract the FIRST string argument, and reject it if it looks like a real CSS/XPath
+        # selector (contains .class, #id, [attr], //, > combinators) but is NOT a placeholder
+        # (doesn't start with {{).
+        #
+        # We use a two-step approach to handle nested quotes:
+        # 1. Find the call site
+        # 2. Extract the first quoted string argument (handling both ' and " quotes)
+        evidence_tracker_call_pattern = re.compile(r"evidence_tracker\.(click|fill|assert_visible)\s*\(")
+
+        for match in evidence_tracker_call_pattern.finditer(code):
+            # Find the first string argument after the opening paren
+            paren_pos = match.end() - 1
+            if paren_pos >= len(code):
+                continue
+            # Find the opening quote of the first argument
+            arg_start = paren_pos + 1
+            # Skip whitespace
+            while arg_start < len(code) and code[arg_start] in (" ", "\t", "\n", "\r"):
+                arg_start += 1
+            if arg_start >= len(code):
+                continue
+            quote_char = code[arg_start]
+            if quote_char not in ("'", '"'):
+                continue
+            # Find the closing quote, handling escaped quotes and nested quotes
+            # For selectors like 'a[href="/path"]', we look for the outer quote
+            arg_end = arg_start + 1
+            while arg_end < len(code):
+                ch = code[arg_end]
+                if ch == "\\":
+                    arg_end += 2  # Skip escaped character
+                    continue
+                if ch == quote_char:
+                    break
+                arg_end += 1
+            content = code[arg_start + 1 : arg_end].strip()
             # If it's a hardcoded selector (not starting with {{ and not a URL), it's a hallucination
             if content and not content.startswith("{{") and not content.startswith("http"):
-                return (
-                    "Skeleton output violated the NEVER GUESS LOCATORS rule. "
-                    "You must use placeholders like `{{CLICK:description}}` instead of raw selectors. "
-                    f"Guessed selector found: '{content}'"
+                # Check if it looks like a real selector (has CSS/XPath patterns)
+                looks_like_selector = any(
+                    pattern.search(content)
+                    for pattern in [
+                        re.compile(r"\.[a-zA-Z]"),  # CSS class
+                        re.compile(r"#\w+"),  # CSS ID
+                        re.compile(r"\[.+="),  # Attribute selector
+                        re.compile(r"//[a-zA-Z]"),  # XPath
+                        re.compile(r"\w+\s*>\s*\w+"),  # Descendant combinator
+                    ]
                 )
+                if looks_like_selector:
+                    return (
+                        "Skeleton output violated the NEVER GUESS LOCATORS rule. "
+                        "You must use placeholders like `{{CLICK:description}}` instead of raw selectors. "
+                        f"Guessed selector found: '{content[:80]}'"
+                    )
         # Reject skeletons where the LLM has written pytest.skip() directly into a
         # non-statement position (e.g. as a label= value or as a string literal in
         # any argument slot).  When this happens the test runs silently instead of

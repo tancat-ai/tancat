@@ -4,13 +4,12 @@ import asyncio
 
 import pytest
 
-from src.orchestrator import TestOrchestrator
-from src.test_generator import TestGenerator
+from src.placeholder_orchestrator import PlaceholderOrchestrator
 
 
 def test_ensure_scraped_uses_stateful_scraper_for_view_cart(monkeypatch: pytest.MonkeyPatch) -> None:
-    orchestrator = TestOrchestrator(TestGenerator(client=None, model_name="test"))  # type: ignore[arg-type]
-    orchestrator._starting_url = "https://example.com/"  # noqa: SLF001
+    """Verify stateful scraping is used for cart/checkout pages."""
+    placeholder_orch = PlaceholderOrchestrator(starting_url="https://example.com/")
 
     calls: list[str] = []
 
@@ -26,11 +25,13 @@ def test_ensure_scraped_uses_stateful_scraper_for_view_cart(monkeypatch: pytest.
         calls.append(f"stateless:{url}")
         return [{"selector": "div", "text": "fallback"}], None, url
 
-    monkeypatch.setattr("src.orchestrator.StatefulPageScraper", FakeStateful)
-    monkeypatch.setattr(orchestrator.scraper, "scrape_url", fake_stateless)
+    monkeypatch.setattr("src.placeholder_orchestrator.StatefulPageScraper", FakeStateful)
+
+    # Mock the stateless scraper on the placeholder orchestrator
+    placeholder_orch.scraper.scrape_url = fake_stateless  # type: ignore[assignment]
 
     scraped: dict[str, list[dict[str, str]]] = {}
-    asyncio.run(orchestrator._ensure_scraped("https://example.com/view_cart", scraped))  # noqa: SLF001
+    asyncio.run(placeholder_orch._ensure_scraped("https://example.com/view_cart", scraped))
 
     assert "stateful:https://example.com/view_cart" in calls
     assert all(not c.startswith("stateless:") for c in calls)
@@ -38,8 +39,8 @@ def test_ensure_scraped_uses_stateful_scraper_for_view_cart(monkeypatch: pytest.
 
 
 def test_ensure_scraped_falls_back_to_stateless_when_stateful_empty(monkeypatch: pytest.MonkeyPatch) -> None:
-    orchestrator = TestOrchestrator(TestGenerator(client=None, model_name="test"))  # type: ignore[arg-type]
-    orchestrator._starting_url = "https://example.com/"  # noqa: SLF001
+    """Verify stateless fallback when stateful scraper returns 0 elements."""
+    placeholder_orch = PlaceholderOrchestrator(starting_url="https://example.com/")
 
     calls: list[str] = []
 
@@ -55,11 +56,13 @@ def test_ensure_scraped_falls_back_to_stateless_when_stateful_empty(monkeypatch:
         calls.append(f"stateless:{url}")
         return [{"selector": "div", "text": "fallback"}], None, url
 
-    monkeypatch.setattr("src.orchestrator.StatefulPageScraper", FakeStateful)
-    monkeypatch.setattr(orchestrator.scraper, "scrape_url", fake_stateless)
+    monkeypatch.setattr("src.placeholder_orchestrator.StatefulPageScraper", FakeStateful)
+
+    # Mock the stateless scraper on the placeholder orchestrator
+    placeholder_orch.scraper.scrape_url = fake_stateless  # type: ignore[assignment]
 
     scraped: dict[str, list[dict[str, str]]] = {}
-    asyncio.run(orchestrator._ensure_scraped("https://example.com/checkout", scraped))  # noqa: SLF001
+    asyncio.run(placeholder_orch._ensure_scraped("https://example.com/checkout", scraped))
 
     assert "stateful:https://example.com/checkout" in calls
     assert "stateless:https://example.com/checkout" in calls

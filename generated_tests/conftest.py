@@ -2,11 +2,15 @@
 
 This file lives under `generated_tests/` so it is discovered when executing
 generated packages directly (e.g. `pytest generated_tests/test_x.py -v`).
+
+Evidence is written to <test_file_directory>/evidence/ so each test package
+gets its own evidence folder alongside its tests.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -40,13 +44,27 @@ def pytest_runtest_makereport(item: Any, call: Any) -> Any:
 
 @pytest.fixture
 def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTracker:
-    """Provide an EvidenceTracker instance for generated tests."""
+    """Provide an EvidenceTracker instance for generated tests.
+
+    Evidence is written to <test_file_directory>/evidence/ so each test package
+    gets its own evidence folder alongside its tests.
+
+    The test_package_dir is determined from the test file's location (not this
+    conftest's location) so that each subdirectory under generated_tests/ that
+    contains a test file gets its own isolated evidence folder.
+    """
     refs = _get_evidence_refs(request)
+
+    # Determine the test file's directory (not this conftest's directory).
+    # request.fspath is the path to the test file being run.
+    test_package_dir = Path(request.fspath).parent
+
     tracker = EvidenceTracker(
         page=page,
         test_name=request.node.name,
         condition_ref=refs.condition_ref,
         story_ref=refs.story_ref,
+        test_package_dir=test_package_dir,
     )
     yield tracker
 

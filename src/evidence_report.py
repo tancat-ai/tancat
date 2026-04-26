@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
@@ -20,6 +21,14 @@ _EVIDENCE_STEP_COLORS: dict[str, str] = {
     "fill": "#0F6E56",
     "click": "#185FA5",
     "assertion": "#854F0B",
+}
+
+# Status colors for Tier 3 heatmap (also used by heatmap_utils.py)
+_STATUS_COLORS: dict[str, str] = {
+    "passed": "#1D9E75",  # Green
+    "partial_pass": "#FAC775",  # Yellow
+    "failed": "#F09595",  # Red
+    "skipped": "#6B7280",  # Gray
 }
 
 
@@ -81,280 +90,26 @@ def _clean_evidence_label(label: str) -> str:
 
 
 def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return steps with labels normalized for UI rendering."""
+    """Return steps with labels normalized for UI rendering.
+
+    Also extracts failure_note and diagnosis from the result dict when present.
+    """
     prepared: list[dict[str, Any]] = []
     for step in steps:
         if not isinstance(step, dict):
             continue
         cloned = dict(step)
         cloned["label"] = _clean_evidence_label(str(step.get("label", "")))
+        # Promote failure metadata from result -> top level for easy access
+        result = step.get("result", {})
+        if isinstance(result, dict):
+            cloned["failure_note"] = result.get("failure_note")
+            cloned["diagnosis"] = result.get("diagnosis")
+            # Mark steps that had failures even if status says passed
+            if result.get("error") and not result.get("status"):
+                cloned["_had_error"] = True
         prepared.append(cloned)
     return prepared
-
-
-def _extract_step_points_by_url(sidecar: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
-    """Return (points_by_url, background_screenshot_by_url) from one sidecar.
-
-    Points are derived by tracking the current URL as `navigate` steps occur.
-    Background screenshot chooses the last assertion screenshot within a URL segment,
-    otherwise the last screenshot for that segment.
-    """
-    steps = sidecar.get("steps", [])
-    if not isinstance(steps, list):
-        return {}, {}
-
-    points_by_url: dict[str, list[dict[str, Any]]] = {}
-    bg_by_url: dict[str, str] = {}
-
-    current_url = ""
-    current_url_norm = ""
-    segment_screenshots: list[tuple[int, str]] = []  # (priority, rel_path)
-
-    def is_meaningful_screenshot(step: dict[str, Any]) -> bool:
-        """Check if a screenshot is likely to be meaningful (not a consent overlay)."""
-        label = str(step.get("label", "")).lower()
-        # Deprioritize screenshots of consent overlays or common pre-action states
-        deprioritize = ["consent", "overlay", "cookie", "accept", "dismiss", "initial", "pre-action"]
-        return not any(word in label for word in deprioritize)
-
-    def flush_segment(url_norm: str) -> None:
-        if not url_norm or not segment_screenshots:
-            return
-        # Choose the highest priority screenshot (assertions are priority 2, others 1)
-        # If priorities are equal, prefer the one that is "meaningful"
-        # Finally prefer the last one in the segment
-        sorted_shots = sorted(segment_screenshots, key=lambda x: (x[0], x[1]))
-        bg_by_url[url_norm] = sorted_shots[-1][1]
-
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        step_type = str(step.get("type", "")).lower()
-        if "navigate" in step_type:
-            flush_segment(current_url_norm)
-            current_url = str(step.get("value", "") or "")
-            current_url_norm = _normalise_url(current_url)
-            segment_screenshots = []
-            shot = step.get("screenshot")
-            if shot:
-                # Navigate screenshots are priority 0 (fallback only)
-                segment_screenshots.append((0, str(shot)))
-
-            if current_url_norm:
-                result = step.get("result", {})
-                run_count = 1
-                if isinstance(result, dict):
-                    rc = result.get("run_count")
-                    if isinstance(rc, int | float):
-                        run_count = int(rc)
-                points_by_url.setdefault(current_url_norm, []).append(
-                    {
-                        "type": "navigate",
-                        "x": 50.0,
-                        "y": 50.0,
-                        "run_count": run_count,
-                    }
-                )
-            continue
-
-        if not current_url_norm:
-            continue
-
-        shot = step.get("screenshot")
-        if shot:
-            priority = 1
-            if "assert" in step_type:
-                priority = 3 if is_meaningful_screenshot(step) else 2
-            elif is_meaningful_screenshot(step):
-                priority = 1
-            else:
-                priority = 0
-            segment_screenshots.append((priority, str(shot)))
-
-        element = step.get("element", {})
-        viewport_pct = element.get("viewport_pct") if isinstance(element, dict) else None
-        if not isinstance(viewport_pct, dict):
-            continue
-        x = viewport_pct.get("x")
-        y = viewport_pct.get("y")
-        if not isinstance(x, int | float) or not isinstance(y, int | float):
-            continue
-
-        result = step.get("result", {})
-        run_count = 1
-        if isinstance(result, dict):
-            rc = result.get("run_count")
-            if isinstance(rc, int | float):
-                run_count = int(rc)
-
-        points_by_url.setdefault(current_url_norm, []).append(
-            {
-                "type": step_type,
-                "x": float(x),
-                "y": float(y),
-                "run_count": run_count,
-            }
-        )
-
-    flush_segment(current_url_norm)
-    return points_by_url, bg_by_url
-
-
-def generate_suite_heatmap(
-    *,
-    evidence_dir: Path,
-    page_url: str,
-) -> str:
-    """Render a suite-level heatmap for one page URL across all sidecars."""
-    if not evidence_dir.exists():
-        return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Evidence directory not found.</div>"
-
-    target_norm = _normalise_url(page_url)
-    all_points: list[dict[str, Any]] = []
-    best_background: tuple[tuple[int, int], str] | None = None  # ((priority, point_count), rel_path)
-
-    for sidecar_path in evidence_dir.glob("*.evidence.json"):
-        sidecar = _safe_read_json(sidecar_path)
-        if not sidecar:
-            continue
-        points_by_url, bg_by_url = _extract_step_points_by_url(sidecar)
-        current_points = points_by_url.get(target_norm, [])
-        if not current_points:
-            continue
-
-        all_points.extend(current_points)
-        if target_norm in bg_by_url:
-            rel = bg_by_url[target_norm]
-            # Priority: assertion (priority 3/2) > meaningful interaction (priority 1) > navigate (priority 0)
-            # We also prefer the screenshot that has the most points associated with it in this sidecar
-            priority = 0
-            if "assert" in rel:
-                priority = 3
-            elif any(p["type"] != "navigate" for p in current_points):
-                priority = 2
-            else:
-                priority = 1
-
-            score = (priority, len(current_points))
-            if best_background is None or score > best_background[0]:
-                best_background = (score, rel)
-
-    if not all_points:
-        escaped = escape_html(page_url)
-        return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No evidence points found for <code>{escaped}</code>.</div>"
-
-    # Pick any background screenshot we found; if none, render points-only.
-    image_data_uri = None
-    if best_background:
-        background_rel = best_background[1]
-        image_path = (
-            (evidence_dir.parent / background_rel).resolve()
-            if background_rel.startswith("evidence/")
-            else (evidence_dir / background_rel).resolve()
-        )
-        image_data_uri = _safe_embed_image_data_uri(image_path)
-
-    points_json = json.dumps(all_points)
-    colors_json = json.dumps(_EVIDENCE_STEP_COLORS)
-    safe_url = escape_html(page_url)
-    bg_html = (
-        f'<img id="suite-img" src="{image_data_uri}" alt="suite screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" />'
-        if image_data_uri
-        else '<div id="suite-img" style="width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;color:#666;">No screenshot available for this page. Rendering points only.</div>'
-    )
-
-    return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
-  <div style="font-weight:600;margin-bottom:10px;">Suite Heatmap</div>
-  <div style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;">{safe_url}</div>
-  <div id="suite-wrap" style="position:relative;width:100%;max-width:1100px;">
-    {bg_html}
-    <svg id="suite-svg" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
-  </div>
-  <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee;display:flex;gap:15px;font-size:12px;color:#666;">
-    <strong>Legend</strong>:
-    <span style="color:{_EVIDENCE_STEP_COLORS["navigate"]};font-weight:700;">navigate</span>,
-    <span style="color:{_EVIDENCE_STEP_COLORS["fill"]};font-weight:700;">fill</span>,
-    <span style="color:{_EVIDENCE_STEP_COLORS["click"]};font-weight:700;">click</span>,
-    <span style="color:{_EVIDENCE_STEP_COLORS["assertion"]};font-weight:700;">assertion</span>
-    <span style="margin-left:auto;"><strong>Points</strong>: {len(all_points)} total interactions across all tests.</span>
-  </div>
-</div>
-
-<script>
-(() => {{
-  const COLORS = {colors_json};
-  const points = {points_json};
-  const wrap = document.getElementById("suite-wrap");
-  const svg = document.getElementById("suite-svg");
-  const img = document.getElementById("suite-img");
-
-  function baseRadius(runCount) {{
-    const rc = Number(runCount || 1);
-    // Large, solid circles for maximum visibility
-    return 22 + Math.min(rc * 2, 50);
-  }}
-
-  function stepType(typeStr) {{
-    const t = String(typeStr || "").toLowerCase();
-    if (t.includes("navigate")) return "navigate";
-    if (t.includes("fill")) return "fill";
-    if (t.includes("click")) return "click";
-    if (t.includes("assert")) return "assertion";
-    return "click";
-  }}
-
-  function render() {{
-    let w = 0;
-    let h = 0;
-    if (img && img.getBoundingClientRect) {{
-      const r = img.getBoundingClientRect();
-      w = r.width;
-      h = r.height;
-    }}
-    if (!w || !h) {{
-      const r = wrap.getBoundingClientRect();
-      w = r.width;
-      h = r.height;
-    }}
-    svg.setAttribute("width", String(w));
-    svg.setAttribute("height", String(h));
-    svg.setAttribute("viewBox", `0 0 ${{w}} ${{h}}`);
-
-    const out = [];
-    points.forEach((p, idx) => {{
-      const t = stepType(p.type);
-      const color = COLORS[t] || "#999";
-      const r = baseRadius(p.run_count);
-      const cx = (Number(p.x) / 100) * w;
-      const cy = (Number(p.y) / 100) * h;
-      const opacity = Math.min(0.25 + (Number(p.run_count || 1) * 0.08), 0.85);
-
-      // Grouping logic for tooltip
-      const label = p.label || p.type;
-
-      out.push(`
-        <g class="point-group" style="cursor:help;">
-          <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="white" stroke-width="4" opacity="${{opacity}}" />
-          <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="3" opacity="${{opacity}}" />
-          <circle cx="${{cx}}" cy="${{cy}}" r="${{Math.max(8, r - 15)}}" fill="none" stroke="${{color}}" stroke-width="2" opacity="${{opacity}}" />
-          <text x="${{cx}}" y="${{cy + 4}}" font-size="12" font-weight="bold" fill="${{color}}" text-anchor="middle" style="pointer-events:none;">${{idx + 1}}</text>
-          <title>${{label}} (x: ${{p.x.toFixed(1)}}%, y: ${{p.y.toFixed(1)}}%)</title>
-        </g>
-      `);
-    }});
-    svg.innerHTML = out.join("");
-  }}
-
-  const ro = new ResizeObserver(() => render());
-  ro.observe(wrap);
-  if (img && img.addEventListener) {{
-    img.addEventListener("load", () => render());
-  }}
-  render();
-}})();
-</script>
-"""
 
 
 def generate_annotated_screenshot(
@@ -490,23 +245,41 @@ def generate_annotated_screenshot(
       const label = String(s.label || t);
       const status = String((s.result && s.result.status) || "");
       const runCount = s.result && s.result.run_count ? s.result.run_count : 1;
+      const failureNote = s.failure_note || null;
+      const hasError = status === "failed" || s._had_error;
+
+      // Build row content
+      let rowContent = `
+        <div style="min-width:30px;height:30px;border-radius:999px;background:${{hasError ? "#dc2626" : COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
+        <div style="flex:1;">
+          <div style="font-weight:600;color:#222;">${{label}}</div>
+          <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
+      `;
+
+      // Add failure note if present
+      if (failureNote) {{
+        rowContent += `
+          <div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:120px;overflow-y:auto;white-space:pre-wrap;">
+            <strong>Failure Diagnosis:</strong><br/>
+            <pre style="white-space:pre-wrap;margin:0;">${{failureNote}}</pre>
+          </div>
+        `;
+      }}
+
+      rowContent += `</div>`;
+
       const row = document.createElement("div");
       row.setAttribute("data-step-id", String(id));
       row.style.display = "flex";
       row.style.gap = "10px";
       row.style.alignItems = "center";
       row.style.padding = "8px 10px";
-      row.style.border = "1px solid #f0f0f0";
+      row.style.border = hasError ? "1px solid #fecaca" : "1px solid #f0f0f0";
       row.style.borderRadius = "8px";
       row.style.marginBottom = "8px";
       row.style.cursor = "default";
-      row.innerHTML = `
-        <div style="min-width:30px;height:30px;border-radius:999px;background:${{COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;color:#222;">${{label}}</div>
-          <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
-        </div>
-      `;
+      row.style.background = hasError ? "#fef2f2" : "#fff";
+      row.innerHTML = rowContent;
       row.addEventListener("mouseenter", () => {{
         hoveredId = id;
         renderOverlay();
@@ -525,12 +298,13 @@ def generate_annotated_screenshot(
     const rows = timeline.querySelectorAll("[data-step-id]");
     rows.forEach((row) => {{
       const id = Number(row.getAttribute("data-step-id"));
+      const hasError = row.style.background === "#fef2f2" || row.style.borderColor === "#fecaca";
       if (hoveredId === id) {{
-        row.style.borderColor = "#c7d2fe";
-        row.style.background = "#eef2ff";
+        row.style.borderColor = hasError ? "#f87171" : "#c7d2fe";
+        row.style.background = hasError ? "#fef2f2" : "#eef2ff";
       }} else {{
-        row.style.borderColor = "#f0f0f0";
-        row.style.background = "#fff";
+        row.style.borderColor = hasError ? "#fecaca" : "#f0f0f0";
+        row.style.background = hasError ? "#fef2f2" : "#fff";
       }}
     }});
   }}
@@ -828,3 +602,159 @@ def generate_annotated_journey(
 }})();
 </script>
 """
+
+
+@dataclass
+class EvidenceFile:
+    """Represents a single evidence sidecar file."""
+
+    test_name: str
+    sidecar_path: Path
+    condition_ref: str
+    story_ref: str
+    status: str
+    duration_s: float
+    step_count: int
+    has_fallback: bool
+    has_failure: bool
+    screenshots: list[str]
+
+
+@dataclass
+class TestPackageEvidence:
+    """Evidence for a single test package directory."""
+
+    package_dir: Path
+    package_name: str
+    tests: list[EvidenceFile]
+    total_steps: int
+    total_screenshots: int
+    passed: int
+    failed: int
+    partial_pass: int
+    skipped: int
+
+
+def list_evidence_from_package(package_dir: Path) -> TestPackageEvidence | None:
+    """Scan a test package directory for evidence sidecars and return aggregated data.
+
+    Looks for ``*.evidence.json`` files in ``package_dir/evidence/``.
+
+    Returns None if no evidence is found.
+    """
+    evidence_dir = package_dir / "evidence"
+    if not evidence_dir.exists():
+        return None
+
+    sidecars = sorted(evidence_dir.glob("*.evidence.json"))
+    if not sidecars:
+        return None
+
+    tests: list[EvidenceFile] = []
+    total_steps = 0
+    total_screenshots = 0
+    passed = 0
+    failed = 0
+    partial_pass = 0
+    skipped = 0
+
+    for sidecar in sidecars:
+        data = _safe_read_json(sidecar)
+        if data is None:
+            continue
+
+        test_info = data.get("test", {})
+        if not isinstance(test_info, dict):
+            test_info = {}
+
+        status = str(test_info.get("status", "unknown"))
+        steps = data.get("steps", [])
+        if not isinstance(steps, list):
+            steps = []
+
+        # Count screenshots
+        screenshot_paths: list[str] = []
+        for step in steps:
+            if isinstance(step, dict):
+                shot = step.get("screenshot")
+                if shot:
+                    screenshot_paths.append(str(shot))
+
+        # Check for fallback usage
+        has_fallback = False
+        for step in steps:
+            if isinstance(step, dict):
+                result = step.get("result", {})
+                if isinstance(result, dict) and result.get("fallback_used"):
+                    has_fallback = True
+                    break
+
+        # Check for failures
+        has_failure = False
+        for step in steps:
+            if isinstance(step, dict):
+                result = step.get("result", {})
+                if isinstance(result, dict) and result.get("status") == "failed":
+                    has_failure = True
+                    break
+
+        tests.append(
+            EvidenceFile(
+                test_name=str(sidecar.stem),  # Remove .evidence.json
+                sidecar_path=sidecar,
+                condition_ref=str(test_info.get("condition_ref", "unknown")),
+                story_ref=str(test_info.get("story_ref", "unknown")),
+                status=status,
+                duration_s=float(test_info.get("duration_s", 0)),
+                step_count=len(steps),
+                has_fallback=has_fallback,
+                has_failure=has_failure,
+                screenshots=screenshot_paths,
+            )
+        )
+
+        total_steps += len(steps)
+        total_screenshots += len(screenshot_paths)
+
+        if status == "passed":
+            passed += 1
+        elif status == "failed":
+            failed += 1
+        elif status == "partial_pass":
+            partial_pass += 1
+        elif status == "skipped":
+            skipped += 1
+
+    return TestPackageEvidence(
+        package_dir=package_dir,
+        package_name=package_dir.name,
+        tests=tests,
+        total_steps=total_steps,
+        total_screenshots=total_screenshots,
+        passed=passed,
+        failed=failed,
+        partial_pass=partial_pass,
+        skipped=skipped,
+    )
+
+
+def list_evidence_from_packages(package_dirs: list[Path]) -> list[TestPackageEvidence]:
+    """Scan multiple test package directories for evidence.
+
+    Returns a list of ``TestPackageEvidence`` objects, one per directory that
+    contains evidence sidecars.  Directories with no evidence are skipped.
+    """
+    return [result for package_dir in package_dirs if (result := list_evidence_from_package(package_dir)) is not None]
+
+
+def list_evidence_from_test_dir(test_dir: Path) -> list[TestPackageEvidence]:
+    """Scan *test_dir* for subdirectories that contain evidence.
+
+    This is the common case where each generated test lives in its own
+    subdirectory under ``generated_tests/``.
+    """
+    if not test_dir.exists():
+        return []
+
+    package_dirs = [d for d in test_dir.iterdir() if d.is_dir() and (d / "evidence").exists()]
+    return list_evidence_from_packages(package_dirs)

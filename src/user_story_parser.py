@@ -277,7 +277,12 @@ class FeatureParser:
         Returns:
             Cleaned criterion text
         """
-        # Strip leading bullet/number markers
-        clean = stripped.lstrip("-•*").strip()
+        # Strip leading bullet/number markers.
+        clean = stripped
+        for marker in ("-", "*", "\u2022"):
+            clean = clean.lstrip(marker)
+        clean = clean.strip()
         clean = re.sub(r"^\d+[.)]\s*", "", clean)
+        if re.fullmatch(r"\(?\s*total\s*:\s*\d+\s+criteria\s*\)?", clean, flags=re.IGNORECASE):
+            return ""
         return clean

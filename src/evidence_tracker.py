@@ -6,6 +6,9 @@ from typing import Any
 
 from playwright.sync_api import Page
 
+from src.failure_reporter import FailureReporter
+from src.locator_fallback import LocatorFallback
+
 
 class EvidenceTracker:
     def __init__(
@@ -16,7 +19,22 @@ class EvidenceTracker:
         story_ref: str = "unknown",
         *,
         evidence_root: Path | None = None,
+        test_package_dir: Path | None = None,
     ) -> None:
+        """Initialize the EvidenceTracker.
+
+        Args:
+            page: Playwright Page instance.
+            test_name: Name of the test (used for evidence file naming).
+            condition_ref: Condition/test case reference (e.g. "TC01.01").
+            story_ref: User story reference (e.g. "S01").
+            evidence_root: Legacy — root directory for evidence. Deprecated; use
+                test_package_dir instead. When both are provided, test_package_dir
+                takes precedence.
+            test_package_dir: Directory containing the test file. Evidence is written
+                to <test_package_dir>/evidence/ so each test package gets its own
+                evidence folder alongside its tests.
+        """
         self.page = page
         self.test_name = test_name
         self.condition_ref = condition_ref
@@ -24,10 +42,16 @@ class EvidenceTracker:
 
         self.steps: list[dict[str, Any]] = []
         self.start_time = time.time()
-        # Anchor evidence artifacts to the repo root so Streamlit and pytest agree
-        # regardless of current working directory. Allow tests/tools to override.
-        repo_root = evidence_root if evidence_root is not None else Path(__file__).resolve().parents[1]
-        self.evidence_dir = repo_root / "evidence"
+
+        # Determine evidence directory: per-test package takes precedence
+        if test_package_dir is not None:
+            self.evidence_dir = Path(test_package_dir) / "evidence"
+        elif evidence_root is not None:
+            self.evidence_dir = evidence_root / "evidence"
+        else:
+            # Fallback to legacy behaviour (repo root)
+            self.evidence_dir = Path(__file__).resolve().parents[1] / "evidence"
+
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.sidecar_path = self.evidence_dir / f"{self.test_name}.evidence.json"
 
@@ -174,6 +198,8 @@ class EvidenceTracker:
         take_screenshot: bool = False,
         error: str | None = None,
         matched_text: str | None = None,
+        fallback_used: bool = False,
+        fallback_chain: list[dict[str, Any]] | None = None,
     ) -> None:
         step_idx = len(self.steps)
 
@@ -197,6 +223,39 @@ class EvidenceTracker:
 
         element_data = self._get_element_metadata(locator)
 
+        # On failure, generate self-diagnosing failure evidence (Tier 1).
+        failure_note: str | None = None
+        diagnosis: dict[str, Any] | None = None
+        if error:
+            try:
+                diagnosis = FailureReporter.diagnose_failure(self.page, locator, step_type, error)
+                failure_note = FailureReporter.generate_failure_note(diagnosis)
+            except Exception:
+                # Diagnosis is best-effort; don't let it break test execution.
+                failure_note = f"[diagnosis failed: {error[:100]}]"
+
+        # Determine step status — "partial_pass" when fallback was used
+        if error:
+            status = "failed"
+        elif fallback_used:
+            status = "partial_pass"
+        else:
+            status = "passed"
+
+        result: dict[str, Any] = {
+            "status": status,
+            "elapsed_ms": 0,  # Could bracket logic above via time.time() to grab real ms
+            "run_count": step_run_count,
+            "matched_text": matched_text,
+            "error": error,
+            "failure_note": failure_note,
+            "diagnosis": diagnosis,
+        }
+
+        if fallback_used:
+            result["fallback_used"] = True
+            result["fallback_chain"] = fallback_chain or []
+
         self.steps.append(
             {
                 "step": step_idx + 1,
@@ -206,23 +265,26 @@ class EvidenceTracker:
                 "value": value,
                 "screenshot": screenshot_path,
                 "element": element_data,
-                "result": {
-                    "status": "failed" if error else "passed",
-                    "elapsed_ms": 0,  # Could bracket logic above via time.time() to grab real ms
-                    "run_count": step_run_count,
-                    "matched_text": matched_text,
-                    "error": error,
-                },
+                "result": result,
             }
         )
 
-    def navigate(self, url: str) -> None:
+    def navigate(self, url: str, label: str = "") -> None:
+        """Navigate to a URL and record the navigation.
+
+        Args:
+            url: The URL to navigate to.
+            label: Optional human-readable label for the step. Defaults to
+                   "Navigate to <url>" when empty.
+        """
+        if not label:
+            label = f"Navigate to {url}"
         try:
             self.page.goto(url)
             self._dismiss_consent_overlays()
-            self._record_step("navigate", f"Navigate to {url}", value=url, take_screenshot=True)
+            self._record_step("navigate", label, value=url, take_screenshot=True)
         except Exception as e:
-            self._record_step("navigate", f"Navigate to {url}", value=url, take_screenshot=True, error=str(e))
+            self._record_step("navigate", label, value=url, take_screenshot=True, error=str(e))
             raise
 
     def fill(self, locator: str, value: str, label: str = "") -> None:
@@ -236,6 +298,16 @@ class EvidenceTracker:
             raise
 
     def click(self, locator: str, label: str = "") -> None:
+        """Click an element, with layered fallback strategies.
+
+        Strategy (Tier 2 — Locator Scoring + Controlled Fallback):
+        1. Scroll into view
+        2. Try direct click with primary locator
+        3. If click fails with visibility/timeout error:
+           a. Try hover-reveal fallback (existing)
+           b. Try locator scoring fallback (new — higher-scoring alternatives)
+        4. If any fallback succeeds, mark step as "partial_pass" with audit trail
+        """
         if not label:
             label = f"Click {locator}"
         try:
@@ -249,14 +321,116 @@ class EvidenceTracker:
             except Exception:
                 # Scrolling is best-effort; clicking may still succeed without it.
                 pass
-            loc.click()
-            self._record_step("click", label, locator=locator)
-            self.steps[-1]["element"] = el_metadata
+
+            # Attempt 1: Direct click
+            try:
+                loc.click(timeout=5000)
+                self._record_step("click", label, locator=locator)
+                self.steps[-1]["element"] = el_metadata
+                return
+            except Exception as click_error:
+                # Check if this looks like a visibility/overlay issue
+                error_str = str(click_error).lower()
+                is_visibility_issue = any(
+                    term in error_str
+                    for term in ["timeout", "visible", "attached", "detached", "hidden", "not visible", "not enabled"]
+                )
+
+                if is_visibility_issue:
+                    # Attempt 2: Hover-reveal fallback (existing)
+                    hover_result = self._try_hover_and_click(loc, locator, label, el_metadata)
+                    if hover_result is not None:
+                        return  # Hover fallback succeeded
+
+                    # Attempt 3: Locator scoring fallback (new — Tier 2)
+                    LocatorFallback.try_fallback(
+                        loc,
+                        locator,
+                        label,
+                        el_metadata,
+                        click_error,
+                        self.page,
+                        self._record_step,
+                    )
+                else:
+                    raise
         except Exception as e:
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
             self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e))
             raise
+
+    def _try_hover_and_click(self, loc: Any, locator: str, label: str, el_metadata: dict) -> None | bool:
+        """Try to click by first dispatching mouseenter events for hover-reveal elements.
+
+        Returns True if the hover fallback succeeded, None if all attempts failed.
+
+        This handles elements that are hidden via CSS (display:none, visibility:hidden,
+        opacity:0) and only become visible when the parent element receives a mouseenter
+        event — common pattern in e-commerce product grids.
+        """
+        # Try hovering over the element itself first
+        try:
+            loc.hover(timeout=2000, force=False)
+            self.page.wait_for_timeout(300)  # Brief wait for CSS transition
+        except Exception:
+            pass
+
+        # Try clicking after hover
+        try:
+            loc.click(timeout=5000)
+            self._record_step("click", label, locator=locator)
+            self.steps[-1]["element"] = el_metadata
+            return True
+        except Exception:
+            pass
+
+        # Try dispatching mouseenter on the element
+        try:
+            loc.evaluate("el => el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))")
+            self.page.wait_for_timeout(300)
+            loc.click(timeout=5000)
+            self._record_step("click", label, locator=locator)
+            self.steps[-1]["element"] = el_metadata
+            return True
+        except Exception:
+            pass
+
+        # Try dispatching mouseenter on all ancestors (for overlay patterns)
+        # This handles cases where the clickable element is inside a hidden overlay
+        try:
+            self.page.evaluate(
+                """
+                (selector) => {
+                    // Find the element and dispatch mouseenter on it and ancestors
+                    const el = document.querySelector(selector);
+                    if (!el) return false;
+
+                    // Dispatch mouseenter on the element
+                    const mouseEnter = new MouseEvent('mouseenter', { bubbles: true });
+                    el.dispatchEvent(mouseEnter);
+
+                    // Also dispatch on parent elements up to body
+                    let parent = el.parentElement;
+                    while (parent && parent.tagName !== 'BODY') {
+                        parent.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                        parent = parent.parentElement;
+                    }
+                    return true;
+                }
+            """,
+                locator,
+            )
+            self.page.wait_for_timeout(300)
+            loc.click(timeout=5000)
+            self._record_step("click", label, locator=locator)
+            self.steps[-1]["element"] = el_metadata
+            return True
+        except Exception:
+            pass
+
+        # All hover attempts failed — return None to signal fallback failure
+        return None
 
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:

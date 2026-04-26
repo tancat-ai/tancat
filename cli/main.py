@@ -105,7 +105,7 @@ def run_analysis(parsed: ParsedInput) -> AnalysisResult:
 
 def run_generation(parsed: ParsedInput, output_dir: str, url: str | None = None) -> None:
     """Generate Playwright tests."""
-    from cli.test_orchestrator import TestCaseOrchestrator
+    from cli.test_case_orchestrator import TestCaseOrchestrator
 
     orchestrator = TestCaseOrchestrator()
     # Generate content for all test cases

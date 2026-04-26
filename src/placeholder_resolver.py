@@ -79,6 +79,12 @@ class PlaceholderResolver:
             str(element.get("classes", "")),
             str(element.get("value", "")),
             str(element.get("placeholder", "")),
+            # Visual enrichment fields
+            str(element.get("icon_classes", "")),
+            str(element.get("icon_unicode", "")),
+            str(element.get("parent_text", "")),
+            str(element.get("aria_icon_label", "")),
+            str(element.get("visual_description", "")),
         ]
         return " ".join(part for part in parts if part).strip()
 
@@ -123,7 +129,11 @@ class PlaceholderResolver:
         text = str(element.get("text", "")).lower()
         href = str(element.get("href", "")).lower()
         classes = str(element.get("classes", "")).lower()
-        haystack = " ".join([selector, text, href, classes])
+        icon_classes = str(element.get("icon_classes", "")).lower()
+        visual_desc = str(element.get("visual_description", "")).lower()
+        parent_text = str(element.get("parent_text", "")).lower()
+        aria_icon_label = str(element.get("aria_icon_label", "")).lower()
+        haystack = " ".join([selector, text, href, classes, icon_classes, visual_desc, parent_text, aria_icon_label])
 
         # If we are looking for a checkout or cart action, ignore footer subscription fields.
         # Sites like automationexercise.com have a persistent footer with #susbscribe_email
@@ -131,6 +141,14 @@ class PlaceholderResolver:
         if any(term in lowered for term in ("cart", "checkout", "payment")):
             if "subscribe" in haystack or "newsletter" in haystack:
                 return False
+
+        if action == "ASSERT" and any(term in lowered for term in ("home page", "landing page", "start page")):
+            # A page-state assertion this generic should skip rather than latch onto
+            # an arbitrary visible element like a footer link.
+            return False
+
+        if action == "CLICK" and "product card" in lowered:
+            return any(term in haystack for term in ("product card", "product-card", "card"))
 
         if action == "CLICK" and "cart" in lowered and any(term in lowered for term in ("go", "open", "navigate")):
             return "view_cart" in haystack or ('href="/view_cart"' in selector) or text.strip() == "cart"
@@ -214,6 +232,12 @@ class PlaceholderResolver:
             if not selector:
                 continue
 
+            # Extract visual enrichment variables for use in scoring
+            lowered = description.replace("_", " ").lower()
+            icon_classes = str(element.get("icon_classes", "")).lower()
+            visual_desc = str(element.get("visual_description", "")).lower()
+            parent_text = str(element.get("parent_text", "")).lower()
+
             if action == "FILL" and not self._is_fillable_element(element):
                 continue
             if not self._matches_intent_bucket(action, description, element):
@@ -258,6 +282,46 @@ class PlaceholderResolver:
 
             if action == "FILL" and self._is_fillable_element(element):
                 score += 3
+
+            # Visual enrichment bonus: icon-aware matching
+            if action == "CLICK":
+                # Icon-only elements get a small bonus when description mentions icons/buttons
+                is_icon = element.get("is_icon", False)
+                is_decorative = element.get("is_decorative", False)
+
+                # Decorative elements should be excluded
+                if is_decorative:
+                    score -= 10
+
+                if is_icon:
+                    # Description mentions "icon", "button", or "click" — icon elements are good matches
+                    if any(term in lowered for term in ("icon", "button", "click", "btn", "arrow", "chevron")):
+                        score += 3
+                    # Element has icon classes — bonus for icon-related descriptions
+                    if icon_classes and any(
+                        term in icon_classes
+                        for term in ("fa-", "fas", "far", "fab", "bi-", "mdi-", "eicon-", "octicon-")
+                    ):
+                        score += 2
+                    # Visual description contains relevant keywords
+                    if visual_desc and any(term in visual_desc for term in ("icon", "button", "label", "aria-label")):
+                        score += 1
+
+                # Parent text bonus: if description matches parent context
+                if parent_text and parent_text != lowered:
+                    parent_words = set(parent_text.split())
+                    desc_word_set = set(lowered.replace("_", " ").split())
+                    parent_overlap = len(parent_words.intersection(desc_word_set))
+                    if parent_overlap > 0:
+                        score += parent_overlap
+
+                # Visual description bonus
+                if visual_desc and visual_desc != lowered:
+                    visual_words = set(visual_desc.replace("_", " ").split())
+                    desc_word_set = set(lowered.replace("_", " ").split())
+                    visual_overlap = len(visual_words.intersection(desc_word_set))
+                    if visual_overlap > 0:
+                        score += visual_overlap
 
             if score >= self.match_threshold:
                 ranked.append((score, element))

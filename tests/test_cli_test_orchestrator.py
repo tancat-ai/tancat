@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from cli.test_orchestrator import TestCaseOrchestrator
+from cli.test_case_orchestrator import TestCaseOrchestrator
 from src.analyzer import AnalyzedTestCase
 from src.config import AnalysisMode
 

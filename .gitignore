@@ -73,7 +73,12 @@ screenshots/*
 # ── Evidence Sidecars ────────────────────────────────────────────────────────
 evidence/
 # ── Generated Test Files ──────────────────────────────────────────────────────
-generated_tests/test_*.py
+# Ignore the generated test files and subfolders
+generated_tests/**/test_*.py
+generated_tests/pages/
+
+# But specifically DO NOT ignore conftest.py
+!generated_tests/conftest.py
 
 # ── MCP Memory Bank ────────────────
 cline-mcp-memory-bank/

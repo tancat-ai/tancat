@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import date
+from typing import cast
 
-from src.spec_analyzer import TestCondition
+from src.spec_analyzer import ConditionIntent, TestCondition, infer_condition_intent
 
 
 @dataclass(frozen=True)
@@ -148,6 +149,7 @@ def build_manual_condition(
     condition_type: str = "exploratory",
     flagged: bool = False,
     src: str = "manual",
+    intent: str | None = None,
 ) -> TestCondition:
     """Return a new tester-authored condition with a stable id."""
     return TestCondition(
@@ -158,6 +160,7 @@ def build_manual_condition(
         source=source.strip(),
         flagged=flagged,
         src=src,  # type: ignore[arg-type]
+        intent=cast(ConditionIntent, intent or infer_condition_intent(text)),
     )
 
 
@@ -165,6 +168,13 @@ def apply_editor_rows(plan: TestPlan, rows: list[dict[str, object]]) -> TestPlan
     """Return a plan updated from editable table rows."""
     allowed_types = {"happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"}
     allowed_sources = {"ai", "manual", "automation"}
+    allowed_intents = {
+        "element_presence",
+        "element_behavior",
+        "state_assertion",
+        "journey_step",
+        "journey_outcome",
+    }
     updated_conditions: list[TestCondition] = []
     updated_confirmed_ids: set[str] = set()
 
@@ -181,6 +191,10 @@ def apply_editor_rows(plan: TestPlan, rows: list[dict[str, object]]) -> TestPlan
         if condition_src not in allowed_sources:
             condition_src = "manual"
 
+        condition_intent = str(row.get("intent", "")).strip()
+        if condition_intent not in allowed_intents:
+            condition_intent = infer_condition_intent(str(row.get("text", "")))
+
         condition = TestCondition(
             id=condition_id,
             type=condition_type,  # type: ignore[arg-type]
@@ -189,6 +203,7 @@ def apply_editor_rows(plan: TestPlan, rows: list[dict[str, object]]) -> TestPlan
             source=str(row.get("source", "")).strip(),
             flagged=bool(row.get("flagged", False)),
             src=condition_src,  # type: ignore[arg-type]
+            intent=cast(ConditionIntent, condition_intent),
         )
         updated_conditions.append(condition)
 

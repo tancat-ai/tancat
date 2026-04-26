@@ -173,6 +173,32 @@ Test story
             "Numbered item five",
         ]
 
+    def test_parse_ignores_total_criteria_summary_line(self) -> None:
+        """Prompt metadata like '(Total: 5 criteria)' must not become a real criterion."""
+        parser = FeatureParser()
+        text = """## User Story
+As a customer I want to add items to cart
+
+## Acceptance Criteria
+1. add items to cart
+2. go to cart
+3. check the items have been added correctly
+4. go to check out
+5. check out
+
+(Total: 5 criteria)
+"""
+        result = parser.parse(text)
+        assert result.success is True
+        assert result.specification is not None
+        assert result.specification.acceptance_criteria == [
+            "add items to cart",
+            "go to cart",
+            "check the items have been added correctly",
+            "go to check out",
+            "check out",
+        ]
+
     def test_parse_with_hash_mark_dividers(self) -> None:
         """Test that hash mark dividers are ignored."""
         parser = FeatureParser()

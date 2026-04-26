@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-04-26T23:49:13.571143",
+  "journey_count": 5,
+  "page_count": 4,
+  "page_object_count": 4,
+  "unresolved_placeholder_count": 1,
+  "unresolved_placeholders": [
+    "pytest.skip(\"Locator for 'product card' not found on scraped pages.\")"
+  ],
+  "tests": [
+    "test_01_add_items_to_cart",
+    "test_02_go_to_cart",
+    "test_03_check_items_added_correctly",
+    "test_04_go_to_check_out",
+    "test_05_checkout_journey"
+  ]
+}

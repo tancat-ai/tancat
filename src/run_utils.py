@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 
-class RunTestLike(Protocol):
+class RunTestRecord(Protocol):
     """Protocol for minimal per-test run result data."""
 
     name: str
@@ -15,7 +15,7 @@ class RunTestLike(Protocol):
     file_path: str
 
 
-def get_failed_nodeids(run_results: Sequence[RunTestLike] | None) -> list[str]:
+def get_failed_nodeids(run_results: Sequence[RunTestRecord] | None) -> list[str]:
     """Return unique pytest nodeids for tests that failed in the previous run."""
     if run_results is None:
         return []

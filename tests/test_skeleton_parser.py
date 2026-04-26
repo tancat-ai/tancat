@@ -140,6 +140,32 @@ def test_normalise_placeholder_actions_handles_single_brace_input() -> None:
     assert "{{CLICK:login_button}}" in result  # Both lines produce CLICK
 
 
+def test_normalise_placeholder_actions_replaces_literal_action_template_with_skip() -> None:
+    parser = SkeletonParser()
+    code = """
+import pytest
+
+    def test_checkout(page, evidence_tracker):
+    evidence_tracker.click({{ACTION:description}}, label="cta")
+"""
+    result = parser.normalise_placeholder_actions(code)
+    assert "pytest.skip(" in result
+    assert "Unsupported placeholder action emitted by model: ACTION." in result
+    assert "{{ACTION:description}}" not in result
+
+
+def test_normalise_placeholder_actions_replaces_unknown_action_with_skip() -> None:
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    {{WAIT:for spinner to disappear}}
+"""
+    result = parser.normalise_placeholder_actions(code)
+    assert "pytest.skip(" in result
+    assert "Unsupported placeholder action emitted by model: WAIT." in result
+    assert "{{WAIT:for spinner to disappear}}" not in result
+
+
 def test_validate_skeleton_rejects_non_url_pages_needed_entries() -> None:
     parser = SkeletonParser()
     code = """
@@ -149,3 +175,64 @@ def test_validate_skeleton_rejects_non_url_pages_needed_entries() -> None:
     error = parser.validate_skeleton(code)
     assert error is not None
     assert "single-brace placeholders" in error or "invalid page entries" in error
+
+
+def test_validate_skeleton_rejects_css_selectors_with_nested_quotes() -> None:
+    """Regression test: selectors like a[href="/path"] bypassed the old regex."""
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.click('a[href="/brand_products/Allen Solly Junior"]', label='product item')
+    evidence_tracker.click("a.btn.btn-default.add-to-cart[data-product-id=\"11\"]", label='add to cart')
+"""
+    error = parser.validate_skeleton(code)
+    assert error is not None
+    assert "NEVER GUESS LOCATORS" in error
+    assert "Guessed selector found:" in error
+
+
+def test_validate_skeleton_accepts_valid_placeholders() -> None:
+    """Ensure valid placeholders still pass validation."""
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.click('{{CLICK:product item}}', label='product item')
+    evidence_tracker.click('{{CLICK:add to cart}}', label='add to cart')
+"""
+    error = parser.validate_skeleton(code)
+    assert error is None
+
+
+def test_validate_skeleton_rejects_css_class_selectors() -> None:
+    """CSS class selectors like .btn.btn-default should be caught."""
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.click('.btn.btn-default.add-to-cart', label='add to cart')
+"""
+    error = parser.validate_skeleton(code)
+    assert error is not None
+    assert "NEVER GUESS LOCATORS" in error
+
+
+def test_validate_skeleton_rejects_css_id_selectors() -> None:
+    """CSS ID selectors like #addToCartBtn should be caught."""
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.click('#addToCartBtn', label='add to cart')
+"""
+    error = parser.validate_skeleton(code)
+    assert error is not None
+    assert "NEVER GUESS LOCATORS" in error
+
+
+def test_validate_skeleton_accepts_url_selectors() -> None:
+    """URL selectors like https://... should be allowed."""
+    parser = SkeletonParser()
+    code = """
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.click('https://example.com/products', label='product link')
+"""
+    error = parser.validate_skeleton(code)
+    assert error is None

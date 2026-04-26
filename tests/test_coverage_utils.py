@@ -137,7 +137,7 @@ def test_build_coverage_display_rows_with_run_results() -> None:
 
     @dataclass
     class _RunResult:
-        """Mock result that satisfies RunTestLike Protocol."""
+        """Mock result that satisfies CoverageRunResult Protocol."""
 
         name: str
         status: str

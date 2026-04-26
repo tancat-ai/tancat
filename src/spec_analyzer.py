@@ -11,6 +11,33 @@ from src.llm_client import LLMClient
 
 ConditionType = Literal["happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"]
 ConditionSrc = Literal["ai", "manual", "automation"]
+ConditionIntent = Literal[
+    "element_presence",
+    "element_behavior",
+    "state_assertion",
+    "journey_step",
+    "journey_outcome",
+]
+
+
+def infer_condition_intent(text: str) -> ConditionIntent:
+    """Infer the best-fit generation intent for a test condition."""
+    lowered = " ".join(part for part in text.lower().replace("_", " ").split() if part)
+
+    if any(phrase in lowered for phrase in ("go to checkout", "go to cart", "open cart", "open checkout")):
+        return "journey_step"
+    if any(phrase in lowered for phrase in ("check out", "checkout successfully", "place order", "complete purchase")):
+        return "journey_outcome"
+    if any(
+        phrase in lowered
+        for phrase in ("added correctly", "is added", "is in cart", "updated correctly", "contains", "summary")
+    ):
+        return "state_assertion"
+    if any(word in lowered for word in ("visible", "displayed", "shown", "present")):
+        return "element_presence"
+    if any(word in lowered for word in ("click", "select", "choose", "open", "navigate", "add to cart", "remove")):
+        return "element_behavior"
+    return "journey_step"
 
 
 @dataclass
@@ -26,6 +53,7 @@ class TestCondition:
     source: str
     flagged: bool = False
     src: ConditionSrc = "ai"
+    intent: ConditionIntent = "journey_step"
 
     def to_dict(self) -> dict:
         """Return dict representation."""
@@ -37,6 +65,7 @@ class TestCondition:
             "source": self.source,
             "flagged": self.flagged,
             "src": self.src,
+            "intent": self.intent,
         }
 
 
@@ -68,7 +97,8 @@ Output ONLY valid JSON matching this schema:
     "expected": "Plain English expected result",
     "source": "The specific spec clause that drove this condition",
     "flagged": boolean (true if type is ambiguity, false otherwise),
-    "src": "ai"
+    "src": "ai",
+    "intent": "element_presence|element_behavior|state_assertion|journey_step|journey_outcome"
   }
 ]
 No markdown fences around the JSON. No conversational text.
@@ -99,6 +129,7 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                         source=f"Acceptance Criteria {idx}",
                         flagged=False,
                         src="manual",
+                        intent=infer_condition_intent(text),
                     )
                 )
             return conditions
@@ -174,6 +205,7 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                         source=str(item_dict.get("source", "Implicit")),
                         flagged=bool(item_dict.get("flagged", ctype == "ambiguity")),
                         src=str(item_dict.get("src", "ai")),  # type: ignore[arg-type]
+                        intent=self._normalise_intent(item_dict.get("intent"), str(item_dict.get("text", ""))),
                     )
                 )
             return conditions
@@ -257,6 +289,21 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                 continue
             out.append(ch)
         return "".join(out)
+
+    @staticmethod
+    def _normalise_intent(raw_intent: Any, text: str) -> ConditionIntent:
+        """Return a validated condition intent, falling back to heuristic inference."""
+        valid_intents: set[str] = {
+            "element_presence",
+            "element_behavior",
+            "state_assertion",
+            "journey_step",
+            "journey_outcome",
+        }
+        intent = str(raw_intent or "").strip()
+        if intent in valid_intents:
+            return intent  # type: ignore[return-value]
+        return infer_condition_intent(text)
 
     def _try_parse_objects_from_array(self, array_text: str) -> list[TestCondition]:
         """Best-effort parse when the overall JSON array is malformed.

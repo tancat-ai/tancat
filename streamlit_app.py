@@ -151,6 +151,7 @@ def _plan_rows_from_plan(plan: TestPlan) -> list[dict[str, object]]:
             "reviewed": condition.id in plan.reviewed_ids,
             "id": condition.id,
             "type": condition.type,
+            "intent": condition.intent,
             "text": condition.text,
             "expected": condition.expected,
             "source": condition.source,
@@ -195,6 +196,7 @@ async def _run_pipeline(
         conditions=conditions_text,
         target_urls=target_urls,
         consent_mode=consent_mode,
+        reviewed_conditions=conditions,
     )
     last_result = orchestrator.last_result
 
@@ -414,6 +416,16 @@ if raw_requirements.strip():
                 "type": st.column_config.SelectboxColumn(
                     "Type",
                     options=["happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"],
+                ),
+                "intent": st.column_config.SelectboxColumn(
+                    "Intent",
+                    options=[
+                        "element_presence",
+                        "element_behavior",
+                        "state_assertion",
+                        "journey_step",
+                        "journey_outcome",
+                    ],
                 ),
                 "text": st.column_config.TextColumn("Condition"),
                 "expected": st.column_config.TextColumn("Expected"),

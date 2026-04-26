@@ -172,3 +172,41 @@ def test_click_checkout_prefers_checkout_over_payment() -> None:
     }
 
     assert resolver.resolve_all(placeholders, pages) == ["'a[href=\"/checkout\"]'"]
+
+
+def test_assert_generic_home_page_skips_instead_of_guessing_weak_match() -> None:
+    resolver = PlaceholderResolver(match_threshold=1)
+    placeholders = [("ASSERT", "home page")]
+    pages = {
+        "https://example.com/": [
+            {
+                "selector": ".fc-vendor-policy-link",
+                "text": "Vendor policy",
+                "role": "a",
+                "href": "https://example.com/policy",
+                "classes": "fc-vendor-policy-link",
+            }
+        ]
+    }
+
+    resolution = resolver.resolve_all(placeholders, pages)[0]
+    assert "pytest.skip" in resolution
+
+
+def test_click_two_word_description_skips_when_only_one_word_matches() -> None:
+    resolver = PlaceholderResolver(match_threshold=1)
+    placeholders = [("CLICK", "product card")]
+    pages = {
+        "https://example.com/products": [
+            {
+                "selector": 'a[href="/brand_products/example"]',
+                "text": "Products",
+                "role": "a",
+                "href": "https://example.com/brand_products/example",
+                "classes": "",
+            }
+        ]
+    }
+
+    resolution = resolver.resolve_all(placeholders, pages)[0]
+    assert "pytest.skip" in resolution

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.spec_analyzer import SpecAnalyzer
+from src.spec_analyzer import SpecAnalyzer, infer_condition_intent
 
 
 def test_spec_analyzer_success() -> None:
@@ -140,4 +140,13 @@ As a customer I want X
     conditions = analyzer.analyze(spec_text)
     assert [c.id for c in conditions] == ["TC01.01", "TC01.02", "TC01.03"]
     assert [c.text for c in conditions] == ["do thing A", "do thing B", "verify thing C"]
+    assert [c.intent for c in conditions] == ["journey_step", "journey_step", "journey_step"]
     mock_llm.generate_test.assert_not_called()
+
+
+def test_infer_condition_intent_maps_common_testing_shapes() -> None:
+    assert infer_condition_intent("Add to Cart button is visible") == "element_presence"
+    assert infer_condition_intent("Cart icon opens the cart") == "element_behavior"
+    assert infer_condition_intent("Check items are added correctly") == "state_assertion"
+    assert infer_condition_intent("Go to checkout") == "journey_step"
+    assert infer_condition_intent("Check out successfully") == "journey_outcome"
