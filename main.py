@@ -114,7 +114,7 @@ def start_mock_server(port: int = MOCK_SITE_PORT) -> None:
     server = subprocess.Popen(
         [sys.executable, "-m", "http.server", str(port)],
         cwd=MOCK_SITE_DIR,
-        creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
+        creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,  # type: ignore[attr-defined]
     )
 
     # Open browser
