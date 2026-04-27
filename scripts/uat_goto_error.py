@@ -9,15 +9,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
 
-load_dotenv()
-os.environ["PIPELINE_DEBUG"] = "1"
-
 from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
 from src.test_generator import TestGenerator
 
+load_dotenv()
+os.environ["PIPELINE_DEBUG"] = "1"
 
-async def test_pipeline():
+
+async def test_pipeline() -> None:
     print("Initializing pipeline with lm-studio provider...")
     client = LLMClient(
         provider="lm-studio",
