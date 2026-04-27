@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-27T08:53:20.572109",
+  "journey_count": 5,
+  "page_count": 4,
+  "page_object_count": 4,
+  "unresolved_placeholder_count": 0,
+  "unresolved_placeholders": [],
+  "tests": [
+    "test_01_add_items_to_cart",
+    "test_02_go_to_cart",
+    "test_03_check_items_added_correctly",
+    "test_04_go_to_checkout",
+    "test_05_check_out"
+  ]
+}
