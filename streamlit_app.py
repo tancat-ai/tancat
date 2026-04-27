@@ -688,190 +688,224 @@ if st.session_state.pipeline_results:
         if st.session_state.pipeline_html_report_path:
             st.caption(f"HTML report: {st.session_state.pipeline_html_report_path}")
 
-        st.divider()
-        st.subheader("Evidence Viewer")
-        # Anchor evidence to the repo root so the UI can always find it even if
-        # Streamlit was launched from a different working directory.
-        evidence_dir = Path(__file__).resolve().parent / "evidence"
-        if not evidence_dir.exists():
-            st.info("No evidence sidecars found yet. Run generated tests to produce `evidence/*.evidence.json`.")
-        else:
-            sidecars = sorted(evidence_dir.glob("*.evidence.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-            if not sidecars:
-                st.info("No evidence sidecars found yet. Run generated tests to produce `evidence/*.evidence.json`.")
+    st.divider()
+    st.subheader("Evidence Viewer")
+    # Search for evidence sidecars in each test package directory under
+    # generated_tests/ (e.g. generated_tests/test_xxx/evidence/*.evidence.json).
+    base_dir = Path(__file__).resolve().parent / "generated_tests"
+    sidecars: list[Path] = []
+    if base_dir.exists():
+        for test_pkg in sorted(base_dir.iterdir()):
+            if test_pkg.is_dir():
+                pkg_evidence = test_pkg / "evidence"
+                sidecars.extend(pkg_evidence.glob("*.evidence.json"))
+    sidecars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not base_dir.exists() or not sidecars:
+        st.info(
+            "No evidence sidecars found yet. Run generated tests to produce `generated_tests/test_xxx/evidence/*.evidence.json`."
+        )
+    else:
+
+        def _find_sidecar(test_name: str) -> Path | None:
+            """Find a sidecar by test name across all test package evidence directories."""
+            for test_pkg in sorted(base_dir.iterdir()):
+                if test_pkg.is_dir():
+                    candidate = test_pkg / "evidence" / f"{test_name}.evidence.json"
+                    if candidate.exists():
+                        return candidate
+            return None
+
+        def _all_evidence_dirs() -> list[Path]:
+            """Return all evidence directories under generated_tests/."""
+            dirs: list[Path] = []
+            for test_pkg in sorted(base_dir.iterdir()):
+                if test_pkg.is_dir():
+                    pkg_evidence = test_pkg / "evidence"
+                    if pkg_evidence.exists():
+                        dirs.append(pkg_evidence)
+            return dirs
+
+        evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map"])
+
+        with evidence_tabs[0]:
+            selected = st.selectbox(
+                "Select evidence sidecar",
+                options=sidecars,
+                format_func=lambda p: p.name,
+            )
+            view_mode = st.selectbox(
+                "View mode",
+                options=["annotated", "heatmap", "clean"],
+                index=0,
+                help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
+            )
+            html = generate_annotated_journey(
+                sidecar_path=Path(selected),
+                view_mode=view_mode,  # type: ignore[arg-type]
+                title=selected.stem,
+            )
+            components.html(html, height=900, scrolling=True)
+
+        with evidence_tabs[1]:
+            entries = load_gantt_entries(_all_evidence_dirs()[0] if _all_evidence_dirs() else Path("."))
+            if not entries:
+                st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
             else:
-                evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map"])
-
-                with evidence_tabs[0]:
-                    selected = st.selectbox(
-                        "Select evidence sidecar",
-                        options=sidecars,
-                        format_func=lambda p: p.name,
-                    )
-                    view_mode = st.selectbox(
-                        "View mode",
-                        options=["annotated", "heatmap", "clean"],
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    group_mode = st.selectbox(
+                        "Grouping Mode",
+                        options=["condition_type", "sprint", "source"],
                         index=0,
-                        help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
+                        key="gantt_group_mode",
                     )
-                    html = generate_annotated_journey(
-                        sidecar_path=Path(selected),
-                        view_mode=view_mode,  # type: ignore[arg-type]
-                        title=selected.stem,
-                    )
-                    components.html(html, height=900, scrolling=True)
+                    fastest, slowest, coverage = build_gantt_summary_sentences(entries)
+                    st.write(f"- {fastest}")
+                    st.write(f"- {slowest}")
+                    st.write(f"- {coverage}")
 
-                with evidence_tabs[1]:
-                    entries = load_gantt_entries(evidence_dir)
-                    if not entries:
-                        st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
-                    else:
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            group_mode = st.selectbox(
-                                "Grouping Mode",
-                                options=["condition_type", "sprint", "source"],
-                                index=0,
-                                key="gantt_group_mode",
-                            )
-                            fastest, slowest, coverage = build_gantt_summary_sentences(entries)
-                            st.write(f"- {fastest}")
-                            st.write(f"- {slowest}")
-                            st.write(f"- {coverage}")
-
-                        with col2:
-                            # Extract condition metadata from test_plan if available
-                            condition_meta = {}
-                            if st.session_state.test_plan:
-                                for c in st.session_state.test_plan.conditions:
-                                    condition_meta[c.id] = {
-                                        "type": c.type,
-                                        "sprint": getattr(st.session_state.test_plan, "sprint", "Backlog"),
-                                        "source": c.src,
-                                    }
-
-                            fig = build_gantt_chart(
-                                entries,
-                                grouping_mode=group_mode,  # type: ignore[arg-type]
-                                condition_meta=condition_meta,
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-
-                        st.divider()
-                        st.subheader("Test Execution Details")
-                        selected_test = st.selectbox(
-                            "Select test for details",
-                            options=sorted(entries, key=lambda e: e.condition_ref),
-                            format_func=lambda e: f"{e.condition_ref} ({e.status})",
-                        )
-
-                        if selected_test:
-                            sidecar_path = evidence_dir / f"{selected_test.test_name}.evidence.json"
-                            sidecar = safe_read_sidecar(sidecar_path)
-                            if sidecar:
-                                test_info = sidecar.get("test", {})
-                                col_a, colb = st.columns(2)
-                                with col_a:
-                                    st.write(f"**Condition Ref:** {test_info.get('condition_ref')}")
-                                    st.write(f"**Story Ref:** {test_info.get('story_ref')}")
-                                    st.write(f"**Status:** {test_info.get('status')}")
-                                with colb:
-                                    st.write(f"**Duration:** {test_info.get('duration_s')}s")
-                                    st.write(f"**Test Name:** {test_info.get('name')}")
-
-                                st.write("**Steps:**")
-                                for step in sidecar.get("steps", []):
-                                    status_icon = "✅" if step.get("result", {}).get("status") == "passed" else "❌"
-                                    st.write(f"- {status_icon} **{step.get('type').upper()}**: {step.get('label')}")
-                                    if step.get("result", {}).get("error"):
-                                        st.error(step.get("result", {}).get("error"))
-
-                        st.divider()
-                        st.subheader("Raw Execution Data")
-                        st.dataframe(
-                            [
-                                {
-                                    "condition_ref": e.condition_ref,
-                                    "story_ref": e.story_ref,
-                                    "status": e.status,
-                                    "duration_s": e.duration_s,
-                                    "test_name": e.test_name,
-                                }
-                                for e in sorted(entries, key=lambda e: (-e.duration_s, e.condition_ref))
-                            ],
-                            width="stretch",
-                        )
-
-                with evidence_tabs[2]:
-                    # Feed test plan confirmation state into heatmap
-                    test_plan_state = None
+                with col2:
+                    # Extract condition metadata from test_plan if available
+                    condition_meta = {}
                     if st.session_state.test_plan:
-                        test_plan_state = {"confirmed_ids": list(st.session_state.test_plan.reviewed_ids)}
+                        for c in st.session_state.test_plan.conditions:
+                            condition_meta[c.id] = {
+                                "type": c.type,
+                                "sprint": getattr(st.session_state.test_plan, "sprint", "Backlog"),
+                                "source": c.src,
+                            }
 
-                    stories = build_story_confidence(evidence_dir, test_plan_state=test_plan_state)
-                    if not stories:
-                        st.info("No heat map data yet. Run generated tests to produce `.evidence.json` sidecars.")
-                    else:
-                        # Summary panels
-                        total_stories = len(stories)
-                        confirmed = len([s for s in stories if s.level == "tester_confirmed"])
-                        gaps = len([s for s in stories if s.level == "gap_open_question"])
-                        unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
-
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("Total Stories", total_stories)
-                        m2.metric("Tester Confirmed", confirmed)
-                        m3.metric("Gaps/Failures", gaps)
-                        m4.metric("Unreviewed", unreviewed)
-
-                        fig = build_confidence_heatmap(stories)
-                        st.plotly_chart(fig, use_container_width=True)
-
-                        st.divider()
-                        st.subheader("Story Confidence Details")
-                        st.dataframe(
-                            [
-                                {
-                                    "story_ref": s.story_ref,
-                                    "confidence": s.level,
-                                    "color": s.color,
-                                    "conditions_with_evidence": s.total_conditions_with_evidence,
-                                    "passed": s.passed_conditions,
-                                    "failed": s.failed_conditions,
-                                    "skipped": s.skipped_conditions,
-                                }
-                                for s in stories
-                            ],
-                            width="stretch",
-                        )
+                    fig = build_gantt_chart(
+                        entries,
+                        grouping_mode=group_mode,  # type: ignore[arg-type]
+                        condition_meta=condition_meta,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 st.divider()
-                st.subheader("Suite Heatmap (Coverage Overview)")
-                # Build URL options from all sidecars by using the `navigate` steps.
-                import json
+                st.subheader("Test Execution Details")
+                selected_test = st.selectbox(
+                    "Select test for details",
+                    options=sorted(entries, key=lambda e: e.condition_ref),
+                    format_func=lambda e: f"{e.condition_ref} ({e.status})",
+                )
 
-                url_options: set[str] = set()
-                for sidecar_path in sidecars:
-                    try:
-                        sidecar_obj = json.loads(sidecar_path.read_text(encoding="utf-8"))
-                    except Exception:
-                        continue
-                    steps = sidecar_obj.get("steps", [])
-                    if not isinstance(steps, list):
-                        continue
-                    for step in steps:
-                        if not isinstance(step, dict):
-                            continue
-                        if str(step.get("type", "")).lower() != "navigate":
-                            continue
-                        val = str(step.get("value", "") or "")
-                        if val.startswith("http"):
-                            url_options.add(val)
-                url_list = sorted(url_options)
+                if selected_test:
+                    sidecar_path = _find_sidecar(selected_test.test_name)
+                    if sidecar_path is None:
+                        st.warning(f"Sidecar not found for {selected_test.test_name}")
+                    else:
+                        sidecar = safe_read_sidecar(sidecar_path)
+                        if sidecar:
+                            test_info = sidecar.get("test", {})
+                            col_a, colb = st.columns(2)
+                            with col_a:
+                                st.write(f"**Condition Ref:** {test_info.get('condition_ref')}")
+                                st.write(f"**Story Ref:** {test_info.get('story_ref')}")
+                                st.write(f"**Status:** {test_info.get('status')}")
+                            with colb:
+                                st.write(f"**Duration:** {test_info.get('duration_s')}s")
+                                st.write(f"**Test Name:** {test_info.get('name')}")
 
-                if not url_list:
-                    st.info("No navigated URLs found in sidecars yet.")
-                else:
-                    selected_url = st.selectbox("Select page URL", options=url_list)
-                    suite_html = generate_suite_heatmap(evidence_dir=evidence_dir, page_url=selected_url)
-                    components.html(suite_html, height=850, scrolling=True)
+                            st.write("**Steps:**")
+                            for step in sidecar.get("steps", []):
+                                status_icon = "✅" if step.get("result", {}).get("status") == "passed" else "❌"
+                                st.write(f"- {status_icon} **{step.get('type').upper()}**: {step.get('label')}")
+                                if step.get("result", {}).get("error"):
+                                    st.error(step.get("result", {}).get("error"))
+
+                st.divider()
+                st.subheader("Raw Execution Data")
+                st.dataframe(
+                    [
+                        {
+                            "condition_ref": e.condition_ref,
+                            "story_ref": e.story_ref,
+                            "status": e.status,
+                            "duration_s": e.duration_s,
+                            "test_name": e.test_name,
+                        }
+                        for e in sorted(entries, key=lambda e: (-e.duration_s, e.condition_ref))
+                    ],
+                    width="stretch",
+                )
+
+        with evidence_tabs[2]:
+            # Feed test plan confirmation state into heatmap
+            test_plan_state = None
+            if st.session_state.test_plan:
+                test_plan_state = {"confirmed_ids": list(st.session_state.test_plan.reviewed_ids)}
+
+            stories = build_story_confidence(
+                _all_evidence_dirs()[0] if _all_evidence_dirs() else Path("."), test_plan_state=test_plan_state
+            )
+            if not stories:
+                st.info("No heat map data yet. Run generated tests to produce `.evidence.json` sidecars.")
+            else:
+                # Summary panels
+                total_stories = len(stories)
+                confirmed = len([s for s in stories if s.level == "tester_confirmed"])
+                gaps = len([s for s in stories if s.level == "gap_open_question"])
+                unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
+
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Total Stories", total_stories)
+                m2.metric("Tester Confirmed", confirmed)
+                m3.metric("Gaps/Failures", gaps)
+                m4.metric("Unreviewed", unreviewed)
+
+                fig = build_confidence_heatmap(stories)
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.divider()
+                st.subheader("Story Confidence Details")
+                st.dataframe(
+                    [
+                        {
+                            "story_ref": s.story_ref,
+                            "confidence": s.level,
+                            "color": s.color,
+                            "conditions_with_evidence": s.total_conditions_with_evidence,
+                            "passed": s.passed_conditions,
+                            "failed": s.failed_conditions,
+                            "skipped": s.skipped_conditions,
+                        }
+                        for s in stories
+                    ],
+                    width="stretch",
+                )
+
+        st.divider()
+        st.subheader("Suite Heatmap (Coverage Overview)")
+        # Build URL options from all sidecars by using the `navigate` steps.
+        import json
+
+        url_options: set[str] = set()
+        for sidecar_path in sidecars:
+            try:
+                sidecar_obj = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            steps = sidecar_obj.get("steps", [])
+            if not isinstance(steps, list):
+                continue
+            for step in steps:
+                if not isinstance(step, dict):
+                    continue
+                if str(step.get("type", "")).lower() != "navigate":
+                    continue
+                val = str(step.get("value", "") or "")
+                if val.startswith("http"):
+                    url_options.add(val)
+        url_list = sorted(url_options)
+
+        if not url_list:
+            st.info("No navigated URLs found in sidecars yet.")
+        else:
+            selected_url = st.selectbox("Select page URL", options=url_list)
+            evidence_dirs = _all_evidence_dirs()
+            suite_html = generate_suite_heatmap(
+                evidence_dir=evidence_dirs[0] if evidence_dirs else Path("."), page_url=selected_url
+            )
+            components.html(suite_html, height=850, scrolling=True)
