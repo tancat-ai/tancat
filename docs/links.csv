@@ -490,3 +490,7 @@ source,target,type
 ./tests/test_test_plan.py,./src/spec_analyzer.py,tests
 ./tests/test_test_plan.py,./src/test_plan.py,tests
 ./tests/test_user_story_parser.py,./src/user_story_parser.py,tests
+
+./AGENTS.md,./SECURITY.md,references
+./AGENTS.md,./docs/plans/PROJECT_TRAINING_PLAN.md,references
+./AGENTS.md,./docs/plans/REFACTOR_PLAN_2026-04-26.md,references
