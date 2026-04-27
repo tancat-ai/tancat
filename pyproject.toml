@@ -54,7 +54,7 @@ ignore = ["E501", "B027"]
 known-first-party = ["src", "cli"]
 [tool.mypy]
 python_version = "3.13"
-exclude = ["generated_tests"]
+exclude = ["generated_tests", "scripts", "scratch"]
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -66,6 +66,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "plotly.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "streamlit.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

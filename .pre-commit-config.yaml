@@ -1,12 +1,12 @@
 # pre-commit configuration for ruff
-# - ruff: linting and auto-fixes
+# - ruff: lintting and auto-fixes
 # - ruff-format: code formatting
 #
 # To run: pre-commit run
 # To install: pre-commit install
 #
-# Note: generated_tests/ is excluded from checks
-exclude: ^generated_tests/
+# Note: generated_tests/, scripts/, and scratch/ are excluded from checks
+exclude: ^(generated_tests/|scripts/|scratch/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
