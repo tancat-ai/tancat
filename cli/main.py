@@ -17,6 +17,24 @@ from src.analyzer import AnalysisResult, KeywordAnalyzer
 # Default demo user story for quick testing
 DEMO_USER_STORY = "As a customer, I want to browse products, add them to my cart, and checkout with a discount code."
 
+# Baseline preset for reproducible debugging runs on automationexercise.com
+_BASELINE_URL = "https://automationexercise.com/"
+_BASELINE_REQUIREMENTS = """## User Story
+As a shopper on automationexercise.com, I want to browse products by category, add items to my cart, review the cart contents, and proceed to checkout so that I can complete a purchase.
+
+## Acceptance Criteria
+1. Navigate to the home page and verify the page loads successfully with product categories visible
+2. Click on the "Dress" category link and verify the category products page displays a list of products
+3. On the category page, click "Add to cart" on a product and verify an "Add to cart confirmation popup" appears
+4. Close the confirmation popup by clicking "Continue Shopping" and verify I remain on the category page
+5. Click the "View Cart" link in the header navigation and verify the cart page loads showing a table of added items
+6. On the cart page, verify the product name, price, and quantity are displayed correctly in the cart table
+7. Click the "Proceed to checkout" button on the cart page and verify the checkout page loads with order summary visible
+8. On the checkout page, verify I am logged in automatically or prompted to login if not already authenticated
+
+(Total: 8 criteria)
+"""
+
 
 def cmd_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     """Handle generate command."""
@@ -243,10 +261,11 @@ def cmd_interactive(parser: argparse.ArgumentParser) -> int:
         print("Select input method:")
         print("  1) Type user story directly")
         print("  2) Load from file (text or JSON)")
+        print("  3) Use baseline story (automationexercise.com)")
         print("  q) Quit")
         print()
 
-        choice = _safe_input("Choice [1/2/q]: ")
+        choice = _safe_input("Choice [1/2/3/q]: ")
         if choice is None:
             print("\nGoodbye!")
             return 0
@@ -259,6 +278,7 @@ def cmd_interactive(parser: argparse.ArgumentParser) -> int:
 
         raw_input = None
         input_format = "user_story"
+        baseline_url: str | None = None
 
         if choice == "1":
             raw_input = _safe_input("Enter user story: ")
@@ -286,13 +306,21 @@ def cmd_interactive(parser: argparse.ArgumentParser) -> int:
             except json.JSONDecodeError as e:
                 print(f"   ⚠  Invalid JSON: {e}")
                 continue
+        elif choice == "3":
+            raw_input = _BASELINE_REQUIREMENTS
+            baseline_url = _BASELINE_URL
+            print(f"   ✓ Loaded baseline story (target: {_BASELINE_URL})")
         else:
             print("   ⚠  Invalid choice, try again.")
             continue
 
         # --- Step 4: Optional URL for page context ---
-        url_input = _safe_input("Target URL (optional, press Enter to skip): ")
-        url = url_input.strip() if url_input and url_input.strip() else None
+        url: str | None = None
+        if baseline_url is not None:
+            url = baseline_url
+        else:
+            url_input = _safe_input("Target URL (optional, press Enter to skip): ")
+            url = url_input.strip() if url_input and url_input.strip() else None
 
         # --- Step 5: Build args and run ---
         args = argparse.Namespace(
