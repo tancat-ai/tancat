@@ -351,6 +351,88 @@ ERROR generated_tests/test_bad.py
         assert "1 error in 0.13s" in filtered
 
 
+class TestPerTestDurationParsing:
+    """Tests for per-test duration parsing (added with --duration=0 flag support)."""
+
+    def test_per_test_durations_parsed_from_duration_line(self) -> None:
+        """Test that per-test durations are parsed from the durations section."""
+        raw = """============================= test session starts =============================
+collected 3 items
+
+t.py::test_a PASSED [ 33%]
+t.py::test_b PASSED [ 66%]
+t.py::test_c PASSED [100%]
+
+============================== slowest durations ==============================
+0.01s setup    t.py::test_c
+0.02s call     t.py::test_c
+0.03s teardown t.py::test_a
+0.05s call     t.py::test_b
+0.08s call     t.py::test_a
+0.10s setup    t.py::test_b
+0.15s setup    t.py::test_a
+
+============================= 3 passed in 0.25s =============================="""
+        result = parse_pytest_output(raw)
+
+        # Each test should have a non-zero duration
+        durations = {r.name: r.duration for r in result.results}
+        assert durations["test_a"] > 0, f"test_a duration should be > 0, got {durations['test_a']}"
+        assert durations["test_b"] > 0, f"test_b duration should be > 0, got {durations['test_b']}"
+        assert durations["test_c"] > 0, f"test_c duration should be > 0, got {durations['test_c']}"
+
+    def test_per_test_durations_sum_is_reasonable(self) -> None:
+        """Test that sum of per-test durations is less than total run duration."""
+        raw = """============================= test session starts =============================
+collected 2 items
+
+t.py::test_one PASSED [ 50%]
+t.py::test_two PASSED [100%]
+
+============================== slowest durations ==============================
+0.05s call     t.py::test_one
+0.03s setup    t.py::test_one
+0.08s call     t.py::test_two
+0.02s setup    t.py::test_two
+
+============================= 2 passed in 1.50s =============================="""
+        result = parse_pytest_output(raw)
+
+        total_test_duration = sum(r.duration for r in result.results)
+        assert total_test_duration > 0
+        assert total_test_duration < result.duration * 2  # should be less than 2x total
+
+    def test_per_test_durations_default_to_zero_when_no_duration_line(self) -> None:
+        """Test that durations default to 0.0 when no duration lines present."""
+        raw = """============================= test session starts =============================
+collected 2 items
+
+t.py::test_a PASSED [ 50%]
+t.py::test_b PASSED [100%]
+
+============================= 2 passed in 1.0s =============================="""
+        result = parse_pytest_output(raw)
+
+        for r in result.results:
+            assert r.duration == 0.0, f"Expected 0.0 default, got {r.duration}"
+
+    def test_duration_helper_parses_valid_values(self) -> None:
+        """Test _parse_duration helper returns floats for valid values."""
+        from src.pytest_output_parser import _parse_duration
+
+        assert _parse_duration("0.42") == 0.42
+        assert _parse_duration("1.5") == 1.5
+        assert _parse_duration("0") == 0.0
+
+    def test_duration_helper_returns_zero_for_invalid_values(self) -> None:
+        """Test _parse_duration helper returns 0.0 for invalid input."""
+        from src.pytest_output_parser import _parse_duration
+
+        assert _parse_duration("abc") == 0.0
+        assert _parse_duration("") == 0.0
+        assert _parse_duration(None) == 0.0  # type: ignore[arg-type]
+
+
 class TestTotalConsistency:
     """Total must always equal Passed + Failed + Skipped.
 

@@ -116,16 +116,23 @@ AI-Playwright-Test-Generator/
 │   ├── test_generator.py        # PROTECTED
 │   ├── orchestrator.py          # Core pipeline orchestrator
 │   ├── pipeline_models.py       # Data models for the pipeline
-│   ├── placeholder_resolver.py  # Resolves LLM generated placeholders
+│   ├── placeholder_resolver.py  # Resolves LLM generated placeholders — text validation + confidence threshold
+│   ├── placeholder_orchestrator.py # Per-page resolution — page-context validation
 │   ├── skeleton_parser.py       # Parses basic skeletons
 │   ├── scraper.py               # DOM metadata scraper
+│   ├── journey_scraper.py       # Journey-aware stateful scraping
 │   ├── page_object_builder.py   # Page Object Model generation
 │   ├── semantic_candidate_ranker.py # Context candidate prioritization
+│   ├── locator_scorer.py        # Scores locators by reliability (data-testid > id > name > aria-label > css-class > text > xpath)
+│   ├── evidence_tracker.py      # Captures runtime diagnostics (failure_note, diagnosis, screenshots)
+│   ├── evidence_loader.py       # Loads evidence JSON from test packages for reports
+│   ├── report_builder.py        # Builds report dicts — merges evidence data
+│   ├── report_formatters.py     # Renders reports (local MD, Jira MD, HTML) with failure diagnostics
 │   ├── pipeline_report_service.py
 │   ├── pipeline_run_service.py
 │   ├── pipeline_writer.py
 │   ├── file_utils.py            # save_generated_test, rename, normalise helpers
-│   └── stateful_scraper.py      # State-aware scraping (deprecated)
+│   └── stateful_scraper.py      # State-aware scraping — fallback scraper in placeholder_orchestrator.py (not removed yet)
 ├── tests/                       # Unit tests FOR the tool (not generated tests)
 ├── generated_tests/             # OUTPUT — tests produced by the tool
 │   └── mock_insurance_site.html # Mock insurance environment
@@ -245,7 +252,20 @@ These rules exist because of real failures. Follow them.
 
 ---
 
-## 11. Planned Work (Next Up)
+## 11. Enhanced Failure Diagnostics (Completed 2026-04-29)
+
+The following improvements were added to reduce wrong locator matches and surface failure diagnostics:
+
+- **Text-Content Validation** — `PlaceholderResolver.text_matches_description()` validates element text matches action description before accepting a match. Prevents `#subscribe` being matched for "Continue Shopping".
+- **Confidence Threshold** — `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches. `LocatorScorer` applies +10 bonus when element text matches action description.
+- **Page-Context Validation** — `PlaceholderOrchestrator._verify_page_context()` logs warnings when a resolved locator was scraped from a different page.
+- **Evidence Loader** — `src/evidence_loader.py` loads evidence JSON from test packages for reports.
+- **Enriched Reports** — All 3 report formats now include "Failure Diagnostics" section with page URL, failure note, suggested alternatives, available elements, screenshot paths.
+- **CLI Debug View** — "View Failure Diagnostics" menu item in `cli/main.py`.
+
+See `docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md` for full details.
+
+## 12. Planned Work (Next Up)
 
 | ID | Feature | Files to Create |
 |----|---------|----------------|
@@ -253,5 +273,5 @@ These rules exist because of real failures. Follow them.
 
 ---
 
-*Last updated: 2026-04-21*
+*Last updated: 2026-04-29*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

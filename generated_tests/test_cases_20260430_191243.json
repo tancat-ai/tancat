@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-04-30T19:12:43.981522",
+  "test_cases": [
+    {
+      "key": "TEST-TC-0001",
+      "summary": "Main Flow",
+      "description": "q",
+      "test_steps": "<h2>Test Steps</h2>",
+      "expected_results": "<h2>Expected Results</h2>\n<h3>Specific Expectations</h3>\n<ul><li>result_display</li></ul>",
+      "execution_status": "UNEXECUTED",
+      "attachments": [],
+      "custom_fields": {}
+    }
+  ]
+}

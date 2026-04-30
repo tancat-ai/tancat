@@ -2,6 +2,10 @@
 
 This module converts coverage analysis and run results into the list[dict] format
 consumed by the renderers in report_formatters. Also contains shared private helpers.
+
+When a ``package_dir`` is provided, evidence JSON files are loaded and merged
+into each report row to surface failure diagnostics (failure notes, suggested
+alternative locators, available page elements, and screenshot paths).
 """
 
 from __future__ import annotations
@@ -10,6 +14,12 @@ import html as _html
 from typing import Any
 
 from src.coverage_utils import RequirementCoverage
+from src.evidence_loader import (
+    get_failure_diagnostics,
+    get_screenshot_paths,
+    load_evidence_for_package,
+    match_evidence_to_test,
+)
 from src.pytest_output_parser import RunResult, TestResult
 
 
@@ -50,16 +60,21 @@ def _find_matching_run_result(run_map: dict[str, TestResult], test_name: str) ->
 def build_report_dicts(
     coverage_analysis: dict | None,
     run_result: RunResult | None,
+    package_dir: str = "",
 ) -> list[dict]:
     """Convert RequirementCoverage + RunResult to the dict format used by report_utils.
 
     Args:
         coverage_analysis: dict with "requirements" key containing RequirementCoverage list
         run_result: RunResult from pytest parser, or None
+        package_dir: Optional path to the test package directory. When provided,
+            evidence JSON files are loaded and merged into each report row to
+            surface failure diagnostics.
 
     Returns:
         List of dicts with keys: test_name, status, icon, tc_id, story_ref,
-        expected_locators, actual_locators, matched_locators, run_status, run_result
+        expected_locators, actual_locators, matched_locators, run_status, run_result,
+        failure_note, suggested_locators, available_elements, screenshot_paths
     """
     if coverage_analysis is None:
         return []
@@ -74,6 +89,11 @@ def build_report_dicts(
         for tr in run_result.results:
             if isinstance(tr, TestResult):
                 run_map[tr.name] = tr
+
+    # Load evidence data if package_dir is provided
+    evidence_map: dict[str, dict[str, Any]] = {}
+    if package_dir:
+        evidence_map = load_evidence_for_package(package_dir)
 
     results: list[dict] = []
     for req in requirements:
@@ -112,6 +132,41 @@ def build_report_dicts(
             else:
                 status = cov_status
 
+        # Load evidence diagnostics for this test
+        failure_note: str | None = None
+        suggested_locators: list[str] = []
+        available_elements: list[dict] = []
+        screenshot_paths: list[str] = []
+        page_url: str = ""
+        page_title: str = ""
+        evidence_duration: float | None = None
+
+        if evidence_map and run is not None:
+            evidence = match_evidence_to_test(evidence_map, run.name)
+            if evidence:
+                diag = get_failure_diagnostics(evidence)
+                failed = diag.get("failed_steps", [])
+
+                # Extract real duration from evidence (pytest_output_parser hardcodes 0.0)
+                evidence_duration = diag.get("test_duration_s")
+
+                if failed:
+                    # Use the first failed step's diagnostics
+                    first_failure = failed[0]
+                    failure_note = first_failure.get("failure_note")
+                    page_url = first_failure.get("page_url_at_failure", diag.get("page_url", ""))
+                    page_title = first_failure.get("page_title_at_failure", diag.get("page_title", "")) or ""
+
+                    # Extract suggested locator strings
+                    raw_suggestions = first_failure.get("suggested_locators", [])
+                    suggested_locators = [s.get("locator", "") for s in raw_suggestions if isinstance(s, dict)]
+
+                    # Extract available element summary
+                    raw_elements = first_failure.get("available_elements", [])
+                    available_elements = [e for e in raw_elements if isinstance(e, dict)]
+
+                screenshot_paths = get_screenshot_paths(evidence)
+
         tc_id_display = str(tc_id)
         icon = _status_icon(status)
 
@@ -127,8 +182,17 @@ def build_report_dicts(
                 "matched_locators": [],
                 "run_status": run.status if run is not None else None,
                 "run_result": run.error_message if run is not None else None,
-                "duration": run.duration if run is not None else 0.0,
+                "duration": evidence_duration
+                if evidence_duration is not None
+                else (run.duration if run is not None else 0.0),
                 "screenshots": [],
+                # Failure diagnostics (new)
+                "failure_note": failure_note,
+                "suggested_locators": suggested_locators,
+                "available_elements": available_elements,
+                "screenshot_paths": screenshot_paths,
+                "page_url": page_url,
+                "page_title": page_title,
             }
         )
 

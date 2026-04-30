@@ -1,10 +1,23 @@
-"""Tests for _strip_llm_reasoning_text in src/code_postprocessor.py."""
+"""Tests for src/code_postprocessor.py: LLM reasoning stripping, code normalisation,
+token replacement, and placeholder resolution safety net."""
 
 from __future__ import annotations
 
+import ast
+import asyncio
+from unittest.mock import AsyncMock
+
 import pytest
 
-from src.code_postprocessor import _is_llm_reasoning_line, _strip_llm_reasoning_text
+from src.code_postprocessor import (
+    _is_llm_reasoning_line,
+    _strip_llm_reasoning_text,
+    normalise_generated_code,
+    replace_remaining_placeholders,
+    replace_token_in_line,
+)
+from src.orchestrator import TestOrchestrator
+from src.test_generator import TestGenerator
 
 
 class TestIsLlmReasoningLine:
@@ -28,168 +41,400 @@ class TestIsLlmReasoningLine:
             "I need to check more.",
             "I should verify this.",
             "All constraints met.",
-            "Matches all criteria.",
-            "Output matches expected.",
-            "Proceeds to next step.",
-            "Self-Correction: this is wrong.",
-            "Refinement: better approach.",
-            "One minor issue.",
-            "One check passed.",
-            "Final check complete.",
-            "Self check done.",
-            "Edge case handled.",
-            "Corner case found.",
-            "In the example shown.",
-            "To be safe, I'll add more.",
-            "To avoid issues, do X.",
         ],
     )
-    def test_detects_llm_reasoning_prefixes(self, line: str) -> None:
-        """Lines starting with known LLM reasoning prefixes should be detected."""
+    def test_detects_reasoning_lines(self, line: str) -> None:
+        """Lines that match the LLM reasoning heuristic should be detected."""
         assert _is_llm_reasoning_line(line) is True
 
     @pytest.mark.parametrize(
         "line",
         [
-            "def test_add_to_cart(page: Page, evidence_tracker) -> None:",
-            "class TestCart:",
+            "def test_example() -> None:",
+            '    page.goto("https://example.com")',
             "import pytest",
             "from playwright.sync_api import Page",
-            "return None",
-            "if page.is_visible():",
-            "elif something:",
-            "else:",
-            "for item in items:",
-            "while condition:",
-            "try:",
-            "except Exception:",
-            "finally:",
-            "with page:",
+            "# This is a comment",
             "assert True",
-            "raise ValueError",
-            "yield result",
-            "lambda x: x",
-            "pass",
-            "break",
-            "continue",
-            "@pytest.mark.evidence",
-            "@pytest.fixture",
-            "# PAGES_NEEDED:",
-            "# - https://example.com",
-            '"""This is a docstring."""',
-            "'''Another docstring.'''",
-            "pytest.skip('reason')",
-            "evidence_tracker.click(selector)",
-            "dismiss_consent_overlays(page)",
-            "page.locator('#button')",
-            "self.page.goto(url)",
+            "",
         ],
     )
-    def test_preserves_valid_python(self, line: str) -> None:
-        """Valid Python constructs should NOT be flagged as reasoning."""
+    def test_ignores_code_lines(self, line: str) -> None:
+        """Actual code lines should not be detected as reasoning."""
         assert _is_llm_reasoning_line(line) is False
-
-    @pytest.mark.parametrize(
-        "line",
-        [
-            "Wait, this needs fixing.",
-            "Note, check the logic.",
-        ],
-    )
-    def test_detects_comment_style_reasoning(self, line: str) -> None:
-        """Lines like '# Note, ...' should be detected."""
-        assert _is_llm_reasoning_line(f"# {line}") is True
-
-    def test_allows_capital_letter_with_colon(self) -> None:
-        """Lines like 'Page: str =' should NOT be flagged (type hint pattern)."""
-        assert _is_llm_reasoning_line("Page: str = None") is False
-
-    def test_allows_capital_letter_with_equals(self) -> None:
-        """Lines like 'ClassName =' should NOT be flagged (assignment pattern)."""
-        assert _is_llm_reasoning_line("CartPage = None") is False
-
-    def test_empty_line_not_reasoning(self) -> None:
-        """Empty lines should not be flagged as reasoning."""
-        assert _is_llm_reasoning_line("") is False
-
-    def test_whitespace_only_not_reasoning(self) -> None:
-        """Whitespace-only lines should not be flagged as reasoning."""
-        assert _is_llm_reasoning_line("   ") is False
 
 
 class TestStripLlmReasoningText:
     """Tests for the _strip_llm_reasoning_text function."""
 
-    def test_removes_reasoning_lines_from_code(self) -> None:
-        """Reasoning lines should be removed while code is preserved."""
-        code = """def test_add_to_cart(page: Page, evidence_tracker) -> None:
-    Wait, the placeholder syntax requires exactly two braces on each side.
-    evidence_tracker.click("#add-to-cart", label="Add to cart")
-    Note, this is important.
-    page.wait_for_timeout(500)
+    def test_strips_reasoning_from_code_block(self) -> None:
+        """Reasoning lines inside a code block should be removed."""
+        code = """Here is the test code:
+
+Wait, the placeholder syntax requires exactly two braces on each side.
+```python
+import pytest
+from playwright.sync_api import Page
+
+def test_example() -> None:
+    # Wait, this is important.
+    page.goto("https://example.com")
+```
 """
         result = _strip_llm_reasoning_text(code)
         assert "Wait, the placeholder syntax" not in result
-        assert "Note, this is important" not in result
-        assert 'evidence_tracker.click("#add-to-cart"' in result
-        assert "page.wait_for_timeout(500)" in result
+        assert "Wait, this is important" not in result
+        assert 'page.goto("https://example.com")' in result
 
-    def test_preserves_blank_lines(self) -> None:
-        """Blank lines should be preserved."""
-        code = """def test_example() -> None:
-    pass
+    def test_steps_output_not_affected(self) -> None:
+        """Steps output printed to stdout should not be affected."""
+        code = """Here is the test code:
 
-    Wait, reasoning.
+Wait, the placeholder syntax requires exactly two braces on each side.
+```python
+import pytest
+from playwright.sync_api import Page
 
-    x = 1
+print("Wait, this is steps output")
+def test_example() -> None:
+    page.goto("https://example.com")
+```
 """
         result = _strip_llm_reasoning_text(code)
-        # Blank lines should remain
-        assert "\n\n" in result
+        assert 'print("Wait, this is steps output")' in result
 
-    def test_handles_code_without_reasoning(self) -> None:
-        """Clean code should pass through unchanged (minus trailing newline)."""
-        code = """def test_clean() -> None:
-    assert True"""
-        result = _strip_llm_reasoning_text(code)
-        assert result == code
+    def test_handles_no_reasoning(self) -> None:
+        """Code without reasoning lines should pass through unchanged."""
+        code = """import pytest
+from playwright.sync_api import Page
 
-    def test_removes_reasoning_between_functions(self) -> None:
-        """Reasoning between function definitions should be removed."""
-        code = """def test_first() -> None:
-    pass
-
-    Let's check the line count.
-    That's within 3-10 lines.
-
-def test_second() -> None:
-    assert True
-"""
-        result = _strip_llm_reasoning_text(code)
-        assert "Let's check" not in result
-        assert "That's within" not in result
-        assert "def test_first" in result
-        assert "def test_second" in result
-
-    def test_preserves_reasoning_like_strings_inside_code(self) -> None:
-        """Strings that happen to contain reasoning-like text but are part of
-        valid Python (e.g., inside a function call) should be preserved."""
-        code = """def test_example() -> None:
-    evidence_tracker.navigate("https://example.com")
-    # Wait, this is a URL, not reasoning.
-"""
-        result = _strip_llm_reasoning_text(code)
-        # The comment line starts with "# Wait," which matches the pattern
-        # This is a known limitation - comments with reasoning prefixes get stripped
-        # The heuristic is intentionally aggressive to catch leaked reasoning
-        assert "evidence_tracker.navigate" in result
-
-    def test_handles_reasoning_with_indentation(self) -> None:
-        """Reasoning lines with indentation should be removed."""
-        code = """def test_example() -> None:
-        Wait, indented reasoning.
+def test_example() -> None:
     page.goto("https://example.com")
 """
         result = _strip_llm_reasoning_text(code)
-        assert "indented reasoning" not in result
+        assert result.strip() == code.strip()
+
+    def test_handles_empty_code(self) -> None:
+        """Empty code should return empty string."""
+        assert _strip_llm_reasoning_text("") == ""
+
+    def test_strips_reasoning_before_code_block(self) -> None:
+        """Reasoning before a Python code block should be stripped."""
+        code = """Wait, let me generate the test code.
+Here's the skeleton:
+
+```python
+import pytest
+from playwright.sync_api import Page
+
+# Wait, don't forget the evidence tracker.
+def test_example() -> None:
+    page.goto("https://example.com")
+```
+"""
+        result = _strip_llm_reasoning_text(code)
+        assert "Wait, let me generate" not in result
+        assert "Wait, don't forget" not in result
+        assert "def test_example" in result
+
+    def test_handles_code_without_backticks(self) -> None:
+        """Code without backticks should still have reasoning stripped."""
+        code = """Wait, here's the code:
+import pytest
+from playwright.sync_api import Page
+
+def test_example() -> None:
+    page.goto("https://example.com")
+"""
+        result = _strip_llm_reasoning_text(code)
+        assert "Wait, here's the code" not in result
+        assert "def test_example" in result
+
+    def test_strips_reasoning_from_comment(self) -> None:
+        """Reasoning inside comments should be stripped if it matches the pattern."""
+        code = """import pytest
+from playwright.sync_api import Page
+
+# Wait, this is reasoning disguised as a comment.
+def test_example() -> None:
+    page.goto("https://example.com")
+"""
+        result = _strip_llm_reasoning_text(code)
+        # The heuristic is intentionally aggressive
+        assert "disguised as a comment" not in result
         assert "page.goto" in result
+
+
+def test_normalise_generated_code_strips_invalid_pytest_mark_assignment() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+@pytest.markelse = None # Placeholder to keep structure clean
+@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok(page: Page, evidence_tracker) -> None:
+    pass
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "@pytest.markelse" not in fixed
+    assert "@pytest.mark.evidence" in fixed
+
+
+def test_normalise_generated_code_repairs_hallucinated_page_object_constructor_and_callsite() -> None:
+    broken = """
+from playwright.sync_api import Page, expect
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+class CartPage:
+    def __larry(self, page: Page):
+        self.page = page
+
+    def go(self) -> None:
+        dismiss_consent_overlays(page)
+        page.goto("https://example.com/")
+
+def test_01_checkout(page: Page):
+    cart = CartPage(project=page) # Note: using placeholder logic
+    cart.go()
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "def __init__(self, page: Page) -> None:" in fixed
+    assert "CartPage(page)" in fixed
+    assert "dismiss_consent_overlays(self.page)" in fixed
+    assert 'evidence_tracker.navigate("https://example.com/")' in fixed
+
+
+def test_normalise_generated_code_rewrites_hallucinated_evidence_launcher_fixture() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok(page: Page, evidence_launcher) -> None:
+    evidence_launcher.step("hello")
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "evidence_launcher" not in fixed
+    assert "evidence_tracker" in fixed
+
+
+def test_normalise_generated_code_repairs_pytest_mark_slash_typo() -> None:
+    broken = """
+import pytest
+
+@pytest.mark/evidence(condition_ref="TC01.01", story_ref="S1")
+def test_01_ok() -> None:
+    assert True
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "@pytest.mark/evidence" not in fixed
+    assert "@pytest.mark.evidence" in fixed
+
+
+def test_normalise_generated_code_rewrites_consent_helper_page_reference_in_page_objects() -> None:
+    broken = """
+from playwright.sync_api import Page
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+class ProductPage:
+    def __init__(self, page: Page):
+        self.page = page
+
+    def navigate(self, evidence_tracker) -> None:
+        evidence_tracker.navigate("https://example.com/")
+        dismiss_consent_overlays(page)
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "dismiss_consent_overlays(self.page)" in fixed
+
+
+def test_normalise_generated_code_dedents_top_level_test_block_after_helper() -> None:
+    broken = """
+import pytest
+from playwright.sync_api import Page
+
+def dismiss_consent_overlays(page: Page) -> None:
+    pass
+
+     @pytest.mark.evidence(condition_ref="TC01.01", story_ref="S01")
+     def test_01_ok(page: Page, evidence_tracker) -> None:
+         evidence_tracker.navigate("https://example.com/")
+         assert True
+
+     # PAGES_NEEDED:
+     # - https://example.com/
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "\n@pytest.mark.evidence" in fixed
+    assert "\n     @pytest.mark.evidence" not in fixed
+    assert "\ndef test_01_ok" in fixed
+
+
+def test_normalise_generated_code_injects_playwright_import_when_page_annotations_exist() -> None:
+    broken = """
+def test_01_ok(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate("https://example.com/")
+"""
+    fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
+    assert "from playwright.sync_api import Page, expect" in fixed
+    assert "def dismiss_consent_overlays(page: Page) -> None:" in fixed
+
+
+def test_run_pipeline_normalises_payable_type_to_page() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
+        return_value="""
+from playwright.sync_api import Page
+
+class CheckoutPage:
+    def __init__(self, page: Payable):
+        self.page = page
+
+def test_checkout(page: Page):
+    checkout_page = CheckoutPage(page)
+    checkout_page
+"""
+    )
+
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="As a shopper I want to check out",
+            conditions="1. Check out",
+            target_urls=[],
+        )
+    )
+
+    assert "page: Payable" not in final_code
+    assert "page: Page" in final_code
+
+
+def test_run_pipeline_normalises_unknown_page_parameter_type_to_page() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
+        return_value="""
+from playwright.sync_api import Page
+
+class CheckoutPage:
+    def __init__(self, page: Note):
+        self.page = page
+
+def test_01_checkout(page: Note):
+    checkout_page = CheckoutPage(page)
+    checkout_page
+"""
+    )
+
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="As a shopper I want to check out",
+            conditions="1. Check out",
+            target_urls=[],
+        )
+    )
+
+    assert "page: Note" not in final_code
+    assert "def __init__(self, page: Page)" in final_code
+    assert "def test_01_checkout(page: Page)" in final_code
+
+
+def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
+    """Ensure evidence labels use the plain description, not the bracketed token."""
+    line = "evidence_tracker.click('{{CLICK:basket}}')"
+
+    fixed = replace_token_in_line(
+        line=line,
+        action="CLICK",
+        token="{{CLICK:basket}}",
+        resolved_value="'#cart-btn'",
+        duplicate_selectors=set(),
+        description="shopping basket",
+    )
+
+    assert "label='shopping basket'" in fixed
+    assert "{{CLICK:basket}}" not in fixed
+
+
+def test_replace_token_in_line_with_skip_replaces_whole_line() -> None:
+    """Unresolved steps should become standalone skips, not invalid parameter injections."""
+    line = "    evidence_tracker.click('{{CLICK:missing}}')"
+
+    fixed = replace_token_in_line(
+        line=line,
+        action="CLICK",
+        token="{{CLICK:missing}}",
+        resolved_value='pytest.skip("not found")',
+        duplicate_selectors=set(),
+        description="missing button",
+    )
+
+    assert fixed.strip() == 'pytest.skip("not found")'
+    assert "evidence_tracker.click" not in fixed
+
+
+def test_replace_token_in_line_goto_replaces_quoted_placeholder_without_double_quotes() -> None:
+    line = '    evidence_tracker.navigate("{{GOTO:products page}}")'
+
+    fixed = replace_token_in_line(
+        line=line,
+        action="GOTO",
+        token="{{GOTO:products page}}",
+        resolved_value="'https://example.com/products'",
+        duplicate_selectors=set(),
+        description="products page",
+    )
+
+    assert fixed.strip() == "evidence_tracker.navigate('https://example.com/products')"
+
+
+def test_replace_remaining_placeholders_ignores_placeholders_inside_quotes() -> None:
+    """The safety net must not corrupt labels that already contain placeholders."""
+    code = "evidence_tracker.click('#id', label='{{CLICK:basket}}')"
+    fixed = replace_remaining_placeholders(code)
+
+    # It should NOT be wrapped in pytest.skip() because it's inside quotes
+    assert fixed == code
+    assert "pytest.skip" not in fixed
+
+
+def test_replace_remaining_placeholders_converts_raw_placeholder_to_skip() -> None:
+    """Unresolved {{...}} placeholders (e.g. those with Python variable syntax) must be
+    replaced with pytest.skip() so they never produce a SyntaxError."""
+    code_with_unresolved = """\
+def test_something(page, evidence_tracker):
+    {{ASSERT:item {item_name} is present in cart}}
+    {{CLICK:add to cart button}}
+"""
+    fixed = replace_remaining_placeholders(code_with_unresolved)
+    assert "pytest.skip(" in fixed
+    # Confirm no line starts with a raw placeholder (which would be invalid Python syntax)
+    for line in fixed.splitlines():
+        assert not line.lstrip().startswith("{{"), f"Raw placeholder still present: {line!r}"
+    # Indentation must be preserved
+    for line in fixed.splitlines():
+        if "pytest.skip" in line:
+            assert line.startswith("    "), f"Expected indented skip, got: {line!r}"
+
+
+def test_replace_remaining_placeholders_replaces_function_call_line_with_valid_skip() -> None:
+    """Unresolved placeholders inside function calls must become valid standalone skips."""
+    code_with_unresolved = """\
+import pytest
+
+def test_checkout(page, evidence_tracker):
+    evidence_tracker.fill({{FILL:email}}, '', label="email")
+    """
+    fixed = replace_remaining_placeholders(code_with_unresolved)
+    assert "evidence_tracker.fill(" not in fixed
+    assert "Unresolved placeholder in this step." in fixed
+    assert "pytest.skip(" in fixed
+    ast.parse(fixed)

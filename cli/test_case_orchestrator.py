@@ -5,6 +5,9 @@ This module manages the orchestration of test generation workflow including:
 - Managing test case ordering based on dependencies
 - Handling parallel execution configuration
 - Generating executable Playwright test files
+
+Uses the same pipeline as the Streamlit app (src/orchestrator.TestOrchestrator)
+for feature parity between CLI and Streamlit frontends.
 """
 
 import asyncio
@@ -205,58 +208,68 @@ class TestCaseOrchestrator:
         return scores.get(complexity, 2)
 
     def _generate_test_files(self, cases: list[AnalyzedTestCase], url: str | None = None) -> list[str]:
-        """Generate Playwright test files from analyzed test cases."""
+        """Generate Playwright test files from analyzed test cases.
+
+        Uses the same TestOrchestrator pipeline as the Streamlit app for
+        feature parity between CLI and Streamlit frontends.
+        """
         if not cases:
             return []
 
         generated: list[str] = []
         output_dir = GENERATED_TESTS_DIR
-
-        # Create output directory if needed
         os.makedirs(output_dir, exist_ok=True)
 
-        # If URL provided, use TestGenerator with page context for each case
+        # Determine target URL(s)
+        target_urls: list[str] = []
         if url:
-            print(f"Using page context from: {url}")
-            from src.scraper import PageScraper
-            from src.test_generator import TestGenerator
+            target_urls = [url]
 
-            # Scrape page context once using the modern PageScraper
-            scraper = PageScraper()
-            elements, scrape_error, _final_url = asyncio.run(scraper.scrape_url(url))
-            if elements:
-                print(f"Successfully scraped {len(elements)} interactive elements")
+        # Create LLM client and TestGenerator for the orchestrator
+        from src.llm_client import LLMClient
+        from src.orchestrator import TestOrchestrator
+        from src.pipeline_writer import PipelineArtifactWriter
+        from src.test_generator import TestGenerator
 
-            # Generate tests for each case with page context
-            generator = TestGenerator(output_dir=output_dir)
-            for case in cases:
-                user_request = f"{case.title}\n{case.description}\nExpected: {case.expected_outcome}"
-                try:
-                    generator.generate_and_save(user_request, None)
-                    if generator.generated_files:
-                        generated.append(generator.generated_files[-1])
-                except Exception as e:
-                    print(f"Warning: Failed to generate test for {case.title}: {e}")
-        else:
-            # Generate without page context using legacy method
-            # Group cases by test type for file organization
-            by_type: dict[str, list[AnalyzedTestCase]] = {}
-            for case in cases:
-                test_type = case.test_type or "general"
-                if test_type not in by_type:
-                    by_type[test_type] = []
-                by_type[test_type].append(case)
+        client = LLMClient()
+        generator = TestGenerator(client=client)
+        orchestrator = TestOrchestrator(generator)
 
-            # Generate file for each group
-            for test_type, type_cases in by_type.items():
-                filename = f"test_{test_type.lower().replace(' ', '_')}.py"
-                filepath = os.path.join(output_dir, filename)
+        # Run the pipeline for each case individually (like the Streamlit app)
+        for idx, case in enumerate(cases):
+            case_user_story = case.title if hasattr(case, "title") else f"Test case {idx + 1}"
+            case_description = case.description if hasattr(case, "description") else ""
+            case_expected = case.expected_outcome if hasattr(case, "expected_outcome") else ""
+            case_conditions = f"{case_description}\nExpected: {case_expected}"
 
-                content = self._generate_test_content(test_type, type_cases)
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(content)
+            try:
+                print(f"  Generating test {idx + 1}/{len(cases)}: {case_user_story}...")
+                asyncio.run(
+                    orchestrator.run_pipeline(
+                        user_story=case_user_story,
+                        conditions=case_conditions,
+                        target_urls=target_urls,
+                        consent_mode="auto-dismiss",
+                    )
+                )
 
-                generated.append(filepath)
+                # Save using PipelineArtifactWriter (same as Streamlit)
+                if orchestrator.last_result is None:
+                    raise RuntimeError(f"No pipeline result for {case_user_story}")
+                artifact_writer = PipelineArtifactWriter(output_dir=output_dir)
+                artifact_set = artifact_writer.write_run_artifacts(
+                    run_result=orchestrator.last_result,
+                    story_text=case_user_story,
+                    base_url=target_urls[0] if target_urls else "",
+                )
+                generated.append(artifact_set.test_file_path)
+                print(f"    [OK] Saved to {artifact_set.test_file_path}")
+
+            except Exception as e:
+                error_msg = f"Warning: Failed to generate test for {case_user_story}: {e}"
+                print(f"    {error_msg}")
+                self.generated_files = generated
+                return generated
 
         self.generated_files = generated
         return generated

@@ -14,12 +14,19 @@ from cli.config import ReportFormat
 from cli.input_parser import InputParser, ParsedInput
 from src.analyzer import AnalysisResult, KeywordAnalyzer
 
+# Default demo user story for quick testing
+DEMO_USER_STORY = "As a customer, I want to browse products, add them to my cart, and checkout with a discount code."
+
 
 def cmd_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     """Handle generate command."""
     print("=" * 60)
     print("🤖 AI Playwright Test Generator")
     print("=" * 60)
+
+    # Use demo story if --demo flag is set
+    if getattr(args, "demo", False) and not args.input and not args.file and not args.generate:
+        args.input = DEMO_USER_STORY
 
     start_time = datetime.now()
 
@@ -137,6 +144,175 @@ def generate_reports(parsed: ParsedInput, analysis_result: AnalysisResult, outpu
         print(f"   ✓ {report_format.value} → {report_path}")
 
 
+def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
+    """Try to list available models for the given provider, return empty list on failure."""
+    try:
+        import httpx
+
+        if provider_name == "ollama":
+            client = httpx.Client(base_url="http://localhost:11434", timeout=5)
+            response = client.get("/api/tags", timeout=5)
+            response.raise_for_status()
+            return [m["name"] for m in response.json().get("models", [])]
+        elif provider_name == "lm-studio":
+            client = httpx.Client(base_url=f"{provider_url}/v1", timeout=5)
+            response = client.get("/models", timeout=5)
+            response.raise_for_status()
+            return [m["id"] for m in response.json().get("data", [])]
+        elif provider_name == "openai":
+            # For OpenAI, return common models since we can't list without API key
+            return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        else:
+            return []
+    except Exception:
+        return []
+
+
+def _safe_input(prompt: str = "") -> str | None:
+    """Read input with EOF handling for piped/non-interactive contexts."""
+    try:
+        return input(prompt)
+    except (EOFError, KeyboardInterrupt):
+        return None
+
+
+def cmd_interactive(parser: argparse.ArgumentParser) -> int:
+    """Interactive CLI loop — presents a menu and prompts the user for input."""
+    print()
+    print("=" * 60)
+    print("[CLI]  AI Playwright Test Generator — Interactive CLI")
+    print("=" * 60)
+    print()
+
+    input_parser = InputParser()
+
+    # --- Step 1: LLM Provider selection ---
+    print("Available LLM providers:")
+    print("  1) Ollama (local)")
+    print("  2) LM Studio (local)")
+    print("  3) OpenAI (cloud)")
+    print()
+
+    provider_choice = _safe_input("Select provider [1/2/3]: ")
+    if provider_choice is None:
+        print("\nGoodbye!")
+        return 0
+
+    provider_map = {
+        "1": ("ollama", "http://localhost:11434"),
+        "2": ("lm-studio", "http://localhost:1234"),
+        "3": ("openai", "https://api.openai.com"),
+    }
+    provider_name, provider_url = provider_map.get(provider_choice.strip(), ("ollama", "http://localhost:11434"))
+
+    # --- Step 2: Model selection ---
+    print(f"\nConnecting to {provider_name} at {provider_url}...")
+    models = _get_available_models(provider_name, provider_url)
+
+    if models:
+        print(f"\nAvailable models ({len(models)}):")
+        for i, model in enumerate(models[:10], 1):  # Show first 10
+            print(f"  {i}) {model}")
+        if len(models) > 10:
+            print(f"  ... and {len(models) - 10} more")
+        model_choice = _safe_input(f"\nSelect model [1-{len(models)}] (default=1): ")
+        if model_choice is None:
+            print("\nGoodbye!")
+            return 0
+        model_choice = model_choice.strip()
+        selected_model = (
+            models[int(model_choice) - 1]
+            if model_choice.isdigit() and 0 < int(model_choice) <= len(models)
+            else models[0]
+        )
+    else:
+        print(f"\n⚠  Could not auto-detect models for {provider_name}.")
+        selected_model_input = _safe_input("Model name (e.g., qwen2.5:7b): ")
+        selected_model = selected_model_input.strip() if selected_model_input else "qwen2.5:7b"
+
+    # Set session provider so all LLMClient instances use this provider
+    from src.llm_client import LLMClient
+
+    LLMClient.set_session_provider(provider_name, provider_url)
+
+    print(f"\nUsing provider: {provider_name} | model: {selected_model}")
+    print()
+
+    # --- Step 3: Input method selection ---
+    while True:
+        print("Select input method:")
+        print("  1) Type user story directly")
+        print("  2) Load from file (text or JSON)")
+        print("  q) Quit")
+        print()
+
+        choice = _safe_input("Choice [1/2/q]: ")
+        if choice is None:
+            print("\nGoodbye!")
+            return 0
+
+        choice = choice.strip().lower()
+
+        if choice == "q":
+            print("Goodbye!")
+            return 0
+
+        raw_input = None
+        input_format = "user_story"
+
+        if choice == "1":
+            raw_input = _safe_input("Enter user story: ")
+            if not raw_input or not raw_input.strip():
+                print("   ⚠  Empty input, try again.")
+                continue
+            raw_input = raw_input.strip()
+        elif choice == "2":
+            filepath = _safe_input("File path: ")
+            if not filepath:
+                print("\nGoodbye!")
+                return 0
+            filepath = filepath.strip()
+            try:
+                with open(filepath, encoding="utf-8") as f:
+                    content = f.read()
+                if filepath.endswith(".json"):
+                    parsed = input_parser.parse_json(content)
+                else:
+                    parsed = input_parser.parse(content, input_format)
+                print(f"   ✓ Loaded {len(parsed.test_cases)} test case(s) from {filepath}")
+            except FileNotFoundError:
+                print(f"   ⚠  File not found: {filepath}")
+                continue
+            except json.JSONDecodeError as e:
+                print(f"   ⚠  Invalid JSON: {e}")
+                continue
+        else:
+            print("   ⚠  Invalid choice, try again.")
+            continue
+
+        # --- Step 4: Optional URL for page context ---
+        url_input = _safe_input("Target URL (optional, press Enter to skip): ")
+        url = url_input.strip() if url_input and url_input.strip() else None
+
+        # --- Step 5: Build args and run ---
+        args = argparse.Namespace(
+            input=raw_input,
+            file=None,
+            generate=None,
+            format=input_format,
+            output_dir="generated_tests",
+            mode="auto",
+            project_key="TEST",
+            evidence=True,
+            url=url,
+            reports="all",
+        )
+
+        # Run the generation pipeline
+        print()
+        return cmd_generate(args, parser)
+
+
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(
@@ -172,6 +348,7 @@ Examples:
     )
     gen_parser.add_argument("--url", type=str, default=None, help="URL to capture page context for test generation")
     gen_parser.add_argument("--reports", type=str, default="all", help="Report format: all, jira, html, json, md")
+    gen_parser.add_argument("--demo", action="store_true", help="Run with a premade demo user story for quick testing")
 
     # Test command
     test_parser = subparsers.add_parser("test", help="Run test suite")
@@ -187,12 +364,11 @@ Examples:
     if not hasattr(args, "output_dir"):
         args.output_dir = "generated_tests"
 
-    # Default command
+    # Default command — no arguments means interactive mode
     if not args.command:
-        args.command = "generate"
-        args.input = ""
+        return cmd_interactive(parser)
 
-    # Validate arguments
+    # Validate arguments — only when explicit input args were provided
     if not getattr(args, "input", None) and not getattr(args, "file", None) and not getattr(args, "generate", None):
         print("❌ Error: Must provide input via --input, --file, or --generate")
         return 1

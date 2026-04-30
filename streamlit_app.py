@@ -242,6 +242,10 @@ provider = st.sidebar.selectbox("LLM Provider", ["ollama", "lm-studio"])
 default_provider_url, default_model = _get_provider_defaults(provider)
 provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
 
+# Propagate user-selected provider to ALL fallback LLMClient() instances
+# throughout the pipeline so they don't fall back to .env.
+LLMClient.set_session_provider(provider, provider_base_url)
+
 # Attempt to fetch models from the provider
 available_models: list[str] = []
 try:

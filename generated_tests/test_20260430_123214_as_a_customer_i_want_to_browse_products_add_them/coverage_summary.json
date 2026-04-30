@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-04-30T12:32:14.652795",
+  "journey_count": 8,
+  "page_count": 4,
+  "page_object_count": 4,
+  "unresolved_placeholder_count": 5,
+  "unresolved_placeholders": [
+    "pytest.skip(\"Locator for 'Product added to cart confirmation popup' not found on scraped pages.\")",
+    "pytest.skip(\"Locator for 'Product added popup' not found on scraped pages.\")",
+    "pytest.skip(\"Locator for 'Category page' not found on scraped pages.\")",
+    "pytest.skip(\"Locator for 'check out button' not found on scraped pages.\")",
+    "pytest.skip(\"Locator for 'checkout form and order summary' not found on scraped pages.\")"
+  ],
+  "tests": [
+    "test_01_browse_category",
+    "test_02_add_to_cart",
+    "test_tc01_03_add_to_cart_confirmation",
+    "test_01_tc01_04_continue_shopping",
+    "test_01_cart_link_click",
+    "test_06_cart_table_display",
+    "test_07_checkout_from_cart",
+    "test_tc01_08_checkout_page_loads"
+  ]
+}

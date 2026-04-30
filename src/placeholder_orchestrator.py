@@ -415,6 +415,52 @@ class PlaceholderOrchestrator:
         concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions])
         return list(dict.fromkeys(seed_urls + required_urls + build_common_path_candidates(seed_urls, concepts)))
 
+    def _verify_page_context(
+        self,
+        description: str,
+        matched_element: dict[str, str],
+        current_url: str | None,
+        scraped_data: dict[str, list[dict[str, str]]],
+    ) -> bool:
+        """Verify the resolved locator exists on the current page (B3: page-context validation).
+
+        If the locator was scraped from a different page, log a warning.
+        Returns True if the element is valid for the current page context.
+        """
+        if current_url is None:
+            return True
+
+        # Check if the element's selector exists on the current page
+        current_elements = scraped_data.get(current_url, [])
+        element_selector = str(matched_element.get("selector", "")).strip()
+        if not element_selector:
+            return True
+
+        for elem in current_elements:
+            if str(elem.get("selector", "")).strip() == element_selector:
+                return True
+
+        # Cross-page mismatch detected
+        # Find which page the element was actually scraped from
+        source_url: str | None = None
+        for url, elements in scraped_data.items():
+            for elem in elements:
+                if str(elem.get("selector", "")).strip() == element_selector:
+                    source_url = url
+                    break
+            if source_url:
+                break
+
+        logger.warning(
+            "Cross-page mismatch: placeholder '%s' resolved to '%s' which exists on '%s' "
+            "but current page is '%s'. Element may not be visible at runtime.",
+            description,
+            element_selector,
+            source_url or "unknown",
+            current_url,
+        )
+        return False
+
     async def _resolve_placeholder_for_page(
         self,
         action: str,
@@ -449,7 +495,18 @@ class PlaceholderOrchestrator:
             )
 
         if matched_element is not None:
-            selector = repr(str(matched_element.get("selector", "")).strip())
+            # B3: Verify page context — log warning for cross-page mismatches
+            self._verify_page_context(description, matched_element, current_url, scraped_data)
+
+            # Call _build_robust_locator directly — bypasses find_best_match's text
+            # validation gate which rejects most elements and causes raw CSS selectors
+            # to be used as fallback instead of the robust locator logic.
+            # Stage 1 (_find_best_element_for_current_page) has already selected the
+            # best element via word-overlap ranking — we trust that result here.
+            robust_selector = PlaceholderResolver._build_robust_locator(matched_element)
+            if not robust_selector:
+                robust_selector = str(matched_element.get("selector", "")).strip()
+            selector = repr(robust_selector)
             next_url = self._infer_next_page_url(action, description, matched_element, scraped_data, current_url)
             if next_url:
                 await self._ensure_scraped(next_url, scraped_data, scraped_errors)
@@ -482,7 +539,14 @@ class PlaceholderOrchestrator:
             if not ranked_candidates:
                 continue
             top_score = ranked_candidates[0][0]
-            shortlisted = [element for score, element in ranked_candidates if score == top_score][:4]
+            # Use a threshold-based shortlist instead of exact score match.
+            # Two elements almost never share the exact highest score, so the old
+            # `score == top_score` filter produced a shortlist of exactly one element,
+            # bypassing the semantic ranker entirely. A threshold of ±2 points gives
+            # the LLM real choices when there's genuine ambiguity without wasting
+            # tokens on clearly inferior candidates.
+            threshold = max(1, top_score - 2)
+            shortlisted = [element for score, element in ranked_candidates if score >= threshold][:4]
 
             matched_element = None
             if len(shortlisted) > 1 and action in {"ASSERT", "CLICK", "FILL"}:

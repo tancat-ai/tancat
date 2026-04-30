@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-04-26T23:49:13.572221",
+  "generated_at": "2026-04-30T12:32:14.653564",
   "base_url": "https://automationexercise.com/",
-  "test_file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\test_as_a_customer_i_want_to_add_items_to_cart.py",
-  "coverage_summary_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\coverage_summary.json",
-  "run_command": "pytest \"C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\test_as_a_customer_i_want_to_add_items_to_cart.py\" -v",
+  "test_file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\test_as_a_customer_i_want_to_browse_products_add_them.py",
+  "coverage_summary_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\coverage_summary.json",
+  "run_command": "pytest \"C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\test_as_a_customer_i_want_to_browse_products_add_them.py\" -v",
   "pages_scraped": [
     {
       "url": "https://automationexercise.com/",
@@ -3232,7 +3232,7 @@
           "name": "csrfmiddlewaretoken",
           "id": "",
           "classes": "",
-          "value": "HBMC2m6tq7BTFW2sSyhhcBF1LUIN6n37VV0Xh2mK96wGiACXPfFhgKSOz1oJRe6f",
+          "value": "UMiVGh8S06sTrLXQ6OfWQAZ7vMZ5hASBzgFdYb6a9wswU2VufxqnnzCJz3DUmOLD",
           "placeholder": "",
           "is_icon": false,
           "icon_classes": "",
@@ -6116,7 +6116,7 @@
           "name": "csrfmiddlewaretoken",
           "id": "",
           "classes": "",
-          "value": "9JLh61TyTFSJkXTVJXecUvk5h7KWzygcn3ZClH9PCENwXBtqGECcYExS5eqSkpjk",
+          "value": "WlmaCycxrCLxGvYkYJedlXtZLHr1hohYuwEKNlUtbcVqwLTeiLJV1p9EZls8sCkR",
           "placeholder": "",
           "is_icon": false,
           "icon_classes": "",
@@ -6195,7 +6195,7 @@
     },
     {
       "url": "https://automationexercise.com/view_cart",
-      "element_count": 22,
+      "element_count": 21,
       "elements": [
         {
           "selector": "a[href=\"/\"]",
@@ -6492,10 +6492,10 @@
           "visual_description": "role(a) [a]"
         },
         {
-          "selector": "a[href=\"/product_details/11\"]",
-          "text": "Sleeves Printed Top - White",
+          "selector": "a[href=\"/product_details/1\"]",
+          "text": "Blue Top",
           "role": "a",
-          "href": "https://automationexercise.com/product_details/11",
+          "href": "https://automationexercise.com/product_details/1",
           "title": "",
           "aria_label": "",
           "name": "",
@@ -6510,7 +6510,7 @@
           "is_hover_reveal": false,
           "parent_text": "",
           "aria_icon_label": "",
-          "visual_description": "label(\"Sleeves Printed Top - White\") role(a) [a]"
+          "visual_description": "label(\"Blue Top\") role(a) [a]"
         },
         {
           "selector": ".disabled",
@@ -6534,7 +6534,7 @@
           "visual_description": "label(\"1\") role(button)"
         },
         {
-          "selector": "a.cart_quantity_delete[data-product-id=\"11\"]",
+          "selector": "a.cart_quantity_delete[data-product-id=\"1\"]",
           "text": "",
           "role": "a",
           "href": "",
@@ -6585,7 +6585,7 @@
           "name": "csrfmiddlewaretoken",
           "id": "",
           "classes": "",
-          "value": "EOvmudhSxDsWIT7tVc2Z7JrFUPa9VvrlS8JHJTx9gCnJlxHYSTqZbSEsIWQ5Gmut",
+          "value": "YenJypr8FnOQzzj8bRT84JW8POCJyVHAfTmCeE8sVeip4Jo1qn0QNdUHyJCinnkF",
           "placeholder": "",
           "is_icon": false,
           "icon_classes": "",
@@ -6637,27 +6637,6 @@
           "parent_text": "",
           "aria_icon_label": "",
           "visual_description": "icon(btn-default) role(submit) [subscribe]"
-        },
-        {
-          "selector": "#scrollUp",
-          "text": "",
-          "role": "a",
-          "href": "",
-          "title": "",
-          "aria_label": "",
-          "name": "",
-          "id": "scrollUp",
-          "classes": "",
-          "value": "",
-          "placeholder": "",
-          "is_icon": false,
-          "icon_classes": "",
-          "icon_unicode": "",
-          "is_decorative": false,
-          "is_hover_reveal": false,
-          "parent_text": "",
-          "aria_icon_label": "",
-          "visual_description": "role(a) [scrollUp]"
         }
       ],
       "error": null
@@ -6928,7 +6907,7 @@
           "name": "csrfmiddlewaretoken",
           "id": "",
           "classes": "",
-          "value": "p3ILttdbAlyrbEixITI6ft8e4H7ybgvlDnW6I9tsjkteOiS2FA66jCl1SONuW7yt",
+          "value": "tqLznYT7yH7JAehRc3pvLXJ35HOXD4qpZdKayHkcjyy7W6lv8aEViQjDne3dW1am",
           "placeholder": "",
           "is_icon": false,
           "icon_classes": "",
@@ -7014,65 +6993,52 @@
   ],
   "journeys": [
     {
-      "test_name": "test_01_add_items_to_cart",
+      "test_name": "test_01_browse_category",
       "start_line": 4,
-      "end_line": 10,
+      "end_line": 9,
       "page_object_names": [],
       "steps": [
         {
           "line_number": 5,
-          "raw_line": "        evidence_tracker.navigate({{GOTO:home page url}})",
+          "raw_line": "    evidence_tracker.navigate({{GOTO:home_url}})",
           "placeholders": [
             {
               "action": "GOTO",
-              "description": "home page url",
-              "token": "{{GOTO:home page url}}",
+              "description": "home_url",
+              "token": "{{GOTO:home_url}}",
               "line_number": 5,
-              "raw_line": "        evidence_tracker.navigate({{GOTO:home page url}})"
+              "raw_line": "    evidence_tracker.navigate({{GOTO:home_url}})"
             }
           ]
         },
         {
           "line_number": 6,
-          "raw_line": "        evidence_tracker.click({{CLICK:product card}})",
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"category_link\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "product card",
-              "token": "{{CLICK:product card}}",
+              "description": "Dress category link",
+              "token": "{{CLICK:Dress category link}}",
               "line_number": 6,
-              "raw_line": "        evidence_tracker.click({{CLICK:product card}})"
+              "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"category_link\")"
             }
           ]
         },
         {
           "line_number": 7,
-          "raw_line": "        evidence_tracker.click({{CLICK:add to cart button}})",
-          "placeholders": [
-            {
-              "action": "CLICK",
-              "description": "add to cart button",
-              "token": "{{CLICK:add to cart button}}",
-              "line_number": 7,
-              "raw_line": "        evidence_tracker.click({{CLICK:add to cart button}})"
-            }
-          ]
-        },
-        {
-          "line_number": 8,
-          "raw_line": "        evidence_tracker.assert_visible({{ASSERT:success message}})",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:products_list}}, label=\"product_list\")",
           "placeholders": [
             {
               "action": "ASSERT",
-              "description": "success message",
-              "token": "{{ASSERT:success message}}",
-              "line_number": 8,
-              "raw_line": "        evidence_tracker.assert_visible({{ASSERT:success message}})"
+              "description": "products_list",
+              "token": "{{ASSERT:products_list}}",
+              "line_number": 7,
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:products_list}}, label=\"product_list\")"
             }
           ]
         },
         {
-          "line_number": 10,
+          "line_number": 9,
           "raw_line": "@pytest.mark.evidence(condition_ref=\"TC01.02\", story_ref=\"S01\")",
           "placeholders": []
         }
@@ -7080,76 +7046,82 @@
       "placeholders": [
         {
           "action": "GOTO",
-          "description": "home page url",
-          "token": "{{GOTO:home page url}}",
+          "description": "home_url",
+          "token": "{{GOTO:home_url}}",
           "line_number": 5,
-          "raw_line": "        evidence_tracker.navigate({{GOTO:home page url}})"
+          "raw_line": "    evidence_tracker.navigate({{GOTO:home_url}})"
         },
         {
           "action": "CLICK",
-          "description": "product card",
-          "token": "{{CLICK:product card}}",
+          "description": "Dress category link",
+          "token": "{{CLICK:Dress category link}}",
           "line_number": 6,
-          "raw_line": "        evidence_tracker.click({{CLICK:product card}})"
-        },
-        {
-          "action": "CLICK",
-          "description": "add to cart button",
-          "token": "{{CLICK:add to cart button}}",
-          "line_number": 7,
-          "raw_line": "        evidence_tracker.click({{CLICK:add to cart button}})"
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"category_link\")"
         },
         {
           "action": "ASSERT",
-          "description": "success message",
-          "token": "{{ASSERT:success message}}",
-          "line_number": 8,
-          "raw_line": "        evidence_tracker.assert_visible({{ASSERT:success message}})"
+          "description": "products_list",
+          "token": "{{ASSERT:products_list}}",
+          "line_number": 7,
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:products_list}}, label=\"product_list\")"
         }
       ]
     },
     {
-      "test_name": "test_02_go_to_cart",
-      "start_line": 11,
+      "test_name": "test_02_add_to_cart",
+      "start_line": 10,
       "end_line": 16,
       "page_object_names": [],
       "steps": [
         {
-          "line_number": 12,
-          "raw_line": "         evidence_tracker.navigate(\"{{GOTO:automation exercise home}}\")",
+          "line_number": 11,
+          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
           "placeholders": [
             {
               "action": "GOTO",
-              "description": "automation exercise home",
-              "token": "{{GOTO:automation exercise home}}",
+              "description": "home_url",
+              "token": "{{GOTO:home_url}}",
+              "line_number": 11,
+              "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+            }
+          ]
+        },
+        {
+          "line_number": 12,
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category link\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "Dress category link",
+              "token": "{{CLICK:Dress category link}}",
               "line_number": 12,
-              "raw_line": "         evidence_tracker.navigate(\"{{GOTO:automation exercise home}}\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category link\")"
             }
           ]
         },
         {
           "line_number": 13,
-          "raw_line": "         evidence_tracker.click(\"{{CLICK:view cart link}}\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart button\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "view cart link",
-              "token": "{{CLICK:view cart link}}",
+              "description": "Add to cart button",
+              "token": "{{CLICK:Add to cart button}}",
               "line_number": 13,
-              "raw_line": "         evidence_tracker.click(\"{{CLICK:view cart link}}\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart button\")"
             }
           ]
         },
         {
           "line_number": 14,
-          "raw_line": "         evidence_tracker.assert_visible(\"{{ASSERT:cart page content}}\")",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Add to cart confirmation popup}}, label=\"Add to cart confirmation popup\")",
           "placeholders": [
             {
               "action": "ASSERT",
-              "description": "cart page content",
-              "token": "{{ASSERT:cart page content}}",
+              "description": "Add to cart confirmation popup",
+              "token": "{{ASSERT:Add to cart confirmation popup}}",
               "line_number": 14,
-              "raw_line": "         evidence_tracker.assert_visible(\"{{ASSERT:cart page content}}\")"
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Add to cart confirmation popup}}, label=\"Add to cart confirmation popup\")"
             }
           ]
         },
@@ -7162,82 +7134,89 @@
       "placeholders": [
         {
           "action": "GOTO",
-          "description": "automation exercise home",
-          "token": "{{GOTO:automation exercise home}}",
-          "line_number": 12,
-          "raw_line": "         evidence_tracker.navigate(\"{{GOTO:automation exercise home}}\")"
+          "description": "home_url",
+          "token": "{{GOTO:home_url}}",
+          "line_number": 11,
+          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
         },
         {
           "action": "CLICK",
-          "description": "view cart link",
-          "token": "{{CLICK:view cart link}}",
+          "description": "Dress category link",
+          "token": "{{CLICK:Dress category link}}",
+          "line_number": 12,
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category link\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart button",
+          "token": "{{CLICK:Add to cart button}}",
           "line_number": 13,
-          "raw_line": "         evidence_tracker.click(\"{{CLICK:view cart link}}\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart button\")"
         },
         {
           "action": "ASSERT",
-          "description": "cart page content",
-          "token": "{{ASSERT:cart page content}}",
+          "description": "Add to cart confirmation popup",
+          "token": "{{ASSERT:Add to cart confirmation popup}}",
           "line_number": 14,
-          "raw_line": "         evidence_tracker.assert_visible(\"{{ASSERT:cart page content}}\")"
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Add to cart confirmation popup}}, label=\"Add to cart confirmation popup\")"
         }
       ]
     },
     {
-      "test_name": "test_03_check_items_added_correctly",
+      "test_name": "test_tc01_03_add_to_cart_confirmation",
       "start_line": 17,
       "end_line": 23,
       "page_object_names": [],
       "steps": [
         {
           "line_number": 18,
-          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
+          "raw_line": "    evidence_tracker.navigate({{GOTO:home page url}})",
           "placeholders": [
             {
               "action": "GOTO",
-              "description": "home_url",
-              "token": "{{GOTO:home_url}}",
+              "description": "home page url",
+              "token": "{{GOTO:home page url}}",
               "line_number": 18,
-              "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+              "raw_line": "    evidence_tracker.navigate({{GOTO:home page url}})"
             }
           ]
         },
         {
           "line_number": 19,
-          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "add to cart button",
-              "token": "{{CLICK:add to cart button}}",
+              "description": "Dress category link",
+              "token": "{{CLICK:Dress category link}}",
               "line_number": 19,
-              "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")"
             }
           ]
         },
         {
           "line_number": 20,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:success notification}}, label=\"success notification\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button for a product}}, label=\"Add to cart\")",
           "placeholders": [
             {
-              "action": "ASSERT",
-              "description": "success notification",
-              "token": "{{ASSERT:success notification}}",
+              "action": "CLICK",
+              "description": "Add to cart button for a product",
+              "token": "{{CLICK:Add to cart button for a product}}",
               "line_number": 20,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:success notification}}, label=\"success notification\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button for a product}}, label=\"Add to cart\")"
             }
           ]
         },
         {
           "line_number": 21,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:correct item in cart}}, label=\"correct item in cart\")",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added to cart confirmation popup}}, label=\"confirmation popup\")",
           "placeholders": [
             {
               "action": "ASSERT",
-              "description": "correct item in cart",
-              "token": "{{ASSERT:correct item in cart}}",
+              "description": "Product added to cart confirmation popup",
+              "token": "{{ASSERT:Product added to cart confirmation popup}}",
               "line_number": 21,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:correct item in cart}}, label=\"correct item in cart\")"
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added to cart confirmation popup}}, label=\"confirmation popup\")"
             }
           ]
         },
@@ -7250,38 +7229,38 @@
       "placeholders": [
         {
           "action": "GOTO",
-          "description": "home_url",
-          "token": "{{GOTO:home_url}}",
+          "description": "home page url",
+          "token": "{{GOTO:home page url}}",
           "line_number": 18,
-          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+          "raw_line": "    evidence_tracker.navigate({{GOTO:home page url}})"
         },
         {
           "action": "CLICK",
-          "description": "add to cart button",
-          "token": "{{CLICK:add to cart button}}",
+          "description": "Dress category link",
+          "token": "{{CLICK:Dress category link}}",
           "line_number": 19,
-          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")"
         },
         {
-          "action": "ASSERT",
-          "description": "success notification",
-          "token": "{{ASSERT:success notification}}",
+          "action": "CLICK",
+          "description": "Add to cart button for a product",
+          "token": "{{CLICK:Add to cart button for a product}}",
           "line_number": 20,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:success notification}}, label=\"success notification\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button for a product}}, label=\"Add to cart\")"
         },
         {
           "action": "ASSERT",
-          "description": "correct item in cart",
-          "token": "{{ASSERT:correct item in cart}}",
+          "description": "Product added to cart confirmation popup",
+          "token": "{{ASSERT:Product added to cart confirmation popup}}",
           "line_number": 21,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:correct item in cart}}, label=\"correct item in cart\")"
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added to cart confirmation popup}}, label=\"confirmation popup\")"
         }
       ]
     },
     {
-      "test_name": "test_04_go_to_check_out",
+      "test_name": "test_01_tc01_04_continue_shopping",
       "start_line": 24,
-      "end_line": 33,
+      "end_line": 32,
       "page_object_names": [],
       "steps": [
         {
@@ -7299,84 +7278,71 @@
         },
         {
           "line_number": 26,
-          "raw_line": "    evidence_tracker.click({{CLICK:product item}}, label=\"product item\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "product item",
-              "token": "{{CLICK:product item}}",
+              "description": "Dress category link",
+              "token": "{{CLICK:Dress category link}}",
               "line_number": 26,
-              "raw_line": "    evidence_tracker.click({{CLICK:product item}}, label=\"product item\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")"
             }
           ]
         },
         {
           "line_number": 27,
-          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart button\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "add to cart button",
-              "token": "{{CLICK:add to cart button}}",
+              "description": "Add to cart button",
+              "token": "{{CLICK:Add to cart button}}",
               "line_number": 27,
-              "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart button\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart\")"
             }
           ]
         },
         {
           "line_number": 28,
-          "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view cart link\")",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added popup}}, label=\"Product added popup\")",
           "placeholders": [
             {
-              "action": "CLICK",
-              "description": "view cart link",
-              "token": "{{CLICK:view cart link}}",
+              "action": "ASSERT",
+              "description": "Product added popup",
+              "token": "{{ASSERT:Product added popup}}",
               "line_number": 28,
-              "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view cart link\")"
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added popup}}, label=\"Product added popup\")"
             }
           ]
         },
         {
           "line_number": 29,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart items list}}, label=\"cart items list\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"Continue Shopping\")",
           "placeholders": [
             {
-              "action": "ASSERT",
-              "description": "cart items list",
-              "token": "{{ASSERT:cart items list}}",
+              "action": "CLICK",
+              "description": "Continue Shopping button",
+              "token": "{{CLICK:Continue Shopping button}}",
               "line_number": 29,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart items list}}, label=\"cart items list\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"Continue Shopping\")"
             }
           ]
         },
         {
           "line_number": 30,
-          "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"proceed to checkout button\")",
-          "placeholders": [
-            {
-              "action": "CLICK",
-              "description": "proceed to checkout button",
-              "token": "{{CLICK:proceed to checkout button}}",
-              "line_number": 30,
-              "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"proceed to checkout button\")"
-            }
-          ]
-        },
-        {
-          "line_number": 31,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout page\")",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Category page}}, label=\"Category page\")",
           "placeholders": [
             {
               "action": "ASSERT",
-              "description": "checkout page",
-              "token": "{{ASSERT:checkout page}}",
-              "line_number": 31,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout page\")"
+              "description": "Category page",
+              "token": "{{ASSERT:Category page}}",
+              "line_number": 30,
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Category page}}, label=\"Category page\")"
             }
           ]
         },
         {
-          "line_number": 33,
+          "line_number": 32,
           "raw_line": "@pytest.mark.evidence(condition_ref=\"TC01.05\", story_ref=\"S01\")",
           "placeholders": []
         }
@@ -7391,64 +7357,70 @@
         },
         {
           "action": "CLICK",
-          "description": "product item",
-          "token": "{{CLICK:product item}}",
+          "description": "Dress category link",
+          "token": "{{CLICK:Dress category link}}",
           "line_number": 26,
-          "raw_line": "    evidence_tracker.click({{CLICK:product item}}, label=\"product item\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:Dress category link}}, label=\"Dress category\")"
         },
         {
           "action": "CLICK",
-          "description": "add to cart button",
-          "token": "{{CLICK:add to cart button}}",
+          "description": "Add to cart button",
+          "token": "{{CLICK:Add to cart button}}",
           "line_number": 27,
-          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}}, label=\"add to cart button\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:Add to cart button}}, label=\"Add to cart\")"
         },
         {
-          "action": "CLICK",
-          "description": "view cart link",
-          "token": "{{CLICK:view cart link}}",
+          "action": "ASSERT",
+          "description": "Product added popup",
+          "token": "{{ASSERT:Product added popup}}",
           "line_number": 28,
-          "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view cart link\")"
-        },
-        {
-          "action": "ASSERT",
-          "description": "cart items list",
-          "token": "{{ASSERT:cart items list}}",
-          "line_number": 29,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart items list}}, label=\"cart items list\")"
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Product added popup}}, label=\"Product added popup\")"
         },
         {
           "action": "CLICK",
-          "description": "proceed to checkout button",
-          "token": "{{CLICK:proceed to checkout button}}",
-          "line_number": 30,
-          "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"proceed to checkout button\")"
+          "description": "Continue Shopping button",
+          "token": "{{CLICK:Continue Shopping button}}",
+          "line_number": 29,
+          "raw_line": "    evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"Continue Shopping\")"
         },
         {
           "action": "ASSERT",
-          "description": "checkout page",
-          "token": "{{ASSERT:checkout page}}",
-          "line_number": 31,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout page\")"
+          "description": "Category page",
+          "token": "{{ASSERT:Category page}}",
+          "line_number": 30,
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:Category page}}, label=\"Category page\")"
         }
       ]
     },
     {
-      "test_name": "test_05_checkout_journey",
-      "start_line": 34,
-      "end_line": 42,
+      "test_name": "test_01_cart_link_click",
+      "start_line": 33,
+      "end_line": 41,
       "page_object_names": [],
       "steps": [
         {
-          "line_number": 35,
+          "line_number": 34,
           "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
           "placeholders": [
             {
               "action": "GOTO",
               "description": "home_url",
               "token": "{{GOTO:home_url}}",
-              "line_number": 35,
+              "line_number": 34,
               "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+            }
+          ]
+        },
+        {
+          "line_number": 35,
+          "raw_line": "    evidence_tracker.click({{CLICK:product category link}}, label=\"category\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "product category link",
+              "token": "{{CLICK:product category link}}",
+              "line_number": 35,
+              "raw_line": "    evidence_tracker.click({{CLICK:product category link}}, label=\"category\")"
             }
           ]
         },
@@ -7467,55 +7439,47 @@
         },
         {
           "line_number": 37,
-          "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view_cart\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}}, label=\"continue_shopping\")",
           "placeholders": [
             {
               "action": "CLICK",
-              "description": "view cart link",
-              "token": "{{CLICK:view cart link}}",
+              "description": "continue shopping button",
+              "token": "{{CLICK:continue shopping button}}",
               "line_number": 37,
-              "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view_cart\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}}, label=\"continue_shopping\")"
             }
           ]
         },
         {
           "line_number": 38,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:item added confirmation}}, label=\"cart_item\")",
+          "raw_line": "    evidence_tracker.click({{CLICK:cart link or icon}}, label=\"cart\")",
           "placeholders": [
             {
-              "action": "ASSERT",
-              "description": "item added confirmation",
-              "token": "{{ASSERT:item added confirmation}}",
+              "action": "CLICK",
+              "description": "cart link or icon",
+              "token": "{{CLICK:cart link or icon}}",
               "line_number": 38,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:item added confirmation}}, label=\"cart_item\")"
+              "raw_line": "    evidence_tracker.click({{CLICK:cart link or icon}}, label=\"cart\")"
             }
           ]
         },
         {
           "line_number": 39,
-          "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"checkout\")",
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart page header}}, label=\"cart_page\")",
           "placeholders": [
             {
-              "action": "CLICK",
-              "description": "proceed to checkout button",
-              "token": "{{CLICK:proceed to checkout button}}",
+              "action": "ASSERT",
+              "description": "cart page header",
+              "token": "{{ASSERT:cart page header}}",
               "line_number": 39,
-              "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"checkout\")"
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart page header}}, label=\"cart_page\")"
             }
           ]
         },
         {
-          "line_number": 40,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout_page\")",
-          "placeholders": [
-            {
-              "action": "ASSERT",
-              "description": "checkout page",
-              "token": "{{ASSERT:checkout page}}",
-              "line_number": 40,
-              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout_page\")"
-            }
-          ]
+          "line_number": 41,
+          "raw_line": "@pytest.mark.evidence(condition_ref=\"TC01.06\", story_ref=\"S01\")",
+          "placeholders": []
         }
       ],
       "placeholders": [
@@ -7523,8 +7487,15 @@
           "action": "GOTO",
           "description": "home_url",
           "token": "{{GOTO:home_url}}",
-          "line_number": 35,
+          "line_number": 34,
           "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "product category link",
+          "token": "{{CLICK:product category link}}",
+          "line_number": 35,
+          "raw_line": "    evidence_tracker.click({{CLICK:product category link}}, label=\"category\")"
         },
         {
           "action": "CLICK",
@@ -7535,31 +7506,349 @@
         },
         {
           "action": "CLICK",
-          "description": "view cart link",
-          "token": "{{CLICK:view cart link}}",
+          "description": "continue shopping button",
+          "token": "{{CLICK:continue shopping button}}",
           "line_number": 37,
-          "raw_line": "    evidence_tracker.click({{CLICK:view cart link}}, label=\"view_cart\")"
-        },
-        {
-          "action": "ASSERT",
-          "description": "item added confirmation",
-          "token": "{{ASSERT:item added confirmation}}",
-          "line_number": 38,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:item added confirmation}}, label=\"cart_item\")"
+          "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}}, label=\"continue_shopping\")"
         },
         {
           "action": "CLICK",
-          "description": "proceed to checkout button",
-          "token": "{{CLICK:proceed to checkout button}}",
-          "line_number": 39,
-          "raw_line": "    evidence_tracker.click({{CLICK:proceed to checkout button}}, label=\"checkout\")"
+          "description": "cart link or icon",
+          "token": "{{CLICK:cart link or icon}}",
+          "line_number": 38,
+          "raw_line": "    evidence_tracker.click({{CLICK:cart link or icon}}, label=\"cart\")"
         },
         {
           "action": "ASSERT",
-          "description": "checkout page",
-          "token": "{{ASSERT:checkout page}}",
-          "line_number": 40,
-          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout page}}, label=\"checkout_page\")"
+          "description": "cart page header",
+          "token": "{{ASSERT:cart page header}}",
+          "line_number": 39,
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:cart page header}}, label=\"cart_page\")"
+        }
+      ]
+    },
+    {
+      "test_name": "test_06_cart_table_display",
+      "start_line": 42,
+      "end_line": 50,
+      "page_object_names": [],
+      "steps": [
+        {
+          "line_number": 43,
+          "raw_line": "       evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
+          "placeholders": [
+            {
+              "action": "GOTO",
+              "description": "home_url",
+              "token": "{{GOTO:home_url}}",
+              "line_number": 43,
+              "raw_line": "       evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+            }
+          ]
+        },
+        {
+          "line_number": 44,
+          "raw_line": "       evidence_tracker.click({{CLICK:Dress category link}}, label=\"category\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "Dress category link",
+              "token": "{{CLICK:Dress category link}}",
+              "line_number": 44,
+              "raw_line": "       evidence_tracker.click({{CLICK:Dress category link}}, label=\"category\")"
+            }
+          ]
+        },
+        {
+          "line_number": 45,
+          "raw_line": "       evidence_tracker.click({{CLICK:Add to cart button}}, label=\"product\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "Add to cart button",
+              "token": "{{CLICK:Add to cart button}}",
+              "line_number": 45,
+              "raw_line": "       evidence_tracker.click({{CLICK:Add to cart button}}, label=\"product\")"
+            }
+          ]
+        },
+        {
+          "line_number": 46,
+          "raw_line": "       evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"popup\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "Continue Shopping button",
+              "token": "{{CLICK:Continue Shopping button}}",
+              "line_number": 46,
+              "raw_line": "       evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"popup\")"
+            }
+          ]
+        },
+        {
+          "line_number": 47,
+          "raw_line": "       evidence_tracker.click({{CLICK:Cart link}}, label=\"header\")",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "Cart link",
+              "token": "{{CLICK:Cart link}}",
+              "line_number": 47,
+              "raw_line": "       evidence_tracker.click({{CLICK:Cart link}}, label=\"header\")"
+            }
+          ]
+        },
+        {
+          "line_number": 48,
+          "raw_line": "       evidence_tracker.assert_visible({{ASSERT:Cart products table}}, label=\"table\")",
+          "placeholders": [
+            {
+              "action": "ASSERT",
+              "description": "Cart products table",
+              "token": "{{ASSERT:Cart products table}}",
+              "line_number": 48,
+              "raw_line": "       evidence_tracker.assert_visible({{ASSERT:Cart products table}}, label=\"table\")"
+            }
+          ]
+        },
+        {
+          "line_number": 50,
+          "raw_line": "@pytest.mark.evidence(condition_ref=\"TC01.07\", story_ref=\"S01\")",
+          "placeholders": []
+        }
+      ],
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "home_url",
+          "token": "{{GOTO:home_url}}",
+          "line_number": 43,
+          "raw_line": "       evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "Dress category link",
+          "token": "{{CLICK:Dress category link}}",
+          "line_number": 44,
+          "raw_line": "       evidence_tracker.click({{CLICK:Dress category link}}, label=\"category\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart button",
+          "token": "{{CLICK:Add to cart button}}",
+          "line_number": 45,
+          "raw_line": "       evidence_tracker.click({{CLICK:Add to cart button}}, label=\"product\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "Continue Shopping button",
+          "token": "{{CLICK:Continue Shopping button}}",
+          "line_number": 46,
+          "raw_line": "       evidence_tracker.click({{CLICK:Continue Shopping button}}, label=\"popup\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "Cart link",
+          "token": "{{CLICK:Cart link}}",
+          "line_number": 47,
+          "raw_line": "       evidence_tracker.click({{CLICK:Cart link}}, label=\"header\")"
+        },
+        {
+          "action": "ASSERT",
+          "description": "Cart products table",
+          "token": "{{ASSERT:Cart products table}}",
+          "line_number": 48,
+          "raw_line": "       evidence_tracker.assert_visible({{ASSERT:Cart products table}}, label=\"table\")"
+        }
+      ]
+    },
+    {
+      "test_name": "test_07_checkout_from_cart",
+      "start_line": 51,
+      "end_line": 56,
+      "page_object_names": [],
+      "steps": [
+        {
+          "line_number": 52,
+          "raw_line": "           evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
+          "placeholders": [
+            {
+              "action": "GOTO",
+              "description": "home_url",
+              "token": "{{GOTO:home_url}}",
+              "line_number": 52,
+              "raw_line": "           evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+            }
+          ]
+        },
+        {
+          "line_number": 53,
+          "raw_line": "           ...",
+          "placeholders": []
+        },
+        {
+          "line_number": 56,
+          "raw_line": "@pytest.mark.evidence(condition_ref=\"TC01.08\", story_ref=\"S01\")",
+          "placeholders": []
+        }
+      ],
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "home_url",
+          "token": "{{GOTO:home_url}}",
+          "line_number": 52,
+          "raw_line": "           evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+        }
+      ]
+    },
+    {
+      "test_name": "test_tc01_08_checkout_page_loads",
+      "start_line": 57,
+      "end_line": 66,
+      "page_object_names": [],
+      "steps": [
+        {
+          "line_number": 58,
+          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")",
+          "placeholders": [
+            {
+              "action": "GOTO",
+              "description": "home_url",
+              "token": "{{GOTO:home_url}}",
+              "line_number": 58,
+              "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+            }
+          ]
+        },
+        {
+          "line_number": 59,
+          "raw_line": "    evidence_tracker.click({{CLICK:dress category link}})",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "dress category link",
+              "token": "{{CLICK:dress category link}}",
+              "line_number": 59,
+              "raw_line": "    evidence_tracker.click({{CLICK:dress category link}})"
+            }
+          ]
+        },
+        {
+          "line_number": 60,
+          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}})",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "add to cart button",
+              "token": "{{CLICK:add to cart button}}",
+              "line_number": 60,
+              "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}})"
+            }
+          ]
+        },
+        {
+          "line_number": 61,
+          "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}})",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "continue shopping button",
+              "token": "{{CLICK:continue shopping button}}",
+              "line_number": 61,
+              "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}})"
+            }
+          ]
+        },
+        {
+          "line_number": 62,
+          "raw_line": "    evidence_tracker.click({{CLICK:cart link}})",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "cart link",
+              "token": "{{CLICK:cart link}}",
+              "line_number": 62,
+              "raw_line": "    evidence_tracker.click({{CLICK:cart link}})"
+            }
+          ]
+        },
+        {
+          "line_number": 63,
+          "raw_line": "    evidence_tracker.click({{CLICK:check out button}})",
+          "placeholders": [
+            {
+              "action": "CLICK",
+              "description": "check out button",
+              "token": "{{CLICK:check out button}}",
+              "line_number": 63,
+              "raw_line": "    evidence_tracker.click({{CLICK:check out button}})"
+            }
+          ]
+        },
+        {
+          "line_number": 64,
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout form and order summary}})",
+          "placeholders": [
+            {
+              "action": "ASSERT",
+              "description": "checkout form and order summary",
+              "token": "{{ASSERT:checkout form and order summary}}",
+              "line_number": 64,
+              "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout form and order summary}})"
+            }
+          ]
+        }
+      ],
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "home_url",
+          "token": "{{GOTO:home_url}}",
+          "line_number": 58,
+          "raw_line": "    evidence_tracker.navigate(\"{{GOTO:home_url}}\")"
+        },
+        {
+          "action": "CLICK",
+          "description": "dress category link",
+          "token": "{{CLICK:dress category link}}",
+          "line_number": 59,
+          "raw_line": "    evidence_tracker.click({{CLICK:dress category link}})"
+        },
+        {
+          "action": "CLICK",
+          "description": "add to cart button",
+          "token": "{{CLICK:add to cart button}}",
+          "line_number": 60,
+          "raw_line": "    evidence_tracker.click({{CLICK:add to cart button}})"
+        },
+        {
+          "action": "CLICK",
+          "description": "continue shopping button",
+          "token": "{{CLICK:continue shopping button}}",
+          "line_number": 61,
+          "raw_line": "    evidence_tracker.click({{CLICK:continue shopping button}})"
+        },
+        {
+          "action": "CLICK",
+          "description": "cart link",
+          "token": "{{CLICK:cart link}}",
+          "line_number": 62,
+          "raw_line": "    evidence_tracker.click({{CLICK:cart link}})"
+        },
+        {
+          "action": "CLICK",
+          "description": "check out button",
+          "token": "{{CLICK:check out button}}",
+          "line_number": 63,
+          "raw_line": "    evidence_tracker.click({{CLICK:check out button}})"
+        },
+        {
+          "action": "ASSERT",
+          "description": "checkout form and order summary",
+          "token": "{{ASSERT:checkout form and order summary}}",
+          "line_number": 64,
+          "raw_line": "    evidence_tracker.assert_visible({{ASSERT:checkout form and order summary}})"
         }
       ]
     }
@@ -7568,7 +7857,7 @@
     {
       "class_name": "HomePage",
       "module_name": "home_page",
-      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\pages\\home_page.py",
+      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\pages\\home_page.py",
       "url": "https://automationexercise.com/",
       "methods": [
         "click_unnamed",
@@ -7609,7 +7898,7 @@
     {
       "class_name": "ProductsPage",
       "module_name": "products_page",
-      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\pages\\products_page.py",
+      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\pages\\products_page.py",
       "url": "https://automationexercise.com/products",
       "methods": [
         "click_unnamed",
@@ -7651,7 +7940,7 @@
     {
       "class_name": "CartPage",
       "module_name": "cart_page",
-      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\pages\\cart_page.py",
+      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\pages\\cart_page.py",
       "url": "https://automationexercise.com/view_cart",
       "methods": [
         "click_unnamed",
@@ -7666,19 +7955,18 @@
         "proceed_to_checkout",
         "click_register_login",
         "click_continue_on_cart",
-        "click_sleeves_printed_top_white",
+        "click_blue_top",
         "click_1",
         "click_here",
         "click_csrfmiddlewaretoken",
         "fill_susbscribe_email",
-        "click_subscribe",
-        "click_scrollup"
+        "click_subscribe"
       ]
     },
     {
       "class_name": "CheckoutPage",
       "module_name": "checkout_page",
-      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260426_234913_as_a_customer_i_want_to_add_items_to_cart\\pages\\checkout_page.py",
+      "file_path": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\generated_tests\\test_20260430_123214_as_a_customer_i_want_to_browse_products_add_them\\pages\\checkout_page.py",
       "url": "https://automationexercise.com/checkout",
       "methods": [
         "click_unnamed",
@@ -7702,7 +7990,35 @@
   "records": [
     {
       "kind": "unresolved_placeholder",
-      "message": "pytest.skip(\"Locator for 'product card' not found on scraped pages.\")",
+      "message": "pytest.skip(\"Locator for 'Product added to cart confirmation popup' not found on scraped pages.\")",
+      "test_name": "",
+      "placeholder": "",
+      "page_url": ""
+    },
+    {
+      "kind": "unresolved_placeholder",
+      "message": "pytest.skip(\"Locator for 'Product added popup' not found on scraped pages.\")",
+      "test_name": "",
+      "placeholder": "",
+      "page_url": ""
+    },
+    {
+      "kind": "unresolved_placeholder",
+      "message": "pytest.skip(\"Locator for 'Category page' not found on scraped pages.\")",
+      "test_name": "",
+      "placeholder": "",
+      "page_url": ""
+    },
+    {
+      "kind": "unresolved_placeholder",
+      "message": "pytest.skip(\"Locator for 'check out button' not found on scraped pages.\")",
+      "test_name": "",
+      "placeholder": "",
+      "page_url": ""
+    },
+    {
+      "kind": "unresolved_placeholder",
+      "message": "pytest.skip(\"Locator for 'checkout form and order summary' not found on scraped pages.\")",
       "test_name": "",
       "placeholder": "",
       "page_url": ""

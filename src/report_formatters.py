@@ -55,6 +55,14 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
         screenshots = test.get("screenshots", [])
         error_message = test.get("error_message", "")
 
+        # Failure diagnostics (new)
+        failure_note = test.get("failure_note")
+        suggested_locators = test.get("suggested_locators", [])
+        available_elements = test.get("available_elements", [])
+        screenshot_paths = test.get("screenshot_paths", [])
+        page_url = test.get("page_url", "")
+        page_title = test.get("page_title", "")
+
         status_icon = _status_icon(status)
         lines.append(f"### {idx}. {test_name} {status_icon}")
         lines.append("")
@@ -63,6 +71,35 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
 
         if error_message:
             lines.append(f"- **Error:** {error_message[:200]}")
+
+        # Failure diagnostics section (only for failed tests with diagnostic data)
+        if status == "failed" and (failure_note or suggested_locators or page_url):
+            lines.append("")
+            lines.append("#### Failure Diagnostics")
+            if page_url:
+                lines.append(f"- **Page URL:** {page_url}")
+            if page_title:
+                lines.append(f"- **Page Title:** {page_title}")
+            if failure_note:
+                # Truncate very long failure notes for readability
+                fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
+                lines.append(f"- **Failure Note:** {fn}")
+            if suggested_locators:
+                lines.append("- **Suggested Alternatives:** " + ", ".join(f"`{s}`" for s in suggested_locators[:5]))
+            if available_elements:
+                # Summarize by role/tag
+                roles: dict[str, int] = {}
+                for elem in available_elements[:20]:
+                    role = elem.get("role", elem.get("tag", "unknown"))
+                    roles[role] = roles.get(role, 0) + 1
+                summary = ", ".join(f"[{r}]×{c}" for r, c in sorted(roles.items()))
+                lines.append(f"- **Available Elements:** {summary}")
+            if screenshot_paths:
+                lines.append("")
+                lines.append("**Failure Screenshots:**")
+                for sp in screenshot_paths:
+                    rel = Path(sp).name if Path(sp).is_absolute() else sp
+                    lines.append(f"- `{rel}`")
 
         if screenshots:
             lines.append("")
@@ -133,6 +170,14 @@ def generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: st
         screenshots = test.get("screenshots", [])
         error_message = test.get("error_message", "")
 
+        # Failure diagnostics (new)
+        failure_note = test.get("failure_note")
+        suggested_locators = test.get("suggested_locators", [])
+        available_elements = test.get("available_elements", [])
+        screenshot_paths = test.get("screenshot_paths", [])
+        page_url = test.get("page_url", "")
+        page_title = test.get("page_title", "")
+
         status_emoji = _status_icon(status)
         lines.append(f"=== {idx}. {test_name} {status_emoji} ===")
         lines.append("")
@@ -141,6 +186,33 @@ def generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: st
 
         if error_message:
             lines.append(f"*Error:* {error_message[:200]}")
+
+        # Failure diagnostics section
+        if status == "failed" and (failure_note or suggested_locators or page_url):
+            lines.append("")
+            lines.append("*-- Failure Diagnostics --*")
+            if page_url:
+                lines.append(f"*Page URL:* {page_url}")
+            if page_title:
+                lines.append(f"*Page Title:* {page_title}")
+            if failure_note:
+                fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
+                lines.append(f"*Failure Note:* {fn}")
+            if suggested_locators:
+                lines.append("*Suggested Alternatives:* " + ", ".join(f"`{s}`" for s in suggested_locators[:5]))
+            if available_elements:
+                roles: dict[str, int] = {}
+                for elem in available_elements[:20]:
+                    role = elem.get("role", elem.get("tag", "unknown"))
+                    roles[role] = roles.get(role, 0) + 1
+                summary = ", ".join(f"[{r}]x{c}" for r, c in sorted(roles.items()))
+                lines.append(f"*Available Elements:* {summary}")
+            if screenshot_paths:
+                lines.append("")
+                lines.append("*Failure Screenshots:*")
+                for sp in screenshot_paths:
+                    fn = Path(sp).name if Path(sp).is_absolute() else sp
+                    lines.append(f"!{fn}|thumbnail!")
 
         if screenshots:
             lines.append("")
@@ -293,6 +365,54 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                     f"                <div class='detail-row'><span class='detail-label'>Error:</span><span style='color:#d32f2f;'>{error_message[:200]}</span></div>",
                 ]
             )
+
+        # Failure diagnostics section for failed tests
+        failure_note = test.get("failure_note")
+        suggested_locators = test.get("suggested_locators", [])
+        available_elements = test.get("available_elements", [])
+        screenshot_paths = test.get("screenshot_paths", [])
+        page_url = test.get("page_url", "")
+        page_title = test.get("page_title", "")
+
+        if status == "failed" and (failure_note or suggested_locators or page_url):
+            diag_border = "border-left:4px solid #f44336;padding-left:15px;margin:15px 0;background:#fff5f5;padding:10px;border-radius:4px;"
+            lines.append(f"                <div style='{diag_border}'>")
+            lines.append("                    <strong style='color:#c62828;'>Failure Diagnostics</strong>")
+            lines.append('                    <div style="margin-top:10px;">')
+            if page_url:
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>Page URL:</span><span>{page_url}</span></div>"
+                )
+            if page_title:
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>Page Title:</span><span>{page_title}</span></div>"
+                )
+            if failure_note:
+                fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>Failure Note:</span><span style='white-space:pre-wrap;'>{fn}</span></div>"
+                )
+            if suggested_locators:
+                loc_html = ", ".join(f"<code>{s}</code>" for s in suggested_locators[:5])
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>Suggested Alternatives:</span><span>{loc_html}</span></div>"
+                )
+            if available_elements:
+                roles: dict[str, int] = {}
+                for elem in available_elements[:20]:
+                    role = elem.get("role", elem.get("tag", "unknown"))
+                    roles[role] = roles.get(role, 0) + 1
+                summary = ", ".join(f"[{r}]x{c}" for r, c in sorted(roles.items()))
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>Available Elements:</span><span>{summary}</span></div>"
+                )
+            if screenshot_paths:
+                lines.append("                    <strong>Failure Screenshots:</strong>")
+                for sp in screenshot_paths:
+                    img_html, _ = embed_screenshot(sp)
+                    lines.append(f"                    <div style='margin:5px 0;'>{img_html}</div>")
+            lines.append("                    </div>")
+            lines.append("                </div>")
 
         if screenshots:
             screenshot_html_parts = []

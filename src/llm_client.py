@@ -15,15 +15,30 @@ class LLMClient:
 
     DEFAULT_SYSTEM_INSTRUCTION = """You are an expert QA engineer and Python developer specializing in Playwright testing.
 
-CRITICAL REQUIREMENTS:
-1. Generate pytest sync Playwright tests only.
-2. Do not use asyncio, async def, or async_playwright.
-3. Use `from playwright.sync_api import Page, expect`.
-4. Do not include `import pytest` in generated code.
-5. Return valid Python code only, with no markdown fences or commentary.
-6. Include screenshot capture logic only when the prompt explicitly asks for it.
-7. Do not invent selectors when page context or placeholder rules say not to.
-"""
+ CRITICAL REQUIREMENTS:
+ 1. Generate pytest sync Playwright tests only.
+ 2. Do not use asyncio, async def, or async_playwright.
+ 3. Use `from playwright.sync_api import Page, expect`.
+ 4. Do not include `import pytest` in generated code.
+ 5. Return valid Python code only, with no markdown fences or commentary.
+ 6. Include screenshot capture logic only when the prompt explicitly asks for it.
+ 7. Do not invent selectors when page context or placeholder rules say not to.
+ """
+
+    # Session-level provider state set by CLI/Streamlit so all fallback clients
+    # use the user-selected provider instead of falling back to .env.
+    _session_provider: str | None = None
+    _session_base_url: str | None = None
+
+    @classmethod
+    def set_session_provider(cls, provider: str, base_url: str | None = None) -> None:
+        """Set the active provider for all LLMClient instances created without explicit provider.
+
+        Call this from CLI or Streamlit after the user selects a provider so that
+        any fallback LLMClient() calls throughout the pipeline use the same provider.
+        """
+        cls._session_provider = provider
+        cls._session_base_url = base_url
 
     def __init__(
         self,
@@ -34,6 +49,13 @@ CRITICAL REQUIREMENTS:
         api_key: str | None = None,
     ) -> None:
         selected_provider = provider_name or provider
+
+        # If no explicit provider, use session-level selection (CLI/Streamlit UI choice)
+        if selected_provider is None and self._session_provider is not None:
+            selected_provider = self._session_provider
+            if base_url is None and self._session_base_url is not None:
+                base_url = self._session_base_url
+
         if selected_provider is not None:
             self._provider = get_provider(selected_provider, base_url=base_url, api_key=api_key)
         else:
@@ -166,7 +188,7 @@ CRITICAL REQUIREMENTS:
             self._conversation_history.pop()
             raise
 
-    async def generate(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> str:
+    async def generate(self, prompt: str, timeout: int = 600, system_prompt: str | None = None) -> str:
         """Async wrapper used by the intelligent pipeline."""
         try:
             completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt)
