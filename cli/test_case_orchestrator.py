@@ -5,6 +5,9 @@ This module manages the orchestration of test generation workflow including:
 - Managing test case ordering based on dependencies
 - Handling parallel execution configuration
 - Generating executable Playwright test files
+
+Uses the same pipeline as the Streamlit app (src/orchestrator.TestOrchestrator)
+for feature parity between CLI and Streamlit frontends.
 """
 
 import asyncio
@@ -13,7 +16,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from cli.config import AnalysisMode
+from cli.input_parser import ParsedInput
 from src.analyzer import AnalysisResult, AnalyzedTestCase, KeywordAnalyzer
+from src.user_story_parser import FeatureParser
 
 GENERATED_TESTS_DIR: str = "generated_tests"
 
@@ -48,7 +53,11 @@ class TestCaseOrchestrator:
         self.generated_files: list[str] = []
 
     def process(
-        self, raw_input: str, explicit_format: str | None = None, url: str | None = None
+        self,
+        raw_input: str,
+        explicit_format: str | None = None,
+        url: str | None = None,
+        output_dir: str = GENERATED_TESTS_DIR,
     ) -> TestOrchestrationResult:
         """
         Process user input through full orchestration pipeline.
@@ -77,12 +86,39 @@ class TestCaseOrchestrator:
             ordered_cases = self._order_test_cases(analysis_result.analyzed_test_cases)
 
             # Step 4: Generate test files (with optional page context)
-            test_files = self._generate_test_files(ordered_cases, url=url)
+            test_files = self._generate_test_files(
+                ordered_cases, url=url, output_dir=output_dir, raw_requirements=raw_input
+            )
             result.generated_files = test_files
 
             # Step 5: Create summary
             result.summary = self._create_summary(analysis_result, test_files)
 
+        except Exception as e:
+            result.errors.append(f"Orchestration error: {str(e)}")
+
+        return result
+
+    def process_parsed(
+        self,
+        parsed: ParsedInput,
+        url: str | None = None,
+        output_dir: str = GENERATED_TESTS_DIR,
+    ) -> TestOrchestrationResult:
+        """Process an already-parsed input through the full orchestration pipeline."""
+        result = TestOrchestrationResult()
+
+        try:
+            analysis_result = self._analyze_input(parsed)
+            ordered_cases = self._order_test_cases(analysis_result.analyzed_test_cases)
+            test_files = self._generate_test_files(
+                ordered_cases,
+                url=url,
+                output_dir=output_dir,
+                raw_requirements=parsed.raw_input,
+            )
+            result.generated_files = test_files
+            result.summary = self._create_summary(analysis_result, test_files)
         except Exception as e:
             result.errors.append(f"Orchestration error: {str(e)}")
 
@@ -204,62 +240,128 @@ class TestCaseOrchestrator:
         scores: dict[str, int] = {"low": 1, "medium": 2, "high": 3}
         return scores.get(complexity, 2)
 
-    def _generate_test_files(self, cases: list[AnalyzedTestCase], url: str | None = None) -> list[str]:
-        """Generate Playwright test files from analyzed test cases."""
+    def _generate_test_files(
+        self,
+        cases: list[AnalyzedTestCase],
+        url: str | None = None,
+        output_dir: str = GENERATED_TESTS_DIR,
+        raw_requirements: str = "",
+    ) -> list[str]:
+        """Generate Playwright test files from analyzed test cases.
+
+        Uses the same TestOrchestrator pipeline as the Streamlit app for
+        feature parity between CLI and Streamlit frontends.
+        """
         if not cases:
             return []
 
         generated: list[str] = []
-        output_dir = GENERATED_TESTS_DIR
-
-        # Create output directory if needed
         os.makedirs(output_dir, exist_ok=True)
 
-        # If URL provided, use TestGenerator with page context for each case
+        # Determine target URL(s)
+        target_urls: list[str] = []
         if url:
-            print(f"Using page context from: {url}")
-            from src.scraper import PageScraper
-            from src.test_generator import TestGenerator
+            target_urls = [url]
 
-            # Scrape page context once using the modern PageScraper
-            scraper = PageScraper()
-            elements, scrape_error, _final_url = asyncio.run(scraper.scrape_url(url))
-            if elements:
-                print(f"Successfully scraped {len(elements)} interactive elements")
+        # Create LLM client and TestGenerator for the orchestrator
+        from src.llm_client import LLMClient
+        from src.orchestrator import TestOrchestrator
+        from src.pipeline_writer import PipelineArtifactWriter
+        from src.test_generator import TestGenerator
 
-            # Generate tests for each case with page context
-            generator = TestGenerator(output_dir=output_dir)
-            for case in cases:
-                user_request = f"{case.title}\n{case.description}\nExpected: {case.expected_outcome}"
-                try:
-                    generator.generate_and_save(user_request, None)
-                    if generator.generated_files:
-                        generated.append(generator.generated_files[-1])
-                except Exception as e:
-                    print(f"Warning: Failed to generate test for {case.title}: {e}")
-        else:
-            # Generate without page context using legacy method
-            # Group cases by test type for file organization
-            by_type: dict[str, list[AnalyzedTestCase]] = {}
-            for case in cases:
-                test_type = case.test_type or "general"
-                if test_type not in by_type:
-                    by_type[test_type] = []
-                by_type[test_type].append(case)
+        client = LLMClient()
+        generator = TestGenerator(client=client)
+        orchestrator = TestOrchestrator(generator)
 
-            # Generate file for each group
-            for test_type, type_cases in by_type.items():
-                filename = f"test_{test_type.lower().replace(' ', '_')}.py"
-                filepath = os.path.join(output_dir, filename)
+        feature_spec_request = self._build_feature_spec_request(raw_requirements)
+        if feature_spec_request is not None:
+            user_story, conditions_text = feature_spec_request
+            try:
+                print("  Generating full feature spec from parsed acceptance criteria...")
+                asyncio.run(
+                    orchestrator.run_pipeline(
+                        user_story=user_story,
+                        conditions=conditions_text,
+                        target_urls=target_urls,
+                        consent_mode="auto-dismiss",
+                    )
+                )
 
-                content = self._generate_test_content(test_type, type_cases)
-                with open(filepath, "w", encoding="utf-8") as f:
-                    f.write(content)
+                if orchestrator.last_result is None:
+                    raise RuntimeError("No pipeline result for parsed feature specification")
 
-                generated.append(filepath)
+                artifact_writer = PipelineArtifactWriter(output_dir=output_dir)
+                artifact_set = artifact_writer.write_run_artifacts(
+                    run_result=orchestrator.last_result,
+                    story_text="Main Flow",
+                    base_url=target_urls[0] if target_urls else "",
+                )
+                generated.append(artifact_set.test_file_path)
+                print(f"    [OK] Saved to {artifact_set.test_file_path}")
+                self.generated_files = generated
+                return generated
+            except Exception as e:
+                error_msg = f"Warning: Failed to generate parsed feature spec: {e}"
+                print(f"    {error_msg}")
+                self.generated_files = generated
+                return generated
+
+        # Run the pipeline for each case individually (like the Streamlit app)
+        for idx, case in enumerate(cases):
+            case_user_story = case.title if hasattr(case, "title") else f"Test case {idx + 1}"
+            case_description = case.description if hasattr(case, "description") else ""
+            case_expected = case.expected_outcome if hasattr(case, "expected_outcome") else ""
+            case_conditions = f"{case_description}\nExpected: {case_expected}"
+
+            try:
+                print(f"  Generating test {idx + 1}/{len(cases)}: {case_user_story}...")
+                asyncio.run(
+                    orchestrator.run_pipeline(
+                        user_story=case_user_story,
+                        conditions=case_conditions,
+                        target_urls=target_urls,
+                        consent_mode="auto-dismiss",
+                    )
+                )
+
+                # Save using PipelineArtifactWriter (same as Streamlit)
+                if orchestrator.last_result is None:
+                    raise RuntimeError(f"No pipeline result for {case_user_story}")
+                artifact_writer = PipelineArtifactWriter(output_dir=output_dir)
+                artifact_set = artifact_writer.write_run_artifacts(
+                    run_result=orchestrator.last_result,
+                    story_text=case_user_story,
+                    base_url=target_urls[0] if target_urls else "",
+                )
+                generated.append(artifact_set.test_file_path)
+                print(f"    [OK] Saved to {artifact_set.test_file_path}")
+
+            except Exception as e:
+                error_msg = f"Warning: Failed to generate test for {case_user_story}: {e}"
+                print(f"    {error_msg}")
+                self.generated_files = generated
+                return generated
 
         self.generated_files = generated
         return generated
+
+    @staticmethod
+    def _build_feature_spec_request(raw_requirements: str) -> tuple[str, str] | None:
+        """Return `(user_story, numbered_conditions)` for markdown-style requirement specs."""
+        if not raw_requirements.strip():
+            return None
+
+        parser = FeatureParser()
+        parse_result = parser.parse(raw_requirements)
+        specification = parse_result.specification if parse_result.success else None
+        if specification is None or not specification.acceptance_criteria:
+            return None
+
+        requirement_model = parser.build_requirement_model(specification)
+        if requirement_model.count == 0:
+            return None
+
+        return specification.user_story.strip(), requirement_model.to_numbered_text().strip()
 
     def _generate_test_content(self, test_type: str, cases: list[AnalyzedTestCase]) -> str:
         """Generate Playwright test file content."""

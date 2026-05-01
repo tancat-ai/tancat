@@ -17,10 +17,21 @@ from dataclasses import dataclass, field
 # ---------------------------------------------------------------------------
 
 # Note: We capture the test name, and optionally skip over the [browser] marker to find the status.
-_PASSED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+PASSED")
-_FAILED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+FAILED")
-_SKIPPED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?\s+SKIPPED")
-_SUMMARY_LINE_RE = re.compile(r" in ([\d.]+)s(?: \([\d:]+\))?\s*=")
+# With --durations=0, pytest emits per-test timing in the test lines:
+#   test_file.py::test_name [123ms] PASSED [ 33%]
+#   test_file.py::test_name [1.23s] FAILED [ 33%]
+_PASSED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?(?:\s+\[([\d.]+)(ms|s)\])?\s+PASSED")
+_FAILED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?(?:\s+\[([\d.]+)(ms|s)\])?\s+FAILED")
+_SKIPPED_RE = re.compile(r"(\S+\.py)::([^\[\s]+)(?:\[[^\]]+\])?(?:\s+\[([\d.]+)(ms|s)\])?\s+SKIPPED")
+_SUMMARY_LINE_RE = re.compile(r" in ([\d.]+)s")
+
+# --durations=0 produces a "slowest durations" section after the test lines:
+#   ============================== slowest durations ==============================
+#   0.05s setup    test_file.py::test_one
+#   0.12s call     test_file.py::test_one
+#   0.00s teardown test_file.py::test_one
+_DURATIONS_HEADER_RE = re.compile(r"^=+ slowest durations =+")
+_DURATIONS_LINE_RE = re.compile(r"^([\d.]+)s\s+\w+\s+(\S+\.py)::(\S+)")
 _PASSED_COUNT_RE = re.compile(r"(\d+) passed")
 _FAILED_COUNT_RE = re.compile(r"(\d+) failed")
 _SKIPPED_COUNT_RE = re.compile(r"(\d+) skipped")
@@ -67,6 +78,23 @@ class RunResult:
 # ---------------------------------------------------------------------------
 
 
+def _parse_duration(value: str | None, unit: str | None = None) -> float:
+    """Parse a duration value with optional unit to seconds.
+
+    Handles formats like "123ms", "1.23s", or returns 0.0 when not available.
+    When only `value` is given (no unit), the value is treated as seconds.
+    """
+    if not value:
+        return 0.0
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        return 0.0
+    if unit == "ms":
+        return num / 1000.0
+    return num  # seconds (or unit not provided → treat as seconds)
+
+
 def parse_pytest_output(raw: str) -> RunResult:
     """Parse raw pytest -v stdout into a structured RunResult.
 
@@ -103,13 +131,41 @@ def parse_pytest_output(raw: str) -> RunResult:
     results_by_name: dict[str, TestResult] = {}
 
     in_failures_block = False
+    in_durations_block = False
     current_failed_name: str | None = None
 
+    # Accumulate per-test durations from the --durations section
+    durations_accum: dict[str, float] = {}
+
     for line in raw.splitlines():
+        stripped = line.strip()
+
         # ── Detect entry into the FAILURES block ──────────────────────────
-        if _FAILURES_HEADER_RE.search(line):
+        if _FAILURES_HEADER_RE.search(stripped):
             in_failures_block = True
+            in_durations_block = False
             continue
+
+        # ── Detect entry into the durations block ─────────────────────────
+        if _DURATIONS_HEADER_RE.match(stripped):
+            in_durations_block = True
+            in_failures_block = False
+            continue
+
+        # ── Inside durations block: accumulate per-test timing ────────────
+        if in_durations_block:
+            dur_match = _DURATIONS_LINE_RE.match(stripped)
+            if dur_match:
+                dur_val = float(dur_match.group(1))
+                test_name = dur_match.group(3)
+                durations_accum[test_name] = durations_accum.get(test_name, 0.0) + dur_val
+                continue
+            # Skip the hidden-durations info line (e.g. "(15 durations < 0.005s hidden...)")
+            if stripped.startswith("(") and "durations" in stripped:
+                continue
+            # Any non-empty line that doesn't match a duration entry ends the block
+            if stripped and not stripped.startswith("="):
+                in_durations_block = False
 
         # ── Inside FAILURES block: grab test name and error message ───────
         if in_failures_block:
@@ -127,10 +183,11 @@ def parse_pytest_output(raw: str) -> RunResult:
         passed_match = _PASSED_RE.search(line)
         if passed_match:
             file_path, name = passed_match.group(1), passed_match.group(2)
+            duration = _parse_duration(passed_match.group(3), passed_match.group(4))
             results_by_name[name] = TestResult(
                 name=name,
                 status="passed",
-                duration=0.0,
+                duration=duration,
                 error_message="",
                 file_path=file_path,
             )
@@ -139,10 +196,11 @@ def parse_pytest_output(raw: str) -> RunResult:
         failed_match = _FAILED_RE.search(line)
         if failed_match:
             file_path, name = failed_match.group(1), failed_match.group(2)
+            duration = _parse_duration(failed_match.group(3), failed_match.group(4))
             results_by_name[name] = TestResult(
                 name=name,
                 status="failed",
-                duration=0.0,
+                duration=duration,
                 error_message="",
                 file_path=file_path,
             )
@@ -151,10 +209,11 @@ def parse_pytest_output(raw: str) -> RunResult:
         skipped_match = _SKIPPED_RE.search(line)
         if skipped_match:
             file_path, name = skipped_match.group(1), skipped_match.group(2)
+            duration = _parse_duration(skipped_match.group(3), skipped_match.group(4))
             results_by_name[name] = TestResult(
                 name=name,
                 status="skipped",
-                duration=0.0,
+                duration=duration,
                 error_message="",
                 file_path=file_path,
             )
@@ -185,6 +244,12 @@ def parse_pytest_output(raw: str) -> RunResult:
                 run.errors = int(error_m.group(1))
             if dur_m:
                 run.duration = float(dur_m.group(1))
+
+    # Apply accumulated durations from the --durations section (these override
+    # inline durations because they are the authoritative per-phase timings).
+    for name, dur in durations_accum.items():
+        if name in results_by_name:
+            results_by_name[name].duration = dur
 
     run.results = list(results_by_name.values())
 

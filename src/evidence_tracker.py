@@ -76,7 +76,15 @@ class EvidenceTracker:
         return f"{action.title()}: {description}"
 
     def _dismiss_consent_overlays(self) -> None:
-        """Best-effort consent dismissal before evidence screenshots."""
+        """Best-effort dismissal of consent, cookie, and ad-overlay popups.
+
+        Handles:
+        - Standard GDPR consent buttons (Consent, Accept, Agree, etc.)
+        - Google Consent TVM (fc-consent-root / fc-dialog-overlay)
+        - Google AdSense vignette overlays
+        - General modal overlays that intercept pointer events
+        """
+        # --- 1. Standard consent/cookie banner buttons ---
         selectors = [
             "button:has-text('Consent')",
             "button:has-text('Accept')",
@@ -95,6 +103,126 @@ class EvidenceTracker:
                     loc.click(timeout=2000)
                     self.page.wait_for_timeout(300)
                     break
+            except Exception:
+                continue
+
+        # --- 2. Google Consent TVM (Two-Party Mode) ---
+        try:
+            consent_btn = self.page.locator(".fc-consent-root button:has-text('Consent')").first
+            if consent_btn.count() > 0 and consent_btn.is_visible():
+                consent_btn.click(timeout=2000)
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        try:
+            manage_btn = self.page.locator(".fc-consent-root button:has-text('Manage options')").first
+            if manage_btn.count() > 0 and manage_btn.is_visible():
+                manage_btn.click(timeout=2000)
+                self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        try:
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(200)
+        except Exception:
+            pass
+
+        # --- 3. Remove Google Consent TVM DOM elements via JavaScript ---
+        try:
+            self.page.evaluate(
+                """
+                () => {
+                    const consentRoot = document.querySelector('.fc-consent-root');
+                    if (consentRoot) { consentRoot.remove(); }
+                    const dialogOverlay = document.querySelector('.fc-dialog-overlay');
+                    if (dialogOverlay) { dialogOverlay.remove(); }
+                    document.querySelectorAll('[class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());
+                    const allElements = document.querySelectorAll('*');
+                    for (const el of allElements) {
+                        const style = window.getComputedStyle(el);
+                        const zIndex = parseInt(style.zIndex, 10);
+                        if (zIndex > 10000 && el.tagName !== 'IFRAME') { el.remove(); }
+                    }
+                }
+                """
+            )
+            self.page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+        # --- 4. Dismiss ad overlays ---
+        try:
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(200)
+        except Exception:
+            pass
+
+    def _dismiss_ad_overlays(self) -> None:
+        """Dismiss ad overlays that intercept pointer events.
+
+        This handles Google AdSense overlays and other common ad frameworks
+        that can block clicks on e-commerce test sites.
+        """
+        # First, try pressing Escape to close any modal overlays
+        try:
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(200)
+        except Exception:
+            pass
+
+        # Use JavaScript to remove ad overlays that intercept pointer events
+        # This is more reliable than trying to click them
+        try:
+            self.page.evaluate(
+                """
+                () => {
+                    // Remove Google AdSense vignette overlay
+                    const vignette = document.getElementById('google_vignette');
+                    if (vignette) {
+                        vignette.style.display = 'none';
+                        vignette.style.visibility = 'hidden';
+                    }
+
+                    // Remove any ins.adsbygoogle elements that are overlays
+                    document.querySelectorAll('ins.adsbygoogle').forEach(el => {
+                        el.style.display = 'none';
+                        el.style.visibility = 'hidden';
+                    });
+
+                    // Remove Google ad iframes that might be intercepting clicks
+                    document.querySelectorAll('iframe[id*="aswift"], iframe[title="Advertisement"]').forEach(el => {
+                        el.style.display = 'none';
+                        el.style.visibility = 'hidden';
+                    });
+
+                    // Remove any element with high z-index that might be an overlay
+                    document.querySelectorAll('[class*="ads"], [id*="google_ads"]').forEach(el => {
+                        el.style.display = 'none';
+                        el.style.visibility = 'hidden';
+                    });
+                }
+                """
+            )
+            self.page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+        # Try to click any visible "Close" or "X" buttons that might be ad-related
+        ad_close_selectors = [
+            "button[aria-label='Close ad']",
+            "button[aria-label='Close Advertisement']",
+            "[class*='close-ad']",
+            "[id*='close-ad']",
+            "button:has-text('Close')",
+        ]
+        for selector in ad_close_selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.count() > 0 and loc.is_visible():
+                    loc.click(timeout=500)
+                    self.page.wait_for_timeout(200)
             except Exception:
                 continue
 
@@ -200,6 +328,7 @@ class EvidenceTracker:
         matched_text: str | None = None,
         fallback_used: bool = False,
         fallback_chain: list[dict[str, Any]] | None = None,
+        elapsed_ms: int | None = None,
     ) -> None:
         step_idx = len(self.steps)
 
@@ -244,7 +373,7 @@ class EvidenceTracker:
 
         result: dict[str, Any] = {
             "status": status,
-            "elapsed_ms": 0,  # Could bracket logic above via time.time() to grab real ms
+            "elapsed_ms": elapsed_ms if elapsed_ms is not None else 0,
             "run_count": step_run_count,
             "matched_text": matched_text,
             "error": error,
@@ -279,22 +408,36 @@ class EvidenceTracker:
         """
         if not label:
             label = f"Navigate to {url}"
+        _t0 = time.time()
         try:
             self.page.goto(url)
             self._dismiss_consent_overlays()
-            self._record_step("navigate", label, value=url, take_screenshot=True)
+            self._dismiss_ad_overlays()
+            self._record_step(
+                "navigate", label, value=url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
+            )
         except Exception as e:
-            self._record_step("navigate", label, value=url, take_screenshot=True, error=str(e))
+            self._record_step(
+                "navigate",
+                label,
+                value=url,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
             raise
 
     def fill(self, locator: str, value: str, label: str = "") -> None:
         if not label:
             label = f"Fill {locator} with '{value}'"
+        _t0 = time.time()
         try:
             self.page.locator(locator).fill(value)
-            self._record_step("fill", label, locator=locator, value=value)
+            self._record_step("fill", label, locator=locator, value=value, elapsed_ms=int((time.time() - _t0) * 1000))
         except Exception as e:
-            self._record_step("fill", label, locator=locator, value=value, error=str(e))
+            self._record_step(
+                "fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000)
+            )
             raise
 
     def click(self, locator: str, label: str = "") -> None:
@@ -310,6 +453,7 @@ class EvidenceTracker:
         """
         if not label:
             label = f"Click {locator}"
+        _t0 = time.time()
         try:
             # We record metadata BEFORE clicking in case navigation clears it
             el_metadata = self._get_element_metadata(locator)
@@ -325,7 +469,7 @@ class EvidenceTracker:
             # Attempt 1: Direct click
             try:
                 loc.click(timeout=5000)
-                self._record_step("click", label, locator=locator)
+                self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
                 self.steps[-1]["element"] = el_metadata
                 return
             except Exception as click_error:
@@ -337,6 +481,10 @@ class EvidenceTracker:
                 )
 
                 if is_visibility_issue:
+                    # First, try to dismiss any ad overlays that might be blocking
+                    self._dismiss_ad_overlays()
+                    self.page.wait_for_timeout(300)
+
                     # Attempt 2: Hover-reveal fallback (existing)
                     hover_result = self._try_hover_and_click(loc, locator, label, el_metadata)
                     if hover_result is not None:
@@ -351,13 +499,21 @@ class EvidenceTracker:
                         click_error,
                         self.page,
                         self._record_step,
+                        elapsed_ms=int((time.time() - _t0) * 1000),
                     )
                 else:
                     raise
         except Exception as e:
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
-            self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e))
+            self._record_step(
+                "click",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
             raise
 
     def _try_hover_and_click(self, loc: Any, locator: str, label: str, el_metadata: dict) -> None | bool:
@@ -369,6 +525,8 @@ class EvidenceTracker:
         opacity:0) and only become visible when the parent element receives a mouseenter
         event — common pattern in e-commerce product grids.
         """
+        _t0 = time.time()
+
         # Try hovering over the element itself first
         try:
             loc.hover(timeout=2000, force=False)
@@ -379,7 +537,7 @@ class EvidenceTracker:
         # Try clicking after hover
         try:
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -390,7 +548,7 @@ class EvidenceTracker:
             loc.evaluate("el => el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))")
             self.page.wait_for_timeout(300)
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -423,7 +581,7 @@ class EvidenceTracker:
             )
             self.page.wait_for_timeout(300)
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -435,15 +593,30 @@ class EvidenceTracker:
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:
             label = f"Assert visible: {locator}"
+        _t0 = time.time()
         try:
             # Use `first` to avoid strict-mode violations when multiple elements
             # match (common with overlays/duplicate buttons in e-commerce UIs).
             loc = self.page.locator(locator).first
             loc.wait_for(state="visible", timeout=5000)
             matched_text = loc.text_content()
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, matched_text=matched_text)
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=matched_text,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
         except Exception as e:
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, error=str(e))
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
             raise
 
     def write(self, status: str = "passed") -> str:

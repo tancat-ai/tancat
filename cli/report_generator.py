@@ -355,6 +355,14 @@ class JiraReportGenerator:
             return self._save_local(
                 os.path.join(self.output_dir, f"test_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html")
             )
+        elif format == ReportFormat.JIRA:
+            return self._save_jira_markdown(
+                os.path.join(self.output_dir, f"test_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}_jira.md")
+            )
+        elif format == ReportFormat.SHAREABLE:
+            return self._save_shareable_markdown(
+                os.path.join(self.output_dir, f"test_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}_shareable.md")
+            )
         else:
             raise ValueError(f"Unsupported format: {format}")
 
@@ -424,3 +432,11 @@ class JiraReportGenerator:
             f.write(content)
 
         return output_path
+
+    def _save_jira_markdown(self, output_path: str) -> str:
+        """Save a Jira-friendly markdown report."""
+        return self._save_markdown(output_path)
+
+    def _save_shareable_markdown(self, output_path: str) -> str:
+        """Save a shareable markdown report."""
+        return self._save_markdown(output_path)

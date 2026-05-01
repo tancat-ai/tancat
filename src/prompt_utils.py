@@ -240,8 +240,16 @@ No PAGE CONTEXT is available, so only generate structural test logic and leave u
 
 
 def count_conditions(conditions: str) -> int:
-    """Return the number of non-empty condition lines."""
-    return len([line.strip() for line in conditions.splitlines() if line.strip()])
+    """Return the number of numbered acceptance criteria (lines starting with N. or N))."""
+    count = 0
+    for line in conditions.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        # Match lines starting with "1.", "1)", "2.", "2)", etc.
+        if re.match(r"^\d+[.)]", stripped):
+            count += 1
+    return count
 
 
 def prepare_conditions_for_generation(conditions: str) -> str:

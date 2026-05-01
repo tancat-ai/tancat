@@ -106,6 +106,7 @@ class LocatorFallback:
         page: Any,
         record_step: Any,
         max_fallbacks: int = 2,
+        elapsed_ms: int = 0,
     ) -> None:
         """Try higher-scoring locator alternatives when the primary locator fails.
 
@@ -174,6 +175,7 @@ class LocatorFallback:
                             "result": "success",
                         }
                     ],
+                    elapsed_ms=elapsed_ms,
                 )
                 return
             except Exception as fallback_error:
@@ -197,5 +199,6 @@ class LocatorFallback:
             error=str(primary_error),
             fallback_used=True,
             fallback_chain=fallback_chain,
+            elapsed_ms=elapsed_ms,
         )
         raise primary_error

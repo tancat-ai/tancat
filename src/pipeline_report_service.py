@@ -37,7 +37,7 @@ class PipelineReportService:
         """Return generated report strings and optionally save them into the package."""
         criteria_lines = [line.strip() for line in criteria_text.splitlines() if line.strip()]
         coverage_analysis = build_coverage_analysis(criteria_lines, generated_code)
-        coverage_rows = build_report_dicts(coverage_analysis, run_result)
+        coverage_rows = build_report_dicts(coverage_analysis, run_result, package_dir=package_dir)
         local_report = generate_local_report(coverage_rows)
         jira_report = generate_jira_report(coverage_rows)
         html_report = generate_html_report(coverage_rows)

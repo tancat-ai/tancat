@@ -242,6 +242,10 @@ provider = st.sidebar.selectbox("LLM Provider", ["ollama", "lm-studio"])
 default_provider_url, default_model = _get_provider_defaults(provider)
 provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
 
+# Propagate user-selected provider to ALL fallback LLMClient() instances
+# throughout the pipeline so they don't fall back to .env.
+LLMClient.set_session_provider(provider, provider_base_url)
+
 # Attempt to fetch models from the provider
 available_models: list[str] = []
 try:
@@ -269,16 +273,19 @@ st.sidebar.title("Pages To Scrape")
 _BASELINE_STARTING_URL = "https://automationexercise.com/"
 _BASELINE_ADDITIONAL_URLS = ""
 _BASELINE_REQUIREMENTS = """## User Story
-As a customer I want to add items to cart
+As a shopper on automationexercise.com, I want to browse products by category, add items to my cart, review the cart contents, and proceed to checkout so that I can complete a purchase.
 
 ## Acceptance Criteria
-1. add items to cart
-2. go to cart
-3. check the items have been added correctly
-4. go to check out
-5. check out
+1. Navigate to the home page and verify the page loads successfully with product categories visible
+2. Click on the "Dress" category link and verify the category products page displays a list of products
+3. On the category page, click "Add to cart" on a product and verify an "Add to cart confirmation popup" appears
+4. Close the confirmation popup by clicking "Continue Shopping" and verify I remain on the category page
+5. Click the "View Cart" link in the header navigation and verify the cart page loads showing a table of added items
+6. On the cart page, verify the product name, price, and quantity are displayed correctly in the cart table
+7. Click the "Proceed to checkout" button on the cart page and verify the checkout page loads with order summary visible
+8. On the checkout page, verify I am logged in automatically or prompted to login if not already authenticated
 
-(Total: 5 criteria)
+(Total: 8 criteria)
 """
 
 if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):
@@ -434,8 +441,8 @@ if raw_requirements.strip():
                 "src": st.column_config.SelectboxColumn("Source Kind", options=["ai", "manual", "automation"]),
             },
         )
-        if hasattr(edited_rows_raw, "to_dict"):
-            edited_rows = edited_rows_raw.to_dict("records")
+        if hasattr(edited_rows_raw, "to_dict"):  # type: ignore[attr-defined]
+            edited_rows = edited_rows_raw.to_dict("records")  # type: ignore[attr-defined]
         else:
             edited_rows = list(edited_rows_raw)
 

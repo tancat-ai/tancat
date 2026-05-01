@@ -65,13 +65,40 @@ class LocatorScorer:
         "tag": "Bare tag selectors match many elements — almost always fragile and non-specific",
     }
 
+    @staticmethod
+    def _text_matches_description(element_text: str, action_description: str) -> bool:
+        """Check if element text plausibly matches the action description.
+
+        Used to apply a bonus when the element's visible text aligns with
+        what the test step is trying to do.
+        """
+        if not element_text or not action_description:
+            return False
+        norm_text = re.sub(r"\s+", " ", element_text).strip().lower()
+        norm_desc = re.sub(r"\s+", " ", action_description).strip().lower()
+        if norm_text in norm_desc or norm_desc in norm_text:
+            return True
+        desc_words = set(norm_desc.split()) - {"the", "a", "an", "and", "to", "in", "on", "for", "of"}
+        text_words = set(norm_text.split())
+        if desc_words and text_words:
+            overlap = len(desc_words & text_words)
+            if overlap >= max(1, len(desc_words) // 2):
+                return True
+        return False
+
     @classmethod
-    def score_locator(cls, selector: str, element: dict[str, Any] | None = None) -> dict[str, Any]:
+    def score_locator(
+        cls,
+        selector: str,
+        element: dict[str, Any] | None = None,
+        action_description: str = "",
+    ) -> dict[str, Any]:
         """Score a single locator and return metadata.
 
         Args:
             selector: The Playwright selector string to score.
             element: Optional scraped element dict for additional context.
+            action_description: Optional action description for text-match bonus.
 
         Returns:
             Dict with keys: selector, type, score, confidence, fragility_reason.
@@ -91,6 +118,12 @@ class LocatorScorer:
 
         # Apply modifiers based on specificity
         final_score = cls._apply_specificity_modifier(base_score, selector, loc_type)
+
+        # Text-match bonus: +10 if element text matches action description
+        if element and action_description:
+            element_text = str(element.get("text", "")).strip()
+            if cls._text_matches_description(element_text, action_description):
+                final_score += 10
 
         # Clamp score to valid range
         final_score = max(0, min(100, final_score))
