@@ -494,3 +494,15 @@ source,target,type
 ./AGENTS.md,./SECURITY.md,references
 ./AGENTS.md,./docs/plans/PROJECT_TRAINING_PLAN.md,references
 ./AGENTS.md,./docs/plans/REFACTOR_PLAN_2026-04-26.md,references
+./docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md,./src/evidence_loader.py,proximity
+./docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md,./src/orchestrator.py,proximity
+./docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md,./src/report_formatters.py,proximity
+./docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md,./src/test_generator.py,proximity
+./docs/plans/implementation_plan.md,./src/llm_client.py,proximity
+./docs/plans/implementation_plan.md,./src/orchestrator.py,proximity
+./docs/plans/implementation_plan.md,./src/scraper.py,proximity
+./docs/plans/implementation_plan.md,./src/test_generator.py,proximity
+./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/llm_client.py,proximity
+./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/orchestrator.py,proximity
+./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/scraper.py,proximity
+./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/test_generator.py,proximity
