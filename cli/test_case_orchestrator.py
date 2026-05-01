@@ -86,7 +86,9 @@ class TestCaseOrchestrator:
             ordered_cases = self._order_test_cases(analysis_result.analyzed_test_cases)
 
             # Step 4: Generate test files (with optional page context)
-            test_files = self._generate_test_files(ordered_cases, url=url, output_dir=output_dir, raw_requirements=raw_input)
+            test_files = self._generate_test_files(
+                ordered_cases, url=url, output_dir=output_dir, raw_requirements=raw_input
+            )
             result.generated_files = test_files
 
             # Step 5: Create summary

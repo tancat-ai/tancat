@@ -435,7 +435,9 @@ class EvidenceTracker:
             self.page.locator(locator).fill(value)
             self._record_step("fill", label, locator=locator, value=value, elapsed_ms=int((time.time() - _t0) * 1000))
         except Exception as e:
-            self._record_step("fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
+            self._record_step(
+                "fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000)
+            )
             raise
 
     def click(self, locator: str, label: str = "") -> None:
@@ -504,7 +506,14 @@ class EvidenceTracker:
         except Exception as e:
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
-            self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
+            self._record_step(
+                "click",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
             raise
 
     def _try_hover_and_click(self, loc: Any, locator: str, label: str, el_metadata: dict) -> None | bool:
@@ -591,9 +600,23 @@ class EvidenceTracker:
             loc = self.page.locator(locator).first
             loc.wait_for(state="visible", timeout=5000)
             matched_text = loc.text_content()
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, matched_text=matched_text, elapsed_ms=int((time.time() - _t0) * 1000))
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=matched_text,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
         except Exception as e:
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
             raise
 
     def write(self, status: str = "passed") -> str:
