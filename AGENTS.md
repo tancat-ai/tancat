@@ -9,7 +9,7 @@
 ## 1. What This Project Does
 
 Generates Playwright Python test scripts from user stories using a local LLM (Ollama).
-Primary interface: Streamlit UI (`streamlit_app.py`). Secondary: CLI (`cli/main.py`).
+Primary interface: Streamlit UI (`streamlit_app.py`). Secondary: CLI (`cli/main.py`, launched by `launch_cli.sh`).
 Tests are written to `generated_tests/`, run via pytest, and evidence exported as Jira/HTML/JSON.
 
 ---
@@ -49,10 +49,15 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 | File | Reason |
 |------|--------|
 | `src/test_generator.py` | Working test generation pipeline — stable |
-| `main.py` | Working CLI entry point — stable |
 | `.github/workflows/ci.yml` | CI/CD configured and passing |
 
 **Rule:** If you find a bug in a protected file, document it in BACKLOG.md and ask before editing.
+
+### Deprecated Compatibility Entry Point
+
+| File | Status |
+|------|--------|
+| `main.py` | Deprecated wrapper only. The retired pre-pipeline CLI menu was superseded by `cli/main.py`. Do not add new behavior here; route users to `python -m cli.main` or `bash launch_cli.sh`. |
 
 ## 3a. Protected Directories
 
@@ -70,18 +75,18 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 ```
 AI-Playwright-Test-Generator/
 ├── streamlit_app.py             # Streamlit UI — primary entry point
-├── main.py                      # PROTECTED — Interactive CLI
+├── main.py                      # Deprecated wrapper to cli/main.py
 ├── launch_ui.sh                 # Start UI only (general use)
 ├── launch_dev.sh                # Start UI + mock insurance site (dev/demo only)
+├── launch_cli.sh                # Start interactive CLI via python -m cli.main
 ├── pytest.ini                   # testpaths = tests (NOT generated_tests)
 ├── pyproject.toml               # Dependencies — managed by uv
 ├── .pre-commit-config.yaml      # ruff + ruff-format + mypy
 ├── cli/                         # CLI module (argparse-based)
-│   ├── main.py
+│   ├── main.py                  # Supported CLI entry point
 │   ├── config.py                # AnalysisMode, ReportFormat enums
 │   ├── input_parser.py
-│   ├── story_analyzer.py
-│   ├── test_orchestrator.py
+│   ├── test_case_orchestrator.py
 │   ├── evidence_generator.py
 │   └── report_generator.py
 ├── docs/                        # Documentation hub

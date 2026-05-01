@@ -13,6 +13,7 @@ from datetime import datetime
 from cli.config import ReportFormat
 from cli.input_parser import InputParser, ParsedInput
 from src.analyzer import AnalysisResult, KeywordAnalyzer
+from src.user_story_parser import FeatureParser
 
 # Default demo user story for quick testing
 DEMO_USER_STORY = "As a customer, I want to browse products, add them to my cart, and checkout with a discount code."
@@ -78,9 +79,16 @@ def cmd_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     print("\n🔍 Running Analysis...")
     analysis_result = run_analysis(parsed)
 
+    if _should_prompt_interactively():
+        print("\nReview generated conditions above before continuing.")
+        confirm_generation = _safe_input("Generate tests for these conditions? [Y/n]: ")
+        if confirm_generation is not None and confirm_generation.strip().lower() in {"n", "no"}:
+            print("Generation cancelled before writing tests.")
+            return 0
+
     # Generate tests
     print("\n⚙️  Generating Tests...")
-    run_generation(parsed, args.output_dir, args.url)
+    generated_files = run_generation(parsed, args.output_dir, args.url)
 
     # Generate evidence
     print("\n📸 Generating Evidence...")
@@ -100,6 +108,14 @@ def cmd_generate(args: argparse.Namespace, parser: argparse.ArgumentParser) -> i
     print(f"   Output Directory: {args.output_dir}")
     print("=" * 60)
 
+    if generated_files and _should_prompt_interactively():
+        print()
+        for generated_file in generated_files:
+            print(f"Generated package: {generated_file}")
+        should_run = _safe_input("Run generated tests now? [y/N]: ")
+        if should_run is not None and should_run.strip().lower() in {"y", "yes"}:
+            run_generated_tests(generated_files)
+
     return 0
 
 
@@ -117,7 +133,30 @@ def cmd_help(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
 def run_analysis(parsed: ParsedInput) -> AnalysisResult:
     """Run analysis on parsed input."""
-    result = KeywordAnalyzer.analyze_parsed(parsed)
+    feature_parser = FeatureParser()
+    feature_result = feature_parser.parse(parsed.raw_input)
+    if feature_result.success and feature_result.specification and feature_result.specification.acceptance_criteria:
+        requirement_model = feature_parser.build_requirement_model(feature_result.specification)
+        analyzed_cases = []
+        detected_patterns: list[str] = []
+
+        for line in requirement_model.lines:
+            title = " ".join(line.split()[:8]).strip() or "Acceptance Criterion"
+            analyzed = KeywordAnalyzer.analyze(title, line)
+            analyzed_cases.append(analyzed)
+            detected_patterns.extend(analyzed.identified_actions)
+
+        result = AnalysisResult(
+            analyzed_test_cases=analyzed_cases,
+            analysis_summary={
+                "total_cases": len(analyzed_cases),
+                "complexity_distribution": {},
+                "requires_auth": False,
+            },
+            detected_patterns=detected_patterns,
+        )
+    else:
+        result = KeywordAnalyzer.analyze_parsed(parsed)
 
     summary = result.analysis_summary
     print(f"   Total Test Cases: {summary['total_cases']}")
@@ -128,16 +167,18 @@ def run_analysis(parsed: ParsedInput) -> AnalysisResult:
     return result
 
 
-def run_generation(parsed: ParsedInput, output_dir: str, url: str | None = None) -> None:
+def run_generation(parsed: ParsedInput, output_dir: str, url: str | None = None) -> list[str]:
     """Generate Playwright tests."""
     from cli.test_case_orchestrator import TestCaseOrchestrator
 
     orchestrator = TestCaseOrchestrator()
-    # Generate content for all test cases
-    for case in parsed.test_cases:
-        orchestrator.process(case.description, url=url)
+    result = orchestrator.process_parsed(parsed, url=url, output_dir=output_dir)
 
-    print(f"   Generated tests for {len(parsed.test_cases)} case(s)")
+    print(f"   Generated tests for {len(orchestrator.generated_files)} case(s)")
+    if result.errors:
+        for error in result.errors:
+            print(f"   ⚠ {error}")
+    return orchestrator.generated_files
 
 
 def run_evidence_generation(output_dir: str) -> None:
@@ -160,6 +201,25 @@ def generate_reports(parsed: ParsedInput, analysis_result: AnalysisResult, outpu
     for report_format in ReportFormat:
         report_path = report_gen.save_test_cases(report_format)
         print(f"   ✓ {report_format.value} → {report_path}")
+
+
+def run_generated_tests(generated_files: list[str]) -> None:
+    """Run one or more generated test packages immediately via pytest."""
+    from src.pipeline_run_service import PipelineRunService
+
+    runner = PipelineRunService()
+    for generated_file in generated_files:
+        print(f"\n🧪 Running: {generated_file}")
+        result = runner.run_saved_test(generated_file)
+        print(f"   Command: {' '.join(result.command)}")
+        print(
+            "   Result: "
+            f"total={result.run_result.total} passed={result.run_result.passed} "
+            f"failed={result.run_result.failed} skipped={result.run_result.skipped} "
+            f"errors={result.run_result.errors}"
+        )
+        if result.display_output:
+            print(result.display_output)
 
 
 def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
@@ -192,6 +252,11 @@ def _safe_input(prompt: str = "") -> str | None:
         return input(prompt)
     except (EOFError, KeyboardInterrupt):
         return None
+
+
+def _should_prompt_interactively() -> bool:
+    """Return True when stdin/stdout look interactive."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 def cmd_interactive(parser: argparse.ArgumentParser) -> int:
@@ -251,7 +316,7 @@ def cmd_interactive(parser: argparse.ArgumentParser) -> int:
     # Set session provider so all LLMClient instances use this provider
     from src.llm_client import LLMClient
 
-    LLMClient.set_session_provider(provider_name, provider_url)
+    LLMClient.set_session_provider(provider_name, provider_url, selected_model)
 
     print(f"\nUsing provider: {provider_name} | model: {selected_model}")
     print()

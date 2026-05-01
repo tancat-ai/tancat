@@ -14,10 +14,10 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
     *   **`cli/main.py`**: CLI entry point (argparse-based).
     *   **`cli/config.py`**: `AnalysisMode`, `ReportFormat` enums and CLI config.
     *   **`cli/input_parser.py`**: Parses user story input and file arguments.
-    *   **`cli/analyzer.py`**: Wraps `SpecAnalyzer` for CLI invocation.
-    *   **`cli/test_orchestrator.py`**: CLI-specific test orchestration wrapper.
+    *   **`cli/test_case_orchestrator.py`**: CLI-specific test orchestration wrapper.
     *   **`cli/evidence_generator.py`**: CLI evidence collection and export.
     *   **`cli/report_generator.py`**: CLI report generation (HTML/Markdown/Jira).
+*   **`main.py`**: Deprecated compatibility wrapper that forwards to `cli.main`. It is not a separate supported workflow.
 
 #### ⚙️ Orchestration Layer
 *   **`src/orchestrator.py` (`TestOrchestrator`)**: The "brain" of the system. It manages the sequential execution of the entire pipeline: from analyzing requirements and scraping web context to generating code and writing files.

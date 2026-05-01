@@ -430,11 +430,12 @@ class EvidenceTracker:
     def fill(self, locator: str, value: str, label: str = "") -> None:
         if not label:
             label = f"Fill {locator} with '{value}'"
+        _t0 = time.time()
         try:
             self.page.locator(locator).fill(value)
-            self._record_step("fill", label, locator=locator, value=value)
+            self._record_step("fill", label, locator=locator, value=value, elapsed_ms=int((time.time() - _t0) * 1000))
         except Exception as e:
-            self._record_step("fill", label, locator=locator, value=value, error=str(e))
+            self._record_step("fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
             raise
 
     def click(self, locator: str, label: str = "") -> None:
@@ -450,6 +451,7 @@ class EvidenceTracker:
         """
         if not label:
             label = f"Click {locator}"
+        _t0 = time.time()
         try:
             # We record metadata BEFORE clicking in case navigation clears it
             el_metadata = self._get_element_metadata(locator)
@@ -465,7 +467,7 @@ class EvidenceTracker:
             # Attempt 1: Direct click
             try:
                 loc.click(timeout=5000)
-                self._record_step("click", label, locator=locator)
+                self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
                 self.steps[-1]["element"] = el_metadata
                 return
             except Exception as click_error:
@@ -495,13 +497,14 @@ class EvidenceTracker:
                         click_error,
                         self.page,
                         self._record_step,
+                        elapsed_ms=int((time.time() - _t0) * 1000),
                     )
                 else:
                     raise
         except Exception as e:
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
-            self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e))
+            self._record_step("click", label, locator=locator, take_screenshot=True, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
             raise
 
     def _try_hover_and_click(self, loc: Any, locator: str, label: str, el_metadata: dict) -> None | bool:
@@ -513,6 +516,8 @@ class EvidenceTracker:
         opacity:0) and only become visible when the parent element receives a mouseenter
         event — common pattern in e-commerce product grids.
         """
+        _t0 = time.time()
+
         # Try hovering over the element itself first
         try:
             loc.hover(timeout=2000, force=False)
@@ -523,7 +528,7 @@ class EvidenceTracker:
         # Try clicking after hover
         try:
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -534,7 +539,7 @@ class EvidenceTracker:
             loc.evaluate("el => el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))")
             self.page.wait_for_timeout(300)
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -567,7 +572,7 @@ class EvidenceTracker:
             )
             self.page.wait_for_timeout(300)
             loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator)
+            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
             self.steps[-1]["element"] = el_metadata
             return True
         except Exception:
@@ -579,15 +584,16 @@ class EvidenceTracker:
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:
             label = f"Assert visible: {locator}"
+        _t0 = time.time()
         try:
             # Use `first` to avoid strict-mode violations when multiple elements
             # match (common with overlays/duplicate buttons in e-commerce UIs).
             loc = self.page.locator(locator).first
             loc.wait_for(state="visible", timeout=5000)
             matched_text = loc.text_content()
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, matched_text=matched_text)
+            self._record_step("assertion", label, locator=locator, take_screenshot=True, matched_text=matched_text, elapsed_ms=int((time.time() - _t0) * 1000))
         except Exception as e:
-            self._record_step("assertion", label, locator=locator, take_screenshot=True, error=str(e))
+            self._record_step("assertion", label, locator=locator, take_screenshot=True, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000))
             raise
 
     def write(self, status: str = "passed") -> str:

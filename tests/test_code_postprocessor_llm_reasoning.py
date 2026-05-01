@@ -12,6 +12,7 @@ import pytest
 from src.code_postprocessor import (
     _is_llm_reasoning_line,
     _strip_llm_reasoning_text,
+    _strip_pages_needed_block,
     normalise_generated_code,
     replace_remaining_placeholders,
     replace_token_in_line,
@@ -437,4 +438,55 @@ def test_checkout(page, evidence_tracker):
     assert "evidence_tracker.fill(" not in fixed
     assert "Unresolved placeholder in this step." in fixed
     assert "pytest.skip(" in fixed
+    ast.parse(fixed)
+
+
+def test_strip_pages_needed_block_removes_trailing_skeleton_metadata() -> None:
+    code = """from playwright.sync_api import Page, expect
+
+def test_checkout(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate('https://example.com/')
+
+# PAGES_NEEDED:
+# - https://example.com/
+"""
+
+    fixed = _strip_pages_needed_block(code)
+
+    assert "# PAGES_NEEDED:" not in fixed
+    assert "# - https://example.com/" not in fixed
+
+
+def test_normalise_generated_code_fixes_over_indented_lines_after_placeholder_skip() -> None:
+    broken = """from playwright.sync_api import Page, expect
+import pytest
+
+@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
+def test_checkout(page: Page, evidence_tracker) -> None:
+    pytest.skip("Skipping unresolved placeholders")
+           evidence_tracker.navigate('https://example.com/')
+           pytest.skip('Unresolved placeholder in this step. {{CLICK:buy}}')
+
+       # PAGES_NEEDED:
+       # - https://example.com/
+"""
+
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+
+    assert "# PAGES_NEEDED:" not in fixed
+    ast.parse(fixed)
+
+
+def test_normalise_generated_code_preserves_nested_helper_blocks_in_auto_dismiss_mode() -> None:
+    broken = """from playwright.sync_api import Page, expect
+
+def test_checkout(page: Page, evidence_tracker) -> None:
+    evidence_tracker.navigate('https://example.com/')
+           evidence_tracker.click('#buy', label='buy')
+"""
+
+    fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
+
+    assert "for selector in candidate_selectors:" in fixed
+    assert "        try:" in fixed
     ast.parse(fixed)

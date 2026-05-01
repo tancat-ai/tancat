@@ -227,6 +227,7 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # whose descriptions contain Python variable syntax (e.g. {item_name}) that
     # break the resolver's regex and therefore were never substituted.
     fixed_code = replace_remaining_placeholders(fixed_code)
+    fixed_code = _strip_pages_needed_block(fixed_code)
 
     # Some models indent entire top-level test blocks after helper functions,
     # producing invalid syntax like `    @pytest.mark.evidence(...)` at module scope.
@@ -456,6 +457,26 @@ def replace_remaining_placeholders(code: str) -> str:
     return "\n".join(output_lines)
 
 
+def _strip_pages_needed_block(code: str) -> str:
+    """Remove trailing skeleton metadata comments from final generated code."""
+    cleaned_lines: list[str] = []
+    inside_pages_needed = False
+
+    for line in code.splitlines():
+        stripped = line.strip()
+        if stripped == "# PAGES_NEEDED:":
+            inside_pages_needed = True
+            continue
+        if inside_pages_needed:
+            if not stripped or stripped.startswith("# -"):
+                continue
+            inside_pages_needed = False
+
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines)
+
+
 def _fix_indentation(code: str) -> str:
     """Fix inconsistent indentation inside test functions and class methods.
 
@@ -466,6 +487,8 @@ def _fix_indentation(code: str) -> str:
     updated_lines: list[str] = []
     inside_function = False
     func_indent = 0
+    previous_significant_indent = 0
+    previous_significant_line = ""
 
     for line in lines:
         stripped = line.lstrip()
@@ -475,23 +498,50 @@ def _fix_indentation(code: str) -> str:
         if re.match(r"^\s*def\s+", line):
             inside_function = True
             func_indent = indent + 4
+            previous_significant_indent = indent
+            previous_significant_line = stripped
             updated_lines.append(line)
             continue
 
         # Detect class definition
         if re.match(r"^\s*class\s+", line):
             inside_function = False
+            previous_significant_indent = indent
+            previous_significant_line = stripped
             updated_lines.append(line)
             continue
 
-        # If we're inside a function and the line has less indentation
-        # than expected but has content, fix it
-        if inside_function and stripped and indent < func_indent:
-            # Only fix if the line looks like it should be indented
-            # (starts with a known keyword or is a function call)
-            if not re.match(r"^\s*(def |class |@|import |from |#|$)", line):
-                updated_lines.append(" " * func_indent + stripped)
+        # If we're inside a function, fix missing indentation and only dedent
+        # obviously accidental extra indentation on top-level statements.
+        if inside_function and stripped:
+            if stripped.startswith("#"):
+                comment_indent = func_indent if indent <= func_indent else indent
+                updated_lines.append(" " * comment_indent + stripped)
+                previous_significant_indent = comment_indent
+                previous_significant_line = stripped
                 continue
+
+            if indent < func_indent and not re.match(r"^\s*(def |class |@|import |from )", line):
+                updated_lines.append(" " * func_indent + stripped)
+                previous_significant_indent = func_indent
+                previous_significant_line = stripped
+                continue
+
+            accidental_extra_indent = (
+                indent > func_indent
+                and previous_significant_indent == func_indent
+                and not previous_significant_line.rstrip().endswith(":")
+                and not re.match(r"^(elif |else:|except\b|finally:)", stripped)
+            )
+            if accidental_extra_indent:
+                updated_lines.append(" " * func_indent + stripped)
+                previous_significant_indent = func_indent
+                previous_significant_line = stripped
+                continue
+
+        if stripped:
+            previous_significant_indent = indent
+            previous_significant_line = stripped
 
         updated_lines.append(line)
 

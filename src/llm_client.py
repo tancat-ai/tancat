@@ -19,8 +19,8 @@ class LLMClient:
  1. Generate pytest sync Playwright tests only.
  2. Do not use asyncio, async def, or async_playwright.
  3. Use `from playwright.sync_api import Page, expect`.
- 4. Do not include `import pytest` in generated code.
- 5. Return valid Python code only, with no markdown fences or commentary.
+ 4. Include `import pytest` at module top when pytest decorators or pytest.skip are used.
+ 5. Return valid Python code only, with no markdown fences, chain-of-thought, or commentary.
  6. Include screenshot capture logic only when the prompt explicitly asks for it.
  7. Do not invent selectors when page context or placeholder rules say not to.
  """
@@ -29,9 +29,15 @@ class LLMClient:
     # use the user-selected provider instead of falling back to .env.
     _session_provider: str | None = None
     _session_base_url: str | None = None
+    _session_model: str | None = None
 
     @classmethod
-    def set_session_provider(cls, provider: str, base_url: str | None = None) -> None:
+    def set_session_provider(
+        cls,
+        provider: str,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
         """Set the active provider for all LLMClient instances created without explicit provider.
 
         Call this from CLI or Streamlit after the user selects a provider so that
@@ -39,6 +45,7 @@ class LLMClient:
         """
         cls._session_provider = provider
         cls._session_base_url = base_url
+        cls._session_model = model
 
     def __init__(
         self,
@@ -61,7 +68,11 @@ class LLMClient:
         else:
             self._provider = create_provider_from_env()
 
-        self._model = model or self._get_default_model()
+        selected_model = model
+        if selected_model is None and self._session_model is not None:
+            selected_model = self._session_model
+
+        self._model = selected_model or self._get_default_model()
         self.system_instruction = self.DEFAULT_SYSTEM_INSTRUCTION
         self._conversation_history: list[ChatMessage] = []
 
@@ -129,7 +140,8 @@ class LLMClient:
         if not raw_text:
             return ""
 
-        cleaned = re.sub(r"<channel\|>+", "", raw_text).strip()
+        cleaned = re.sub(r"<channel\|>+", "\n", raw_text).strip()
+        cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned).strip()
         fence_match = re.search(r"```(?:python)?\n(.+?)```", cleaned, re.S)
         if fence_match:
             return fence_match.group(1).strip()
@@ -137,17 +149,16 @@ class LLMClient:
         if re.match(r"^```(?:python)?\s*```$", cleaned, re.S):
             return ""
 
-        import_match = re.search(r"(?:from\s+playwright\.sync_api\s+import|import\s+pytest)", cleaned)
-        if import_match:
-            return cleaned[import_match.start() :].strip()
-
-        decorator_match = re.search(r"@pytest\.mark", cleaned)
-        if decorator_match:
-            return cleaned[decorator_match.start() :].strip()
-
-        function_match = re.search(r"def\s+test_", cleaned)
-        if function_match:
-            return cleaned[function_match.start() :].strip()
+        code_start_patterns = [
+            re.compile(r"(?m)^(from\s+playwright\.sync_api\s+import[^\n]*)"),
+            re.compile(r"(?m)^(import\s+pytest\b[^\n]*)"),
+            re.compile(r"(?m)^(@pytest\.mark[^\n]*)"),
+            re.compile(r"(?m)^(def\s+test_\w+\s*\()"),
+        ]
+        for pattern in code_start_patterns:
+            match = pattern.search(cleaned)
+            if match:
+                return cleaned[match.start() :].strip()
 
         return cleaned
 

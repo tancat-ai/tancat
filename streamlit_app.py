@@ -441,8 +441,8 @@ if raw_requirements.strip():
                 "src": st.column_config.SelectboxColumn("Source Kind", options=["ai", "manual", "automation"]),
             },
         )
-        if hasattr(edited_rows_raw, "to_dict"):
-            edited_rows = edited_rows_raw.to_dict("records")
+        if hasattr(edited_rows_raw, "to_dict"):  # type: ignore[attr-defined]
+            edited_rows = edited_rows_raw.to_dict("records")  # type: ignore[attr-defined]
         else:
             edited_rows = list(edited_rows_raw)
 

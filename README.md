@@ -71,6 +71,8 @@ source .venv/bin/activate   # macOS/Linux
 python -m cli.main
 ```
 
+Root `main.py` is kept only as a deprecated compatibility wrapper. New CLI work should use `cli/main.py`.
+
 **Interactive menu flow:**
 1. **Configure LLM** — Select provider (ollama/lm-studio) and model
 2. **Enter User Story** — Paste text or upload a `.md`/`.txt` file

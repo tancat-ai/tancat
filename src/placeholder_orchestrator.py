@@ -208,7 +208,13 @@ class PlaceholderOrchestrator:
 
         # 1. Resolve placeholders inside test functions
         for journey in journeys:
-            current_url = self._select_initial_page_url(journey, page_requirements, seed_urls, scraped_data)
+            current_url = self._select_initial_page_url(
+                journey,
+                page_requirements,
+                seed_urls,
+                scraped_data,
+                lines,
+            )
             journey_unresolved[journey.test_name] = []
 
             for step in journey.steps:
@@ -590,8 +596,13 @@ class PlaceholderOrchestrator:
         page_requirements: list[PageRequirement],
         seed_urls: list[str],
         scraped_data: dict[str, list[dict[str, str]]],
+        skeleton_lines: list[str] | None = None,
     ) -> str | None:
         """Choose the starting page for one test journey."""
+        journey_start_url = self._extract_journey_start_url(journey, skeleton_lines or [])
+        if journey_start_url and journey_start_url in scraped_data:
+            return journey_start_url
+
         for placeholder in journey.placeholders:
             if placeholder.action in {"GOTO", "URL"}:
                 resolved_url = self.resolver.resolve_url(
@@ -602,6 +613,25 @@ class PlaceholderOrchestrator:
                     return resolved_url
 
         return self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
+
+    @staticmethod
+    def _extract_journey_start_url(journey: TestJourney, skeleton_lines: list[str]) -> str | None:
+        """Return a per-journey starting URL marker inserted during fragment combine."""
+        if not skeleton_lines:
+            return None
+
+        marker_prefix = "# JOURNEY_START_URL:"
+        scan_index = max(0, journey.start_line - 2)
+
+        while scan_index >= 0:
+            stripped = skeleton_lines[scan_index].strip()
+            if not stripped:
+                break
+            if stripped.startswith(marker_prefix):
+                return stripped.split(":", 1)[1].strip()
+            scan_index -= 1
+
+        return None
 
     @staticmethod
     def _page_requirements_to_pages(
