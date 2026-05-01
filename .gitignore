@@ -73,12 +73,15 @@ screenshots/*
 # ── Evidence Sidecars ────────────────────────────────────────────────────────
 evidence/
 # ── Generated Test Files ──────────────────────────────────────────────────────
-# Ignore the generated test files and subfolders
-generated_tests/**/test_*.py
+# Ignore all generated test outputs (test packages, reports, parsed cases)
+generated_tests/test_*/
+generated_tests/test_cases_*.*
+generated_tests/test_report_*.*
 generated_tests/pages/
 
-# But specifically DO NOT ignore conftest.py
+# But specifically DO NOT ignore these files (needed for the tool to work)
 !generated_tests/conftest.py
+!generated_tests/mock_insurance_site.html
 
 # ── MCP Memory Bank ────────────────
 cline-mcp-memory-bank/
