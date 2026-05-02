@@ -51,13 +51,18 @@ def extract_failed_nodeids_from_raw_output(raw_output: str) -> list[str]:
 
 
 def build_pytest_run_command(saved_path: str, failed_nodeids: Sequence[str] | None = None) -> list[str]:
-    """Build the pytest command for full or failed-only execution in the UI flow."""
+    """Build the pytest command for full or failed-only execution in the UI flow.
+
+    --durations=0 shows the "slowest durations" section after test execution,
+    which the output parser uses to capture individual test durations.
+    """
     command = [
         "pytest",
         "-o",
         "addopts=",
         "--browser=chromium",
         "--screenshot=only-on-failure",
+        "--durations=0",
         "-v",
         "--tb=short",
     ]

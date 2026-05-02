@@ -46,6 +46,80 @@ bash launch_ui.sh
 # Then open http://localhost:8501
 ```
 
+## Usage
+
+### Quick Launchers
+
+```bash
+# Launch the Streamlit UI
+bash launch_ui.sh
+
+# Launch the interactive CLI
+bash launch_cli.sh
+```
+### Interactive CLI (Recommended)
+
+The CLI launches an interactive, menu-driven session that guides you through the full pipeline:
+
+```bash
+# Activate virtual environment first
+uv sync
+.venv\Scripts\activate   # Windows
+source .venv/bin/activate   # macOS/Linux
+
+# Launch interactive CLI
+python -m cli.main
+```
+
+Root `main.py` is kept only as a deprecated compatibility wrapper. New CLI work should use `cli/main.py`.
+
+**Interactive menu flow:**
+1. **Configure LLM** — Select provider (ollama/lm-studio) and model
+2. **Enter User Story** — Paste text or upload a `.md`/`.txt` file
+3. **Enter Target URLs** — Starting URL + additional pages to scrape
+4. **Consent Mode** — How to handle cookie/consent banners
+5. **Build Living Test Plan** — AI derives conditions for your review and sign-off
+6. **Run Intelligent Pipeline** — Generates skeleton → scrapes pages → resolves placeholders
+7. **View Generated Code** — Inspect the final pytest script
+8. **Run Generated Tests** — Execute tests with pytest
+9. **Generate/View Reports** — Local markdown, Jira, or HTML reports
+
+### Legacy Parameter-Based CLI
+
+```bash
+# Generate from a string
+python -m cli.main generate --input "As a user, I want to login"
+
+# Generate from a file
+python -m cli.main generate --file user_stories.md
+
+# With full options
+python -m cli.main generate \
+  --input "Add items to cart" \
+  --output generated_tests \
+  --url https://example.com \
+  --format user_story
+```
+
+**Available options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--input`, `-i` | | Raw test case input string |
+| `--file`, `-f` | | Input file (text or JSON) |
+| `--generate`, `-g` | | Generate test case from prompt |
+| `--format` | `user_story` | Format: `user_story`, `gherkin`, `auto` |
+| `--output`, `-o` | `generated_tests` | Output directory |
+| `--url` | | Target URL for page context |
+| `--help` | | Show help message |
+
+### Help
+
+```bash
+python -m cli.main --help
+python -m cli.main generate --help
+```
+
 ## Prerequisites
 
 - **Python 3.13+**

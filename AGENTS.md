@@ -9,7 +9,7 @@
 ## 1. What This Project Does
 
 Generates Playwright Python test scripts from user stories using a local LLM (Ollama).
-Primary interface: Streamlit UI (`streamlit_app.py`). Secondary: CLI (`cli/main.py`).
+Primary interface: Streamlit UI (`streamlit_app.py`). Secondary: CLI (`cli/main.py`, launched by `launch_cli.sh`).
 Tests are written to `generated_tests/`, run via pytest, and evidence exported as Jira/HTML/JSON.
 
 ---
@@ -49,10 +49,15 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 | File | Reason |
 |------|--------|
 | `src/test_generator.py` | Working test generation pipeline — stable |
-| `main.py` | Working CLI entry point — stable |
 | `.github/workflows/ci.yml` | CI/CD configured and passing |
 
 **Rule:** If you find a bug in a protected file, document it in BACKLOG.md and ask before editing.
+
+### Deprecated Compatibility Entry Point
+
+| File | Status |
+|------|--------|
+| `main.py` | Deprecated wrapper only. The retired pre-pipeline CLI menu was superseded by `cli/main.py`. Do not add new behavior here; route users to `python -m cli.main` or `bash launch_cli.sh`. |
 
 ## 3a. Protected Directories
 
@@ -70,18 +75,18 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 ```
 AI-Playwright-Test-Generator/
 ├── streamlit_app.py             # Streamlit UI — primary entry point
-├── main.py                      # PROTECTED — Interactive CLI
+├── main.py                      # Deprecated wrapper to cli/main.py
 ├── launch_ui.sh                 # Start UI only (general use)
 ├── launch_dev.sh                # Start UI + mock insurance site (dev/demo only)
+├── launch_cli.sh                # Start interactive CLI via python -m cli.main
 ├── pytest.ini                   # testpaths = tests (NOT generated_tests)
 ├── pyproject.toml               # Dependencies — managed by uv
 ├── .pre-commit-config.yaml      # ruff + ruff-format + mypy
 ├── cli/                         # CLI module (argparse-based)
-│   ├── main.py
+│   ├── main.py                  # Supported CLI entry point
 │   ├── config.py                # AnalysisMode, ReportFormat enums
 │   ├── input_parser.py
-│   ├── story_analyzer.py
-│   ├── test_orchestrator.py
+│   ├── test_case_orchestrator.py
 │   ├── evidence_generator.py
 │   └── report_generator.py
 ├── docs/                        # Documentation hub
@@ -116,16 +121,23 @@ AI-Playwright-Test-Generator/
 │   ├── test_generator.py        # PROTECTED
 │   ├── orchestrator.py          # Core pipeline orchestrator
 │   ├── pipeline_models.py       # Data models for the pipeline
-│   ├── placeholder_resolver.py  # Resolves LLM generated placeholders
+│   ├── placeholder_resolver.py  # Resolves LLM generated placeholders — text validation + confidence threshold
+│   ├── placeholder_orchestrator.py # Per-page resolution — page-context validation
 │   ├── skeleton_parser.py       # Parses basic skeletons
 │   ├── scraper.py               # DOM metadata scraper
+│   ├── journey_scraper.py       # Journey-aware stateful scraping
 │   ├── page_object_builder.py   # Page Object Model generation
 │   ├── semantic_candidate_ranker.py # Context candidate prioritization
+│   ├── locator_scorer.py        # Scores locators by reliability (data-testid > id > name > aria-label > css-class > text > xpath)
+│   ├── evidence_tracker.py      # Captures runtime diagnostics (failure_note, diagnosis, screenshots)
+│   ├── evidence_loader.py       # Loads evidence JSON from test packages for reports
+│   ├── report_builder.py        # Builds report dicts — merges evidence data
+│   ├── report_formatters.py     # Renders reports (local MD, Jira MD, HTML) with failure diagnostics
 │   ├── pipeline_report_service.py
 │   ├── pipeline_run_service.py
 │   ├── pipeline_writer.py
 │   ├── file_utils.py            # save_generated_test, rename, normalise helpers
-│   └── stateful_scraper.py      # State-aware scraping (deprecated)
+│   └── stateful_scraper.py      # State-aware scraping — fallback scraper in placeholder_orchestrator.py (not removed yet)
 ├── tests/                       # Unit tests FOR the tool (not generated tests)
 ├── generated_tests/             # OUTPUT — tests produced by the tool
 │   └── mock_insurance_site.html # Mock insurance environment
@@ -245,7 +257,20 @@ These rules exist because of real failures. Follow them.
 
 ---
 
-## 11. Planned Work (Next Up)
+## 11. Enhanced Failure Diagnostics (Completed 2026-04-29)
+
+The following improvements were added to reduce wrong locator matches and surface failure diagnostics:
+
+- **Text-Content Validation** — `PlaceholderResolver.text_matches_description()` validates element text matches action description before accepting a match. Prevents `#subscribe` being matched for "Continue Shopping".
+- **Confidence Threshold** — `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches. `LocatorScorer` applies +10 bonus when element text matches action description.
+- **Page-Context Validation** — `PlaceholderOrchestrator._verify_page_context()` logs warnings when a resolved locator was scraped from a different page.
+- **Evidence Loader** — `src/evidence_loader.py` loads evidence JSON from test packages for reports.
+- **Enriched Reports** — All 3 report formats now include "Failure Diagnostics" section with page URL, failure note, suggested alternatives, available elements, screenshot paths.
+- **CLI Debug View** — "View Failure Diagnostics" menu item in `cli/main.py`.
+
+See `docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md` for full details.
+
+## 12. Planned Work (Next Up)
 
 | ID | Feature | Files to Create |
 |----|---------|----------------|
@@ -253,5 +278,5 @@ These rules exist because of real failures. Follow them.
 
 ---
 
-*Last updated: 2026-04-21*
+*Last updated: 2026-04-29*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

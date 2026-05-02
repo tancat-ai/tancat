@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import sync_playwright
 
+from src.accessibility_enricher import AccessibilityEnricher
 from src.element_enricher import ElementEnricher
 
 
@@ -20,7 +25,7 @@ class PageScraper:
     def _debug(self, message: str) -> None:
         """Print debug message if logging is enabled."""
         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
-            print(f"[scraper] {message}", flush=True)
+            print(f"[scraper] {message}", flush=True, file=sys.stderr)
 
     async def scrape_url(self, url: str) -> tuple[list[dict[str, Any]], str | None, str]:
         """Scrape a single URL using a headless browser.
@@ -28,14 +33,59 @@ class PageScraper:
         Returns:
         A tuple of (elements_list, error_message_or_none, final_url).
         """
-        import asyncio
+        return self._scrape_url_via_subprocess(url)
 
-        return await asyncio.to_thread(self._scrape_url_sync, url)
-
-    def _scrape_url_sync(self, url: str) -> tuple[list[dict[str, Any]], str | None, str]:
-        """Synchronous scraping logic, run via asyncio.to_thread."""
+    def _scrape_url_via_subprocess(self, url: str) -> tuple[list[dict[str, Any]], str | None, str]:
+        """Run the sync Playwright scrape in a clean subprocess (avoids Windows nested loop issues)."""
         self._debug(f"Starting browser scrape for {url}...")
 
+        payload = {
+            "url": url,
+            "timeout_ms": self.timeout_ms,
+        }
+        subprocess_path = str(Path(__file__).resolve())
+        try:
+            completed = subprocess.run(
+                [sys.executable, subprocess_path, "--scrape"],
+                input=json.dumps(payload),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=max(60, int(self.timeout_ms / 1000) + 30),
+            )
+        except subprocess.TimeoutExpired:
+            self._debug(f"Subprocess timed out scraping {url}")
+            return [], f"Timeout scraping {url}", url
+
+        # Always surface subprocess stderr for debugging
+        if completed.stderr:
+            print(completed.stderr, flush=True, file=sys.stderr)
+
+        if completed.returncode != 0:
+            self._debug(f"Subprocess error scraping {url}: {completed.stderr}")
+            return [], completed.stderr or f"Subprocess failed for {url}", url
+
+        try:
+            data = json.loads(completed.stdout or "{}")
+        except json.JSONDecodeError:
+            return [], "Invalid JSON from subprocess", url
+
+        elements = data.get("elements", [])
+        a11y_snapshot = data.get("a11y_snapshot") or {}
+        error = data.get("error")
+        final_url = data.get("final_url", url)
+
+        # Enrich elements with computed accessibility names (AI-024)
+        elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)
+
+        return elements, error, final_url
+
+    def _scrape_url_sync(self, url: str) -> tuple[list[dict[str, Any]], dict[str, Any], str | None, str]:
+        """Synchronous scraping logic, called directly in the subprocess entry point.
+
+        Returns:
+            A tuple of (elements_list, a11y_snapshot_dict, error_message_or_none, final_url).
+        """
         try:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
@@ -48,22 +98,23 @@ class PageScraper:
                 # Navigate and wait for the network to be idle (ensures JS rendering)
                 response = page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
                 if not response:
-                    return [], f"No response from {url}", url
+                    return [], {}, f"No response from {url}", url
 
                 if response.status >= 400:
-                    return [], f"HTTP {response.status}", page.url
+                    return [], {}, f"HTTP {response.status}", page.url
 
                 final_url = page.url
                 html_content = page.content()
                 elements = self._extract_elements_from_html(html_content, base_url=final_url)
 
+                # Capture accessibility snapshot before browser closes (AI-024)
+                a11y_snapshot = page.accessibility.snapshot(depth=5) or {}  # type: ignore[attr-defined]
+
                 browser.close()
-                self._debug(f"Successfully scraped {len(elements)} elements from {final_url}")
-                return elements, None, final_url
+                return elements, a11y_snapshot, None, final_url
 
         except Exception as e:
-            self._debug(f"Error scraping {url}: {e}")
-            return [], str(e), url
+            return [], {}, str(e), url
 
     @staticmethod
     def _normalise_href(base_url: str, href: str) -> str:
@@ -276,10 +327,35 @@ class PageScraper:
 
     async def scrape_all(self, urls: list[str]) -> dict[str, tuple[list[dict[str, Any]], str | None, str]]:
         """Scrape multiple URLs using the Playwright browser."""
-        # Use asyncio.to_thread since Playwright sync API is being used
-        import asyncio
-
         results: dict[str, tuple[list[dict[str, Any]], str | None, str]] = {}
         for url in urls:
-            results[url] = await asyncio.to_thread(self._scrape_url_sync, url)
+            results[url] = self._scrape_url_via_subprocess(url)
         return results
+
+
+def _subprocess_entrypoint() -> None:
+    """Entry point when this module is run as a subprocess with --scrape flag.
+
+    Reads a JSON payload from stdin, runs the sync Playwright scrape, and
+    writes a JSON result to stdout. This isolates Playwright from any existing
+    asyncio event loop (e.g. Streamlit's), avoiding Windows NotImplementedError.
+    """
+    payload = json.loads(sys.stdin.read())
+    url = payload["url"]
+    timeout_ms = payload.get("timeout_ms", 30000)
+
+    scraper = PageScraper(timeout_ms=timeout_ms)
+    elements, a11y_snapshot, error, final_url = scraper._scrape_url_sync(url)
+
+    result = {
+        "elements": elements,
+        "a11y_snapshot": a11y_snapshot,
+        "error": error,
+        "final_url": final_url,
+    }
+    print(json.dumps(result))
+
+
+if __name__ == "__main__":
+    if "--scrape" in sys.argv:
+        _subprocess_entrypoint()

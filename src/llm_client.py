@@ -15,15 +15,37 @@ class LLMClient:
 
     DEFAULT_SYSTEM_INSTRUCTION = """You are an expert QA engineer and Python developer specializing in Playwright testing.
 
-CRITICAL REQUIREMENTS:
-1. Generate pytest sync Playwright tests only.
-2. Do not use asyncio, async def, or async_playwright.
-3. Use `from playwright.sync_api import Page, expect`.
-4. Do not include `import pytest` in generated code.
-5. Return valid Python code only, with no markdown fences or commentary.
-6. Include screenshot capture logic only when the prompt explicitly asks for it.
-7. Do not invent selectors when page context or placeholder rules say not to.
-"""
+ CRITICAL REQUIREMENTS:
+ 1. Generate pytest sync Playwright tests only.
+ 2. Do not use asyncio, async def, or async_playwright.
+ 3. Use `from playwright.sync_api import Page, expect`.
+ 4. Include `import pytest` at module top when pytest decorators or pytest.skip are used.
+ 5. Return valid Python code only, with no markdown fences, chain-of-thought, or commentary.
+ 6. Include screenshot capture logic only when the prompt explicitly asks for it.
+ 7. Do not invent selectors when page context or placeholder rules say not to.
+ """
+
+    # Session-level provider state set by CLI/Streamlit so all fallback clients
+    # use the user-selected provider instead of falling back to .env.
+    _session_provider: str | None = None
+    _session_base_url: str | None = None
+    _session_model: str | None = None
+
+    @classmethod
+    def set_session_provider(
+        cls,
+        provider: str,
+        base_url: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        """Set the active provider for all LLMClient instances created without explicit provider.
+
+        Call this from CLI or Streamlit after the user selects a provider so that
+        any fallback LLMClient() calls throughout the pipeline use the same provider.
+        """
+        cls._session_provider = provider
+        cls._session_base_url = base_url
+        cls._session_model = model
 
     def __init__(
         self,
@@ -34,12 +56,23 @@ CRITICAL REQUIREMENTS:
         api_key: str | None = None,
     ) -> None:
         selected_provider = provider_name or provider
+
+        # If no explicit provider, use session-level selection (CLI/Streamlit UI choice)
+        if selected_provider is None and self._session_provider is not None:
+            selected_provider = self._session_provider
+            if base_url is None and self._session_base_url is not None:
+                base_url = self._session_base_url
+
         if selected_provider is not None:
             self._provider = get_provider(selected_provider, base_url=base_url, api_key=api_key)
         else:
             self._provider = create_provider_from_env()
 
-        self._model = model or self._get_default_model()
+        selected_model = model
+        if selected_model is None and self._session_model is not None:
+            selected_model = self._session_model
+
+        self._model = selected_model or self._get_default_model()
         self.system_instruction = self.DEFAULT_SYSTEM_INSTRUCTION
         self._conversation_history: list[ChatMessage] = []
 
@@ -107,7 +140,8 @@ CRITICAL REQUIREMENTS:
         if not raw_text:
             return ""
 
-        cleaned = re.sub(r"<channel\|>+", "", raw_text).strip()
+        cleaned = re.sub(r"<channel\|>+", "\n", raw_text).strip()
+        cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned).strip()
         fence_match = re.search(r"```(?:python)?\n(.+?)```", cleaned, re.S)
         if fence_match:
             return fence_match.group(1).strip()
@@ -115,17 +149,16 @@ CRITICAL REQUIREMENTS:
         if re.match(r"^```(?:python)?\s*```$", cleaned, re.S):
             return ""
 
-        import_match = re.search(r"(?:from\s+playwright\.sync_api\s+import|import\s+pytest)", cleaned)
-        if import_match:
-            return cleaned[import_match.start() :].strip()
-
-        decorator_match = re.search(r"@pytest\.mark", cleaned)
-        if decorator_match:
-            return cleaned[decorator_match.start() :].strip()
-
-        function_match = re.search(r"def\s+test_", cleaned)
-        if function_match:
-            return cleaned[function_match.start() :].strip()
+        code_start_patterns = [
+            re.compile(r"(?m)^(from\s+playwright\.sync_api\s+import[^\n]*)"),
+            re.compile(r"(?m)^(import\s+pytest\b[^\n]*)"),
+            re.compile(r"(?m)^(@pytest\.mark[^\n]*)"),
+            re.compile(r"(?m)^(def\s+test_\w+\s*\()"),
+        ]
+        for pattern in code_start_patterns:
+            match = pattern.search(cleaned)
+            if match:
+                return cleaned[match.start() :].strip()
 
         return cleaned
 
@@ -166,7 +199,7 @@ CRITICAL REQUIREMENTS:
             self._conversation_history.pop()
             raise
 
-    async def generate(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> str:
+    async def generate(self, prompt: str, timeout: int = 600, system_prompt: str | None = None) -> str:
         """Async wrapper used by the intelligent pipeline."""
         try:
             completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt)

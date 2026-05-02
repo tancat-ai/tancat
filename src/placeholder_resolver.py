@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import re
 from typing import Any
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+
+def _default_min_confidence() -> float:
+    """Return the minimum confidence threshold from environment or default."""
+    try:
+        return float(os.environ.get("PLACEHOLDER_MIN_CONFIDENCE", "0.3"))
+    except (ValueError, TypeError):
+        return 0.3
 
 
 class PlaceholderResolver:
@@ -48,8 +60,13 @@ class PlaceholderResolver:
         "verify": {"assert", "check"},
     }
 
-    def __init__(self, match_threshold: int = 1) -> None:
+    def __init__(
+        self,
+        match_threshold: int = 1,
+        min_confidence: float | None = None,
+    ) -> None:
         self.match_threshold = match_threshold
+        self.min_confidence = min_confidence if min_confidence is not None else _default_min_confidence()
 
     def _get_words(self, text: str, *, expand_aliases: bool = True) -> set[str]:
         clean_text = re.sub(r"[^a-zA-Z0-9\s]", " ", text.replace("_", " ").lower())
@@ -85,6 +102,8 @@ class PlaceholderResolver:
             str(element.get("parent_text", "")),
             str(element.get("aria_icon_label", "")),
             str(element.get("visual_description", "")),
+            # Accessibility tree enrichment (AI-024)
+            str(element.get("accessible_name", "")),
         ]
         return " ".join(part for part in parts if part).strip()
 
@@ -123,7 +142,7 @@ class PlaceholderResolver:
 
     @staticmethod
     def _matches_intent_bucket(action: str, description: str, element: dict[str, Any]) -> bool:
-        """Return True when the element fits the likely user intent for the step."""
+        """Return True when the scraped element fits the likely user intent for the step."""
         lowered = description.replace("_", " ").lower()
         selector = str(element.get("selector", "")).lower()
         text = str(element.get("text", "")).lower()
@@ -133,14 +152,47 @@ class PlaceholderResolver:
         visual_desc = str(element.get("visual_description", "")).lower()
         parent_text = str(element.get("parent_text", "")).lower()
         aria_icon_label = str(element.get("aria_icon_label", "")).lower()
+        element_id = str(element.get("id", "")).lower()
         haystack = " ".join([selector, text, href, classes, icon_classes, visual_desc, parent_text, aria_icon_label])
 
-        # If we are looking for a checkout or cart action, ignore footer subscription fields.
-        # Sites like automationexercise.com have a persistent footer with #susbscribe_email
-        # that often confuses semantic rankers.
+        # GENERIC SUBSCRIBE/NEWSLETTER GUARD (enhanced)
+        # Sites like automationexercise.com have a persistent footer with #subscribe / newsletter fields
+        # that often confuses semantic rankers.  This guard now covers:
+        #  - explicit cart/checkout/payment actions (original)
+        #  - popup/modal related actions ("continue shopping", "close", "dismiss", "ok")
+        #  - ANY CLICK action when the element has no visible text but carries a subscribe/newsletter ID.
+        is_subscribe_element = (
+            "subscribe" in haystack
+            or "newsletter" in haystack
+            or element_id in {"subscribe", "susbscribe_email", "newsletter_email"}
+        )
         if any(term in lowered for term in ("cart", "checkout", "payment")):
-            if "subscribe" in haystack or "newsletter" in haystack:
+            if is_subscribe_element:
                 return False
+
+        # Extended popup/modal guard: "continue shopping", "close modal", "dismiss", etc.
+        if action == "CLICK" and any(
+            term in lowered
+            for term in (
+                "continue shopping",
+                "close",
+                "dismiss",
+                "ok",
+                "cancel",
+                "popup",
+                "modal",
+                "confirmation",
+            )
+        ):
+            if is_subscribe_element:
+                return False
+
+        # Generic guard for CLICK actions: an element with NO visible text that carries a
+        # subscribe/newsletter ID should never be clicked when the description expects specific
+        # action-oriented text (e.g. "Continue Shopping").  Inputs without text are almost always
+        # form fields, not clickable buttons.
+        if action == "CLICK" and is_subscribe_element and not text.strip():
+            return False
 
         if action == "ASSERT" and any(term in lowered for term in ("home page", "landing page", "start page")):
             # A page-state assertion this generic should skip rather than latch onto
@@ -194,23 +246,72 @@ class PlaceholderResolver:
 
         return True
 
+    @staticmethod
+    def text_matches_description(element_text: str, action_description: str) -> bool:
+        """Check if element's visible text plausibly matches the action description.
+
+        Uses case-insensitive containment with whitespace normalization.
+        Allows partial matches (e.g. "Continue Shopping" matches "Continue").
+        """
+        if not element_text or not action_description:
+            return False
+
+        norm_text = re.sub(r"\s+", " ", element_text).strip().lower()
+        norm_desc = re.sub(r"\s+", " ", action_description).strip().lower()
+
+        # Direct containment
+        if norm_text in norm_desc or norm_desc in norm_text:
+            return True
+
+        # Word-level overlap: at least half of description words appear in element text
+        desc_words = set(norm_desc.split()) - {"the", "a", "an", "and", "to", "in", "on", "for", "of"}
+        text_words = set(norm_text.split())
+        if desc_words and text_words:
+            overlap = len(desc_words & text_words)
+            if overlap >= max(1, len(desc_words) // 2):
+                return True
+
+        return False
+
     def find_best_element(
         self,
         action: str,
         description: str,
         page_elements: list[dict[str, Any]],
     ) -> dict[str, Any] | None:
-        """Return the best-matching scraped element for a placeholder description."""
+        """Return the best-matching scraped element for a placeholder description.
+
+        Applies text-content validation and confidence threshold filtering.
+        Elements whose visible text doesn't match the description are skipped.
+        If the best candidate's confidence score is below ``min_confidence``,
+        the method returns ``None`` (skip rather than guess).
+        """
         ranked_candidates = self.rank_candidates(action, description, page_elements)
-        if ranked_candidates:
-            score, element = ranked_candidates[0]
+        if not ranked_candidates:
+            return None
 
-            # If we only have 1 word match, and it's a very short word, verify it's not a fluke
-            if score == 1 and len(description) > 5:
-                # Basic sanity check for single-word matches on long descriptions
-                pass
+        # Filter by text-content validation (B1)
+        for score, element in ranked_candidates:
+            element_text = str(element.get("text", "")).strip()
+            if self.text_matches_description(element_text, description):
+                # Verify confidence threshold (B2)
+                max_possible_score = max(c[0] for c in ranked_candidates)
+                confidence = score / max_possible_score if max_possible_score > 0 else 0.0
+                if confidence >= self.min_confidence:
+                    return element
+                logger.debug(
+                    "Candidate '%s' confidence %.2f below threshold %.2f — marking unresolved",
+                    element_text,
+                    confidence,
+                    self.min_confidence,
+                )
+            elif element_text:
+                logger.debug(
+                    "Skipped candidate '%s' — text does not match description '%s'",
+                    element_text,
+                    description,
+                )
 
-            return element
         return None
 
     def rank_candidates(
@@ -283,6 +384,16 @@ class PlaceholderResolver:
             if action == "FILL" and self._is_fillable_element(element):
                 score += 3
 
+            # Text-content penalty for CLICK actions: elements with NO visible text should be
+            # penalized when the description contains meaningful content words (not just stop words).
+            # This prevents an empty newsletter input (#subscribe) from beating a button with
+            # "Continue Shopping" text.
+            if action == "CLICK":
+                element_text = str(element.get("text", "")).strip()
+                desc_content_words = desc_words - {"click", "tap", "press"}
+                if not element_text and desc_content_words:
+                    score -= 5
+
             # Visual enrichment bonus: icon-aware matching
             if action == "CLICK":
                 # Icon-only elements get a small bonus when description mentions icons/buttons
@@ -337,15 +448,136 @@ class PlaceholderResolver:
         return ranked
 
     def find_best_match(self, action: str, description: str, page_elements: list[dict[str, Any]]) -> str | None:
-        """Return the best-matching selector for a placeholder description."""
+        """Return the best-matching selector for a placeholder description.
+
+        Transforms brittle CSS selectors (e.g. `.btn.btn-default.add-to-cart[data-product-id="11"]`)
+        into robust Playwright locators (e.g. `a:has-text("Add to cart")`) when possible.
+        """
         best_element = self.find_best_element(action, description, page_elements)
         if best_element is None:
             # No heuristic fallback — let placeholders resolve to None and emit pytest.skip()
             # This enforces "skip rather than guess" architectural principle.
             return None
-        selector = str(best_element.get("selector", "")).strip()
+        selector = self._build_robust_locator(best_element)
         if selector:
             return selector
+        # Fallback to raw scraped selector if robust locator couldn't be built
+        raw_selector = str(best_element.get("selector", "")).strip()
+        return raw_selector if raw_selector else None
+
+    @staticmethod
+    def _build_robust_locator(element: dict[str, Any]) -> str | None:
+        """Build a robust Playwright locator from scraped element metadata.
+
+        Prefers stable, specific selectors (ID, href, data-attrs) over
+        text-based locators when a stable selector is available.  Text-based
+        locators are used as a fallback when no stable selector exists.
+
+        Priority order (most specific first):
+        1. ID-based (e.g. `#buy`)
+        2. href-based for links (e.g. `a[href="/view_cart"]`)
+        3. Data attribute with specific value (e.g. `[data-product-id="1"]`)
+        4. Class-based without brittle framework prefixes (e.g. `.cart_description`)
+        5. Tag + :has-text (e.g. `a:has-text("Add to cart")`)
+        6. Role + :has-text (e.g. `button:has-text("Submit")`)
+        7. Aria-label based (e.g. `[aria-label="Submit"]`)
+        8. None — falls back to raw selector
+        """
+        tag = str(element.get("tag", "")).strip().lower()
+        text = str(element.get("text", "")).strip()
+        role = str(element.get("role", "")).strip().lower()
+        selector = str(element.get("selector", "")).strip()
+        element_id = str(element.get("id", "")).strip()
+        aria_label = str(element.get("aria_label", "")).strip()
+        classes = str(element.get("classes", "")).strip().lower()
+        href = str(element.get("href", "")).strip()
+
+        # Strip common UI framework class prefixes that add no semantic value
+        # e.g. "btn btn-default add-to-cart" -> useful parts: "add-to-cart"
+        useful_class_terms = {
+            term
+            for term in classes.split()
+            if term
+            and not any(prefix in term for prefix in ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-"))
+        }
+
+        # Build tag prefix for the locator
+        tag_prefix = tag if tag and tag not in ("div", "span", "a", "") else ""
+
+        # Priority 1: ID-based locator (most stable)
+        # Check the `id` field first, then fall back to extracting from selector
+        if element_id:
+            return f"#{element_id}"
+        # Extract ID from raw selector (e.g. "#buy" -> "buy")
+        id_match = re.search(r"#([\w-]+)", selector)
+        if id_match:
+            return f"#{id_match.group(1)}"
+
+        # Priority 2: href-based locator for anchor elements
+        if role in ("a", "link"):
+            # First try extracting href value from the raw selector (e.g. a[href="/view_cart"])
+            href_match = re.search(r'\[href=["\']([^"\']+)["\']\]', selector)
+            if href_match:
+                escaped_href = href_match.group(1).replace('"', '\\"')
+                return f'a[href="{escaped_href}"]'
+            # Fall back to the href field
+            if href:
+                escaped_href = href.replace('"', '\\"')
+                return f'a[href="{escaped_href}"]'
+
+        # Priority 3: Data attribute with specific value from the raw selector
+        # e.g. [data-product-id="1"] — keep the specific value when it's a simple data-* attr
+        data_attr_matches = re.findall(r'\[data-([\w-]+)=["\']([^"\']+)["\']\]', selector)
+        if data_attr_matches:
+            # Build selector with specific data attribute values
+            data_parts = [f'[data-{attr_name}="{attr_value}"]' for attr_name, attr_value in data_attr_matches]
+            # Add useful class terms if present
+            if useful_class_terms:
+                class_part = "." + ".".join(sorted(useful_class_terms))
+                return class_part + "".join(data_parts)
+            return "".join(data_parts)
+
+        # Priority 4: Class-based without brittle framework prefixes
+        # Extract class names from the raw selector as primary source
+        # e.g. ".cart_description", ".btn.btn-default.add-to-cart", etc.
+        selector_class_matches = re.findall(r"\.([\w-]+)", selector)
+        if selector_class_matches:
+            # Filter out framework prefixes from selector-extracted classes too
+            clean_classes = [
+                c
+                for c in selector_class_matches
+                if not any(prefix in c for prefix in ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-"))
+            ]
+            if clean_classes:
+                class_part = "." + ".".join(sorted(clean_classes))
+                if tag_prefix:
+                    return f"{tag_prefix}{class_part}"
+                return class_part
+
+        # Also use useful_class_terms from the `classes` field as fallback
+        if useful_class_terms:
+            class_part = "." + ".".join(sorted(useful_class_terms))
+            if tag_prefix:
+                return f"{tag_prefix}{class_part}"
+            return class_part
+
+        # Priority 5: Text-based locator (fallback — robust but less specific)
+        if text:
+            escaped_text = text.replace('"', '\\"')
+            if tag_prefix:
+                return f'{tag_prefix}:has-text("{escaped_text}")'
+            if role and role not in ("", "div", "span"):
+                return f'{role}:has-text("{escaped_text}")'
+            return f':has-text("{escaped_text}")'
+
+        # Priority 6: Aria-label based locator
+        if aria_label:
+            escaped_label = aria_label.replace('"', '\\"')
+            if tag_prefix:
+                return f'{tag_prefix}[aria-label="{escaped_label}"]'
+            return f'[aria-label="{escaped_label}"]'
+
+        # No robust locator could be built — caller falls back to raw selector
         return None
 
     def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:

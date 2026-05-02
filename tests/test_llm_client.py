@@ -19,6 +19,17 @@ class TestLLMClientInitialization:
         client = LLMClient(model="custom-model")
         assert client.model == "custom-model"
 
+    def test_client_uses_session_model_when_explicit_model_not_provided(self) -> None:
+        """Verify session-selected model is reused by later implicit clients."""
+        LLMClient.set_session_provider("lm-studio", "http://localhost:1234", "session-model")
+        try:
+            client = LLMClient(provider_name="lm-studio")
+            assert client.model == "session-model"
+        finally:
+            LLMClient._session_provider = None
+            LLMClient._session_base_url = None
+            LLMClient._session_model = None
+
 
 class TestOllamaProviderIntegration:
     """Tests for the Ollama provider wrapper using the official Ollama client."""
@@ -228,6 +239,23 @@ class TestExtractCodeMethod:
         assert result.startswith("from playwright.sync_api import Page, expect")
         assert "def test_05_complete_checkout" in result
 
+    def test_extracts_code_ignoring_think_block_with_import_mentions(self) -> None:
+        """Verify code extraction ignores reasoning blocks that mention imports."""
+        client = LLMClient()
+        input_text = (
+            "<think>\n"
+            'I am debating whether to include "import pytest" in generated code.\n'
+            "</think>\n\n"
+            "from playwright.sync_api import Page, expect\n"
+            "import pytest\n\n"
+            '@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")\n'
+            "def test_example(page: Page, evidence_tracker) -> None:\n"
+            "    pass\n"
+        )
+        result = client._extract_code(input_text)
+        assert result.startswith("from playwright.sync_api import Page, expect")
+        assert 'I am debating whether to include "import pytest"' not in result
+
 
 class TestSystemPromptContent:
     """Tests for verifying system prompt content and quality."""
@@ -249,12 +277,11 @@ class TestSystemPromptContent:
         # async_playwright appears only in a "DO NOT use" instruction — not as an instruction to use it
         assert "do not use asyncio, async def, or async_playwright" in client.system_instruction.lower()
 
-    def test_system_prompt_excludes_pytest_import(self) -> None:
-        """Verify system prompt explicitly excludes pytest."""
+    def test_system_prompt_includes_pytest_import_when_needed(self) -> None:
+        """Verify system prompt explicitly allows pytest imports for decorators and skips."""
         client = LLMClient()
         assert "pytest" in client.system_instruction.lower()
-        # The prompt uses "Do NOT include `import pytest`"
-        assert "do not" in client.system_instruction.lower() and "import pytest" in client.system_instruction.lower()
+        assert "include `import pytest`" in client.system_instruction.lower()
 
 
 class TestErrorHandling:

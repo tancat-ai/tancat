@@ -11,6 +11,7 @@ class AsyncGeneratorLike(Protocol):
 
     async def generate(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> str:
         """Generate text from a prompt."""
+        ...
 
 
 class SemanticCandidateRanker:
@@ -84,6 +85,7 @@ class SemanticCandidateRanker:
                         "href": str(candidate.get("href", "")).strip(),
                         "classes": str(candidate.get("classes", "")).strip(),
                         "placeholder": str(candidate.get("placeholder", "")).strip(),
+                        "accessible_name": str(candidate.get("accessible_name", "")).strip(),
                     }
                 )
             )

@@ -201,18 +201,17 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     fixed_code = re.sub(r"(?m)^\s*evidence_tracker\.record_condition\(.*?\)\s*$", "", fixed_code)
 
     # Fix misplaced closing parenthesis in evidence_tracker method calls.
-    # Common LLM mistake: evidence_tracker.assert_visible(...'), label="...")
-    #                          ^-- extra ) before , label=
-    # Pattern: closing paren followed by comma and label= (or other kwarg)
+    # Common LLM mistake: evidence_tracker.assert_visible('selector')', label="...")
+    #                          ^-- extra ') before , label=
+    # Only match when there's a double-quoted closing pattern ')') which indicates
+    # an EXTRA ') that the LLM added — NOT the normal selector closing ') from
+    # replace_token_in_line which produces: click('selector'), label='...')
+    #
+    # Strategy: match ')')  (closing paren, quote, closing paren) which is the
+    # LLM mistake pattern, and replace with ')' (just the normal closing).
     fixed_code = re.sub(
-        r"(evidence_tracker\.\w+\([^)]*)\)'(\s*,\s*label=)",
-        r"\1\2",
-        fixed_code,
-    )
-    # Also handle nested parens like evidence_tracker.click(..., label=...)')
-    fixed_code = re.sub(
-        r"(evidence_tracker\.\w+\([^)]*\)[^)]*)\)'(\s*,\s*\w+=)",
-        r"\1\2",
+        r"(evidence_tracker\.\w+\([^)]*)\)'\)(\s*,\s*\w+=)",
+        r"\1)'\2",
         fixed_code,
     )
 
@@ -228,6 +227,7 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # whose descriptions contain Python variable syntax (e.g. {item_name}) that
     # break the resolver's regex and therefore were never substituted.
     fixed_code = replace_remaining_placeholders(fixed_code)
+    fixed_code = _strip_pages_needed_block(fixed_code)
 
     # Some models indent entire top-level test blocks after helper functions,
     # producing invalid syntax like `    @pytest.mark.evidence(...)` at module scope.
@@ -238,6 +238,11 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
 
     # Deduplicate consecutive pytest.skip() calls in the same test block
     fixed_code = _deduplicate_skip_calls(fixed_code)
+
+    # Replace bare `...` (ellipsis) in test functions with pytest.skip().
+    # When the LLM can't generate a full test body, it emits `...` which is a no-op.
+    # This causes tests to "pass" without testing anything — replace with proper skip.
+    fixed_code = _replace_bare_ellipsis(fixed_code)
 
     return fixed_code
 
@@ -271,7 +276,12 @@ def replace_token_in_line(
         return f"{indent}{resolved_value}"
 
     if action == "CLICK":
+        # Ensure selector_literal is a properly quoted string literal.
+        # robust_locators from :has-text() may contain double quotes (e.g. a:has-text("Add to cart")),
+        # so we wrap them in single quotes for valid Python syntax.
         selector_literal = resolved_value
+        if not (resolved_value.startswith("'") or resolved_value.startswith('"')):
+            selector_literal = repr(resolved_value)
         # NOTE: Playwright auto-waits for elements to be actionable before clicking.
         # Appending `:visible` as a CSS pseudo-selector is invalid and causes failures.
         # See: https://playwright.dev/python/docs/actionability
@@ -297,20 +307,23 @@ def replace_token_in_line(
         return f"{indent}evidence_tracker.click({selector_literal}, label={repr(step_label)})"
 
     if action == "ASSERT":
+        # Ensure resolved_value is a properly quoted string literal for assert_visible
+        assert_value = resolved_value
+        if not (resolved_value.startswith("'") or resolved_value.startswith('"')):
+            assert_value = repr(resolved_value)
         if stripped == token:
-            return f"{indent}evidence_tracker.assert_visible({resolved_value}, label={repr(step_label)})"
+            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
 
         # Use regex to handle expect(page.locator(...)) regardless of content
-        expect_match = re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped)
-        if expect_match:
-            return f"{indent}evidence_tracker.assert_visible({resolved_value}, label={repr(step_label)})"
+        if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
+            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
 
         locator_only_patterns = {
             f"page.locator({token})",
             f"self.page.locator({token})",
         }
         if stripped in locator_only_patterns:
-            return f"{indent}evidence_tracker.assert_visible({resolved_value}, label={repr(step_label)})"
+            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
         return line.replace(token, resolved_value)
 
     if action == "FILL":
@@ -444,6 +457,26 @@ def replace_remaining_placeholders(code: str) -> str:
     return "\n".join(output_lines)
 
 
+def _strip_pages_needed_block(code: str) -> str:
+    """Remove trailing skeleton metadata comments from final generated code."""
+    cleaned_lines: list[str] = []
+    inside_pages_needed = False
+
+    for line in code.splitlines():
+        stripped = line.strip()
+        if stripped == "# PAGES_NEEDED:":
+            inside_pages_needed = True
+            continue
+        if inside_pages_needed:
+            if not stripped or stripped.startswith("# -"):
+                continue
+            inside_pages_needed = False
+
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines)
+
+
 def _fix_indentation(code: str) -> str:
     """Fix inconsistent indentation inside test functions and class methods.
 
@@ -454,6 +487,8 @@ def _fix_indentation(code: str) -> str:
     updated_lines: list[str] = []
     inside_function = False
     func_indent = 0
+    previous_significant_indent = 0
+    previous_significant_line = ""
 
     for line in lines:
         stripped = line.lstrip()
@@ -463,23 +498,50 @@ def _fix_indentation(code: str) -> str:
         if re.match(r"^\s*def\s+", line):
             inside_function = True
             func_indent = indent + 4
+            previous_significant_indent = indent
+            previous_significant_line = stripped
             updated_lines.append(line)
             continue
 
         # Detect class definition
         if re.match(r"^\s*class\s+", line):
             inside_function = False
+            previous_significant_indent = indent
+            previous_significant_line = stripped
             updated_lines.append(line)
             continue
 
-        # If we're inside a function and the line has less indentation
-        # than expected but has content, fix it
-        if inside_function and stripped and indent < func_indent:
-            # Only fix if the line looks like it should be indented
-            # (starts with a known keyword or is a function call)
-            if not re.match(r"^\s*(def |class |@|import |from |#|$)", line):
-                updated_lines.append(" " * func_indent + stripped)
+        # If we're inside a function, fix missing indentation and only dedent
+        # obviously accidental extra indentation on top-level statements.
+        if inside_function and stripped:
+            if stripped.startswith("#"):
+                comment_indent = func_indent if indent <= func_indent else indent
+                updated_lines.append(" " * comment_indent + stripped)
+                previous_significant_indent = comment_indent
+                previous_significant_line = stripped
                 continue
+
+            if indent < func_indent and not re.match(r"^\s*(def |class |@|import |from )", line):
+                updated_lines.append(" " * func_indent + stripped)
+                previous_significant_indent = func_indent
+                previous_significant_line = stripped
+                continue
+
+            accidental_extra_indent = (
+                indent > func_indent
+                and previous_significant_indent == func_indent
+                and not previous_significant_line.rstrip().endswith(":")
+                and not re.match(r"^(elif |else:|except\b|finally:)", stripped)
+            )
+            if accidental_extra_indent:
+                updated_lines.append(" " * func_indent + stripped)
+                previous_significant_indent = func_indent
+                previous_significant_line = stripped
+                continue
+
+        if stripped:
+            previous_significant_indent = indent
+            previous_significant_line = stripped
 
         updated_lines.append(line)
 
@@ -695,33 +757,162 @@ def rewrite_page_references_in_class_methods(code: str) -> str:
 
 
 def _inject_consent_helper(code: str) -> str:
-    """Inject a lightweight consent-dismiss helper and call it after navigation."""
+    """Inject a consent-dismiss helper and call it after navigation."""
     helper_name = "dismiss_consent_overlays"
     if helper_name not in code:
-        helper_block = """
+        # Build the helper block as a list of lines to avoid nested triple-quote issues.
+        _h: list[str] = []
 
-def dismiss_consent_overlays(page: Page) -> None:
-    candidate_selectors = [
-        "button:has-text('Consent')",
-        "button:has-text('Accept')",
-        "button:has-text('Continue')",
-        "button:has-text('OK')",
-        "button:has-text('Got it')",
-        "button:has-text('I Agree')",
-        "button:has-text('Agree')",
-        "button[aria-label='Close']",
-        "button[aria-label='close']",
-    ]
-    for selector in candidate_selectors:
-        try:
-            locator = page.locator(selector).first
-            if locator.count() > 0 and locator.is_visible():
-                locator.click(timeout=500)
-                page.wait_for_timeout(200)
-                break
-        except Exception:
-            continue
-"""
+        def _a(line: str = "") -> None:
+            _h.append(line)
+
+        _a()
+        _a("def dismiss_consent_overlays(page: Page) -> None:")
+        _a('    """Best-effort dismissal of consent, cookie, and ad-overlay popups."""')
+        _a("    # --- 1. Standard consent/cookie banner buttons ---")
+        _a("    candidate_selectors = [")
+        _a("        \"button:has-text('Consent')\",")
+        _a("        \"button:has-text('Accept')\",")
+        _a("        \"button:has-text('Continue')\",")
+        _a("        \"button:has-text('OK')\",")
+        _a("        \"button:has-text('Got it')\",")
+        _a("        \"button:has-text('I Agree')\",")
+        _a("        \"button:has-text('Agree')\",")
+        _a("        \"button[aria-label='Close']\",")
+        _a("        \"button[aria-label='close']\",")
+        _a("    ]")
+        _a("    for selector in candidate_selectors:")
+        _a("        try:")
+        _a("            locator = page.locator(selector).first")
+        _a("            if locator.count() > 0 and locator.is_visible():")
+        _a("                locator.click(timeout=500)")
+        _a("                page.wait_for_timeout(200)")
+        _a("                break")
+        _a("        except Exception:")
+        _a("            continue")
+        _a()
+        _a("    # --- 2. Google Consent TVM (Two-Party Mode) ---")
+        _a("    try:")
+        _a("        consent_btn = page.locator(\".fc-consent-root button:has-text('Consent')\").first")
+        _a("        if consent_btn.count() > 0 and consent_btn.is_visible():")
+        _a("            consent_btn.click(timeout=2000)")
+        _a("            page.wait_for_timeout(500)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    try:")
+        _a("        manage_btn = page.locator(\".fc-consent-root button:has-text('Manage options')\").first")
+        _a("        if manage_btn.count() > 0 and manage_btn.is_visible():")
+        _a("            manage_btn.click(timeout=2000)")
+        _a("            page.wait_for_timeout(500)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    try:")
+        _a('        page.keyboard.press("Escape")')
+        _a("        page.wait_for_timeout(200)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    # --- 3. Remove Google Consent TVM DOM elements via JavaScript ---")
+        _a("    try:")
+        # Use single-quoted JS template to avoid triple-quote conflict.
+        _a("        page.evaluate(")
+        _a("            '''")
+        _a("            () => {")
+        _a("                const consentRoot = document.querySelector('.fc-consent-root');")
+        _a("                if (consentRoot) { consentRoot.remove(); }")
+        _a("                const dialogOverlay = document.querySelector('.fc-dialog-overlay');")
+        _a("                if (dialogOverlay) { dialogOverlay.remove(); }")
+        _a(
+            "                document.querySelectorAll('[class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());"
+        )
+        _a("                const allElements = document.querySelectorAll('*');")
+        _a("                for (const el of allElements) {")
+        _a("                    const style = window.getComputedStyle(el);")
+        _a("                    const zIndex = parseInt(style.zIndex, 10);")
+        _a("                    if (zIndex > 10000 && el.tagName !== 'IFRAME') { el.remove(); }")
+        _a("                }")
+        _a("            }")
+        _a("            '''")
+        _a("        )")
+        _a("        page.wait_for_timeout(300)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    # --- 3a. Expand collapsed Bootstrap panels (e.g., category dropdowns) ---")
+        _a("    try:")
+        _a("        page.evaluate(")
+        _a("            '''")
+        _a("            () => {")
+        _a("                document.querySelectorAll('.panel-collapse.collapse').forEach(el => {")
+        _a("                    el.classList.add('in');")
+        _a("                    el.style.display = 'block';")
+        _a("                });")
+        _a("            }")
+        _a("            '''")
+        _a("        )")
+        _a("        page.wait_for_timeout(300)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    # --- 4. Dismiss ad overlays that may intercept pointer events ---")
+        _a("    try:")
+        _a('        page.keyboard.press("Escape")')
+        _a("        page.wait_for_timeout(200)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+        _a("    ad_overlay_selectors = [")
+        _a('        "#google_vignette",')
+        _a("        \"[id*='google_vignette']\",")
+        _a('        ".adsbygoogle",')
+        _a("        \"iframe[id*='google_ads']\",")
+        _a("        \"iframe[id*='aswift']\",")
+        _a("        \"iframe[title='Advertisement']\",")
+        _a("    ]")
+        _a("    for selector in ad_overlay_selectors:")
+        _a("        try:")
+        _a("            ad_element = page.locator(selector).first")
+        _a("            if ad_element.count() > 0:")
+        _a('                page.keyboard.press("Escape")')
+        _a("                page.wait_for_timeout(200)")
+        _a("        except Exception:")
+        _a("            continue")
+        _a()
+        _a("    # Use JavaScript to remove ad overlays that intercept pointer events")
+        _a("    try:")
+        _a("        page.evaluate(")
+        _a("            '''")
+        _a("            () => {")
+        _a("                const vignette = document.getElementById('google_vignette');")
+        _a("                if (vignette) {")
+        _a("                    vignette.style.display = 'none';")
+        _a("                    vignette.style.visibility = 'hidden';")
+        _a("                }")
+        _a("                document.querySelectorAll('ins.adsbygoogle').forEach(el => {")
+        _a("                    el.style.display = 'none';")
+        _a("                    el.style.visibility = 'hidden';")
+        _a("                });")
+        _a(
+            '                document.querySelectorAll(\'iframe[id*=\\"aswift\\"], iframe[title=\\"Advertisement\\"]\').forEach(el => {'
+        )
+        _a("                    el.style.display = 'none';")
+        _a("                    el.style.visibility = 'hidden';")
+        _a("                });")
+        _a('                document.querySelectorAll(\'[class*=\\"ads\\"], [id*=\\"google_ads\\"]\').forEach(el => {')
+        _a("                    el.style.display = 'none';")
+        _a("                    el.style.visibility = 'hidden';")
+        _a("                });")
+        _a("            }")
+        _a("            '''")
+        _a("        )")
+        _a("        page.wait_for_timeout(300)")
+        _a("    except Exception:")
+        _a("        pass")
+        _a()
+
+        helper_block = "\n".join(_h) + "\n"
         insert_after = "from playwright.sync_api import Page, expect"
         if insert_after in code:
             code = code.replace(insert_after, insert_after + helper_block, 1)
@@ -788,6 +979,54 @@ def _deduplicate_skip_calls(code: str) -> str:
         updated_lines.append(line)
 
     _flush_skips()
+    return "\n".join(updated_lines)
+
+
+def _replace_bare_ellipsis(code: str) -> str:
+    """Replace bare `...` (ellipsis) statements in test functions with pytest.skip().
+
+    When the LLM can't generate a full test body, it emits `...` which is a no-op.
+    This causes tests to "pass" without testing anything. Replace with proper skip.
+    """
+    lines = code.splitlines()
+    updated_lines: list[str] = []
+    inside_test = False
+
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+
+        # Detect test function start
+        if re.match(r"^def\s+test_\w+\(", stripped):
+            inside_test = True
+            updated_lines.append(line)
+            continue
+
+        # Detect end of test function (top-level def/class, or decorator at column 0)
+        if inside_test and indent == 0 and stripped:
+            if re.match(r"^(def |class |@)", stripped):
+                inside_test = False
+
+        # Replace bare `...` on its own line within a test function
+        if inside_test and stripped == "...":
+            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+            # Skip if followed by a comment like "# PAGES_NEEDED:" — that's part of the block
+            if not next_line.startswith("#"):
+                updated_lines.append(f"{' ' * indent}pytest.skip('Test body not generated (unresolved placeholders)')")
+                continue
+
+        updated_lines.append(line)
+
+    # Ensure pytest is imported since we added pytest.skip() calls
+    if "pytest.skip(" in "\n".join(updated_lines):
+        target = "import pytest"
+        if not any(line_item.strip() == target for line_item in updated_lines):
+            # Insert after first import line or at top
+            for idx, line in enumerate(updated_lines):
+                if line.startswith("from ") or line.startswith("import "):
+                    updated_lines.insert(idx, target)
+                    break
+
     return "\n".join(updated_lines)
 
 

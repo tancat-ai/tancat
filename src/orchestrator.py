@@ -374,8 +374,15 @@ class TestOrchestrator:
         page_requirements: list[tuple[str, str]] = []
 
         for fragment in fragments:
-            page_requirements.extend(self.parser.parse_pages_needed(fragment))
-            body_blocks.append(self._strip_imports_and_pages_needed(fragment).strip())
+            fragment_pages = self.parser.parse_pages_needed(fragment)
+            page_requirements.extend(fragment_pages)
+            fragment_body = self._strip_imports_and_pages_needed(fragment).strip()
+
+            if fragment_pages:
+                primary_url, _description = fragment_pages[0]
+                fragment_body = f"# JOURNEY_START_URL: {primary_url}\n{fragment_body}"
+
+            body_blocks.append(fragment_body)
 
         combined_parts = [
             "from playwright.sync_api import Page, expect",

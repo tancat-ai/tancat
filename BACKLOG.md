@@ -685,6 +685,19 @@ the list. Depends on AI-011 and AI-012 being in place first.
 
 **All checks passed:** ruff clean, mypy clean, pytest green.
 
+### Session 22 (2026-05-01) — CLI entry point cleanup
+**What:** Clarified supported CLI ownership after the argparse CLI module superseded
+the original root `main.py` menu flow.
+
+**Fix:**
+- Root `main.py` is now a deprecated compatibility wrapper that forwards to `cli.main`.
+- `AGENTS.md`, `docs/PROJECT_KNOWLEDGE.md`, `README.md`, and `docs/ARCHITECTURE.md`
+  now identify `cli/main.py` as the supported CLI entry point.
+- Removed stale protection guidance that treated root `main.py` as the active CLI.
+
+**Why:** Avoids two competing terminal workflows and keeps CLI fixes focused on
+`cli/main.py`, which is what `launch_cli.sh` runs.
+
 
 ### Session 21 (2026-04-26) — conftest path fix + Tier 1/2 verification
 **What:** Generated test evidence sidecars were being written to the wrong directory.

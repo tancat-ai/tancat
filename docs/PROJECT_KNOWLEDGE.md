@@ -19,6 +19,11 @@
 - **Don't use:** Flask/Django/React — too much overhead
 - **Entry:** `bash launch_ui.sh`
 
+### CLI Entry Point
+- **Use:** `cli/main.py` via `bash launch_cli.sh` or `python -m cli.main`
+- **Don't use:** root `main.py` for new behavior. It is a deprecated compatibility wrapper only.
+- **Reason:** The older root menu flow predates the skeleton-first pipeline and was superseded by the argparse CLI module.
+
 ### Testable Helpers Location: `src/` modules
 - **Use:** `src/<module>.py` for testable functions
 - **Don't use:** `streamlit_app.py` for testable logic — importing it outside
@@ -65,10 +70,15 @@ OLLAMA_BASE_URL=http://localhost:11434
 |------|--------|
 | `src/test_generator.py` | Working test generation pipeline — stable |
 | `src/llm_client.py` | Ollama API client — working correctly |
-| `main.py` | CLI entry point — stable |
 | `.github/workflows/ci.yml` | CI/CD configured and passing |
 
 **Rule:** If you find a bug in a protected file, document it in BACKLOG.md and ask before editing.
+
+## Deprecated Compatibility Files
+
+| File | Status |
+|------|--------|
+| `main.py` | Deprecated wrapper to `cli.main`. Keep it minimal and do not restore the retired pre-pipeline CLI menu. |
 
 ## Protected Directories
 
@@ -158,7 +168,8 @@ All other `src/` modules have 1:1 test files in `tests/`.
 - **2026-04-04:** Evidence traceability pipeline designed (AI-016 through AI-022)
 - **2026-04-08:** Pipeline architecture refactor, multi-provider LLM support
 - **2026-04-12:** Documentation refactoring — consolidated overlapping docs
-- **2026-04-22:** CLI module split — removed `story_analyzer.py`, added `analyzer.py` and `config.py`
+- **2026-04-22:** CLI module split — removed `story_analyzer.py`; CLI analysis now routes through `src/analyzer.py` and `cli/config.py`
+- **2026-05-01:** Root `main.py` deprecated as compatibility wrapper; supported CLI entry point is `cli/main.py`.
 - **2026-04-22:** Test folder cleanup — removed stale `tests/src/` (duplicates of src/ files),
   `tests/example_test.py`, `tests/uat_pipeline_test.py`, `tests/coverage.xml`.
   Deleted deprecated `src/page_context_scraper.py`. 299 tests passing.
