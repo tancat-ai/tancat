@@ -136,12 +136,74 @@ def _strip_llm_reasoning_text(code: str) -> str:
     return "\n".join(cleaned_lines)
 
 
+# Regex to match standalone placeholder lines (indented, just {{ACTION:description}})
+_STANDALONE_PLACEHOLDER_RE = re.compile(
+    r"^(\s*)\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}\s*$",
+    re.MULTILINE,
+)
+
+
+def _convert_standalone_placeholders(code: str) -> str:
+    """Convert standalone placeholder lines into evidence_tracker calls.
+
+    The new prompt format asks the LLM to write standalone placeholders like:
+        {{CLICK:Dress category link}}
+    instead of wrapped in function calls. This function converts them back into
+    proper evidence_tracker.xxx() calls so the rest of the pipeline can resolve them.
+
+    After conversion, the line becomes a valid placeholder that the existing
+    replace_token_in_line logic can handle:
+        {{CLICK:Dress category link}}  (unchanged - already in correct format)
+
+    However, if the LLM writes evidence_tracker.click({{CLICK:...}}), we need to
+    extract the placeholder and leave it standalone for the resolver.
+    """
+    lines = code.splitlines()
+    output_lines: list[str] = []
+
+    for line in lines:
+        # Check if this is a standalone placeholder line
+        m = _STANDALONE_PLACEHOLDER_RE.match(line)
+        if m:
+            indent, action, description = m.group(1), m.group(2), m.group(3)
+            token = f"{{{{{action}:{description}}}}}"
+            # Keep as standalone placeholder - the resolver will handle it via replace_token_in_line
+            output_lines.append(f"{indent}{token}")
+            continue
+
+        # Check if LLM wrapped placeholder in evidence_tracker call - unwrap it
+        # Pattern: evidence_tracker.click({{CLICK:...}}, label=...)
+        wrapped_pattern = re.match(
+            r"^(\s*)evidence_tracker\.(click|fill|navigate|assert_visible)\(\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}",
+            line,
+        )
+        if wrapped_pattern:
+            indent, _method, action, description = (
+                wrapped_pattern.group(1),
+                wrapped_pattern.group(2),
+                wrapped_pattern.group(3),
+                wrapped_pattern.group(4),
+            )
+            token = f"{{{{{action}:{description}}}}}"
+            output_lines.append(f"{indent}{token}")
+            continue
+
+        output_lines.append(line)
+
+    return "\n".join(output_lines)
+
+
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
     """Apply small deterministic fixes to common skeleton-generation mistakes."""
     fixed_code = code
 
     # First: strip LLM reasoning text that may have leaked into the code block
     fixed_code = _strip_llm_reasoning_text(fixed_code)
+
+    # Convert standalone placeholder lines and unwrap evidence_tracker-wrapped placeholders.
+    # The new prompt format asks for standalone {{ACTION:description}} lines, which the
+    # resolver expects. If the LLM still wraps them in evidence_tracker calls, unwrap them.
+    fixed_code = _convert_standalone_placeholders(fixed_code)
 
     # Clean up malformed decorators if the LLM added spaces
     fixed_code = re.sub(r"@\s*pytest\s*\.\s*mark\s*\.\s*evidence", "@pytest.mark.evidence", fixed_code)

@@ -27,8 +27,6 @@ from src.test_generator import TestGenerator
 from src.url_utils import (
     build_common_path_candidates,
     extract_route_concepts,
-    extract_seed_domain,
-    filter_urls_to_allowed_domain,
 )
 
 logger = logging.getLogger(__name__)
@@ -148,6 +146,31 @@ class TestOrchestrator:
             skeleton_error = self.parser.validate_skeleton(skeleton_code)
             if skeleton_error:
                 raise ValueError(skeleton_error)
+            # Validate that the skeleton uses placeholders, not real CSS selectors
+            validator = SkeletonValidator()
+            validation_result = validator.validate(skeleton_code)
+            if not validation_result.is_valid:
+                self._debug(f"skeleton validation violations: {validation_result.violations}")
+                raise ValueError(
+                    f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}"
+                )
+            # Phase 3: Detect zero-placeholder skeletons and retry once
+            placeholders_found = self.parser.parse_placeholders(skeleton_code)
+            if not placeholders_found and expected_test_count > 0:
+                logger.warning(
+                    "Zero placeholders found in skeleton (expected %d tests). "
+                    "LLM likely wrote real selectors. Retrying with stricter prompt.",
+                    expected_test_count,
+                )
+                retry_conditions = build_retry_conditions(prepared_conditions, expected_test_count)
+                skeleton_code = await self.test_generator.generate_skeleton(
+                    user_story,
+                    retry_conditions + "\n\nCRITICAL: Every test body line must be a standalone placeholder "
+                    "like {{{{CLICK:description}}}}. Do NOT write evidence_tracker.xxx() calls or real selectors.",
+                    target_urls=target_urls,
+                    expected_count=expected_test_count,
+                )
+                skeleton_code = self.parser.normalise_placeholder_actions(skeleton_code)
             self._debug("phase=generate_skeleton done")
 
         placeholders = self.parser.parse_placeholders(skeleton_code)
@@ -437,15 +460,29 @@ class TestOrchestrator:
         user_story: str,
         conditions: str,
     ) -> list[str]:
-        """Return a tightly-scoped list of URLs needed for the current journeys."""
-        allowed_domains = extract_seed_domain(seed_urls)
-        raw_required_urls = [page_requirement.url for page_requirement in page_requirements]
-        required_urls = filter_urls_to_allowed_domain(raw_required_urls, allowed_domains)
+        """Return a tightly-scoped list of URLs needed for the current journeys.
+
+        IMPORTANT: LLM-generated PAGES_NEEDED URLs (``page_requirements``) are intentionally
+        NOT used as scrape targets because the LLM hallucinates plausible-sounding but
+        incorrect paths (e.g. ``/category_details/1`` instead of ``/category_products/1``).
+
+        Instead we rely on:
+        1. User-provided seed URLs — always correct, provided by the human
+        2. Common path candidates built from route concepts extracted from user stories,
+           conditions and placeholder descriptions — these generate sensible patterns like
+           ``/cart``, ``/checkout``, ``/view_cart`` without LLM guessing
+
+        The scraper captures actual URLs it visits (including redirects), so any page the
+        site actually has will be discovered through navigation from seed pages. There is
+        no benefit in asking an LLM to guess URL paths it cannot possibly know.
+        """
         placeholder_descriptions = [
             placeholder.description for journey in journeys for placeholder in journey.placeholders
         ]
         concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions])
-        return list(dict.fromkeys(seed_urls + required_urls + build_common_path_candidates(seed_urls, concepts)))
+        # Deliberately skip page_requirements (LLM-guessed URLs) — use only seed URLs
+        # and algorithmically-generated common path candidates.
+        return list(dict.fromkeys(seed_urls + build_common_path_candidates(seed_urls, concepts)))
 
     # Backwards-compatible delegation methods for code that references these directly on TestOrchestrator.
     async def _resolve_placeholder_for_page(

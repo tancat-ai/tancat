@@ -132,25 +132,32 @@ tracker.assert_visible(locator: str, label: str = "") -> None
 tracker.write(status: str = "passed") -> str  # returns sidecar path
 ```
 
-### Placeholder Resolution
-- Placeholders use double-brace syntax: `{{ACTION:description}}`
-- The resolver matches placeholder descriptions against scraped DOM element metadata
-- Priority: ID > class > role+name > text match
+### Placeholder Resolution (Two-Phase Pipeline)
+- **Phase 1:** LLM generates skeletons with `{{ACTION:description}}` placeholders — never sees real locators
+- **Phase 2:** `PlaceholderOrchestrator` coordinates resolution using scraped DOM data
+- **LocatorScorer priority:** `data-testid > id > name > aria-label > css-class > text > xpath` (+10 bonus for text match)
+- **SemanticCandidateRanker:** LLM tiebreaker when top candidates within ±2 score threshold
+- **Confidence threshold:** `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches
+- **Page-context validation:** `_verify_page_context()` warns if locator scraped from different page than journey URL
+- See `docs/ARCHITECTURE.md` §4 for full dependency graph
 
 ## Test Folder Coverage
 
 | src/ File | Test File | Status |
 |-----------|-----------|--------|
-| `code_postprocessor.py` | — | ❌ Missing — core pipeline logic |
-| `url_utils.py` | — | ❌ Missing — newly extracted pure functions |
+| `code_postprocessor.py` | `test_code_postprocessor_llm_reasoning.py` | ✅ Covered |
+| `url_utils.py` | — | ❌ Missing — pure functions, easy to add |
 | `analyzer.py` | — | ⚠️ Only indirectly tested via CLI |
 | `evidence_report.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
 | `report_builder.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
 | `report_formatters.py` | — | ⚠️ Partially covered by `test_report_utils.py` |
-| `llm_providers/__init__.py` | — | ❌ Missing |
-| `config.py` | — | ❌ Missing (trivial) |
+| `llm_providers/__init__.py` | `test_llm_client.py` | ✅ Covered (via LLMClient tests) |
+| `config.py` | — | ❌ Missing (trivial constants) |
 
-All other `src/` modules have 1:1 test files in `tests/`.
+**New modules with test coverage:**
+- `placeholder_orchestrator.py`, `journey_scraper.py`, `locator_scorer.py`, `evidence_loader.py`, `failure_reporter.py` all have dedicated test files in `tests/`.
+
+See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 
 ## Planned Work
 

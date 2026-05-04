@@ -129,18 +129,57 @@ python -m cli.main generate --help
 ## Architecture
 
 ```
-streamlit_app.py (UI) ─→ cli/main.py (CLI)
+Phase 1: SKELETON GENERATION (LLM)
+────────────────────────────────────
+streamlit_app.py / cli/main.py
         │
         ▼
-  src/orchestrator.py (pipeline brain)
+  orchestrator.py ──┐
+        │            │
+   ┌────┼────┬──────┴──────────────┐
+   ▼    ▼     ▼                    ▼
+ spec  test  scraper              LLM
+ analyzer generator (scraper)    client
+          │                        │
+          ▼                        ▼
+      skeleton with           prompt_utils.py
+      placeholders ←───────── prompt template
+
+Phase 2: PLACEHOLDER RESOLUTION (DOM Data)
+────────────────────────────────────────────
         │
-   ┌────┼─────────┬──────────┬──────────┐
-   ▼    ▼         ▼          ▼          ▼
-spec    test    scraper  LLM       placeholder
-analyzer generator  (DOM)  client    resolver
-                          │
-                    src/pipeline_writer.py → generated_tests/
+        ▼
+placeholder_orchestrator.py (coordinates per-page resolution)
+   │            │              │
+   ▼            ▼              ▼
+journey_    stateful_    semantic_
+scraper     scraper      candidate_ranker
+                            │
+   ┌────────┬───────────────┤
+   ▼        ▼               ▼
+placeholder_resolver ← locator_scorer (scores candidates)
+   │
+   ▼
+code_postprocessor (fixes syntax, normalizes code)
+
+Phase 3: PERSISTENCE + REPORTING
+─────────────────────────────────
+        │
+        ▼
+  pipeline_writer.py ──→ generated_tests/
+        │
+   evidence_tracker.py → .evidence.json sidecars
+        │
+   report_builder ←──┐
+        │            │
+        ▼            ▼
+  failure_reporter  evidence_loader (loads sidecar data)
+        │
+        ▼
+  report_formatters → local.md / jira.md / standalone.html
 ```
+
+For a full module responsibility map and dependency graph, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Documentation
 

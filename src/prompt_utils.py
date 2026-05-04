@@ -82,11 +82,22 @@ def get_skeleton_prompt_template(
     # Minimal output template — SHORT, direct, and brace-count explicit.
     # Uses % style for user_story/conditions/known_urls so .format() is never
     # called on the brace-heavy examples.
+    #
+    # CRITICAL CHANGE: Test bodies use STANDALONE placeholder lines (not wrapped in
+    # evidence_tracker calls). The postprocessor converts these into proper
+    # evidence_tracker.navigate/click/assert_visible calls AFTER resolution.
+    # This removes the cognitive conflict where the LLM sees function-call syntax
+    # with locator arguments and tries to fill in "real" selectors.
     output_template = (
         "\n=== REQUIRED OUTPUT FORMAT (STRICT) ===\n"
         f"Your output must contain EXACTLY {count_label} test functions. NOTHING ELSE.\n"
         "Each test: 3-10 lines MAX. No comments. No blank lines between steps.\n"
         "Imports go ONCE at the top. # PAGES_NEEDED goes at the bottom.\n"
+        "\n"
+        "TEST BODY RULE (CRITICAL):\n"
+        "Each line inside a test function is ONE standalone placeholder — nothing else.\n"
+        "Do NOT wrap placeholders in function calls. Do NOT write evidence_tracker.xxx().\n"
+        "The build pipeline will convert your placeholders into proper code automatically.\n"
         "\n"
         "MINIMAL EXAMPLE (1 test, showing format):\n"
         "\n"
@@ -95,9 +106,9 @@ def get_skeleton_prompt_template(
         "\n"
         '@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")\n'
         "def test_01_example(page: Page, evidence_tracker) -> None:\n"
-        '    evidence_tracker.navigate("{{GOTO:home_url}}")\n'
-        f'    evidence_tracker.click({_show("CLICK:button")}, label="button")\n'
-        f'    evidence_tracker.assert_visible({_show("ASSERT:result")}, label="result")\n'
+        '    {{GOTO:home page}}\n'
+        f'    {_show("CLICK:button")}\n'
+        f'    {_show("ASSERT:result")}\n'
         "\n"
         "# PAGES_NEEDED:\n"
         "# - https://your-target-site.com/ (home page)\n"
@@ -109,33 +120,38 @@ def get_skeleton_prompt_template(
     placeholder_syntax_section = (
         "=== PLACEHOLDER SYNTAX (STRICT — VIOLATION = REJECTION) ===\n"
         "Use ONLY double-brace placeholders with EXACTLY 2 braces each side.\n"
+        "Each placeholder stands ALONE on its own line — indented inside the test function.\n"
+        "Do NOT wrap placeholders in evidence_tracker.xxx() calls.\n"
         "Use one of these exact placeholder forms only:\n"
         f"- {_show('CLICK:button description')}\n"
-        f"- {_show('FILL:input description')}\n"
-        f"- {_show('GOTO:page url description')}\n"
-        f"- {_show('URL:page url description')}\n"
-        f"- {_show('ASSERT:visible result description')}\n"
+        f"- {_show('FILL:input field description')}\n"
+        f"- {_show('GOTO:page description')}\n"
+        f"- {_show('URL:page description')}\n"
+        f"- {_show('ASSERT:element description')}\n"
         "\n"
         "=== FORBIDDEN IN SKELETON OUTPUT (ABSOLUTELY NO EXCEPTIONS) ===\n"
         "NEVER write real CSS selectors, XPath, or any locator in the skeleton.\n"
+        "NEVER wrap placeholders in function calls like evidence_tracker.click({{CLICK:...}}).\n"
         "FORBIDDEN patterns (your output will be REJECTED if any appear):\n"
         "  - CSS selectors: '.btn.btn-success', '#elementId', 'a[href=\"/path\"]'\n"
         "  - XPath: '//button', '//a[@class=\"test\"]'\n"
         "  - Playwright methods: 'page.locator(...)', 'page.get_by_role(...)', 'page.click(...)'\n"
+        "  - evidence_tracker calls: 'evidence_tracker.click(...)', 'evidence_tracker.navigate(...)'\n"
         "  - Any real locator pattern: '.class', '#id', '[attribute]', 'tag > child'\n"
-        "If you need a locator -> USE A PLACEHOLDER INSTEAD.\n"
-        "Example: Instead of '.btn.btn-success.close-checkout-modal.btn-block'\n"
-        "         USE: {{{{ASSERT:success confirmation message}}}}\n"
-        "Example: Instead of 'a[href=\"/view_cart\"]'\n"
-        "         USE: {{{{CLICK:view cart link}}}}\n"
+        "WRONG (will be REJECTED):\n"
+        "  evidence_tracker.click('a[href=\"/category\"]', label='Dress link')\n"
+        "  evidence_tracker.navigate('{{GOTO:home}}')\n"
+        "RIGHT (standalone placeholder on its own line):\n"
+        "  {{{{CLICK:Dress category link}}}}\n"
+        "  {{{{GOTO:home page}}}}\n"
         "\n"
         "=== ALLOWED PLACEHOLDERS (NO OTHER ACTIONS ARE VALID) ===\n"
         "The ONLY allowed ACTION values are: CLICK, FILL, GOTO, URL, ASSERT\n"
-        f"- CLICK:{_show('description')} — for clicking buttons, links, or elements\n"
-        f"- FILL:{_show('description')} — for typing into input fields\n"
-        f"- GOTO:{_show('description')} — for navigating to a URL\n"
-        f"- URL:{_show('description')} — for navigating to a URL (same as GOTO)\n"
-        f"- ASSERT:{_show('description')} — for asserting element visibility\n"
+        f"- {{{{CLICK:description}}}} — for clicking buttons, links, or elements\n"
+        f"- {{{{FILL:description}}}} — for typing into input fields\n"
+        f"- {{{{GOTO:description}}}} — for navigating to a page\n"
+        f"- {{{{URL:description}}}} — for navigating to a page (same as GOTO)\n"
+        f"- {{{{ASSERT:description}}}} — for asserting element visibility\n"
         "For ANY other action (CLOSE, WAIT, PRESS, SELECT, SCROLL, etc.),\n"
         "write: pytest.skip('Not supported in skeleton: action name')\n"
         "DO NOT invent new placeholder action names. Only CLICK, FILL, GOTO, URL, ASSERT.\n"
@@ -152,6 +168,24 @@ def get_skeleton_prompt_template(
         + "\n"
         + brace_examples
         + placeholder_syntax_section
+        + "=== NAVIGATION PATTERN GUIDELINES ===\n"
+        + "- Many sites hide navigation links inside collapsible containers\n"
+        + "  (hamburger menus, sidebars, accordions, dropdown menus).\n"
+        + "- Before clicking a navigation link, first expand its container:\n"
+        + "  Example: {{{{CLICK:hamburger menu toggle button}}}} then {{{{CLICK:Dress category link}}}}\n"
+        + "- Common container expanders: hamburger icon, menu button, sidebar toggle,\n"
+        + "  accordion header, dropdown trigger, 'Menu' text/button.\n"
+        + "- If a navigation target might be hidden, ALWAYS generate the expand step first.\n"
+        + "- When clicking items in a header/nav bar, check if a menu toggle exists\n"
+        + "  and include it as a prerequisite step before the target click.\n"
+        + "\n"
+        + "=== ASSERTION SPECIFICITY ===\n"
+        + "- For ASSERT placeholders, describe the specific content expected,\n"
+        + "  not generic UI elements. Prefer 'product title heading' over 'button'.\n"
+        + "- Example: {{{{ASSERT:product name and price displayed}}}} instead of {{{{ASSERT:visible product details}}}}\n"
+        + "- The more specific the description, the better the placeholder resolver\n"
+        + "  can match it to real page elements.\n"
+        + "\n"
         + "=== EVIDENCE TRACKER (STRICT) ===\n"
         "- In test functions: evidence_tracker is a fixture argument -> `def test_xxx(page: Page, evidence_tracker):\n"
         "- In Page Object methods: include evidence_tracker as a method parameter\n"

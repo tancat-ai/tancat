@@ -107,6 +107,9 @@ class PageScraper:
                 html_content = page.content()
                 elements = self._extract_elements_from_html(html_content, base_url=final_url)
 
+                # Capture visibility for each element using Playwright runtime checks
+                elements = self._capture_element_visibility(page, elements)
+
                 # Capture accessibility snapshot before browser closes (AI-024)
                 a11y_snapshot = page.accessibility.snapshot(depth=5) or {}  # type: ignore[attr-defined]
 
@@ -115,6 +118,33 @@ class PageScraper:
 
         except Exception as e:
             return [], {}, str(e), url
+
+    def _capture_element_visibility(
+        self,
+        page: Any,
+        elements: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Check runtime visibility of each scraped element using Playwright is_visible().
+
+        This adds an 'is_visible' boolean field to each element dict. Elements that are
+        hidden (e.g., behind sliders, in collapsed menus, or display:none) will have
+        is_visible=False, allowing the placeholder resolver to prefer visible candidates.
+
+        Note: This runs in the subprocess after networkidle, so JS-rendered state is captured.
+        """
+        for element in elements:
+            selector = str(element.get("selector", "")).strip()
+            if not selector:
+                element["is_visible"] = True  # No selector — assume visible (safe default)
+                continue
+            try:
+                loc = page.locator(selector).first
+                element["is_visible"] = loc.is_visible(timeout=2000)
+            except Exception:
+                # If visibility check fails (e.g., invalid selector), default to True
+                # rather than blocking the pipeline. The resolver's scoring still applies.
+                element["is_visible"] = True
+        return elements
 
     @staticmethod
     def _normalise_href(base_url: str, href: str) -> str:

@@ -37,12 +37,16 @@ LAYER_MAP = {
     # Context
     "src/scraper.py": "context",
     "src/stateful_scraper.py": "context",
+    "src/journey_scraper.py": "context",
     "src/semantic_candidate_ranker.py": "context",
     # Refinement
+    "src/placeholder_orchestrator.py": "refinement",
     "src/placeholder_resolver.py": "refinement",
     "src/page_object_builder.py": "refinement",
     "src/code_validator.py": "refinement",
     "src/code_postprocessor.py": "refinement",
+    "src/locator_scorer.py": "refinement",
+    "src/locator_fallback.py": "refinement",
     # Output
     "src/report_utils.py": "output",
     "src/report_builder.py": "output",
@@ -583,6 +587,20 @@ IMPORT_LINKS = [
     ("src/report_utils.py", "src/report_builder.py"),
     ("src/report_utils.py", "src/report_formatters.py"),
     ("src/report_utils.py", "src/evidence_report.py"),
+    # New modules - placeholder orchestration chain
+    ("src/orchestrator.py", "src/placeholder_orchestrator.py"),
+    ("src/placeholder_orchestrator.py", "src/scraper.py"),
+    ("src/placeholder_orchestrator.py", "src/stateful_scraper.py"),
+    ("src/placeholder_orchestrator.py", "src/journey_scraper.py"),
+    ("src/placeholder_orchestrator.py", "src/placeholder_resolver.py"),
+    ("src/placeholder_orchestrator.py", "src/page_object_builder.py"),
+    ("src/placeholder_orchestrator.py", "src/semantic_candidate_ranker.py"),
+    ("src/placeholder_resolver.py", "src/locator_scorer.py"),
+    ("src/semantic_candidate_ranker.py", "src/llm_client.py"),
+    # Evidence chain
+    ("src/report_builder.py", "src/evidence_loader.py"),
+    ("src/report_formatters.py", "src/failure_reporter.py"),
+    ("src/failure_reporter.py", "src/evidence_loader.py"),
 ]
 for s, t in IMPORT_LINKS:
     LINKS.add((s, t, "import"))

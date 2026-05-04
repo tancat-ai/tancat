@@ -333,6 +333,12 @@ class PlaceholderResolver:
             if not selector:
                 continue
 
+            # Skip hidden elements entirely — never select elements that are
+            # explicitly marked as hidden (e.g. CSRF tokens, consent framework inputs).
+            role = str(element.get("role", "")).strip().lower()
+            if role == "hidden":
+                continue
+
             # Extract visual enrichment variables for use in scoring
             lowered = description.replace("_", " ").lower()
             icon_classes = str(element.get("icon_classes", "")).lower()
@@ -384,14 +390,32 @@ class PlaceholderResolver:
             if action == "FILL" and self._is_fillable_element(element):
                 score += 3
 
+            # Extract element text once for use in multiple scoring rules below.
+            element_text = str(element.get("text", "")).strip()
+
             # Text-content penalty for CLICK actions: elements with NO visible text should be
             # penalized when the description contains meaningful content words (not just stop words).
             # This prevents an empty newsletter input (#subscribe) from beating a button with
-            # "Continue Shopping" text.
+            # "Continue Shopping" text.  Increased from -5 to -10 to more strongly prefer
+            # elements with visible, descriptive text over bare structural elements.
             if action == "CLICK":
-                element_text = str(element.get("text", "")).strip()
                 desc_content_words = desc_words - {"click", "tap", "press"}
                 if not element_text and desc_content_words:
+                    score -= 10
+
+            # ASSERT-specific penalty: single-class selectors (e.g. ".btn") are overly generic
+            # and often match hidden modal buttons or unrelated page elements.  Penalize them
+            # so the resolver prefers elements with specific text content matching the description.
+            if action == "ASSERT":
+                selector_lower = selector.lower()
+                # Detect single-class selectors: exactly one class, no ID, no data-attrs, no href
+                is_single_class = (
+                    selector_lower.startswith(".")
+                    and selector_lower.count(".") == 1
+                    and "[" not in selector_lower
+                    and "#" not in selector_lower
+                )
+                if is_single_class and not element_text:
                     score -= 5
 
             # Visual enrichment bonus: icon-aware matching
@@ -437,6 +461,8 @@ class PlaceholderResolver:
             if score >= self.match_threshold:
                 ranked.append((score, element))
 
+        # Sort by: 1) score desc, 2) text length desc (prefer more descriptive elements),
+        # 3) selector specificity desc (prefer longer, more specific selectors).
         ranked.sort(
             key=lambda item: (
                 item[0],

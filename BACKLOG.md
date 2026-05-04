@@ -1,7 +1,7 @@
 ﻿# BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-04-26 (Session: conftest path fix + Tier 1 verification)
+Last updated: 2026-05-02 (AI-023, AI-024, AI-025 added)
 
 ---
 
@@ -62,11 +62,6 @@ writing if code fails syntax check.
 ## 🟡 Active Improvements (Prioritised)
 
 ### AI-009 — Multi-Page Scraping ◉ Phase A COMPLETE, Phase B In Progress
-**What:** Allow the scraper to collect elements from multiple pages in a user flow,
-not just the base URL
-**Phase A (complete — Session 10):** Backend `scrape_multiple_pages()`, `MultiPageContext`,
-`ScraperState` in `src/page_context_scraper.py`. UI integrated in `streamlit_app.py` with
-additional URLs text area, conditional scraping, per-page sidebar feedback.
 **Phase B (in progress — Session 11):** Authenticated journey scraping — single browser
 session follows user-defined steps (goto, click, fill, capture, wait), credential profiles
 in session state, auth redirect detection, SSO/MFA/CAPTCHA explicit errors.
@@ -424,14 +419,52 @@ format support: Gherkin, Jira AC bullets, numbered, free-form
 > Note: Each of these needs a detailed design session before handing to Cline.
 > They are listed here to capture intent — not ready for implementation yet.
 
----
+### AI-023 — Interactive Locator Repair Loop
+**What:** When a generated test fails with a locator error (TimeoutError or strict
+mode violation), the tool offers an interactive repair mode. A headed browser opens
+at exactly the page where the test got stuck. The tester clicks the element they
+want. The tool captures the locator Playwright reports for that click and patches
+it directly into the test file. The tester then re-runs to verify.
+
+**Why:** This closes the loop between "test generated" and "test working." Currently
+locator failures require the tester to debug the DOM manually and edit the file
+themselves — work the tool should handle. This feature maps directly to what an
+automation tester would do: open the page, find the element, copy the locator.
+
+**Spec:** `docs/FEATURE_SPEC_AI023_locator_repair.md`
+
+**New files:**
+- `src/failure_classifier.py` — classify pytest failure type from error message
+- `tests/test_failure_classifier.py`
+- `src/locator_repair.py` — patch locator in test file + codegen browser session
+- `tests/test_locator_repair.py`
+
+**Modified files:**
+- `streamlit_app.py` — repair button on locator failures, browser session state
+
+**Implementation sequence (4 Cline sessions, strict order):**
+1. `src/failure_classifier.py` + tests
+2. `src/locator_repair.py` patch logic + tests (no browser)
+3. `streamlit_app.py` UI — repair button and state transitions (no browser)
+
+**Constraints:**
+- Locator failures only — assertion failures get explanation note, no repair button
+- Streamlit UI only — not available in CI or headless runs
+- One locator repair per invocation — not batch
+- Never guesses a replacement — only records what the tester clicks
+
+### AI-024 — Accessibility Tree Enrichment
+**What:** Add `page.accessibility.snapshot()` to scraping pipeline...
+[rest of entries from spec file]
+
+### AI-025 — Visual Regression Detection (Planning Required)
+**What:** Post-run screenshot comparison against baselines...
 
 ### AI-010 — Page Object Model Generation Mode
 **What:** Add a toggle in the UI — "Simple tests" vs "Page Object Model" — that
 changes how the LLM structures its output.
 
-**Why it matters:** Currently generated tests are standalone functions. If the site
-changes (e.g. a URL or button label), every test that references it needs updating
+**Why it matters:** Currently generated tests are standalone functions. If the site changes (e.g. a URL or button label), every test that references it needs updating
 individually. Page Object Model (POM) puts all page interactions into a class — one
 change in one place fixes all tests that use it. Standard pattern in professional
 test suites.
@@ -799,3 +832,86 @@ modular components (InputParser, UserStoryAnalyzer, TestCaseOrchestrator, etc.)
 - Never let an AI commit directly without human review
 - Give implementation AIs the full project rules, not just the spec doc
 - One feature per AI session — mixing tools mid-feature creates inconsistency
+
+---
+
+## 🐛 Test Generation Quality Fixes (May 2026)
+
+> Root cause analysis from `generated_tests/test_20260502_123121_as_a_customer_i_want_to_browse_products_add_them/report_local.md`:
+> 7 of 8 tests failed because the "Dress" link (`a[href="/category_products/1"]`) exists in DOM but is hidden behind a slider/menu. Test_02 also navigated to `/category_details/1` (404) instead of `/category_products/1`.
+
+### Session 1 — Visibility Filtering + Generic Selectors + URL Guessing (Priority: Highest)
+
+**Problems addressed:**
+- Placeholder resolver selects hidden elements (e.g., nav links behind sliders)
+- ASSERT actions match overly generic selectors like `.btn`
+- LLM hallucinates URLs that don't exist (`/category_details/1` → 404)
+
+**Tasks:**
+1. **Task 1A: Strengthen visibility filtering in resolver**
+   - Increase penalty for CLICK on elements with no text from `-5` to `-10`
+   - Skip elements where `role == "hidden"` entirely
+   - In `find_best_element()`, prefer candidates with MORE descriptive text when multiple have matching text
+
+2. **Task 1B: Penalize generic selectors for ASSERT actions**
+   - When `action == "ASSERT"`, penalize single-class selectors (e.g., `.btn`) with `-5` score
+   - Prefer elements where text content closely matches the description
+
+3. **Task 1C: Remove LLM URL guessing**
+   - In `_build_candidate_urls()`, skip LLM-generated `page_requirements` URLs
+   - Rely on `build_common_path_candidates()` + user seed URLs only
+   - The scraper already captures actual URLs including redirects — no need for LLM guesses
+
+**Files to modify:**
+- `src/placeholder_resolver.py` — visibility scoring, generic selector penalties
+- `src/orchestrator.py` — deprioritize LLM-guessed URLs
+- `tests/test_placeholder_resolver.py` — tests for new scoring behavior
+
+**Expected outcome:** Tests no longer select hidden elements; ASSERT actions target specific content; no more 404 from hallucinated URLs.
+
+---
+
+### Session 2 — Visibility Capture in Scraper (Priority: Medium)
+
+**Problem:** Even with improved resolver scoring, we can't perfectly distinguish visible from hidden elements without runtime browser data. The scraper extracts elements from HTML via BeautifulSoup but has no visibility information.
+
+**Task:** Add `is_visible()` checks during Playwright scraping.
+
+**Approach:**
+1. In `_scrape_url_sync()`, after extracting element metadata, call `page.locator(selector).is_visible()` for each interactive element
+2. Add `"visible": true/false` to each element dict in the subprocess payload
+3. Downstream: `PlaceholderResolver.find_best_element()` filters out `visible: false` candidates, falling back only when no visible alternatives exist
+
+**Tradeoffs:**
+- **Benefit:** Accurate runtime visibility from the actual browser
+- **Cost:** Extra `is_visible()` call per element adds overhead in subprocess (estimated 50-100ms per element)
+- **Schema change:** JSON payload between scraper and resolver gains a new field
+
+**Files to modify:**
+- `src/scraper.py` — capture visibility in `_scrape_url_sync()`
+- `src/placeholder_resolver.py` — filter by `visible` field
+- `tests/test_scraper.py` — verify visibility field populated
+
+**Expected outcome:** Resolver never selects elements that are genuinely hidden at runtime.
+
+---
+
+### Session 3 — Skeleton Prompt: Specific Assertions (Priority: Lower)
+
+**Problem:** Generated ASSERT placeholders are too generic (e.g., `ASSERT:button visible`) leading to assertions that match wrong elements even after resolution.
+
+**Task:** Update the skeleton prompt to generate descriptive ASSERT placeholders.
+
+**Approach:**
+1. In `get_skeleton_prompt_template()`, add explicit guidance for ASSERT specificity:
+   - "For ASSERT actions, describe WHAT element should be visible (e.g., 'ASSERT:product added confirmation message' not 'ASSERT:button visible')"
+   - Show before/after examples of good vs bad ASSERT descriptions
+2. In `rank_candidates()`, when resolving ASSERT placeholders, give bonus to elements where text content has high word-overlap with description
+
+**Files to modify:**
+- `src/prompt_utils.py` — add ASSERT specificity guidance
+- `tests/test_prompt_utils.py` — verify prompt includes new guidance
+
+**Expected outcome:** ASSERT placeholders carry enough context for the resolver to pick specific, meaningful elements instead of generic `.btn` matches.
+
+

@@ -495,7 +495,11 @@ class PlaceholderOrchestrator:
             return f'pytest.skip("{error_msg}")', None
 
         matched_element = await self._find_best_element_for_current_page(action, description, current_url, scoped_pages)
-        if matched_element is None:
+        # Only fall back to all pages for non-assertion actions. Assertions must be
+        # verifiable on the CURRENT page — falling back to elements from other pages
+        # produces wrong locators that fail at runtime (e.g., asserting a link that was
+        # just clicked to navigate away from its page).
+        if matched_element is None and action != "ASSERT":
             matched_element = await self._find_best_element_for_current_page(
                 action, description, current_url, scraped_data
             )
