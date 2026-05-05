@@ -494,15 +494,23 @@ class PlaceholderOrchestrator:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
             return f'pytest.skip("{error_msg}")', None
 
-        matched_element = await self._find_best_element_for_current_page(action, description, current_url, scoped_pages)
-        # Only fall back to all pages for non-assertion actions. Assertions must be
-        # verifiable on the CURRENT page — falling back to elements from other pages
-        # produces wrong locators that fail at runtime (e.g., asserting a link that was
-        # just clicked to navigate away from its page).
-        if matched_element is None and action != "ASSERT":
-            matched_element = await self._find_best_element_for_current_page(
-                action, description, current_url, scraped_data
-            )
+        # When scoped_pages is empty (current_url not in scraped_data), fall back to
+        # ALL scraped pages. The "no fallback" rule prevents using wrong-page elements
+        # when the current page HAS data. But when scoped_pages is empty due to URL
+        # normalization differences (trailing slash, query params, etc.), we must
+        # search all pages to find the element.
+        pages_to_search = scoped_pages if scoped_pages else scraped_data
+        matched_element = await self._find_best_element_for_current_page(
+            action, description, current_url, pages_to_search
+        )
+        # Do NOT fall back to elements from other pages. Each action must resolve
+        # against the CURRENT page context — falling back to elements scraped from a
+        # different page produces wrong locators that fail at runtime:
+        # - ASSERT: element was already navigated away from (hidden)
+        # - CLICK: element exists on home page but action happens on category page
+        # - FILL: form field from wrong page context
+        # The scraper must capture elements on each page; if resolution fails, the
+        # test should skip with a clear message rather than use a wrong locator.
 
         if matched_element is not None:
             # B3: Verify page context — log warning for cross-page mismatches
@@ -536,6 +544,30 @@ class PlaceholderOrchestrator:
             return {current_url: scraped_data[current_url]}
         return {}
 
+    def _validate_text_match(
+        self,
+        element: dict[str, str] | None,
+        description: str,
+    ) -> dict[str, str] | None:
+        """Validate that the element's visible text plausibly matches the description.
+
+        Returns the element if validation passes, None otherwise.
+        """
+        if element is None:
+            return None
+        element_text = str(element.get("text", "")).strip()
+        if not element_text:
+            # Elements with no text (e.g., icons, images) bypass text validation
+            return element
+        if self.resolver.text_matches_description(element_text, description):
+            return element
+        logger.debug(
+            "Text validation failed: element '%s' does not match description '%s'",
+            element_text,
+            description,
+        )
+        return None
+
     async def _find_best_element_for_current_page(
         self,
         action: str,
@@ -566,10 +598,46 @@ class PlaceholderOrchestrator:
                     current_url=current_url,
                     candidates=shortlisted,
                 )
-            if matched_element is None:
-                matched_element = shortlisted[0]
+
+            # Text validation gate: validate the LLM's choice, then try remaining candidates.
+            # This catches wrong matches where the LLM picks an element whose text doesn't
+            # correspond to the placeholder description (e.g. "Add to cart" for "Cart link").
+            validated = self._validate_text_match(matched_element, description) if matched_element else None
+            if validated is not None:
+                return validated
+
+            # LLM's choice failed text validation — try remaining candidates in rank order
+            for candidate in shortlisted:
+                if self._validate_text_match(candidate, description):
+                    return candidate
+
+            # Text validation failed all shortlisted candidates — fall back to the LLM's
+            # choice anyway but log a warning for diagnostics.
             if matched_element is not None:
+                element_text = str(matched_element.get("text", "")).strip()
+                logger.warning(
+                    "LLM-selected element '%s' fails text validation for '%s' — "
+                    "using anyway (diagnostic review recommended).",
+                    element_text,
+                    description,
+                )
                 return matched_element
+
+            # No LLM selection — use top candidate with text validation
+            if shortlisted:
+                top_candidate = shortlisted[0]
+                if self._validate_text_match(top_candidate, description):
+                    return top_candidate
+                # Text validation failed — but still return the top candidate as a fallback.
+                # Generic ASSERT descriptions (e.g. "items added correctly") won't match any
+                # element text, so we need this fallback to avoid perpetual skip.
+                logger.warning(
+                    "Top-ranked element '%s' fails text validation for '%s' — using anyway.",
+                    str(top_candidate.get("text", "")).strip(),
+                    description,
+                )
+                return top_candidate
+            # Continue to next page mapping
         return None
 
     def _infer_next_page_url(

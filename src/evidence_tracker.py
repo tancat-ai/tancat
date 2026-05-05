@@ -83,62 +83,18 @@ class EvidenceTracker:
         - Google Consent TVM (fc-consent-root / fc-dialog-overlay)
         - Google AdSense vignette overlays
         - General modal overlays that intercept pointer events
+
+        NOTE: Timeouts are intentionally low (500ms) to avoid blocking test execution.
+        On sites without consent banners, this should complete in <200ms total.
         """
-        # --- 1. Standard consent/cookie banner buttons ---
-        selectors = [
-            "button:has-text('Consent')",
-            "button:has-text('Accept')",
-            "button:has-text('Continue')",
-            "button:has-text('OK')",
-            "button:has-text('Got it')",
-            "button:has-text('I Agree')",
-            "button:has-text('Agree')",
-            "button[aria-label='Close']",
-            "button[aria-label='close']",
-        ]
-        for selector in selectors:
-            try:
-                loc = self.page.locator(selector).first
-                if loc.count() > 0 and loc.is_visible():
-                    loc.click(timeout=2000)
-                    self.page.wait_for_timeout(300)
-                    break
-            except Exception:
-                continue
-
-        # --- 2. Google Consent TVM (Two-Party Mode) ---
-        try:
-            consent_btn = self.page.locator(".fc-consent-root button:has-text('Consent')").first
-            if consent_btn.count() > 0 and consent_btn.is_visible():
-                consent_btn.click(timeout=2000)
-                self.page.wait_for_timeout(500)
-        except Exception:
-            pass
-
-        try:
-            manage_btn = self.page.locator(".fc-consent-root button:has-text('Manage options')").first
-            if manage_btn.count() > 0 and manage_btn.is_visible():
-                manage_btn.click(timeout=2000)
-                self.page.wait_for_timeout(500)
-        except Exception:
-            pass
-
-        try:
-            self.page.keyboard.press("Escape")
-            self.page.wait_for_timeout(200)
-        except Exception:
-            pass
-
-        # --- 3. Remove Google Consent TVM DOM elements via JavaScript ---
+        # Fast-path: try JS removal first (no waiting, no iteration)
         try:
             self.page.evaluate(
                 """
                 () => {
-                    const consentRoot = document.querySelector('.fc-consent-root');
-                    if (consentRoot) { consentRoot.remove(); }
-                    const dialogOverlay = document.querySelector('.fc-dialog-overlay');
-                    if (dialogOverlay) { dialogOverlay.remove(); }
-                    document.querySelectorAll('[class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());
+                    // Remove consent/cookie banners via JS (fastest path)
+                    document.querySelectorAll('.fc-consent-root, .fc-dialog-overlay, [class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());
+                    // Remove high z-index overlays (excluding iframes)
                     const allElements = document.querySelectorAll('*');
                     for (const el of allElements) {
                         const style = window.getComputedStyle(el);
@@ -148,14 +104,28 @@ class EvidenceTracker:
                 }
                 """
             )
-            self.page.wait_for_timeout(300)
         except Exception:
             pass
 
-        # --- 4. Dismiss ad overlays ---
+        # Only iterate buttons if JS didn't clear everything
+        selectors = [
+            "button:has-text('Consent')",
+            "button:has-text('Accept')",
+            "button:has-text('OK')",
+            "button[aria-label='Close']",
+        ]
+        for selector in selectors:
+            try:
+                loc = self.page.locator(selector).first
+                if loc.count() > 0 and loc.is_visible():
+                    loc.click(timeout=500)
+                    break
+            except Exception:
+                continue
+
+        # Single Escape press
         try:
             self.page.keyboard.press("Escape")
-            self.page.wait_for_timeout(200)
         except Exception:
             pass
 
@@ -164,67 +134,34 @@ class EvidenceTracker:
 
         This handles Google AdSense overlays and other common ad frameworks
         that can block clicks on e-commerce test sites.
+
+        NOTE: Uses JS removal (fast) instead of iterative clicking.
         """
-        # First, try pressing Escape to close any modal overlays
+        # Single Escape press
         try:
             self.page.keyboard.press("Escape")
-            self.page.wait_for_timeout(200)
         except Exception:
             pass
 
-        # Use JavaScript to remove ad overlays that intercept pointer events
-        # This is more reliable than trying to click them
+        # Use JavaScript to remove ad overlays — fast and reliable
         try:
             self.page.evaluate(
                 """
                 () => {
-                    // Remove Google AdSense vignette overlay
                     const vignette = document.getElementById('google_vignette');
                     if (vignette) {
                         vignette.style.display = 'none';
                         vignette.style.visibility = 'hidden';
                     }
-
-                    // Remove any ins.adsbygoogle elements that are overlays
-                    document.querySelectorAll('ins.adsbygoogle').forEach(el => {
-                        el.style.display = 'none';
-                        el.style.visibility = 'hidden';
-                    });
-
-                    // Remove Google ad iframes that might be intercepting clicks
-                    document.querySelectorAll('iframe[id*="aswift"], iframe[title="Advertisement"]').forEach(el => {
-                        el.style.display = 'none';
-                        el.style.visibility = 'hidden';
-                    });
-
-                    // Remove any element with high z-index that might be an overlay
-                    document.querySelectorAll('[class*="ads"], [id*="google_ads"]').forEach(el => {
+                    document.querySelectorAll('ins.adsbygoogle, iframe[id*="aswift"], iframe[title="Advertisement"], [class*="ads"], [id*="google_ads"]').forEach(el => {
                         el.style.display = 'none';
                         el.style.visibility = 'hidden';
                     });
                 }
                 """
             )
-            self.page.wait_for_timeout(300)
         except Exception:
             pass
-
-        # Try to click any visible "Close" or "X" buttons that might be ad-related
-        ad_close_selectors = [
-            "button[aria-label='Close ad']",
-            "button[aria-label='Close Advertisement']",
-            "[class*='close-ad']",
-            "[id*='close-ad']",
-            "button:has-text('Close')",
-        ]
-        for selector in ad_close_selectors:
-            try:
-                loc = self.page.locator(selector).first
-                if loc.count() > 0 and loc.is_visible():
-                    loc.click(timeout=500)
-                    self.page.wait_for_timeout(200)
-            except Exception:
-                continue
 
     def _load_previous_history(self) -> dict[str, int]:
         if self.sidecar_path.exists():

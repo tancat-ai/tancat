@@ -270,13 +270,45 @@ The following improvements were added to reduce wrong locator matches and surfac
 
 See `docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md` for full details.
 
-## 12. Planned Work (Next Up)
+## 12. UAT Scripts
 
-| ID | Feature | Files to Create |
-|----|---------|----------------|
-| AI-019 | Prompt Update: EvidenceTracker Methods | `src/prompt_utils.py` |
+### `scripts/uat_automationexercise.py` — End-to-end pipeline validation
+
+Runs the full skeleton-first pipeline against automationexercise.com with a realistic e-commerce user story, then validates the generated code.
+
+**Usage:**
+```bash
+# Use LM Studio with same model as Cline (avoids GPU VRAM contention)
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio --model qwen3.6-27b
+
+# Use Ollama (when Cline is not running)
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider ollama --model qwen3.5:35b
+```
+
+**When to use:**
+- After changes to placeholder resolution, scraper, or pipeline orchestration
+- Before declaring a placeholder-related fix as done
+- When validating the pipeline against a real multi-page e-commerce site
+
+**CRITICAL: GPU VRAM contention** — When running through Cline, use LM Studio with the same model Cline is already using (e.g., `qwen3.6-27b`). Loading a second model (e.g., Ollama `qwen3.5:9b`) causes VRAM contention → 500 errors or truncated responses. The script uses `LLMClient.set_session_provider()` so all pipeline components share the same provider.
+
+**Known results (2026-05-05):** 4/6 tests pass on automationexercise.com. test_04 and test_06 fail because ASSERT placeholders for "confirmation message" resolve to `.cart_quantity_delete` (delete button) instead of the actual confirmation popup. This is a resolution quality issue for ASSERT-type placeholders, not an infrastructure problem.
+
+### `scripts/debug_pipeline.py` — Debug pipeline with inspection
+
+Stops at each phase and prints scraped data, resolution results, and generated code for inspection. Use when diagnosing why placeholders resolve incorrectly.
 
 ---
 
-*Last updated: 2026-04-29*
+## 13. Known Issues — Placeholder Resolution
+
+| Symptom | Cause | Status |
+|---------|-------|--------|
+| ASSERT placeholders resolve to wrong element | Resolver matches on shared attributes (e.g., `data-product-id`) rather than assertion intent | Open — needs semantic matching improvement |
+| "Products link" resolves to brand product link | Scraper sees all elements on single-page app; resolver picks first match by score | Known limitation |
+| Navigation criteria generate GOTO not CLICK | "navigate" verb in user story → GOTO placeholder → direct `page.goto()` | By design but produces non-click journeys |
+
+---
+
+*Last updated: 2026-05-05*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

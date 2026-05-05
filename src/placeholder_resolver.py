@@ -246,29 +246,119 @@ class PlaceholderResolver:
 
         return True
 
+    # Words that describe the UI interaction pattern rather than the content itself.
+    # These should be stripped from placeholder descriptions before text matching
+    # so that "Add to cart button next to a product" focuses on "add cart product"
+    # rather than failing because the element text "Add to cart" lacks "button", "next", etc.
+    # IMPORTANT: Do NOT strip words like "link", "icon", "header", "cart" — these are
+    # meaningful content descriptors that help distinguish between elements.
+    ACTION_CONTEXT_WORDS = {
+        "a",
+        "an",
+        "and",
+        "appears",
+        "button",
+        "click",
+        "correctly",
+        "dialog",
+        "enter",
+        "field",
+        "fill",
+        "for",
+        "hover",
+        "icon",
+        "input",
+        "in",
+        "into",
+        "loads",
+        "modal",
+        "next",
+        "on",
+        "or",
+        "popup",
+        "press",
+        "select",
+        "successfully",
+        "tap",
+        "the",
+        "text",
+        "to",
+        "type",
+        "visible",
+        "with",
+    }
+
+    # Action verbs that signal a specific interaction (add, buy, remove, etc.).
+    # When the description uses navigation language ("link", "icon") but the element
+    # text contains action verbs, reject the match — they represent different intents.
+    ACTION_VERBS = {
+        "add",
+        "buy",
+        "remove",
+        "delete",
+        "submit",
+        "register",
+        "sign",
+        "login",
+        "logout",
+        "place",
+        "proceed",
+        "continue",
+        "close",
+        "dismiss",
+        "cancel",
+    }
+
+    # Navigation language that indicates the user wants to navigate TO something,
+    # not perform an action ON something.
+    NAVIGATION_WORDS = {
+        "link",
+        "icon",
+        "button",
+        "go",
+        "open",
+        "navigate",
+        "header",
+        "menu",
+        "tab",
+    }
+
     @staticmethod
     def text_matches_description(element_text: str, action_description: str) -> bool:
         """Check if element's visible text plausibly matches the action description.
 
         Uses case-insensitive containment with whitespace normalization.
-        Allows partial matches (e.g. "Continue Shopping" matches "Continue").
+        Strips action-context words from the description to focus on core intent words.
+        For example: "Add to cart button next to a product" becomes "add cart product"
+        which can now match element text "Add to cart".
+
+        REJECTS mismatches where the description uses navigation language ("cart link")
+        but the element text contains action verbs ("Add to cart") — different intents.
         """
         if not element_text or not action_description:
             return False
 
-        norm_text = re.sub(r"\s+", " ", element_text).strip().lower()
-        norm_desc = re.sub(r"\s+", " ", action_description).strip().lower()
+        # Normalize underscores to spaces (LLM often generates "add_to_cart_button" style)
+        norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
+        norm_desc = re.sub(r"[_\s]+", " ", action_description).strip().lower()
 
-        # Direct containment
+        # Direct containment (most reliable check)
         if norm_text in norm_desc or norm_desc in norm_text:
             return True
 
-        # Word-level overlap: at least half of description words appear in element text
-        desc_words = set(norm_desc.split()) - {"the", "a", "an", "and", "to", "in", "on", "for", "of"}
+        # Word-level overlap with action-context words stripped from description
+        desc_words = set(norm_desc.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
         text_words = set(norm_text.split())
         if desc_words and text_words:
             overlap = len(desc_words & text_words)
+            # Require at least half the core intent words to match, with minimum of 1
             if overlap >= max(1, len(desc_words) // 2):
+                # REJECT: description uses navigation language but element has action verbs
+                # e.g. "Cart link" should NOT match "Add to cart" element text
+                desc_has_nav = bool(desc_words & PlaceholderResolver.NAVIGATION_WORDS)
+                element_has_action = bool(text_words & PlaceholderResolver.ACTION_VERBS)
+                if desc_has_nav and element_has_action:
+                    return False
                 return True
 
         return False

@@ -45,6 +45,19 @@ _LLM_REASONING_PATTERNS = [
 ]
 
 
+# Patterns that detect LLM reasoning leaked as bullet points or numbered lists.
+# These look like "- Actually, ..." or "- 3-10 lines MAX per test."
+_BULLET_REASONING_PATTERNS = [
+    re.compile(r"^\s*-?\s*\d+\.\s+[A-Z]"),  # "- 1. Do this"
+    re.compile(r"^\s*-\s+(Actually|Note|Wait|Hmm|Okay|Sure|Let's|That's|This is)\b", re.IGNORECASE),
+    re.compile(r"^\s*-\s+(The prompt|The example|I will|I need|I should|All constraints)\b", re.IGNORECASE),
+    re.compile(r"^\s*-\s+\d+-\d+\s+\w+", re.IGNORECASE),  # "- 3-10 lines MAX"
+    re.compile(r"^\s*-\s+\w+\s+(MAX|MIN|must|should|need)\b", re.IGNORECASE),  # "- lines MAX"
+    re.compile(r"^\s*-\s+\(My test has", re.IGNORECASE),  # "- (My test has 6 lines"
+    re.compile(r"^\s*-\s+\w+\s+(inside|inside,|within)\b", re.IGNORECASE),  # "- 6 lines inside"
+]
+
+
 def _is_llm_reasoning_line(line: str) -> bool:
     """Return True if the line looks like LLM reasoning text rather than Python code.
 
@@ -53,6 +66,7 @@ def _is_llm_reasoning_line(line: str) -> bool:
     - Is a short English sentence (under 80 chars) with punctuation that Python
       code would not normally have at the start of a line (commas after sentence starters)
     - Contains no valid Python keywords and is not a comment, string, or docstring
+    - Bullet-point reasoning patterns like "- 3-10 lines MAX per test."
     """
     stripped = line.strip()
     if not stripped:
@@ -104,6 +118,11 @@ def _is_llm_reasoning_line(line: str) -> bool:
 
     # Check for reasoning patterns
     for pattern in _LLM_REASONING_PATTERNS:
+        if pattern.match(stripped):
+            return True
+
+    # Check for bullet-point reasoning patterns
+    for pattern in _BULLET_REASONING_PATTERNS:
         if pattern.match(stripped):
             return True
 

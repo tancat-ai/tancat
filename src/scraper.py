@@ -111,7 +111,12 @@ class PageScraper:
                 elements = self._capture_element_visibility(page, elements)
 
                 # Capture accessibility snapshot before browser closes (AI-024)
-                a11y_snapshot = page.accessibility.snapshot(depth=5) or {}  # type: ignore[attr-defined]
+                a11y_snapshot: dict[str, Any] = {}
+                try:
+                    a11y_snapshot = page.accessibility.snapshot(depth=5) or {}  # type: ignore[attr-defined]
+                except AttributeError:
+                    # page.accessibility not available in this Playwright version
+                    self._debug("page.accessibility.snapshot() not available — skipping a11y enrichment")
 
                 browser.close()
                 return elements, a11y_snapshot, None, final_url
