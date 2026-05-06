@@ -193,7 +193,7 @@ def _convert_standalone_placeholders(code: str) -> str:
         # Check if LLM wrapped placeholder in evidence_tracker call - unwrap it
         # Pattern: evidence_tracker.click({{CLICK:...}}, label=...)
         wrapped_pattern = re.match(
-            r"^(\s*)evidence_tracker\.(click|fill|navigate|assert_visible)\(\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}",
+            r"^(\s*)evidence_tracker\.(click|fill|navigate|assert_visible)\(\s*\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}",
             line,
         )
         if wrapped_pattern:

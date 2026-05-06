@@ -278,11 +278,14 @@ Runs the full skeleton-first pipeline against automationexercise.com with a real
 
 **Usage:**
 ```bash
-# Use LM Studio with same model as Cline (avoids GPU VRAM contention)
+# Use LM Studio (auto-detects loaded model, avoids GPU VRAM contention)
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio
+
+# Use LM Studio with specific model if needed
 .venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio --model qwen3.6-27b
 
 # Use Ollama (when Cline is not running)
-.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider ollama --model qwen3.5:35b
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider ollama
 ```
 
 **When to use:**

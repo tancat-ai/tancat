@@ -41,6 +41,8 @@ cp .env.example .env
 ollama serve
 ollama pull qwen3.5:35b
 
+> Note: local LLM output can vary across runs. If the generated skeleton produces an unexpected number of tests, rerun the UAT script or try a different LM Studio model variant.
+
 # 4. Launch UI
 bash launch_ui.sh
 # Then open http://localhost:8501

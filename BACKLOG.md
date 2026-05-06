@@ -70,6 +70,27 @@ in session state, auth redirect detection, SSO/MFA/CAPTCHA explicit errors.
 
 ---
 
+### AI-026 — Persist Generated Tests Across Sessions
+**What:** Add CLI support to reload and rerun previously generated test packages from disk without regenerating them in the same session. Preserve generated artifact metadata, reports, and failure diagnostics across CLI restarts.
+
+**Why:** The current CLI flow only exposes generated tests in-memory for the active session. This limits debugging and reuse when you want to come back later and rerun or inspect existing generated suites.
+
+**Scope:**
+- Add a reusable persistence layer for generated pipeline artifacts and metadata
+- Store `pipeline_saved_path`, test package manifest, run results, and report locations in a reloadable package descriptor
+- Add CLI menu commands such as `Load Existing Generated Tests` and `Re-run Saved Suite`
+- Keep feature parity with Streamlit by sharing the same artifact and report model wherever possible
+- Ensure the CLI can load existing `generated_tests/` packages produced by prior runs or by external save operations
+
+**Design Notes:**
+- Reuse `src/pipeline_writer.py`/`PipelineArtifactWriter` for save/load consistency
+- Consider a small package manifest JSON next to saved tests to record paths and metadata
+- Keep shared behavior between Streamlit and CLI by pulling common helpers into `src/` instead of UI-only files
+
+**Priority:** Medium — improves workflow and debugging without changing core generation logic
+
+---
+
 ## ✅ Completed: Evidence Tracker Feature Chain (AI-016 through AI-022)
 
 **Status:** Complete — April 2026. All seven items delivered.

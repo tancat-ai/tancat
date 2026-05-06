@@ -37,6 +37,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - mypy `import-untyped` for pandas via `pandas-stubs` dev dependency
 - mypy `import-untyped` for plotly via per-module override in `pyproject.toml`
 - pre-commit hook failures from variable shadowing in `generate_3d_map.py` via mypy override
+- Fix skeleton prompt generation to inject the exact expected test count into the LLM prompt.
+- Improve placeholder postprocessing to unwrap `evidence_tracker.xxx({{...}})` wrappers with optional whitespace.
 
 ---
 

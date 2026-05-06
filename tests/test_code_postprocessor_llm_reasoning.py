@@ -441,6 +441,20 @@ def test_checkout(page, evidence_tracker):
     ast.parse(fixed)
 
 
+def test_normalise_generated_code_unwraps_evidence_tracker_wrapped_placeholders() -> None:
+    """The normaliser should unwrap evidence_tracker wrapped placeholders to standalone token lines."""
+    code = """\
+from playwright.sync_api import Page, expect
+import pytest
+
+def test_01(page: Page, evidence_tracker) -> None:
+    evidence_tracker.click( {{CLICK:add to cart}}, label='add to cart')
+"""
+    fixed = normalise_generated_code(code, consent_mode="leave-as-is")
+    assert "evidence_tracker.click(" not in fixed
+    assert "{{CLICK:add to cart}}" in fixed
+
+
 def test_strip_pages_needed_block_removes_trailing_skeleton_metadata() -> None:
     code = """from playwright.sync_api import Page, expect
 

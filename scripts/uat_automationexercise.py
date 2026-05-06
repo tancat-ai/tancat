@@ -9,19 +9,21 @@ realistic e-commerce user story. This exercises:
 - Navigation vs action verb disambiguation
 
 Usage:
-    python scripts/uat_automationexercise.py
-    python scripts/uat_automationexercise.py --provider ollama --model qwen3.5:9b
-    python scripts/uat_automationexercise.py --provider lm-studio --model qwen3.6-27b
+    python scripts/uat_automationexercise.py --provider lm-studio
+    python scripts/uat_automationexercise.py --provider lm-studio --headed
+    python scripts/uat_automationexercise.py --provider ollama --model qwen3.5:35b
 
 NOTE: When running through Cline, use LM Studio with the same model Cline is
 already using (e.g. qwen3.6-27b) to avoid GPU VRAM contention from loading
-two models simultaneously.
+two models simultaneously. Use --headed to see the browser automation in real-time.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -72,12 +74,23 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Provider base URL (default: from .env)",
     )
+    parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Run browser in headed mode (show browser window)",
+    )
     return parser.parse_args()
 
 
 async def run_uat() -> None:
     args = parse_args()
     load_dotenv()
+
+    # Enable headed mode if requested
+    if args.headed:
+        os.environ["PLAYWRIGHT_HEADLESS"] = "0"
+        print("[Headed Mode] Browser window will be visible")
+        print()
 
     # Configure the LLM provider — use session-level settings so all pipeline
     # components (TestGenerator, Orchestrator, etc.) share the same provider.
@@ -137,12 +150,20 @@ async def run_uat() -> None:
             print("❌ UAT FAILED: Generated code is too short or empty.")
             return
 
-        # Check for placeholder artifacts that should have been resolved
-        if "{{{" in final_code:
-            print("⚠️  UAT WARNING: Unresolved placeholders found in generated code.")
-            print("   The placeholder resolution pipeline may have failed.")
+        # Check for placeholder artifacts that should have been resolved.
+        if re.search(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code) or \
+            'pytest.skip("Unresolved placeholder' in final_code or \
+            "pytest.skip('Unresolved placeholder" in final_code:
+            print("⚠️  UAT WARNING: Unresolved placeholders or placeholder skips found in generated code.")
+            if re.search(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code):
+                print("   The generated code still contains placeholder tokens.")
+            if 'pytest.skip("Unresolved placeholder' in final_code or "pytest.skip('Unresolved placeholder" in final_code:
+                print("   Placeholder unresolved skip statements were inserted.")
         else:
             print("✅ No unresolved placeholders found.")
+
+        test_names = re.findall(r"^def\s+(test_\d+)", final_code, re.M)
+        print(f"Generated test count: {len(test_names)}")
 
         # Check for key patterns — evidence_tracker is the expected pattern,
         # not raw page.goto/.click() since the pipeline wraps all interactions.

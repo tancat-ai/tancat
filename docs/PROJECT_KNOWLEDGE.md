@@ -109,6 +109,7 @@ These have appeared multiple times during AI-assisted development:
 |---------|-------|-----|
 | "Could not connect to Ollama" | Ollama not running | `ollama serve` + `ollama list` |
 | "LLM returned empty response" | `OLLAMA_TIMEOUT` too low | Set `OLLAMA_TIMEOUT=300` in `.env` |
+| Unexpected skeleton count or only one generated test | local LLM nondeterminism or prompt adherence variance | Rerun the pipeline; the skeleton prompt now explicitly injects the expected test count and uses stricter retry guidance. If it persists, try a different LM Studio model variant. |
 | Generated tests fail in CI | `generated_tests/` in testpaths | `pytest.ini` — `testpaths = tests` only |
 | Wrong venv active | Old venv from renamed project | `rm -rf .venv && uv sync` |
 | mypy cache corruption | Stale `.mypy_cache` | `rm -rf .mypy_cache` then re-run |

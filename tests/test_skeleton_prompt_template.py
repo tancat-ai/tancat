@@ -3,10 +3,11 @@
 Tests verify directory handling, file naming, and error scenarios.
 """
 
+import asyncio
 import os
 import tempfile
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -227,6 +228,29 @@ def test_example(page: Page):
 
             with pytest.raises(Exception, match="API error"):
                 generator.generate_and_save("test request")
+
+
+class TestGenerateSkeletonPromptCountInjection:
+    """Tests for injecting the expected count into the skeleton prompt."""
+
+    def test_generate_skeleton_includes_expected_count_in_prompt(self, tmp_path: Any) -> None:
+        generator = TestGenerator(output_dir=str(tmp_path))
+        generator.client = MagicMock()
+        generator.client.generate = AsyncMock(return_value="generated")
+
+        asyncio.run(
+            generator.generate_skeleton(
+                user_story="As a user, I want to do X.",
+                conditions="1. Do X\n2. Do Y",
+                target_urls=["https://example.com"],
+                expected_count=2,
+            )
+        )
+
+        prompt = generator.client.generate.call_args.args[0]
+        assert "EXACTLY 2 SEPARATE test functions" in prompt
+        assert "ONE test per acceptance criterion" in prompt
+        assert "IMPORTANT: You must generate exactly 2 test functions" in prompt
 
 
 class TestFileNameGeneration:

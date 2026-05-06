@@ -59,7 +59,7 @@ class TestGenerator:
         # Compute count_label_upper for the template's {count_label_upper} placeholder
         count_label_upper = str(expected_count).upper() if expected_count is not None else "N"
         prompt = (
-            get_skeleton_prompt_template().format(
+            get_skeleton_prompt_template(expected_count=expected_count).format(
                 user_story=user_story,
                 conditions=conditions,
                 known_urls_block=known_urls_block,
