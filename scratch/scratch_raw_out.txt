@@ -1,0 +1,356 @@
+Here's a thinking process:
+
+1.  **Analyze User Input:**
+   - **Role:** Playwright Python test engineer
+   - **Requirements:**
+     - Generate EXACTLY 6 test functions. One per criterion.
+     - Use ONLY the double-brace placeholder format for test steps: `{GOTO:url}`, `{CLICK:button or link description}`, `{FILL:input field description:value to type}`, `{ASSERT:visible element description}`
+     - NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
+     - Use pytest sync Playwright tests only.
+     - Do not use asyncio, async def, or async_playwright.
+     - Use `from playwright.sync_api import Page, expect`.
+     - Include `import pytest` when pytest decorators are used.
+     - Return valid Python code only, no markdown fences, chain-of-thought, or commentary.
+     - Include screenshot capture logic only when explicitly asked (not asked here).
+     - Do not invent selectors when page context or placeholder rules say not to (I'll stick to the placeholder format strictly).
+   - **User Story:** Log in, add items to cart, verify cart, proceed to checkout, complete checkout.
+   - **Acceptance Criteria (6 items):**
+     1. Log in with username standard_user and password secret_sauce
+     2. Add at least one item (e.g. Sauce Labs Backpack) to the cart
+     3. Navigate to the shopping cart page
+     4. Verify the added item appears correctly in the cart
+     5. Navigate to the checkout page
+     6. Complete the checkout process and verify success (Thank You page)
+   - **Known URL:** https://www.saucedemo.com
+
+2.  **Map Criteria to Test Functions:**
+   - `test_01_login`: Log in with standard_user/secret_sauce
+   - `test_02_add_item`: Add Sauce Labs Backpack to cart
+   - `test_03_navigate_cart`: Navigate to shopping cart page
+   - `test_04_verify_cart`: Verify added item appears correctly in cart
+   - `test_05_navigate_checkout`: Navigate to checkout page
+   - `test_06_complete_checkout`: Complete checkout and verify success
+
+3.  **Apply Placeholder Format Strictly:**
+   The prompt says: "Use ONLY the double-brace placeholder format for test steps." and gives examples:
+   `{GOTO:url}`
+   `{CLICK:button or link description}`
+   `{FILL:input field description:value to type}`
+   `{ASSERT:visible element description}`
+
+   I need to map each criterion to these placeholders. I'll construct the steps carefully.
+
+   Test 1: Login
+   `{GOTO:https://www.saucedemo.com}`
+   `{FILL:username input:standard_user}`
+   `{FILL:password input:secret_sauce}`
+   `{CLICK:login button}`
+   `{ASSERT:product list page}`
+
+   Test 2: Add item
+   `{CLICK:Sauce Labs Backpack add to cart button}`
+   `{ASSERT:cart badge updated}` (or similar, but I'll stick to the format)
+   Actually, the prompt says "Use ONLY the double-brace placeholder format for test steps." I will just output the placeholders inside the test functions.
+
+   Let's carefully follow the exact format requested.
+   I will write each test function with the exact placeholders.
+
+   Test 1:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-01", story_ref="S01")
+   def test_01_login(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {ASSERT:product list page}
+   ```
+
+   Test 2:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-02", story_ref="S01")
+   def test_02_add_item(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {ASSERT:cart badge updated}
+   ```
+
+   Test 3:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-03", story_ref="S01")
+   def test_03_navigate_cart(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {ASSERT:shopping cart page}
+   ```
+
+   Test 4:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-04", story_ref="S01")
+   def test_04_verify_cart(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {ASSERT:Sauce Labs Backpack item in cart}
+   ```
+
+   Test 5:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-05", story_ref="S01")
+   def test_05_navigate_checkout(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {CLICK:checkout button}
+       {ASSERT:checkout page}
+   ```
+
+   Test 6:
+   ```python
+   @pytest.mark.evidence(condition_ref="AC-06", story_ref="S01")
+   def test_06_complete_checkout(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {CLICK:checkout button}
+       {FILL:first name input:John}
+       {FILL:last name input:Doe}
+       {FILL:zip code input:12345}
+       {CLICK:finish button}
+       {ASSERT:thank you page}
+   ```
+
+4.  **Check Constraints:**
+   - EXACTLY 6 test functions? Yes.
+   - One per criterion? Yes.
+   - Use ONLY the double-brace placeholder format for test steps? Yes.
+   - NO PROSE. NO EXPLANATIONS. START WITH IMPORTS? Yes.
+   - pytest sync Playwright tests only? Yes.
+   - No asyncio/async? Yes.
+   - `from playwright.sync_api import Page, expect`? I need to include this import.
+   - `import pytest`? Yes.
+   - Valid Python code only, no markdown fences? I will output raw text without markdown code blocks.
+   - Screenshot logic? Not requested.
+   - Do not invent selectors? I'm using descriptive placeholders as instructed by the format `{CLICK:button or link description}`.
+
+   Wait, the prompt says "Use ONLY the double-brace placeholder format for test steps." This implies the body of the test functions should ONLY contain these placeholders. I will ensure that.
+   I need to make sure the imports are at the top.
+   I will format it exactly as requested.
+
+   Let's verify the exact wording: "Use ONLY the double-brace placeholder format for test steps."
+   I will write the imports, then the 6 tests. Each test will only contain the placeholders.
+   I'll make sure the function signatures match typical pytest fixtures: `def test_01_login(page, evidence_tracker):`
+   The prompt example uses `page, evidence_tracker`. I'll stick to that.
+
+   One detail: The prompt says "Use ONLY the double-brace placeholder format for test steps." It doesn't say I can't have imports or decorators. I'll include them.
+   I will output raw text without markdown formatting to strictly satisfy "Return valid Python code only, with no markdown fences".
+
+   Let's draft it carefully.
+
+   ```python
+   import pytest
+   from playwright.sync_api import Page, expect
+
+   @pytest.mark.evidence(condition_ref="AC-01", story_ref="S01")
+   def test_01_login(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {ASSERT:product list page}
+
+   @pytest.mark.evidence(condition_ref="AC-02", story_ref="S01")
+   def test_02_add_item(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {ASSERT:cart badge updated}
+
+   @pytest.mark.evidence(condition_ref="AC-03", story_ref="S01")
+   def test_03_navigate_cart(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {ASSERT:shopping cart page}
+
+   @pytest.mark.evidence(condition_ref="AC-04", story_ref="S01")
+   def test_04_verify_cart(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {ASSERT:Sauce Labs Backpack item in cart}
+
+   @pytest.mark.evidence(condition_ref="AC-05", story_ref="S01")
+   def test_05_navigate_checkout(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {CLICK:checkout button}
+       {ASSERT:checkout page}
+
+   @pytest.mark.evidence(condition_ref="AC-06", story_ref="S01")
+   def test_06_complete_checkout(page, evidence_tracker):
+       {GOTO:https://www.saucedemo.com}
+       {FILL:username input:standard_user}
+       {FILL:password input:secret_sauce}
+       {CLICK:login button}
+       {CLICK:Sauce Labs Backpack add to cart button}
+       {CLICK:shopping cart icon}
+       {CLICK:checkout button}
+       {FILL:first name input:John}
+       {FILL:last name input:Doe}
+       {FILL:zip code input:12345}
+       {CLICK:finish button}
+       {ASSERT:thank you page}
+   ```
+
+   Check constraints:
+   - EXACTLY 6 test functions? Yes.
+   - One per criterion? Yes.
+   - ONLY double-brace placeholder format for test steps? Yes.
+   - NO PROSE. NO EXPLANATIONS. START WITH IMPORTS? Yes.
+   - pytest sync Playwright? Yes.
+   - No asyncio? Yes.
+   - `from playwright.sync_api import Page, expect`? Yes.
+   - `import pytest`? Yes.
+   - Valid Python code only, no markdown fences? I will output raw text.
+   - Screenshot? Not requested.
+   - Do not invent selectors? I used descriptive placeholders as per the allowed format.
+
+   One minor thing: The prompt says "Use ONLY the double-brace placeholder format for test steps." This might mean I shouldn't include any other code inside the functions. I've done that.
+   I will ensure the output starts exactly with `import pytest` and ends with the last test function. No markdown.
+
+   All constraints met. Proceeding. 
+   I will generate the raw text now. 
+   Self-Correction/Refinement during thought: 
+   The prompt says "Use ONLY the double-brace placeholder format for test steps." It's fine. 
+   I'll make sure the formatting matches exactly. 
+   I will output it directly. 
+   Ready. 
+   Output matches the draft.✅
+   Note: I'll remove the markdown code block markers as instructed: "Return valid Python code only, with no markdown fences".
+   I will paste the raw Python code.
+   All good. 
+   Proceeds. 
+   [Output Generation] -> *Proceeds*
+   *(Self-Correction/Verification during drafting)*: 
+   Wait, the prompt says "Use ONLY the double-brace placeholder format for test steps." It doesn't forbid imports/decorators. 
+   I'll keep the imports and decorators. 
+   The example shows:
+   ```
+   import pytest
+   from playwright.sync_api import Page
+
+   @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
+   def test_01_example(page, evidence_tracker):
+       {GOTO:https://example.com}
+       ...
+   ```
+   I'll follow that exactly.
+   All set. 
+   Output matches draft.✅
+   Generating. 
+   [Output] -> (raw text)
+   `import pytest`
+   `from playwright.sync_api import Page, expect`
+   ... etc.
+   Done. 
+   *Self-Correction/Note during thought*: I should ensure I don't accidentally include markdown formatting. I will output plain text.
+   The prompt says "Return valid Python code only, with no markdown fences, chain-of-thought, or commentary."
+   I will strictly follow this.
+   Proceeds. 
+   [Output Generation] -> *Proceeds*
+</think>
+
+import pytest
+from playwright.sync_api import Page, expect
+
+@pytest.mark.evidence(condition_ref="AC-01", story_ref="S01")
+def test_01_login(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {ASSERT:product list page}
+
+@pytest.mark.evidence(condition_ref="AC-02", story_ref="S01")
+def test_02_add_item(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {CLICK:Sauce Labs Backpack add to cart button}
+    {ASSERT:cart badge updated}
+
+@pytest.mark.evidence(condition_ref="AC-03", story_ref="S01")
+def test_03_navigate_cart(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {CLICK:Sauce Labs Backpack add to cart button}
+    {CLICK:shopping cart icon}
+    {ASSERT:shopping cart page}
+
+@pytest.mark.evidence(condition_ref="AC-04", story_ref="S01")
+def test_04_verify_cart(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {CLICK:Sauce Labs Backpack add to cart button}
+    {CLICK:shopping cart icon}
+    {ASSERT:Sauce Labs Backpack item in cart}
+
+@pytest.mark.evidence(condition_ref="AC-05", story_ref="S01")
+def test_05_navigate_checkout(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {CLICK:Sauce Labs Backpack add to cart button}
+    {CLICK:shopping cart icon}
+    {CLICK:checkout button}
+    {ASSERT:checkout page}
+
+@pytest.mark.evidence(condition_ref="AC-06", story_ref="S01")
+def test_06_complete_checkout(page, evidence_tracker):
+    {GOTO:https://www.saucedemo.com}
+    {FILL:username input:standard_user}
+    {FILL:password input:secret_sauce}
+    {CLICK:login button}
+    {CLICK:Sauce Labs Backpack add to cart button}
+    {CLICK:shopping cart icon}
+    {CLICK:checkout button}
+    {FILL:first name input:John}
+    {FILL:last name input:Doe}
+    {FILL:zip code input:12345}
+    {CLICK:finish button}
+    {ASSERT:thank you page}
