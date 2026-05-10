@@ -23,12 +23,10 @@ Or run directly:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -40,13 +38,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from src.placeholder_orchestrator import PlaceholderOrchestrator
-from src.placeholder_resolver import PlaceholderResolver
-from src.scraper import PageScraper
-
+from src.placeholder_orchestrator import PlaceholderOrchestrator  # noqa: E402
+from src.placeholder_resolver import PlaceholderResolver  # noqa: E402
+from src.scraper import PageScraper  # noqa: E402
 
 # Sample test data — mirrors the real mock insurance site structure
-SAMPLE_SKELETON = '''
+SAMPLE_SKELETON = """
 def test_01_browse_products(page):
     page.goto("{{GOTO:home page}}")
     page.locator("{{{{CLICK:product category link}}}}").click()
@@ -58,7 +55,7 @@ def test_02_add_to_cart(page):
 def test_03_view_cart(page):
     page.locator("{{{{CLICK:Cart link or cart icon in the page header}}}}").click()
     page.locator("{{{{ASSERT:cart page with selected items}}}}").is_visible()
-'''
+"""
 
 SAMPLE_PLACEHOLDERS = [
     ("GOTO", "home page"),
@@ -98,9 +95,7 @@ def inspect_text_validation() -> None:
         status = "✅ PASS" if result == expected else "❌ FAIL"
         if result != expected:
             all_pass = False
-        print(
-            f"  {status} | element='{element_text}' desc='{description}' -> {result} (expected {expected})"
-        )
+        print(f"  {status} | element='{element_text}' desc='{description}' -> {result} (expected {expected})")
 
     print()
     if all_pass:
@@ -118,7 +113,6 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
     print()
 
     scraper = PageScraper()
-    orchestrator = PlaceholderOrchestrator(seed_url)
     resolver = PlaceholderResolver()
 
     # Step 1: Scrape the seed URL
@@ -140,8 +134,6 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
 
     # Step 2: Resolve each placeholder
     print("[Step 2] Resolving placeholders...")
-    scraped_data = {final_url or seed_url: elements}
-
     for action, description in SAMPLE_PLACEHOLDERS:
         print(f"\n  Placeholder: ({action}) '{description}'")
 
@@ -165,7 +157,7 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
             selector = resolver._build_robust_locator(best)
             print(f"    ✅ Resolved to: {selector}")
         else:
-            print(f"    ❌ No match found — will generate pytest.skip()")
+            print("    ❌ No match found — will generate pytest.skip()")
 
     print()
 

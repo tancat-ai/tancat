@@ -55,7 +55,8 @@ def test_models_serialize_to_json_friendly_dicts() -> None:
     assert placeholder.to_dict()["action"] == "CLICK"
     assert step.to_dict()["placeholders"][0]["description"] == "cart link"
     assert journey.to_dict()["page_object_names"] == ["CartPage"]
-    assert PageRequirement(url="https://example.com/", description="home").to_dict()["url"] == "https://example.com/"
+    pr = PageRequirement(keyword="home", description="homepage")
+    assert pr.to_dict()["keyword"] == "home"
     assert page.to_dict()["element_count"] == 4
     assert page_object.to_dict()["module_name"] == "cart_page"
     assert record.to_dict()["kind"] == "unresolved_placeholder"

@@ -137,10 +137,14 @@ class SkeletonParser:
     """Extract placeholders and required URLs from generated skeletons."""
 
     def __init__(self) -> None:
+        # Supports {{ACTION:description}} and {{FILL:description:value}}
         self.placeholder_pattern = re.compile(r"\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}")
         self.any_double_brace_placeholder_pattern = re.compile(r"\{\{([A-Z_]+):([^}]+)\}\}")
-        self.pages_pattern = re.compile(r"#\s*[-*]?\s*`?(https?://[^`\s]+)`?(?:\s+\((.*?)\))?")
+        # Match keyword-based page references: "# - cart (shopping cart page)"
+        # The LLM writes short keywords (not URLs) that match GOTO placeholder descriptions.
+        self.pages_pattern = re.compile(r"#\s*[-*]?\s*(\w+)(?:\s+(?:\((.*?)\)|—\s*(.*?)))?\s*$", re.MULTILINE)
         self.single_brace_placeholder_pattern = re.compile(r"(?<!\{)\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}(?!\})")
+        # Ensure we match test definitions at the start of a line, or preceded only by whitespace
         self.test_definition_pattern = re.compile(r"^\s*def\s+(test_\w+)\s*\(", re.M)
         self.page_object_reference_pattern = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\s*\(")
 
@@ -293,12 +297,30 @@ class SkeletonParser:
         return uses
 
     def parse_pages_needed(self, code: str) -> list[tuple[str, str]]:
-        """Return the pages listed in the `# PAGES_NEEDED:` block."""
-        return [(url.strip(), desc.strip() if desc else "") for url, desc in self.pages_pattern.findall(code)]
+        """Return the pages listed in the `# PAGES_NEEDED:` block as (keyword, description) tuples.
+
+        The LLM writes keywords like:
+            # - cart (shopping cart page)
+            # - checkout (checkout page)
+        """
+        # findall returns (keyword, paren_desc, dash_desc) — use whichever description was captured
+        raw_matches = self.pages_pattern.findall(code)
+        result: list[tuple[str, str]] = []
+        for keyword, paren_desc, dash_desc in raw_matches:
+            desc = (paren_desc or dash_desc or "").strip()
+            result.append((keyword.strip(), desc))
+        return result
 
     def parse_page_requirements(self, code: str) -> list[PageRequirement]:
-        """Return typed page requirements from the `# PAGES_NEEDED:` block."""
-        return [PageRequirement(url=url, description=description) for url, description in self.parse_pages_needed(code)]
+        """Return typed page requirements from the `# PAGES_NEEDED:` block.
+
+        Each requirement contains a keyword (not a URL) that matches GOTO placeholder
+        descriptions. Actual URL resolution happens via UrlResolver (Phase 3).
+        """
+        return [
+            PageRequirement(keyword=keyword, description=description)
+            for keyword, description in self.parse_pages_needed(code)
+        ]
 
     def parse_test_journeys(self, code: str) -> list[TestJourney]:
         """Return structured journey data for each generated test function."""
@@ -450,17 +472,19 @@ class SkeletonParser:
                 f"Examples: {preview}"
             )
 
+        # Validate PAGES_NEEDED block — entries must be keywords (short words), not URLs.
+        # The LLM writes: # - cart (shopping cart page)
         pages_needed_block = re.search(r"#\s*PAGES_NEEDED:\s*(.*)", code, re.S)
         if pages_needed_block:
             page_lines = re.findall(r"^\s*#\s*-\s*(.+)$", pages_needed_block.group(1), re.M)
             invalid_pages = [
-                line.strip() for line in page_lines if line.strip() and not re.match(r"https?://", line.strip())
+                line.strip() for line in page_lines if line.strip() and re.match(r"https?://", line.strip())
             ]
             if invalid_pages:
                 preview = ", ".join(invalid_pages[:3])
                 return (
-                    "Skeleton output listed invalid page entries in `# PAGES_NEEDED:`. "
-                    "Each entry must be a real absolute URL. "
+                    "Skeleton output listed URLs in `# PAGES_NEEDED:`. "
+                    "Use short keywords only (e.g. 'cart', 'checkout'), not full URLs. "
                     f"Examples: {preview}"
                 )
 

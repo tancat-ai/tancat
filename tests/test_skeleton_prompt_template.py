@@ -248,9 +248,8 @@ class TestGenerateSkeletonPromptCountInjection:
         )
 
         prompt = generator.client.generate.call_args.args[0]
-        assert "EXACTLY 2 SEPARATE test functions" in prompt
-        assert "ONE test per acceptance criterion" in prompt
-        assert "IMPORTANT: You must generate exactly 2 test functions" in prompt
+        assert "EXACTLY 2 test functions" in prompt
+        assert "exactly 2 test functions" in prompt
 
 
 class TestFileNameGeneration:

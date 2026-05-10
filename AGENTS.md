@@ -308,10 +308,10 @@ Stops at each phase and prints scraped data, resolution results, and generated c
 | Symptom | Cause | Status |
 |---------|-------|--------|
 | ASSERT placeholders resolve to wrong element | Resolver matches on shared attributes (e.g., `data-product-id`) rather than assertion intent | Open — needs semantic matching improvement |
-| "Products link" resolves to brand product link | Scraper sees all elements on single-page app; resolver picks first match by score | Known limitation |
+| "Products link" resolves to brand product link | Scraper sees all elements on single-page app; resolver picks first match by score | Partially fixed (2026-05-08) — global best resolution reduces cross-page mismatches but same-page ambiguity remains |
 | Navigation criteria generate GOTO not CLICK | "navigate" verb in user story → GOTO placeholder → direct `page.goto()` | By design but produces non-click journeys |
 
 ---
 
-*Last updated: 2026-05-05*
+*Last updated: 2026-05-08*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

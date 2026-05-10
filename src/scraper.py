@@ -144,7 +144,7 @@ class PageScraper:
                 continue
             try:
                 loc = page.locator(selector).first
-                element["is_visible"] = loc.is_visible(timeout=2000)
+                element["is_visible"] = loc.is_visible()
             except Exception:
                 # If visibility check fails (e.g., invalid selector), default to True
                 # rather than blocking the pipeline. The resolver's scoring still applies.
@@ -234,17 +234,18 @@ class PageScraper:
         consent_selectors = [
             # IAB Global Vendor List overlays
             '[id^="fc-preference"]',
-            '[id*="consent"]',
-            '[id*="cookie"]',
-            '[class*="consent"]',
-            '[class*="cookie"]',
-            '[class*="cc-"]',
-            # Common consent modal patterns
-            '[role="dialog"][id*="consent"]',
-            '[role="dialog"][id*="cookie"]',
-            '[role="dialog"][class*="consent"]',
-            '[role="dialog"][class*="cookie"]',
-            # Generic overlay dismiss
+            # Common consent modal patterns (more specific to avoid false positives)
+            'div[id*="consent"][role="dialog"]',
+            'div[id*="cookie"][role="dialog"]',
+            'div[class*="consent"][role="dialog"]',
+            'div[class*="cookie"][role="dialog"]',
+            'section[class*="consent"]',
+            'section[class*="cookie"]',
+            # Specific framework classes
+            ".cc-window",
+            ".cc-banner",
+            ".cc-modal",
+            # Generic overlay dismiss (only if they have a role or look like a banner)
             "div[aria-label*='Consent']",
             "div[aria-label*='cookie']",
         ]
@@ -347,6 +348,7 @@ class PageScraper:
                     "href": href,
                     "title": str(tag.get("title", "")).strip(),
                     "aria_label": str(tag.get("aria-label", "")).strip(),
+                    "data_test": str(tag.get("data-test", "")).strip(),
                     "name": str(tag.get("name", "")).strip(),
                     "id": str(tag.get("id", "")).strip(),
                     "classes": " ".join(_class_attr) if isinstance(_class_attr := tag.get("class"), list) else "",

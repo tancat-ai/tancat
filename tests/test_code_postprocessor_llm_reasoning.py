@@ -282,7 +282,8 @@ def test_01_ok(page: Page, evidence_tracker) -> None:
 """
     fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
     assert "from playwright.sync_api import Page, expect" in fixed
-    assert "def dismiss_consent_overlays(page: Page) -> None:" in fixed
+    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
+    assert "dismiss_consent_overlays(page)" in fixed
 
 
 def test_run_pipeline_normalises_payable_type_to_page() -> None:
@@ -501,6 +502,6 @@ def test_checkout(page: Page, evidence_tracker) -> None:
 
     fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
 
-    assert "for selector in candidate_selectors:" in fixed
-    assert "        try:" in fixed
+    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
+    assert "dismiss_consent_overlays(page)" in fixed
     ast.parse(fixed)

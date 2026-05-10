@@ -279,7 +279,44 @@ __all__ = [
     "OpenAIProvider",
     "get_provider",
     "create_provider_from_env",
+    "auto_detect_provider",
 ]
+
+
+def auto_detect_provider() -> LLMProvider:
+    """Probe local ports to find an active LLM provider.
+
+    Checks:
+    1. LM Studio (http://localhost:1234/v1)
+    2. Ollama (http://localhost:11434)
+
+    Returns:
+        The first active LLMProvider found.
+
+    Raises:
+        ConnectionError: If no local providers are active.
+    """
+    import httpx
+
+    # 1. Try LM Studio
+    try:
+        lm_url = "http://localhost:1234/v1/models"
+        resp = httpx.get(lm_url, timeout=2.0)
+        if resp.status_code == 200:
+            return LMStudioProvider()
+    except (httpx.ConnectError, httpx.TimeoutException):
+        pass
+
+    # 2. Try Ollama
+    try:
+        ollama_url = "http://localhost:11434/api/tags"
+        resp = httpx.get(ollama_url, timeout=2.0)
+        if resp.status_code == 200:
+            return OllamaProvider()
+    except (httpx.ConnectError, httpx.TimeoutException):
+        pass
+
+    raise ConnectionError("No local LLM providers (LM Studio or Ollama) are currently active.")
 
 
 def get_provider(provider_name: str, **kwargs: Any) -> LLMProvider:

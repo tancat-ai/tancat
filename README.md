@@ -122,6 +122,15 @@ python -m cli.main --help
 python -m cli.main generate --help
 ```
 
+### UAT validation script
+
+Use `scripts/uat_automationexercise.py` for batch quality validation on supported demo sites:
+
+```bash
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio --site automationexercise
+.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio --site saucedemo
+```
+
 ## Prerequisites
 
 - **Python 3.13+**

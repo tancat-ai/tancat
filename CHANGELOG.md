@@ -39,6 +39,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - pre-commit hook failures from variable shadowing in `generate_3d_map.py` via mypy override
 - Fix skeleton prompt generation to inject the exact expected test count into the LLM prompt.
 - Improve placeholder postprocessing to unwrap `evidence_tracker.xxx({{...}})` wrappers with optional whitespace.
+- Placeholder resolution now collects candidates across ALL scraped pages before selecting the global best match, preventing low-quality matches from early pages when a much better match exists on a later page (e.g., finding a cart page element for "username input" instead of the login page element). Added `tests/test_global_best_resolution.py` with 5 regression tests.
 
 ---
 

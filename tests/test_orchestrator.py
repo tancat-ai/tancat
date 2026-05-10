@@ -8,6 +8,10 @@ from src.spec_analyzer import TestCondition
 from src.test_generator import TestGenerator
 
 
+def _disable_journey_discovery(orchestrator: TestOrchestrator) -> None:
+    orchestrator._scrape_journeys_statefully = AsyncMock(return_value={})  # type: ignore[method-assign]
+
+
 def test_run_pipeline_replaces_placeholders_with_scraped_locators() -> None:
     generator = TestGenerator(output_dir="generated_tests")
     generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
@@ -20,13 +24,27 @@ def test_checkout(page: Page):
     {{ASSERT:cart_summary}}
 
 # PAGES_NEEDED:
-# - https://example.com/products (products)
+# - products (products)
 """
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
+            "https://example.com/": (
+                [
+                    {"selector": "#add-to-cart", "text": "Add To Cart Button", "role": "button"},
+                    {
+                        "selector": "#cart-summary",
+                        "text": "Items in cart",
+                        "role": "region",
+                        "href": "https://example.com/view_cart",
+                    },
+                ],
+                None,
+                "https://example.com/",
+            ),
             "https://example.com/products": (
                 [{"selector": "#add-to-cart", "text": "Add To Cart Button", "role": "button"}],
                 None,
@@ -45,6 +63,21 @@ def test_checkout(page: Page):
                 "https://example.com/view_cart",
             ),
         }
+    )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {"selector": "#add-to-cart", "text": "Add To Cart Button", "role": "button"},
+                {
+                    "selector": "#cart-summary",
+                    "text": "Items in cart",
+                    "role": "region",
+                    "href": "https://example.com/view_cart",
+                },
+            ],
+            None,
+            "https://example.com/",
+        )
     )
 
     final_code = asyncio.run(
@@ -83,16 +116,17 @@ def test_checkout(page: Page):
 
 
 def test_run_pipeline_rejects_malformed_skeleton_before_resolution() -> None:
+    """Skeleton with hallucinated CSS selectors must be rejected before resolution."""
     generator = TestGenerator(output_dir="generated_tests")
     generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
         return_value="""
 from playwright.sync_api import Page
 
 def test_checkout(page: Page):
-    {GOTO:Product Page URL}
+    evidence_tracker.click('.btn.primary')
 
 # PAGES_NEEDED:
-# - {URL:Product Page}
+# - product_page (product page)
 """
     )
 
@@ -102,7 +136,11 @@ def test_checkout(page: Page):
         asyncio.run(orchestrator.run_pipeline(user_story="story", conditions="1. criterion"))
         raise AssertionError("Expected malformed skeleton to raise ValueError")
     except ValueError as exc:
-        assert "single-brace placeholders" in str(exc) or "invalid page entries" in str(exc)
+        assert (
+            "hallucinated CSS selectors" in str(exc).lower()
+            or "NEVER GUESS LOCATORS" in str(exc)
+            or "CSS class selector" in str(exc).lower()
+        )
 
 
 def test_run_pipeline_normalises_page_object_output_and_pytest_imports() -> None:
@@ -127,6 +165,7 @@ def test_checkout(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
@@ -136,18 +175,27 @@ def test_checkout(page: Page):
                         "text": "Cart",
                         "role": "a",
                         "href": "https://example.com/view_cart",
-                    }
+                    },
                 ],
                 None,
                 "https://example.com/",
             )
         }
     )
-
-    async def fake_scrape_url(url: str) -> tuple[list[dict[str, str]], str | None, str]:
-        return [], None, url
-
-    orchestrator.scraper.scrape_url = fake_scrape_url  # type: ignore[assignment]
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {
+                    "selector": 'a[href="/view_cart"]',
+                    "text": "Cart",
+                    "role": "a",
+                    "href": "https://example.com/view_cart",
+                },
+            ],
+            None,
+            "https://example.com/",
+        )
+    )
 
     final_code = asyncio.run(
         orchestrator.run_pipeline(
@@ -168,6 +216,7 @@ def test_checkout(page: Page):
 def test_build_candidate_urls_stays_scoped_to_expected_journey_pages() -> None:
     generator = TestGenerator(output_dir="generated_tests")
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     journeys = orchestrator.parser.parse_test_journeys(
         """
 from playwright.sync_api import Page
@@ -209,16 +258,20 @@ def test_checkout(page: Page):
     {{CLICK:add to cart}}
 
 # PAGES_NEEDED:
-# - https://example.com/ (home)
-# - https://example.com/products (products)
+# - home (home)
+# - products (products)
 """
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
-                [{"selector": "#hero", "text": "Hero", "role": "region"}],
+                [
+                    {"selector": "#hero", "text": "Hero", "role": "region"},
+                    {"selector": "#buy", "text": "Add to Cart", "role": "button"},
+                ],
                 None,
                 "https://example.com/",
             ),
@@ -228,6 +281,16 @@ def test_checkout(page: Page):
                 "https://example.com/products",
             ),
         }
+    )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {"selector": "#hero", "text": "Hero", "role": "region"},
+                {"selector": "#buy", "text": "Add to Cart", "role": "button"},
+            ],
+            None,
+            "https://example.com/",
+        )
     )
 
     asyncio.run(
@@ -239,10 +302,10 @@ def test_checkout(page: Page):
     )
 
     assert orchestrator.last_result is not None
-    assert [(page.url, page.description) for page in orchestrator.last_result.page_requirements] == [
-        ("https://example.com/", "home"),
-        ("https://example.com/products", "products"),
-    ]
+    # PageRequirement now stores keywords (not URLs) — check keywords match
+    req_keywords = [page.keyword for page in orchestrator.last_result.page_requirements]
+    assert "home" in req_keywords
+    assert "products" in req_keywords
 
 
 def test_run_pipeline_retries_when_skeleton_does_not_generate_one_test_per_criterion() -> None:
@@ -269,6 +332,7 @@ def test_02_go_to_cart(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
@@ -306,7 +370,7 @@ def test_01_add_to_cart(page: Page, evidence_tracker) -> None:
     evidence_tracker.click({{CLICK:add to cart button}}, label="add to cart")
 
 # PAGES_NEEDED:
-# - https://example.com/ (home)
+# - home (home)
 """,
             """
 from playwright.sync_api import Page, expect
@@ -318,25 +382,56 @@ def test_02_go_to_cart(page: Page, evidence_tracker) -> None:
     evidence_tracker.click({{CLICK:cart link}}, label="cart")
 
 # PAGES_NEEDED:
-# - https://example.com/view_cart (cart)
+# - cart (cart)
 """,
         ]
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
-                [{"selector": "#buy", "text": "Add to cart", "role": "button"}],
+                [
+                    {"selector": "#buy", "text": "Add to cart", "role": "button"},
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    },
+                ],
                 None,
                 "https://example.com/",
             ),
             "https://example.com/view_cart": (
-                [{"selector": "#cart-link", "text": "Cart", "role": "a", "href": "https://example.com/view_cart"}],
+                [
+                    {
+                        "selector": 'a[href="/view_cart"]',
+                        "text": "Cart",
+                        "role": "a",
+                        "href": "https://example.com/view_cart",
+                    }
+                ],
                 None,
                 "https://example.com/view_cart",
             ),
         }
+    )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {"selector": "#buy", "text": "Add to cart", "role": "button"},
+                {
+                    "selector": 'a[href="/view_cart"]',
+                    "text": "Cart",
+                    "role": "a",
+                    "href": "https://example.com/view_cart",
+                },
+            ],
+            None,
+            "https://example.com/",
+        )
     )
     reviewed_conditions = [
         TestCondition(
@@ -381,7 +476,7 @@ def test_02_go_to_cart(page: Page, evidence_tracker) -> None:
         "test_01_add_to_cart",
         "test_02_go_to_cart",
     ]
-    assert "https://example.com/view_cart" in final_code
+    assert 'a[href="/view_cart"]' in final_code
 
 
 def test_run_pipeline_normalises_unsupported_placeholder_actions_before_validation() -> None:
@@ -395,6 +490,7 @@ def test_01_add(page: Page):
 """
     )
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
 
     final_code = asyncio.run(
@@ -419,14 +515,22 @@ def test_01_example(page: Page):
 """
     )
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
-                [{"selector": "#buy", "text": "Buy", "role": "button"}],
+                [{"selector": "#buy", "text": "Product named", "role": "button"}],
                 None,
                 "https://example.com/",
             )
         }
+    )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [{"selector": "#buy", "text": "Product named", "role": "button"}],
+            None,
+            "https://example.com/",
+        )
     )
 
     final_code = asyncio.run(
@@ -453,6 +557,7 @@ def test_checkout(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/products": (
@@ -464,6 +569,16 @@ def test_checkout(page: Page):
                 "https://example.com/products",
             )
         }
+    )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
+                {"selector": '[data-product-id="1"]', "text": "Add To Cart Button", "role": "button"},
+            ],
+            None,
+            "https://example.com/products",
+        )
     )
 
     final_code = asyncio.run(
@@ -495,6 +610,7 @@ def test_02_verify_cart(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
@@ -527,6 +643,25 @@ def test_02_verify_cart(page: Page):
             ),
         }
     )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {
+                    "selector": 'a[href="/view_cart"]',
+                    "text": "Cart",
+                    "role": "a",
+                    "href": "https://example.com/view_cart",
+                },
+                {
+                    "selector": "#hero-summary",
+                    "text": "Summary",
+                    "role": "region",
+                },
+            ],
+            None,
+            "https://example.com/",
+        )
+    )
 
     final_code = asyncio.run(
         orchestrator.run_pipeline(
@@ -557,6 +692,7 @@ def test_01_verify_cart(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/view_cart": (
@@ -567,15 +703,30 @@ def test_01_verify_cart(page: Page):
                         "role": "a",
                         "href": "https://example.com/view_cart",
                     },
-                    {"selector": ".cart_description", "text": "Blue Top", "role": "div", "href": ""},
+                    {"selector": ".cart_description", "text": "Items added correctly", "role": "div", "href": ""},
                 ],
                 None,
                 "https://example.com/view_cart",
             )
         }
     )
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {
+                    "selector": 'a[href="/view_cart"]',
+                    "text": "Cart",
+                    "role": "a",
+                    "href": "https://example.com/view_cart",
+                },
+                {"selector": ".cart_description", "text": "Items added correctly", "role": "div", "href": ""},
+            ],
+            None,
+            "https://example.com/view_cart",
+        )
+    )
     orchestrator.semantic_ranker.choose_best_candidate = AsyncMock(  # type: ignore[method-assign]
-        return_value={"selector": ".cart_description", "text": "Blue Top", "role": "div", "href": ""}
+        return_value={"selector": ".cart_description", "text": "Items added correctly", "role": "div", "href": ""}
     )
 
     final_code = asyncio.run(
@@ -602,6 +753,7 @@ def test_checkout(page: Page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    _disable_journey_discovery(orchestrator)
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://example.com/": (
@@ -620,7 +772,18 @@ def test_checkout(page: Page):
     )
 
     async def fake_scrape_url(url: str) -> tuple[list[dict[str, str]], str | None, str]:
-        return [], None, url
+        return (
+            [
+                {
+                    "selector": 'a[href="/view_cart"]',
+                    "text": "Cart",
+                    "role": "a",
+                    "href": "https://example.com/view_cart",
+                }
+            ],
+            None,
+            url,
+        )
 
     orchestrator.scraper.scrape_url = fake_scrape_url  # type: ignore[assignment]
 
@@ -633,6 +796,6 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "def dismiss_consent_overlays(page: Page) -> None:" in final_code
+    assert "from src.browser_utils import dismiss_consent_overlays" in final_code
     assert 'evidence_tracker.navigate("https://example.com/")' in final_code
     assert "dismiss_consent_overlays(page)" in final_code

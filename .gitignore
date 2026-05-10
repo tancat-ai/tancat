@@ -35,7 +35,8 @@ ENV/
 .env.*.local
 
 # ── IDE ───────────────────────────────────────────────────────────────────────
-!.vscode/settings.json
+.vscode/
+!.vscode/launch.json
 .idea/
 *.swp
 *.swo
@@ -101,3 +102,12 @@ ISSUES_FOUND_AND_FIXES.md
 
 # ── Private / Commercial Strategy Docs ────────────────────────────────────────
 docs/private/
+
+# Playwright
+node_modules/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+# ── Scratch Files ──────────────
+scratch/

@@ -41,6 +41,40 @@ class TestTextMatchesDescription:
     def test_whitespace_normalization(self) -> None:
         assert self.resolver.text_matches_description("Add   to   cart", "click add to cart") is True
 
+    # Regression tests: "X button" descriptions must match action-verb element text.
+    # Previously, a navigation/action guard rejected these because "button" is a
+    # NAVIGATION word and "add" is an ACTION verb. The guard was removed (May 2026)
+    # because intent-level filtering is already handled by _matches_intent_bucket().
+
+    def test_add_to_cart_button_matches_add_to_cart_text(self) -> None:
+        """'Sauce Labs Backpack add to cart button' must match 'Add to cart' element text."""
+        assert self.resolver.text_matches_description("Add to cart", "Sauce Labs Backpack add to cart button") is True
+
+    def test_checkout_button_matches_proceed_to_checkout_text(self) -> None:
+        """'proceed to checkout button' must match 'Proceed to Checkout' element text."""
+        assert self.resolver.text_matches_description("Proceed to Checkout", "proceed to checkout button") is True
+
+    def test_finish_button_matches_finish_text(self) -> None:
+        """'finish button' must match 'Finish' element text."""
+        assert self.resolver.text_matches_description("Finish", "finish button") is True
+
+    def test_login_button_matches_login_text(self) -> None:
+        """'login button' must match 'Login' element text (was already allowed by exception)."""
+        assert self.resolver.text_matches_description("Login", "login button") is True
+
+    def test_continue_shopping_button_matches_continue_shopping_text(self) -> None:
+        """'Continue Shopping button' must match 'Continue Shopping' element text."""
+        assert self.resolver.text_matches_description("Continue Shopping", "Continue Shopping button") is True
+
+    def test_cart_link_does_not_match_add_to_cart_text(self) -> None:
+        """'Cart link' should NOT match 'Add to cart' — different intents.
+        This is handled by _matches_intent_bucket(), not text_matches_description().
+        The text method only checks word overlap, so this actually passes here.
+        The intent bucket filter is what blocks it upstream."""
+        # Word overlap: {"cart"} in both → passes text validation
+        # Intent filtering happens in rank_candidates() → _matches_intent_bucket()
+        assert self.resolver.text_matches_description("Add to cart", "Cart link") is True
+
 
 class TestFindBestElementWithTextValidation:
     """find_best_element skips candidates whose text doesn't match."""

@@ -107,14 +107,15 @@ class TestGenerateTestMethod:
             client.generate_test("")
         assert "empty" in str(exc_info.value).lower()
 
-    @patch("src.llm_client.create_provider_from_env")
-    def test_generate_test_calls_api_correctly(self, mock_create_provider: MagicMock) -> None:
+    @patch("src.llm_client.auto_detect_provider")
+    def test_generate_test_calls_api_correctly(self, mock_auto_detect_provider: MagicMock) -> None:
         """Verify API call is made with correct payload."""
         # Mock the provider
         mock_provider = MagicMock()
         mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
         mock_provider.complete.return_value = ChatCompletion(content="test code", model="qwen3.5:35b")
-        mock_create_provider.return_value = mock_provider
+        mock_auto_detect_provider.return_value = mock_provider
 
         client = LLMClient()
         _ = client.generate_test("test scenario")
@@ -130,42 +131,42 @@ class TestGenerateTestMethod:
         assert messages[1].role == "user"
         assert "test scenario" in messages[1].content
 
-    @patch("src.llm_client.create_provider_from_env")
-    def test_generate_test_returns_extracted_code(self, mock_create_provider: MagicMock) -> None:
+    @patch("src.llm_client.auto_detect_provider")
+    def test_generate_test_returns_extracted_code(self, mock_auto_detect_provider: MagicMock) -> None:
         """Verify extracted code is returned."""
         # Mock the provider
         mock_provider = MagicMock()
         mock_provider.provider_name = "ollama"
         mock_provider.complete.return_value = ChatCompletion(content="```python\ntest code\n```", model="qwen3.5:35b")
-        mock_create_provider.return_value = mock_provider
+        mock_auto_detect_provider.return_value = mock_provider
 
         client = LLMClient()
         result = client.generate_test("test scenario")
 
         assert result == "test code"
 
-    @patch("src.llm_client.create_provider_from_env")
-    def test_generate_test_with_trailing_newline(self, mock_create_provider: MagicMock) -> None:
+    @patch("src.llm_client.auto_detect_provider")
+    def test_generate_test_with_trailing_newline(self, mock_auto_detect_provider: MagicMock) -> None:
         """Verify code with trailing newline is handled correctly."""
         # Mock the provider
         mock_provider = MagicMock()
         mock_provider.provider_name = "ollama"
         mock_provider.complete.return_value = ChatCompletion(content="```python\ntest code\n```", model="qwen3.5:35b")
-        mock_create_provider.return_value = mock_provider
+        mock_auto_detect_provider.return_value = mock_provider
 
         client = LLMClient()
         result = client.generate_test("test scenario")
 
         assert result == "test code"
 
-    @patch("src.llm_client.create_provider_from_env")
-    def test_connection_error_handling(self, mock_create_provider: MagicMock) -> None:
+    @patch("src.llm_client.auto_detect_provider")
+    def test_connection_error_handling(self, mock_auto_detect_provider: MagicMock) -> None:
         """Verify RuntimeError is raised for connection failures."""
         # Mock the provider to raise an exception
         mock_provider = MagicMock()
         mock_provider.provider_name = "ollama"
         mock_provider.complete.side_effect = Exception("Connection failed")
-        mock_create_provider.return_value = mock_provider
+        mock_auto_detect_provider.return_value = mock_provider
 
         client = LLMClient()
         with pytest.raises(Exception) as exc_info:
@@ -287,14 +288,14 @@ class TestSystemPromptContent:
 class TestErrorHandling:
     """Tests for error handling scenarios."""
 
-    @patch("src.llm_client.create_provider_from_env")
-    def test_connection_error_message(self, mock_create_provider: MagicMock) -> None:
+    @patch("src.llm_client.auto_detect_provider")
+    def test_connection_error_message(self, mock_auto_detect_provider: MagicMock) -> None:
         """Verify helpful error message for connection failures."""
         # Mock the provider to raise an exception
         mock_provider = MagicMock()
         mock_provider.provider_name = "ollama"
         mock_provider.complete.side_effect = Exception("Connection refused")
-        mock_create_provider.return_value = mock_provider
+        mock_auto_detect_provider.return_value = mock_provider
 
         client = LLMClient()
         with pytest.raises(Exception) as exc_info:

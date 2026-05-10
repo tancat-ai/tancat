@@ -195,7 +195,7 @@ class TestCaseOrchestrator:
 
             # Scrape page context once using the current scraper
             scraper = PageScraper()
-            elements, scrape_error, final_url = scraper._scrape_url_sync(url)
+            elements, a11y_snapshot, scrape_error, final_url = scraper._scrape_url_sync(url)
             if elements:
                 print(f"✅ Successfully scraped {len(elements)} interactive elements from {final_url}")
 

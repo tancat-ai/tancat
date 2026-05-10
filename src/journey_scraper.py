@@ -24,6 +24,7 @@ from typing import Any
 
 from playwright.sync_api import sync_playwright
 
+from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 
 
@@ -104,6 +105,12 @@ class JourneyScraper:
         self.base_backoff_ms = base_backoff_ms
         self.headless = headless
         self._html_scraper = PageScraper(timeout_ms=timeout_ms)
+        self._resolver = PlaceholderResolver()
+
+    def _debug(self, message: str) -> None:
+        """Print debug message to stderr if logging is enabled."""
+        if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
+            print(f"[journey_discovery] {message}", flush=True, file=sys.stderr)
 
     async def scrape_journey(
         self,
@@ -158,6 +165,11 @@ class JourneyScraper:
             check=False,
             timeout=max(120, int(self.timeout_ms / 1000) * max(1, len(steps))),
         )
+
+        # Surface subprocess stderr for real-time debugging
+        if completed.stderr:
+            print(completed.stderr, flush=True, file=sys.stderr)
+
         if completed.returncode != 0:
             return {}
 
@@ -189,22 +201,37 @@ class JourneyScraper:
                 # Start at the starting URL to establish session
                 if self.starting_url:
                     current_url = self.starting_url
-                    page.goto(self.starting_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                    self._debug(f"Navigating to starting URL: {self.starting_url}")
+                    page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
+                    # Scrape the starting page so elements are available for placeholder resolution.
+                    # Without this, pages like login forms are never captured since auto-scrape
+                    # only triggers after explicit navigate steps (line 244), not initial load.
+                    elements = self._scrape_current_page(page, current_url)
+                    output[current_url] = elements
 
                 for step_index, step in enumerate(steps):
                     last_error: Exception | None = None
+                    self._debug(f"Step {step_index + 1}/{len(steps)}: {step.action} '{step.description}'")
 
                     for attempt in range(1, self.max_retries + 1):
                         try:
                             if step.action == "navigate" and step.url:
                                 current_url = self._navigate_to(page, step.url, step.timeout_ms)
 
-                            elif step.action == "click" and step.selector:
-                                self._click_selector(page, step.selector, step.timeout_ms)
+                            elif step.action == "click":
+                                selector = step.selector
+                                if not selector and step.description:
+                                    selector = self._discover_selector(page, step.action, step.description)
+                                if selector:
+                                    self._click_selector(page, selector, step.timeout_ms)
 
-                            elif step.action == "fill" and step.selector and step.text:
-                                self._fill_selector(page, step.selector, step.text, step.timeout_ms)
+                            elif step.action == "fill":
+                                selector = step.selector
+                                if not selector and step.description:
+                                    selector = self._discover_selector(page, step.action, step.description)
+                                if selector and step.text:
+                                    self._fill_selector(page, selector, step.text, step.timeout_ms)
 
                             elif step.action == "wait":
                                 wait_time = (
@@ -223,6 +250,7 @@ class JourneyScraper:
                                 elements = self._scrape_current_page(page, current_url)
                                 output[current_url] = elements
 
+                            current_url = page.url
                             last_error = None
                             break
 
@@ -242,6 +270,29 @@ class JourneyScraper:
 
         return output
 
+    def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
+        """Find the best selector for a description on the current live page."""
+        # Ensure the page is stable and rendered
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+
+        html = page.content()
+        elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
+
+        self._debug(f"Scraped {len(elements)} elements for discovery of '{description}'")
+
+        # We don't have LLM context here, so we use rank_candidates directly
+        ranked = self._resolver.rank_candidates(action, description, elements)
+        if not ranked:
+            return None
+
+        # Pick top candidate and build a robust locator
+        _score, element = ranked[0]
+        robust = self._resolver._build_robust_locator(element)  # noqa: SLF001
+        return robust or element.get("selector")
+
     def _navigate_to(self, page: Any, url: str, timeout_ms: int) -> str:
         """Navigate to a URL and return the final URL.
 
@@ -256,6 +307,10 @@ class JourneyScraper:
 
         response = page.goto(full_url, wait_until="networkidle", timeout=timeout_ms)
         if response:
+            try:
+                page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                pass
             page.wait_for_timeout(1000)  # Extra wait for stable DOM
             self._dismiss_consent_overlays(page)
             return page.url
@@ -263,24 +318,38 @@ class JourneyScraper:
 
     def _click_selector(self, page: Any, selector: str, timeout_ms: int) -> None:
         """Click an element by selector, with scroll-into-view and retry."""
+        self._debug(f"Attempting to click selector: {selector}")
         locator = page.locator(selector).first
         if locator.count() == 0:
+            self._debug(f"Click failed: Locator {selector} not found on page.")
             return
 
         try:
             locator.scroll_into_view_if_needed(timeout=min(2000, timeout_ms))
-        except Exception:
-            pass
+        except Exception as e:
+            self._debug(f"Scroll into view failed: {e}")
 
-        locator.click(timeout=min(5000, timeout_ms))
+        try:
+            locator.click(timeout=min(5000, timeout_ms))
+            self._debug(f"Clicked successfully: {selector}")
+        except Exception as e:
+            self._debug(f"Click exception: {e}")
+            raise
         page.wait_for_timeout(500)  # Brief wait for page transition
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
         """Fill an input element by selector."""
+        self._debug(f"Attempting to fill selector: {selector} with text: {text}")
         locator = page.locator(selector).first
         if locator.count() == 0:
+            self._debug(f"Fill failed: Locator {selector} not found on page.")
             return
-        locator.fill(text)
+        try:
+            locator.fill(text)
+            self._debug(f"Filled successfully: {selector}")
+        except Exception as e:
+            self._debug(f"Fill exception: {e}")
+            raise
 
     def _scrape_current_page(self, page: Any, url: str) -> list[dict[str, Any]]:
         """Scrape elements from the current page state."""

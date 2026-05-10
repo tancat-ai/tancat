@@ -42,9 +42,14 @@ class TestStep:
 
 @dataclass(frozen=True)
 class PageRequirement:
-    """A page URL declared in the skeleton's PAGES_NEEDED block."""
+    """A page reference declared in the skeleton's PAGES_NEEDED block.
 
-    url: str
+    The LLM writes short keywords (not URLs) that match GOTO placeholder descriptions.
+    For example: {{GOTO:cart}} → keyword "cart". Actual URLs are resolved later
+    against journey scraping results.
+    """
+
+    keyword: str
     description: str = ""
 
     def to_dict(self) -> dict[str, Any]:

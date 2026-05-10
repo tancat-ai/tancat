@@ -9,10 +9,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.code_postprocessor import normalise_generated_code
+from src.journey_scraper import JourneyScraper, JourneyStep
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
+from src.prerequisite_injector import PrerequisiteInjector
 from src.prompt_utils import (
     build_retry_conditions,
     build_single_condition_skeleton_prompt,
@@ -151,9 +153,7 @@ class TestOrchestrator:
             validation_result = validator.validate(skeleton_code)
             if not validation_result.is_valid:
                 self._debug(f"skeleton validation violations: {validation_result.violations}")
-                raise ValueError(
-                    f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}"
-                )
+                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
             # Phase 3: Detect zero-placeholder skeletons and retry once
             placeholders_found = self.parser.parse_placeholders(skeleton_code)
             if not placeholders_found and expected_test_count > 0:
@@ -213,6 +213,11 @@ class TestOrchestrator:
             )
 
         page_requirements = self.parser.parse_page_requirements(skeleton_code)
+
+        # Discover and scrape pages required for the journeys.
+        # We combine two approaches:
+        # 1. Static seed URLs (fast, provides baseline)
+        # 2. Stateful journey discovery (follows test steps, handles auth/cart)
         pages_to_scrape = self._build_candidate_urls(
             seed_urls=target_urls or [],
             page_requirements=page_requirements,
@@ -221,6 +226,8 @@ class TestOrchestrator:
             conditions=conditions,
         )
         self._debug(f"phase=scrape start urls={len(pages_to_scrape)}")
+
+        # Approach 1: Initial static scrape
         raw_scraped_data = await self._scraper.scrape_all(pages_to_scrape) if pages_to_scrape else {}
         scraped_data: dict[str, list[dict[str, Any]]] = {
             url: elements for url, (elements, error, _final_url) in raw_scraped_data.items()
@@ -229,14 +236,40 @@ class TestOrchestrator:
             url: _error for url, (elements, _error, _final) in raw_scraped_data.items() if _error
         }
 
+        # Approach 2: Stateful journey discovery (the "User-Driven" fix)
+        if self._starting_url:
+            self._debug("phase=journey_discovery start")
+            # Always enable discovery logs in the orchestrator debug output
+            journey_data = await self._scrape_journeys_statefully(journeys, self._starting_url)
+            # Journey-aware data takes precedence as it has correct state
+            for url, elements in journey_data.items():
+                if elements:
+                    scraped_data[url] = elements
+                    self._debug(f"journey discovery enriched: {url} ({len(elements)} elements)")
+            self._debug("phase=journey_discovery done")
+
         # Track redirects to maintain correct page context
         redirects: dict[str, str] = {
             url: final_url for url, (_elems, _err, final_url) in raw_scraped_data.items() if url != final_url
         }
 
-        if self._starting_url and scraped_data:
-            scraped_data = await self._placeholder_orchestrator._upgrade_stateful_pages(scraped_data)
         self._debug("phase=scrape done")
+
+        # Build keyword → URL mapping from discovered URLs (Phase 3: UrlResolver)
+        # This maps PAGES_NEEDED keywords to actual URLs discovered by scraping
+        if self._starting_url:
+            keywords = [pr.keyword for pr in page_requirements]
+            scraped_urls = list(scraped_data.keys())
+            placeholder_descs = [ph.description for j in journeys for ph in j.placeholders]
+            concepts_list = list(extract_route_concepts([user_story, conditions, *placeholder_descs, *keywords]))
+            self._placeholder_orchestrator.url_resolver.build_mapping(
+                keywords=keywords,
+                scraped_urls=scraped_urls,
+                seed_url=self._starting_url,
+                concepts=concepts_list,
+            )
+            self._debug(f"url_resolver mappings: {self._placeholder_orchestrator.url_resolver.get_all_mappings()}")
+
         scraped_page_records = self._placeholder_orchestrator._build_scraped_page_records(
             pages_to_scrape, scraped_data, scraped_errors, redirects
         )
@@ -251,6 +284,21 @@ class TestOrchestrator:
             scraped_errors=scraped_errors,
         )
         self._debug("phase=resolve_placeholders done")
+
+        # Prerequisite injection: detect dependency chains and inject auth steps
+        self._debug("phase=prerequisite_injection start")
+        injector = PrerequisiteInjector()
+        if journeys and self._starting_url:
+            injection_plans = injector.analyze_dependencies(
+                journeys=journeys,
+                starting_url=self._starting_url,
+                scraped_pages=scraped_data,
+            )
+            if injection_plans:
+                final_code = injector.inject_into_code(final_code, injection_plans)
+                self._debug(f"phase=prerequisite_injection injected={len(injection_plans)} tests")
+        self._debug("phase=prerequisite_injection done")
+
         final_code = normalise_generated_code(
             final_code, consent_mode=consent_mode, target_url=self._starting_url or ""
         )
@@ -272,6 +320,59 @@ class TestOrchestrator:
             unresolved_placeholders=unresolved,
         )
         return final_code
+
+    async def _scrape_journeys_statefully(
+        self,
+        journeys: list[TestJourney],
+        starting_url: str,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Scrape pages by following the generated skeleton journeys step-by-step."""
+        if not starting_url:
+            return {}
+
+        all_scraped_data: dict[str, list[dict[str, Any]]] = {}
+        scraper = JourneyScraper(starting_url=starting_url)
+
+        for journey in journeys:
+            self._debug(f"following discovery journey for: {journey.test_name}")
+            steps: list[JourneyStep] = []
+
+            for step in journey.steps:
+                for placeholder in step.placeholders:
+                    action = placeholder.action.lower()
+                    if action == "goto":
+                        # For GOTO, we try to resolve the URL from the description
+                        url = self._resolver.resolve_url(placeholder.description, {})
+                        if url:
+                            steps.append(JourneyStep(action="navigate", url=url, description=placeholder.description))
+                    elif action in ("click", "fill"):
+                        fill_text: str | None = None
+                        if action == "fill":
+                            # Try to extract fill text from the raw line first
+                            fill_text = self._placeholder_orchestrator._extract_fill_text(step.raw_line)
+                            # Fallback: if the placeholder description contains a colon,
+                            # the fill value may be embedded as FILL:description:value
+                            if not fill_text and ":" in placeholder.description:
+                                parts = placeholder.description.split(":", 1)
+                                fill_text = parts[1].strip() if len(parts) > 1 else None
+                        steps.append(
+                            JourneyStep(
+                                action=action,
+                                text=fill_text,
+                                description=placeholder.description,
+                            )
+                        )
+                    elif action == "assert":
+                        steps.append(JourneyStep(action="scrape", description=placeholder.description))
+
+            # Add a final scrape step if not already there
+            if not steps or steps[-1].action != "scrape":
+                steps.append(JourneyStep(action="scrape", description="final page state"))
+
+            journey_data = await scraper.scrape_journey(steps)
+            all_scraped_data.update(journey_data)
+
+        return all_scraped_data
 
     @staticmethod
     def _build_generation_conditions(

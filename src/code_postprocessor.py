@@ -296,12 +296,13 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
         fixed_code,
     )
 
-    # Ensure every test starts with a navigation if none present
-    fixed_code = _ensure_test_navigation(fixed_code)
+    # Ensure every test starts with a navigation if none present.
+    # Pass target_url (seed URL) so tests navigate to the correct homepage
+    # instead of LLM-guessed URLs from PAGES_NEEDED.
+    fixed_code = _ensure_test_navigation(fixed_code, target_url=target_url or None)
 
-    # Hallucination fix: Flatten inner functions like `def inner():` and `def run_test():`
-    # DISABLED temporarily — causes indentation issues with complex LLM output
-    # fixed_code = _flatten_inner_functions(fixed_code)
+    # Dedent module-level constructs that the LLM accidentally indented
+    fixed_code = _fix_module_scope_indentation(fixed_code)
 
     # Safety net: replace any remaining unresolved {{ACTION:...}} placeholders with
     # pytest.skip() so they never cause a SyntaxError.  This catches placeholders
@@ -335,6 +336,7 @@ def replace_token_in_line(
     resolved_value: str,
     duplicate_selectors: set[str],
     description: str = "",
+    fill_value: str = "",
 ) -> str:
     """Replace a single placeholder token within a code line."""
     stripped = line.strip()
@@ -409,7 +411,7 @@ def replace_token_in_line(
 
     if action == "FILL":
         if stripped == token:
-            return f'{indent}evidence_tracker.fill({resolved_value}, "", label={repr(step_label)})'
+            return f"{indent}evidence_tracker.fill({resolved_value}, {repr(fill_value)}, label={repr(step_label)})"
         locator_only_patterns = {
             f"page.locator({token})",
             f"self.page.locator({token})",
@@ -421,18 +423,14 @@ def replace_token_in_line(
             f"self.page.locator({token}).fill('')",
         }
         if stripped in locator_only_patterns or stripped in locator_fill_patterns:
-            return f"{indent}evidence_tracker.fill({resolved_value}, '', label={repr(step_label)})"
+            return f"{indent}evidence_tracker.fill({resolved_value}, {repr(fill_value)}, label={repr(step_label)})"
         # Handle cases where the LLM generates fill(token) without value arg
         fill_no_value = re.match(
             r"(evidence_tracker\.fill\()(" + re.escape(token) + r")(\s*,\s*label=)",
             stripped,
         )
         if fill_no_value:
-            return re.sub(
-                r"(evidence_tracker\.fill\()(" + re.escape(token) + r")(\s*,\s*label=)",
-                r"\1\2, '', \3",
-                stripped,
-            )
+            return f"{indent}{fill_no_value.group(1)}{resolved_value}, {repr(fill_value)}{fill_no_value.group(3)}{repr(step_label)})"
         return line.replace(token, resolved_value)
 
     if action in {"GOTO", "URL"}:
@@ -458,6 +456,20 @@ def replace_token_in_line(
         return line.replace(token, resolved_value)
 
     return line.replace(token, resolved_value)
+
+
+def _fix_module_scope_indentation(code: str) -> str:
+    """Ensure imports, class definitions, and test functions are at module scope (no indent)."""
+    module_level_keywords = ("import ", "from ", "def test_", "class ", "@pytest.mark")
+    lines = code.splitlines()
+    fixed: list[str] = []
+    for line in lines:
+        stripped = line.lstrip()
+        if any(stripped.startswith(kw) for kw in module_level_keywords):
+            fixed.append(stripped)
+        else:
+            fixed.append(line)
+    return "\n".join(fixed)
 
 
 def replace_remaining_placeholders(code: str) -> str:
@@ -838,168 +850,19 @@ def rewrite_page_references_in_class_methods(code: str) -> str:
 
 
 def _inject_consent_helper(code: str) -> str:
-    """Inject a consent-dismiss helper and call it after navigation."""
+    """Inject the dismiss_consent_overlays import and calls into the code."""
     helper_name = "dismiss_consent_overlays"
-    if helper_name not in code:
-        # Build the helper block as a list of lines to avoid nested triple-quote issues.
-        _h: list[str] = []
+    import_line = "from src.browser_utils import dismiss_consent_overlays"
 
-        def _a(line: str = "") -> None:
-            _h.append(line)
-
-        _a()
-        _a("def dismiss_consent_overlays(page: Page) -> None:")
-        _a('    """Best-effort dismissal of consent, cookie, and ad-overlay popups."""')
-        _a("    # --- 1. Standard consent/cookie banner buttons ---")
-        _a("    candidate_selectors = [")
-        _a("        \"button:has-text('Consent')\",")
-        _a("        \"button:has-text('Accept')\",")
-        _a("        \"button:has-text('Continue')\",")
-        _a("        \"button:has-text('OK')\",")
-        _a("        \"button:has-text('Got it')\",")
-        _a("        \"button:has-text('I Agree')\",")
-        _a("        \"button:has-text('Agree')\",")
-        _a("        \"button[aria-label='Close']\",")
-        _a("        \"button[aria-label='close']\",")
-        _a("    ]")
-        _a("    for selector in candidate_selectors:")
-        _a("        try:")
-        _a("            locator = page.locator(selector).first")
-        _a("            if locator.count() > 0 and locator.is_visible():")
-        _a("                locator.click(timeout=500)")
-        _a("                page.wait_for_timeout(200)")
-        _a("                break")
-        _a("        except Exception:")
-        _a("            continue")
-        _a()
-        _a("    # --- 2. Google Consent TVM (Two-Party Mode) ---")
-        _a("    try:")
-        _a("        consent_btn = page.locator(\".fc-consent-root button:has-text('Consent')\").first")
-        _a("        if consent_btn.count() > 0 and consent_btn.is_visible():")
-        _a("            consent_btn.click(timeout=2000)")
-        _a("            page.wait_for_timeout(500)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    try:")
-        _a("        manage_btn = page.locator(\".fc-consent-root button:has-text('Manage options')\").first")
-        _a("        if manage_btn.count() > 0 and manage_btn.is_visible():")
-        _a("            manage_btn.click(timeout=2000)")
-        _a("            page.wait_for_timeout(500)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    try:")
-        _a('        page.keyboard.press("Escape")')
-        _a("        page.wait_for_timeout(200)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    # --- 3. Remove Google Consent TVM DOM elements via JavaScript ---")
-        _a("    try:")
-        # Use single-quoted JS template to avoid triple-quote conflict.
-        _a("        page.evaluate(")
-        _a("            '''")
-        _a("            () => {")
-        _a("                const consentRoot = document.querySelector('.fc-consent-root');")
-        _a("                if (consentRoot) { consentRoot.remove(); }")
-        _a("                const dialogOverlay = document.querySelector('.fc-dialog-overlay');")
-        _a("                if (dialogOverlay) { dialogOverlay.remove(); }")
-        _a(
-            "                document.querySelectorAll('[class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());"
-        )
-        _a("                const allElements = document.querySelectorAll('*');")
-        _a("                for (const el of allElements) {")
-        _a("                    const style = window.getComputedStyle(el);")
-        _a("                    const zIndex = parseInt(style.zIndex, 10);")
-        _a("                    if (zIndex > 10000 && el.tagName !== 'IFRAME') { el.remove(); }")
-        _a("                }")
-        _a("            }")
-        _a("            '''")
-        _a("        )")
-        _a("        page.wait_for_timeout(300)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    # --- 3a. Expand collapsed Bootstrap panels (e.g., category dropdowns) ---")
-        _a("    try:")
-        _a("        page.evaluate(")
-        _a("            '''")
-        _a("            () => {")
-        _a("                document.querySelectorAll('.panel-collapse.collapse').forEach(el => {")
-        _a("                    el.classList.add('in');")
-        _a("                    el.style.display = 'block';")
-        _a("                });")
-        _a("            }")
-        _a("            '''")
-        _a("        )")
-        _a("        page.wait_for_timeout(300)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    # --- 4. Dismiss ad overlays that may intercept pointer events ---")
-        _a("    try:")
-        _a('        page.keyboard.press("Escape")')
-        _a("        page.wait_for_timeout(200)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-        _a("    ad_overlay_selectors = [")
-        _a('        "#google_vignette",')
-        _a("        \"[id*='google_vignette']\",")
-        _a('        ".adsbygoogle",')
-        _a("        \"iframe[id*='google_ads']\",")
-        _a("        \"iframe[id*='aswift']\",")
-        _a("        \"iframe[title='Advertisement']\",")
-        _a("    ]")
-        _a("    for selector in ad_overlay_selectors:")
-        _a("        try:")
-        _a("            ad_element = page.locator(selector).first")
-        _a("            if ad_element.count() > 0:")
-        _a('                page.keyboard.press("Escape")')
-        _a("                page.wait_for_timeout(200)")
-        _a("        except Exception:")
-        _a("            continue")
-        _a()
-        _a("    # Use JavaScript to remove ad overlays that intercept pointer events")
-        _a("    try:")
-        _a("        page.evaluate(")
-        _a("            '''")
-        _a("            () => {")
-        _a("                const vignette = document.getElementById('google_vignette');")
-        _a("                if (vignette) {")
-        _a("                    vignette.style.display = 'none';")
-        _a("                    vignette.style.visibility = 'hidden';")
-        _a("                }")
-        _a("                document.querySelectorAll('ins.adsbygoogle').forEach(el => {")
-        _a("                    el.style.display = 'none';")
-        _a("                    el.style.visibility = 'hidden';")
-        _a("                });")
-        _a(
-            '                document.querySelectorAll(\'iframe[id*=\\"aswift\\"], iframe[title=\\"Advertisement\\"]\').forEach(el => {'
-        )
-        _a("                    el.style.display = 'none';")
-        _a("                    el.style.visibility = 'hidden';")
-        _a("                });")
-        _a('                document.querySelectorAll(\'[class*=\\"ads\\"], [id*=\\"google_ads\\"]\').forEach(el => {')
-        _a("                    el.style.display = 'none';")
-        _a("                    el.style.visibility = 'hidden';")
-        _a("                });")
-        _a("            }")
-        _a("            '''")
-        _a("        )")
-        _a("        page.wait_for_timeout(300)")
-        _a("    except Exception:")
-        _a("        pass")
-        _a()
-
-        helper_block = "\n".join(_h) + "\n"
+    # 1. Add import at the top
+    if import_line not in code:
         insert_after = "from playwright.sync_api import Page, expect"
         if insert_after in code:
-            code = code.replace(insert_after, insert_after + helper_block, 1)
+            code = code.replace(insert_after, insert_after + "\n" + import_line, 1)
         else:
-            code = helper_block + "\n" + code
+            code = import_line + "\n" + code
 
+    # 2. Inject calls after navigations
     lines = code.splitlines()
     updated_lines: list[str] = []
     for line in lines:
@@ -1111,17 +974,27 @@ def _replace_bare_ellipsis(code: str) -> str:
     return "\n".join(updated_lines)
 
 
-def _ensure_test_navigation(code: str) -> str:
-    """Inject an initial navigation to the first known URL if a test lacks navigation."""
-    pages_block = re.search(r"# PAGES_NEEDED:\n((?:# https?://.*\n?)+)", code)
-    if not pages_block:
-        return code
+def _ensure_test_navigation(code: str, target_url: str | None = None) -> str:
+    """Inject an initial navigation to the given URL if a test lacks navigation.
 
-    first_url = re.search(r"https?://[^\s\n]+", pages_block.group(1))
-    if not first_url:
-        return code
+    Args:
+        code: The generated test code.
+        target_url: The seed URL (user-provided, known-correct) to navigate to.
+            If None, falls back to extracting from PAGES_NEEDED (legacy).
+    """
+    if target_url:
+        url = target_url
+    else:
+        # Legacy fallback — LLM-guessed URLs (less reliable)
+        pages_block = re.search(r"# PAGES_NEEDED:\n((?:# https?://.*\n?)+)", code)
+        if not pages_block:
+            return code
 
-    url = first_url.group(0)
+        first_url = re.search(r"https?://[^\s\n]+", pages_block.group(1))
+        if not first_url:
+            return code
+
+        url = first_url.group(0)
     lines = code.splitlines()
     updated_lines: list[str] = []
 

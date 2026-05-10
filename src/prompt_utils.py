@@ -3,322 +3,34 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
-_EVIDENCE_TRACKER_RULES = """=== EVIDENCE TRACKER RULES (STRICT) ===
-1. MANDATORY SIGNATURE: Every test function MUST include `evidence_tracker` in its arguments.
-   Example: `def test_example(page, evidence_tracker):`
-2. FORBIDDEN METHODS: NEVER use raw Playwright methods on the `page` object for navigation or interaction.
-   - ❌ DO NOT USE: `page.goto(url)` -> ✅ USE: `evidence_tracker.navigate(url)`
-   - ❌ DO NOT USE: `page.locator(...).fill(...)` -> ✅ USE: `evidence_tracker.fill(locator, value, label=...)`
-   - ❌ DO NOT USE: `page.locator(...).click()` -> ✅ USE: `evidence_tracker.click(locator, label=...)`
-   - ❌ DO NOT USE: `expect(page.locator(...)).to_be_visible()` -> ✅ USE: `evidence_tracker.assert_visible(locator, label=...)`
-3. MANDATORY DECORATOR: Every test function MUST be decorated with the `@pytest.mark.evidence` decorator containing valid references.
-   Example: `@pytest.mark.evidence(condition_ref="CRITERIA_ID", story_ref="STORY_ID")`
-4. EVIDENCE INTEGRITY: All interactions that produce screenshots or logs must go through `evidence_tracker`. Never call `page.screenshot()` directly.
-"""
-
-
-# Sentinel placeholder — never processed by .format() since it uses % style.
+# Sentinel placeholders — never processed by .format() directly since they use % style.
 _USER_STORY_PLACEHOLDER = "%(USER_STORY)s"
 _CONDITIONS_PLACEHOLDER = "%(CONDITIONS)s"
 _KNOWN_URLS_PLACEHOLDER = "%(KNOWN_URLS)s"
 
 
-def get_skeleton_prompt_template(
-    expected_count: int | None = None,
-    *,
-    user_story: str = "USER STORY GOES HERE",
-    conditions: str = "1. Acceptance criterion 1\n2. Acceptance criterion 2",
-    known_urls_block: str = "- No URLs provided",
-) -> str:
-    """Return the Phase 1 skeleton-generation prompt.
-
-    Args:
-        expected_count: If provided, the exact number of test functions to generate
-                        is injected prominently into the prompt.
-        user_story: The user story text (default placeholder).
-        conditions: The acceptance criteria text (default placeholder).
-        known_urls_block: Known target URLs block (default placeholder).
-    """
-    count_label = str(expected_count) if expected_count is not None else "N"
-
-    # The prompt MUST start with the count instruction — LLMs attend most to beginning.
-    count_header = ""
-    if expected_count is not None:
-        count_header = (
-            f"MANDATORY OUTPUT REQUIREMENT:\n"
-            f"1. Your ENTIRE output must contain EXACTLY {expected_count} SEPARATE test functions.\n"
-            f"2. ONE test per acceptance criterion. NEVER combine multiple criteria.\n"
-            f"3. Each test must be SHORT: 3-10 lines MAX. No comments inside tests.\n"
-            f"4. NEVER use comments like '# ... N more tests' — write ALL {expected_count} tests fully.\n"
-            f"5. If you produce fewer than {expected_count} tests, the output is rejected.\n\n"
-        )
-
-    # Brace examples shown to the LLM — built with raw strings to avoid any
-    # .format() interpretation.  The LLM must see exactly two braces each side.
-    _OPEN = "{{"
-    _CLOSE = "}}"
-
-    def _double(text: str) -> str:
-        return f"{_OPEN}{text}{_CLOSE}"
-
-    # Double-escape for .format() survival: {{{{ }} }} -> {{ }} in output
-    _DOUBLED = "{{{{"
-    _DOUBLED_CLOSE = "}}}}"
-
-    def _show(text: str) -> str:
-        return f"{_DOUBLED}{text}{_DOUBLED_CLOSE}"
-
-    brace_examples = (
-        "\n"
-        "PLACEHOLDER BRACE RULE (CRITICAL — READ CAREFULLY):\n"
-        "Every placeholder uses EXACTLY TWO braces on each side.\n"
-        f"CORRECT: {_show('CLICK:button')}  {_show('FILL:name')}  {_show('ASSERT:visible')}\n"
-        "If your output has a different number of braces, it is INVALID.\n"
-        "\n"
-    )
-
-    # Minimal output template — SHORT, direct, and brace-count explicit.
-    # Uses % style for user_story/conditions/known_urls so .format() is never
-    # called on the brace-heavy examples.
-    #
-    # CRITICAL CHANGE: Test bodies use STANDALONE placeholder lines (not wrapped in
-    # evidence_tracker calls). The postprocessor converts these into proper
-    # evidence_tracker.navigate/click/assert_visible calls AFTER resolution.
-    # This removes the cognitive conflict where the LLM sees function-call syntax
-    # with locator arguments and tries to fill in "real" selectors.
-    output_template = (
-        "\n=== REQUIRED OUTPUT FORMAT (STRICT) ===\n"
-        f"Your output must contain EXACTLY {count_label} test functions. NOTHING ELSE.\n"
-        "Each test: 3-10 lines MAX. No comments. No blank lines between steps.\n"
-        "Imports go ONCE at the top. # PAGES_NEEDED goes at the bottom.\n"
-        "\n"
-        "TEST BODY RULE (CRITICAL):\n"
-        "Each line inside a test function is ONE standalone placeholder — nothing else.\n"
-        "Do NOT wrap placeholders in function calls. Do NOT write evidence_tracker.xxx().\n"
-        "The build pipeline will convert your placeholders into proper code automatically.\n"
-        "\n"
-        "MINIMAL EXAMPLE (1 test, showing format):\n"
-        "\n"
-        "from playwright.sync_api import Page, expect\n"
-        "import pytest\n"
-        "\n"
-        '@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")\n'
-        "def test_01_example(page: Page, evidence_tracker) -> None:\n"
-        '    {{GOTO:home page}}\n'
-        f'    {_show("CLICK:button")}\n'
-        f'    {_show("ASSERT:result")}\n'
-        "\n"
-        "# PAGES_NEEDED:\n"
-        "# - https://your-target-site.com/ (home page)\n"
-        "\n"
-        f"IMPORTANT: Write ALL {count_label} tests fully. Each test SEPARATE. "
-        "NO comments like '# ... more tests'. NEVER merge criteria.\n"
-    )
-
-    placeholder_syntax_section = (
-        "=== PLACEHOLDER SYNTAX (STRICT — VIOLATION = REJECTION) ===\n"
-        "Use ONLY double-brace placeholders with EXACTLY 2 braces each side.\n"
-        "Each placeholder stands ALONE on its own line — indented inside the test function.\n"
-        "Do NOT wrap placeholders in evidence_tracker.xxx() calls.\n"
-        "Use one of these exact placeholder forms only:\n"
-        f"- {_show('CLICK:button description')}\n"
-        f"- {_show('FILL:input field description')}\n"
-        f"- {_show('GOTO:page description')}\n"
-        f"- {_show('URL:page description')}\n"
-        f"- {_show('ASSERT:element description')}\n"
-        "\n"
-        "=== FORBIDDEN IN SKELETON OUTPUT (ABSOLUTELY NO EXCEPTIONS) ===\n"
-        "NEVER write real CSS selectors, XPath, or any locator in the skeleton.\n"
-        "NEVER wrap placeholders in function calls like evidence_tracker.click({{CLICK:...}}).\n"
-        "FORBIDDEN patterns (your output will be REJECTED if any appear):\n"
-        "  - CSS selectors: '.btn.btn-success', '#elementId', 'a[href=\"/path\"]'\n"
-        "  - XPath: '//button', '//a[@class=\"test\"]'\n"
-        "  - Playwright methods: 'page.locator(...)', 'page.get_by_role(...)', 'page.click(...)'\n"
-        "  - evidence_tracker calls: 'evidence_tracker.click(...)', 'evidence_tracker.navigate(...)'\n"
-        "  - Any real locator pattern: '.class', '#id', '[attribute]', 'tag > child'\n"
-        "WRONG (will be REJECTED):\n"
-        "  evidence_tracker.click('a[href=\"/category\"]', label='Dress link')\n"
-        "  evidence_tracker.navigate('{{GOTO:home}}')\n"
-        "RIGHT (standalone placeholder on its own line):\n"
-        "  {{{{CLICK:Dress category link}}}}\n"
-        "  {{{{GOTO:home page}}}}\n"
-        "\n"
-        "=== ALLOWED PLACEHOLDERS (NO OTHER ACTIONS ARE VALID) ===\n"
-        "The ONLY allowed ACTION values are: CLICK, FILL, GOTO, URL, ASSERT\n"
-        f"- {{{{CLICK:description}}}} — for clicking buttons, links, or elements\n"
-        f"- {{{{FILL:description}}}} — for typing into input fields\n"
-        f"- {{{{GOTO:description}}}} — for navigating to a page\n"
-        f"- {{{{URL:description}}}} — for navigating to a page (same as GOTO)\n"
-        f"- {{{{ASSERT:description}}}} — for asserting element visibility\n"
-        "For ANY other action (CLOSE, WAIT, PRESS, SELECT, SCROLL, etc.),\n"
-        "write: pytest.skip('Not supported in skeleton: action name')\n"
-        "DO NOT invent new placeholder action names. Only CLICK, FILL, GOTO, URL, ASSERT.\n"
-        "\n"
-    )
-
-    return (
-        "You are a Playwright Python test engineer.\n"
-        "\n"
-        "Generate a pytest sync Playwright skeleton from the specification below.\n"
-        "\n"
-        + count_header
-        + output_template
-        + "\n"
-        + brace_examples
-        + placeholder_syntax_section
-        + "=== NAVIGATION PATTERN GUIDELINES ===\n"
-        + "- Many sites hide navigation links inside collapsible containers\n"
-        + "  (hamburger menus, sidebars, accordions, dropdown menus).\n"
-        + "- Before clicking a navigation link, first expand its container:\n"
-        + "  Example: {{{{CLICK:hamburger menu toggle button}}}} then {{{{CLICK:Dress category link}}}}\n"
-        + "- Common container expanders: hamburger icon, menu button, sidebar toggle,\n"
-        + "  accordion header, dropdown trigger, 'Menu' text/button.\n"
-        + "- If a navigation target might be hidden, ALWAYS generate the expand step first.\n"
-        + "- When clicking items in a header/nav bar, check if a menu toggle exists\n"
-        + "  and include it as a prerequisite step before the target click.\n"
-        + "\n"
-        + "=== ASSERTION SPECIFICITY ===\n"
-        + "- For ASSERT placeholders, describe the specific content expected,\n"
-        + "  not generic UI elements. Prefer 'product title heading' over 'button'.\n"
-        + "- Example: {{{{ASSERT:product name and price displayed}}}} instead of {{{{ASSERT:visible product details}}}}\n"
-        + "- The more specific the description, the better the placeholder resolver\n"
-        + "  can match it to real page elements.\n"
-        + "\n"
-        + "=== EVIDENCE TRACKER (STRICT) ===\n"
-        "- In test functions: evidence_tracker is a fixture argument -> `def test_xxx(page: Page, evidence_tracker):\n"
-        "- In Page Object methods: include evidence_tracker as a method parameter\n"
-        "- NEVER use raw page.goto(), page.click(), page.fill(), expect(page.locator(...))\n"
-        "- ALWAYS use evidence_tracker.navigate(), evidence_tracker.click(), evidence_tracker.fill(), evidence_tracker.assert_visible()\n"
-        '- Decorate every test with: @pytest.mark.evidence(condition_ref="TC...", story_ref="...")\n'
-        "\n"
-        "=== CODE STRUCTURE ===\n"
-        "- pytest format, sync API only. No async/await.\n"
-        "- Imports: from playwright.sync_api import Page, expect; import pytest\n"
-        "- Page Object classes: structural stubs only; do NOT guess selectors inside them.\n"
-        "- Include a # PAGES_NEEDED: block with real absolute URLs only (no placeholders).\n"
-        "\n"
-        "Known Target URLs:\n"
-        "{known_urls_block}\n"
-        "\n"
-        "User Story:\n"
-        "{user_story}\n"
-        "\n"
-        "Derived Test Conditions:\n"
-        "{conditions}\n"
-        "\n"
-        f"ALL {count_label.upper()} CRITERIA MUST HAVE SEPARATE TEST FUNCTIONS. "
-        "Generate ONE test per criterion. Do NOT combine, skip, or omit any criteria.\n"
-    )
-
-
-def get_streamlit_system_prompt_template() -> str:
-    """DEPRECATED — This prompt format is not used in production.
-
-    The skeleton-first pipeline with placeholder resolution is now the only active path.
-    Kept for historical reference only. Do not wire this back into the generation flow.
-    """
-    return (
-        """You are an expert QA engineer writing Playwright Python tests in pytest format using the sync API.
-
-REQUIREMENTS:
-- Generate exactly {count} test functions from the acceptance criteria below.
-- Use pytest format and Playwright sync API only.
-- Do not use async/await or async_playwright.
-- Each test runs in a FRESH browser context, so never assume login or cart state carries across tests.
-- Use ONLY LOCATORS LISTED IN THE PAGE CONTEXT ABOVE.
-- NEVER invent, guess, or create locators that are not present in the PAGE CONTEXT.
-
-"""
-        + _EVIDENCE_TRACKER_RULES
-        + """
-
-User Story:
-{user_story}
-
-Derived Test Conditions:
-{conditions}
-"""
-    )
-
-
-def build_page_context_prompt_block(page_context: Any) -> str:
-    """Format page context into an approved-locators block for prompt injection."""
-    raw_context = str(page_context or "").strip()
-    if not raw_context:
-        return """=== PAGE CONTEXT ===
-No context available.
-
-No PAGE CONTEXT is available, so only generate structural test logic and leave unknown interactions explicit.
-"""
-
-    truncated = raw_context
-    truncation_note = ""
-    if len(truncated) > 5000:
-        truncated = truncated[:5000]
-        truncation_note = "\nNOTE: PAGE CONTEXT was truncated to keep prompt size bounded.\n"
-
-    locators = re.findall(r"(page\.[^\n]+)", truncated)
-    if not locators:
-        locators_block = "- No approved locators were extracted from PAGE CONTEXT."
-    else:
-        locators_block = "\n".join(f"- {locator.strip()}" for locator in locators)
-
-    return f"""=== PAGE CONTEXT ===
-{truncated}
-{truncation_note}
-=== APPROVED LOCATORS ===
-{locators_block}
-"""
-
-
 def count_conditions(conditions: str) -> int:
-    """Return the number of numbered acceptance criteria (lines starting with N. or N))."""
-    count = 0
-    for line in conditions.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        # Match lines starting with "1.", "1)", "2.", "2)", etc.
-        if re.match(r"^\d+[.)]", stripped):
-            count += 1
-    return count
+    """Return the number of numbered criteria in the conditions text."""
+    # Matches lines starting with "1. ", "1)", etc.
+    return len(re.findall(r"^\d+[.)]\s+", conditions, re.M))
 
 
 def prepare_conditions_for_generation(conditions: str) -> str:
-    """Enumerate conditions with line numbers for clear LLM referencing."""
-    condition_lines = [line.strip() for line in conditions.splitlines() if line.strip()]
-    normalized_lines: list[str] = []
-
-    for index, line in enumerate(condition_lines, start=1):
-        stripped_line = re.sub(r"^\d+[.)]\s*", "", line).strip()
-        normalized_lines.append(f"{index}. {stripped_line}")
-
-    total_count = len(normalized_lines)
-    if total_count == 0:
-        return conditions
-
-    return (
-        f"There are exactly {total_count} test conditions below.\n"
-        f"Generate EXACTLY {total_count} pytest test functions.\n"
-        "Generate ONE test function per condition.\n"
-        "Do NOT combine multiple conditions into one test.\n"
-        "Name the tests in order such as test_01_..., test_02_..., test_03_....\n\n" + "\n".join(normalized_lines)
-    )
+    """Prepare conditions text for LLM generation by ensuring proper numbering."""
+    lines = [line.strip() for line in conditions.splitlines() if line.strip()]
+    prepared = []
+    for i, line in enumerate(lines, 1):
+        # Remove existing numbering if present
+        clean_line = re.sub(r"^\d+[.)]\s*", "", line)
+        prepared.append(f"{i}. {clean_line}")
+    return "\n".join(prepared)
 
 
-def build_retry_conditions(
-    prepared_conditions: str,
-    expected_test_count: int,
-) -> str:
-    """Return a stricter condition prompt for a one-time skeleton retry."""
-    return (
-        prepared_conditions
-        + "\n\nCRITICAL CORRECTION:\n"
-        + f"The previous answer did not produce exactly {expected_test_count} separate pytest test functions.\n"
-        + "Regenerate the file with one test function per numbered condition and do not merge them."
-    )
+def build_retry_conditions(conditions: str, expected_count: int) -> str:
+    """Format conditions for a retry with a strict count requirement."""
+    header = f"STRICT REQUIREMENT: You MUST generate EXACTLY {expected_count} test functions. One for each criterion below. DO NOT skip or combine any."
+    return f"{header}\n\n{conditions}"
 
 
 def build_single_condition_skeleton_prompt(
@@ -329,40 +41,138 @@ def build_single_condition_skeleton_prompt(
     target_condition_ref: str,
     target_condition_text: str,
     target_condition_expected: str,
-    target_condition_intent: str,
+    target_condition_intent: str | None = None,
 ) -> str:
-    """Return a prompt that generates exactly one skeleton test for one condition."""
-    all_conditions_block = "\n".join(
-        f"{index}. {condition}" for index, condition in enumerate(ordered_conditions, start=1)
-    )
-    intent_guidance = {
-        "element_presence": "Keep setup minimal. Prefer one focused visibility assertion after navigation.",
-        "element_behavior": "Focus on one main element interaction and one clear result assertion.",
-        "state_assertion": "Include prerequisite setup actions needed to make the asserted state true within this test.",
-        "journey_step": "Include all prerequisite user actions needed to reach this step independently.",
-        "journey_outcome": "Include the full prerequisite journey needed to reach the final outcome independently.",
-    }
-    prompt = get_skeleton_prompt_template(expected_count=1).format(
-        user_story=user_story,
-        conditions=(
-            "Ordered reviewed conditions for context:\n"
-            f"{all_conditions_block}\n\n"
-            "Generate exactly ONE test function for this target condition only:\n"
-            f"- Ref: {target_condition_ref}\n"
-            f"- Condition: {target_condition_text}\n"
-            f"- Expected: {target_condition_expected}\n"
-            f"- Intent: {target_condition_intent}\n"
-        ),
-        known_urls_block=known_urls_block,
-    )
+    """Build a prompt for generating a single test function fragment."""
+    conditions_block = "\n".join(f"- {c}" for c in ordered_conditions)
+
     return (
-        prompt
-        + "\n"
-        + "ADDITIONAL TARGETING RULES:\n"
-        + "- Output exactly one pytest test function for the target condition only.\n"
-        + "- Use the full ordered condition list as context, but do not generate tests for the other conditions.\n"
-        + "- Do not assume browser, cart, or login state carries across tests.\n"
-        + "- Include prerequisite setup steps when needed to make this target condition independently executable.\n"
-        + f"- Intent-specific rule: {intent_guidance.get(target_condition_intent, intent_guidance['journey_step'])}\n"
-        + f'- Use @pytest.mark.evidence(condition_ref="{target_condition_ref}", story_ref="S01") on the test.\n'
+        "You are a Playwright Python test engineer.\n"
+        "\n"
+        "Generate EXACTLY ONE pytest test function for the target condition below.\n"
+        "\n"
+        "=== TARGET CONDITION ===\n"
+        f"ID: {target_condition_ref}\n"
+        f"Description: {target_condition_text}\n"
+        f"Expected: {target_condition_expected}\n"
+        "\n"
+        "=== MANDATORY OUTPUT FORMAT ===\n"
+        "1. Output ONLY the test function code. NO PROSE.\n"
+        "2. Use ONLY standalone double-brace placeholders inside the test.\n"
+        "3. Every line in the test body must be a placeholder like {{CLICK:description}}.\n"
+        "\n"
+        "=== ALLOWED PLACEHOLDERS ===\n"
+        "{{GOTO:url or description}}\n"
+        "{{CLICK:element description}}\n"
+        "{{FILL:element description:value to type}}\n"
+        "{{ASSERT:element description}}\n"
+        "\n"
+        "=== USER STORY ===\n"
+        f"{user_story}\n"
+        "\n"
+        "=== ALL CONDITIONS (FOR CONTEXT) ===\n"
+        f"{conditions_block}\n"
+        "\n"
+        "=== KNOWN TARGET URLS ===\n"
+        f"{known_urls_block}\n"
+        "\n"
+        f"Generate the test function for {target_condition_ref} now."
     )
+
+
+def get_skeleton_prompt_template(
+    expected_count: int | None = None,
+) -> str:
+    """Return a template for Phase 1 skeleton-generation prompt."""
+    count_label = str(expected_count) if expected_count is not None else "N"
+
+    return (
+        "You are a Playwright Python test engineer.\n"
+        "\n"
+        "=== INSTRUCTIONS ===\n"
+        f"Generate EXACTLY {count_label} test functions. One per criterion.\n"
+        "Use ONLY the double-brace placeholder format for test steps.\n"
+        "NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.\n"
+        "\n"
+        "=== ALLOWED STEP FORMATS ===\n"
+        "{{GOTO:page keyword}}\n"
+        "{{CLICK:button or link description}}\n"
+        "{{FILL:input field description:value to type}}\n"
+        "{{ASSERT:visible element description}}\n"
+        "\n"
+        "=== PAGES_NEEDED BLOCK ===\n"
+        "At the end of your output, list the pages needed using KEYWORDS (not URLs):\n"
+        "# PAGES_NEEDED:\n"
+        "# - home (homepage)\n"
+        "# - cart (shopping cart page)\n"
+        "# - checkout (checkout page)\n"
+        "Each keyword must match a GOTO placeholder. DO NOT write URLs here.\n"
+        "\n"
+        "=== PREREQUISITE STEPS ===\n"
+        "Each test must be self-contained. If a test depends on earlier criteria\n"
+        "being completed first (e.g., you must log in before adding items to cart),\n"
+        "include those prerequisite steps at the start of the test function.\n"
+        "\n"
+        "=== EXAMPLE OUTPUT ===\n"
+        "import pytest\n"
+        "from playwright.sync_api import Page\n"
+        "\n"
+        '@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")\n'
+        "def test_01_example(page, evidence_tracker):\n"
+        "    {{GOTO:home}}\n"
+        "    {{FILL:username:admin}}\n"
+        "    {{CLICK:submit button}}\n"
+        "    {{ASSERT:welcome message}}\n"
+        "\n"
+        '@pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")\n'
+        "def test_02_example(page, evidence_tracker):\n"
+        "    {{GOTO:home}}\n"
+        "    {{FILL:username:admin}}\n"
+        "    {{CLICK:submit button}}\n"
+        "    {{CLICK:add to cart button}}\n"
+        "    {{ASSERT:cart badge updated}}\n"
+        "\n"
+        "# PAGES_NEEDED:\n"
+        "# - home (homepage)\n"
+        "\n"
+        "=== USER STORY ===\n"
+        "{user_story}\n"
+        "\n"
+        "=== ACCEPTANCE CRITERIA ===\n"
+        "{conditions}\n"
+        "\n"
+        "=== KNOWN URLS ===\n"
+        "{known_urls_block}\n"
+        "\n"
+        f"Generate the {count_label} test functions now."
+    )
+
+
+def get_streamlit_system_prompt_template() -> str:
+    """Return the system prompt for the Streamlit UI."""
+    return (
+        "You are a Playwright Python test engineer.\n"
+        "Generate a pytest sync Playwright test based on the User Story and Conditions.\n"
+        "\n"
+        "=== CONTEXT ===\n"
+        "User Story: {user_story}\n"
+        "Conditions: {conditions}\n"
+        "Test Count: {count}\n"
+        "\n"
+        "=== RULES ===\n"
+        "1. Use pytest format with sync Playwright API.\n"
+        "2. Do NOT use async/await.\n"
+        "3. Every test runs in a FRESH browser context.\n"
+        "4. Follow the PAGE CONTEXT constraints if provided.\n"
+    )
+
+
+def build_page_context_prompt_block(page_context: str) -> str:
+    """Format the scraped page context for inclusion in an LLM prompt."""
+    if not page_context:
+        return "=== PAGE CONTEXT ===\nNo PAGE CONTEXT is available for this page."
+
+    if len(page_context) > 15000:
+        page_context = page_context[:15000] + "\n... (truncated)"
+
+    return f"=== APPROVED LOCATORS (PAGE CONTEXT) ===\n{page_context}\n"

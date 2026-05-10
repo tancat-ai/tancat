@@ -18,16 +18,16 @@ expect(page).to_have_url({{URL:dashboard}})
     ]
 
 
-def test_parse_pages_needed_extracts_urls_and_descriptions() -> None:
+def test_parse_pages_needed_extracts_keywords_and_descriptions() -> None:
     parser = SkeletonParser()
     code = """
 # PAGES_NEEDED:
-# - https://example.com/ (home)
-# - https://example.com/cart (cart page)
+# - home (homepage)
+# - cart (shopping cart page)
 """
     assert parser.parse_pages_needed(code) == [
-        ("https://example.com/", "home"),
-        ("https://example.com/cart", "cart page"),
+        ("home", "homepage"),
+        ("cart", "shopping cart page"),
     ]
 
 
@@ -35,13 +35,13 @@ def test_parse_page_requirements_returns_typed_records() -> None:
     parser = SkeletonParser()
     code = """
 # PAGES_NEEDED:
-# - https://example.com/ (home)
-# - https://example.com/cart (cart page)
+# - home (homepage)
+# - cart (shopping cart page)
 """
 
     assert parser.parse_page_requirements(code) == [
-        PageRequirement(url="https://example.com/", description="home"),
-        PageRequirement(url="https://example.com/cart", description="cart page"),
+        PageRequirement(keyword="home", description="homepage"),
+        PageRequirement(keyword="cart", description="shopping cart page"),
     ]
 
 

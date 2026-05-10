@@ -739,6 +739,34 @@ the list. Depends on AI-011 and AI-012 being in place first.
 
 **All checks passed:** ruff clean, mypy clean, pytest green.
 
+### Session (2026-05-08) — Global Best Resolution Fix
+**What:** Placeholder resolution in `src/placeholder_orchestrator.py` was returning the first
+per-page match instead of the global best match across all scraped pages. On multi-page sites
+like saucedemo.com, this caused login page elements (e.g., `#user-name`, `#password`,
+`#login-button`) to be skipped entirely because a low-quality match existed on an earlier page
+in dict iteration order (e.g., cart page).
+
+**Root Cause:** `_find_best_element_for_current_page()` iterated through pages sequentially and
+returned the first match found per-page, never reaching pages with better matches.
+
+**Fix:** Changed the method to collect ALL ranked candidates from ALL pages into a single list,
+sort by score descending, then select the global best match. Threshold-based shortlisting and
+semantic ranking operate on the global ranking.
+
+**Files Modified:**
+- `src/placeholder_orchestrator.py` — `_find_best_element_for_current_page()` now collects
+  candidates globally before selecting the best match
+- `tests/test_global_best_resolution.py` — 5 new regression tests covering cross-page resolution,
+  password field, login button, checkout button, and no-match scenarios
+
+**Quality Checks:** ruff clean, mypy clean, 45 placeholder-related tests pass.
+
+**Impact:** Fixes all placeholder resolution failures on saucedemo.com and similar multi-page
+sites where elements on the login page were being skipped because cart/checkout pages appeared
+first in the scraped data dict.
+
+---
+
 ### Session 22 (2026-05-01) — CLI entry point cleanup
 **What:** Clarified supported CLI ownership after the argparse CLI module superseded
 the original root `main.py` menu flow.

@@ -245,7 +245,7 @@ def test_subscribe_guard_rejects_empty_subscribe_input_for_continue_shopping_cli
             },
             # A better match — button with actual text
             {
-                "selector": '.btn.btn-default',
+                "selector": ".btn.btn-default",
                 "text": "Continue Shopping",
                 "role": "button",
                 "id": "",
@@ -303,7 +303,7 @@ def test_subscribe_guard_rejects_subscribe_for_popup_modal_actions() -> None:
                 "classes": "form-control",
             },
             {
-                "selector": '.modal-close',
+                "selector": ".modal-close",
                 "text": "Close",
                 "role": "button",
                 "id": "",
@@ -333,7 +333,7 @@ def test_text_content_penalty_favors_element_with_text_for_click_actions() -> No
             },
             # Element with matching text — should win
             {
-                "selector": '.btn.add-to-cart',
+                "selector": ".btn.add-to-cart",
                 "text": "Add to cart",
                 "role": "button",
                 "id": "",

@@ -10,6 +10,7 @@ realistic e-commerce user story. This exercises:
 
 Usage:
     python scripts/uat_automationexercise.py --provider lm-studio
+    python scripts/uat_automationexercise.py --provider lm-studio --site saucedemo
     python scripts/uat_automationexercise.py --provider lm-studio --headed
     python scripts/uat_automationexercise.py --provider ollama --model qwen3.5:35b
 
@@ -22,10 +23,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import os
 import re
+import subprocess
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -33,31 +39,93 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.llm_client import LLMClient
-from src.orchestrator import TestOrchestrator
-from src.test_generator import TestGenerator
+from src.llm_client import LLMClient  # noqa: E402
+from src.orchestrator import TestOrchestrator  # noqa: E402
+from src.test_generator import TestGenerator  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Conftest template — provides the evidence_tracker fixture for generated tests
+# ---------------------------------------------------------------------------
+
+CONFTEST_TEMPLATE = '''"""Conftest for generated tests — provides evidence_tracker fixture."""
+from pathlib import Path
+from typing import Any
+
+from playwright.sync_api import Page
+
+import pytest
+from src.evidence_tracker import EvidenceTracker
 
 
-USER_STORY = (
-    "As a customer, I want to browse products on the website and add them to my cart "
-    "so that I can purchase them later."
-)
+@pytest.fixture()
+def evidence_tracker(page: Page, request: Any) -> EvidenceTracker:
+    """Create an EvidenceTracker bound to the Playwright page fixture."""
+    test_name = getattr(request.node, "name", "unknown_test")
+    condition_ref = ""
+    story_ref = ""
+    for mark in request.node.iter_markers("evidence"):
+        condition_ref = mark.kwargs.get("condition_ref", condition_ref)
+        story_ref = mark.kwargs.get("story_ref", story_ref)
+    tracker = EvidenceTracker(
+        page=page,
+        test_name=test_name,
+        condition_ref=condition_ref or "unknown",
+        story_ref=story_ref or "unknown",
+    )
+    yield tracker
+    # Teardown: write sidecar if steps were recorded
+    if tracker.steps:
+        tracker.write(status="passed")
+'''
 
-CONDITIONS = (
-    "1. Navigate to the automationexercise.com home page\n"
-    "2. Click the 'Products' link in the header navigation to go to the products page\n"
-    "3. On the products page, click the 'Add to cart' button next to a product (e.g. Blue Top)\n"
-    "4. Verify a confirmation message appears indicating the product was added to cart\n"
-    "5. Click the 'Cart' link in the header navigation to go to the cart page\n"
-    "6. Verify the cart page displays the product that was added with its name and price\n"
-)
 
-TARGET_URLS = ["https://automationexercise.com"]
+DEFAULT_SITE = "automationexercise"
+SITE_CONFIGS: dict[str, dict[str, Any]] = {
+    "automationexercise": {
+        "name": "automationexercise.com",
+        "user_story": (
+            "As a customer, I want to browse products on the website and add them to my cart "
+            "so that I can purchase them later."
+        ),
+        "conditions": (
+            "1. Navigate to the automationexercise.com home page\n"
+            "2. Click the 'Products' link in the header navigation to go to the products page\n"
+            "3. On the products page, click the 'Add to cart' button next to a product (e.g. Blue Top)\n"
+            "4. Verify a confirmation message appears indicating the product was added to cart\n"
+            "5. Click the 'Cart' link in the header navigation to go to the cart page\n"
+            "6. Verify the cart page displays the product that was added with its name and price\n"
+        ),
+        "target_urls": ["https://automationexercise.com"],
+    },
+    "saucedemo": {
+        "name": "saucedemo.com",
+        "user_story": (
+            "As a user, I want to log in to the shopping site, add items to my cart, "
+            "verify the items in the cart, proceed to checkout, and complete the "
+            "checkout process."
+        ),
+        "conditions": (
+            "1. Log in with username standard_user and password secret_sauce\n"
+            "2. Add at least one item (e.g. Sauce Labs Backpack) to the cart\n"
+            "3. Navigate to the shopping cart page\n"
+            "4. Verify the added item appears correctly in the cart\n"
+            "5. Navigate to the checkout page\n"
+            "6. Complete the checkout process and verify success (Thank You page)"
+        ),
+        "target_urls": ["https://www.saucedemo.com"],
+    },
+}
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="UAT: automationexercise.com pipeline validation")
+    parser = argparse.ArgumentParser(description="UAT pipeline validation for supported sites")
+    parser.add_argument(
+        "--site",
+        choices=list(SITE_CONFIGS.keys()),
+        default=DEFAULT_SITE,
+        help=f"Site to validate (default: {DEFAULT_SITE})",
+    )
     parser.add_argument(
         "--provider",
         choices=["ollama", "lm-studio", "openai"],
@@ -79,12 +147,32 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run browser in headed mode (show browser window)",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--run",
+        action="store_true",
+        help="Run the generated tests against the real site",
+    )
+    parser.add_argument(
+        "--save",
+        action="store_true",
+        help="Save the generated tests to generated_tests/ directory",
+    )
+    return parser.parse_args(argv)
+
+
+def configure_windows_console_encoding() -> None:
+    """Use UTF-8 console streams for emoji output when running as a script."""
+    if sys.platform != "win32":
+        return
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
 
 
 async def run_uat() -> None:
     args = parse_args()
     load_dotenv()
+
+    site_config = SITE_CONFIGS[args.site]
 
     # Enable headed mode if requested
     if args.headed:
@@ -92,32 +180,35 @@ async def run_uat() -> None:
         print("[Headed Mode] Browser window will be visible")
         print()
 
-    # Configure the LLM provider — use session-level settings so all pipeline
-    # components (TestGenerator, Orchestrator, etc.) share the same provider.
-    # This avoids loading a second model when running through Cline.
+    # Configure the LLM provider — use session-level settings if requested.
+    # Otherwise, LLMClient will auto-detect the active local provider.
     if args.provider:
         LLMClient.set_session_provider(
             provider=args.provider,
             base_url=args.base_url,
             model=args.model,
         )
-        provider_info = f"{args.provider}" + (f" / {args.model}" if args.model else "")
+        provider_info = f"{args.provider}" + (f" / {args.model}" if args.model else " (auto-detect model)")
     else:
-        provider_info = "from .env"
+        provider_info = "auto-detect"
 
     print("=" * 80)
-    print("UAT: automationexercise.com Pipeline Validation")
+    print(f"UAT: {site_config['name']} Pipeline Validation")
     print("=" * 80)
     print()
+    print(f"UAT Site: {args.site}")
     print(f"LLM Provider: {provider_info}")
     print()
-    print(f"User Story: {USER_STORY}")
+    print(f"User Story: {site_config['user_story']}")
     print()
-    print(f"Conditions:\n{CONDITIONS}")
+    print(f"Conditions:\n{site_config['conditions']}")
     print()
-    print(f"Target URLs: {TARGET_URLS}")
+    print(f"Target URLs: {site_config['target_urls']}")
     print()
     print("-" * 80)
+
+    # Enable debug logging for the pipeline
+    os.environ["PIPELINE_DEBUG"] = "1"
 
     try:
         # Create client without explicit provider — it will pick up the session
@@ -128,14 +219,16 @@ async def run_uat() -> None:
         generator = TestGenerator(client=client)
         orchestrator = TestOrchestrator(generator)
 
-        print("\n[Phase 1] Generating test skeletons with LLM...")
+        print(f"\n[Phase 1] Generating test skeletons for {args.site}...")
+        start_time = time.time()
         final_code = await orchestrator.run_pipeline(
-            user_story=USER_STORY,
-            conditions=CONDITIONS,
-            target_urls=TARGET_URLS,
+            user_story=site_config["user_story"],
+            conditions=site_config["conditions"],
+            target_urls=site_config["target_urls"],
         )
+        gen_duration = time.time() - start_time
 
-        print("\n[Phase 1] Complete.")
+        print(f"\n[Phase 1] Complete in {gen_duration:.1f}s.")
         print()
 
         print("-" * 80)
@@ -151,35 +244,41 @@ async def run_uat() -> None:
             return
 
         # Check for placeholder artifacts that should have been resolved.
-        if re.search(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code) or \
-            'pytest.skip("Unresolved placeholder' in final_code or \
-            "pytest.skip('Unresolved placeholder" in final_code:
+        placeholders_found = re.findall(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code)
+        skips_found = (
+            'pytest.skip("Unresolved placeholder' in final_code or "pytest.skip('Unresolved placeholder" in final_code
+        )
+
+        if placeholders_found or skips_found:
             print("⚠️  UAT WARNING: Unresolved placeholders or placeholder skips found in generated code.")
-            if re.search(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code):
-                print("   The generated code still contains placeholder tokens.")
-            if 'pytest.skip("Unresolved placeholder' in final_code or "pytest.skip('Unresolved placeholder" in final_code:
+            if placeholders_found:
+                print(f"   Found {len(placeholders_found)} placeholder tokens.")
+            if skips_found:
                 print("   Placeholder unresolved skip statements were inserted.")
         else:
             print("✅ No unresolved placeholders found.")
 
+        # Dynamic validation based on criteria count
+        num_criteria = len(re.findall(r"^\d+\.", site_config["conditions"], re.M))
         test_names = re.findall(r"^def\s+(test_\d+)", final_code, re.M)
+        print(f"Expected test count: {num_criteria}")
         print(f"Generated test count: {len(test_names)}")
 
-        # Check for key patterns — evidence_tracker is the expected pattern,
-        # not raw page.goto/.click() since the pipeline wraps all interactions.
         checks = {
-            "test_01": "test_01" in final_code,
-            "test_02": "test_02" in final_code,
-            "test_03": "test_03" in final_code,
-            "test_04": "test_04" in final_code,
-            "test_05": "test_05" in final_code,
-            "test_06": "test_06" in final_code,
             "evidence_tracker.navigate": "evidence_tracker.navigate" in final_code,
             "evidence_tracker.click": "evidence_tracker.click" in final_code,
             "evidence_tracker.assert_visible": "evidence_tracker.assert_visible" in final_code,
             "pytest.mark.evidence": "@pytest.mark.evidence" in final_code,
-            "dismiss_consent_overlays": "dismiss_consent_overlays" in final_code,
         }
+
+        # Site-specific checks
+        if args.site == "automationexercise":
+            checks["dismiss_consent_overlays"] = "dismiss_consent_overlays" in final_code
+
+        # Add individual test checks
+        for i in range(1, num_criteria + 1):
+            test_id = f"test_{i:02d}"
+            checks[test_id] = test_id in final_code
 
         print("\n[Validation]")
         all_pass = True
@@ -188,6 +287,47 @@ async def run_uat() -> None:
             print(f"  {status} {check_name}: {'found' if passed else 'MISSING'}")
             if not passed:
                 all_pass = False
+
+        # --- Save / Run ---
+        if args.save or args.run:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = Path("generated_tests") / f"uat_{args.site}_{timestamp}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Write conftest
+            (output_dir / "conftest.py").write_text(CONFTEST_TEMPLATE, encoding="utf-8")
+
+            # Write test file
+            test_file = output_dir / f"test_{args.site}.py"
+            test_file.write_text(final_code, encoding="utf-8")
+            print(f"\n[Save] Saved generated tests to: {output_dir}")
+
+            if args.run:
+                print(f"\n[Phase 2] Running generated tests against {site_config['name']}...")
+                run_start = time.time()
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        str(output_dir),
+                        "-v",
+                        "--tb=short",
+                        "--no-header",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                run_duration = time.time() - run_start
+                print(result.stdout)
+                if result.stderr:
+                    print(result.stderr)
+
+                if result.returncode == 0:
+                    print(f"✅ Tests PASSED in {run_duration:.1f}s")
+                else:
+                    print(f"❌ Tests FAILED in {run_duration:.1f}s (exit code: {result.returncode})")
+                    all_pass = False
 
         print()
         if all_pass:
@@ -203,4 +343,5 @@ async def run_uat() -> None:
 
 
 if __name__ == "__main__":
+    configure_windows_console_encoding()
     asyncio.run(run_uat())

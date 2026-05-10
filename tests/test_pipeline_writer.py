@@ -21,8 +21,8 @@ def test_write_run_artifacts_creates_package_with_manifest_and_pages(tmp_path: P
         pages_to_scrape=["https://example.com/", "https://example.com/cart"],
         scraped_pages={"https://example.com/": [], "https://example.com/cart": []},
         page_requirements=[
-            PageRequirement(url="https://example.com/", description="home"),
-            PageRequirement(url="https://example.com/cart", description="cart"),
+            PageRequirement(keyword="home", description="home"),
+            PageRequirement(keyword="cart", description="cart"),
         ],
         journeys=[
             TestJourney(
@@ -181,7 +181,7 @@ def test_checkout(page: Page) -> None:
 """.strip(),
         pages_to_scrape=["https://example.com/"],
         scraped_pages={"https://example.com/": []},
-        page_requirements=[PageRequirement(url="https://example.com/", description="home")],
+        page_requirements=[PageRequirement(keyword="home", description="home")],
         journeys=[
             TestJourney(
                 test_name="test_checkout",
