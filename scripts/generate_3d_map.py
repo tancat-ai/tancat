@@ -449,6 +449,41 @@ DOC_REFS = {
         "AGENTS.md",
         ".clinerules",
     ],
+    # Orphan docs — add to DOC_REFS so they appear in links.csv
+    "SECURITY.md": [
+        "README.md",
+        "CONTRIBUTING.md",
+    ],
+    "docs/plans/FEATURE_PLAN_keyword_based_url_resolution.md": [
+        "src/orchestrator.py",
+        "src/url_utils.py",
+        "src/placeholder_orchestrator.py",
+    ],
+    "docs/plans/FEATURE_PLAN_pom_with_evidence_tracker.md": [
+        "src/page_object_builder.py",
+        "src/evidence_tracker.py",
+        "src/pipeline_writer.py",
+    ],
+    "docs/plans/FEATURE_PLAN_test_prerequisite_injection.md": [
+        "src/orchestrator.py",
+        "src/prerequisite_injector.py",
+        "src/pipeline_writer.py",
+    ],
+    "docs/specs/FEATURE_SPEC_AI023_locator_repair.md": [
+        "src/code_postprocessor.py",
+        "src/placeholder_resolver.py",
+        "src/locator_scorer.py",
+    ],
+    "docs/specs/FEATURE_SPEC_AI024_accessibility_tree_enrichment.md": [
+        "src/scraper.py",
+        "src/accessibility_enricher.py",
+        "src/placeholder_resolver.py",
+    ],
+    "docs/specs/FEATURE_SPEC_AI026_persist_generated_tests.md": [
+        "src/pipeline_writer.py",
+        "src/file_utils.py",
+        "src/pipeline_run_service.py",
+    ],
 }
 
 ###############################################################################
