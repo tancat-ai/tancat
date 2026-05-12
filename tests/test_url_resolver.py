@@ -74,6 +74,20 @@ def test_build_mapping_skips_already_mapped_keywords() -> None:
     assert resolver.resolve("cart") == "https://www.saucedemo.com/cart.html"
 
 
+def test_exact_match_prefers_html_route_over_bare_static_guess() -> None:
+    resolver = UrlResolver()
+    resolver.build_mapping(
+        keywords=["cart"],
+        scraped_urls=[
+            "https://www.saucedemo.com/cart",
+            "https://www.saucedemo.com/cart.html",
+        ],
+        seed_url="https://www.saucedemo.com/",
+    )
+
+    assert resolver.resolve("cart") == "https://www.saucedemo.com/cart.html"
+
+
 def test_build_mapping_with_concepts_generates_candidates() -> None:
     resolver = UrlResolver()
     resolver.build_mapping(

@@ -9,14 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.code_postprocessor import (
-    _is_llm_reasoning_line,
-    _strip_llm_reasoning_text,
-    _strip_pages_needed_block,
-    normalise_generated_code,
-    replace_remaining_placeholders,
-    replace_token_in_line,
-)
+from src.code_normalizer import replace_remaining_placeholders
+from src.code_normalizer import strip_pages_needed_block as _strip_pages_needed_block
+from src.code_postprocessor import normalise_generated_code, replace_token_in_line
+from src.llm_reasoning_filter import _is_llm_reasoning_line
+from src.llm_reasoning_filter import strip_llm_reasoning as _strip_llm_reasoning_text
 from src.orchestrator import TestOrchestrator
 from src.test_generator import TestGenerator
 
@@ -219,6 +216,18 @@ def test_01_ok(page: Page, evidence_launcher) -> None:
     fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
     assert "evidence_launcher" not in fixed
     assert "evidence_tracker" in fixed
+
+
+def test_normalise_generated_code_adds_evidence_tracker_fixture_when_body_uses_it() -> None:
+    broken = """
+import pytest
+
+@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
+def test_01_login(page):
+    evidence_tracker.navigate("https://example.com/")
+"""
+    fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
+    assert "def test_01_login(page, evidence_tracker):" in fixed
 
 
 def test_normalise_generated_code_repairs_pytest_mark_slash_typo() -> None:

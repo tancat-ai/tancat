@@ -142,13 +142,17 @@ class UrlResolver:
         kw_normalized = kw_lower.replace(" ", "-").replace("_", "-")
 
         # 1. Exact path match — keyword matches the entire path (single segment)
+        exact_candidates: list[str] = []
         for url in scraped_urls:
             path = urlparse(url).path.lower().strip("/")
             if not path:
                 continue
             clean_path = path.rsplit(".", 1)[0]
             if clean_path == kw_lower or clean_path == kw_normalized:
-                return url
+                exact_candidates.append(url)
+        if exact_candidates:
+            exact_candidates.sort(key=lambda url: (0 if "." in urlparse(url).path.rsplit("/", 1)[-1] else 1, len(url)))
+            return exact_candidates[0]
 
         # 2. Direct path segment match
         for url in scraped_urls:

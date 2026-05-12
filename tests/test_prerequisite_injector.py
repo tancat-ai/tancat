@@ -328,6 +328,34 @@ def test_02_add_item(page, evidence_tracker):
         decorator_pos = result.index("@pytest.mark.evidence")
         func_pos = result.index("def test_02_add_item")
         assert decorator_pos < func_pos
+        assert result.count("@pytest.mark.evidence") == 1
+
+    def test_does_not_inject_when_target_already_logs_in(self) -> None:
+        auth_journey = _journey(
+            test_name="test_01_login",
+            steps=[
+                _step("    evidence_tracker.fill('#user-name', 'standard_user', label='username input')"),
+                _step("    evidence_tracker.click('#login-button', label='login button')"),
+            ],
+        )
+        cart_journey = _journey(
+            test_name="test_02_add_item",
+            steps=[
+                _step("    evidence_tracker.navigate('https://www.saucedemo.com')"),
+                _step("    evidence_tracker.fill('#user-name', 'standard_user', label='username input')"),
+                _step("    evidence_tracker.fill('#password', 'secret_sauce', label='password input')"),
+                _step("    evidence_tracker.click('#login-button', label='login button')"),
+                _step("    evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add item')"),
+            ],
+        )
+
+        injector = PrerequisiteInjector()
+        plans = injector.analyze_dependencies(
+            journeys=[auth_journey, cart_journey],
+            starting_url="https://www.saucedemo.com",
+        )
+
+        assert "test_02_add_item" not in plans
 
     def test_skips_navigation_and_consent_steps(self) -> None:
         """Navigation and consent dismiss steps should not be injected."""

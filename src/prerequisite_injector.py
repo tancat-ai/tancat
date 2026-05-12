@@ -155,6 +155,9 @@ class PrerequisiteInjector:
             return {}
 
         auth_steps = self._extract_prerequisite_steps(auth_journey, "TC-01")
+        if not auth_steps:
+            logger.debug("Authentication test had no resolved steps — prerequisite injection skipped")
+            return {}
 
         # Build injection plans for dependent tests
         plans: dict[str, InjectionPlan] = {}
@@ -223,12 +226,6 @@ class PrerequisiteInjector:
                     # Find the function body indentation (first non-empty line after def)
                     body_indent = self._detect_body_indent(lines, index)
 
-                    # Collect decorator lines before this function
-                    decorator_lines = self._collect_decorators(lines, index)
-
-                    # Add decorators first
-                    result.extend(decorator_lines)
-
                     # Add the function definition line
                     result.append(line)
                     index += 1
@@ -273,6 +270,14 @@ class PrerequisiteInjector:
         criterion_text = ""
 
         for step in journey.steps:
+            raw_lower = step.raw_line.lower()
+            nav_match = re.search(r"evidence_tracker\.navigate\(\s*['\"]([^'\"]+)['\"]", step.raw_line)
+            if nav_match:
+                first_goto_url = nav_match.group(1)
+                if not criterion_text:
+                    criterion_text += " " + raw_lower
+                break
+
             for placeholder in step.placeholders:
                 if placeholder.action == "GOTO":
                     first_goto_url = placeholder.description
@@ -283,6 +288,9 @@ class PrerequisiteInjector:
 
             if first_goto_url:
                 break
+
+            if "evidence_tracker." in raw_lower:
+                criterion_text += " " + raw_lower
 
         return (first_goto_url, criterion_text.strip())
 
@@ -303,6 +311,14 @@ class PrerequisiteInjector:
             has_login_intent = False
 
             for step in journey.steps:
+                raw_lower = step.raw_line.lower()
+                if "evidence_tracker.fill(" in raw_lower:
+                    has_fill = True
+                if any(kw in raw_lower for kw in login_keywords):
+                    has_login_intent = True
+                if any(kw in raw_lower for kw in {"username", "password", "email", "user name", "pass"}):
+                    has_login_intent = True
+
                 for placeholder in step.placeholders:
                     desc_lower = placeholder.description.lower()
 
@@ -367,7 +383,34 @@ class PrerequisiteInjector:
         if journey.test_name == auth_test_name:
             return False
 
+        if self._journey_contains_auth_steps(journey):
+            return False
+
         return targets_starting_page and has_post_auth_intent
+
+    @staticmethod
+    def _journey_contains_auth_steps(journey: TestJourney) -> bool:
+        """Return True when the test already performs a login-like sequence."""
+        has_credential_fill = False
+        has_login_click = False
+        credential_terms = {"username", "user-name", "password", "email"}
+        login_terms = {"login", "log in", "sign in"}
+
+        for step in journey.steps:
+            raw_lower = step.raw_line.lower()
+            if "evidence_tracker.fill(" in raw_lower and any(term in raw_lower for term in credential_terms):
+                has_credential_fill = True
+            if "evidence_tracker.click(" in raw_lower and any(term in raw_lower for term in login_terms):
+                has_login_click = True
+
+            for placeholder in step.placeholders:
+                desc_lower = placeholder.description.lower()
+                if placeholder.action == "FILL" and any(term in desc_lower for term in credential_terms):
+                    has_credential_fill = True
+                if placeholder.action == "CLICK" and any(term in desc_lower for term in login_terms):
+                    has_login_click = True
+
+        return has_credential_fill and has_login_click
 
     def _extract_prerequisite_steps(
         self,

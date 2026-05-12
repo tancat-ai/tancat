@@ -83,12 +83,20 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 |--------|-------------|
 | `src/pipeline_models.py` | `PlaceholderUse`, `TestStep`, `PageRequirement`, `TestJourney`, `ScrapedPage`, `GeneratedPageObject`, `ManifestRecord`, `PipelineArtifactSet` |
 
+### 🖥️ UI Layer (Streamlit Support)
+
+| Module | Role |
+|--------|------|
+| `src/ui_pipeline.py` | Pipeline execution helpers for Streamlit UI — business logic only (no rendering). Contains `run_pipeline()`, `build_test_plan()`, `execute_saved_test()`, `build_report_bundle()`. Extracted from `streamlit_app.py` to enable testing outside Streamlit context. |
+| `src/ui_renderers.py` | Streamlit rendering helpers — pure UI, no business logic. Contains `SidebarConfig`, `RequirementsInput`, `ResultsPanel`, `RunResultsDisplay`, `EvidenceViewer`. Extracted from `streamlit_app.py`. |
+
 ### 🔧 Utility Modules
 
 | Module | Role |
 |--------|------|
 | `src/file_utils.py` | `save_generated_test()`, `normalise_code_newlines()` helpers. |
 | `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
+| `src/url_inference.py` | URL transition inference for journey-aware placeholder resolution. Extracted from `placeholder_orchestrator.py`. |
 | `src/pytest_output_parser.py` | Parses pytest stdout → structured results for reporting. |
 | `src/config.py` | Pipeline configuration constants. |
 | `src/run_utils.py` | Test execution utilities. |
@@ -96,6 +104,14 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/coverage_utils.py` | Coverage calculation helpers. |
 | `src/gantt_utils.py` | Gantt chart generation for pipeline visualization. |
 | `src/heatmap_utils.py` | Heatmap visualization utilities. |
+| `src/evidence_serializer.py` | Evidence JSON serialization (sidecar file writing). Extracted from `evidence_tracker.py`. |
+| `src/screenshot_capture.py` | Screenshot capture and annotation utilities. Extracted from `evidence_tracker.py`. |
+| `src/state_tracker.py` | DOM state tracking — detects changes and URL transitions. Extracted from `journey_scraper.py`. |
+| `src/form_detector.py` | Form detection and element classification (selector constants). Extracted from `journey_scraper.py`. |
+| `src/semantic_matcher.py` | Token-based semantic similarity for placeholder matching. Extracted from `placeholder_resolver.py`. |
+| `src/intent_matcher.py` | Intent-based element filtering for placeholder resolution. Extracted from `placeholder_resolver.py`. |
+| `src/code_normalizer.py` | Deterministic code normalization transforms. Extracted from `code_postprocessor.py`. |
+| `src/llm_reasoning_filter.py` | LLM reasoning text detection and stripping. Extracted from `code_postprocessor.py`. |
 
 ---
 
@@ -145,7 +161,18 @@ Generated test files are written to `generated_tests/` with a `manifest.json`. A
 graph TD
     subgraph "Interface Layer"
         UI[streamlit_app.py]
+        UIPipeline[src/ui_pipeline.py]
+        UIRender[src/ui_renderers.py]
         CLI[cli/main.py]
+        CLIInput[cli/input_parser.py]
+        CLIMenu[cli/menu_renderer.py]
+        CLIPipeline[cli/pipeline_runner.py]
+        CLIRender[cli/report_generator.py]
+        CLIEvidence[cli/evidence_generator.py]
+        CLISession[cli/session.py]
+        CLITestOrch[cli/test_case_orchestrator.py]
+        CLIColor[cli/color.py]
+        CLIConfig[cli/config.py]
     end
 
     subgraph "Orchestration Layer"
@@ -166,14 +193,21 @@ graph TD
         Scrape[src/scraper.py]
         Stateful[src/stateful_scraper.py]
         Journey[src/journey_scraper.py]
+        FormDetect[src/form_detector.py]
+        StateTrack[src/state_tracker.py]
+        URLInfer[src/url_inference.py]
     end
 
     subgraph "Refinement Layer"
         Res[src/placeholder_resolver.py]
         Score[src/locator_scorer.py]
         Rank[src/semantic_candidate_ranker.py]
+        SemMatch[src/semantic_matcher.py]
+        IntentMatch[src/intent_matcher.py]
         POM[src/page_object_builder.py]
         PostProc[src/code_postprocessor.py]
+        CodeNorm[src/code_normalizer.py]
+        LLMFilter[src/llm_reasoning_filter.py]
         Val[src/code_validator.py]
     end
 
@@ -184,6 +218,8 @@ graph TD
         RBuild[src/report_builder.py]
         RFormat[src/report_formatters.py]
         ETrack[src/evidence_tracker.py]
+        ESerial[src/evidence_serializer.py]
+        SScape[src/screenshot_capture.py]
         ELoad[src/evidence_loader.py]
         FReport[src/failure_reporter.py]
     end
@@ -193,8 +229,22 @@ graph TD
     end
 
     %% Flow of Control
-    UI --> Orch
-    CLI --> Orch
+    UI --> UIPipeline
+    UI --> UIRender
+    CLI --> CLIInput
+    CLI --> CLIMenu
+    CLI --> CLIPipeline
+    CLI --> CLISession
+    CLI --> CLIColor
+    CLI --> CLIConfig
+    CLIInput --> CLIConfig
+    CLIMenu --> CLIColor
+    CLIPipeline --> Orch
+    CLIPipeline --> CLITestOrch
+    CLIPipeline --> CLIEvidence
+    CLIPipeline --> CLIRender
+    UIPipeline --> Orch
+
     Orch --> Spec
     Orch --> Gen
     Orch --> POrc
@@ -209,9 +259,16 @@ graph TD
     POrc --> Journey
     POrc --> Res
     POrc --> POM
+    POrc --> URLInfer
+    Journey --> FormDetect
+    Journey --> StateTrack
     Res --> Score
     Res --> Rank
+    Res --> SemMatch
+    Res --> IntentMatch
     Rank --> LLM
+    PostProc --> CodeNorm
+    PostProc --> LLMFilter
     PostProc --> Val
     Orch --> Writer
     Writer --> RunSvc
@@ -220,6 +277,8 @@ graph TD
     RBuild --> ELoad
     RBuild --> FReport
     RFormat --> FReport
+    ETrack --> ESerial
+    ETrack --> SScape
 ```
 
 ---
@@ -269,4 +328,4 @@ graph TD
 
 ---
 
-*Last updated: 2026-05-01*
+*Last updated: 2026-05-11*

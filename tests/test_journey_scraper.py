@@ -95,10 +95,10 @@ class TestCartSeedingScraper:
         """Test that product selectors contain expected patterns."""
         selectors = CartSeedingScraper.PRODUCT_SELECTORS
         assert any("[data-product-id]" in s for s in selectors)
-        assert any("Shop Now" in s for s in selectors)
+        assert any(".product" in s for s in selectors)
 
     def test_add_to_cart_selectors_contain_expected_patterns(self) -> None:
         """Test that add-to-cart selectors contain expected patterns."""
         selectors = CartSeedingScraper.ADD_TO_CART_SELECTORS
-        assert any("Add to cart" in s for s in selectors)
-        assert any('button:has-text("Add to cart")' in s for s in selectors)
+        assert any("add-to-cart" in s for s in selectors)
+        assert any("submit" in s for s in selectors)

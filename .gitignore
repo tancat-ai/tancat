@@ -110,4 +110,4 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 # ── Scratch Files ──────────────
-scratch/
+scratch/generated_tests/

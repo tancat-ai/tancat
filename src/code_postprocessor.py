@@ -1,215 +1,26 @@
-"""Pure code-string transformation helpers extracted from TestOrchestrator."""
+"""Pure code-string transformation helpers extracted from TestOrchestrator.
+
+Orchestrates normalization by delegating to specialised sub-modules:
+- :mod:`src.llm_reasoning_filter` — detects and strips LLM reasoning text
+- :mod:`src.code_normalizer` — deterministic normalization transforms
+"""
 
 from __future__ import annotations
 
 import re
 
-# Patterns that match common LLM reasoning/thinking text that leaks into code output.
-# These are English sentences, questions, or self-references that are not valid Python.
-_LLM_REASONING_PREFIXES = (
-    "Wait,",
-    "Note,",
-    "Actually,",
-    "Hmm,",
-    "Okay,",
-    "Sure,",
-    "Let's ",
-    "That's ",
-    "This is ",
-    "The prompt ",
-    "The example ",
-    "I will ",
-    "I need ",
-    "I should ",
-    "All constraints",
-    "Matches all",
-    "Output matches",
-    "Proceeds",
-    "Self-Correction",
-    "Refinement",
-    "One minor",
-    "One check",
-    "Final check",
-    "Self check",
-    "Edge case",
-    "Corner case",
-    "In the example",
-    "To be safe",
-    "To avoid",
+from .code_normalizer import (
+    convert_standalone_placeholders,
+    dedent_indented_test_blocks,
+    deduplicate_skip_calls,
+    ensure_test_navigation,
+    fix_indentation,
+    fix_module_scope_indentation,
+    replace_bare_ellipsis,
+    replace_remaining_placeholders,
+    strip_pages_needed_block,
 )
-
-_LLM_REASONING_PATTERNS = [
-    re.compile(r"^\s*#\s*[A-Z][a-z]+,\s", re.IGNORECASE),  # # Note, ... # Wait,
-    re.compile(r"^\s*(?:Wait|Note|Actually|Hmm|Okay|Sure|Let's|That's|This is)\b", re.IGNORECASE),
-    re.compile(r"^\s*# - \d+\.\s+[A-Z][a-z]+,\s"),  # numbered list items that are reasoning
-]
-
-
-# Patterns that detect LLM reasoning leaked as bullet points or numbered lists.
-# These look like "- Actually, ..." or "- 3-10 lines MAX per test."
-_BULLET_REASONING_PATTERNS = [
-    re.compile(r"^\s*-?\s*\d+\.\s+[A-Z]"),  # "- 1. Do this"
-    re.compile(r"^\s*-\s+(Actually|Note|Wait|Hmm|Okay|Sure|Let's|That's|This is)\b", re.IGNORECASE),
-    re.compile(r"^\s*-\s+(The prompt|The example|I will|I need|I should|All constraints)\b", re.IGNORECASE),
-    re.compile(r"^\s*-\s+\d+-\d+\s+\w+", re.IGNORECASE),  # "- 3-10 lines MAX"
-    re.compile(r"^\s*-\s+\w+\s+(MAX|MIN|must|should|need)\b", re.IGNORECASE),  # "- lines MAX"
-    re.compile(r"^\s*-\s+\(My test has", re.IGNORECASE),  # "- (My test has 6 lines"
-    re.compile(r"^\s*-\s+\w+\s+(inside|inside,|within)\b", re.IGNORECASE),  # "- 6 lines inside"
-]
-
-
-def _is_llm_reasoning_line(line: str) -> bool:
-    """Return True if the line looks like LLM reasoning text rather than Python code.
-
-    Heuristics:
-    - Starts with common LLM reasoning prefixes
-    - Is a short English sentence (under 80 chars) with punctuation that Python
-      code would not normally have at the start of a line (commas after sentence starters)
-    - Contains no valid Python keywords and is not a comment, string, or docstring
-    - Bullet-point reasoning patterns like "- 3-10 lines MAX per test."
-    """
-    stripped = line.strip()
-    if not stripped:
-        return False
-
-    # Skip lines that are valid Python constructs
-    python_keywords = (
-        "def ",
-        "class ",
-        "import ",
-        "from ",
-        "return ",
-        "if ",
-        "elif ",
-        "else:",
-        "for ",
-        "while ",
-        "try:",
-        "except",
-        "finally:",
-        "with ",
-        "assert ",
-        "raise ",
-        "yield ",
-        "lambda ",
-        "pass",
-        "break",
-        "continue",
-        "@pytest",
-        "@",
-        "# PAGES_NEEDED",
-        "# - https",
-        "# -http",
-        '"""',
-        "'''",
-        "pytest.",
-        "evidence_tracker",
-        "dismiss_consent",
-        "page.",
-        "self.",
-    )
-    if any(stripped.startswith(kw) for kw in python_keywords):
-        return False
-
-    # Check for LLM reasoning prefixes
-    for prefix in _LLM_REASONING_PREFIXES:
-        if stripped.startswith(prefix):
-            return True
-
-    # Check for reasoning patterns
-    for pattern in _LLM_REASONING_PATTERNS:
-        if pattern.match(stripped):
-            return True
-
-    # Check for bullet-point reasoning patterns
-    for pattern in _BULLET_REASONING_PATTERNS:
-        if pattern.match(stripped):
-            return True
-
-    # Heuristic: short lines with sentence-like punctuation that aren't Python
-    if len(stripped) < 80 and any(c in stripped for c in (",", ".")):
-        # Lines that start with a capital letter followed by a comma are likely reasoning
-        if re.match(r"^[A-Z][a-z]+,", stripped):
-            # But allow valid Python like "Page," in type hints (unlikely at line start)
-            if not re.match(r"^[A-Z][A-Za-z]*\s*[:=]", stripped):
-                return True
-
-    return False
-
-
-def _strip_llm_reasoning_text(code: str) -> str:
-    """Remove lines that look like LLM reasoning/thinking text.
-
-    LLMs sometimes output their internal chain-of-thought as part of the code
-    block. This function detects and removes such lines while preserving valid
-    Python code, comments, and blank lines.
-    """
-    lines = code.splitlines()
-    cleaned_lines: list[str] = []
-
-    for line in lines:
-        if _is_llm_reasoning_line(line):
-            continue
-        cleaned_lines.append(line)
-
-    return "\n".join(cleaned_lines)
-
-
-# Regex to match standalone placeholder lines (indented, just {{ACTION:description}})
-_STANDALONE_PLACEHOLDER_RE = re.compile(
-    r"^(\s*)\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}\s*$",
-    re.MULTILINE,
-)
-
-
-def _convert_standalone_placeholders(code: str) -> str:
-    """Convert standalone placeholder lines into evidence_tracker calls.
-
-    The new prompt format asks the LLM to write standalone placeholders like:
-        {{CLICK:Dress category link}}
-    instead of wrapped in function calls. This function converts them back into
-    proper evidence_tracker.xxx() calls so the rest of the pipeline can resolve them.
-
-    After conversion, the line becomes a valid placeholder that the existing
-    replace_token_in_line logic can handle:
-        {{CLICK:Dress category link}}  (unchanged - already in correct format)
-
-    However, if the LLM writes evidence_tracker.click({{CLICK:...}}), we need to
-    extract the placeholder and leave it standalone for the resolver.
-    """
-    lines = code.splitlines()
-    output_lines: list[str] = []
-
-    for line in lines:
-        # Check if this is a standalone placeholder line
-        m = _STANDALONE_PLACEHOLDER_RE.match(line)
-        if m:
-            indent, action, description = m.group(1), m.group(2), m.group(3)
-            token = f"{{{{{action}:{description}}}}}"
-            # Keep as standalone placeholder - the resolver will handle it via replace_token_in_line
-            output_lines.append(f"{indent}{token}")
-            continue
-
-        # Check if LLM wrapped placeholder in evidence_tracker call - unwrap it
-        # Pattern: evidence_tracker.click({{CLICK:...}}, label=...)
-        wrapped_pattern = re.match(
-            r"^(\s*)evidence_tracker\.(click|fill|navigate|assert_visible)\(\s*\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}",
-            line,
-        )
-        if wrapped_pattern:
-            indent, _method, action, description = (
-                wrapped_pattern.group(1),
-                wrapped_pattern.group(2),
-                wrapped_pattern.group(3),
-                wrapped_pattern.group(4),
-            )
-            token = f"{{{{{action}:{description}}}}}"
-            output_lines.append(f"{indent}{token}")
-            continue
-
-        output_lines.append(line)
-
-    return "\n".join(output_lines)
+from .llm_reasoning_filter import strip_llm_reasoning
 
 
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
@@ -217,18 +28,15 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     fixed_code = code
 
     # First: strip LLM reasoning text that may have leaked into the code block
-    fixed_code = _strip_llm_reasoning_text(fixed_code)
+    fixed_code = strip_llm_reasoning(fixed_code)
 
     # Convert standalone placeholder lines and unwrap evidence_tracker-wrapped placeholders.
-    # The new prompt format asks for standalone {{ACTION:description}} lines, which the
-    # resolver expects. If the LLM still wraps them in evidence_tracker calls, unwrap them.
-    fixed_code = _convert_standalone_placeholders(fixed_code)
+    fixed_code = convert_standalone_placeholders(fixed_code)
 
     # Clean up malformed decorators if the LLM added spaces
     fixed_code = re.sub(r"@\s*pytest\s*\.\s*mark\s*\.\s*evidence", "@pytest.mark.evidence", fixed_code)
 
     # Always inject pytest at module level when the code uses any pytest constructs.
-    # _inject_import handles deduplication by removing any existing copies first.
     if "pytest.skip(" in fixed_code or "pytest.mark." in fixed_code:
         fixed_code = inject_import(fixed_code, "import pytest")
     if re.search(r"\bPage\b", fixed_code) or "expect(" in fixed_code:
@@ -237,19 +45,18 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # The tool ships an `evidence_tracker` fixture for generated tests.
     # Some LLMs hallucinate a non-existent `evidence_launcher` fixture name.
     fixed_code = re.sub(r"\bevidence_launcher\b", "evidence_tracker", fixed_code)
+    fixed_code = _ensure_evidence_tracker_fixture(fixed_code)
 
     # Ensure evidence_tracker is used for common methods even if LLM forgot
     fixed_code = re.sub(r"page\.goto\(", "evidence_tracker.navigate(", fixed_code)
     fixed_code = re.sub(r"self\.page\.goto\(", "evidence_tracker.navigate(", fixed_code)
 
     # Some models hallucinate a slash between `pytest.mark` and the marker name.
-    # Example: `@pytest.mark/evidence(...)` which is invalid Python.
     fixed_code = re.sub(r"(?m)^\s*@pytest\.mark\s*/\s*([A-Za-z_][A-Za-z0-9_]*)", r"@pytest.mark.\1", fixed_code)
 
-    # Some models hallucinate special constructor names (e.g. `__larry`) which
-    # makes instantiation fail immediately at runtime.
+    # Some models hallucinate special constructor names (e.g. `__larry`)
     fixed_code = re.sub(
-        r"(?m)^(\s*)def\s+__larry\s*\(\s*self\s*,\s*page\s*:\s*Page\s*\)\s*:\s*$",
+        r"(?m)(^\s*)def\s+__larry\s*\(\s*self\s*,\s*page\s*:\s*Page\s*\)\s*:\s*$",
         r"\1def __init__(self, page: Page) -> None:",
         fixed_code,
     )
@@ -261,9 +68,7 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
         fixed_code,
     )
 
-    # Guardrail: some models accidentally emit invalid decorator assignment lines like
-    # `@pytest.markelse = None`, which breaks syntax validation. Strip any decorator
-    # lines that look like attribute assignments on `pytest.mark*`.
+    # Guardrail: strip invalid decorator assignment lines
     fixed_code = re.sub(r"(?m)^\s*@pytest\.mark\w*\s*=\s*.*\n?", "", fixed_code)
 
     fixed_code = re.sub(r"(def __init__\(self,\s*page:\s*)([A-Za-z_][A-Za-z0-9_]*)", r"\1Page", fixed_code)
@@ -276,20 +81,10 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
 
     fixed_code = rewrite_page_references_in_class_methods(fixed_code)
 
-    # Hallucination guard: record_condition(...) -> @pytest.mark.evidence
-    # This is a bit tricky to fix automatically if the LLM put it at the end of the function.
-    # But we can at least strip it to avoid runtime errors.
+    # Hallucination guard: record_condition(...) -> strip
     fixed_code = re.sub(r"(?m)^\s*evidence_tracker\.record_condition\(.*?\)\s*$", "", fixed_code)
 
     # Fix misplaced closing parenthesis in evidence_tracker method calls.
-    # Common LLM mistake: evidence_tracker.assert_visible('selector')', label="...")
-    #                          ^-- extra ') before , label=
-    # Only match when there's a double-quoted closing pattern ')') which indicates
-    # an EXTRA ') that the LLM added — NOT the normal selector closing ') from
-    # replace_token_in_line which produces: click('selector'), label='...')
-    #
-    # Strategy: match ')')  (closing paren, quote, closing paren) which is the
-    # LLM mistake pattern, and replace with ')' (just the normal closing).
     fixed_code = re.sub(
         r"(evidence_tracker\.\w+\([^)]*)\)'\)(\s*,\s*\w+=)",
         r"\1)'\2",
@@ -297,34 +92,26 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     )
 
     # Ensure every test starts with a navigation if none present.
-    # Pass target_url (seed URL) so tests navigate to the correct homepage
-    # instead of LLM-guessed URLs from PAGES_NEEDED.
-    fixed_code = _ensure_test_navigation(fixed_code, target_url=target_url or None)
+    fixed_code = ensure_test_navigation(fixed_code, target_url=target_url or None)
 
     # Dedent module-level constructs that the LLM accidentally indented
-    fixed_code = _fix_module_scope_indentation(fixed_code)
+    fixed_code = fix_module_scope_indentation(fixed_code)
 
-    # Safety net: replace any remaining unresolved {{ACTION:...}} placeholders with
-    # pytest.skip() so they never cause a SyntaxError.  This catches placeholders
-    # whose descriptions contain Python variable syntax (e.g. {item_name}) that
-    # break the resolver's regex and therefore were never substituted.
+    # Safety net: replace any remaining unresolved placeholders with pytest.skip()
     fixed_code = replace_remaining_placeholders(fixed_code)
-    fixed_code = _strip_pages_needed_block(fixed_code)
+    fixed_code = strip_pages_needed_block(fixed_code)
 
-    # Some models indent entire top-level test blocks after helper functions,
-    # producing invalid syntax like `    @pytest.mark.evidence(...)` at module scope.
-    fixed_code = _dedent_indented_test_blocks(fixed_code)
+    # Some models indent entire top-level test blocks after helper functions
+    fixed_code = dedent_indented_test_blocks(fixed_code)
 
     # Fix inconsistent indentation inside test functions and class methods
-    fixed_code = _fix_indentation(fixed_code)
+    fixed_code = fix_indentation(fixed_code)
 
     # Deduplicate consecutive pytest.skip() calls in the same test block
-    fixed_code = _deduplicate_skip_calls(fixed_code)
+    fixed_code = deduplicate_skip_calls(fixed_code)
 
-    # Replace bare `...` (ellipsis) in test functions with pytest.skip().
-    # When the LLM can't generate a full test body, it emits `...` which is a no-op.
-    # This causes tests to "pass" without testing anything — replace with proper skip.
-    fixed_code = _replace_bare_ellipsis(fixed_code)
+    # Replace bare `...` (ellipsis) in test functions with pytest.skip()
+    fixed_code = replace_bare_ellipsis(fixed_code)
 
     return fixed_code
 
@@ -341,33 +128,19 @@ def replace_token_in_line(
     """Replace a single placeholder token within a code line."""
     stripped = line.strip()
     indent = line[: len(line) - len(line.lstrip())]
-    # Duplicate selector disambiguation is handled by EvidenceTracker at runtime.
-    # NOTE: Playwright auto-waits for elements to be actionable before clicking,
-    # so we no longer append `:visible` to click selectors (it's invalid CSS).
 
     if "pytest.skip" in resolved_value:
-        # If the resolution is a skip, replace the WHOLE line to ensure it executes.
         return f"{indent}{resolved_value}"
 
     step_label = description if description else token
 
-    # Handle the case where the resolved value (e.g. pytest.skip) is embedded
-    # inside a label= argument — the naive str.replace would produce
-    # `evidence_tracker.click(..., label='pytest.skip(...)')` which is invalid.
-    # Detect this pattern and replace the entire line with the skip statement.
     if "pytest.skip" in resolved_value and "label=" in stripped:
         return f"{indent}{resolved_value}"
 
     if action == "CLICK":
-        # Ensure selector_literal is a properly quoted string literal.
-        # robust_locators from :has-text() may contain double quotes (e.g. a:has-text("Add to cart")),
-        # so we wrap them in single quotes for valid Python syntax.
         selector_literal = resolved_value
         if not (resolved_value.startswith("'") or resolved_value.startswith('"')):
             selector_literal = repr(resolved_value)
-        # NOTE: Playwright auto-waits for elements to be actionable before clicking.
-        # Appending `:visible` as a CSS pseudo-selector is invalid and causes failures.
-        # See: https://playwright.dev/python/docs/actionability
         if stripped == token:
             return f"{indent}evidence_tracker.click({selector_literal}, label={repr(step_label)})"
         if stripped == f"{token}.click()":
@@ -386,21 +159,16 @@ def replace_token_in_line(
         }
         if stripped in locator_only_patterns or stripped in locator_click_patterns:
             return f"{indent}evidence_tracker.click({selector_literal}, label={repr(step_label)})"
-        # Final fallback: always produce valid evidence_tracker.click() with proper indentation
         return f"{indent}evidence_tracker.click({selector_literal}, label={repr(step_label)})"
 
     if action == "ASSERT":
-        # Ensure resolved_value is a properly quoted string literal for assert_visible
         assert_value = resolved_value
         if not (resolved_value.startswith("'") or resolved_value.startswith('"')):
             assert_value = repr(resolved_value)
         if stripped == token:
             return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
-
-        # Use regex to handle expect(page.locator(...)) regardless of content
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
             return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
-
         locator_only_patterns = {
             f"page.locator({token})",
             f"self.page.locator({token})",
@@ -424,7 +192,6 @@ def replace_token_in_line(
         }
         if stripped in locator_only_patterns or stripped in locator_fill_patterns:
             return f"{indent}evidence_tracker.fill({resolved_value}, {repr(fill_value)}, label={repr(step_label)})"
-        # Handle cases where the LLM generates fill(token) without value arg
         fill_no_value = re.match(
             r"(evidence_tracker\.fill\()(" + re.escape(token) + r")(\s*,\s*label=)",
             stripped,
@@ -458,218 +225,39 @@ def replace_token_in_line(
     return line.replace(token, resolved_value)
 
 
-def _fix_module_scope_indentation(code: str) -> str:
-    """Ensure imports, class definitions, and test functions are at module scope (no indent)."""
-    module_level_keywords = ("import ", "from ", "def test_", "class ", "@pytest.mark")
-    lines = code.splitlines()
-    fixed: list[str] = []
-    for line in lines:
-        stripped = line.lstrip()
-        if any(stripped.startswith(kw) for kw in module_level_keywords):
-            fixed.append(stripped)
-        else:
-            fixed.append(line)
-    return "\n".join(fixed)
-
-
-def replace_remaining_placeholders(code: str) -> str:
-    """Replace any unresolved {{ACTION:description}} placeholders with pytest.skip().
-
-    The resolver's regex uses ``[^}]+`` for the description, which means
-    descriptions containing Python variable syntax such as ``{item_name}``
-    break the match and the placeholder is never substituted.  Those raw
-    strings are invalid Python and will cause a SyntaxError.  This method
-    is the last-resort safety net applied after all other post-processing.
-
-    When the placeholder is embedded inside a function call (e.g.
-    ``evidence_tracker.fill({{FILL:x}}, label="y")``), the entire call
-    is replaced with a skip statement to avoid producing invalid Python.
-
-    Placeholders that appear inside quoted strings (e.g. inside a
-    ``label='{{CLICK:basket}}'`` argument) are left untouched because they
-    are metadata, not executable code.
-    """
-    # This regex handles nested braces like {item_name} that break the
-    # resolver's simpler [^}]+ pattern.  It matches the shortest string
-    # between {{ACTION: and the closing }}.
-    placeholder_pattern = re.compile(r"\{\{[A-Z_]+:(.+?)\}\}", re.DOTALL)
-
-    def _is_inside_quotes(text_before: str) -> bool:
-        """Return True if the position in text_before is inside single or double quotes."""
-        in_single = False
-        in_double = False
-        for ch in text_before:
-            if ch == "'" and not in_double:
-                in_single = not in_single
-            elif ch == '"' and not in_single:
-                in_double = not in_double
-        return in_single or in_double
-
-    output_lines: list[str] = []
-    for line in code.splitlines():
-        if "{{" not in line:
-            output_lines.append(line)
-            continue
-        # Preserve indentation
-        indent = line[: len(line) - len(line.lstrip())]
-        the_content = line.strip()
-
-        # Find all unresolved placeholders
-        matches = list(placeholder_pattern.finditer(the_content))
-        if not matches:
-            output_lines.append(line)
-            continue
-
-        # Skip replacement if ALL matches are inside quotes (metadata only)
-        all_inside_quotes = all(_is_inside_quotes(the_content[: match.start()]) for match in matches)
-        if all_inside_quotes:
-            output_lines.append(line)
-            continue
-
-        # Check if any placeholder is inside a function call (not inside quotes)
-        has_function_call = any(
-            not _is_inside_quotes(the_content[: match.start()])
-            and re.search(r"[A-Za-z_][A-Za-z0-9_]*\s*\(", the_content[: match.start()])
-            and ")" in the_content[match.end() :]
-            for match in matches
-        )
-
-        if has_function_call:
-            # Replace the entire line with a skip statement
-            preview = ", ".join(match.group(0) for match in matches[:3])
-            reason = f"Unresolved placeholder in this step. {preview}"
-            output_lines.append(f"{indent}pytest.skip({reason!r})")
-        else:
-            # Placeholder is standalone — replace it directly
-            def _handle_match(m: re.Match) -> str:
-                text = m.group(0)
-                return f'pytest.skip("Unresolved placeholder: {text}")'
-
-            new_content = placeholder_pattern.sub(_handle_match, the_content)
-            output_lines.append(f"{indent}{new_content}")
-    return "\n".join(output_lines)
-
-
-def _strip_pages_needed_block(code: str) -> str:
-    """Remove trailing skeleton metadata comments from final generated code."""
-    cleaned_lines: list[str] = []
-    inside_pages_needed = False
-
-    for line in code.splitlines():
-        stripped = line.strip()
-        if stripped == "# PAGES_NEEDED:":
-            inside_pages_needed = True
-            continue
-        if inside_pages_needed:
-            if not stripped or stripped.startswith("# -"):
-                continue
-            inside_pages_needed = False
-
-        cleaned_lines.append(line)
-
-    return "\n".join(cleaned_lines)
-
-
-def _fix_indentation(code: str) -> str:
-    """Fix inconsistent indentation inside test functions and class methods.
-
-    The LLM sometimes emits lines without indentation inside function bodies.
-    This method detects such lines and applies 4-space indentation.
-    """
-    lines = code.splitlines()
-    updated_lines: list[str] = []
-    inside_function = False
-    func_indent = 0
-    previous_significant_indent = 0
-    previous_significant_line = ""
-
-    for line in lines:
-        stripped = line.lstrip()
-        indent = len(line) - len(stripped)
-
-        # Detect function definition
-        if re.match(r"^\s*def\s+", line):
-            inside_function = True
-            func_indent = indent + 4
-            previous_significant_indent = indent
-            previous_significant_line = stripped
-            updated_lines.append(line)
-            continue
-
-        # Detect class definition
-        if re.match(r"^\s*class\s+", line):
-            inside_function = False
-            previous_significant_indent = indent
-            previous_significant_line = stripped
-            updated_lines.append(line)
-            continue
-
-        # If we're inside a function, fix missing indentation and only dedent
-        # obviously accidental extra indentation on top-level statements.
-        if inside_function and stripped:
-            if stripped.startswith("#"):
-                comment_indent = func_indent if indent <= func_indent else indent
-                updated_lines.append(" " * comment_indent + stripped)
-                previous_significant_indent = comment_indent
-                previous_significant_line = stripped
-                continue
-
-            if indent < func_indent and not re.match(r"^\s*(def |class |@|import |from )", line):
-                updated_lines.append(" " * func_indent + stripped)
-                previous_significant_indent = func_indent
-                previous_significant_line = stripped
-                continue
-
-            accidental_extra_indent = (
-                indent > func_indent
-                and previous_significant_indent == func_indent
-                and not previous_significant_line.rstrip().endswith(":")
-                and not re.match(r"^(elif |else:|except\b|finally:)", stripped)
-            )
-            if accidental_extra_indent:
-                updated_lines.append(" " * func_indent + stripped)
-                previous_significant_indent = func_indent
-                previous_significant_line = stripped
-                continue
-
-        if stripped:
-            previous_significant_indent = indent
-            previous_significant_line = stripped
-
-        updated_lines.append(line)
-
-    return "\n".join(updated_lines)
-
-
-def _dedent_indented_test_blocks(code: str) -> str:
-    """Dedent malformed top-level test blocks that were shifted right as a unit."""
+def _ensure_evidence_tracker_fixture(code: str) -> str:
+    """Add the evidence_tracker pytest fixture argument to tests that use it."""
     lines = code.splitlines()
     updated_lines: list[str] = []
     index = 0
 
     while index < len(lines):
         line = lines[index]
-        stripped = line.lstrip()
-        indent = len(line) - len(stripped)
-
-        if indent > 0 and re.match(r"^(?:@pytest\.mark\.evidence|def\s+test_)", stripped):
-            block_indent = indent
-            while index < len(lines):
-                current = lines[index]
-                current_stripped = current.lstrip()
-                current_indent = len(current) - len(current_stripped)
-
-                if not current_stripped:
-                    updated_lines.append("")
-                    index += 1
-                    continue
-
-                if current_indent < block_indent:
-                    break
-
-                updated_lines.append(current[block_indent:])
-                index += 1
+        match = re.match(r"^(\s*)def\s+(test_\w+)\(([^)]*)\)(.*):\s*$", line)
+        if not match:
+            updated_lines.append(line)
+            index += 1
             continue
+
+        block_lines: list[str] = []
+        lookahead = index + 1
+        while lookahead < len(lines):
+            next_line = lines[lookahead]
+            if next_line and not next_line[0].isspace() and re.match(r"^(?:@|def |class |import |from )", next_line):
+                break
+            block_lines.append(next_line)
+            lookahead += 1
+
+        if "evidence_tracker." not in "\n".join(block_lines):
+            updated_lines.append(line)
+            index += 1
+            continue
+
+        params = [param.strip() for param in match.group(3).split(",") if param.strip()]
+        param_names = [param.split(":", 1)[0].split("=", 1)[0].strip() for param in params]
+        if "evidence_tracker" not in param_names:
+            params.append("evidence_tracker")
+            line = f"{match.group(1)}def {match.group(2)}({', '.join(params)}){match.group(4)}:"
 
         updated_lines.append(line)
         index += 1
@@ -678,13 +266,7 @@ def _dedent_indented_test_blocks(code: str) -> str:
 
 
 def flatten_inner_functions(code: str) -> str:
-    """Remove nested 'def inner():' style wrappers and move their decorators up.
-
-    Handles the common case where the LLM wraps test logic inside a short
-    inner function (e.g. ``def inner():`` or ``def run_test():``) followed
-    by a call to that function.  The inner function's body is unindented
-    and placed directly inside the outer test function.
-    """
+    """Remove nested 'def inner():' style wrappers and move their decorators up."""
     lines = code.splitlines()
     updated_lines: list[str] = []
 
@@ -693,19 +275,15 @@ def flatten_inner_functions(code: str) -> str:
         line = lines[i]
         stripped = line.strip()
 
-        # Detect a test function that is immediately followed by a nested
-        # function definition (not another test, class, or top-level block).
         if stripped.startswith("def test_") and "(" in stripped:
             updated_lines.append(line)
             i += 1
 
-            # Look for a nested function (more indented than the test def)
             while i < len(lines):
                 next_line = lines[i]
                 next_stripped = next_line.strip()
                 next_indent = len(next_line) - len(next_line.lstrip())
 
-                # If we hit another test, class, or top-level block, stop
                 if (
                     next_stripped.startswith("def test_")
                     or next_stripped.startswith("class ")
@@ -715,43 +293,34 @@ def flatten_inner_functions(code: str) -> str:
                 ):
                     break
 
-                # Detect nested function definition
                 if next_stripped.startswith("def ") and next_indent > 0:
-                    # Collect decorators above the nested function
                     decorator_lines: list[str] = []
                     j = i - 1
                     while j >= 0 and lines[j].strip().startswith("@pytest.mark.evidence"):
                         decorator_lines.insert(0, lines[j].strip())
                         j -= 1
 
-                    # Get the nested function name
                     func_name = next_stripped[4:].split("(", 1)[0].strip()
 
-                    # Add decorators to the outer test
                     base_indent = " " * (len(line) - len(line.lstrip()))
                     for d_line in decorator_lines:
                         updated_lines.append(f"{base_indent}{d_line}")
 
-                    # Skip the nested function def line
                     i += 1
 
-                    # Process the body of the nested function
                     nested_indent = next_indent
                     while i < len(lines):
                         body_line = lines[i]
                         body_stripped = body_line.strip()
                         body_indent = len(body_line) - len(body_line.lstrip())
 
-                        # End of nested function (back to nested_indent or less)
                         if body_stripped and body_indent <= nested_indent:
                             break
 
-                        # Skip the call to the inner function
                         if body_indent == nested_indent and body_stripped.startswith(func_name + "("):
                             i += 1
                             continue
 
-                        # Unindent the body to the outer test level
                         if body_stripped:
                             updated_lines.append(base_indent + body_line.lstrip())
                         else:
@@ -759,7 +328,6 @@ def flatten_inner_functions(code: str) -> str:
                         i += 1
                     continue
 
-                # Not a nested function — just a regular line in the test body
                 updated_lines.append(next_line)
                 i += 1
             continue
@@ -771,14 +339,9 @@ def flatten_inner_functions(code: str) -> str:
 
 
 def inject_import(code: str, import_line: str) -> str:
-    """Insert an import at the very top of the generated file.
-
-    Always ensures the import is at module level (column 0), even if a
-    malformed copy already exists somewhere deeper in the file.
-    """
+    """Insert an import at the very top of the generated file."""
     lines = code.splitlines()
 
-    # Remove any existing copy of this import line (with or without whitespace)
     stripped_target = import_line.strip()
     lines = [ln for ln in lines if ln.strip() != stripped_target]
 
@@ -826,8 +389,6 @@ def rewrite_page_references_in_class_methods(code: str) -> str:
             line = re.sub(r"\bpage\.", "self.page.", line)
 
         if inside_instance_method:
-            # Check if evidence_tracker is a method parameter — if so, DON'T convert
-            # to self.evidence_tracker (it's passed as an argument, not an instance attr)
             method_sig = ""
             if "(" in stripped and ")" in stripped:
                 method_sig = stripped.split("(", 1)[1].split(")")[0]
@@ -854,7 +415,6 @@ def _inject_consent_helper(code: str) -> str:
     helper_name = "dismiss_consent_overlays"
     import_line = "from src.browser_utils import dismiss_consent_overlays"
 
-    # 1. Add import at the top
     if import_line not in code:
         insert_after = "from playwright.sync_api import Page, expect"
         if insert_after in code:
@@ -862,7 +422,6 @@ def _inject_consent_helper(code: str) -> str:
         else:
             code = import_line + "\n" + code
 
-    # 2. Inject calls after navigations
     lines = code.splitlines()
     updated_lines: list[str] = []
     for line in lines:
@@ -870,177 +429,10 @@ def _inject_consent_helper(code: str) -> str:
         stripped = line.strip()
         indent = line[: len(line) - len(line.lstrip())]
 
-        # Skip injection if the line is already a call to the helper
         if f"{helper_name}(" in stripped:
             continue
 
         if stripped.startswith("page.goto(") or stripped.startswith("evidence_tracker.navigate("):
-            # Check if next line is already a call to avoid duplicates
             updated_lines.append(f"{indent}{helper_name}(page)")
 
     return "\n".join(updated_lines)
-
-
-def _deduplicate_skip_calls(code: str) -> str:
-    """Remove duplicate consecutive pytest.skip() calls in test blocks.
-
-    When both the orchestrator and the postprocessor inject skips for the same
-    placeholder, you get two skip() calls in a row.  Keep only the first one.
-    """
-    lines = code.splitlines()
-    updated_lines: list[str] = []
-    pending_skips: list[str] = []
-    in_test = False
-
-    def _flush_skips() -> None:
-        if pending_skips:
-            updated_lines.append(pending_skips[0])
-            pending_skips.clear()
-
-    for line in lines:
-        stripped = line.lstrip()
-        indent = line[: len(line) - len(line.lstrip())]
-
-        # Detect test function start
-        if stripped.startswith("def test_"):
-            _flush_skips()
-            in_test = True
-            updated_lines.append(line)
-            continue
-
-        # Detect end of test function (another def at same or lesser indent, or class)
-        if in_test and stripped and indent == 0:
-            _flush_skips()
-            if stripped.startswith("def ") or stripped.startswith("class ") or stripped.startswith("@"):
-                in_test = False
-
-        # Collect consecutive skip calls
-        if in_test and stripped.startswith("pytest.skip("):
-            pending_skips.append(line)
-            continue
-
-        _flush_skips()
-        updated_lines.append(line)
-
-    _flush_skips()
-    return "\n".join(updated_lines)
-
-
-def _replace_bare_ellipsis(code: str) -> str:
-    """Replace bare `...` (ellipsis) statements in test functions with pytest.skip().
-
-    When the LLM can't generate a full test body, it emits `...` which is a no-op.
-    This causes tests to "pass" without testing anything. Replace with proper skip.
-    """
-    lines = code.splitlines()
-    updated_lines: list[str] = []
-    inside_test = False
-
-    for i, line in enumerate(lines):
-        stripped = line.lstrip()
-        indent = len(line) - len(stripped)
-
-        # Detect test function start
-        if re.match(r"^def\s+test_\w+\(", stripped):
-            inside_test = True
-            updated_lines.append(line)
-            continue
-
-        # Detect end of test function (top-level def/class, or decorator at column 0)
-        if inside_test and indent == 0 and stripped:
-            if re.match(r"^(def |class |@)", stripped):
-                inside_test = False
-
-        # Replace bare `...` on its own line within a test function
-        if inside_test and stripped == "...":
-            next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
-            # Skip if followed by a comment like "# PAGES_NEEDED:" — that's part of the block
-            if not next_line.startswith("#"):
-                updated_lines.append(f"{' ' * indent}pytest.skip('Test body not generated (unresolved placeholders)')")
-                continue
-
-        updated_lines.append(line)
-
-    # Ensure pytest is imported since we added pytest.skip() calls
-    if "pytest.skip(" in "\n".join(updated_lines):
-        target = "import pytest"
-        if not any(line_item.strip() == target for line_item in updated_lines):
-            # Insert after first import line or at top
-            for idx, line in enumerate(updated_lines):
-                if line.startswith("from ") or line.startswith("import "):
-                    updated_lines.insert(idx, target)
-                    break
-
-    return "\n".join(updated_lines)
-
-
-def _ensure_test_navigation(code: str, target_url: str | None = None) -> str:
-    """Inject an initial navigation to the given URL if a test lacks navigation.
-
-    Args:
-        code: The generated test code.
-        target_url: The seed URL (user-provided, known-correct) to navigate to.
-            If None, falls back to extracting from PAGES_NEEDED (legacy).
-    """
-    if target_url:
-        url = target_url
-    else:
-        # Legacy fallback — LLM-guessed URLs (less reliable)
-        pages_block = re.search(r"# PAGES_NEEDED:\n((?:# https?://.*\n?)+)", code)
-        if not pages_block:
-            return code
-
-        first_url = re.search(r"https?://[^\s\n]+", pages_block.group(1))
-        if not first_url:
-            return code
-
-        url = first_url.group(0)
-    lines = code.splitlines()
-    updated_lines: list[str] = []
-
-    inside_test = False
-    test_has_nav = False
-
-    for line in lines:
-        stripped = line.lstrip()
-        indent = line[: len(line) - len(stripped)]
-
-        if stripped.startswith("def test_"):
-            inside_test = True
-            test_has_nav = False
-            updated_lines.append(line)
-            continue
-
-        if inside_test:
-            if stripped.startswith("def ") or (line.strip() == "" and indent == ""):
-                # End of test function or start of next
-                if not test_has_nav:
-                    # Insert nav at the start of the previous test block
-                    # This is complex to do in a single pass, so we'll use a simpler approach
-                    pass
-                inside_test = False
-
-            if "navigate(" in stripped or "goto(" in stripped:
-                test_has_nav = True
-
-        updated_lines.append(line)
-
-    # Simpler approach: find test functions and inject nav if missing
-    final_code = "\n".join(updated_lines)
-
-    def _inject_nav(match: re.Match[str]) -> str:
-        body = match.group(2)
-        if "navigate(" in body or "goto(" in body:
-            return match.group(0)
-
-        indent = "    "
-        nav_line = f'\n{indent}evidence_tracker.navigate("{url}")\n{indent}dismiss_consent_overlays(page)'
-        return f"{match.group(1)}{nav_line}{body}"
-
-    # Match test function signature and capture its body
-    return re.sub(
-        r"(def test_\w+\(page: Page, evidence_tracker\) -> None:)(.*?(?=\n\n|\ndef |\Z))",
-        _inject_nav,
-        final_code,
-        flags=re.S,
-    )

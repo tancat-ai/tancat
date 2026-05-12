@@ -24,6 +24,11 @@ from typing import Any
 
 from playwright.sync_api import sync_playwright
 
+from src.form_detector import (
+    ADD_TO_CART_SELECTORS,
+    CONTINUE_SHOPPING_SELECTORS,
+    PRODUCT_SELECTORS,
+)
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 
@@ -459,35 +464,10 @@ class CartSeedingScraper(JourneyScraper):
     "scrape cart with items" use case.
     """
 
-    # Selectors for finding a product to add to cart
-    PRODUCT_SELECTORS = [
-        "[data-product-id]:visible",
-        'a:has-text("Shop Now")',
-        'a:has-text("View Product")',
-        'a[href*="product_detail"]',
-        'a[href*="product"]',
-        ".product-card a",
-        "div[class*='product'] a",
-    ]
-
-    # Selectors for the "Add to Cart" button on the product page
-    ADD_TO_CART_SELECTORS = [
-        'button:has-text("Add to cart")',
-        'a:has-text("Add to cart")',
-        'input[type="submit"][value*="cart"]',
-        ".add-to-cart",
-        'button:has-text("Buy")',
-    ]
-
-    # Selectors for the "Continue Shopping" modal button
-    CONTINUE_SHOPPING_SELECTORS = [
-        'button:has-text("Continue Shopping")',
-        'button:has-text("Close")',
-        'button[aria-label="Close"]',
-        ".close-modal",
-        ".modal-footer button",
-        'a:has-text("Continue Shopping")',
-    ]
+    # Class-level selector constants (re-exported from form_detector for compatibility)
+    PRODUCT_SELECTORS: list[str] = PRODUCT_SELECTORS
+    ADD_TO_CART_SELECTORS: list[str] = ADD_TO_CART_SELECTORS
+    CONTINUE_SHOPPING_SELECTORS: list[str] = CONTINUE_SHOPPING_SELECTORS
 
     def __init__(
         self,
@@ -500,7 +480,7 @@ class CartSeedingScraper(JourneyScraper):
         Args:
             starting_url: The home page URL (used to establish session).
             products_url: Optional explicit products page URL. If not provided,
-                         derived from starting_url by appending "/products".
+                          derived from starting_url by appending "/products".
             **kwargs: Additional arguments passed to JourneyScraper.
         """
         super().__init__(starting_url, **kwargs)
@@ -547,7 +527,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=self.PRODUCT_SELECTORS[0],  # Use first matching selector
+                selector=PRODUCT_SELECTORS[0],  # Use first matching selector
                 description="select a product",
             )
         )
@@ -556,7 +536,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=self.ADD_TO_CART_SELECTORS[0],
+                selector=ADD_TO_CART_SELECTORS[0],
                 description="add product to cart",
             )
         )
@@ -565,7 +545,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=self.CONTINUE_SHOPPING_SELECTORS[0],
+                selector=CONTINUE_SHOPPING_SELECTORS[0],
                 description="dismiss confirmation modal",
             )
         )

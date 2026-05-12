@@ -187,6 +187,14 @@ source,target,type
 ./docs/plans/REFACTOR_PLAN_2026-04-26.md,./src/pipeline_writer.py,proximity
 ./docs/plans/REFACTOR_PLAN_2026-04-26.md,./src/scraper.py,proximity
 ./docs/plans/REFACTOR_PLAN_2026-04-26.md,./src/test_generator.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/llm_client.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/orchestrator.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/pipeline_models.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/pipeline_report_service.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/pipeline_run_service.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/pipeline_writer.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/scraper.py,proximity
+./docs/plans/REFACTOR_PLAN_2026-05-10.md,./src/test_generator.py,proximity
 ./docs/plans/cline_prompt_delete_page_context_scraper.md,./src/llm_client.py,proximity
 ./docs/plans/cline_prompt_delete_page_context_scraper.md,./src/orchestrator.py,proximity
 ./docs/plans/cline_prompt_delete_page_context_scraper.md,./src/pipeline_models.py,proximity
@@ -231,6 +239,10 @@ source,target,type
 ./docs/private/GTM_STRATEGY.md,./src/orchestrator.py,proximity
 ./docs/private/GTM_STRATEGY.md,./src/scraper.py,proximity
 ./docs/private/GTM_STRATEGY.md,./src/test_generator.py,proximity
+./docs/reviews/skip review.md,./src/llm_client.py,proximity
+./docs/reviews/skip review.md,./src/orchestrator.py,proximity
+./docs/reviews/skip review.md,./src/scraper.py,proximity
+./docs/reviews/skip review.md,./src/test_generator.py,proximity
 ./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/llm_client.py,proximity
 ./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/orchestrator.py,proximity
 ./docs/specs/FEATURE_SPEC_AI009_phase_b.md,./src/scraper.py,proximity

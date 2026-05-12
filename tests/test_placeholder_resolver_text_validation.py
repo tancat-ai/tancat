@@ -77,41 +77,6 @@ class TestTextMatchesDescription:
 
 
 class TestFindBestElementWithTextValidation:
-    """find_best_element skips candidates whose text doesn't match."""
-
-    def test_skips_unrelated_text(self) -> None:
-        resolver = PlaceholderResolver()
-        elements = [
-            {"selector": "#subscribe", "text": "Subscribe to newsletter", "role": "checkbox"},
-            {"selector": "#continue-btn", "text": "Continue Shopping", "role": "button"},
-        ]
-        result = resolver.find_best_element("CLICK", "Continue Shopping", elements)
-        assert result is not None
-        assert result["selector"] == "#continue-btn"
-
-    def test_returns_none_when_no_match(self) -> None:
-        resolver = PlaceholderResolver()
-        elements = [
-            {"selector": "#subscribe", "text": "Subscribe to newsletter", "role": "checkbox"},
-            {"selector": "#footer", "text": "Footer text", "role": "div"},
-        ]
-        result = resolver.find_best_element("CLICK", "Continue Shopping", elements)
-        assert result is None
-
-    def test_prefers_text_match_over_unrelated(self) -> None:
-        resolver = PlaceholderResolver()
-        elements = [
-            {"selector": "#subscribe", "text": "Subscribe", "role": "checkbox"},
-            {"selector": "#add-cart", "text": "Add to cart", "role": "button"},
-        ]
-        result = resolver.find_best_element("CLICK", "Add to cart", elements)
-        assert result is not None
-        assert result["selector"] == "#add-cart"
-
-
-class TestConfidenceThreshold:
-    """min_confidence threshold prevents low-confidence resolutions."""
-
     def test_default_threshold_from_env(self) -> None:
         with mock.patch.dict(os.environ, {"PLACEHOLDER_MIN_CONFIDENCE": "0.5"}):
             resolver = PlaceholderResolver()

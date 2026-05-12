@@ -25,6 +25,7 @@ def test_checkout(page: Page):
 
 # PAGES_NEEDED:
 # - products (products)
+# - cart (cart)
 """
     )
 
@@ -799,3 +800,104 @@ def test_checkout(page: Page):
     assert "from src.browser_utils import dismiss_consent_overlays" in final_code
     assert 'evidence_tracker.navigate("https://example.com/")' in final_code
     assert "dismiss_consent_overlays(page)" in final_code
+
+
+def test_run_pipeline_advances_after_login_to_resolve_saucedemo_inventory_steps() -> None:
+    generator = TestGenerator(output_dir="generated_tests")
+    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
+        return_value="""
+from playwright.sync_api import Page, expect
+import pytest
+
+@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
+def test_01_login(page):
+    {{GOTO:home}}
+    {{FILL:username input:standard_user}}
+    {{FILL:password input:secret_sauce}}
+    {{CLICK:login button}}
+    {{ASSERT:products page loaded}}
+
+@pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
+def test_02_add_item(page):
+    {{GOTO:home}}
+    {{FILL:username input:standard_user}}
+    {{FILL:password input:secret_sauce}}
+    {{CLICK:login button}}
+    {{CLICK:add to cart button for Sauce Labs Backpack}}
+    {{CLICK:shopping cart link}}
+
+# PAGES_NEEDED:
+# - home (homepage)
+# - products (products page)
+# - cart (shopping cart page)
+"""
+    )
+
+    orchestrator = TestOrchestrator(generator)
+    orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "https://www.saucedemo.com": (
+                [
+                    {"selector": "#user-name", "text": "", "role": "text", "id": "user-name"},
+                    {"selector": "#password", "text": "", "role": "password", "id": "password"},
+                    {"selector": "#login-button", "text": "Login", "role": "submit", "id": "login-button"},
+                ],
+                None,
+                "https://www.saucedemo.com",
+            ),
+            "https://www.saucedemo.com/products": ([], None, "https://www.saucedemo.com/products"),
+        }
+    )
+    orchestrator._scrape_journeys_statefully = AsyncMock(  # type: ignore[method-assign]
+        return_value={
+            "https://www.saucedemo.com/inventory.html": [
+                {
+                    "selector": "#add-to-cart-sauce-labs-backpack",
+                    "text": "Add to cart",
+                    "role": "button",
+                    "id": "add-to-cart-sauce-labs-backpack",
+                    "data_test": "add-to-cart-sauce-labs-backpack",
+                },
+                {
+                    "selector": '.shopping_cart_link[data-test="shopping-cart-link"]',
+                    "text": "",
+                    "role": "a",
+                    "href": "https://www.saucedemo.com/cart.html",
+                    "classes": "shopping_cart_link",
+                    "data_test": "shopping-cart-link",
+                },
+            ],
+            "https://www.saucedemo.com/cart.html": [
+                {
+                    "selector": "#checkout",
+                    "text": "Checkout",
+                    "role": "button",
+                    "id": "checkout",
+                }
+            ],
+        }
+    )
+
+    final_code = asyncio.run(
+        orchestrator.run_pipeline(
+            user_story="As a user I want to log in and add items to my cart",
+            conditions="1. Log in\n2. Add at least one item to the cart",
+            target_urls=["https://www.saucedemo.com"],
+        )
+    )
+
+    assert "def test_01_login(page, evidence_tracker):" in final_code
+    assert "def test_02_add_item(page, evidence_tracker):" in final_code
+    assert (
+        "evidence_tracker.assert_visible('#add-to-cart-sauce-labs-backpack', label='products page loaded')"
+        in final_code
+    )
+    assert (
+        "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack')"
+        in final_code
+    )
+    assert (
+        "evidence_tracker.click('a[href=\"https://www.saucedemo.com/cart.html\"]', label='shopping cart link')"
+        in final_code
+    )
+    assert "Unresolved placeholder" not in final_code

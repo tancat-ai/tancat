@@ -289,8 +289,9 @@ class TestOrchestrator:
         self._debug("phase=prerequisite_injection start")
         injector = PrerequisiteInjector()
         if journeys and self._starting_url:
+            resolved_journeys = self.parser.parse_test_journeys(final_code)
             injection_plans = injector.analyze_dependencies(
-                journeys=journeys,
+                journeys=resolved_journeys or journeys,
                 starting_url=self._starting_url,
                 scraped_pages=scraped_data,
             )

@@ -83,12 +83,16 @@ AI-Playwright-Test-Generator/
 ├── pyproject.toml               # Dependencies — managed by uv
 ├── .pre-commit-config.yaml      # ruff + ruff-format + mypy
 ├── cli/                         # CLI module (argparse-based)
-│   ├── main.py                  # Supported CLI entry point
+│   ├── main.py                  # Supported CLI entry point (366 lines after refactor)
+│   ├── color.py                 # ANSI colour helpers
 │   ├── config.py                # AnalysisMode, ReportFormat enums
 │   ├── input_parser.py
-│   ├── test_case_orchestrator.py
-│   ├── evidence_generator.py
-│   └── report_generator.py
+│   ├── menu_renderer.py         # Menu rendering functions
+│   ├── pipeline_runner.py       # Pipeline execution from CLI
+│   ├── report_generator.py
+│   ├── session.py               # CLI session state dataclass
+│   └── test_case_orchestrator.py
+│   └── evidence_generator.py
 ├── docs/                        # Documentation hub
 │   ├── specs/                   # Feature specification documents
 │   │   ├── FEATURE_SPEC_intelligent_scraping_pipeline.md
@@ -109,13 +113,22 @@ AI-Playwright-Test-Generator/
 │   ├── test_suite_audit_*.md    # Test suite audit reports
 │   ├── plans/                   # Implementation plans
 │   └── private/                 # GTM strategy and other private docs
-├── scripts/                     # Utility and UAT scripts
-│   ├── generate_3d_map.py       # 3D documentation map generator
-│   ├── run_lmstudio_pipeline_once.py
-│   ├── 3d_map_data.json         # Generated 3D map data
-│   ├── uat_full_pipeline.py     # UAT script
-│   ├── uat_llm_call.py          # UAT script
-│   └── uat_reproducible_failure.py # UAT script
+├── scripts/                     # Utility and UAT scripts (see scripts/README.md)
+│   ├── README.md                # Scripts directory index
+│   ├── 3d map/                  # 3D documentation map generation
+│   │   ├── generate_3d_map.py
+│   │   ├── audit_3d_map.py
+│   │   └── 3d_map_data.json
+│   ├── debug/                   # Diagnostic scripts
+│   │   ├── debug_all.py         # Unified debug entry point
+│   │   ├── debug_pipeline.py
+│   │   ├── debug_saucedemo_*.py
+│   │   └── debug_scoring.py
+│   ├── maintenance/             # Project housekeeping
+│   │   ├── cli_e2e_validation.py
+│   │   └── project_sanitizer.py
+│   └── uat/                     # User acceptance testing
+│       └── uat_automationexercise.py
 ├── src/                         # Core modules — tested via tests/
 │   ├── llm_client.py            # PROTECTED
 │   ├── test_generator.py        # PROTECTED
@@ -131,6 +144,17 @@ AI-Playwright-Test-Generator/
 │   ├── locator_scorer.py        # Scores locators by reliability (data-testid > id > name > aria-label > css-class > text > xpath)
 │   ├── evidence_tracker.py      # Captures runtime diagnostics (failure_note, diagnosis, screenshots)
 │   ├── evidence_loader.py       # Loads evidence JSON from test packages for reports
+│   ├── evidence_serializer.py   # Evidence JSON serialization (extracted from evidence_tracker)
+│   ├── form_detector.py         # Form detection and selector constants (extracted from journey_scraper)
+│   ├── intent_matcher.py        # Intent classification for placeholders (extracted from placeholder_resolver)
+│   ├── llm_reasoning_filter.py  # LLM reasoning text detection/stripping (extracted from code_postprocessor)
+│   ├── code_normalizer.py       # Code normalization transforms (extracted from code_postprocessor)
+│   ├── semantic_matcher.py      # Token-based semantic similarity (extracted from placeholder_resolver)
+│   ├── screenshot_capture.py    # Screenshot capture utilities (extracted from evidence_tracker)
+│   ├── state_tracker.py         # DOM state tracking (extracted from journey_scraper)
+│   ├── ui_pipeline.py           # Pipeline execution for Streamlit UI (extracted from streamlit_app)
+│   ├── ui_renderers.py          # Streamlit rendering helpers (extracted from streamlit_app)
+│   ├── url_inference.py         # URL inference from page context (extracted from placeholder_orchestrator)
 │   ├── report_builder.py        # Builds report dicts — merges evidence data
 │   ├── report_formatters.py     # Renders reports (local MD, Jira MD, HTML) with failure diagnostics
 │   ├── pipeline_report_service.py
@@ -272,20 +296,22 @@ See `docs/plans/FEATURE_PLAN_enhanced_failure_diagnostics.md` for full details.
 
 ## 12. UAT Scripts
 
-### `scripts/uat_automationexercise.py` — End-to-end pipeline validation
+See `scripts/README.md` for a complete index of all utility scripts.
+
+### `scripts/uat/uat_automationexercise.py` — End-to-end pipeline validation
 
 Runs the full skeleton-first pipeline against automationexercise.com with a realistic e-commerce user story, then validates the generated code.
 
 **Usage:**
 ```bash
 # Use LM Studio (auto-detects loaded model, avoids GPU VRAM contention)
-.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio
+.venv\Scripts\python.exe scripts\uat\uat_automationexercise.py --provider lm-studio
 
 # Use LM Studio with specific model if needed
-.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider lm-studio --model qwen3.6-27b
+.venv\Scripts\python.exe scripts\uat\uat_automationexercise.py --provider lm-studio --model qwen3.6-27b
 
 # Use Ollama (when Cline is not running)
-.venv\Scripts\python.exe scripts\uat_automationexercise.py --provider ollama
+.venv\Scripts\python.exe scripts\uat\uat_automationexercise.py --provider ollama
 ```
 
 **When to use:**
@@ -297,9 +323,13 @@ Runs the full skeleton-first pipeline against automationexercise.com with a real
 
 **Known results (2026-05-05):** 4/6 tests pass on automationexercise.com. test_04 and test_06 fail because ASSERT placeholders for "confirmation message" resolve to `.cart_quantity_delete` (delete button) instead of the actual confirmation popup. This is a resolution quality issue for ASSERT-type placeholders, not an infrastructure problem.
 
-### `scripts/debug_pipeline.py` — Debug pipeline with inspection
+### `scripts/debug/debug_pipeline.py` — Debug pipeline with inspection
 
 Stops at each phase and prints scraped data, resolution results, and generated code for inspection. Use when diagnosing why placeholders resolve incorrectly.
+
+### `scripts/debug/debug_all.py` — Unified debug entry point
+
+Consolidated entry point for all debug scripts. Run `--help` for available commands.
 
 ---
 

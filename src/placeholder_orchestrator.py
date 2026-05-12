@@ -14,6 +14,7 @@ from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 from src.semantic_candidate_ranker import SemanticCandidateRanker
 from src.stateful_scraper import StatefulPageScraper
+from src.url_inference import infer_next_page_url
 from src.url_resolver import UrlResolver
 from src.url_utils import (
     build_common_path_candidates,
@@ -283,6 +284,10 @@ class PlaceholderOrchestrator:
                 if "pytest.skip" in resolved_value:
                     journey_unresolved.setdefault(journey_name, []).append(description)
                 else:
+                    if journey_name in journey_unresolved:
+                        journey_unresolved[journey_name] = [
+                            unresolved for unresolved in journey_unresolved[journey_name] if unresolved != description
+                        ]
                     line_resolutions.setdefault(use.line_number, []).append(
                         (use.token, action, resolved_value, description, fill_value)
                     )
@@ -574,7 +579,7 @@ class PlaceholderOrchestrator:
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)
-            next_url = self._infer_next_page_url(action, description, matched_element, scraped_data, current_url)
+            next_url = infer_next_page_url(action, description, matched_element, scraped_data, current_url)
             if next_url:
                 await self._ensure_scraped(next_url, scraped_data, scraped_errors)
             return selector, next_url
@@ -644,6 +649,8 @@ class PlaceholderOrchestrator:
             )
 
         if not all_ranked:
+            if action == "ASSERT" and self._is_page_state_assertion(description):
+                return self._select_page_state_candidate(pages_data, description)
             return None
 
         # Sort by score descending to get the global best match
@@ -696,6 +703,10 @@ class PlaceholderOrchestrator:
             top_candidate = shortlisted[0]
             if self._validate_text_match(top_candidate, description):
                 return top_candidate
+            if action == "ASSERT" and self._is_page_state_assertion(description):
+                page_loaded_candidate = self._select_page_loaded_candidate(shortlisted, description)
+                if page_loaded_candidate is not None:
+                    return page_loaded_candidate
             logger.info(
                 "Top-ranked element '%s' fails text validation for '%s' — skipping (unresolved placeholder).",
                 str(top_candidate.get("text", "")).strip(),
@@ -703,27 +714,57 @@ class PlaceholderOrchestrator:
             )
         return None
 
-    def _infer_next_page_url(
-        self,
-        action: str,
+    @staticmethod
+    @staticmethod
+    def _is_page_state_assertion(description: str) -> bool:
+        """Return True for broad assertions that a named page/state is loaded."""
+        lowered = description.lower()
+        return any(
+            term in lowered
+            for term in (
+                "page",
+                "loaded",
+                "badge updated",
+                "thank you",
+                "success",
+                "summary",
+            )
+        )
+
+    @staticmethod
+    def _select_page_state_candidate(
+        pages_data: dict[str, list[dict[str, str]]],
         description: str,
-        matched_element: dict[str, str],
-        scraped_data: dict[str, list[dict[str, str]]],
-        current_url: str | None,
-    ) -> str | None:
-        """Infer the next active page after a resolved step when navigation is implied."""
-        href = str(matched_element.get("href", "")).strip()
-        if action == "CLICK" and href:
-            if href.startswith(("http://", "https://")):
-                return href
-            if current_url:
-                return urljoin(current_url, href)
-            return href
+    ) -> dict[str, str] | None:
+        """Pick a stable visible candidate from the current page for broad page-state assertions."""
+        candidates = [element for elements in pages_data.values() for element in elements]
+        return PlaceholderOrchestrator._select_page_loaded_candidate(candidates, description)
 
-        if action == "CLICK" and any(term in description.lower() for term in ("cart", "checkout", "product", "home")):
-            return self.resolver.resolve_url(description, scraped_data)
+    @staticmethod
+    def _select_page_loaded_candidate(
+        candidates: list[dict[str, str]],
+        description: str = "",
+    ) -> dict[str, str] | None:
+        """Pick a stable visible page element for generic "page loaded" assertions."""
+        lowered = description.lower()
+        if "cart badge" in lowered or "badge updated" in lowered:
+            for candidate in candidates:
+                candidate_text = " ".join(
+                    str(candidate.get(field, "")).lower()
+                    for field in ("selector", "text", "classes", "data_test", "aria_label", "accessible_name")
+                )
+                if "cart" in candidate_text and ("badge" in candidate_text or str(candidate.get("text", "")).strip()):
+                    return candidate
 
-        return None
+        for candidate in candidates:
+            role = str(candidate.get("role", "")).strip().lower()
+            selector = str(candidate.get("selector", "")).strip()
+            if not selector or role in {"hidden", "password", "email", "text", "input"}:
+                continue
+            if str(candidate.get("is_visible", "true")).lower() == "false":
+                continue
+            return candidate
+        return candidates[0] if candidates else None
 
     def _select_initial_page_url(
         self,

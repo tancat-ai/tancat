@@ -1,4 +1,9 @@
-"""Resolve placeholder descriptions against scraped page elements."""
+"""Resolve placeholder descriptions against scraped page elements.
+
+Orchestrates semantic matching (SemanticMatcher) and intent filtering
+(IntentMatcher) to produce ranked candidate lists and final selector
+resolutions for pytest-style Playwright tests.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +13,38 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
+from src.intent_matcher import IntentMatcher
+from src.semantic_matcher import SemanticMatcher
+
 logger = logging.getLogger(__name__)
+
+
+def _css_escape_id(value: str) -> str:
+    r"""Escape a raw ID value for safe use in a CSS #id selector.
+
+    CSS selectors require certain characters to be escaped with backslashes.
+    For example, an ID like ``add-to-cart-test.allthethings()-t-shirt-(red)``
+    must become ``\(add-to-cart-test\.allthethings\(\)-t-shirt-\(red\)``
+    to be parsed correctly by Playwright's CSS selector engine.
+
+    Handles CSS special characters: space, tab, linefeed, #, ", ', \, ,, !, $,
+    %, &, *, (, ), +, :, ;, <, =, >, ?, @, [, ], ^, `, {, |, }, ~ and control chars.
+    """
+    if not value:
+        return value
+    # CSS selector special characters that must be escaped in an ID component.
+    # Per CSS Selectors Level 3, these need backslash escaping when not in a string.
+    # CSS identifiers allow letters, digits, underscores, and hyphens without escaping.
+    # Only escape true CSS delimiter/special characters.
+    # See: https://drafts.csswg.org/selectors-3/#character-set
+    escape_chars = r'"\'' + r"""#&*,/><:=?@[\]^`{|}~!$%();+""" + "\t\n\r\x0c"
+    result = []
+    for char in value:
+        if char in escape_chars:
+            result.append(f"\\{char}")
+        else:
+            result.append(char)
+    return "".join(result)
 
 
 def _default_min_confidence() -> float:
@@ -22,85 +58,6 @@ def _default_min_confidence() -> float:
 class PlaceholderResolver:
     """Match placeholder descriptions to real scraped locators."""
 
-    STOP_WORDS = {
-        "a",
-        "an",
-        "and",
-        "be",
-        "button",
-        "check",
-        "correctly",
-        "for",
-        "have",
-        "icon",
-        "in",
-        "into",
-        "items",
-        "link",
-        "logo",
-        "of",
-        "or",
-        "page",
-        "please",
-        "product",
-        "the",
-        "to",
-        "url",
-        "with",
-    }
-    # Curated token expansions for placeholder resolution.
-    # Only includes terms that actually appear in user stories, test descriptions,
-    # and DOM metadata for real e-commerce / form-based test targets.
-    # Populated from analysis of saucedemo.com, automationexercise.com, and Playwright locator patterns.
-    TOKEN_EXPANSIONS = {
-        # --- E-commerce / shopping vocabulary ---
-        "add": {"buy", "basket", "place"},
-        "basket": {"cart", "bag", "shopping"},
-        "cart": {"basket", "bag", "shopping", "trolley"},
-        "checkout": {"check", "out", "order", "payment", "proceed", "complete", "finish"},
-        "ecommerce": {"shop", "store"},
-        "finish": {"complete", "done", "submit", "place", "order"},
-        "home": {"index", "landing", "start", "main"},
-        "product": {"item", "goods", "merchandise"},
-        "products": {"catalog", "item", "goods"},
-        "shopping": {"cart", "basket", "bag", "continue"},
-        # --- Form field names ---
-        "password": {"pass", "pw", "passwd"},
-        "username": {"user", "name", "login", "email", "userid", "user_id", "user-name", "input"},
-        "user": {"username", "user-name", "user_name", "login"},
-        "name": {"full name", "first name", "last name", "given name"},
-        "first": {"forename", "given"},
-        "last": {"surname", "family", "family name"},
-        "zip": {"postal", "code", "postcode", "pin"},
-        "address": {"addr", "location", "street"},
-        "phone": {"tel", "telephone", "mobile", "cell"},
-        "email": {"e-mail", "mail"},
-        # --- Navigation / action verbs ---
-        "verify": {"assert", "check", "confirm", "ensure"},
-        "confirm": {"verify", "assert", "check"},
-        "continue": {"proceed", "next"},
-        "cancel": {"close", "dismiss", "decline"},
-        "close": {"dismiss", "exit", "cancel", "x"},
-        "back": {"previous", "return", "go back"},
-        "next": {"forward", "continue"},
-        "submit": {"send", "post", "place", "confirm", "save"},
-        "search": {"find", "query", "look", "lookup"},
-        "sort": {"order", "arrange", "filter"},
-        "filter": {"sort", "narrow", "refine"},
-        "clear": {"remove", "delete", "reset"},
-        "select": {"choose", "pick"},
-        "enter": {"type", "input", "fill", "key"},
-        "navigate": {"go", "open", "visit", "load"},
-        # --- Confirmation / assertion patterns ---
-        "success": {"completed", "done", "ok", "confirmed"},
-        # --- UI component types (only those appearing in real user stories) ---
-        "popup": {"modal", "dialog", "overlay", "lightbox"},
-        "dropdown": {"select", "menu", "list", "combo"},
-        "dialog": {"modal", "popup", "overlay"},
-        "modal": {"dialog", "popup", "overlay"},
-        "overlay": {"modal", "dialog", "popup"},
-    }
-
     def __init__(
         self,
         match_threshold: int = 1,
@@ -108,27 +65,6 @@ class PlaceholderResolver:
     ) -> None:
         self.match_threshold = match_threshold
         self.min_confidence = min_confidence if min_confidence is not None else _default_min_confidence()
-
-    def _get_words(self, text: str, *, expand_aliases: bool = True) -> set[str]:
-        # Normalise delimiters: replace underscores and hyphens with spaces
-        normalized = text.replace("_", " ").replace("-", " ")
-        clean_text = re.sub(r"[^a-zA-Z0-9\s]", " ", normalized.lower())
-        base_words = {word for word in clean_text.split() if word and word not in self.STOP_WORDS}
-        expanded_words = set(base_words)
-
-        for word in list(base_words):
-            # Handle common concatenated words (e.g. "username" -> "user", "name")
-            if word == "username":
-                expanded_words.update(["user", "name"])
-            if word == "password":
-                expanded_words.update(["pass", "word"])
-
-            if word.endswith("s") and len(word) > 3:
-                expanded_words.add(word[:-1])
-            if expand_aliases:
-                expanded_words.update(self.TOKEN_EXPANSIONS.get(word, set()))
-
-        return expanded_words
 
     def _build_element_haystack(self, element: dict[str, Any]) -> str:
         """Return a single string containing all searchable metadata for an element.
@@ -204,347 +140,6 @@ class PlaceholderResolver:
         if not href and text:
             return True
         return False
-
-    def _semantic_similarity(self, description: str, text: str) -> float:
-        """Compute a semantic similarity score between description and text.
-
-        Uses token-level overlap with expansions to handle cases like
-        "username input" → "user-name" and "finish button" → "Finish".
-
-        Returns a score between 0.0 and 1.0 where 1.0 is a perfect match.
-        """
-        if not text or not description:
-            return 0.0
-
-        # Normalize both strings
-        norm_desc = description.replace("_", " ").lower().strip()
-        norm_text = text.replace("_", " ").lower().strip()
-
-        # Direct containment is highest similarity
-        if norm_text in norm_desc or norm_desc in norm_text:
-            return 1.0
-
-        # Get expanded tokens for both
-        desc_tokens = self._get_words(norm_desc, expand_aliases=True)
-        text_tokens = self._get_words(norm_text, expand_aliases=True)
-
-        if not desc_tokens or not text_tokens:
-            return 0.0
-
-        # Jaccard-like similarity with token expansions
-        intersection = desc_tokens & text_tokens
-        union = desc_tokens | text_tokens
-
-        if not union:
-            return 0.0
-
-        base_similarity = len(intersection) / len(union)
-
-        # Bonus for partial word matches (e.g., "user-name" contains "user" and "name")
-        desc_words_set = {w for w in norm_desc.split() if len(w) > 2}
-        text_words_set = {w for w in norm_text.split() if len(w) > 2}
-
-        if desc_words_set and text_words_set:
-            # Check if any description word is contained in any text word or vice versa
-            partial_matches = 0
-            total_checks = 0
-            for dw in desc_words_set:
-                for tw in text_words_set:
-                    total_checks += 1
-                    if dw in tw or tw in dw:
-                        partial_matches += 1
-
-            if total_checks > 0:
-                partial_score = partial_matches / total_checks
-                # Blend Jaccard with partial score (weight partial higher for compound words)
-                blended = 0.4 * base_similarity + 0.6 * partial_score
-                return min(1.0, blended)
-
-        return base_similarity
-
-    def _matches_intent_bucket(self, action: str, description: str, element: dict[str, Any]) -> bool:
-        """Return True when the scraped element fits the likely user intent for the step."""
-        lowered = description.replace("_", " ").lower()
-        selector = str(element.get("selector", "")).lower()
-        text = str(element.get("text", "")).lower()
-        href = str(element.get("href", "")).lower()
-        classes = str(element.get("classes", "")).lower()
-        icon_classes = str(element.get("icon_classes", "")).lower()
-        visual_desc = str(element.get("visual_description", "")).lower()
-        parent_text = str(element.get("parent_text", "")).lower()
-        aria_icon_label = str(element.get("aria_icon_label", "")).lower()
-        element_id = str(element.get("id", "")).lower()
-        value = str(element.get("value", "")).lower()
-        data_test = str(element.get("data_test", "")).lower()
-        name = str(element.get("name", "")).lower()
-        placeholder = str(element.get("placeholder", "")).lower()
-        aria_label = str(element.get("aria_label", "")).lower()
-        accessible_name = str(element.get("accessible_name", "")).lower()
-        all_element_text = " ".join(
-            [
-                selector,
-                text,
-                href,
-                classes,
-                icon_classes,
-                visual_desc,
-                parent_text,
-                aria_icon_label,
-                value,
-                data_test,
-                name,
-                placeholder,
-                aria_label,
-                accessible_name,
-            ]
-        )
-
-        # EXACT ID/DATA-TEST MATCH (High Priority)
-        lowered_id = str(element.get("id", "")).lower()
-        lowered_data_test = str(element.get("data_test", "")).lower()
-        id_haystack = f"{lowered_id} {lowered_data_test}"
-
-        desc_words = self._get_words(description)
-        if any(word in id_haystack for word in desc_words if len(word) > 3):
-            # If a core word from the description is in the ID, give it a massive boost
-            return True
-
-        # SEMANTIC SIMILARITY BOOST: For FILL actions on input elements, use semantic
-        # similarity to match descriptions like "first name input" to elements with
-        # id="first-name" or data-test="firstname-input".
-        if action == "FILL" and self._is_fillable_element(element):
-            # Check semantic similarity between description and element identifiers
-            for field in [lowered_id, data_test, name, placeholder, aria_label, accessible_name]:
-                if field:
-                    sim = self._semantic_similarity(description, field)
-                    if sim > 0.4:
-                        return True
-
-        # LOGIN/LOGOUT GUARD
-        if any(term in lowered for term in ("login", "log in", "sign in", "logout", "log out", "sign out")):
-            return any(
-                term in all_element_text
-                for term in (
-                    "login",
-                    "log-in",
-                    "signin",
-                    "sign-in",
-                    "logout",
-                    "log-out",
-                    "signout",
-                    "sign-out",
-                    "submit",
-                )
-            )
-
-        # USERNAME/PASSWORD/LOGIN BUTTON SPECIFIC MATCHING (saucedemo.com pattern)
-        # Match descriptions like "username input" to id="user-name" or data-test="username"
-        if action == "FILL" and self._is_fillable_element(element):
-            # Username field matching
-            if any(term in lowered for term in ("username", "user name", "user input", "email input")):
-                if any(term in all_element_text for term in ("username", "user-name", "user_name", "email")):
-                    return True
-            # Password field matching
-            if any(term in lowered for term in ("password", "pass input", "pw input")):
-                if any(term in all_element_text for term in ("password", "pass", "passwd")):
-                    return True
-
-        # LOGIN BUTTON MATCHING
-        if action == "CLICK" and any(term in lowered for term in ("login button", "sign in", "log in")):
-            if any(term in all_element_text for term in ("login", "login-button", "login_button", "submit")):
-                return True
-
-        # GENERIC SUBSCRIBE/NEWSLETTER GUARD (enhanced)
-        # Sites like automationexercise.com have a persistent footer with #subscribe / newsletter fields
-        # that often confuses semantic rankers.  This guard now covers:
-        #  - explicit cart/checkout/payment actions (original)
-        #  - popup/modal related actions ("continue shopping", "close", "dismiss", "ok")
-        #  - ANY CLICK action when the element has no visible text but carries a subscribe/newsletter ID.
-        is_subscribe_element = (
-            "subscribe" in all_element_text
-            or "newsletter" in all_element_text
-            or element_id in {"subscribe", "susbscribe_email", "newsletter_email"}
-        )
-        if any(term in lowered for term in ("cart", "checkout", "payment")):
-            if is_subscribe_element:
-                return False
-
-        # Extended popup/modal guard: "continue shopping", "close modal", "dismiss", etc.
-        if action == "CLICK" and any(
-            term in lowered
-            for term in (
-                "continue shopping",
-                "close",
-                "dismiss",
-                "ok",
-                "cancel",
-                "popup",
-                "modal",
-                "confirmation",
-            )
-        ):
-            if is_subscribe_element:
-                return False
-
-        # Generic guard for CLICK actions: an element with NO visible text that carries a
-        # subscribe/newsletter ID should never be clicked when the description expects specific
-        # action-oriented text (e.g. "Continue Shopping").  Inputs without text are almost always
-        # form fields, not clickable buttons.
-        if action == "CLICK" and is_subscribe_element and not text.strip():
-            return False
-
-        if action == "ASSERT" and any(term in lowered for term in ("home page", "landing page", "start page")):
-            # A page-state assertion this generic should skip rather than latch onto
-            # an arbitrary visible element like a footer link.
-            return False
-
-        if action == "CLICK" and "product card" in lowered:
-            return any(term in all_element_text for term in ("product card", "product-card", "card"))
-
-        if action == "CLICK" and "cart" in lowered and any(term in lowered for term in ("go", "open", "navigate")):
-            return "view_cart" in all_element_text or ('href="/view_cart"' in selector) or text.strip() == "cart"
-
-        if action == "CLICK" and "add" in lowered and "cart" in lowered:
-            return any(
-                term in all_element_text
-                for term in ("add to cart", "add-to-cart", "data-product-id", "product_id", "buy")
-            )
-
-        # ADD TO CART BUTTON: Match elements with text "Add to cart" regardless of product name
-        if action == "CLICK" and any(term in lowered for term in ("add to cart", "addtocart", "add-to-basket")):
-            if "add" in all_element_text and ("cart" in all_element_text or "basket" in all_element_text):
-                return True
-            # Also match by semantic similarity to element text
-            if text and self._semantic_similarity(description, text) > 0.3:
-                return True
-
-        # FINISH/COMPLETE BUTTON: Common on checkout pages
-        if action == "CLICK" and any(
-            term in lowered for term in ("finish", "complete order", "place order", "confirm order")
-        ):
-            return any(
-                term in all_element_text
-                for term in ("finish", "complete", "place order", "confirm order", "submit order", "confirm purchase")
-            )
-
-        # SHOPPING CART / BASKET LINK: Match cart navigation elements
-        if action == "CLICK" and any(
-            term in lowered for term in ("shopping cart", "cart link", "cart icon", "go to cart")
-        ):
-            return any(
-                term in all_element_text
-                for term in ("cart", "basket", "shopping", "view cart", "go to cart", "shopping-cart")
-            )
-            # Also check data-test attributes specifically
-            if any(dt in {"shopping-cart-link", "cart-link", "basket-link", "view-cart"} for dt in [data_test]):
-                return True
-
-        # CHECKOUT BUTTON/LINK: Match checkout navigation
-        if action == "CLICK" and any(
-            term in lowered for term in ("proceed to checkout", "go to checkout", "checkout page")
-        ):
-            return any(
-                term in all_element_text
-                for term in ("checkout", "check out", "proceed to checkout", "place your order")
-            )
-
-        # FORM FIELD MATCHING: For FILL actions, match by semantic similarity to field labels
-        if action == "FILL":
-            # Check if description contains "first name", "last name", "zip", "email", "password"
-            # and element has matching identifier
-            form_field_matches = {
-                "first name": {"first-name", "firstname", "firstName", "first_name", "f-name"},
-                "last name": {"last-name", "lastname", "lastName", "last_name", "l-name", "surname"},
-                "zip code": {"zip-code", "zipcode", "zipCode", "zip_code", "postal", "postal-code"},
-                "email address": {"email", "e-mail", "email-address", "email_address", "mail"},
-                "phone number": {"phone", "telephone", "phone-number", "phone_number", "tel"},
-                "company": {"company", "company name", "company_name", "business"},
-                "address": {"address", "address1", "street", "street-address"},
-                "city": {"city", "town"},
-                "state": {"state", "province", "region"},
-                "country": {"country", "nation"},
-            }
-            for desc_key, element_ids in form_field_matches.items():
-                if desc_key in lowered:
-                    if data_test in element_ids or lowered_id in element_ids or name in element_ids:
-                        return True
-                    # Also check semantic similarity
-                    for eid in element_ids:
-                        if self._semantic_similarity(description, eid) > 0.5:
-                            return True
-
-        if action == "ASSERT" and ("cart" in lowered or "item" in lowered or "checkout" in lowered):
-            is_content_match = any(
-                term in all_element_text
-                for term in (
-                    "cart_description",
-                    "cart_quantity",
-                    "cart_price",
-                    "cart_total",
-                    "cart-summary",
-                    "summary",
-                    "product",
-                    "quantity",
-                    "price",
-                    "cart_info",
-                    "checkout",
-                    "order",
-                    "payment",
-                )
-            )
-            # Avoid matching product search widgets when asserting cart/checkout.
-            if "search" in all_element_text and "cart" not in all_element_text:
-                return False
-            is_nav_link = str(element.get("role", "")).strip().lower() == "a" and "view_cart" in all_element_text
-            return is_content_match and not is_nav_link
-
-        if action == "CLICK" and any(term in lowered for term in ("checkout", "check out")):
-            # Favor true checkout navigation, avoid "payment" shortcuts.
-            if "payment" in all_element_text and "payment" not in lowered:
-                return False
-            return any(
-                term in all_element_text
-                for term in ("checkout", "check out", "proceed to checkout", "place order", "check_out")
-            )
-
-        # THANK YOU / SUCCESS PAGE ASSERTION: Match confirmation messages
-        if action == "ASSERT" and any(
-            term in lowered for term in ("thank you", "thankyou", "success", "order confirmed", "order complete")
-        ):
-            return any(
-                term in all_element_text
-                for term in (
-                    "thank you",
-                    "thankyou",
-                    "order confirmed",
-                    "order complete",
-                    "order summary",
-                    "confirmation",
-                    "success",
-                )
-            )
-
-        # CONTINUE SHOPPING BUTTON
-        if action == "CLICK" and "continue shopping" in lowered:
-            return any(term in all_element_text for term in ("continue shopping", "continue", "shop", "keep shopping"))
-
-        # PRODUCT NAME MATCHING: For descriptions like "Sauce Labs Backpack"
-        if action in {"CLICK", "ASSERT"}:
-            # Extract product name from description (words before "add to cart", "click", etc.)
-            product_indicators = {"add to cart", "click", "button", "link", "select", "choose"}
-            product_words = [w for w in lowered.split() if w not in product_indicators and len(w) > 2]
-            if len(product_words) >= 2:  # At least a 2-word product name
-                # Check if product words appear in element text or data attributes
-                element_content = " ".join([text, data_test, lowered_id, name, aria_label])
-                matched_words = sum(
-                    1
-                    for pw in product_words
-                    if pw in element_content or pw.replace(" ", "") in element_content.replace(" ", "")
-                )
-                if matched_words >= max(1, len(product_words) // 2):
-                    return True
-
-        return True
 
     # Words that describe the UI interaction pattern rather than the content itself.
     # These should be stripped from placeholder descriptions before text matching
@@ -736,7 +331,7 @@ class PlaceholderResolver:
         page_elements: list[dict[str, Any]],
     ) -> list[tuple[int, dict[str, Any]]]:
         """Return scored candidate elements in descending match order."""
-        desc_words = self._get_words(description)
+        desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
             return []
 
@@ -760,10 +355,10 @@ class PlaceholderResolver:
             visual_desc = str(element.get("visual_description", "")).lower()
             parent_text = str(element.get("parent_text", "")).lower()
 
-            if action == "FILL" and not self._is_fillable_element(element):
+            if action == "FILL" and not IntentMatcher._is_fillable(element):
                 continue
 
-            if not self._matches_intent_bucket(action, description, element):
+            if not IntentMatcher.matches(action, description, element):
                 continue
 
             haystack = self._build_element_haystack(element).lower()
@@ -771,13 +366,54 @@ class PlaceholderResolver:
                 if action == "ASSERT" and not self._is_assertion_candidate(element):
                     continue
                 else:
-                    ranked.append((100, element))
+                    # Base score is 100 for haystack matches, but apply product-ID bonus
+                    # to differentiate between products (e.g., backpack vs fleece-jacket).
+                    haystack_score = 100
+                    if action == "CLICK" and {"add", "cart"}.issubset(desc_words):
+                        # Use raw words (no expansion) for product-ID matching in haystack branch too.
+                        raw_product_words = SemanticMatcher.get_words(description, expand_aliases=False) - {
+                            "add",
+                            "cart",
+                            "button",
+                            "item",
+                            "product",
+                            "for",
+                            "to",
+                            "the",
+                            "a",
+                            "an",
+                        }
+                        if raw_product_words:
+                            element_id_lower = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
+                            product_word_set = set(" ".join(raw_product_words).lower().split())
+                            if product_word_set and all(pw in element_id_lower for pw in product_word_set):
+                                haystack_score += 20
+                    ranked.append((haystack_score, element))
                     continue
 
-            element_words = self._get_words(haystack, expand_aliases=False)
+            element_words = SemanticMatcher.get_words(haystack, expand_aliases=False)
             score = len(desc_words.intersection(element_words))
             role = str(element.get("role", "")).strip().lower()
             href = str(element.get("href", "")).strip().lower()
+
+            # Content words for scoring (defined early for use in structural match and penalty sections)
+            desc_content_words = desc_words - {"click", "tap", "press"}
+
+            # Structural match bonus: when data-test or id contains meaningful
+            # description keywords, treat it as a strong match. This handles icon/nav
+            # elements like [data-test="shopping-cart-link"] for "shopping cart icon"
+            # where the haystack doesn't contain "icon" but the structural attribute
+            # is a near-perfect match for the intent.
+            data_test_words = set(str(element.get("data_test", "")).lower().replace("-", " ").replace("_", " ").split())
+            id_words = set(str(element.get("id", "")).lower().replace("-", " ").replace("_", " ").split())
+            structural_words = data_test_words | id_words
+            # Only count meaningful content words (not stop words)
+            structural_content = (
+                structural_words & desc_content_words if action == "CLICK" else structural_words & desc_words
+            )
+            if len(structural_content) >= 2:
+                # Strong structural match — boost to near-haystack level
+                score = max(score, 80 + len(structural_content) * 5)
 
             if action == "CLICK" and "cart" in desc_words and ("cart" in href or "cart" in element_words):
                 score += 2
@@ -786,6 +422,48 @@ class PlaceholderResolver:
             if action == "CLICK" and "checkout" in desc_words and "payment" in href and "payment" not in desc_words:
                 # Avoid jumping straight to payment when the user intent is checkout.
                 score -= 3
+            if action == "CLICK" and {"add", "cart"}.issubset(desc_words):
+                # Use raw description words (without token expansion) for product-ID matching.
+                # desc_words includes TOKEN_EXPANSIONS (e.g. "add" -> {"buy", "basket", "place"})
+                # which would cause the all() check below to fail.  We need only the actual
+                # product name words from the original description.
+                raw_product_words = SemanticMatcher.get_words(description, expand_aliases=False) - {
+                    "add",
+                    "cart",
+                    "button",
+                    "item",
+                    "product",
+                    "for",
+                    "to",
+                    "the",
+                    "a",
+                    "an",
+                }
+                product_words = desc_words - {
+                    "add",
+                    "cart",
+                    "button",
+                    "item",
+                    "product",
+                    "for",
+                    "to",
+                    "the",
+                    "a",
+                    "an",
+                }
+                if product_words:
+                    matched_product_words = len(product_words.intersection(element_words))
+                    score += matched_product_words * 4
+                    # Strong bonus when ALL product name words match the element ID.
+                    # This ensures "Sauce Labs Backpack" prefers #add-to-cart-sauce-labs-backpack
+                    # over #add-to-cart-sauce-labs-fleece-jacket. Without this, the tiebreaker
+                    # (selector length) incorrectly favors longer IDs.
+                    element_id_lower = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
+                    # Use raw words (no expansion) so "sauce labs backpack" checks against the ID
+                    # rather than the expanded set {"sauce", "labs", "backpack", "buy", "basket", ...}.
+                    product_word_set = set(" ".join(raw_product_words).lower().split())
+                    if product_word_set and all(pw in element_id_lower for pw in product_word_set):
+                        score += 20  # Large bonus for exact product-ID match
             if action == "ASSERT" and {"cart", "product"}.intersection(desc_words) and "cart" in href:
                 score -= 2
             if action == "ASSERT" and self._is_assertion_candidate(element):
@@ -814,10 +492,28 @@ class PlaceholderResolver:
             # This prevents an empty newsletter input (#subscribe) from beating a button with
             # "Continue Shopping" text.  Increased from -5 to -10 to more strongly prefer
             # elements with visible, descriptive text over bare structural elements.
+            #
+            # EXCEPTION: icon/nav elements with strong structural matches (data-test or id
+            # containing relevant description words) should NOT be penalized. IntentMatcher
+            # already approved them, and the structural match is more reliable than text.
+            # This fixes: "shopping cart icon" resolving to "Add to cart" button instead of
+            # [data-test="shopping-cart-link"].
             if action == "CLICK":
                 desc_content_words = desc_words - {"click", "tap", "press"}
                 if not element_text and desc_content_words:
-                    score -= 10
+                    # Check for strong structural match: data-test or id contains description words
+                    data_test = str(element.get("data_test", "")).lower().replace("-", " ").replace("_", " ")
+                    element_id = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
+                    structural_haystack = f"{data_test} {element_id}"
+                    structural_words = set(structural_haystack.split())
+                    structural_overlap = len(desc_content_words & structural_words)
+                    has_strong_structural_match = structural_overlap >= 2
+
+                    if has_strong_structural_match:
+                        # IntentMatcher approved + structural match — light penalty only
+                        score -= 2
+                    else:
+                        score -= 10
 
             # ASSERT-specific penalty: single-class selectors (e.g. ".btn") are overly generic
             # and often match hidden modal buttons or unrelated page elements.  Penalize them
@@ -949,11 +645,11 @@ class PlaceholderResolver:
         # Priority 1: ID-based locator (most stable)
         # Check the `id` field first, then fall back to extracting from selector
         if element_id:
-            return f"#{element_id}"
+            return f"#{_css_escape_id(element_id)}"
         # Extract ID from raw selector (e.g. "#buy" -> "buy")
         id_match = re.search(r"#([\w-]+)", selector)
         if id_match:
-            return f"#{id_match.group(1)}"
+            return f"#{_css_escape_id(id_match.group(1))}"
 
         # Priority 2: href-based locator for anchor elements
         if role in ("a", "link"):
@@ -1027,7 +723,7 @@ class PlaceholderResolver:
         if not pages_data:
             return None
 
-        desc_words = self._get_words(description)
+        desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
             first_url = next(iter(pages_data), None)
             return first_url
@@ -1037,10 +733,12 @@ class PlaceholderResolver:
 
         for url, elements in pages_data.items():
             parsed = urlparse(url)
-            path_words = self._get_words((parsed.path or "/").replace("/", " "), expand_aliases=False)
+            path_words = SemanticMatcher.get_words((parsed.path or "/").replace("/", " "), expand_aliases=False)
             page_words = set(path_words)
             for element in elements[:25]:
-                page_words.update(self._get_words(self._build_element_haystack(element), expand_aliases=False))
+                page_words.update(
+                    SemanticMatcher.get_words(self._build_element_haystack(element), expand_aliases=False)
+                )
 
             score = len(desc_words.intersection(page_words))
             if parsed.path in {"", "/"} and {"home", "start", "landing", "store"}.intersection(desc_words):

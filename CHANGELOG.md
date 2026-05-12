@@ -10,6 +10,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **Refactor 2026-05-10 (Parts 1-7)** — Modular extraction reducing `streamlit_app.py` from 918 → 362 lines (60% reduction) per REFACTOR_PLAN_2026-05-10.md
+  - `src/ui_pipeline.py` — Pipeline execution helpers extracted from `streamlit_app.py` (business logic, no rendering)
+  - `src/ui_renderers.py` — Streamlit rendering helpers extracted from `streamlit_app.py` (pure UI, no business logic)
+  - `src/evidence_serializer.py` — Evidence JSON serialization extracted from `evidence_tracker.py`
+  - `src/screenshot_capture.py` — Screenshot capture utilities extracted from `evidence_tracker.py`
+  - `src/state_tracker.py` — DOM state tracking extracted from `journey_scraper.py`
+  - `src/form_detector.py` — Form detection and selector constants extracted from `journey_scraper.py`
+  - `src/semantic_matcher.py` — Token-based semantic similarity extracted from `placeholder_resolver.py`
+  - `src/intent_matcher.py` — Intent-based element filtering extracted from `placeholder_resolver.py`
+  - `src/code_normalizer.py` — Code normalization transforms extracted from `code_postprocessor.py`
+  - `src/llm_reasoning_filter.py` — LLM reasoning text detection extracted from `code_postprocessor.py`
+  - `src/url_inference.py` — URL transition inference extracted from `placeholder_orchestrator.py`
 - `CONTRIBUTING.md` — contributor guide with dev setup and coding standards
 - `SECURITY.md` — private vulnerability reporting policy
 - `CHANGELOG.md` — this file

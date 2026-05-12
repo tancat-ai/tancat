@@ -7,7 +7,7 @@ from typing import Any
 
 
 def load_uat_module() -> Any:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "uat_automationexercise.py"
+    script_path = Path(__file__).resolve().parents[1] / "scripts" / "uat" / "uat_automationexercise.py"
     spec: ModuleSpec | None = importlib.util.spec_from_file_location("uat_automationexercise", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)

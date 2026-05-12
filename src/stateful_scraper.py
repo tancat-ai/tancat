@@ -130,12 +130,16 @@ class StatefulPageScraper:
         return output
 
     def _seed_cart_session(self, page: Any) -> None:
-        """Navigate + try to add one item to cart (best effort)."""
+        """Navigate, login if needed, then try to add one item to cart (best effort)."""
         if not self.starting_url:
             return
 
         page.goto(self.starting_url, wait_until="domcontentloaded")
         self._dismiss_consent_overlays(page)
+
+        # Detect and handle login forms — many demo sites (saucedemo, etc.) require
+        # authentication before showing product/inventory pages.
+        self._attempt_login(page)
 
         add_to_cart_selectors = [
             '[data-product-id="11"]',
@@ -172,6 +176,50 @@ class StatefulPageScraper:
                     break
             except Exception:
                 continue
+
+    def _attempt_login(self, page: Any) -> None:
+        """Detect and fill login forms on the current page.
+
+        Handles common demo-site patterns:
+        - saucedemo.com: #user-name / #password / #login-button
+        - Generic: input[type="text"] + input[type="password"] + button
+        """
+        # Strategy 1: saucedemo-style (id-based)
+        try:
+            user_field = page.locator("#user-name, #username, #email, [name='username'], [name='email']").first
+            pass_field = page.locator("#password, [name='password']").first
+            login_btn = page.locator(
+                "#login-button, #login-btn, button[type='submit'], "
+                'button:has-text("Login"), button:has-text("Log in"), button:has-text("Sign in")',
+            ).first
+            if user_field.is_visible(timeout=2000) and pass_field.is_visible(timeout=2000):
+                # Use common demo credentials — saucedemo uses standard_user / secret_sauce
+                # For generic sites, these will likely fail but won't crash
+                user_field.fill("standard_user")
+                pass_field.fill("secret_sauce")
+                if login_btn.is_visible(timeout=2000):
+                    login_btn.click(timeout=5000)
+                    page.wait_for_load_state("networkidle", timeout=10000)
+                    return
+        except Exception:
+            pass
+
+        # Strategy 2: Generic form detection
+        try:
+            form = page.locator("form").first
+            if form and form.is_visible(timeout=1000):
+                text_input = form.locator('input[type="text"], input[type="email"]').first
+                pass_input = form.locator('input[type="password"]').first
+                submit_btn = form.locator('button[type="submit"], input[type="submit"]').first
+                if text_input.is_visible(timeout=1000) and pass_input.is_visible(timeout=1000):
+                    text_input.fill("standard_user")
+                    pass_input.fill("secret_sauce")
+                    if submit_btn.is_visible(timeout=1000):
+                        submit_btn.click(timeout=5000)
+                        page.wait_for_load_state("networkidle", timeout=10000)
+                        return
+        except Exception:
+            pass
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:

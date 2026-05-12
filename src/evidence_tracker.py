@@ -1,4 +1,3 @@
-import json
 import re
 import time
 from pathlib import Path
@@ -6,6 +5,7 @@ from typing import Any
 
 from playwright.sync_api import Page
 
+from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.locator_fallback import LocatorFallback
 
@@ -166,9 +166,7 @@ class EvidenceTracker:
     def _load_previous_history(self) -> dict[str, int]:
         if self.sidecar_path.exists():
             try:
-                with open(self.sidecar_path, encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("run_history", {"total_runs": 0, "passed_runs": 0, "failed_runs": 0})
+                return EvidenceSerializer.load_run_history(self.sidecar_path)
             except Exception:
                 pass
         return {"total_runs": 0, "passed_runs": 0, "failed_runs": 0}
@@ -176,9 +174,7 @@ class EvidenceTracker:
     def _load_previous_steps(self) -> list[dict[str, Any]]:
         if self.sidecar_path.exists():
             try:
-                with open(self.sidecar_path, encoding="utf-8") as f:
-                    data = json.load(f)
-                    return data.get("steps", [])
+                return EvidenceSerializer.load_steps(self.sidecar_path)
             except Exception:
                 pass
         return []
@@ -690,25 +686,15 @@ class EvidenceTracker:
         else:
             self.run_history["failed_runs"] += 1
 
-        duration_s = round(time.time() - self.start_time, 2)
+        json_content = EvidenceSerializer.serialize(
+            test_name=self.test_name,
+            condition_ref=self.condition_ref,
+            story_ref=self.story_ref,
+            status=status,
+            page_url=self.page.url,
+            run_history=self.run_history,
+            steps=self.steps,
+        )
 
-        payload = {
-            "schema_version": "1.0",
-            "test": {
-                "name": self.test_name,
-                "condition_ref": self.condition_ref,
-                "story_ref": self.story_ref,
-                "status": status,
-                "duration_s": duration_s,
-            },
-            "page": {
-                "url": self.page.url,
-            },
-            "run_history": self.run_history,
-            "steps": self.steps,
-        }
-
-        with open(self.sidecar_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-
+        self.sidecar_path.write_text(json_content, encoding="utf-8")
         return str(self.sidecar_path)

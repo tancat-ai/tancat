@@ -91,6 +91,27 @@ in session state, auth redirect detection, SSO/MFA/CAPTCHA explicit errors.
 
 ---
 
+## ✅ Completed: Refactor 2026-05-10 (Parts 1-7)
+
+**Status:** Complete — May 2026. REFACTOR_PLAN_2026-05-10.md delivered.
+
+**Summary:** Extracted 11 modules from 5 parent files, reducing `streamlit_app.py` from 918 → 362 lines (60% reduction). All quality gates passing: ruff clean, mypy clean, 541/541 tests passing, 68% coverage.
+
+**Modules extracted:**
+- `src/ui_pipeline.py` — Pipeline execution from `streamlit_app.py`
+- `src/ui_renderers.py` — UI rendering from `streamlit_app.py`
+- `src/evidence_serializer.py` — JSON serialization from `evidence_tracker.py`
+- `src/screenshot_capture.py` — Screenshot utilities from `evidence_tracker.py`
+- `src/state_tracker.py` — DOM state tracking from `journey_scraper.py`
+- `src/form_detector.py` — Form detection constants from `journey_scraper.py`
+- `src/semantic_matcher.py` — Token semantic similarity from `placeholder_resolver.py`
+- `src/intent_matcher.py` — Intent filtering from `placeholder_resolver.py`
+- `src/code_normalizer.py` — Code normalization from `code_postprocessor.py`
+- `src/llm_reasoning_filter.py` — Reasoning text detection from `code_postprocessor.py`
+- `src/url_inference.py` — URL transition inference from `placeholder_orchestrator.py`
+
+---
+
 ## ✅ Completed: Evidence Tracker Feature Chain (AI-016 through AI-022)
 
 **Status:** Complete — April 2026. All seven items delivered.
