@@ -11,8 +11,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.placeholder_resolver import PlaceholderResolver
-from src.scraper import PageScraper
+from src.placeholder_resolver import PlaceholderResolver  # noqa: E402
+from src.scraper import PageScraper  # noqa: E402
 
 
 async def main() -> None:
@@ -97,7 +97,9 @@ async def main() -> None:
         selector = str(elem.get("selector", "")).lower()
         elem_id = str(elem.get("id", "")).lower()
         classes = str(elem.get("classes", "")).lower()
-        if any(term in (text + selector + elem_id + classes) for term in ("cart", "basket", "bag", "shopping", "badge")):
+        if any(
+            term in (text + selector + elem_id + classes) for term in ("cart", "basket", "bag", "shopping", "badge")
+        ):
             cart_elements.append(elem)
 
     if cart_elements:

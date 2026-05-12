@@ -130,9 +130,7 @@ def inspect_skeleton_placeholders() -> None:
     print(f"  Found {len(uses)} placeholder uses:")
     for use in uses:
         token = "{{{{" + f"({use.action}:{use.description})" + "}}}}"
-        print(
-            f"    Line {use.line_number}: ({use.action}) '{use.description}' -> {token}"
-        )
+        print(f"    Line {use.line_number}: ({use.action}) '{use.description}' -> {token}")
 
     placeholders = parser.parse_placeholders(SAMPLE_SKELETON)
     print(f"\n  parse_placeholders() returned {len(placeholders)} placeholders:")
@@ -142,7 +140,9 @@ def inspect_skeleton_placeholders() -> None:
     journeys = parser.parse_test_journeys(SAMPLE_SKELETON)
     print(f"\n  parse_test_journeys() returned {len(journeys)} journeys:")
     for j in journeys:
-        print(f"    {j.test_name} (lines {j.start_line}-{j.end_line}, steps={len(j.steps)}, placeholders={len(j.placeholders)})")
+        print(
+            f"    {j.test_name} (lines {j.start_line}-{j.end_line}, steps={len(j.steps)}, placeholders={len(j.placeholders)})"
+        )
 
     print()
 
@@ -308,6 +308,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     except Exception as e:
         print(f"  ❌ Pipeline failed: {e}")
         import traceback
+
         traceback.print_exc()
         return
 

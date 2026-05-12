@@ -10,8 +10,8 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.placeholder_resolver import PlaceholderResolver
-from src.scraper import PageScraper
+from src.placeholder_resolver import PlaceholderResolver  # noqa: E402
+from src.scraper import PageScraper  # noqa: E402
 
 
 def main() -> None:
@@ -23,9 +23,7 @@ def main() -> None:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         page = context.new_page()
 
         # Step 1: Login
@@ -117,11 +115,11 @@ def main() -> None:
         cart_elements = []
         for elem in elements:
             haystack = (
-                str(elem.get("text", "")) +
-                str(elem.get("selector", "")) +
-                str(elem.get("id", "")) +
-                str(elem.get("classes", "")) +
-                str(elem.get("aria_label", ""))
+                str(elem.get("text", ""))
+                + str(elem.get("selector", ""))
+                + str(elem.get("id", ""))
+                + str(elem.get("classes", ""))
+                + str(elem.get("aria_label", ""))
             ).lower()
             if any(term in haystack for term in cart_terms):
                 cart_elements.append(elem)

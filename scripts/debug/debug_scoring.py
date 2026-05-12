@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Debug scoring for shopping cart icon element."""
+
 from __future__ import annotations
 
 import sys

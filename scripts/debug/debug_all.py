@@ -38,6 +38,7 @@ def _import_and_run(module_path: str, args: list[str]) -> None:
             if callable(mod.main):
                 # Check if main accepts args
                 import inspect
+
                 sig = inspect.signature(mod.main)
                 if len(sig.parameters) == 0:
                     mod.main()
@@ -77,9 +78,11 @@ Examples:
   %(cmd)s saucedemo-login
         """,
     )
-    parser.formatter_class = type(parser.formatter_class.__name__,
-                                   (argparse.RawDescriptionHelpFormatter,),
-                                   {"__cmd__": "python scripts/debug/debug_all.py"})
+    parser.formatter_class = type(
+        parser.formatter_class.__name__,
+        (argparse.RawDescriptionHelpFormatter,),
+        {"__cmd__": "python scripts/debug/debug_all.py"},
+    )
 
     subparsers = parser.add_subparsers(dest="command", help="Debug command to run")
 
@@ -153,6 +156,7 @@ def main() -> int:
     except Exception as e:
         print(f"ERROR running {module_name}: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
