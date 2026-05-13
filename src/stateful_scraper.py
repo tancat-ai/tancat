@@ -270,26 +270,10 @@ class StatefulPageScraper:
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:
-        selectors = [
-            "button:has-text('Consent')",
-            "button:has-text('Accept')",
-            "button:has-text('Continue')",
-            "button:has-text('OK')",
-            "button:has-text('Got it')",
-            "button:has-text('I Agree')",
-            "button:has-text('Agree')",
-            "button[aria-label='Close']",
-            "button[aria-label='close']",
-        ]
-        for selector in selectors:
-            try:
-                loc = page.locator(selector).first
-                if loc.count() > 0 and loc.is_visible():
-                    loc.click(timeout=2000)
-                    page.wait_for_timeout(300)
-                    break
-            except Exception:
-                continue
+        """Delegate to central consent dismissal utility."""
+        from src.browser_utils import dismiss_consent_overlays
+
+        dismiss_consent_overlays(page)  # type: ignore[arg-type]
 
 
 def _run_subprocess_entry() -> int:
