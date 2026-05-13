@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.code_validator import validate_python_syntax
+from src.journey_scraper import CredentialProfile, JourneyStep
 from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportBundle, PipelineReportService
@@ -137,6 +138,8 @@ async def run_pipeline(
     consent_mode: str,
     reviewed_conditions: list[TestCondition] | None = None,
     session: PipelineSessionState | None = None,
+    credential_profile: CredentialProfile | None = None,
+    journey_steps: list[JourneyStep] | None = None,
 ) -> None:
     """Execute the full skeleton-first pipeline.
 
@@ -164,7 +167,11 @@ async def run_pipeline(
         conditions_text = criteria
 
     generator = TestGenerator(client=client, model_name=model_name)
-    orchestrator = TestOrchestrator(generator)
+    orchestrator = TestOrchestrator(
+        generator,
+        credential_profile=credential_profile,
+        journey_steps=journey_steps,
+    )
 
     final_code = await orchestrator.run_pipeline(
         user_story=user_story,

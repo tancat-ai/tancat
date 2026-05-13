@@ -3,6 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+from src.journey_scraper import CredentialProfile
 from src.orchestrator import TestOrchestrator
 from src.spec_analyzer import TestCondition
 from src.test_generator import TestGenerator
@@ -901,3 +902,23 @@ def test_02_add_item(page):
         in final_code
     )
     assert "Unresolved placeholder" not in final_code
+
+
+def test_orchestrator_passes_credential_to_scraper() -> None:
+    """CredentialProfile passed to TestOrchestrator is stored and available for scraping."""
+    generator = TestGenerator(output_dir="generated_tests")
+    profile = CredentialProfile(label="saucedemo", username="standard_user", password="secret_sauce")
+    orchestrator = TestOrchestrator(generator, credential_profile=profile)
+
+    assert orchestrator._credential_profile is profile
+    # Access through profile variable to avoid mypy narrowing issues
+    assert profile.username == "standard_user"
+    assert profile.password == "secret_sauce"
+
+
+def test_orchestrator_without_credential_profile() -> None:
+    """TestOrchestrator works without a credential profile (backward compatibility)."""
+    generator = TestGenerator(output_dir="generated_tests")
+    orchestrator = TestOrchestrator(generator)
+
+    assert orchestrator._credential_profile is None

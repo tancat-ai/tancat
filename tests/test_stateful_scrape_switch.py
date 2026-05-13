@@ -14,7 +14,7 @@ def test_ensure_scraped_uses_stateful_scraper_for_view_cart(monkeypatch: pytest.
     calls: list[str] = []
 
     class FakeStateful:
-        def __init__(self, starting_url: str) -> None:
+        def __init__(self, starting_url: str, credential_profile: dict[str, str] | None = None) -> None:
             calls.append(f"init:{starting_url}")
 
         async def scrape_url(self, url: str) -> list[dict[str, str]]:
@@ -45,7 +45,7 @@ def test_ensure_scraped_falls_back_to_stateless_when_stateful_empty(monkeypatch:
     calls: list[str] = []
 
     class FakeStateful:
-        def __init__(self, starting_url: str) -> None:
+        def __init__(self, starting_url: str, credential_profile: dict[str, str] | None = None) -> None:
             calls.append(f"init:{starting_url}")
 
         async def scrape_url(self, url: str) -> list[dict[str, str]]:

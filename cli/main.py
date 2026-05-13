@@ -30,9 +30,13 @@ except ImportError:
 
 # ── Sub-module imports ────────────────────────────────────────────────────
 
+from src.journey_scraper import CredentialProfile, JourneyStep
+
 from .color import green, yellow
 from .menu_renderer import (
+    collect_authentication,
     collect_consent_mode,
+    collect_journey_steps,
     collect_urls,
     collect_user_story,
     configure_llm,
@@ -74,6 +78,17 @@ async def interactive_session() -> None:
                 menu_items.append("Re-enter Target URLs")
 
             menu_items.append("Consent Mode")
+
+            # Authentication / Journey (AI-009 Phase B)
+            auth_label = "Configure Authentication"
+            if session.credential_profile:
+                auth_label = f"Re-configure Authentication ({session.credential_profile.label})"
+            menu_items.append(auth_label)
+
+            journey_label = "Configure Journey"
+            if session.journey_steps:
+                journey_label = f"Re-configure Journey ({len(session.journey_steps)} steps)"
+            menu_items.append(journey_label)
 
             if not session.plan_confirmed:
                 menu_items.append("Build Living Test Plan")
@@ -123,6 +138,10 @@ async def interactive_session() -> None:
             _collect_urls_inline(session)
         elif menu_items[idx] == "Consent Mode":
             session.consent_mode = collect_consent_mode()
+        elif "Authentication" in menu_items[idx]:
+            _collect_authentication_inline(session)
+        elif "Journey" in menu_items[idx]:
+            _collect_journey_inline(session)
         elif menu_items[idx] in ("Build Living Test Plan", "Review Test Plan"):
             await build_test_plan(session)
         elif menu_items[idx] == "Run Intelligent Pipeline":
@@ -170,6 +189,38 @@ def _collect_urls_inline(session: Session) -> None:
     starting, additional = collect_urls()
     session.starting_url = starting
     session.additional_urls = additional
+
+
+def _collect_authentication_inline(session: Session) -> None:
+    result = collect_authentication()
+    if result is None:
+        session.credential_profile = None
+    else:
+        session.credential_profile = CredentialProfile(
+            label=result["label"],
+            username=result["username"],
+            password=result["password"],
+        )
+        print(green(f"  ✓ Authentication configured: '{result['label']}'"))
+
+
+def _collect_journey_inline(session: Session) -> None:
+    raw_steps = collect_journey_steps()
+    converted: list[JourneyStep] = []
+    for s in raw_steps:
+        converted.append(
+            JourneyStep(
+                action=s["action"],
+                url=s.get("url"),
+                selector=s.get("selector"),
+                text=s.get("text"),
+                description=s.get("description", ""),
+                timeout_ms=int(s.get("timeout_ms", "30000")),
+            )
+        )
+    session.journey_steps = converted
+    if session.journey_steps:
+        print(green(f"  ✓ Journey configured with {len(session.journey_steps)} step(s)."))
 
 
 # ── Legacy parameter-based commands (kept for backward compatibility) ────

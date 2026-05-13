@@ -26,6 +26,8 @@ from src.ui_renderers import (
     ResultsPanel,
     RunResultsDisplay,
     SidebarConfig,
+    render_credential_profiles,
+    render_journey_builder,
 )
 
 st.set_page_config(page_title="AI Playwright Generator", page_icon=":test_tube:", layout="wide")
@@ -261,6 +263,13 @@ if raw_requirements.strip():
             st.success("The living test plan is signed off and generation is unlocked.")
 
 # ---------------------------------------------------------------------------
+# Credential profiles and journey builder (rendered once per page load)
+# ---------------------------------------------------------------------------
+additional_urls_list = [u.strip() for u in str(urls_input).splitlines() if u.strip()]
+st.session_state._active_credential_profile = render_credential_profiles()
+st.session_state._active_journey_steps = render_journey_builder(additional_urls_list) if additional_urls_list else None
+
+# ---------------------------------------------------------------------------
 # Pipeline execution
 # ---------------------------------------------------------------------------
 run_disabled = bool(raw_requirements.strip()) and not bool(st.session_state.plan_confirmed)
@@ -309,6 +318,7 @@ if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
 
                 # Build session wrapper for ui_pipeline
                 session = PipelineSessionState({str(k): v for k, v in st.session_state.items()})
+                # Use credential/journey values rendered at module level
                 asyncio.run(
                     run_pipeline(
                         user_story=user_story,
@@ -324,6 +334,8 @@ if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
                             else None
                         ),
                         session=session,
+                        credential_profile=st.session_state._active_credential_profile,
+                        journey_steps=st.session_state._active_journey_steps,
                     )
                 )
                 # Sync session state back to st.session_state
@@ -335,6 +347,20 @@ if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
 
 if st.session_state.pipeline_error:
     st.error(st.session_state.pipeline_error)
+
+# ---------------------------------------------------------------------------
+# Scraper error surfacing (Task 5)
+# ---------------------------------------------------------------------------
+if st.session_state.get("pipeline_scraper_warnings"):
+    for warning in st.session_state.pipeline_scraper_warnings:
+        st.warning(f"⚠️ Scraper: {warning}")
+
+if st.session_state.get("pipeline_scraper_errors"):
+    for error in st.session_state.pipeline_scraper_errors:
+        st.error(f"❌ Scraper: {error}")
+
+if st.session_state.get("pipeline_journey_captured_count"):
+    st.success(f"✅ Captured context from {st.session_state.pipeline_journey_captured_count} pages")
 
 # ---------------------------------------------------------------------------
 # Results display

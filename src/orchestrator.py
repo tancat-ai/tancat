@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.code_postprocessor import normalise_generated_code
-from src.journey_scraper import JourneyScraper, JourneyStep
+from src.journey_scraper import (
+    CredentialProfile,
+    JourneyResult,
+    JourneyScraper,
+    JourneyStep,
+    execute_journey,
+)
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_orchestrator import PlaceholderOrchestrator
@@ -55,14 +61,26 @@ class TestOrchestrator:
 
     __test__ = False
 
-    def __init__(self, test_generator: TestGenerator) -> None:
+    def __init__(
+        self,
+        test_generator: TestGenerator,
+        *,
+        credential_profile: CredentialProfile | None = None,
+        journey_steps: list[JourneyStep] | None = None,
+    ) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()
         self._starting_url: str | None = None
-        self._placeholder_orchestrator = PlaceholderOrchestrator(starting_url=None)
+        self._credential_profile = credential_profile
+        self._journey_steps: list[JourneyStep] | None = journey_steps
+        self._placeholder_orchestrator = PlaceholderOrchestrator(
+            starting_url=None, credential_profile=self._credential_profile
+        )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None
         self._debug_enabled = os.getenv("PIPELINE_DEBUG", "").strip() == "1"
+        # Diagnostics for journey execution
+        self._pipeline_diagnostics: dict[str, Any] = {}
 
     # Backwards-compatible attributes: these let existing test code assign/mock
     # attributes like ``orchestrator.scraper``, ``orchestrator.resolver``, etc.
@@ -236,13 +254,39 @@ class TestOrchestrator:
             url: _error for url, (elements, _error, _final) in raw_scraped_data.items() if _error
         }
 
-        # Approach 2: Stateful journey discovery (the "User-Driven" fix)
+        # Approach 2: User-provided journey execution (Phase B — authenticated scraping)
+        if self._journey_steps and len(self._journey_steps) > 0:
+            self._debug("phase=journey_execution start (Phase B)")
+            journey_result: JourneyResult = execute_journey(
+                journey_steps=self._journey_steps,
+                credential_profile=self._credential_profile,
+                starting_url=self._starting_url,
+            )
+            journey_scraped: dict[str, list[dict[str, Any]]] = journey_result.captured_pages
+
+            # Record diagnostics
+            self._pipeline_diagnostics["journey_failed_steps"] = journey_result.failed_steps
+            if journey_result.error_message:
+                self._pipeline_diagnostics["journey_error"] = journey_result.error_message
+            if journey_result.redirected_urls:
+                self._pipeline_diagnostics["auth_redirects"] = journey_result.redirected_urls
+
+            # Merge journey data with static scrape data (journey pages supplement static data)
+            for url, elements in journey_scraped.items():
+                if elements:
+                    scraped_data[url] = elements
+                    self._debug(f"journey execution captured: {url} ({len(elements)} elements)")
+            self._debug("phase=journey_execution done")
+
+        # Approach 3: Stateful journey discovery (the "User-Driven" fix)
         if self._starting_url:
             self._debug("phase=journey_discovery start")
             # Always enable discovery logs in the orchestrator debug output
-            journey_data = await self._scrape_journeys_statefully(journeys, self._starting_url)
+            discovery_data = await self._scrape_journeys_statefully(
+                journeys, self._starting_url, self._credential_profile
+            )
             # Journey-aware data takes precedence as it has correct state
-            for url, elements in journey_data.items():
+            for url, elements in discovery_data.items():
                 if elements:
                     scraped_data[url] = elements
                     self._debug(f"journey discovery enriched: {url} ({len(elements)} elements)")
@@ -326,13 +370,17 @@ class TestOrchestrator:
         self,
         journeys: list[TestJourney],
         starting_url: str,
+        credential_profile: CredentialProfile | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Scrape pages by following the generated skeleton journeys step-by-step."""
         if not starting_url:
             return {}
 
         all_scraped_data: dict[str, list[dict[str, Any]]] = {}
-        scraper = JourneyScraper(starting_url=starting_url)
+        scraper = JourneyScraper(
+            starting_url=starting_url,
+            credential_profile=credential_profile,
+        )
 
         for journey in journeys:
             self._debug(f"following discovery journey for: {journey.test_name}")
@@ -370,7 +418,7 @@ class TestOrchestrator:
             if not steps or steps[-1].action != "scrape":
                 steps.append(JourneyStep(action="scrape", description="final page state"))
 
-            journey_data = await scraper.scrape_journey(steps)
+            journey_data = await scraper.scrape_journey(steps, credential_profile=credential_profile)
             all_scraped_data.update(journey_data)
 
         return all_scraped_data

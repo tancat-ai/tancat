@@ -61,10 +61,18 @@ writing if code fails syntax check.
 
 ## 🟡 Active Improvements (Prioritised)
 
-### AI-009 — Multi-Page Scraping ◉ Phase A COMPLETE, Phase B In Progress
-**Phase B (in progress — Session 11):** Authenticated journey scraping — single browser
+### AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
+**Phase A:** Static multi-page scraping with placeholder resolution — COMPLETE.
+**Phase B (completed 2026-05-13):** Authenticated journey scraping — single browser
 session follows user-defined steps (goto, click, fill, capture, wait), credential profiles
 in session state, auth redirect detection, SSO/MFA/CAPTCHA explicit errors.
+
+**Phase B deliverables:**
+- `src/journey_scraper.py` — `execute_journey()`, `JourneyScraper`, `CartSeedingScraper`, auth redirect/SSO/MFA/CAPTCHA detection
+- `src/orchestrator.py` — journey execution integrated via `journey_steps` parameter in `run_pipeline()`; journey results merge with static scrape data
+- `src/ui_pipeline.py` — bridges Streamlit UI data to `TestOrchestrator` with `credential_profile` and `journey_steps`
+- Live verification: successful saucedemo.com journey (Login → Products → Cart) via Playwright MCP
+- Test fix: `tests/test_stateful_scrape_switch.py` FakeStateful mocks updated to accept `credential_profile`
 **Spec:** `docs/FEATURE_SPEC_AI009_phase_b.md`
 **Priority:** Highest — core value driver
 

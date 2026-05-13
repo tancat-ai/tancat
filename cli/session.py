@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.journey_scraper import CredentialProfile, JourneyStep
 from src.pytest_output_parser import RunResult
 from src.spec_analyzer import TestCondition
 from src.test_plan import TestPlan
@@ -61,6 +62,10 @@ class Session:
 
     # Requirements
     raw_requirements: str = ""
+
+    # Authentication / Journey (AI-009 Phase B)
+    credential_profile: CredentialProfile | None = None
+    journey_steps: list[JourneyStep] = field(default_factory=list)
 
 
 def _env_or_default(key: str, default: str) -> str:

@@ -7,7 +7,7 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
-from src.journey_scraper import CartSeedingScraper
+from src.journey_scraper import CartSeedingScraper, CredentialProfile
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_resolver import PlaceholderResolver
@@ -30,8 +30,13 @@ class PlaceholderOrchestrator:
 
     __test__ = False  # type: ignore[assignment]
 
-    def __init__(self, starting_url: str | None = None) -> None:
+    def __init__(
+        self,
+        starting_url: str | None = None,
+        credential_profile: CredentialProfile | None = None,
+    ) -> None:
         self._starting_url = starting_url
+        self._credential_profile = credential_profile
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.page_object_builder = PageObjectBuilder()
@@ -51,7 +56,7 @@ class PlaceholderOrchestrator:
         parsed = urlparse(url)  # type: ignore[name-defined]
         is_stateful_target = parsed.path.rstrip("/") in {"/view_cart", "/checkout"}  # type: ignore[name-defined]
         if is_stateful_target and self._starting_url:
-            stateful_scraper = StatefulPageScraper(self._starting_url)
+            stateful_scraper = StatefulPageScraper(self._starting_url, credential_profile=self._credential_profile)
             elements = await stateful_scraper.scrape_url(url)
             scraped_data[url] = elements
             if elements:
@@ -132,7 +137,7 @@ class PlaceholderOrchestrator:
                 len(stateful_targets),
             )
 
-            stateful_scraper = StatefulPageScraper(self._starting_url)
+            stateful_scraper = StatefulPageScraper(self._starting_url, credential_profile=self._credential_profile)
             stateful_map = await stateful_scraper.scrape_urls(stateful_targets)
             for url in stateful_targets:
                 existing = scraped_data.get(url, [])
@@ -714,7 +719,6 @@ class PlaceholderOrchestrator:
             )
         return None
 
-    @staticmethod
     @staticmethod
     def _is_page_state_assertion(description: str) -> bool:
         """Return True for broad assertions that a named page/state is loaded."""

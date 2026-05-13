@@ -308,6 +308,16 @@ graph TD
 3. **Aggregation**: `PipelineReportService` collects screenshots, logs, and coverage stats via `EvidenceLoader`.
 4. **Output**: Final HTML/Markdown/Jira reports with failure diagnostics presented back to the user.
 
+### E. Journey Scraping Flow (AI-009 Phase B)
+1. **Input**: User defines `credential_profile` and `journey_steps` in the Streamlit UI sidebar.
+2. **UI Bridge**: `src/ui_pipeline.py` passes `credential_profile`, `journey_steps`, and `scrape_urls` to `TestOrchestrator.run_pipeline()`.
+3. **Orchestrator**: `src/orchestrator.py` detects `journey_steps` and calls `execute_journey()` from `src/journey_scraper.py` before static scraping.
+4. **Journey Execution**: `execute_journey()` launches a single browser session that follows the user-defined steps (goto, click, fill, capture, wait), capturing DOM metadata at each step.
+5. **Auth Detection**: If an auth redirect is detected (e.g., login page URL patterns), the journey scraper logs a warning and continues. SSO/MFA/CAPTCHA trigger explicit errors.
+6. **Data Merging**: Journey results merge with static scrape data — journey data supplements (does not overwrite) existing scraped pages. New pages from the journey are added, existing pages are enriched with additional elements.
+7. **Resolution**: `PlaceholderOrchestrator` resolves placeholders against the combined scrape data (static + journey).
+8. **Data flow**: `UI → ui_pipeline → TestOrchestrator → execute_journey() → merge → PlaceholderOrchestrator → resolution`
+
 ---
 
 ## 6. Troubleshooting: Error-to-Module Mapping

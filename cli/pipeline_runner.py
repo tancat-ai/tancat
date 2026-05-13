@@ -163,7 +163,11 @@ async def run_pipeline(session: Any) -> None:
         base_url=session.provider_base_url,
     )
     generator = TestGenerator(client=client, model_name=session.model_name)
-    orchestrator = TestOrchestrator(generator)
+    orchestrator = TestOrchestrator(
+        generator,
+        credential_profile=session.credential_profile,
+        journey_steps=session.journey_steps if session.journey_steps else None,
+    )
 
     conditions = list(session.pipeline_conditions or [])
     if not conditions and session.test_plan:

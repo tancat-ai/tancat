@@ -240,6 +240,100 @@ def collect_consent_mode() -> str:
     return ["auto-dismiss", "leave-as-is", "test-consent-flow"][idx]
 
 
+# ── Authentication / Journey (AI-009 Phase B) ────────────────────────────
+
+
+def collect_authentication() -> dict[str, str] | None:
+    """Let user define a credential profile. Returns dict or None to skip."""
+    print_header("Authentication (optional)")
+
+    choice = print_menu(
+        ["Configure credentials", "Skip (no authentication needed)"],
+        "Authentication",
+    )
+    if choice == 1:
+        print(yellow("  Skipping authentication setup."))
+        return None
+
+    label = read_non_empty("  Profile label (e.g. Standard user):")
+    username = read_non_empty("  Username:")
+    password = read_non_empty("  Password:")
+    print(green(f"  ✓ Credential profile '{label}' saved (session only — never persisted to disk)."))
+    return {"label": label, "username": username, "password": password}
+
+
+JOURNEY_STEP_ACTIONS = ["navigate", "click", "fill", "wait", "scrape"]
+
+
+def collect_journey_steps() -> list[dict[str, str]]:
+    """Interactive journey builder. Returns list of step dicts."""
+    print_header("Journey Builder (optional)")
+
+    choice = print_menu(
+        ["Build journey steps", "Skip (use static URL scraping)"],
+        "Journey scraping",
+    )
+    if choice == 1:
+        print(yellow("  Skipping journey builder — using static URL scraping."))
+        return []
+
+    steps: list[dict[str, str]] = []
+    print("  Define the steps the scraper will follow.")
+    print("  Add a 'scrape' step wherever you want page context collected.\n")
+
+    while True:
+        if steps:
+            print("  Current journey:")
+            for i, step in enumerate(steps, 1):
+                desc = step.get("description", "")
+                action = step.get("action", "?")
+                extra = ""
+                if action == "navigate" and step.get("url"):
+                    extra = f" -> {step['url']}"
+                elif action == "click" and step.get("selector"):
+                    extra = f" [{step['selector']}]"
+                elif action == "fill" and step.get("selector"):
+                    val = step.get("text", "")
+                    if val in ("{{username}}", "{{password}}"):
+                        extra = f" [{step['selector']} = {val}]"
+                    else:
+                        extra = f" [{step['selector']} = <redacted>]"
+                print(f"    {i}. {action}{extra} ({desc})")
+            print()
+
+        add_choice = print_menu(
+            ["Add step", "Done building"],
+            "Journey builder",
+        )
+        if add_choice == 1:
+            break
+
+        action_idx = print_menu(JOURNEY_STEP_ACTIONS, "Step type")
+        action = JOURNEY_STEP_ACTIONS[action_idx]
+
+        new_step: dict[str, str] = {"action": action}
+        desc = read_optional(f"  Description for this {action} step:")
+        if desc:
+            new_step["description"] = desc
+
+        if action == "navigate":
+            new_step["url"] = read_non_empty("  URL to navigate to:")
+        elif action == "click":
+            new_step["selector"] = read_non_empty("  CSS selector or button text:")
+        elif action == "fill":
+            new_step["selector"] = read_non_empty("  Input field selector:")
+            raw_value = read_optional("  Value (or {{username}} / {{password}} for credential template):")
+            new_step["text"] = raw_value
+        elif action == "wait":
+            new_step["selector"] = read_non_empty("  Selector to wait for:")
+        # "scrape" steps capture page context — no extra fields needed
+
+        steps.append(new_step)
+        print(green(f"  ✓ Added {action} step.\n"))
+
+    return steps
+
+
 # ── File opener ───────────────────────────────────────────────────────────
 
 
