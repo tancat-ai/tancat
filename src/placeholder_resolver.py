@@ -269,12 +269,16 @@ class PlaceholderResolver:
         for score, element in ranked_candidates:
             element_text = str(element.get("text", "")).strip()
             element_value = str(element.get("value", "")).strip()
+            element_accessible = str(element.get("accessible_name", "")).strip()
 
-            # Check both visible text and input value (important for <input type="submit">)
+            # Check visible text, input value, AND accessible_name from a11y tree (AI-024)
+            # accessible_name is critical for icon-only elements (e.g., shopping cart icon
+            # with empty text but accessible_name="Shopping cart")
             text_match = self.text_matches_description(element_text, description)
             value_match = self.text_matches_description(element_value, description)
+            accessible_match = self.text_matches_description(element_accessible, description)
 
-            if text_match or value_match:
+            if text_match or value_match or accessible_match:
                 # Verify confidence threshold (B2)
                 max_possible_score = max(c[0] for c in ranked_candidates)
                 confidence = score / max_possible_score if max_possible_score > 0 else 0.0
