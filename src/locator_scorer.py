@@ -119,14 +119,18 @@ class LocatorScorer:
         # Apply modifiers based on specificity
         final_score = cls._apply_specificity_modifier(base_score, selector, loc_type)
 
-        # Text-match bonus: +10 if element text or value matches action description
+        # Text-match bonus: +10 if element text, value, or accessible_name matches action description
         if element and action_description:
             element_text = str(element.get("text", "")).strip()
             element_value = str(element.get("value", "")).strip()
+            element_accessible_name = str(element.get("accessible_name", "")).strip()
 
             # For input elements, the value is often the visible text (e.g. <input type="submit" value="Login">)
-            if cls._text_matches_description(element_text, action_description) or cls._text_matches_description(
-                element_value, action_description
+            # Also check accessible_name — computed by the browser a11y tree (AI-024)
+            if (
+                cls._text_matches_description(element_text, action_description)
+                or cls._text_matches_description(element_value, action_description)
+                or cls._text_matches_description(element_accessible_name, action_description)
             ):
                 final_score += 10
 

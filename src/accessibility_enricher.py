@@ -47,6 +47,100 @@ class AccessibilityEnricher:
     }
 
     @staticmethod
+    def _transform_cdp_ax_tree(cdp_nodes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Transform CDP Accessibility.getFullAXTree result into the format expected by enrich().
+
+        CDP returns a flat list of nodes with:
+          - role: {"type": "...", "value": "button"}
+          - name: {"type": "...", "value": "Click me"}
+          - properties: [{"name": "...", "value": {"type": "...", "value": "..."}}]
+          - childIds: ["nodeId1", "nodeId2"]
+          - backendDOMNodeId: int
+
+        We transform this into a tree with:
+          - role: "button"
+          - name: "Click me"
+          - properties: [{"name": "...", "value": "..."}]
+          - children: [transformed nodes]
+        """
+        if not cdp_nodes:
+            return {}
+
+        # Build a lookup: nodeId -> original CDP node
+        orig_map: dict[str, dict[str, Any]] = {}
+        for node in cdp_nodes:
+            orig_map[str(node.get("nodeId", ""))] = node
+
+        # Build transformed nodes for ALL nodes (including ignored ones as pass-through parents)
+        node_map: dict[str, dict[str, Any]] = {}
+        for node in cdp_nodes:
+            node_id = str(node.get("nodeId", ""))
+
+            # Extract role value
+            role_info = node.get("role", {})
+            role_value = ""
+            if role_info:
+                raw_role = role_info.get("value") if isinstance(role_info, dict) else str(role_info)
+                role_value = str(raw_role).lower() if raw_role else ""
+
+            # Extract name value
+            name_info = node.get("name", {})
+            name_value = ""
+            if isinstance(name_info, dict):
+                name_value = (name_info.get("value") or "").strip()
+
+            # Extract properties as simple key-value pairs
+            props: list[dict[str, Any]] = []
+            for prop in node.get("properties", []):
+                prop_name = prop.get("name", "") if isinstance(prop, dict) else ""
+                prop_val_info = prop.get("value", {}) if isinstance(prop, dict) else {}
+                prop_val = ""
+                if isinstance(prop_val_info, dict):
+                    prop_val = prop_val_info.get("value", "")
+                elif prop_val_info is not None:
+                    prop_val = str(prop_val_info)
+                if prop_name:
+                    props.append({"name": str(prop_name), "value": str(prop_val)})
+
+            transformed: dict[str, Any] = {
+                "role": str(role_value),
+                "name": str(name_value),
+                "properties": props,
+                "children": [],
+                "_ignored": node.get("ignored", False),
+            }
+
+            node_map[node_id] = transformed
+
+        # Wire children using childIds from original nodes
+        all_child_ids: set[str] = set()
+        for node in cdp_nodes:
+            node_id = str(node.get("nodeId", ""))
+            parent_transformed = node_map.get(node_id)
+            if parent_transformed is None:
+                continue
+            for child_id in node.get("childIds", []):
+                cid = str(child_id)
+                all_child_ids.add(cid)
+                child = node_map.get(cid)
+                if child:
+                    parent_transformed["children"].append(child)
+
+        # Find root nodes (not a child of any other node)
+        root_children: list[dict[str, Any]] = []
+        for node_id, transformed in node_map.items():
+            if node_id not in all_child_ids:
+                root_children.append(transformed)
+
+        # Return as a single root with children, or the first root child if only one
+        if len(root_children) == 1:
+            return root_children[0]
+        elif root_children:
+            return {"role": "document", "name": "", "properties": [], "children": root_children}
+        else:
+            return next(iter(node_map.values()), {})
+
+    @staticmethod
     def enrich(elements: list[dict[str, Any]], a11y_tree: dict[str, Any]) -> list[dict[str, Any]]:
         """Merge computed accessible names from a11y tree into scraped elements.
 

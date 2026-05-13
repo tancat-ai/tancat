@@ -110,13 +110,21 @@ class PageScraper:
                 # Capture visibility for each element using Playwright runtime checks
                 elements = self._capture_element_visibility(page, elements)
 
-                # Capture accessibility snapshot before browser closes (AI-024)
+                # Capture accessibility snapshot via CDP before browser closes (AI-024)
+                # page.accessibility.snapshot() is NOT available in Python Playwright bindings.
+                # Use Chrome DevTools Protocol instead.
                 a11y_snapshot: dict[str, Any] = {}
                 try:
-                    a11y_snapshot = page.accessibility.snapshot(depth=5) or {}  # type: ignore[attr-defined]
-                except AttributeError:
-                    # page.accessibility not available in this Playwright version
-                    self._debug("page.accessibility.snapshot() not available — skipping a11y enrichment")
+                    cdp = context.new_cdp_session(page)
+                    ax_result = cdp.send("Accessibility.getFullAXTree")
+                    a11y_snapshot = AccessibilityEnricher._transform_cdp_ax_tree(ax_result.get("nodes", []))
+                    # CDP session is cleaned up when browser context closes
+                    if a11y_snapshot:
+                        self._debug(f"CDP accessibility tree captured: {len(ax_result.get('nodes', []))} nodes")
+                    else:
+                        self._debug("CDP accessibility tree returned no nodes")
+                except Exception as e:
+                    self._debug(f"CDP accessibility tree failed: {e} — skipping a11y enrichment")
 
                 browser.close()
                 return elements, a11y_snapshot, None, final_url
