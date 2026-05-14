@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+from src.journey_auth_detector import (
+    detect_auth_redirect as _detect_auth_redirect,
+)
+from src.journey_auth_detector import (
+    detect_captcha as _detect_captcha,
+)
+from src.journey_auth_detector import (
+    detect_mfa as _detect_mfa,
+)
+from src.journey_auth_detector import (
+    detect_sso as _detect_sso,
+)
 from src.journey_scraper import (
     CartSeedingScraper,
     CredentialProfile,
     JourneyResult,
     JourneyScraper,
     JourneyStep,
-    _detect_auth_redirect,
-    _detect_captcha,
-    _detect_mfa,
-    _detect_sso,
     _substitute_templates,
 )
 
