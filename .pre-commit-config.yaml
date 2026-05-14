@@ -6,7 +6,7 @@
 # To install: pre-commit install
 #
 # Note: generated_tests/, scripts/, and scratch/ are excluded from checks
-exclude: ^(generated_tests/|scripts/|scratch/)
+exclude: ^(generated_tests/|scripts/|scratch/|notebooks/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit

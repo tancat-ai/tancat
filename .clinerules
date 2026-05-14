@@ -25,6 +25,14 @@
 - Do not store: code snippets, file contents, anything already in AGENTS.md
 - Prune stale entries — outdated memory actively causes mistakes
 
+## Debugging Pipeline Issues
+
+When diagnosing placeholder resolution problems, scraper output, or skeleton generation:
+- **Preferred:** Use `notebooks/debug_pipeline.ipynb` for interactive, cell-by-cell debugging with state preservation
+- **Fallback:** Use `scripts/debug/debug_pipeline.py` when Jupyter is unavailable
+- **E2E validation:** Use `scripts/uat/uat_automationexercise.py` after fixing placeholder-related issues
+- Do not modify pipeline modules without first establishing baseline behavior in the notebook
+
 ## General Discipline
 - One feature per session (see AGENTS.md §10)
 - Never declare work done without running end-to-end

@@ -918,34 +918,37 @@ modular components (InputParser, UserStoryAnalyzer, TestCaseOrchestrator, etc.)
 > Root cause analysis from `generated_tests/test_20260502_123121_as_a_customer_i_want_to_browse_products_add_them/report_local.md`:
 > 7 of 8 tests failed because the "Dress" link (`a[href="/category_products/1"]`) exists in DOM but is hidden behind a slider/menu. Test_02 also navigated to `/category_details/1` (404) instead of `/category_products/1`.
 
-### Session 1 — Visibility Filtering + Generic Selectors + URL Guessing (Priority: Highest)
+### Session 1 — LLM Disambiguation for Placeholder Resolution ✅ DONE (2026-05-13)
 
-**Problems addressed:**
-- Placeholder resolver selects hidden elements (e.g., nav links behind sliders)
-- ASSERT actions match overly generic selectors like `.btn`
-- LLM hallucinates URLs that don't exist (`/category_details/1` → 404)
+**Problem addressed:**
+- Rule-based scoring in `PlaceholderResolver.rank_candidates()` produces near-ties (e.g., "Products link" resolves to brand product link instead of navigation link)
+- Adding more scoring rules creates layering debt
+- LLM understands context that rule-based scoring cannot encode
 
-**Tasks:**
-1. **Task 1A: Strengthen visibility filtering in resolver**
-   - Increase penalty for CLICK on elements with no text from `-5` to `-10`
-   - Skip elements where `role == "hidden"` entirely
-   - In `find_best_element()`, prefer candidates with MORE descriptive text when multiple have matching text
+**Solution implemented:**
+- `_disambiguate_with_llm()` method added to `PlaceholderResolver`
+- Triggered when top-2 candidate scores differ by ≤ `DISAMBIGUATION_THRESHOLD` (default: 5)
+- Sends up to 3 candidates to LLM with structured prompt (action, description, candidate details, optional Aria snapshot)
+- Falls back to rule-based scoring when LLM unavailable or response unparsable
+- Configuration via `USE_LLM_DISAMBIGUATION` (default: true) and `DISAMBIGUATION_THRESHOLD` (default: 5) env vars
+- Aria snapshot context stored as `__meta__` element in `page_elements` (Option A)
 
-2. **Task 1B: Penalize generic selectors for ASSERT actions**
-   - When `action == "ASSERT"`, penalize single-class selectors (e.g., `.btn`) with `-5` score
-   - Prefer elements where text content closely matches the description
+**Files modified:**
+- `src/placeholder_resolver.py` — `_disambiguate_with_llm()`, `_extract_aria_snapshot()`, `_filter_aria_snapshot()`, config params, integration in `find_best_element()`
+- `tests/test_placeholder_resolver_disambiguation.py` — NEW — 17 tests (4 trigger, 6 LLM call, 2 scenario, 2 config, 3 integration)
 
-3. **Task 1C: Remove LLM URL guessing**
-   - In `_build_candidate_urls()`, skip LLM-generated `page_requirements` URLs
-   - Rely on `build_common_path_candidates()` + user seed URLs only
-   - The scraper already captures actual URLs including redirects — no need for LLM guesses
+**Quality gates:**
+- `ruff check src/placeholder_resolver.py` — clean
+- `mypy src/placeholder_resolver.py` — clean
+- `pytest tests/test_placeholder_resolver_disambiguation.py -v` — 17/17 passed
+- `pytest tests/ -x -q` — 610 passed (1 pre-existing failure in `test_vision_enricher.py` unrelated)
 
-**Files to modify:**
-- `src/placeholder_resolver.py` — visibility scoring, generic selector penalties
-- `src/orchestrator.py` — deprioritize LLM-guessed URLs
-- `tests/test_placeholder_resolver.py` — tests for new scoring behavior
+**Original tasks from Session 1 backlog (Visibility Filtering + Generic Selectors + URL Guessing):**
+- Task 1A (visibility filtering): Partially addressed — text-content validation + confidence threshold already implemented
+- Task 1B (ASSERT generic selectors): Addressed via LLM disambiguation — generic selectors are deprioritized when LLM picks specific elements
+- Task 1C (URL guessing): Deferred to future session — out of scope for LLM disambiguation
 
-**Expected outcome:** Tests no longer select hidden elements; ASSERT actions target specific content; no more 404 from hallucinated URLs.
+**Expected outcome:** When rule-based scoring produces near-ties, the LLM makes the final decision with context — one targeted call replaces dozens of scoring rules.
 
 ---
 

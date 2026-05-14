@@ -38,7 +38,6 @@ def _import_and_run(module_path: str, args: list[str]) -> None:
             if callable(mod.main):
                 # Check if main accepts args
                 import inspect
-
                 sig = inspect.signature(mod.main)
                 if len(sig.parameters) == 0:
                     mod.main()
@@ -58,30 +57,28 @@ def _import_and_run(module_path: str, args: list[str]) -> None:
         os.chdir(original_cwd)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Unified debug entry point for AI-Playwright-Test-Generator",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+USAGE_EPILOG = """\
 Commands:
   pipeline              Full pipeline trace (skeleton -> scrape -> resolve -> final code)
   text-validation       Inspect text_matches_description logic (offline)
-  skeleton-inspection   Inspect placeholder extraction from skeleton (offline)
+  skeleton-inspection   Inspect skeleton placeholders (offline)
   saucedemo-login       Login to SauceDemo and test resolution
   saucedemo-inventory   Scrape SauceDemo inventory page
   saucedemo-scrape      Quick scrape of SauceDemo login page
   scoring               Debug scoring for specific elements
 
 Examples:
-  %(cmd)s pipeline --url https://saucedemo.com
-  %(cmd)s text-validation
-  %(cmd)s saucedemo-login
-        """,
-    )
-    parser.formatter_class = type(
-        parser.formatter_class.__name__,
-        (argparse.RawDescriptionHelpFormatter,),
-        {"__cmd__": "python scripts/debug/debug_all.py"},
+  python scripts/debug/debug_all.py pipeline --url https://saucedemo.com
+  python scripts/debug/debug_all.py text-validation
+  python scripts/debug/debug_all.py saucedemo-login
+"""
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Unified debug entry point for AI-Playwright-Test-Generator",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=USAGE_EPILOG,
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Debug command to run")
@@ -117,9 +114,10 @@ def main() -> int:
     args = parse_args()
 
     if not args.command:
-        print(__doc__.strip())
+        doc = __doc__ if __doc__ else ""
+        print(doc.strip())
         print()
-        parse_args.__self__.parse_args(["--help"])  # type: ignore
+        parse_args.__globals__["parser"].parse_args(["--help"])  # noqa: F821
         return 0
 
     command_map = {
@@ -156,7 +154,6 @@ def main() -> int:
     except Exception as e:
         print(f"ERROR running {module_name}: {e}")
         import traceback
-
         traceback.print_exc()
         return 1
 

@@ -289,6 +289,89 @@ INSTRUCTIONS:
             "tokens_used": completion.usage or {},
         }
 
+    def create_vision_completion(
+        self,
+        image_base64: str,
+        prompt: str,
+    ) -> str:
+        """Send a vision-capable LLM an image + text prompt.
+
+        Uses the same provider infrastructure as complete() but
+        sends the image as base64 data URI in the message content.
+
+        For ollama/lm-studio: uses chat completions with images field.
+        For openai: uses chat.completions.create() with image_url content part.
+
+        Args:
+            image_base64: Base64-encoded PNG image string (without data URI prefix).
+            prompt: Text prompt for the vision LLM.
+
+        Returns:
+            Text response from the vision LLM.
+
+        Raises:
+            ValueError: If the provider/model does not support vision.
+        """
+        if not prompt or not prompt.strip():
+            raise ValueError("Prompt cannot be empty")
+
+        self.reset_conversation()
+
+        # Build message content with image + text
+        if self.provider_name in ("ollama", "lm-studio"):
+            # Ollama format: images as base64 array in message
+            ollama_content: list[dict[str, Any]] = [
+                {"type": "text", "text": prompt},
+            ]
+            # Add image as base64 data URI
+            image_data_uri = f"data:image/png;base64,{image_base64}"
+            ollama_content.append({"type": "image_url", "image_url": image_data_uri})
+
+            self._conversation_history.append(
+                ChatMessage(role="user", content=ollama_content)  # type: ignore[arg-type]
+            )
+        else:
+            # OpenAI-compatible format
+            openai_content: list[dict[str, Any]] = [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{image_base64}",
+                        "detail": "high",
+                    },
+                },
+                {"type": "text", "text": prompt},
+            ]
+
+            self._conversation_history.append(
+                ChatMessage(role="user", content=openai_content)  # type: ignore[arg-type]
+            )
+
+        import time
+
+        start_time = time.time()
+        try:
+            self._debug(f"Calling vision provider={self.provider_name} model={self._model}")
+            completion = self._provider.complete(
+                messages=self._conversation_history,
+                model=self._model,
+                timeout=120,
+            )
+            elapsed = time.time() - start_time
+            content_len = len(completion.content) if completion.content else 0
+            self._debug(f"Received vision completion in {elapsed:.2f}s, length={content_len} chars")
+
+            if not completion.content or len(completion.content) < 10:
+                print(f"Warning: Vision LLM returned suspiciously short response: '{completion.content}'")
+
+            self._conversation_history.append(ChatMessage(role="assistant", content=completion.content))
+            return completion.content or ""
+        except Exception as e:
+            elapsed = time.time() - start_time
+            self._debug(f"Vision LLM call failed after {elapsed:.2f}s: {e}")
+            self._conversation_history.pop()
+            raise
+
 
 def create_llm_client(provider_name: str | None = None, model: str | None = None) -> LLMClient:
     """Create an LLMClient instance."""

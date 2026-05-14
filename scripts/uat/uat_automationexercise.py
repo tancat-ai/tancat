@@ -9,10 +9,10 @@ realistic e-commerce user story. This exercises:
 - Navigation vs action verb disambiguation
 
 Usage:
-    python scripts/uat_automationexercise.py --provider lm-studio
-    python scripts/uat_automationexercise.py --provider lm-studio --site saucedemo
-    python scripts/uat_automationexercise.py --provider lm-studio --headed
-    python scripts/uat_automationexercise.py --provider ollama --model qwen3.5:35b
+    python scripts/uat/uat_automationexercise.py --provider lm-studio
+    python scripts/uat/uat_automationexercise.py --provider lm-studio --site saucedemo
+    python scripts/uat/uat_automationexercise.py --provider lm-studio --headed
+    python scripts/uat/uat_automationexercise.py --provider ollama --model qwen3.5:35b
 
 NOTE: When running through Cline, use LM Studio with the same model Cline is
 already using (e.g. qwen3.6-27b) to avoid GPU VRAM contention from loading

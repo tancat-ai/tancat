@@ -111,3 +111,8 @@ node_modules/
 /playwright/.auth/
 # ── Scratch Files ──────────────
 scratch/generated_tests/
+
+# ── notebooks ──────────────
+
+notebooks/_debug_output.py
+notebooks/.ipynb_checkpoints/

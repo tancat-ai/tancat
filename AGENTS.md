@@ -129,6 +129,8 @@ AI-Playwright-Test-Generator/
 │   │   └── project_sanitizer.py
 │   └── uat/                     # User acceptance testing
 │       └── uat_automationexercise.py
+├── notebooks/                   # Interactive debugging notebooks
+│   └── debug_pipeline.ipynb     # Jupyter pipeline debugger — step-by-step trace with state preservation
 ├── src/                         # Core modules — tested via tests/
 │   ├── llm_client.py            # PROTECTED
 │   ├── test_generator.py        # PROTECTED
@@ -330,6 +332,41 @@ Stops at each phase and prints scraped data, resolution results, and generated c
 ### `scripts/debug/debug_all.py` — Unified debug entry point
 
 Consolidated entry point for all debug scripts. Run `--help` for available commands.
+
+---
+
+## 12a. Interactive Debugging — Jupyter Notebook
+
+`notebooks/debug_pipeline.ipynb` — Interactive pipeline debugger with state preservation between cells.
+
+**When to use (instead of CLI scripts):**
+- Diagnosing why placeholders resolve incorrectly — Cell 5 shows per-token resolution with scores
+- Testing selector fixes without code changes — Cell 7 scratchpad patches selectors in-place
+- Inspecting scraper output — Cell 4 DataFrame shows all candidates with element details
+- Iterating on ranking logic — re-run Cell 5 after editing `src/semantic_candidate_ranker.py`
+
+**Prerequisites:**
+- `nest_asyncio` package required (patches Jupyter's asyncio loop for sync Playwright)
+- Run cells top-to-bottom for full trace, or re-run individual cells after changes
+
+**Cell guide:**
+| Cell | Stage | What to look for |
+|------|-------|------------------|
+| 1 | Setup | Import errors, asyncio conflicts |
+| 2 | Config | Edit URL, story, model before proceeding |
+| 3 | Skeleton | Token inventory — `{{TOKEN:description}}` only, no real selectors |
+| 4 | Scraper | Candidate count, element types, JS render issues |
+| 4b | Search | Filter candidates by token description |
+| 5 | Resolution | Per-token status, winner selector, scores, fallback flags |
+| 5b | Deep-dive | Top 10 candidates for a failing token |
+| 6 | Output | Final test file, `pytest.skip()` count |
+| 7 | Patch | Manual selector override without code changes |
+
+**Advantages over `scripts/debug/debug_pipeline.py`:**
+- State preserved between cells — no full re-run needed
+- Pandas DataFrames with color-coded status columns
+- Scratchpad patching (Cell 7) — test fixes before committing code
+- Targeted candidate filtering (Cell 4b)
 
 ---
 
