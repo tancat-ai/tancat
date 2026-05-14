@@ -18,6 +18,7 @@ from typing import Any
 
 from playwright.sync_api import sync_playwright
 
+from src.form_login_utils import attempt_login
 from src.journey_scraper import CredentialProfile
 from src.scraper import PageScraper
 
@@ -146,7 +147,7 @@ class StatefulPageScraper:
 
         # Detect and handle login forms — many demo sites (saucedemo, etc.) require
         # authentication before showing product/inventory pages.
-        self._attempt_login(page)
+        attempt_login(page, self._credential_profile)
 
         add_to_cart_selectors = [
             '[data-product-id="11"]',
@@ -183,90 +184,6 @@ class StatefulPageScraper:
                     break
             except Exception:
                 continue
-
-    def _attempt_login(self, page: Any) -> None:
-        """Detect and fill login forms on the current page.
-
-        Handles common demo-site patterns:
-        - saucedemo.com: #user-name / #password / #login-button
-        - Generic: input[type="text"] + input[type="password"] + button
-
-        If a credential profile is provided, uses its username/password.
-        Otherwise, attempts form detection without filling credentials
-        (let the page handle anonymous access).
-        """
-        if self._credential_profile is None:
-            # No credentials — attempt to detect and submit empty forms
-            # (some sites allow anonymous submission or pre-filled fields)
-            self._attempt_login_without_credentials(page)
-            return
-
-        username = self._credential_profile.username
-        password = self._credential_profile.password
-
-        # Strategy 1: saucedemo-style (id-based)
-        try:
-            user_field = page.locator("#user-name, #username, #email, [name='username'], [name='email']").first
-            pass_field = page.locator("#password, [name='password']").first
-            login_btn = page.locator(
-                "#login-button, #login-btn, button[type='submit'], "
-                'button:has-text("Login"), button:has-text("Log in"), button:has-text("Sign in")',
-            ).first
-            if user_field.is_visible(timeout=2000) and pass_field.is_visible(timeout=2000):
-                user_field.fill(username)
-                pass_field.fill(password)
-                if login_btn.is_visible(timeout=2000):
-                    login_btn.click(timeout=5000)
-                    page.wait_for_load_state("networkidle", timeout=10000)
-                    return
-        except Exception:
-            pass
-
-        # Strategy 2: Generic form detection
-        try:
-            form = page.locator("form").first
-            if form and form.is_visible(timeout=1000):
-                text_input = form.locator('input[type="text"], input[type="email"]').first
-                pass_input = form.locator('input[type="password"]').first
-                submit_btn = form.locator('button[type="submit"], input[type="submit"]').first
-                if text_input.is_visible(timeout=1000) and pass_input.is_visible(timeout=1000):
-                    text_input.fill(username)
-                    pass_input.fill(password)
-                    if submit_btn.is_visible(timeout=1000):
-                        submit_btn.click(timeout=5000)
-                        page.wait_for_load_state("networkidle", timeout=10000)
-                        return
-        except Exception:
-            pass
-
-    @staticmethod
-    def _attempt_login_without_credentials(page: Any) -> None:
-        """Attempt to detect login forms without filling credentials.
-
-        Some sites allow anonymous access or have pre-filled fields.
-        This method detects forms but does not fill them.
-        """
-        # Strategy 1: Check for saucedemo-style fields — detect but don't fill
-        try:
-            user_field = page.locator("#user-name, #username, #email, [name='username'], [name='email']").first
-            pass_field = page.locator("#password, [name='password']").first
-            if user_field.is_visible(timeout=2000) and pass_field.is_visible(timeout=2000):
-                # Login form detected but no credentials — skip filling
-                return
-        except Exception:
-            pass
-
-        # Strategy 2: Generic form detection — detect but don't fill
-        try:
-            form = page.locator("form").first
-            if form and form.is_visible(timeout=1000):
-                text_input = form.locator('input[type="text"], input[type="email"]').first
-                pass_input = form.locator('input[type="password"]').first
-                if text_input.is_visible(timeout=1000) and pass_input.is_visible(timeout=1000):
-                    # Form detected but no credentials — skip filling
-                    return
-        except Exception:
-            pass
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:
