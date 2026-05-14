@@ -3,6 +3,10 @@
 Orchestrates semantic matching (SemanticMatcher) and intent filtering
 (IntentMatcher) to produce ranked candidate lists and final selector
 resolutions for pytest-style Playwright tests.
+
+Includes LLM-based disambiguation for near-tie candidates (Session 1 of
+UAT fix series). When rule-based scoring produces top-2 candidates within
+a score threshold, the LLM is consulted with Aria snapshot context.
 """
 
 from __future__ import annotations
@@ -14,9 +18,33 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.intent_matcher import IntentMatcher
+from src.llm_client import LLMClient
+from src.llm_reasoning_filter import strip_llm_reasoning
+from src.locator_builder import build_robust_locator
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
+
+# ── LLM Disambiguation Configuration ────────────────────────────────────────
+# Trigger when top-2 candidate scores differ by ≤ this many points.
+_DEFAULT_DISAMBIGUATION_THRESHOLD = 5
+
+# Maximum number of candidates to send to the LLM for disambiguation.
+_MAX_DISAMBIGUATION_CANDIDATES = 3
+
+
+def _default_disambiguation_threshold() -> int:
+    """Return the disambiguation threshold from environment or default."""
+    try:
+        return int(os.environ.get("DISAMBIGUATION_THRESHOLD", "5"))
+    except (ValueError, TypeError):
+        return _DEFAULT_DISAMBIGUATION_THRESHOLD
+
+
+def _use_llm_disambiguation() -> bool:
+    """Return whether LLM disambiguation is enabled via environment."""
+    value = os.environ.get("USE_LLM_DISAMBIGUATION", "true").lower()
+    return value not in ("false", "0", "no")
 
 
 def _css_escape_id(value: str) -> str:
@@ -62,9 +90,17 @@ class PlaceholderResolver:
         self,
         match_threshold: int = 1,
         min_confidence: float | None = None,
+        use_llm_disambiguation: bool | None = None,
+        disambiguation_threshold: int | None = None,
     ) -> None:
         self.match_threshold = match_threshold
         self.min_confidence = min_confidence if min_confidence is not None else _default_min_confidence()
+        self.use_llm_disambiguation = (
+            use_llm_disambiguation if use_llm_disambiguation is not None else _use_llm_disambiguation()
+        )
+        self.disambiguation_threshold = (
+            disambiguation_threshold if disambiguation_threshold is not None else _default_disambiguation_threshold()
+        )
 
     def _build_element_haystack(self, element: dict[str, Any]) -> str:
         """Return a single string containing all searchable metadata for an element.
@@ -249,6 +285,111 @@ class PlaceholderResolver:
 
         return False
 
+    @staticmethod
+    def _extract_aria_snapshot(page_elements: list[dict[str, Any]]) -> str | None:
+        """Extract Aria snapshot metadata from page elements.
+
+        The Aria snapshot is stored as a special element dict with __meta__ key
+        (Option A from the spec). This keeps the pipeline API unchanged.
+        """
+        for element in page_elements:
+            if element.get("__meta__") == "aria_snapshot":
+                return element.get("text", "")
+        return None
+
+    @staticmethod
+    def _filter_aria_snapshot(page_elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return page elements excluding Aria snapshot metadata entries."""
+        return [el for el in page_elements if el.get("__meta__") != "aria_snapshot"]
+
+    def _disambiguate_with_llm(
+        self,
+        action: str,
+        description: str,
+        top_candidates: list[tuple[int, dict[str, Any]]],
+        aria_snapshot: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Use the LLM to pick the best element when rule-based scoring produces a tie.
+
+        When the top-2 candidates are within DISAMBIGUATION_THRESHOLD points,
+        delegate to the LLM with structured context (Aria snapshot + candidate details).
+
+        Args:
+            action: Placeholder action (CLICK, FILL, ASSERT, GOTO).
+            description: Placeholder description text.
+            top_candidates: Top N scored candidates from rank_candidates().
+            aria_snapshot: Aria snapshot text from page.ariaSnapshot() — optional fallback context.
+
+        Returns:
+            The winning element dict, or None if LLM unavailable or response unparsable.
+        """
+        if len(top_candidates) < 2:
+            return None
+
+        # Limit to MAX_DISAMBIGUATION_CANDIDATES to keep the prompt small.
+        candidates_to_send = top_candidates[:_MAX_DISAMBIGUATION_CANDIDATES]
+
+        # Build candidate option lines
+        option_lines: list[str] = []
+        for idx, (_score, element) in enumerate(candidates_to_send, start=1):
+            text = str(element.get("text", "")).strip()
+            role = str(element.get("role", "")).strip()
+            selector = str(element.get("selector", "")).strip()
+            element_id = str(element.get("id", "")).strip()
+            aria_label = str(element.get("aria_label", "")).strip() or str(element.get("accessible_name", "")).strip()
+            line = f'{idx}. text="{text}", role="{role}", selector="{selector}"'
+            if element_id:
+                line += f', id="{element_id}"'
+            if aria_label:
+                line += f', aria="{aria_label}"'
+            option_lines.append(line)
+
+        # Build the prompt
+        prompt_parts: list[str] = [
+            f'Pick the element that matches: {action} "{description}"',
+            "",
+            "Options:",
+        ]
+        prompt_parts.extend(option_lines)
+
+        if aria_snapshot:
+            prompt_parts.append("")
+            prompt_parts.append("Page accessibility context:")
+            # Truncate snapshot to avoid excessive tokens
+            snapshot_excerpt = aria_snapshot[:2000] if len(aria_snapshot) > 2000 else aria_snapshot
+            prompt_parts.append(snapshot_excerpt)
+
+        prompt_parts.append("")
+        prompt_parts.append(f"Return only the number (1-{len(candidates_to_send)}) of the best match.")
+
+        prompt = "\n".join(prompt_parts)
+
+        try:
+            client = LLMClient()
+            # generate_test() is the sync method; _extract_code + normalise are applied internally.
+            # For a simple numeric answer this is fine — strip_reasoning as a safety net.
+            response = client.generate_test(prompt, timeout=30)
+            cleaned = strip_llm_reasoning(response)
+
+            # Extract a single digit from the response
+            digits = re.findall(r"\d+", cleaned)
+            if digits:
+                choice = int(digits[0])
+                if 1 <= choice <= len(candidates_to_send):
+                    logger.debug(
+                        "LLM disambiguation selected option %d for '%s' (action=%s)",
+                        choice,
+                        description,
+                        action,
+                    )
+                    return candidates_to_send[choice - 1][1]
+
+            logger.debug("LLM disambiguation returned unparsable response: %s", cleaned)
+        except Exception as e:
+            logger.debug("LLM disambiguation failed (%s) — falling back to rule-based scoring", e)
+
+        return None
+
     def find_best_element(
         self,
         action: str,
@@ -264,6 +405,51 @@ class PlaceholderResolver:
         ranked_candidates = self.rank_candidates(action, description, page_elements)
         if not ranked_candidates:
             return None
+
+        # Extract Aria snapshot metadata from page_elements (Option A — __meta__ element)
+        aria_snapshot = self._extract_aria_snapshot(page_elements)
+
+        # LLM Disambiguation: when top-2 candidates are within threshold, delegate to LLM.
+        llm_pick: dict[str, Any] | None = None
+        if self.use_llm_disambiguation and len(ranked_candidates) >= 2:
+            top_score = ranked_candidates[0][0]
+            second_score = ranked_candidates[1][0]
+            if top_score - second_score <= self.disambiguation_threshold:
+                logger.debug(
+                    "Disambiguation triggered: top=%d, second=%d (threshold=%d) for '%s'",
+                    top_score,
+                    second_score,
+                    self.disambiguation_threshold,
+                    description,
+                )
+                llm_pick = self._disambiguate_with_llm(
+                    action,
+                    description,
+                    ranked_candidates[:_MAX_DISAMBIGUATION_CANDIDATES],
+                    aria_snapshot=aria_snapshot,
+                )
+                # Validate LLM pick against text + confidence before accepting
+                if llm_pick is not None:
+                    pick_text = str(llm_pick.get("text", "")).strip()
+                    pick_value = str(llm_pick.get("value", "")).strip()
+                    pick_accessible = str(llm_pick.get("accessible_name", "")).strip()
+                    if (
+                        self.text_matches_description(pick_text, description)
+                        or self.text_matches_description(pick_value, description)
+                        or self.text_matches_description(pick_accessible, description)
+                    ):
+                        # Find the score for this pick
+                        pick_score: int | None = None
+                        for _s, _el in ranked_candidates:
+                            if _el is llm_pick or _el.get("selector") == llm_pick.get("selector"):
+                                pick_score = _s
+                                break
+                        if pick_score is not None:
+                            max_possible = max(c[0] for c in ranked_candidates)
+                            confidence = pick_score / max_possible if max_possible > 0 else 0.0
+                            if confidence >= self.min_confidence:
+                                logger.debug("LLM disambiguation pick accepted: %s", llm_pick.get("selector"))
+                                return llm_pick
 
         # Filter by text-content validation (B1)
         for score, element in ranked_candidates:
@@ -600,127 +786,12 @@ class PlaceholderResolver:
             # No heuristic fallback — let placeholders resolve to None and emit pytest.skip()
             # This enforces "skip rather than guess" architectural principle.
             return None
-        selector = self._build_robust_locator(best_element)
+        selector = build_robust_locator(best_element)
         if selector:
             return selector
         # Fallback to raw scraped selector if robust locator couldn't be built
         raw_selector = str(best_element.get("selector", "")).strip()
         return raw_selector if raw_selector else None
-
-    @staticmethod
-    def _build_robust_locator(element: dict[str, Any]) -> str | None:
-        """Build a robust Playwright locator from scraped element metadata.
-
-        Prefers stable, specific selectors (ID, href, data-attrs) over
-        text-based locators when a stable selector is available.  Text-based
-        locators are used as a fallback when no stable selector exists.
-
-        Priority order (most specific first):
-        1. ID-based (e.g. `#buy`)
-        2. href-based for links (e.g. `a[href="/view_cart"]`)
-        3. Data attribute with specific value (e.g. `[data-product-id="1"]`)
-        4. Class-based without brittle framework prefixes (e.g. `.cart_description`)
-        5. Tag + :has-text (e.g. `a:has-text("Add to cart")`)
-        6. Role + :has-text (e.g. `button:has-text("Submit")`)
-        7. Aria-label based (e.g. `[aria-label="Submit"]`)
-        8. None — falls back to raw selector
-        """
-        tag = str(element.get("tag", "")).strip().lower()
-        text = str(element.get("text", "")).strip()
-        role = str(element.get("role", "")).strip().lower()
-        selector = str(element.get("selector", "")).strip()
-        element_id = str(element.get("id", "")).strip()
-        aria_label = str(element.get("aria_label", "")).strip()
-        classes = str(element.get("classes", "")).strip().lower()
-        href = str(element.get("href", "")).strip()
-
-        # Strip common UI framework class prefixes that add no semantic value
-        # e.g. "btn btn-default add-to-cart" -> useful parts: "add-to-cart"
-        useful_class_terms = {
-            term
-            for term in classes.split()
-            if term
-            and not any(prefix in term for prefix in ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-"))
-        }
-
-        # Build tag prefix for the locator
-        tag_prefix = tag if tag and tag not in ("div", "span", "a", "") else ""
-
-        # Priority 1: ID-based locator (most stable)
-        # Check the `id` field first, then fall back to extracting from selector
-        if element_id:
-            return f"#{_css_escape_id(element_id)}"
-        # Extract ID from raw selector (e.g. "#buy" -> "buy")
-        id_match = re.search(r"#([\w-]+)", selector)
-        if id_match:
-            return f"#{_css_escape_id(id_match.group(1))}"
-
-        # Priority 2: href-based locator for anchor elements
-        if role in ("a", "link"):
-            # First try extracting href value from the raw selector (e.g. a[href="/view_cart"])
-            href_match = re.search(r'\[href=["\']([^"\']+)["\']\]', selector)
-            if href_match:
-                escaped_href = href_match.group(1).replace('"', '\\"')
-                return f'a[href="{escaped_href}"]'
-            # Fall back to the href field
-            if href:
-                escaped_href = href.replace('"', '\\"')
-                return f'a[href="{escaped_href}"]'
-
-        # Priority 3: Data attribute with specific value from the raw selector
-        # e.g. [data-product-id="1"] — keep the specific value when it's a simple data-* attr
-        data_attr_matches = re.findall(r'\[data-([\w-]+)=["\']([^"\']+)["\']\]', selector)
-        if data_attr_matches:
-            # Build selector with specific data attribute values
-            data_parts = [f'[data-{attr_name}="{attr_value}"]' for attr_name, attr_value in data_attr_matches]
-            # Add useful class terms if present
-            if useful_class_terms:
-                class_part = "." + ".".join(sorted(useful_class_terms))
-                return class_part + "".join(data_parts)
-            return "".join(data_parts)
-
-        # Priority 4: Class-based without brittle framework prefixes
-        # Extract class names from the raw selector as primary source
-        # e.g. ".cart_description", ".btn.btn-default.add-to-cart", etc.
-        selector_class_matches = re.findall(r"\.([\w-]+)", selector)
-        if selector_class_matches:
-            # Filter out framework prefixes from selector-extracted classes too
-            clean_classes = [
-                c
-                for c in selector_class_matches
-                if not any(prefix in c for prefix in ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-"))
-            ]
-            if clean_classes:
-                class_part = "." + ".".join(sorted(clean_classes))
-                if tag_prefix:
-                    return f"{tag_prefix}{class_part}"
-                return class_part
-
-        # Also use useful_class_terms from the `classes` field as fallback
-        if useful_class_terms:
-            class_part = "." + ".".join(sorted(useful_class_terms))
-            if tag_prefix:
-                return f"{tag_prefix}{class_part}"
-            return class_part
-
-        # Priority 5: Text-based locator (fallback — robust but less specific)
-        if text:
-            escaped_text = text.replace('"', '\\"')
-            if tag_prefix:
-                return f'{tag_prefix}:has-text("{escaped_text}")'
-            if role and role not in ("", "div", "span"):
-                return f'{role}:has-text("{escaped_text}")'
-            return f':has-text("{escaped_text}")'
-
-        # Priority 6: Aria-label based locator
-        if aria_label:
-            escaped_label = aria_label.replace('"', '\\"')
-            if tag_prefix:
-                return f'{tag_prefix}[aria-label="{escaped_label}"]'
-            return f'[aria-label="{escaped_label}"]'
-
-        # No robust locator could be built — caller falls back to raw selector
-        return None
 
     def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:
         """Resolve navigation placeholders to the best matching scraped URL."""

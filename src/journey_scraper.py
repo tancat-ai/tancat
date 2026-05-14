@@ -36,6 +36,7 @@ from src.journey_auth_detector import (
     detect_mfa,
     detect_sso,
 )
+from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 
@@ -622,7 +623,7 @@ class JourneyScraper:
 
         # Pick top candidate and build a robust locator
         _score, element = ranked[0]
-        robust = self._resolver._build_robust_locator(element)  # noqa: SLF001
+        robust = build_robust_locator(element)
         return robust or element.get("selector")
 
     def _navigate_to(self, page: Any, url: str, timeout_ms: int) -> str:

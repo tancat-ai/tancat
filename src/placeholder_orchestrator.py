@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
 from src.journey_scraper import CartSeedingScraper, CredentialProfile
+from src.locator_builder import build_robust_locator
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_resolver import PlaceholderResolver
@@ -580,7 +581,7 @@ class PlaceholderOrchestrator:
             # to be used as fallback instead of the robust locator logic.
             # Stage 1 (_find_best_element_for_current_page) has already selected the
             # best element via word-overlap ranking — we trust that result here.
-            robust_selector = PlaceholderResolver._build_robust_locator(matched_element)
+            robust_selector = build_robust_locator(matched_element)
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)
