@@ -7,6 +7,7 @@ from playwright.sync_api import Page
 
 from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
+from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
 
 
@@ -304,7 +305,7 @@ class EvidenceTracker:
         1. Scroll into view
         2. Try direct click with primary locator
         3. If click fails with visibility/timeout error:
-           a. Try hover-reveal fallback (existing)
+           a. Try hover-reveal fallback (hover_click_utils)
            b. Try locator scoring fallback (new — higher-scoring alternatives)
         4. If any fallback succeeds, mark step as "partial_pass" with audit trail
         """
@@ -342,10 +343,11 @@ class EvidenceTracker:
                     self._dismiss_ad_overlays()
                     self.page.wait_for_timeout(300)
 
-                    # Attempt 2: Hover-reveal fallback (existing)
-                    hover_result = self._try_hover_and_click(loc, locator, label, el_metadata)
-                    if hover_result is not None:
-                        return  # Hover fallback succeeded
+                    # Attempt 2: Hover-reveal fallback (delegated to hover_click_utils)
+                    if try_hover_and_click(self.page, loc, locator):
+                        self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
+                        self.steps[-1]["element"] = el_metadata
+                        return
 
                     # Attempt 3: Locator scoring fallback (new — Tier 2)
                     LocatorFallback.try_fallback(
@@ -372,206 +374,6 @@ class EvidenceTracker:
                 elapsed_ms=int((time.time() - _t0) * 1000),
             )
             raise
-
-    def _try_hover_and_click(self, loc: Any, locator: str, label: str, el_metadata: dict) -> None | bool:
-        """Try to click by first dispatching mouseenter events for hover-reveal elements.
-
-        Returns True if the hover fallback succeeded, None if all attempts failed.
-
-        This handles elements that are hidden via CSS (display:none, visibility:hidden,
-        opacity:0) and only become visible when the parent element receives a mouseenter
-        event — common pattern in e-commerce product grids.
-
-        Strategy:
-        1. Hover target element directly
-        2. Dispatch mouseenter on target + ancestors
-        3. Find and hover visible parent category triggers (e.g., "Women" revealing subcategories)
-        4. Use JavaScript to force-show hidden elements and click via DOM
-        """
-        _t0 = time.time()
-
-        # Attempt 1: Hover the element itself
-        try:
-            loc.hover(timeout=2000, force=False)
-            self.page.wait_for_timeout(300)
-        except Exception:
-            pass
-
-        try:
-            loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-            self.steps[-1]["element"] = el_metadata
-            return True
-        except Exception:
-            pass
-
-        # Attempt 2: Dispatch mouseenter on element + ancestors
-        try:
-            loc.evaluate("el => el.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }))")
-            self.page.wait_for_timeout(300)
-            loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-            self.steps[-1]["element"] = el_metadata
-            return True
-        except Exception:
-            pass
-
-        # Attempt 3: Dispatch mouseenter on all ancestors (for overlay patterns)
-        try:
-            self.page.evaluate(
-                """
-                (selector) => {
-                    const el = document.querySelector(selector);
-                    if (!el) return false;
-                    const mouseEnter = new MouseEvent('mouseenter', { bubbles: true });
-                    el.dispatchEvent(mouseEnter);
-                    let parent = el.parentElement;
-                    while (parent && parent.tagName !== 'BODY') {
-                        parent.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-                        parent = parent.parentElement;
-                    }
-                    return true;
-                }
-            """,
-                locator,
-            )
-            self.page.wait_for_timeout(300)
-            loc.click(timeout=5000)
-            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-            self.steps[-1]["element"] = el_metadata
-            return True
-        except Exception:
-            pass
-
-        # Attempt 4: Find and hover visible parent category triggers.
-        # On sites like automationexercise.com, subcategory links (e.g., "Dress") are
-        # hidden inside a sidebar menu until you hover the parent category header
-        # (e.g., "Women", "Men", "Kids"). We need to find those visible trigger elements.
-        try:
-            result = self.page.evaluate(
-                """
-                (targetSelector) => {
-                    const target = document.querySelector(targetSelector);
-                    if (!target) return { clicked: false, reason: 'no target' };
-
-                    // Walk up the DOM to find menu container structure
-                    let el = target;
-                    while (el && el.tagName !== 'BODY') {
-                        // Look for parent elements that are visible and might be category triggers
-                        // These are typically <a> or <li> elements with text content, no hidden classes
-                        const style = window.getComputedStyle(el);
-
-                        // Check siblings that might be the hover trigger
-                        const parent = el.parentElement;
-                        if (parent) {
-                            for (const sibling of parent.children) {
-                                const sibStyle = window.getComputedStyle(sibling);
-                                const isVisible = sibStyle.display !== 'none' &&
-                                                  sibStyle.visibility !== 'hidden' &&
-                                                  sibStyle.opacity !== '0';
-                                // Look for anchor tags or list items that are visible and have text
-                                if (isVisible && (sibling.tagName === 'A' || sibling.tagName === 'LI') &&
-                                    sibling.textContent.trim().length > 0 && sibling.textContent.trim().length < 50) {
-                                    // Dispatch hover on this visible sibling
-                                    const mouseEnter = new MouseEvent('mouseenter', { bubbles: true });
-                                    sibling.dispatchEvent(mouseEnter);
-
-                                    // Also try actual hover via dispatching on the element
-                                    sibling.style.visibility = 'visible';
-                                    sibling.style.display = 'block';
-                                }
-                            }
-                        }
-
-                        // Check if this ancestor is a visible category header
-                        const ancestorStyle = window.getComputedStyle(el);
-                        if (ancestorStyle.display !== 'none' && el.tagName === 'A' && el.textContent.trim()) {
-                            // Hover this visible ancestor
-                            const mouseEnter = new MouseEvent('mouseenter', { bubbles: true });
-                            el.dispatchEvent(mouseEnter);
-                            const mouseOver = new MouseEvent('mouseover', { bubbles: true });
-                            el.dispatchEvent(mouseOver);
-
-                            // Now check if target became visible
-                            const targetStyle2 = window.getComputedStyle(target);
-                            if (targetStyle2.display !== 'none' && targetStyle2.visibility !== 'hidden') {
-                                return { clicked: false, reason: 'ancestor hovered', madeVisible: true };
-                            }
-                        }
-
-                        el = el.parentElement;
-                    }
-                    return { clicked: false, reason: 'walked ancestors' };
-                }
-                """,
-                locator,
-            )
-
-            if result and result.get("madeVisible"):
-                self.page.wait_for_timeout(500)  # Longer wait for CSS transition after hover
-                try:
-                    loc.click(timeout=5000)
-                    self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-                    self.steps[-1]["element"] = el_metadata
-                    return True
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        # Attempt 5: Force-show the element via JavaScript and click programmatically.
-        # This is a last resort for elements hidden behind CSS hover menus.
-        try:
-            self.page.evaluate(
-                """
-                (selector) => {
-                    const el = document.querySelector(selector);
-                    if (!el) return false;
-
-                    // Force the element and all ancestors to be visible
-                    let current = el;
-                    while (current && current.tagName !== 'BODY') {
-                        const style = window.getComputedStyle(current);
-                        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-                            // Remove inline styles that hide the element
-                            current.style.display = '';
-                            current.style.visibility = '';
-                            current.style.opacity = '1';
-
-                            // Also remove any CSS classes that might be hiding it
-                            const classesToRemove = [];
-                            for (const cls of current.classList) {
-                                if (cls.includes('hidden') || cls.includes('collapse') ||
-                                    cls.includes('invisible') || cls.includes('collapsed')) {
-                                    classesToRemove.push(cls);
-                                }
-                            }
-                            classesToRemove.forEach(c => current.classList.remove(c));
-
-                            // Add a class to force visibility
-                            current.style.setProperty('display', 'block', 'important');
-                            current.style.setProperty('visibility', 'visible', 'important');
-                        }
-                        current = current.parentElement;
-                    }
-
-                    // Now click the element programmatically
-                    el.click();
-                    return true;
-                }
-                """,
-                locator,
-            )
-            self.page.wait_for_timeout(500)
-            # Record success — JS click was used as fallback
-            self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-            self.steps[-1]["element"] = el_metadata
-            return True
-        except Exception:
-            pass
-
-        # All hover attempts failed — return None to signal fallback failure
-        return None
 
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:
