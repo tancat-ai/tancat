@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from src.locator_builder import build_robust_locator
 from src.orchestrator import TestOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
@@ -101,7 +102,7 @@ def test_resolver_matches_known_placeholder() -> None:
         for action, description in actions_to_try:
             best = resolver.find_best_element(action, description, elements)
             if best:
-                selector = resolver._build_robust_locator(best)
+                selector = build_robust_locator(best)
                 print(f"  ({action}) '{description}' -> {selector}")
                 found_any_match = True
 
