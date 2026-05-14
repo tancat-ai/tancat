@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.skeleton_parser import SkeletonValidator
+from src.skeleton_validator import SkeletonValidator
 
 
 class TestSkeletonValidator:

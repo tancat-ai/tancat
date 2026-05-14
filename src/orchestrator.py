@@ -29,7 +29,8 @@ from src.prompt_utils import (
 )
 from src.scraper import PageScraper
 from src.semantic_candidate_ranker import SemanticCandidateRanker
-from src.skeleton_parser import SkeletonParser, SkeletonValidator
+from src.skeleton_parser import SkeletonParser
+from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
 from src.url_utils import (
