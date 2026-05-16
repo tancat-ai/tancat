@@ -362,6 +362,10 @@ class PageScraper:
                     "classes": " ".join(_class_attr) if isinstance(_class_attr := tag.get("class"), list) else "",
                     "value": str(tag.get("value", "")).strip(),
                     "placeholder": str(tag.get("placeholder", "")).strip(),
+                    # Session 2: Visibility flag — set to True at extraction time;
+                    # _capture_element_visibility() overwrites this with the live DOM
+                    # check result (True/False) before returning.
+                    "is_visible": True,
                 }
             )
 

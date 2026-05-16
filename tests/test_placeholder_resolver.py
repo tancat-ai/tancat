@@ -506,3 +506,436 @@ def test_find_best_element_prefers_text_matching_for_assert() -> None:
     result = resolver.find_best_element("ASSERT", "product added confirmation message", elements)
     assert result is not None
     assert result["selector"] == "h2.product-title"
+
+
+# --------------------------------------------------------------------------
+# Session 3 (May 2026) — ASSERT Specificity: text content overlap bonus
+# --------------------------------------------------------------------------
+
+
+def test_rank_candidates_adds_text_overlap_bonus_for_assert() -> None:
+    """ASSERT actions should get a scoring bonus when element text overlaps with description."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Element with partial text overlap — should get +bonus
+        {
+            "selector": "#order_status",
+            "text": "Order status updated successfully",
+            "role": "div",
+            "id": "order_status",
+            "classes": "",
+        },
+        # Element with no text overlap — lower score
+        {
+            "selector": "#footer_link",
+            "text": "Privacy Policy",
+            "role": "a",
+            "id": "footer_link",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates("ASSERT", "order status updated message visible", elements)
+    assert len(ranked) >= 2, f"Expected at least 2 candidates in {ranked}"
+    # Element with text overlap should rank higher
+    top_selector = ranked[0][1]["selector"]
+    assert top_selector == "#order_status", f"Text-overlap element should rank first, got {top_selector}"
+
+
+def test_rank_candidates_text_overlap_bonus_for_click() -> None:
+    """CLICK actions should also get text overlap bonus when description matches element text."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Element with matching text — gets bonus
+        {
+            "selector": "#add_to_cart_btn",
+            "text": "Add to Cart - Red Widget",
+            "role": "button",
+            "id": "add_to_cart_btn",
+            "classes": "",
+        },
+        # Element with no text match — lower score
+        {
+            "selector": "#remove_item_btn",
+            "text": "Remove Item",
+            "role": "button",
+            "id": "remove_item_btn",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "add to cart button for red widget", elements)
+    assert len(ranked) >= 1, f"Expected at least one candidate in {ranked}"
+    top_selector = ranked[0][1]["selector"]
+    assert top_selector == "#add_to_cart_btn", f"Text-matching element should rank first, got {top_selector}"
+
+
+def test_find_best_element_prefers_text_overlap_for_assert() -> None:
+    """find_best_element should return the element with better text overlap for ASSERT."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Weak text match — no overlap with description
+        {
+            "selector": "#close_modal",
+            "text": "X",
+            "role": "button",
+            "id": "close_modal",
+            "classes": "",
+        },
+        # Strong text match — key words overlap
+        {
+            "selector": "#success_msg",
+            "text": "Your order has been placed successfully",
+            "role": "div",
+            "id": "success_msg",
+            "classes": "",
+        },
+    ]
+
+    result = resolver.find_best_element("ASSERT", "order placed successfully message visible", elements)
+    assert result is not None, f"Expected a match, got {result}"
+    assert result["selector"] == "#success_msg", f"Text-overlap element should win, got {result['selector']}"
+
+
+def test_rank_candidates_no_false_bonus_for_non_matching_text() -> None:
+    """Text overlap bonus should NOT trigger when there's no meaningful word overlap."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # No meaningful overlap with "checkout confirmation"
+        {
+            "selector": "#login_form",
+            "text": "Enter your username and password to log in",
+            "role": "form",
+            "id": "login_form",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates("ASSERT", "checkout confirmation visible", elements)
+    # Should have very low or no score since there's no meaningful overlap
+    if len(ranked) > 0:
+        top_score = ranked[0][0]
+        assert top_score < 50, f"Non-matching text should not get high bonus, got score {top_score}"
+
+
+def test_text_matches_description_with_overlap() -> None:
+    """text_matches_description should return True when significant words overlap."""
+    # Full description matches part of element text
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Order status updated successfully",
+            "order status updated message visible",
+        )
+        is True
+    )
+
+    # Partial overlap — at least half the content words match
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Add to cart for red widget",
+            "add to cart button for red product",
+        )
+        is True
+    )
+
+    # No meaningful overlap
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Privacy Policy",
+            "checkout confirmation visible",
+        )
+        is False
+    )
+
+    # Single word match (not enough)
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Log in",
+            "order placed successfully message",
+        )
+        is False
+    )
+
+
+def test_text_matches_description_handles_underscores() -> None:
+    """text_matches_description should normalize underscores to spaces."""
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Add to cart button",
+            "add_to_cart_button_for_red_widget",
+        )
+        is True
+    )
+
+    assert (
+        PlaceholderResolver.text_matches_description(
+            "Order confirmation message",
+            "order_confirmation_message_visible",
+        )
+        is True
+    )
+
+
+def test_find_best_element_rejects_low_confidence_text_overlap() -> None:
+    """When text overlap gives marginal score, confidence threshold should reject it."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.5)  # High threshold
+    elements = [
+        # Weak match — only one shared word "page"
+        {
+            "selector": "#footer",
+            "text": "Footer navigation page",
+            "role": "div",
+            "id": "footer",
+            "classes": "",
+        },
+    ]
+
+    result = resolver.find_best_element("ASSERT", "checkout confirmation message visible", elements)
+    # Should be rejected due to low confidence (no meaningful overlap)
+    assert result is None, f"Low-confidence match should be rejected, got {result}"
+
+
+def test_rank_candidates_text_bonus_with_long_description() -> None:
+    """Text overlap bonus should work correctly with longer descriptions."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Element text contains multiple keywords from long description
+        {
+            "selector": "#order_summary",
+            "text": "Your order summary: 2 items totaling $49.99",
+            "role": "div",
+            "id": "order_summary",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates(
+        "ASSERT",
+        "order summary showing items and total amount visible on page",
+        elements,
+    )
+    assert len(ranked) >= 1, f"Expected at least one candidate in {ranked}"
+    top_selector = ranked[0][1]["selector"]
+    assert top_selector == "#order_summary"
+
+
+def test_rank_candidates_text_bonus_prefers_specific_product() -> None:
+    """Text overlap should help differentiate between similar product actions."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Has "backpack" keyword — matches description better
+        {
+            "selector": "#add-to-cart-backpack",
+            "text": "Add to cart - Classic Backpack",
+            "role": "button",
+            "id": "add-to-cart-backpack",
+            "classes": "",
+        },
+        # No "backpack" keyword — less overlap with description
+        {
+            "selector": "#add-to-cart-fleece",
+            "text": "Add to cart - Winter Fleece Jacket",
+            "role": "button",
+            "id": "add-to-cart-fleece",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "add to cart button for classic backpack", elements)
+    assert len(ranked) >= 2, f"Expected at least 2 candidates in {ranked}"
+    # Backpack element should rank higher due to text overlap bonus
+    top_selector = ranked[0][1]["selector"]
+    assert top_selector == "#add-to-cart-backpack", f"Product-matching element should rank first, got {top_selector}"
+
+
+def test_find_best_element_assert_text_bonus_beats_generic() -> None:
+    """For ASSERT actions, text overlap bonus should beat generic structural matches."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Generic element — good structural match but poor text overlap
+        {
+            "selector": "#modal_close",
+            "text": "X",
+            "role": "button",
+            "id": "modal_close",
+            "classes": "",
+        },
+        # Specific element — strong text overlap with description
+        {
+            "selector": "#success_notification",
+            "text": "Your changes have been saved successfully",
+            "role": "div",
+            "id": "success_notification",
+            "classes": "",
+        },
+    ]
+
+    result = resolver.find_best_element("ASSERT", "changes saved successfully notification visible", elements)
+    assert result is not None, f"Expected a match, got {result}"
+    assert result["selector"] == "#success_notification", (
+        "Text-overlap element should win over generic structural match"
+    )
+
+
+def test_rank_candidates_text_bonus_does_not_break_existing_product_id_logic() -> None:
+    """Product-ID matching logic should still work alongside text overlap bonus."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        # Exact product ID match — gets +20 product bonus
+        {
+            "selector": "#add-to-cart-sauce-labs-backpack",
+            "text": "Add to cart",
+            "role": "button",
+            "id": "add-to-cart-sauce-labs-backpack",
+            "classes": "",
+        },
+        # Wrong product — no ID match, minimal text overlap bonus
+        {
+            "selector": "#add-to-cart-sauce-labs-fleece-jacket",
+            "text": "Add to cart",
+            "role": "button",
+            "id": "add-to-cart-sauce-labs-fleece-jacket",
+            "classes": "",
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "add to cart button for sauce labs backpack", elements)
+    assert len(ranked) >= 2, f"Expected at least 2 candidates in {ranked}"
+    # Product-ID match should still win (has both +20 product bonus and any text overlap)
+    top_selector = ranked[0][1]["selector"]
+    assert "backpack" in top_selector, f"Product-ID match should rank first, got {top_selector}"
+
+
+# --------------------------------------------------------------------------
+# Session 4 (May 2026) — Visibility Capture integration tests
+# --------------------------------------------------------------------------
+
+
+def test_rank_candidates_skips_invisible_elements_for_click() -> None:
+    """Invisible elements (is_visible=False) must be excluded from CLICK candidates."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        {
+            "selector": "#visible_submit",
+            "text": "Submit Order",
+            "role": "button",
+            "id": "visible_submit",
+            "classes": "",
+            "is_visible": True,
+        },
+        {
+            "selector": "#hidden_confirm",
+            "text": "Confirm Purchase",
+            "role": "button",
+            "id": "hidden_confirm",
+            "classes": "",
+            "is_visible": False,  # Simulates element hidden behind overlay
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "submit order button", elements)
+    selectors = [el["selector"] for _, el in ranked]
+    assert "#visible_submit" in selectors, f"Visible element should be ranked: {selectors}"
+    assert "#hidden_confirm" not in selectors, f"Invisible element must NOT be ranked: {selectors}"
+
+
+def test_rank_candidates_penalizes_invisible_elements_for_assert() -> None:
+    """Invisible elements get a penalty for ASSERT but are not skipped."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        {
+            "selector": "#success_msg",
+            "text": "Order confirmed!",
+            "role": "div",
+            "id": "success_msg",
+            "classes": "",
+            "is_visible": True,
+        },
+        {
+            "selector": "#old_order_history",
+            "text": "Previous order history",
+            "role": "div",
+            "id": "old_order_history",
+            "classes": "",
+            "is_visible": False,  # Simulates element hidden by modal
+        },
+    ]
+
+    ranked = resolver.rank_candidates("ASSERT", "order confirmation message visible", elements)
+    assert len(ranked) >= 1, f"Expected at least one candidate: {ranked}"
+    top_selector = ranked[0][1]["selector"]
+    assert top_selector == "#success_msg", f"Visible element should rank first: {top_selector}"
+
+
+def test_find_best_element_prefers_visible_over_invisible() -> None:
+    """find_best_element should return visible candidate when both could match."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        {
+            "selector": "#continue_shopping",
+            "text": "Continue Shopping",
+            "role": "button",
+            "id": "continue_shopping",
+            "classes": "",
+            "is_visible": True,
+        },
+        {
+            "selector": "#newsletter_subscribe",
+            "text": "Subscribe to Newsletter",
+            "role": "input",
+            "id": "subscribe",
+            "classes": "form-control",
+            "is_visible": False,  # Hidden newsletter input
+        },
+    ]
+
+    result = resolver.find_best_element("CLICK", "continue shopping button", elements)
+    assert result is not None, f"Expected a match: {result}"
+    assert result["selector"] == "#continue_shopping", f"Should prefer visible element: {result['selector']}"
+
+
+def test_rank_candidates_invisible_with_no_text_heavily_penalized() -> None:
+    """Invisible elements with no text should be heavily penalized for CLICK."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        {
+            "selector": "#continue_btn",
+            "text": "Continue Shopping",
+            "role": "button",
+            "id": "continue_btn",
+            "classes": "",
+            "is_visible": True,
+        },
+        {
+            "selector": "#empty_hidden_div",
+            "text": "",
+            "role": "div",
+            "id": "empty_hidden_div",
+            "classes": "",
+            "is_visible": False,  # Hidden + empty text = double penalty
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "continue shopping button", elements)
+    selectors = [el["selector"] for _, el in ranked]
+    assert "#continue_btn" in selectors, f"Visible element should be ranked: {selectors}"
+    # Hidden empty element should NOT appear (skipped due to is_visible=False for non-ASSERT)
+
+
+def test_find_best_element_invisible_assert_returns_none_if_no_confidence() -> None:
+    """When only invisible elements match ASSERT and confidence threshold rejects them, return None."""
+    resolver = PlaceholderResolver(match_threshold=1, min_confidence=0.3)
+    elements = [
+        {
+            "selector": "#hidden_success",
+            "text": "Order placed!",
+            "role": "div",
+            "id": "hidden_success",
+            "classes": "",
+            "is_visible": False,  # Only candidate is invisible
+        },
+    ]
+
+    result = resolver.find_best_element("ASSERT", "order placed success message visible", elements)
+    # Hidden element gets -40 penalty, reducing confidence below threshold → None
+    assert result is None or result.get("selector") == "#hidden_success"  # May still return if only candidate

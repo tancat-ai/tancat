@@ -105,16 +105,12 @@ def test_checkout(page: Page):
     assert [journey.test_name for journey in orchestrator.last_result.journeys] == ["test_checkout"]
     scraped_urls = [page.url for page in orchestrator.last_result.scraped_page_records]
     generated_class_names = [page_object.class_name for page_object in orchestrator.last_result.generated_page_objects]
+    # URL guessing removed — only seed URLs are scraped statically.
+    # Products and cart pages are discovered via journey navigation.
     assert "https://example.com/" in scraped_urls
-    assert "https://example.com/products" in scraped_urls
-    assert "https://example.com/view_cart" in scraped_urls
+    # The scraper mock returns data for products/view_cart but only the seed URL
+    # is in pages_to_scrape. Journey discovery would populate the rest.
     assert "HomePage" in generated_class_names
-    assert "ProductsPage" in generated_class_names
-    assert "CartPage" in generated_class_names
-    assert any(
-        page.url == "https://example.com/view_cart" and page.element_count == 1
-        for page in orchestrator.last_result.scraped_page_records
-    )
 
 
 def test_run_pipeline_rejects_malformed_skeleton_before_resolution() -> None:
@@ -241,12 +237,9 @@ def test_02_go_to_cart(page: Page):
         conditions="1. Go to cart\n2. Check out",
     )
 
-    assert discovered[0] == "https://example.com/"
-    assert "https://example.com/products" in discovered
-    assert "https://example.com/view_cart" in discovered
-    assert "https://example.com/checkout" in discovered
-    assert all("product_details" not in url for url in discovered)
-    assert all("brand_products" not in url for url in discovered)
+    # URL guessing has been removed — _build_candidate_urls only returns seed URLs.
+    # Journey discovery finds all reachable pages by navigating statefully.
+    assert discovered == ["https://example.com/"]
 
 
 def test_run_pipeline_preserves_page_requirements_metadata() -> None:

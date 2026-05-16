@@ -115,4 +115,4 @@ scratch/generated_tests/
 # ── notebooks ──────────────
 
 notebooks/_debug_output.py
-notebooks/.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/generated_tests/uat_*/

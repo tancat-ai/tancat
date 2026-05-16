@@ -257,31 +257,49 @@ class PlaceholderResolver:
         """Check if element's visible text plausibly matches the action description.
 
         Uses case-insensitive containment with whitespace normalization.
-        Strips action-context words from the description to focus on core intent words.
-        For example: "Add to cart button next to a product" becomes "add cart product"
-        which can now match element text "Add to cart".
+        Handles two common patterns:
+        1. Direct text overlap: "Add to cart" matches "Add to cart button"
+        2. Action + qualifier split: "add to cart button for Sauce Labs Backpack"
+           splits on "for"/"next to"/"on" → action part "add to cart button" is validated
+           against element text, ignoring the product qualifier.
 
         Intent-level filtering is handled by _matches_intent_bucket() in rank_candidates().
         This method only validates text overlap, not intent compatibility.
         """
-        if not element_text or not action_description:
+        if not action_description:
             return False
 
         # Normalize underscores to spaces (LLM often generates "add_to_cart_button" style)
-        norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
-        norm_desc = re.sub(r"[_\s]+", " ", action_description).strip().lower()
+        # Strip LLM-generated quotes — common problem: "'Products'" should match "Products"
+        norm_desc = re.sub(r"['\"']", "", action_description)
+        norm_desc = re.sub(r"[_\s]+", " ", norm_desc).strip().lower()
 
-        # Direct containment (most reliable check)
-        if norm_text in norm_desc or norm_desc in norm_text:
-            return True
+        # Split description on qualifier separators to isolate the action part.
+        # "add to cart button for Sauce Labs Backpack" -> "add to cart button"
+        # "click remove button next to broken red light" -> "click remove button"
+        action_part = re.split(r"\s+(?:for|next\s+to|beside|on|with|by|above|below)\s+", norm_desc)[0]
 
-        # Word-level overlap with action-context words stripped from description
-        desc_words = set(norm_desc.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
-        text_words = set(norm_text.split())
-        if desc_words and text_words:
-            overlap = len(desc_words & text_words)
-            # Require at least half the core intent words to match, with minimum of 1
-            return overlap >= max(1, len(desc_words) // 2)
+        if element_text:
+            norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
+
+            # Direct containment (most reliable check) - check against both full desc and action part
+            if norm_text in norm_desc or norm_desc in norm_text:
+                return True
+            if norm_text in action_part or action_part in norm_text:
+                return True
+
+            # Word-level overlap with action-context words stripped
+            desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
+            text_words = set(norm_text.split())
+            if desc_words and text_words:
+                overlap = len(desc_words & text_words)
+                if overlap >= max(1, len(desc_words) // 2):
+                    return True
+
+            # Check if at least one significant action word overlaps
+            action_words = set(action_part.split()) & PlaceholderResolver.ACTION_VERBS
+            if action_words and action_words & text_words:
+                return True
 
         return False
 
@@ -539,6 +557,27 @@ class PlaceholderResolver:
             if role == "hidden":
                 continue
 
+            # Penalize elements marked as invisible at runtime (Session 2: Visibility Capture).
+            # Elements with is_visible=False were checked against the live browser DOM and found
+            # to be hidden (display:none, off-screen, behind overlays, etc.). Prefer visible
+            # candidates so generated tests interact with actually-useful page elements.
+            if element.get("is_visible") is False:
+                # Exception: ASSERT placeholders may intentionally check visibility of hidden-to-view
+                # but still-rendered elements (e.g., success messages that appear after action).
+                # Even then, penalize heavily to prefer truly-visible alternatives.
+                if action != "ASSERT":
+                    logger.debug(
+                        "Skipping hidden element '%s' (is_visible=False) for placeholder '%s' (action=%s)",
+                        selector,
+                        description,
+                        action,
+                    )
+                # Apply penalty by reducing score — if it drops below threshold, element won't be ranked
+                # Since we haven't computed the score yet, skip this element entirely for non-ASSERT actions.
+                if action != "ASSERT":
+                    continue
+                # For ASSERT: continue but note in scoring (penalty applied after base score)
+
             # Extract visual enrichment variables for use in scoring
             lowered = description.replace("_", " ").lower()
             icon_classes = str(element.get("icon_classes", "")).lower()
@@ -677,6 +716,11 @@ class PlaceholderResolver:
             # Extract element text once for use in multiple scoring rules below.
             element_text = str(element.get("text", "")).strip()
 
+            # Visibility penalty for ASSERT actions (Session 2 continuation): hidden elements get
+            # a heavy score reduction so visible alternatives rank higher.
+            if action == "ASSERT" and element.get("is_visible") is False:
+                score -= 40
+
             # Text-content penalty for CLICK actions: elements with NO visible text should be
             # penalized when the description contains meaningful content words (not just stop words).
             # This prevents an empty newsletter input (#subscribe) from beating a button with
@@ -759,6 +803,27 @@ class PlaceholderResolver:
                     visual_overlap = len(visual_words.intersection(desc_word_set))
                     if visual_overlap > 0:
                         score += visual_overlap
+
+            # Text-content bonus: when element's visible text directly matches the
+            # action description, apply +10 bonus. This breaks ties where multiple
+            # candidates have similar structural scores but only one has the right text.
+            # Example: "Products" link (text="Products") should beat brand links
+            # that happen to share the same attribute scores.
+            if element_text:
+                norm_elem_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
+                norm_desc_text = re.sub(r"['\"']", "", description)
+                norm_desc_text = re.sub(r"[_\s]+", " ", norm_desc_text).strip().lower()
+                # Direct containment: element text is contained in description or vice versa
+                if norm_elem_text in norm_desc_text or norm_desc_text in norm_elem_text:
+                    score += 10
+                # Word overlap bonus: significant words overlap
+                else:
+                    elem_text_words = set(norm_elem_text.split())
+                    desc_text_words = set(norm_desc_text.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
+                    if desc_text_words:
+                        text_overlap = len(elem_text_words & desc_text_words)
+                        if text_overlap >= max(1, len(desc_text_words) // 2):
+                            score += 5
 
             if score >= self.match_threshold:
                 ranked.append((score, element))

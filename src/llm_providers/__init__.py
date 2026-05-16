@@ -194,6 +194,26 @@ class LMStudioProvider(LLMProvider):
             else None,
         )
 
+    def get_loaded_model(self, timeout: int = 5) -> str | None:
+        """Return the model ID that is currently loaded in LM Studio memory.
+
+        Queries LM Studio's native API endpoint which exposes model state.
+        Returns the first LLM-type model whose state is 'loaded', or None
+        if no model is currently loaded (e.g. JIT-loading mode).
+        """
+        try:
+            # /api/v0/models is LM Studio's native endpoint (not OpenAI-compatible)
+            # so hit the base URL directly, not the /v1 proxy
+            response = self._client.get(f"{self._base_url}/api/v0/models", timeout=timeout)
+            response.raise_for_status()
+            for model in response.json().get("data", []):
+                if model.get("state") == "loaded" and model.get("type") in ("llm", "vlm"):
+                    return model["id"]
+        except Exception:
+            # If the endpoint is unavailable, fall back gracefully
+            pass
+        return None
+
     def list_models(self, timeout: int = 30) -> list[str]:
         response = self._client.get("/models", timeout=timeout)
         response.raise_for_status()

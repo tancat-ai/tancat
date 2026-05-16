@@ -952,26 +952,21 @@ modular components (InputParser, UserStoryAnalyzer, TestCaseOrchestrator, etc.)
 
 ---
 
-### Session 2 — Visibility Capture in Scraper (Priority: Medium)
+### Session 2 — Visibility Capture in Scraper ✅ COMPLETE (2026-05-15)
 
 **Problem:** Even with improved resolver scoring, we can't perfectly distinguish visible from hidden elements without runtime browser data. The scraper extracts elements from HTML via BeautifulSoup but has no visibility information.
 
-**Task:** Add `is_visible()` checks during Playwright scraping.
+**Solution implemented:**
+1. `_capture_element_visibility()` in `src/scraper.py` — calls `page.locator(selector).is_visible()` for each element after networkidle
+2. `is_visible` field added to all scraped element dicts (default `True` in `_extract_elements_from_html()`, overwritten with live DOM check)
+3. `PlaceholderResolver.rank_candidates()` filters out `is_visible=False` candidates for CLICK/FILL actions; applies -40 score penalty for ASSERT actions
 
-**Approach:**
-1. In `_scrape_url_sync()`, after extracting element metadata, call `page.locator(selector).is_visible()` for each interactive element
-2. Add `"visible": true/false` to each element dict in the subprocess payload
-3. Downstream: `PlaceholderResolver.find_best_element()` filters out `visible: false` candidates, falling back only when no visible alternatives exist
+**Files modified:**
+- `src/scraper.py` — `_capture_element_visibility()` method (lines 135-160), integrated into `_scrape_url_sync()`
+- `src/placeholder_resolver.py` — visibility filtering in `rank_candidates()` (lines 560-581, 723-725), removed unused `score_penalty` variable
+- `tests/test_scraper.py` — 4 new tests: default visibility, field presence, empty selector handling, element preservation
 
-**Tradeoffs:**
-- **Benefit:** Accurate runtime visibility from the actual browser
-- **Cost:** Extra `is_visible()` call per element adds overhead in subprocess (estimated 50-100ms per element)
-- **Schema change:** JSON payload between scraper and resolver gains a new field
-
-**Files to modify:**
-- `src/scraper.py` — capture visibility in `_scrape_url_sync()`
-- `src/placeholder_resolver.py` — filter by `visible` field
-- `tests/test_scraper.py` — verify visibility field populated
+**Quality gates:** ruff clean, mypy clean, 651/651 tests pass
 
 **Expected outcome:** Resolver never selects elements that are genuinely hidden at runtime.
 

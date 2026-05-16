@@ -102,7 +102,17 @@ class LLMClient:
             if env_model:
                 return env_model
 
-        # 2. If no env var, try to list models and pick the first one (for local providers)
+        # 2. For LM Studio, check what model is currently loaded in memory
+        if self._provider.provider_name == "lm-studio":
+            from src.llm_providers import LMStudioProvider
+
+            if isinstance(self._provider, LMStudioProvider):
+                loaded = self._provider.get_loaded_model(timeout=5)
+                if loaded:
+                    self._debug(f"Using loaded model: {loaded}")
+                    return loaded
+
+        # 3. If no env var, try to list models and pick the first one (for local providers)
         if self._provider.provider_name in ("ollama", "lm-studio"):
             try:
                 models = self.list_models(timeout=5)
@@ -112,7 +122,7 @@ class LLMClient:
             except Exception as e:
                 self._debug(f"Failed to auto-detect model: {e}")
 
-        # 3. Final fallbacks
+        # 4. Final fallbacks
         if self._provider.provider_name == "ollama":
             return "qwen2.5:7b"
         if self._provider.provider_name == "lm-studio":

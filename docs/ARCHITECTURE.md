@@ -139,9 +139,16 @@ The LLM generates pytest test skeletons using `{{ACTION:description}}` placehold
 Pages are scraped statelessly first. Then cart/checkout pages are upgraded with session-aware scraping. Pages with 0 elements get a stateful retry.
 
 ### Phase 4: Placeholder Resolution
-`placeholder_orchestrator.py` → `placeholder_resolver.py` → `locator_scorer.py` → `semantic_candidate_ranker.py` (LLM tiebreaker)
+`placeholder_orchestrator.py` → `placeholder_resolver.py` → `semantic_candidate_ranker.py` (LLM tiebreaker, called from orchestrator)
 
-For each journey step, placeholders are resolved sequentially while tracking the active page. The resolver scopes to the current journey URL first, then falls back to all scraped pages. When multiple candidates have similar scores, the semantic ranker uses the LLM to choose.
+For each journey step, placeholders are resolved sequentially while tracking the active page. The resolver scopes to the current journey URL first, then falls back to all scraped pages. `placeholder_resolver.py` uses inline word-overlap scoring with:
+- `semantic_matcher.py` — word tokenization
+- `intent_matcher.py` — intent-based filtering (CLICK needs clickable, FILL needs fillable)
+- `locator_builder.py` — robust selector construction
+
+When top candidates are within a score threshold, `semantic_candidate_ranker.py` (called from `placeholder_orchestrator`, not the resolver) uses the LLM as tiebreaker.
+
+**Note:** `locator_scorer.py` is NOT part of design-time placeholder resolution. It is used by `locator_fallback.py` (runtime fallback when primary locator fails) and `failure_reporter.py` (diagnostic scoring).
 
 ### Phase 5: Post-Processing
 `orchestrator.py` → `code_postprocessor.py` → `code_validator.py`
@@ -262,11 +269,11 @@ graph TD
     POrc --> URLInfer
     Journey --> FormDetect
     Journey --> StateTrack
-    Res --> Score
-    Res --> Rank
     Res --> SemMatch
     Res --> IntentMatch
+    POrc --> Rank
     Rank --> LLM
+    FReport --> Score
     PostProc --> CodeNorm
     PostProc --> LLMFilter
     PostProc --> Val
@@ -329,7 +336,7 @@ graph TD
 | `strict mode violation: resolved to 2 elements` | `placeholder_resolver.py` — ambiguous locator | 4 |
 | Last criteria get no generated tests | `test_generator.py` — LLM truncation | 2 |
 | "pytest.skip: Locator not found" | `placeholder_resolver.py` — no DOM match for description | 4 |
-| Wrong element matched for action | `locator_scorer.py`, `semantic_candidate_ranker.py` | 4 |
+| Wrong element matched for action | `placeholder_resolver.py` (scoring), `semantic_candidate_ranker.py` (LLM tiebreaker) | 4 |
 | Cross-page locator mismatch warning | `placeholder_orchestrator.py` → `_verify_page_context()` | 4 |
 | Reports missing failure diagnostics | `evidence_loader.py`, `failure_reporter.py` | 6 |
 | Generated test fails: `ERR_CONNECTION_REFUSED` | Target site unreachable (not a tool bug) | Runtime |

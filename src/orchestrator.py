@@ -33,10 +33,7 @@ from src.skeleton_parser import SkeletonParser
 from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
-from src.url_utils import (
-    build_common_path_candidates,
-    extract_route_concepts,
-)
+from src.url_utils import extract_route_concepts
 
 logger = logging.getLogger(__name__)
 
@@ -611,29 +608,17 @@ class TestOrchestrator:
         user_story: str,
         conditions: str,
     ) -> list[str]:
-        """Return a tightly-scoped list of URLs needed for the current journeys.
+        """Return seed URLs only — journey discovery finds all reachable pages.
 
-        IMPORTANT: LLM-generated PAGES_NEEDED URLs (``page_requirements``) are intentionally
-        NOT used as scrape targets because the LLM hallucinates plausible-sounding but
-        incorrect paths (e.g. ``/category_details/1`` instead of ``/category_products/1``).
+        URL guessing via common path patterns has been removed because the journey
+        scraper navigates the site statefully, following links and form submissions,
+        capturing all pages and elements without guessing URL patterns.
 
-        Instead we rely on:
-        1. User-provided seed URLs — always correct, provided by the human
-        2. Common path candidates built from route concepts extracted from user stories,
-           conditions and placeholder descriptions — these generate sensible patterns like
-           ``/cart``, ``/checkout``, ``/view_cart`` without LLM guessing
-
-        The scraper captures actual URLs it visits (including redirects), so any page the
-        site actually has will be discovered through navigation from seed pages. There is
-        no benefit in asking an LLM to guess URL paths it cannot possibly know.
+        The scraper captures actual URLs it visits (including redirects), so any page
+        the site actually has will be discovered through navigation from seed pages.
         """
-        placeholder_descriptions = [
-            placeholder.description for journey in journeys for placeholder in journey.placeholders
-        ]
-        concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions])
-        # Deliberately skip page_requirements (LLM-guessed URLs) — use only seed URLs
-        # and algorithmically-generated common path candidates.
-        return list(dict.fromkeys(seed_urls + build_common_path_candidates(seed_urls, concepts)))
+        # Deduplicate while preserving order — journey discovery handles the rest
+        return list(dict.fromkeys(seed_urls))
 
     # Backwards-compatible delegation methods for code that references these directly on TestOrchestrator.
     async def _resolve_placeholder_for_page(

@@ -168,8 +168,14 @@ scraper     scraper      candidate_ranker
                             │
    ┌────────┬───────────────┤
    ▼        ▼               ▼
-placeholder_resolver ← locator_scorer (scores candidates)
+placeholder_resolver ← semantic_matcher + intent_matcher (inline scoring)
    │
+   └→ semantic_candidate_ranker (LLM tiebreaker, called from placeholder_orchestrator)
+   └→ locator_builder (robust selector construction)
+
+Runtime (after test generation):
+   locator_fallback ← locator_scorer (scores candidates for fallback)
+   failure_reporter ← locator_scorer (diagnostic scoring)
    ▼
 code_postprocessor (fixes syntax, normalizes code)
 

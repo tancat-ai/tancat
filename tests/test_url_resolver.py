@@ -88,17 +88,25 @@ def test_exact_match_prefers_html_route_over_bare_static_guess() -> None:
     assert resolver.resolve("cart") == "https://www.saucedemo.com/cart.html"
 
 
-def test_build_mapping_with_concepts_generates_candidates() -> None:
+def test_build_mapping_with_concepts_no_scraped_urls() -> None:
+    """Concepts no longer generate fallback candidates — journey scraper is the source of truth.
+
+    build_common_path_candidates() was changed to return [] (URL guessing removed).
+    When no scraped URLs are available, keywords cannot be resolved even with concepts.
+    """
     resolver = UrlResolver()
     resolver.build_mapping(
         keywords=["products", "cart"],
-        scraped_urls=[],  # No scraped URLs — should use common path candidates
+        scraped_urls=[],  # No scraped URLs available
         seed_url="https://www.example.com/",
         concepts=["products", "cart"],
     )
-    # Should generate common path candidates
-    assert resolver.resolve("products") is not None
-    assert resolver.resolve("cart") is not None
+    # Without scraped URLs, keywords cannot be resolved (common path candidates removed)
+    assert resolver.resolve("products") is None
+    assert resolver.resolve("cart") is None
+    # But home/homepage/login are always mapped to seed_url
+    assert resolver.resolve("home") == "https://www.example.com/"
+    assert resolver.resolve("homepage") == "https://www.example.com/"
 
 
 # ------------------------------------------------------------------

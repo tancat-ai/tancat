@@ -57,66 +57,13 @@ def extract_route_concepts(texts: list[str]) -> set[str]:
 
 
 def build_common_path_candidates(seed_urls: list[str], concepts: set[str]) -> list[str]:
-    """Construct common route URLs from the supplied starting pages.
+    """URL guessing removed — journey discovery finds all reachable pages.
 
-    Generates multiple common path variations for each concept to maximise the
-    chance that at least one candidate matches the target site's actual URLs.
-
-    Common URL patterns covered:
-    - Products: /products, /shop, /store, /catalog, /inventory, /inventory.html
-    - Cart: /cart, /view_cart, /shopping_cart, /shopping-cart
-    - Checkout: /checkout, /check-out, /checkout-step-one
+    This function is kept as a stub for backwards compatibility but returns
+    an empty list. The journey scraper navigates the site statefully,
+    capturing all pages and elements without guessing URL patterns.
     """
-    candidates: list[str] = []
-    if not seed_urls:
-        return candidates
-
-    # Common URL pattern variations for each concept
-    products_paths = [
-        "products",
-        "shop",
-        "store",
-        "catalog",
-        "inventory",
-        "inventory.html",
-        "product",
-        "all-products",
-        "browse",
-    ]
-    cart_paths = [
-        "cart",
-        "view_cart",
-        "shopping_cart",
-        "shopping-cart",
-        "my-cart",
-        "basket",
-        "my-basket",
-    ]
-    checkout_paths = [
-        "checkout",
-        "check-out",
-        "checkout-step-one",
-        "checkout/payment",
-        "checkout/review",
-    ]
-
-    for seed_url in seed_urls:
-        parsed = urlparse(seed_url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}/"
-
-        if "products" in concepts:
-            for path in products_paths:
-                candidates.append(urljoin(base_url, path))
-
-        if "cart" in concepts:
-            for path in cart_paths:
-                candidates.append(urljoin(base_url, path))
-
-        if "checkout" in concepts:
-            for path in checkout_paths:
-                candidates.append(urljoin(base_url, path))
-
-    return list(dict.fromkeys(candidates))
+    return []
 
 
 def heuristic_url_from_description(current_url: str, description: str) -> str | None:

@@ -8,7 +8,7 @@
 
 ## 1. What This Project Does
 
-Generates Playwright Python test scripts from user stories using a local LLM (Ollama).
+Generates Playwright Python test scripts from user stories using a local LLM.
 Primary interface: Streamlit UI (`streamlit_app.py`). Secondary: CLI (`cli/main.py`, launched by `launch_cli.sh`).
 Tests are written to `generated_tests/`, run via pytest, and evidence exported as Jira/HTML/JSON.
 
@@ -195,6 +195,8 @@ OLLAMA_TIMEOUT=300          # Must be 300 — default 60s causes timeouts
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
+**LM Studio model detection** — When using LM Studio without `LM_STUDIO_MODEL` set, the system auto-detects the model currently loaded in memory via `/api/v0/models` (state=`"loaded"`). This avoids triggering a model reload when the user has a different model loaded than the fallback default. Set `LM_STUDIO_MODEL` only to force a specific model.
+
 **Setup:**
 ```bash
 uv sync
@@ -288,7 +290,7 @@ These rules exist because of real failures. Follow them.
 The following improvements were added to reduce wrong locator matches and surface failure diagnostics:
 
 - **Text-Content Validation** — `PlaceholderResolver.text_matches_description()` validates element text matches action description before accepting a match. Prevents `#subscribe` being matched for "Continue Shopping".
-- **Confidence Threshold** — `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches. `LocatorScorer` applies +10 bonus when element text matches action description.
+- **Confidence Threshold** — `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches. `PlaceholderResolver.rank_candidates()` applies +10 text-content bonus when element text matches action description. `LocatorScorer` (separate module) is used by runtime fallback (`locator_fallback.py`) and diagnostics (`failure_reporter.py`), NOT design-time resolution.
 - **Page-Context Validation** — `PlaceholderOrchestrator._verify_page_context()` logs warnings when a resolved locator was scraped from a different page.
 - **Evidence Loader** — `src/evidence_loader.py` loads evidence JSON from test packages for reports.
 - **Enriched Reports** — All 3 report formats now include "Failure Diagnostics" section with page URL, failure note, suggested alternatives, available elements, screenshot paths.
@@ -380,5 +382,5 @@ Consolidated entry point for all debug scripts. Run `--help` for available comma
 
 ---
 
-*Last updated: 2026-05-08*
+*Last updated: 2026-05-15*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*
