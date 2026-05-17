@@ -51,6 +51,21 @@
 - **Replaced by:** skeleton-first two-phase pipeline
 - **Rule:** Do not use or restore this module
 
+## Dead Code — Confirmed (DO NOT RESURRECT)
+
+These methods exist in source files but are **never called by the live pipeline**.
+They were confirmed dead on 2026-05-16 by tracing the orchestrator call graph.
+Cline: do not call, reference, or restore these methods without explicit approval.
+
+| Method | File | Lines | Why Dead |
+|--------|------|-------|----------|
+| `find_best_match()` | `placeholder_resolver.py` | 843–859 | Orchestrator calls `rank_candidates()` + `build_robust_locator()` directly |
+| `find_best_element()` | `placeholder_resolver.py` | 411–533 | Only called by `find_best_match()` which is itself dead |
+| `resolve_all()` | `placeholder_resolver.py` | 902–931 | Not called from orchestrator path |
+| `_disambiguate_with_llm()` | `placeholder_resolver.py` | 323–409 | Superseded by `SemanticCandidateRanker` |
+
+**Deletion target:** Phase 1 of resolver restructure. See `RESTRUCTURE_PLAN.md`.
+
 ## Environment Setup
 
 ```bash
@@ -137,10 +152,32 @@ tracker.write(status: str = "passed") -> str  # returns sidecar path
 - **Phase 1:** LLM generates skeletons with `{{ACTION:description}}` placeholders — never sees real locators
 - **Phase 2:** `PlaceholderOrchestrator` coordinates resolution using scraped DOM data
 - **LocatorScorer priority:** `data-testid > id > name > aria-label > css-class > text > xpath` (+10 bonus for text match)
-- **SemanticCandidateRanker:** LLM tiebreaker when top candidates within ±2 score threshold
 - **Confidence threshold:** `PLACEHOLDER_MIN_CONFIDENCE` env var (default 0.3) rejects low-confidence matches
 - **Page-context validation:** `_verify_page_context()` warns if locator scraped from different page than journey URL
 - See `docs/ARCHITECTURE.md` §4 for full dependency graph
+
+#### Live Resolution Call Graph (confirmed 2026-05-16)
+```
+Entry: PlaceholderOrchestrator._replace_placeholders_sequentially()
+  → _resolve_placeholder_for_page()
+    → UrlResolver.resolve()                              [GOTO/URL — primary]
+    → PlaceholderResolver.resolve_url()                  [GOTO/URL — fallback]
+    → _find_best_element_for_current_page()              [CLICK/FILL/ASSERT]
+      → PlaceholderResolver.rank_candidates()            [scoring — LIVE]
+      → SemanticCandidateRanker.choose_best_candidate()  [when shortlist > 1]
+      → _validate_text_match()
+        → PlaceholderResolver.text_matches_description()
+      → build_robust_locator()                           [from locator_builder]
+```
+
+**Live methods in `PlaceholderResolver` (do not delete):**
+`rank_candidates()`, `resolve_url()`, `text_matches_description()`
+
+**⚠️ NOTE — Restructure in progress (feat/resolver-restructure):**
+`_find_best_element_for_current_page()` is being rewritten as an LLM-first
+priority chain (Pass 1: text match → Pass 2: structural match → Pass 3: LLM
+arbitration → Pass 4: skip). Do not add complexity to the current scoring
+logic — it is being replaced. See `RESTRUCTURE_PLAN.md`.
 
 ## Test Folder Coverage
 
@@ -181,8 +218,9 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 - **2026-04-22:** Test folder cleanup — removed stale `tests/src/` (duplicates of src/ files),
   `tests/example_test.py`, `tests/uat_pipeline_test.py`, `tests/coverage.xml`.
   Deleted deprecated `src/page_context_scraper.py`. 299 tests passing.
+- **2026-05-16:** Resolver audit — live call graph traced and documented, four dead methods confirmed in `placeholder_resolver.py`, resolver restructure plan created (`RESTRUCTURE_PLAN.md`), vulture findings documented.
 
 ---
 
-*Last Updated: 2026-04-22*
-*Project Status: CI green — Pipeline architecture, multi-provider LLM, Evidence Tracker (AI-018), CLI split complete.*
+*Last Updated: 2026-05-16*
+*Project Status: CI green — Resolver restructure in progress (feat/resolver-restructure). Dead code confirmed, deletion pending Phase 1. Live call graph documented above.*

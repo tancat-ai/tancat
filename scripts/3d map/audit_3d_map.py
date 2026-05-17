@@ -4,7 +4,7 @@ import csv
 import os
 from collections import defaultdict
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ── 1. Load nodes ──────────────────────────────────────────────────────
 nodes_by_label = {}
@@ -13,7 +13,7 @@ with open(os.path.join(BASE, "docs/nodes.csv")) as f:
     for row in csv.DictReader(f):
         label = row["label"]
         nodes_by_label[label] = row
-        clean = label.lstrip("./")
+        clean = label.removeprefix("./")
         nodes_by_clean[clean] = row
 
 # ── 2. Load links ──────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ print("=" * 60)
 # Dead nodes: in nodes.csv but file doesn't exist
 dead_nodes = []
 for label, row in nodes_by_label.items():
-    clean = label.lstrip("./")
+    clean = label.removeprefix("./")
     full_path = os.path.join(BASE, clean)
     if not os.path.exists(full_path):
         dead_nodes.append((label, row["group"], row["size"]))
@@ -47,8 +47,9 @@ def normalize(label: str) -> str | None:
         return label
     if "./" + label in nodes_by_label:
         return "./" + label
-    if label.lstrip("./") in nodes_by_clean:
-        return "./" + label.lstrip("./")
+    clean = label.removeprefix("./")
+    if clean in nodes_by_clean:
+        return "./" + clean
     return None
 
 

@@ -361,7 +361,7 @@ source,target,type
 ./docs/plans/AI-017_plan.md,./streamlit_app.py,references
 ./docs/plans/AI-017_plan.md,./tests/test_test_plan.py,references
 ./docs/plans/AI-018_plan.md,./generated_tests/conftest.py,references
-./docs/plans/AI-018_plan.md,gitignore,references
+./docs/plans/AI-018_plan.md,./.gitignore,references
 ./docs/plans/AI-018_plan.md,./src/evidence_tracker.py,references
 ./docs/plans/AI-018_plan.md,./tests/test_evidence_tracker.py,references
 ./docs/plans/AI-019_plan.md,./src/llm_client.py,references
@@ -409,7 +409,7 @@ source,target,type
 ./docs/plans/FEATURE_PLAN_test_prerequisite_injection.md,./src/pipeline_writer.py,references
 ./docs/plans/FEATURE_PLAN_test_prerequisite_injection.md,./src/prerequisite_injector.py,references
 ./docs/plans/PK_CLEANUP_section1_audit.md,./AGENTS.md,references
-./docs/plans/PK_CLEANUP_section1_audit.md,clinerules,references
+./docs/plans/PK_CLEANUP_section1_audit.md,./.clinerules,references
 ./docs/plans/PK_CLEANUP_section1_audit.md,./docs/PROJECT_KNOWLEDGE.md,references
 ./docs/specs/FEATURE_SPEC_AI023_locator_repair.md,./src/code_postprocessor.py,references
 ./docs/specs/FEATURE_SPEC_AI023_locator_repair.md,./src/locator_scorer.py,references
@@ -505,7 +505,6 @@ source,target,type
 ./streamlit_app.py,./src/test_generator.py,import
 ./streamlit_app.py,./src/test_plan.py,import
 ./streamlit_app.py,./src/user_story_parser.py,import
-./tests/test_cli_test_orchestrator.py,cli/test_orchestrator.py,tests
 ./tests/test_code_validator.py,./src/code_validator.py,tests
 ./tests/test_coverage_utils.py,./src/coverage_utils.py,tests
 ./tests/test_evidence_tracker.py,./src/evidence_tracker.py,tests
@@ -522,9 +521,6 @@ source,target,type
 ./tests/test_page_object_builder.py,./src/page_object_builder.py,tests
 ./tests/test_page_object_builder.py,./src/pipeline_models.py,tests
 ./tests/test_pipeline_models.py,./src/pipeline_models.py,tests
-tests/test_pipeline_package_integration.py,./src/orchestrator.py,tests
-tests/test_pipeline_package_integration.py,./src/pipeline_run_service.py,tests
-tests/test_pipeline_package_integration.py,./src/pipeline_writer.py,tests
 ./tests/test_pipeline_report_service.py,./src/pipeline_report_service.py,tests
 ./tests/test_pipeline_report_service.py,./src/pytest_output_parser.py,tests
 ./tests/test_pipeline_run_service.py,./src/pipeline_run_service.py,tests
@@ -549,7 +545,6 @@ tests/test_pipeline_package_integration.py,./src/pipeline_writer.py,tests
 ./tests/test_stateful_scrape_switch.py,./src/orchestrator.py,tests
 ./tests/test_stateful_scrape_switch.py,./src/test_generator.py,tests
 ./tests/test_stateful_scraper.py,./src/stateful_scraper.py,tests
-tests/test_test_generator.py,./src/test_generator.py,tests
 ./tests/test_test_plan.py,./src/spec_analyzer.py,tests
 ./tests/test_test_plan.py,./src/test_plan.py,tests
 ./tests/test_user_story_parser.py,./src/user_story_parser.py,tests

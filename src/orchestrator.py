@@ -345,11 +345,7 @@ class TestOrchestrator:
         final_code = normalise_generated_code(
             final_code, consent_mode=consent_mode, target_url=self._starting_url or ""
         )
-        unresolved = [
-            resolution
-            for resolution in self._resolver.resolve_all(placeholders, scraped_data)
-            if "pytest.skip" in resolution
-        ]
+        unresolved = [line.strip() for line in final_code.splitlines() if "pytest.skip(" in line]
         self.last_result = PipelineRunResult(
             skeleton_code=skeleton_code,
             final_code=final_code,

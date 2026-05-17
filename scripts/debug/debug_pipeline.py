@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Debug pipeline — full end-to-end placeholder trace.
+"""Debug pipeline -- full end-to-end placeholder trace.
 
 Runs the skeleton-first pipeline step-by-step and prints diagnostics at each
 stage so the exact point of failure is visible rather than inferred.
 
 Usage:
-    # Full trace (skeleton → scrape → resolve → final code)
+    # Full trace (skeleton -> scrape -> resolve -> final code)
     python scripts/debug_pipeline.py --url https://saucedemo.com --story "As a user I want to login"
 
     # Inspect text validation logic only
@@ -18,10 +18,10 @@ Usage:
     PIPELINE_DEBUG=1 python scripts/debug_pipeline.py --url https://saucedemo.com --story "..."
 
 Each stage prints:
-  Stage 1 — Skeleton: placeholders found
-  Stage 2 — Scrape: elements per page
-  Stage 3 — Resolve: candidate ranking + selected locator per placeholder
-  Stage 4 — Final code: whether each resolved locator survived into output
+  Stage 1 -- Skeleton: placeholders found
+  Stage 2 -- Scrape: elements per page
+  Stage 3 -- Resolve: candidate ranking + selected locator per placeholder
+  Stage 4 -- Final code: whether each resolved locator survived into output
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Sample data for standalone inspections ────────────────────────────
+# -- Sample data for standalone inspections ------------------------------
 
 SAMPLE_SKELETON = """
 def test_01_browse_products(page):
@@ -69,7 +69,7 @@ SAMPLE_PLACEHOLDERS = [
     ("ASSERT", "cart page with selected items"),
 ]
 
-# ── Stage 0: Text Validation Inspection ───────────────────────────────
+# -- Stage 0: Text Validation Inspection ---------------------------------
 
 
 def inspect_text_validation() -> None:
@@ -93,13 +93,13 @@ def inspect_text_validation() -> None:
     ]
 
     print("=" * 80)
-    print("STAGE 0 — TEXT VALIDATION INSPECTION")
+    print("STAGE 0 -- TEXT VALIDATION INSPECTION")
     print("=" * 80)
 
     all_pass = True
     for element_text, description, expected in test_cases:
         result = resolver.text_matches_description(element_text, description)
-        status = "✅ PASS" if result == expected else "❌ FAIL"
+        status = "[PASS]" if result == expected else "[FAIL]"
         if result != expected:
             all_pass = False
         print(f"  {status} | element='{element_text}' desc='{description}' -> {result} (expected {expected})")
@@ -108,11 +108,11 @@ def inspect_text_validation() -> None:
     if all_pass:
         print("All text validation checks passed!")
     else:
-        print("Some text validation checks FAILED — review needed.")
+        print("Some text validation checks FAILED -- review needed.")
     print()
 
 
-# ── Stage A: Skeleton Placeholder Extraction ──────────────────────────
+# -- Stage A: Skeleton Placeholder Extraction ---------------------------
 
 
 def inspect_skeleton_placeholders() -> None:
@@ -122,7 +122,7 @@ def inspect_skeleton_placeholders() -> None:
     parser = SkeletonParser()
 
     print("=" * 80)
-    print("STAGE A — SKELETON PLACEHOLDER EXTRACTION")
+    print("STAGE A -- SKELETON PLACEHOLDER EXTRACTION")
     print("=" * 80)
     print()
 
@@ -147,7 +147,7 @@ def inspect_skeleton_placeholders() -> None:
     print()
 
 
-# ── Stage B: Placeholder Resolution Inspection (async) ────────────────
+# -- Stage B: Placeholder Resolution Inspection (async) ------------------
 
 
 async def inspect_placeholder_resolution(seed_url: str) -> None:
@@ -156,7 +156,7 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
     from src.scraper import PageScraper
 
     print("=" * 80)
-    print(f"STAGE B — PLACEHOLDER RESOLUTION INSPECTION  (seed: {seed_url})")
+    print(f"STAGE B -- PLACEHOLDER RESOLUTION INSPECTION  (seed: {seed_url})")
     print("=" * 80)
     print()
 
@@ -167,7 +167,7 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
     print("[Scrape] Fetching seed URL...")
     elements, error, final_url = await scraper.scrape_url(seed_url)
     if error:
-        print(f"  ⚠️  Scraping error: {error}")
+        print(f"  [WARNING] Scraping error: {error}")
     else:
         display_url = final_url if final_url else seed_url
         print(f"  Scraped {len(elements)} elements from {display_url}")
@@ -203,14 +203,14 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
         best = resolver.find_best_element(action, description, elements)
         if best:
             resolved_selector = resolver._build_robust_locator(best)
-            print(f"    ✅ Resolved to: {resolved_selector}")
+            print(f"    [OK] Resolved to: {resolved_selector}")
         else:
-            print("    ❌ No match found — will generate pytest.skip()")
+            print("    [FAIL] No match found -- will generate pytest.skip()")
 
     print()
 
 
-# ── Stage C: Full Pipeline Trace ──────────────────────────────────────
+# -- Stage C: Full Pipeline Trace ----------------------------------------
 
 
 def _extract_placeholder_pattern() -> re.Pattern:
@@ -230,7 +230,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     from src.test_generator import TestGenerator
 
     print("=" * 80)
-    print("STAGE C — FULL PIPELINE TRACE")
+    print("STAGE C -- FULL PIPELINE TRACE")
     print(f"  URL: {url}")
     print(f"  Story: {user_story}")
     print(f"  Conditions: {conditions or '(auto-detect)'}")
@@ -240,10 +240,10 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     parser = SkeletonParser()
     ph_regex = _extract_placeholder_pattern()
 
-    # ── Stage 1: Generate Skeleton ──────────────────────────────────
-    print("─" * 60)
-    print("STAGE 1 — SKELETON GENERATION")
-    print("─" * 60)
+    # -- Stage 1: Generate Skeleton ------------------------------------
+    print("-" * 60)
+    print("STAGE 1 -- SKELETON GENERATION")
+    print("-" * 60)
 
     llm_client = LLMClient()
     test_generator = TestGenerator(client=llm_client)
@@ -265,7 +265,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
             expected_count=3,
         )
     except Exception as e:
-        print(f"  ❌ Skeleton generation failed: {e}")
+        print(f"  [FAIL] Skeleton generation failed: {e}")
         print("\n  NOTE: If the LLM is unavailable, use --text-validation or")
         print("  --skeleton-inspection for offline diagnostics.")
         return
@@ -289,10 +289,10 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
         print(f"      token: {token}")
     print()
 
-    # ── Stage 2: Scrape ─────────────────────────────────────────────
-    print("─" * 60)
-    print("STAGE 2 — DOM SCRAPING")
-    print("─" * 60)
+    # -- Stage 2: Scrape -----------------------------------------------
+    print("-" * 60)
+    print("STAGE 2 -- DOM SCRAPING")
+    print("-" * 60)
 
     # We need to run the pipeline to get scraped data, so let it run.
     # Then we inspect the results.
@@ -306,7 +306,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
             target_urls=[url],
         )
     except Exception as e:
-        print(f"  ❌ Pipeline failed: {e}")
+        print(f"  [FAIL] Pipeline failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -314,13 +314,13 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
 
     result = orchestrator.last_result
     if result is None:
-        print("  ❌ PipelineRunResult not captured")
+        print("  [FAIL] PipelineRunResult not captured")
         return
 
-    # ── Stage 2 (post-pipeline): Show scraped data ──────────────────
-    print("─" * 60)
-    print("STAGE 2 — SCRAPED DATA (post-pipeline)")
-    print("─" * 60)
+    # -- Stage 2 (post-pipeline): Show scraped data --------------------
+    print("-" * 60)
+    print("STAGE 2 -- SCRAPED DATA (post-pipeline)")
+    print("-" * 60)
 
     for page_url, elements in result.scraped_pages.items():
         short_url = page_url[-60:] if len(page_url) > 60 else page_url
@@ -333,21 +333,21 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
             print(f"    ... and {len(elements) - 5} more")
     print()
 
-    # ── Stage 3: Resolution Results ─────────────────────────────────
-    print("─" * 60)
-    print("STAGE 3 — PLACEHOLDER RESOLUTION")
-    print("─" * 60)
+    # -- Stage 3: Resolution Results -----------------------------------
+    print("-" * 60)
+    print("STAGE 3 -- PLACEHOLDER RESOLUTION")
+    print("-" * 60)
 
     unresolved = result.unresolved_placeholders
     print(f"  Unresolved placeholders: {len(unresolved)}")
     for u in unresolved:
-        print(f"    ⚠️  {u}")
+        print(f"    [WARNING] {u}")
     print()
 
-    # ── Stage 4: Token Survival Analysis ────────────────────────────
-    print("─" * 60)
-    print("STAGE 4 — TOKEN SURVIVAL ANALYSIS")
-    print("─" * 60)
+    # -- Stage 4: Token Survival Analysis ------------------------------
+    print("-" * 60)
+    print("STAGE 4 -- TOKEN SURVIVAL ANALYSIS")
+    print("-" * 60)
     print()
     print("  Checking each skeleton placeholder against final code:")
     print()
@@ -356,7 +356,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     dropped_count = 0
 
     for token, action, desc in skeleton_tokens:
-        # Check if the raw token still appears (shouldn't — it should be replaced)
+        # Check if the raw token still appears (shouldn't -- it should be replaced)
         token_in_skeleton = token in skeleton_code
         token_in_final = token in final_code
 
@@ -381,12 +381,12 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
         else:
             locator_survived = None
 
-        status_icon = "✅" if locator_survived else "❌" if not locator_survived else "⚠️"
+        status_icon = "[OK]" if locator_survived else "[FAIL]" if not locator_survived else "[?]"
         survival_str = "YES" if locator_survived else "NO" if not locator_survived else "UNKNOWN"
 
         print(f"  {status_icon} ({action}) '{desc}'")
         print(f"     token in skeleton: {token_in_skeleton}")
-        print(f"     token in final:    {token_in_final} (should be False — replaced)")
+        print(f"     token in final:    {token_in_final} (should be False -- replaced)")
         print(f"     locator survived:  {survival_str}")
 
         if locator_survived:
@@ -396,10 +396,10 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
 
         print()
 
-    # ── Summary ─────────────────────────────────────────────────────
-    print("─" * 60)
-    print("STAGE 4 — SUMMARY")
-    print("─" * 60)
+    # -- Summary -------------------------------------------------------
+    print("-" * 60)
+    print("STAGE 4 -- SUMMARY")
+    print("-" * 60)
     print()
     print(f"  Total placeholders:     {len(skeleton_tokens)}")
     print(f"  Survived to final:      {survived_count}")
@@ -408,7 +408,7 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     print()
 
     if dropped_count > 0:
-        print("  ⚠️  LOCATORS WERE DROPPED — the pipeline resolved them but they")
+        print("  [WARNING] LOCATORS WERE DROPPED -- the pipeline resolved them but they")
         print("  did not appear in the final code. Investigate:")
         print("    1. replace_token_in_line() pattern matching")
         print("    2. normalise_generated_code() transformations")
@@ -416,9 +416,9 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
         print()
 
     # Show final code snippet
-    print("─" * 60)
+    print("-" * 60)
     print("FINAL CODE (first 80 lines)")
-    print("─" * 60)
+    print("-" * 60)
     final_lines = final_code.splitlines()
     for i, line in enumerate(final_lines[:80], 1):
         print(f"  {i:3d} | {line}")
@@ -427,12 +427,12 @@ async def trace_full_pipeline(url: str, user_story: str, conditions: str | None 
     print()
 
 
-# ── Main ──────────────────────────────────────────────────────────────
+# -- Main ---------------------------------------------------------------
 
 
 def main() -> None:
     """CLI entry point."""
-    ap = argparse.ArgumentParser(description="Debug pipeline — placeholder resolution inspector")
+    ap = argparse.ArgumentParser(description="Debug pipeline -- placeholder resolution inspector")
     ap.add_argument(
         "--url",
         help="Seed URL to scrape (e.g., https://saucedemo.com)",
@@ -476,7 +476,7 @@ def main() -> None:
 
     # Default: run all offline inspections, then ask for URL
     print("\n" + "=" * 80)
-    print("DEBUG PIPELINE — Placeholder Resolution Inspector")
+    print("DEBUG PIPELINE -- Placeholder Resolution Inspector")
     print("=" * 80 + "\n")
 
     inspect_text_validation()

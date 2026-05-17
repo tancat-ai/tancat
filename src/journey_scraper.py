@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -25,6 +26,7 @@ from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
+from src.accessibility_enricher import AccessibilityEnricher
 from src.form_detector import (
     ADD_TO_CART_SELECTORS,
     CONTINUE_SHOPPING_SELECTORS,
@@ -286,7 +288,16 @@ def _execute_journey_sync(
                     elif step.action == "capture":
                         html = page.content()
                         elements = html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-                        captured_pages[current_url] = elements
+                        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
+                        try:
+                            enriched = _capture_element_visibility_sync(page, elements)
+                            a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                            if a11y_snapshot is not None:
+                                enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
+                            captured_pages[current_url] = enriched
+                        except Exception:
+                            # Enrichment is additive — fall back to unenriched elements on failure
+                            captured_pages[current_url] = elements
 
                     elif step.action == "wait":
                         wait_desc = step.description or "1.0"
@@ -386,6 +397,55 @@ def execute_journey(
         )
 
     return JourneyResult.from_dict(data)
+
+
+# ────────────────────────────────────────────────────────────────
+# B-0XX: Enrichment helpers for consistent scrape quality
+# Reused across _execute_journey_sync, JourneyScraper._scrape_current_page,
+# and JourneyScraper._discover_selector to match PageScraper enrichment pipeline.
+# ────────────────────────────────────────────────────────────────
+
+
+def _capture_element_visibility_sync(
+    page: Any,
+    elements: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Check runtime visibility of each scraped element using Playwright is_visible()."""
+    for elem in elements:
+        selector = elem.get("selector")
+        if not selector:
+            continue
+        try:
+            loc = page.locator(selector).first
+            elem["is_visible"] = loc.is_visible()
+        except Exception:
+            pass  # Keep default is_visible value on lookup failure
+    return elements
+
+
+def _capture_a11y_snapshot_sync(
+    context: Any,
+    page: Any,
+) -> dict[str, Any] | None:
+    """Capture accessibility snapshot via CDP. Returns None if unavailable."""
+    try:
+        cdp_session = context.new_cdp_session(page)
+    except Exception:
+        return None
+
+    a11y_snapshot: dict[str, Any] = {"nodes": []}
+    try:
+        tree_response = cdp_session.send("Accessibility.getFullAXTree")
+        a11y_snapshot["nodes"] = tree_response.get("nodes", []) if isinstance(tree_response, dict) else []
+    except Exception:
+        pass  # Return empty nodes list on CDP failure
+
+    try:
+        cdp_session.detach()
+    except Exception:
+        pass
+
+    return a11y_snapshot
 
 
 class JourneyScraper:
@@ -540,7 +600,7 @@ class JourneyScraper:
                     # Scrape the starting page so elements are available for placeholder resolution.
                     # Without this, pages like login forms are never captured since auto-scrape
                     # only triggers after explicit navigate steps (line 244), not initial load.
-                    elements = self._scrape_current_page(page, current_url)
+                    elements = self._scrape_current_page(page, current_url, context)  # B-0XX: pass context
                     output[current_url] = elements
 
                 for step_index, step in enumerate(steps):
@@ -575,12 +635,16 @@ class JourneyScraper:
                                 page.wait_for_timeout(int(wait_time * 1000))
 
                             elif step.action == "scrape" and current_url:
-                                elements = self._scrape_current_page(page, current_url)
+                                elements = self._scrape_current_page(  # B-0XX: pass context
+                                    page, current_url, context
+                                )
                                 output[current_url] = elements
 
                             # Auto-scrape after navigation if no explicit scrape step
                             if step.action == "navigate" and current_url:
-                                elements = self._scrape_current_page(page, current_url)
+                                elements = self._scrape_current_page(  # B-0XX: pass context
+                                    page, current_url, context
+                                )
                                 output[current_url] = elements
 
                             current_url = page.url
@@ -614,14 +678,28 @@ class JourneyScraper:
         html = page.content()
         elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
 
+        # B-0XX: Apply enrichment for better candidate quality in selector discovery
+        try:
+            elements = _capture_element_visibility_sync(page, elements)
+        except Exception:
+            pass  # Additive — continue with unenriched on failure
+
         self._debug(f"Scraped {len(elements)} elements for discovery of '{description}'")
 
         # We don't have LLM context here, so we use rank_candidates directly
+        norm_desc = re.sub(r"[^\w\s]", " ", description).lower()
+        for element in elements:
+            raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
+            norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+            if len(norm_text) >= 3 and norm_text in norm_desc:
+                robust = build_robust_locator(element)
+                return robust or element.get("selector")
+
         ranked = self._resolver.rank_candidates(action, description, elements)
         if not ranked:
             return None
 
-        # Pick top candidate and build a robust locator
+            # Pick top candidate and build a robust locator
         _score, element = ranked[0]
         robust = build_robust_locator(element)
         return robust or element.get("selector")
@@ -684,10 +762,30 @@ class JourneyScraper:
             self._debug(f"Fill exception: {e}")
             raise
 
-    def _scrape_current_page(self, page: Any, url: str) -> list[dict[str, Any]]:
-        """Scrape elements from the current page state."""
+    def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
+        """Scrape elements from the current page state.
+
+        Args:
+            page: Live Playwright page object.
+            url: Current page URL for base_url in extraction.
+            context: Optional browser context for CDP a11y snapshot (B-0XX).
+        """
         html = page.content()
-        return self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
+        elements = self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
+
+        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
+        try:
+            enriched = _capture_element_visibility_sync(page, elements)
+            if context is not None:
+                a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                if a11y_snapshot is not None:
+                    enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
+            return enriched
+        except Exception:
+            # Enrichment is additive — fall back to unenriched elements on failure
+            pass
+
+        return elements
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:

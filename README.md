@@ -6,7 +6,7 @@ An AI-powered tool that generates Playwright Python test scripts from user stori
 |--------|--------|
 | CI/CD Pipeline | [![CI](https://github.com/lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/AI-Playwright-Test-Generator/actions) |
 | Python Version | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
-| License | ![License](https://img.shields.io/badge/license-MIT-green.svg) |
+| License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | Code Quality | [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
 
 ## What It Does
@@ -212,4 +212,16 @@ For a full module responsibility map and dependency graph, see [ARCHITECTURE.md]
 
 ## License
 
-This project is provided as-is for personal and educational use.
+Copyright 2026 lacattano
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

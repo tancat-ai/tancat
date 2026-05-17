@@ -54,6 +54,8 @@ Thumbs.db
 logs/
 streamlit.err
 pytest_out*.txt
+uat_output*.txt
+vulture_report.txt
 
 # ── Testing & Coverage ────────────────────────────────────────────────────────
 .pytest_cache/
@@ -79,6 +81,7 @@ generated_tests/test_*/
 generated_tests/test_cases_*.*
 generated_tests/test_report_*.*
 generated_tests/pages/
+generated_tests/uat_*/
 
 # But specifically DO NOT ignore these files (needed for the tool to work)
 !generated_tests/conftest.py
@@ -115,4 +118,4 @@ scratch/generated_tests/
 # ── notebooks ──────────────
 
 notebooks/_debug_output.py
-notebooks/.ipynb_checkpoints/generated_tests/uat_*/
+notebooks/.ipynb_checkpoints/

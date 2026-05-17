@@ -33,6 +33,13 @@ When diagnosing placeholder resolution problems, scraper output, or skeleton gen
 - **E2E validation:** Use `scripts/uat/uat_automationexercise.py` after fixing placeholder-related issues
 - Do not modify pipeline modules without first establishing baseline behavior in the notebook
 
+# Terminal Environment Rules
+- The terminal is Git Bash (MINGW64) on Windows.
+- ALWAYS use forward slashes (`/`) for all paths and executable targets (e.g., `.venv/Scripts/python.exe`, `src/journey_scraper.py`).
+- NEVER use Windows CMD/PowerShell built-ins (e.g., do not use `type`, `dir`, `findstr`).
+- ALWAYS use standard POSIX/Bash equivalents (`cat`, `ls`, `grep`).
+- If you need to check if a file exists or do complex text processing, favor short python one-liners (e.g., `python -c "..."`) to avoid shell-specific escaping bugs.
+
 ## General Discipline
 - One feature per session (see AGENTS.md §10)
 - Never declare work done without running end-to-end

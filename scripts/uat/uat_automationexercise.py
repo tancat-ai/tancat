@@ -157,6 +157,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Save the generated tests to generated_tests/ directory",
     )
+    parser.add_argument(
+        "--verify-enrichment",
+        action="store_true",
+        help="Verify B-0XX scrape enrichment: check source modules have visibility + a11y code paths",
+    )
     return parser.parse_args(argv)
 
 
@@ -166,6 +171,47 @@ def configure_windows_console_encoding() -> None:
         return
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
+
+def _verify_b0xx_enrichment() -> bool:
+    """Verify B-0XX enrichment code paths exist in source modules.
+
+    Returns True if all checks pass, False otherwise.
+    """
+    print("\n[B-0XX Enrichment Verification]")
+    print("-" * 60)
+
+    journey_src = Path("src/journey_scraper.py").read_text()
+    stateful_src = Path("src/stateful_scraper.py").read_text()
+
+    enrichment_checks: dict[str, bool] = {
+        # JourneyScraper checks (Path A + B + C from spec)
+        "journey_scraper imports AccessibilityEnricher": "AccessibilityEnricher" in journey_src
+        and "from src.accessibility_enricher import" in journey_src,
+        "journey_scraper has _capture_element_visibility_sync helper": "_capture_element_visibility_sync"
+        in journey_src,
+        "journey_scraper has _capture_a11y_snapshot_sync helper": "_capture_a11y_snapshot_sync" in journey_src,
+        "journey_scraper._scrape_current_page accepts context param": "context: Any | None = None" in journey_src
+        or "context=None" in journey_src,
+        # StatefulPageScraper checks (Phase 1 from spec)
+        "stateful_scraper imports AccessibilityEnricher": "AccessibilityEnricher" in stateful_src
+        and "from src.accessibility_enricher import" in stateful_src,
+        "stateful_scraper has _capture_a11y_snapshot method": "_capture_a11y_snapshot" in stateful_src,
+        "stateful_scraper calls AccessibilityEnricher.enrich()": "AccessibilityEnricher.enrich(" in stateful_src,
+        # Module-level helpers for Path C (execute_journey_sync)
+        "module-level enrichment helpers defined": journey_src.count("_capture_element_visibility_sync") >= 2
+        and journey_src.count("_capture_a11y_snapshot_sync") >= 2,
+    }
+
+    all_pass = True
+    for check_name, passed in enrichment_checks.items():
+        status = "[PASS]" if passed else "[FAIL]"
+        print(f"  {status} {check_name}")
+        if not passed:
+            all_pass = False
+
+    print("-" * 60)
+    return all_pass
 
 
 async def run_uat() -> None:
@@ -199,6 +245,16 @@ async def run_uat() -> None:
     print(f"UAT Site: {args.site}")
     print(f"LLM Provider: {provider_info}")
     print()
+
+    # B-0XX enrichment verification (static check, no pipeline run needed)
+    if args.verify_enrichment:
+        enrich_pass = _verify_b0xx_enrichment()
+        if enrich_pass:
+            print("\n✅ B-0XX Enrichment VERIFIED: All code paths present.")
+        else:
+            print("\n❌ B-0XX Enrichment FAILED: Some code paths missing.")
+        return
+
     print(f"User Story: {site_config['user_story']}")
     print()
     print(f"Conditions:\n{site_config['conditions']}")

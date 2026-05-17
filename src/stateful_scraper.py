@@ -18,6 +18,7 @@ from typing import Any
 
 from playwright.sync_api import sync_playwright
 
+from src.accessibility_enricher import AccessibilityEnricher
 from src.form_login_utils import attempt_login
 from src.journey_scraper import CredentialProfile
 from src.scraper import PageScraper
@@ -119,6 +120,15 @@ class StatefulPageScraper:
                             page.wait_for_timeout(1000)
                             html = page.content()
                             result = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
+
+                            # B-0XX: Capture runtime visibility using Playwright is_visible()
+                            result = self._html_scraper._capture_element_visibility(page, result)
+
+                            # B-0XX: CDP accessibility snapshot and enrichment
+                            a11y_snapshot = self._capture_a11y_snapshot(context, page)
+                            if a11y_snapshot:
+                                result = AccessibilityEnricher.enrich(result, a11y_snapshot)
+
                             output[url] = result
                             last_error = None
                             break
@@ -136,6 +146,27 @@ class StatefulPageScraper:
                 browser.close()
 
         return output
+
+    @staticmethod
+    def _capture_a11y_snapshot(
+        context: Any,
+        page: Any,
+    ) -> dict[str, Any]:
+        """Capture accessibility snapshot via CDP.
+
+        Returns an empty dict if CDP is unavailable or returns no nodes,
+        matching the PageScraper fallback behaviour.
+        """
+        a11y_snapshot: dict[str, Any] = {}
+        try:
+            cdp = context.new_cdp_session(page)
+            ax_result = cdp.send("Accessibility.getFullAXTree")
+            a11y_snapshot = AccessibilityEnricher._transform_cdp_ax_tree(ax_result.get("nodes", []))
+            # CDP session is cleaned up when browser context closes
+        except Exception:
+            # Graceful fallback — enrichment is additive, missing it doesn't break the pipeline.
+            pass
+        return a11y_snapshot
 
     def _seed_cart_session(self, page: Any) -> None:
         """Navigate, login if needed, then try to add one item to cart (best effort)."""

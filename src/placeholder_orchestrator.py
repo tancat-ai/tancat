@@ -628,6 +628,46 @@ class PlaceholderOrchestrator:
         )
         return None
 
+    def _normalise_element_text(self, element: dict[str, str]) -> str:
+        """Extract and normalise element text for Pass 1 matching.
+
+        Priority: accessible_name → aria_label → text.
+        Strips non-ASCII characters (icon fonts), lowercases,
+        and strips whitespace.
+        """
+        raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
+        return re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+
+    def _pass1_text_match(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str] | None:
+        """Pass 1 — fast text match before scoring.
+
+        Returns the first element whose normalised text is
+        contained in the normalised description.
+        Only fires for CLICK and FILL — ASSERT tokens for
+        page state will not match element text and should
+        fall through to the scoring path.
+
+        Minimum element text length of 3 characters prevents
+        single-character matches ('a', 'x') producing false wins.
+        """
+        if action not in {"CLICK", "FILL"}:
+            return None
+
+        norm_description = re.sub(r"[^\w\s]", " ", description).lower()
+
+        for elements in pages_data.values():
+            for element in elements:
+                norm_text = self._normalise_element_text(element)
+                if len(norm_text) >= 3 and norm_text in norm_description:
+                    return element
+
+        return None
+
     async def _find_best_element_for_current_page(
         self,
         action: str,
@@ -642,6 +682,16 @@ class PlaceholderOrchestrator:
         when a much better match exists on a later page (e.g., finding a cart page
         element for "username input" instead of the login page element).
         """
+        # Pass 1 — fast text match (no scoring, no LLM)
+        pass1_result = self._pass1_text_match(action, description, pages_data)
+        if pass1_result is not None:
+            logger.debug(
+                "PASS1 text match for '%s' → %s",
+                description,
+                pass1_result.get("selector", ""),
+            )
+            return pass1_result
+
         # Collect ALL ranked candidates across ALL pages
         all_ranked: list[tuple[float, dict[str, str]]] = []
         for url, elements in pages_data.items():
