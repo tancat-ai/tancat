@@ -848,6 +848,8 @@ class PlaceholderOrchestrator:
                 element_text,
                 description,
             )
+            if action == "ASSERT":
+                return matched_element
             return matched_element
 
         # No LLM selection — use top candidate with text validation
