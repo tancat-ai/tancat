@@ -46,6 +46,12 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Deprecated test files: `tests/src/`, `tests/example_test.py`, `tests/uat_pipeline_test.py`
 
 ### Fixed
+- Pass 1 text match added to `PlaceholderOrchestrator._find_best_element_for_current_page()` — resolves nav links by element text before scoring, eliminating Products link tie bug
+- Pass 1 text match added to `JourneyScraper._find_selector_for_step()` — journey discovery now navigates to correct pages (e.g. /products not /brand_products/*)  
+- `resolve_all()` diagnostic replaced with regex scan of final_code — eliminates 25+ LLM timeout calls post-pipeline (runtime: 1263s → 165s)
+- `src/journey_scraper_clean.py` dead file deleted (0% coverage, not imported)
+- Punctuation stripping added to Pass 1 description normalisation — handles LLM-generated tokens like `'Products' link` with embedded quotes
+- UAT saucedemo: 5/6 tests passing against real site with browser automation
 - mypy `import-untyped` for pandas via `pandas-stubs` dev dependency
 - mypy `import-untyped` for plotly via per-module override in `pyproject.toml`
 - pre-commit hook failures from variable shadowing in `generate_3d_map.py` via mypy override

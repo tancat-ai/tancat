@@ -74,6 +74,34 @@ writing if code fails syntax check.
 **Fix (long term):** Multi-page scraping (AI-009) injects real selectors
 **Priority:** Medium — AI-009 should prevent recurrence
 
+### B-012 — Pass 1 false positive: "add to cart" matches cart nav link
+**Symptom:** CLICK:'Add to cart' button resolves to a[href="/view_cart"] (text="Cart")
+because "cart" appears in both the description and the nav link text.
+**Root cause:** Pass 1 minimum length guard (3 chars) allows short common words
+to match across unrelated elements.
+**Fix:** Use role signal from description ("button" keyword → prefer role=button
+over role=link) as secondary filter in Pass 1, or require matched text to be
+more specific (longer or multi-word).
+**Priority:** High — causes wrong element in generated tests
+
+### B-013 — Journey discovery stops one page short for checkout-step-two
+**Symptom:** "finish button" on checkout-step-two.html never resolves because
+journey discovery clicked #continue (step one) rather than reaching step two.
+**Root cause:** Journey discovery doesn't scrape the page after the final click
+in the sequence — it navigates to step two but doesn't capture it.
+**Fix:** Ensure final navigation step in discovery journey triggers a scrape
+of the resulting page before the journey ends.
+**Priority:** Medium — affects multi-step form flows
+
+### B-014 — ASSERT tokens resolve to wrong elements silently
+**Symptom:** Assertions like "homepage loaded successfully" resolve to a[href="/"]
+rather than skipping. False pass — test looks resolved but will give wrong results.
+**Root cause:** Scorer finds closest structural match rather than skipping when
+no text-bearing element matches the description.
+**Fix:** ASSERT pass in resolution should require text-bearing elements (p, h*, 
+span, div with visible text) and skip if none match — not fall back to structural
+match. Needs design session before implementation.
+**Priority:** High — silent wrong assertions are worse than skips
 ---
 
 ## 🟡 Active Improvements (Prioritised)
