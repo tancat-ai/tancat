@@ -97,7 +97,9 @@ def main() -> None:
                 text_match = resolver.text_matches_description(elem_text, description)
                 print(f"      score={score:3d} text_match={str(text_match):5s} text='{text}' id='{elem_id}' -> {sel}")
 
-            best = resolver.find_best_element(action, description, elements)
+            from tests.resolver_test_helpers import best_ranked_element
+
+            best = best_ranked_element(resolver, action, description, elements)
             if best:
                 resolved = resolver._build_robust_locator(best)
                 best_text = str(best.get("text", ""))[:30]

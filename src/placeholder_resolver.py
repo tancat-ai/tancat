@@ -1,12 +1,8 @@
 """Resolve placeholder descriptions against scraped page elements.
 
 Orchestrates semantic matching (SemanticMatcher) and intent filtering
-(IntentMatcher) to produce ranked candidate lists and final selector
-resolutions for pytest-style Playwright tests.
-
-Includes LLM-based disambiguation for near-tie candidates (Session 1 of
-UAT fix series). When rule-based scoring produces top-2 candidates within
-a score threshold, the LLM is consulted with Aria snapshot context.
+(IntentMatcher) to produce ranked candidate lists for the live pipeline
+(PlaceholderOrchestrator → rank_candidates → SemanticCandidateRanker).
 """
 
 from __future__ import annotations
@@ -18,33 +14,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.intent_matcher import IntentMatcher
-from src.llm_client import LLMClient
-from src.llm_reasoning_filter import strip_llm_reasoning
-from src.locator_builder import build_robust_locator
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
-
-# ── LLM Disambiguation Configuration ────────────────────────────────────────
-# Trigger when top-2 candidate scores differ by ≤ this many points.
-_DEFAULT_DISAMBIGUATION_THRESHOLD = 5
-
-# Maximum number of candidates to send to the LLM for disambiguation.
-_MAX_DISAMBIGUATION_CANDIDATES = 3
-
-
-def _default_disambiguation_threshold() -> int:
-    """Return the disambiguation threshold from environment or default."""
-    try:
-        return int(os.environ.get("DISAMBIGUATION_THRESHOLD", "5"))
-    except ValueError, TypeError:
-        return _DEFAULT_DISAMBIGUATION_THRESHOLD
-
-
-def _use_llm_disambiguation() -> bool:
-    """Return whether LLM disambiguation is enabled via environment."""
-    value = os.environ.get("USE_LLM_DISAMBIGUATION", "true").lower()
-    return value not in ("false", "0", "no")
 
 
 def _css_escape_id(value: str) -> str:
@@ -90,17 +62,9 @@ class PlaceholderResolver:
         self,
         match_threshold: int = 1,
         min_confidence: float | None = None,
-        use_llm_disambiguation: bool | None = None,
-        disambiguation_threshold: int | None = None,
     ) -> None:
         self.match_threshold = match_threshold
         self.min_confidence = min_confidence if min_confidence is not None else _default_min_confidence()
-        self.use_llm_disambiguation = (
-            use_llm_disambiguation if use_llm_disambiguation is not None else _use_llm_disambiguation()
-        )
-        self.disambiguation_threshold = (
-            disambiguation_threshold if disambiguation_threshold is not None else _default_disambiguation_threshold()
-        )
 
     def _build_element_haystack(self, element: dict[str, Any]) -> str:
         """Return a single string containing all searchable metadata for an element.
@@ -302,235 +266,6 @@ class PlaceholderResolver:
                 return True
 
         return False
-
-    @staticmethod
-    def _extract_aria_snapshot(page_elements: list[dict[str, Any]]) -> str | None:
-        """Extract Aria snapshot metadata from page elements.
-
-        The Aria snapshot is stored as a special element dict with __meta__ key
-        (Option A from the spec). This keeps the pipeline API unchanged.
-        """
-        for element in page_elements:
-            if element.get("__meta__") == "aria_snapshot":
-                return element.get("text", "")
-        return None
-
-    @staticmethod
-    def _filter_aria_snapshot(page_elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Return page elements excluding Aria snapshot metadata entries."""
-        return [el for el in page_elements if el.get("__meta__") != "aria_snapshot"]
-
-    def _disambiguate_with_llm(
-        self,
-        action: str,
-        description: str,
-        top_candidates: list[tuple[int, dict[str, Any]]],
-        aria_snapshot: str | None = None,
-    ) -> dict[str, Any] | None:
-        """Use the LLM to pick the best element when rule-based scoring produces a tie.
-
-        When the top-2 candidates are within DISAMBIGUATION_THRESHOLD points,
-        delegate to the LLM with structured context (Aria snapshot + candidate details).
-
-        Args:
-            action: Placeholder action (CLICK, FILL, ASSERT, GOTO).
-            description: Placeholder description text.
-            top_candidates: Top N scored candidates from rank_candidates().
-            aria_snapshot: Aria snapshot text from page.ariaSnapshot() — optional fallback context.
-
-        Returns:
-            The winning element dict, or None if LLM unavailable or response unparsable.
-        """
-        if len(top_candidates) < 2:
-            return None
-
-        # Limit to MAX_DISAMBIGUATION_CANDIDATES to keep the prompt small.
-        candidates_to_send = top_candidates[:_MAX_DISAMBIGUATION_CANDIDATES]
-
-        # Build candidate option lines
-        option_lines: list[str] = []
-        for idx, (_score, element) in enumerate(candidates_to_send, start=1):
-            text = str(element.get("text", "")).strip()
-            role = str(element.get("role", "")).strip()
-            selector = str(element.get("selector", "")).strip()
-            element_id = str(element.get("id", "")).strip()
-            aria_label = str(element.get("aria_label", "")).strip() or str(element.get("accessible_name", "")).strip()
-            line = f'{idx}. text="{text}", role="{role}", selector="{selector}"'
-            if element_id:
-                line += f', id="{element_id}"'
-            if aria_label:
-                line += f', aria="{aria_label}"'
-            option_lines.append(line)
-
-        # Build the prompt
-        prompt_parts: list[str] = [
-            f'Pick the element that matches: {action} "{description}"',
-            "",
-            "Options:",
-        ]
-        prompt_parts.extend(option_lines)
-
-        if aria_snapshot:
-            prompt_parts.append("")
-            prompt_parts.append("Page accessibility context:")
-            # Truncate snapshot to avoid excessive tokens
-            snapshot_excerpt = aria_snapshot[:2000] if len(aria_snapshot) > 2000 else aria_snapshot
-            prompt_parts.append(snapshot_excerpt)
-
-        prompt_parts.append("")
-        prompt_parts.append(f"Return only the number (1-{len(candidates_to_send)}) of the best match.")
-
-        prompt = "\n".join(prompt_parts)
-
-        try:
-            client = LLMClient()
-            # generate_test() is the sync method; _extract_code + normalise are applied internally.
-            # For a simple numeric answer this is fine — strip_reasoning as a safety net.
-            response = client.generate_test(prompt, timeout=30)
-            cleaned = strip_llm_reasoning(response)
-
-            # Extract a single digit from the response
-            digits = re.findall(r"\d+", cleaned)
-            if digits:
-                choice = int(digits[0])
-                if 1 <= choice <= len(candidates_to_send):
-                    logger.debug(
-                        "LLM disambiguation selected option %d for '%s' (action=%s)",
-                        choice,
-                        description,
-                        action,
-                    )
-                    return candidates_to_send[choice - 1][1]
-
-            logger.debug("LLM disambiguation returned unparsable response: %s", cleaned)
-        except Exception as e:
-            logger.debug("LLM disambiguation failed (%s) — falling back to rule-based scoring", e)
-
-        return None
-
-    def find_best_element(
-        self,
-        action: str,
-        description: str,
-        page_elements: list[dict[str, Any]],
-    ) -> dict[str, Any] | None:
-        """Return the best element match for a placeholder description.
-
-        Elements whose visible text doesn't match the description are skipped.
-        If the best candidate's confidence score is below ``min_confidence``,
-        the method returns ``None`` (skip rather than guess).
-        """
-        ranked_candidates = self.rank_candidates(action, description, page_elements)
-        if not ranked_candidates:
-            return None
-
-        # Extract Aria snapshot metadata from page_elements (Option A — __meta__ element)
-        aria_snapshot = self._extract_aria_snapshot(page_elements)
-
-        # LLM Disambiguation: when top-2 candidates are within threshold, delegate to LLM.
-        llm_pick: dict[str, Any] | None = None
-        if self.use_llm_disambiguation and len(ranked_candidates) >= 2:
-            top_score = ranked_candidates[0][0]
-            second_score = ranked_candidates[1][0]
-            if top_score - second_score <= self.disambiguation_threshold:
-                logger.debug(
-                    "Disambiguation triggered: top=%d, second=%d (threshold=%d) for '%s'",
-                    top_score,
-                    second_score,
-                    self.disambiguation_threshold,
-                    description,
-                )
-                llm_pick = self._disambiguate_with_llm(
-                    action,
-                    description,
-                    ranked_candidates[:_MAX_DISAMBIGUATION_CANDIDATES],
-                    aria_snapshot=aria_snapshot,
-                )
-                # Validate LLM pick against text + confidence before accepting
-                if llm_pick is not None:
-                    pick_text = str(llm_pick.get("text", "")).strip()
-                    pick_value = str(llm_pick.get("value", "")).strip()
-                    pick_accessible = str(llm_pick.get("accessible_name", "")).strip()
-                    if (
-                        self.text_matches_description(pick_text, description)
-                        or self.text_matches_description(pick_value, description)
-                        or self.text_matches_description(pick_accessible, description)
-                    ):
-                        # Find the score for this pick
-                        pick_score: int | None = None
-                        for _s, _el in ranked_candidates:
-                            if _el is llm_pick or _el.get("selector") == llm_pick.get("selector"):
-                                pick_score = _s
-                                break
-                        if pick_score is not None:
-                            max_possible = max(c[0] for c in ranked_candidates)
-                            confidence = pick_score / max_possible if max_possible > 0 else 0.0
-                            if confidence >= self.min_confidence:
-                                logger.debug("LLM disambiguation pick accepted: %s", llm_pick.get("selector"))
-                                return llm_pick
-
-        # Filter by text-content validation (B1)
-        for score, element in ranked_candidates:
-            element_text = str(element.get("text", "")).strip()
-            element_value = str(element.get("value", "")).strip()
-            element_accessible = str(element.get("accessible_name", "")).strip()
-
-            # Check visible text, input value, AND accessible_name from a11y tree (AI-024)
-            # accessible_name is critical for icon-only elements (e.g., shopping cart icon
-            # with empty text but accessible_name="Shopping cart")
-            text_match = self.text_matches_description(element_text, description)
-            value_match = self.text_matches_description(element_value, description)
-            accessible_match = self.text_matches_description(element_accessible, description)
-
-            if text_match or value_match or accessible_match:
-                # Verify confidence threshold (B2)
-                max_possible_score = max(c[0] for c in ranked_candidates)
-                confidence = score / max_possible_score if max_possible_score > 0 else 0.0
-                if confidence >= self.min_confidence:
-                    return element
-                logger.debug(
-                    "Candidate '%s' (value='%s') confidence %.2f below threshold %.2f — marking unresolved",
-                    element_text,
-                    element_value,
-                    confidence,
-                    self.min_confidence,
-                )
-            elif element_text or element_value:
-                logger.debug(
-                    "Skipped candidate '%s' (value='%s') — text does not match description '%s'",
-                    element_text,
-                    element_value,
-                    description,
-                )
-            else:
-                # Elements with no visible text AND no value — accept if _matches_intent_bucket passed.
-                # This covers saucedemo-style login forms where #user-name, #password, #login-button
-                # have empty text but stable id/data-test attributes that already matched.
-                id_val = str(element.get("id", "")).strip()
-                data_test = str(element.get("data_test", "")).strip()
-                has_stable_id = bool(id_val or data_test)
-                if has_stable_id:
-                    max_possible_score = max(c[0] for c in ranked_candidates)
-                    confidence = score / max_possible_score if max_possible_score > 0 else 0.0
-                    if confidence >= self.min_confidence:
-                        logger.debug(
-                            "Accepted textless element '%s' (id='%s', data_test='%s') confidence %.2f",
-                            str(element.get("selector", "")),
-                            id_val,
-                            data_test,
-                            confidence,
-                        )
-                        return element
-                    logger.debug(
-                        "Rejected textless element '%s' (id='%s', data_test='%s') — confidence %.2f below threshold %.2f",
-                        str(element.get("selector", "")),
-                        id_val,
-                        data_test,
-                        confidence,
-                        self.min_confidence,
-                    )
-
-        return None
 
     def rank_candidates(
         self,
@@ -840,24 +575,6 @@ class PlaceholderResolver:
         )
         return ranked
 
-    def find_best_match(self, action: str, description: str, page_elements: list[dict[str, Any]]) -> str | None:
-        """Return the best-matching selector for a placeholder description.
-
-        Transforms brittle CSS selectors (e.g. `.btn.btn-default.add-to-cart[data-product-id="11"]`)
-        into robust Playwright locators (e.g. `a:has-text("Add to cart")`) when possible.
-        """
-        best_element = self.find_best_element(action, description, page_elements)
-        if best_element is None:
-            # No heuristic fallback — let placeholders resolve to None and emit pytest.skip()
-            # This enforces "skip rather than guess" architectural principle.
-            return None
-        selector = build_robust_locator(best_element)
-        if selector:
-            return selector
-        # Fallback to raw scraped selector if robust locator couldn't be built
-        raw_selector = str(best_element.get("selector", "")).strip()
-        return raw_selector if raw_selector else None
-
     def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:
         """Resolve navigation placeholders to the best matching scraped URL."""
         if not pages_data:
@@ -898,34 +615,3 @@ class PlaceholderResolver:
             return best_url
 
         return next(iter(pages_data), None)
-
-    def resolve_all(
-        self,
-        placeholders: list[tuple[str, str]],
-        pages_data: dict[str, list[dict[str, Any]]],
-    ) -> list[str]:
-        """Resolve all placeholders into selectors or explicit `pytest.skip()` calls."""
-        resolutions: list[str] = []
-
-        for action, description in placeholders:
-            found_match: str | None = None
-
-            if action in {"GOTO", "URL"}:
-                found_match = self.resolve_url(description, pages_data)
-                if found_match:
-                    resolutions.append(repr(found_match))
-                    continue
-
-            for elements in pages_data.values():
-                found_match = self.find_best_match(action, description, elements)
-                if found_match:
-                    break
-
-            if found_match:
-                resolutions.append(repr(found_match))
-                continue
-
-            error_msg = f"Locator for '{description}' not found on scraped pages."
-            resolutions.append(f'pytest.skip("{error_msg}")')
-
-        return resolutions

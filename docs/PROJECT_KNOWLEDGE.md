@@ -51,20 +51,18 @@
 - **Replaced by:** skeleton-first two-phase pipeline
 - **Rule:** Do not use or restore this module
 
-## Dead Code — Confirmed (DO NOT RESURRECT)
+## Dead Code — Deleted 2026-05-17 (DO NOT RESURRECT)
 
-These methods exist in source files but are **never called by the live pipeline**.
-They were confirmed dead on 2026-05-16 by tracing the orchestrator call graph.
-Cline: do not call, reference, or restore these methods without explicit approval.
+These methods were removed from `placeholder_resolver.py` in Phase 1 of the resolver restructure. The live pipeline uses `PlaceholderOrchestrator._find_best_element_for_current_page()` → `rank_candidates()` + `SemanticCandidateRanker`.
 
-| Method | File | Lines | Why Dead |
-|--------|------|-------|----------|
-| `find_best_match()` | `placeholder_resolver.py` | 843–859 | Orchestrator calls `rank_candidates()` + `build_robust_locator()` directly |
-| `find_best_element()` | `placeholder_resolver.py` | 411–533 | Only called by `find_best_match()` which is itself dead |
-| `resolve_all()` | `placeholder_resolver.py` | 902–931 | Not called from orchestrator path |
-| `_disambiguate_with_llm()` | `placeholder_resolver.py` | 323–409 | Superseded by `SemanticCandidateRanker` |
+| Method | Was | Replacement |
+|--------|-----|-------------|
+| `find_best_match()` | Wrapper around `find_best_element` + `build_robust_locator` | Orchestrator + `build_robust_locator()` |
+| `find_best_element()` | Scoring + LLM disambiguation path | Pass 1–3 in orchestrator |
+| `resolve_all()` | Batch placeholder resolution | `_replace_placeholders_sequentially()` |
+| `_disambiguate_with_llm()` | Near-tie LLM pick in resolver | `SemanticCandidateRanker` (Pass 3) |
 
-**Deletion target:** Phase 1 of resolver restructure. See `RESTRUCTURE_PLAN.md`.
+See `docs/plans/RESTRUCTURE_PLAN.md`.
 
 ## Environment Setup
 
@@ -156,28 +154,28 @@ tracker.write(status: str = "passed") -> str  # returns sidecar path
 - **Page-context validation:** `_verify_page_context()` warns if locator scraped from different page than journey URL
 - See `docs/ARCHITECTURE.md` §4 for full dependency graph
 
-#### Live Resolution Call Graph (confirmed 2026-05-16)
+#### Live Resolution Call Graph (confirmed 2026-05-17)
 ```
 Entry: PlaceholderOrchestrator._replace_placeholders_sequentially()
   → _resolve_placeholder_for_page()
     → UrlResolver.resolve()                              [GOTO/URL — primary]
     → PlaceholderResolver.resolve_url()                  [GOTO/URL — fallback]
     → _find_best_element_for_current_page()              [CLICK/FILL/ASSERT]
-      → PlaceholderResolver.rank_candidates()            [scoring — LIVE]
-      → SemanticCandidateRanker.choose_best_candidate()  [when shortlist > 1]
-      → _validate_text_match()
-        → PlaceholderResolver.text_matches_description()
-      → build_robust_locator()                           [from locator_builder]
+      → Pass 1: _pass1_text_match() / _pass1_assert_text_match()
+      → Pass 2: _pass2_structural_match()
+      → Pass 3: PlaceholderResolver.rank_candidates() + SemanticCandidateRanker
+      → _validate_text_match() → PlaceholderResolver.text_matches_description()
+      → build_robust_locator()
+    → _page_requirements_to_pages()                      [scopes via UrlResolver keywords]
 ```
 
 **Live methods in `PlaceholderResolver` (do not delete):**
 `rank_candidates()`, `resolve_url()`, `text_matches_description()`
 
-**⚠️ NOTE — Restructure in progress (feat/resolver-restructure):**
-`_find_best_element_for_current_page()` is being rewritten as an LLM-first
-priority chain (Pass 1: text match → Pass 2: structural match → Pass 3: LLM
-arbitration → Pass 4: skip). Do not add complexity to the current scoring
-logic — it is being replaced. See `RESTRUCTURE_PLAN.md`.
+**Deleted (2026-05-17 — do not resurrect):**
+`find_best_match()`, `find_best_element()`, `resolve_all()`, `_disambiguate_with_llm()`
+
+See `docs/plans/RESTRUCTURE_PLAN.md` for remaining Phase 2/3 guardrails.
 
 ## Test Folder Coverage
 
@@ -199,9 +197,12 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 
 ## Planned Work
 
-| ID | Feature | Files to Create |
-|----|---------|----------------|
-| AI-019 | Prompt Update: EvidenceTracker Methods | `src/prompt_utils.py` |
+| ID | Feature | Notes |
+|----|---------|-------|
+| AI-010 | POM generation toggle | Stage B — tests still use evidence_tracker inline |
+| AI-011 | Run history chart | Root `run_history.json` — not started |
+| AI-023 | Locator repair loop | Spec only |
+| AI-026 | CLI reload saved suites | Partial — `PipelineArtifactWriter` exists |
 
 ## Version History
 
@@ -222,5 +223,5 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 
 ---
 
-*Last Updated: 2026-05-16*
-*Project Status: CI green — Resolver restructure in progress (feat/resolver-restructure). Dead code confirmed, deletion pending Phase 1. Live call graph documented above.*
+*Last Updated: 2026-05-17*
+*Project Status: CI green — Resolver Phases 0–2 partial (Pass 1–2 + logging live). Dead resolver methods deleted. UrlResolver page scoping wired.*

@@ -150,7 +150,7 @@ Then resolve `{{GOTO:cart}}` → `evidence_tracker.navigate("https://www.saucede
 ### Known Limitations
 - GOTO placeholder resolution still uses `heuristic_url_from_description()` and `resolve_url()` as fallbacks
 - The skeleton prompt still shows URL examples (will be updated in Phase 4)
-- `_page_requirements_to_pages()` returns `None` (use all scraped pages) until UrlResolver filtering is implemented
+- `_page_requirements_to_pages()` filters scraped data by `UrlResolver.resolve(keyword)` — implemented 2026-05-17
 
 ---
 

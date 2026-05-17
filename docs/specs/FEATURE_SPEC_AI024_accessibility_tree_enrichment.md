@@ -2,8 +2,8 @@
 
 ## AI-024 — Accessibility Tree Enrichment
 
-**Status:** Design complete — ready for implementation session
-**Last updated:** 2026-05-01
+**Status:** ✅ Implemented — 2026-05-17
+**Last updated:** 2026-05-17
 **Depends on:** Nothing — standalone improvement to scraper pipeline
 **Blocks:** Nothing — but reduces frequency of locator failures that trigger AI-023 repair loop
 **Priority:** Medium — single-session improvement with measurable impact
@@ -149,7 +149,7 @@ In `_scrape_url_sync()`, after `page.content()` and before browser close:
 html_content = page.content()
 elements = self._extract_elements_from_html(html_content, base_url=final_url)
 
-# NEW: capture accessibility snapshot
+# NEW: capture accessibility snapshot (production: CDP getFullAXTree — see scraper.py)
 a11y_tree = page.accessibility.snapshot()
 
 # NEW: enrich elements with computed accessible names

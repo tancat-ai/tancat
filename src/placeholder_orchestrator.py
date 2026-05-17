@@ -14,6 +14,7 @@ from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPag
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 from src.semantic_candidate_ranker import SemanticCandidateRanker
+from src.semantic_matcher import SemanticMatcher
 from src.stateful_scraper import StatefulPageScraper
 from src.url_inference import infer_next_page_url
 from src.url_resolver import UrlResolver
@@ -576,11 +577,8 @@ class PlaceholderOrchestrator:
             # B3: Verify page context — log warning for cross-page mismatches
             self._verify_page_context(description, matched_element, current_url, scraped_data)
 
-            # Call _build_robust_locator directly — bypasses find_best_match's text
-            # validation gate which rejects most elements and causes raw CSS selectors
-            # to be used as fallback instead of the robust locator logic.
-            # Stage 1 (_find_best_element_for_current_page) has already selected the
-            # best element via word-overlap ranking — we trust that result here.
+            # _find_best_element_for_current_page() has already selected the element
+            # via the priority chain (text → structural → scoring/LLM).
             robust_selector = build_robust_locator(matched_element)
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
@@ -628,6 +626,23 @@ class PlaceholderOrchestrator:
         )
         return None
 
+    @staticmethod
+    def _log_resolve_pass(
+        pass_number: int,
+        pass_name: str,
+        description: str,
+        element: dict[str, str] | None,
+    ) -> None:
+        if element is None:
+            return
+        logger.info(
+            "[RESOLVE] '%s' | pass=%d (%s) | selector=%s",
+            description,
+            pass_number,
+            pass_name,
+            element.get("selector", ""),
+        )
+
     def _normalise_element_text(self, element: dict[str, str]) -> str:
         """Extract and normalise element text for Pass 1 matching.
 
@@ -658,13 +673,83 @@ class PlaceholderOrchestrator:
         if action not in {"CLICK", "FILL"}:
             return None
 
-        norm_description = re.sub(r"[^\w\s]", " ", description).lower()
+        norm_description = description.lower()
 
         for elements in pages_data.values():
             for element in elements:
                 norm_text = self._normalise_element_text(element)
                 if len(norm_text) >= 3 and norm_text in norm_description:
                     return element
+
+        return None
+
+    def _pass1_assert_text_match(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str] | None:
+        """Pass 1 (ASSERT) — match text-bearing elements whose label appears in the description."""
+        if action != "ASSERT":
+            return None
+
+        norm_description = description.lower()
+        text_bearing_roles = {
+            "heading",
+            "paragraph",
+            "text",
+            "status",
+            "alert",
+            "region",
+            "article",
+            "listitem",
+            "cell",
+            "columnheader",
+            "rowheader",
+        }
+        text_bearing_tags = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "li", "td", "th"}
+
+        for elements in pages_data.values():
+            for element in elements:
+                role = str(element.get("role", "")).strip().lower()
+                tag = str(element.get("tag", "")).strip().lower()
+                if role not in text_bearing_roles and tag not in text_bearing_tags:
+                    continue
+                norm_text = self._normalise_element_text(element)
+                if len(norm_text) >= 3 and norm_text in norm_description:
+                    return element
+
+        return None
+
+    def _pass2_structural_match(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str] | None:
+        """Pass 2 — match stable attributes (id, data-test, aria) to description keywords."""
+        if action not in {"CLICK", "FILL", "ASSERT"}:
+            return None
+
+        desc_words = SemanticMatcher.get_words(description, expand_aliases=False)
+        if not desc_words:
+            return None
+
+        structural_fields = ("id", "data_test", "aria_label", "accessible_name", "name")
+
+        for elements in pages_data.values():
+            for element in elements:
+                for field in structural_fields:
+                    raw = str(element.get(field, "")).strip()
+                    if len(raw) < 2:
+                        continue
+                    field_words = SemanticMatcher.get_words(raw, expand_aliases=False)
+                    overlap = desc_words & field_words
+                    if len(overlap) >= 2:
+                        return element
+                    normalized_field = raw.lower().replace("_", " ").replace("-", " ")
+                    if normalized_field in description.lower():
+                        return element
 
         return None
 
@@ -682,15 +767,26 @@ class PlaceholderOrchestrator:
         when a much better match exists on a later page (e.g., finding a cart page
         element for "username input" instead of the login page element).
         """
-        # Pass 1 — fast text match (no scoring, no LLM)
+        # Pass 1 — fast text match (CLICK/FILL)
         pass1_result = self._pass1_text_match(action, description, pages_data)
         if pass1_result is not None:
-            logger.debug(
-                "PASS1 text match for '%s' → %s",
-                description,
-                pass1_result.get("selector", ""),
-            )
+            self._log_resolve_pass(1, "text match", description, pass1_result)
             return pass1_result
+
+        # Pass 1 — ASSERT text-bearing elements
+        pass1_assert = self._pass1_assert_text_match(action, description, pages_data)
+        if pass1_assert is not None:
+            self._log_resolve_pass(1, "assert text match", description, pass1_assert)
+            return pass1_assert
+
+        # Pass 2 — structural attribute match
+        pass2_result = self._pass2_structural_match(action, description, pages_data)
+        if pass2_result is not None:
+            self._log_resolve_pass(2, "structural match", description, pass2_result)
+            return pass2_result
+
+        # Pass 3 — scoring shortlist + semantic ranker (legacy path)
+        logger.debug("[RESOLVE] '%s' | pass=3 (scoring)", description)
 
         # Collect ALL ranked candidates across ALL pages
         all_ranked: list[tuple[float, dict[str, str]]] = []
@@ -871,38 +967,37 @@ class PlaceholderOrchestrator:
 
         return None
 
-    @staticmethod
     def _page_requirements_to_pages(
+        self,
         page_requirements: list[PageRequirement],
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, list[dict[str, str]]] | None:
-        """Return scraped data filtered to explicitly required pages.
+        """Return scraped data filtered to pages declared in PAGES_NEEDED keywords."""
+        if not page_requirements or not scraped_data:
+            return None
 
-        Note: page_requirements now contain keywords (not URLs). Until UrlResolver
-        is integrated (Phase 3), return None to signal "use all scraped pages".
-        """
-        # TODO (Phase 3): Use UrlResolver to map keywords to discovered URLs,
-        # then filter scraped_data to those URLs.
-        _ = page_requirements  # Suppress unused warning
-        return None
+        filtered: dict[str, list[dict[str, str]]] = {}
+        for requirement in page_requirements:
+            resolved_url = self.url_resolver.resolve(requirement.keyword)
+            if resolved_url and resolved_url in scraped_data:
+                filtered[resolved_url] = scraped_data[resolved_url]
 
-    @staticmethod
+        return filtered if filtered else None
+
     def _select_fallback_page_url(
+        self,
         page_requirements: list[PageRequirement],
         seed_urls: list[str],
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> str | None:
-        """Return the default page URL to use when no journey-specific page is known.
-
-        IMPORTANT: Prefer seed_urls (user-provided, known-correct). The page_requirements
-        now contain keywords (not URLs) which are resolved via UrlResolver (Phase 3).
-        """
-        # Priority 1: seed_urls — user-provided, known to be correct
+        """Return the default page URL to use when no journey-specific page is known."""
         for seed_url in seed_urls:
             if seed_url in scraped_data:
                 return seed_url
-        # Priority 2: whatever was scraped (first available)
-        # Note: page_requirements are keywords now, not URLs — skip them until
-        # UrlResolver (Phase 3) can map keywords to discovered URLs.
-        _ = page_requirements  # Suppress unused warning
+
+        for requirement in page_requirements:
+            resolved_url = self.url_resolver.resolve(requirement.keyword)
+            if resolved_url and resolved_url in scraped_data:
+                return resolved_url
+
         return next(iter(scraped_data), None)

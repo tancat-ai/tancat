@@ -79,7 +79,9 @@ async def main() -> None:
             print(f"      score={score:3d} text_match={text_match!s:5s} text='{text}' id='{elem_id}' -> {selector}")
 
         # Full resolution
-        best = resolver.find_best_element(action, description, elements)
+        from tests.resolver_test_helpers import best_ranked_element
+
+        best = best_ranked_element(resolver, action, description, elements)
         if best:
             resolved_selector = resolver._build_robust_locator(best)
             print(f"    ✅ Resolved to: {resolved_selector}")

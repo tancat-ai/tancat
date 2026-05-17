@@ -98,7 +98,9 @@ class TestFindBestElementWithTextValidation:
             {"selector": "#subscribe", "text": "Subscribe", "role": "checkbox"},
             {"selector": "#add-cart", "text": "Add to cart", "role": "button"},
         ]
-        result = resolver.find_best_element("CLICK", "Add to cart", elements)
+        from tests.resolver_test_helpers import best_ranked_element
+
+        result = best_ranked_element(resolver, "CLICK", "Add to cart", elements)
         # With 0.99 threshold, even the best match may fail if scores are close
         # This tests that the threshold mechanism is active
         assert result is None or result["selector"] == "#add-cart"

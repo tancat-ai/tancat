@@ -200,7 +200,9 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
                 print(f"      score={score} text='{text}' selector='{selector}' text_match={text_match}")
 
         # Try full resolution
-        best = resolver.find_best_element(action, description, elements)
+        from tests.resolver_test_helpers import best_ranked_element
+
+        best = best_ranked_element(resolver, action, description, elements)
         if best:
             resolved_selector = resolver._build_robust_locator(best)
             print(f"    [OK] Resolved to: {resolved_selector}")

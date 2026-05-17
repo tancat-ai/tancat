@@ -100,7 +100,9 @@ def test_resolver_matches_known_placeholder() -> None:
 
         found_any_match = False
         for action, description in actions_to_try:
-            best = resolver.find_best_element(action, description, elements)
+            from tests.resolver_test_helpers import best_ranked_element
+
+            best = best_ranked_element(resolver, action, description, elements)
             if best:
                 selector = build_robust_locator(best)
                 print(f"  ({action}) '{description}' -> {selector}")

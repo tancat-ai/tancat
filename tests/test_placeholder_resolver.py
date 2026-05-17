@@ -1,6 +1,7 @@
 """Tests for placeholder resolution."""
 
 from src.placeholder_resolver import PlaceholderResolver
+from tests.resolver_test_helpers import best_ranked_element, resolve_placeholders
 
 
 def test_resolve_all_returns_real_selector_for_matching_placeholder() -> None:
@@ -9,7 +10,7 @@ def test_resolve_all_returns_real_selector_for_matching_placeholder() -> None:
     pages = {"https://example.com": [{"selector": "#login", "text": "Login Button", "role": "button"}]}
 
     # _build_robust_locator prefers ID-based (#login) over text-based locators
-    assert resolver.resolve_all(placeholders, pages) == ["'#login'"]
+    assert resolve_placeholders(resolver, placeholders, pages) == ["'#login'"]
 
 
 def test_resolve_all_returns_pytest_skip_when_no_match_found() -> None:
@@ -17,7 +18,7 @@ def test_resolve_all_returns_pytest_skip_when_no_match_found() -> None:
     placeholders = [("CLICK", "checkout button")]
     pages = {"https://example.com": [{"selector": "#login", "text": "Login", "role": "button"}]}
 
-    resolution = resolver.resolve_all(placeholders, pages)[0]
+    resolution = resolve_placeholders(resolver, placeholders, pages)[0]
     assert "pytest.skip" in resolution
     assert "checkout button" in resolution
 
@@ -37,7 +38,7 @@ def test_resolve_all_matches_cart_link_using_href_and_synonyms() -> None:
     }
 
     # _build_robust_locator prefers href-based for link elements
-    assert resolver.resolve_all(placeholders, pages) == ["'a[href=\"/view_cart\"]'"]
+    assert resolve_placeholders(resolver, placeholders, pages) == ["'a[href=\"/view_cart\"]'"]
 
 
 def test_resolve_all_maps_navigation_placeholders_to_matching_urls() -> None:
@@ -53,7 +54,7 @@ def test_resolve_all_maps_navigation_placeholders_to_matching_urls() -> None:
         "https://example.com/checkout": [],
     }
 
-    assert resolver.resolve_all(placeholders, pages) == [
+    assert resolve_placeholders(resolver, placeholders, pages) == [
         "'https://example.com/'",
         "'https://example.com/view_cart'",
         "'https://example.com/checkout'",
@@ -74,7 +75,7 @@ def test_fill_does_not_match_non_fillable_link_element() -> None:
         ]
     }
 
-    resolution = resolver.resolve_all(placeholders, pages)[0]
+    resolution = resolve_placeholders(resolver, placeholders, pages)[0]
     assert "pytest.skip" in resolution
 
 
@@ -98,10 +99,9 @@ def test_assert_prefers_cart_content_over_cart_nav_link() -> None:
         ]
     }
 
-    # Text validation: "Blue Top" doesn't match "items have been added correctly"
-    # so the resolver correctly skips (B1 text-content validation)
-    resolution = resolver.resolve_all(placeholders, pages)[0]
-    assert "pytest.skip" in resolution
+    # rank_candidates prefers cart content (.cart_description) over the cart nav link
+    resolution = resolve_placeholders(resolver, placeholders, pages)[0]
+    assert ".cart_description" in resolution
 
 
 def test_click_go_to_cart_does_not_match_add_to_cart_button() -> None:
@@ -127,7 +127,7 @@ def test_click_go_to_cart_does_not_match_add_to_cart_button() -> None:
     }
 
     # _build_robust_locator prefers href-based for link elements
-    assert resolver.resolve_all(placeholders, pages) == ["'a[href=\"/view_cart\"]'"]
+    assert resolve_placeholders(resolver, placeholders, pages) == ["'a[href=\"/view_cart\"]'"]
 
 
 def test_click_add_to_cart_does_not_match_cart_navigation_link() -> None:
@@ -153,7 +153,7 @@ def test_click_add_to_cart_does_not_match_cart_navigation_link() -> None:
     }
 
     # _build_robust_locator prefers data-attribute with class prefix
-    assert resolver.resolve_all(placeholders, pages) == ["'.add-to-cart.btn[data-product-id=\"11\"]'"]
+    assert resolve_placeholders(resolver, placeholders, pages) == ["'.add-to-cart.btn[data-product-id=\"11\"]'"]
 
 
 def test_click_checkout_prefers_checkout_over_payment() -> None:
@@ -179,7 +179,7 @@ def test_click_checkout_prefers_checkout_over_payment() -> None:
     }
 
     # _build_robust_locator prefers href-based for link elements
-    assert resolver.resolve_all(placeholders, pages) == ["'a[href=\"/checkout\"]'"]
+    assert resolve_placeholders(resolver, placeholders, pages) == ["'a[href=\"/checkout\"]'"]
 
 
 def test_assert_generic_home_page_skips_instead_of_guessing_weak_match() -> None:
@@ -197,7 +197,7 @@ def test_assert_generic_home_page_skips_instead_of_guessing_weak_match() -> None
         ]
     }
 
-    resolution = resolver.resolve_all(placeholders, pages)[0]
+    resolution = resolve_placeholders(resolver, placeholders, pages)[0]
     assert "pytest.skip" in resolution
 
 
@@ -216,7 +216,7 @@ def test_click_two_word_description_skips_when_only_one_word_matches() -> None:
         ]
     }
 
-    resolution = resolver.resolve_all(placeholders, pages)[0]
+    resolution = resolve_placeholders(resolver, placeholders, pages)[0]
     assert "pytest.skip" in resolution
 
 
@@ -254,7 +254,7 @@ def test_subscribe_guard_rejects_empty_subscribe_input_for_continue_shopping_cli
         ]
     }
 
-    result = resolver.resolve_all(placeholders, pages)
+    result = resolve_placeholders(resolver, placeholders, pages)
     # Should match the button with text, NOT the subscribe input
     assert "pytest.skip" not in result[0]
     assert "#subscribe" not in result[0]
@@ -284,7 +284,7 @@ def test_subscribe_guard_rejects_subscribe_element_for_cart_checkout_actions() -
         ]
     }
 
-    result = resolver.resolve_all(placeholders, pages)
+    result = resolve_placeholders(resolver, placeholders, pages)
     assert "pytest.skip" not in result[0]
     assert "#susbscribe_email" not in result[0]
 
@@ -312,7 +312,7 @@ def test_subscribe_guard_rejects_subscribe_for_popup_modal_actions() -> None:
         ]
     }
 
-    result = resolver.resolve_all(placeholders, pages)
+    result = resolve_placeholders(resolver, placeholders, pages)
     assert "pytest.skip" not in result[0]
     assert "#newsletter_email" not in result[0]
 
@@ -342,7 +342,7 @@ def test_text_content_penalty_favors_element_with_text_for_click_actions() -> No
         ]
     }
 
-    result = resolver.resolve_all(placeholders, pages)
+    result = resolve_placeholders(resolver, placeholders, pages)
     assert "pytest.skip" not in result[0]
     assert "#some_empty_div" not in result[0]
 
@@ -477,7 +477,7 @@ def test_find_best_element_skips_hidden_role() -> None:
         },
     ]
 
-    result = resolver.find_best_element("FILL", "some field", elements)
+    result = best_ranked_element(resolver, "FILL", "some field", elements)
     assert result is None
 
 
@@ -503,7 +503,7 @@ def test_find_best_element_prefers_text_matching_for_assert() -> None:
         },
     ]
 
-    result = resolver.find_best_element("ASSERT", "product added confirmation message", elements)
+    result = best_ranked_element(resolver, "ASSERT", "product added confirmation message", elements)
     assert result is not None
     assert result["selector"] == "h2.product-title"
 
@@ -592,7 +592,7 @@ def test_find_best_element_prefers_text_overlap_for_assert() -> None:
         },
     ]
 
-    result = resolver.find_best_element("ASSERT", "order placed successfully message visible", elements)
+    result = best_ranked_element(resolver, "ASSERT", "order placed successfully message visible", elements)
     assert result is not None, f"Expected a match, got {result}"
     assert result["selector"] == "#success_msg", f"Text-overlap element should win, got {result['selector']}"
 
@@ -690,7 +690,7 @@ def test_find_best_element_rejects_low_confidence_text_overlap() -> None:
         },
     ]
 
-    result = resolver.find_best_element("ASSERT", "checkout confirmation message visible", elements)
+    result = best_ranked_element(resolver, "ASSERT", "checkout confirmation message visible", elements)
     # Should be rejected due to low confidence (no meaningful overlap)
     assert result is None, f"Low-confidence match should be rejected, got {result}"
 
@@ -770,7 +770,7 @@ def test_find_best_element_assert_text_bonus_beats_generic() -> None:
         },
     ]
 
-    result = resolver.find_best_element("ASSERT", "changes saved successfully notification visible", elements)
+    result = best_ranked_element(resolver, "ASSERT", "changes saved successfully notification visible", elements)
     assert result is not None, f"Expected a match, got {result}"
     assert result["selector"] == "#success_notification", (
         "Text-overlap element should win over generic structural match"
@@ -889,7 +889,7 @@ def test_find_best_element_prefers_visible_over_invisible() -> None:
         },
     ]
 
-    result = resolver.find_best_element("CLICK", "continue shopping button", elements)
+    result = best_ranked_element(resolver, "CLICK", "continue shopping button", elements)
     assert result is not None, f"Expected a match: {result}"
     assert result["selector"] == "#continue_shopping", f"Should prefer visible element: {result['selector']}"
 
@@ -936,6 +936,6 @@ def test_find_best_element_invisible_assert_returns_none_if_no_confidence() -> N
         },
     ]
 
-    result = resolver.find_best_element("ASSERT", "order placed success message visible", elements)
+    result = best_ranked_element(resolver, "ASSERT", "order placed success message visible", elements)
     # Hidden element gets -40 penalty, reducing confidence below threshold → None
     assert result is None or result.get("selector") == "#hidden_success"  # May still return if only candidate

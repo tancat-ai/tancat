@@ -19,7 +19,7 @@ Paste a user story → get back executable Playwright pytest tests with real DOM
 - **Local LLM** — Runs entirely locally via Ollama (no API costs)
 - **Real Selectors** — Scrapes actual DOM elements, never injects selectors into LLM prompts
 - **Skeleton-First Pipeline** — Two-phase: placeholders → resolution (eliminates selector hallucination)
-- **Page Object Model** — Generated tests follow POM pattern
+- **Page Object Models (optional)** — Pipeline can emit page object classes; tests use `evidence_tracker` steps (full POM test mode: AI-010 planned)
 - **Streamlit UI** — Primary interface for non-technical QA testers
 - **CLI Tool** — Command-line interface for CI/CD integration
 - **Multi-Format Reports** — Local markdown, Jira, HTML with base64-embedded screenshots

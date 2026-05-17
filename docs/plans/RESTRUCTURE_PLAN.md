@@ -71,6 +71,8 @@ Note dead nodes and dead links. These will be cleaned up after dead code deletio
 
 **Phase 0 exit criteria**: Live call graph documented in `PROJECT_KNOWLEDGE.md`. Dead method list confirmed. No code changed.
 
+**Status (2026-05-17):** ✅ Complete
+
 ---
 
 ## Phase 1 — Dead Code Deletion
@@ -114,6 +116,8 @@ python scripts/audit_3d_map.py
 Remove any IMPORT_LINKS entries in `generate_3d_map.py` that referenced deleted methods' modules.
 
 **Phase 1 exit criteria**: `vulture src/ --min-confidence 80` shows no methods from the confirmed dead list. Green gate passing. 3D map regenerated. Commit: `chore: remove dead resolver methods`.
+
+**Status (2026-05-17):** ✅ Complete — methods deleted; tests use `tests/resolver_test_helpers.py`; `test_placeholder_resolver_disambiguation.py` removed.
 
 ---
 
@@ -192,6 +196,8 @@ Split into three sessions:
 One UAT run after all three sessions before commit.
 
 **Phase 2 exit criteria**: UAT passing. Resolution pass visible in output. `tests/uat_full_pipeline.py` green. Commit: `feat: LLM-first priority chain resolver`.
+
+**Status (2026-05-17):** 🟡 Partial — Sessions 2.1–2.2 done (Pass 1 CLICK/FILL + ASSERT text, Pass 2 structural, `[RESOLVE]` logging). Pass 3 still uses legacy shortlist/threshold + `SemanticCandidateRanker`. Session 2.3 / full UAT pending.
 
 ---
 

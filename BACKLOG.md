@@ -1,7 +1,24 @@
 ﻿# BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-05-02 (AI-023, AI-024, AI-025 added)
+Last updated: 2026-05-17 (doc audit, resolver restructure Phases 1–2, UrlResolver Phase 3)
+
+---
+
+## ✅ Shipped (doc audit 2026-05-17)
+
+| ID | Status | Notes |
+|----|--------|-------|
+| AI-016–AI-022 | **Complete** | Evidence chain: tracker, spec analysis, test plan UI, annotated screenshots, Gantt, coverage + suite heatmaps |
+| AI-024 | **Complete** | `AccessibilityEnricher` + CDP `getFullAXTree` in PageScraper (not `page.accessibility.snapshot()`) |
+| B-0XX | **Complete** | Journey + stateful scrapers use same visibility + a11y enrichment as PageScraper |
+| Prerequisite injection (Stage A) | **Complete** | `PrerequisiteInjector` in orchestrator |
+| Keyword URL resolution | **Complete** | `UrlResolver` for GOTO; Phase 3 page scoping wired 2026-05-17 |
+| Resolver restructure Phase 0–1 | **Complete** | Dead methods removed from `placeholder_resolver.py` |
+| Resolver restructure Phase 2 | **Partial** | Pass 1 (CLICK/FILL + ASSERT text), Pass 2 structural, Pass 3 scoring+LLM; pass logging added |
+| AI-019 | **Superseded** | Skeleton uses placeholders; `code_postprocessor` injects `evidence_tracker` — no LLM evidence rules needed |
+
+**Still open (high level):** AI-010 POM toggle, AI-011 run history chart, AI-023 repair loop, AI-026 CLI reload, AI-004 Run Now gaps, Session 3 ASSERT prompt specificity.
 
 ---
 
@@ -182,7 +199,7 @@ Three new outputs are produced per test run:
 
 ---
 
-### ~~AI-016 — Spec Analysis Stage~~
+### ✅ AI-016 — Spec Analysis Stage (COMPLETE)
 
 **What:** A new pipeline stage that runs before test generation. Reads the
 user's input (spec, user story, or acceptance criteria), extracts business rules,
@@ -217,7 +234,7 @@ conditions rather than raw acceptance criteria text
 
 ---
 
-### AI-017 — Living Test Plan UI
+### ✅ AI-017 — Living Test Plan UI (COMPLETE)
 
 **What:** After spec analysis, the tester sees a full editable test plan showing
 all derived conditions. They can edit any condition's text, expected result, or
@@ -247,7 +264,7 @@ Any filtering, sorting, or condition-manipulation logic goes in
 
 ---
 
-### AI-018 — Evidence Tracker Module
+### ✅ AI-018 — Evidence Tracker Module (COMPLETE)
 
 **What:** `src/evidence_tracker.py` — wraps Playwright Page interactions to
 record element bounding boxes, interaction types, step sequence, and run history.
@@ -283,7 +300,7 @@ into every generated test automatically
 
 ---
 
-### AI-019 — Prompt Update: EvidenceTracker Methods
+### ~~AI-019 — Prompt Update: EvidenceTracker Methods~~ (SUPERSEDED — skeleton-first + postprocessor)
 
 **What:** Update `src/prompt_utils.py` to add a new rule block
 `_EVIDENCE_TRACKER_RULES` instructing the LLM to use `evidence_tracker.*`
@@ -315,7 +332,7 @@ template system.
 
 ---
 
-### AI-020 — Annotated Screenshot Evidence View
+### ✅ AI-020 — Annotated Screenshot Evidence View (COMPLETE)
 
 **What:** Extend `src/report_utils.py` to read `.evidence.json` sidecars when
 building the HTML evidence bundle. Render an SVG overlay on top of each
@@ -354,7 +371,7 @@ Multiply by container dimensions at render time.
 
 ---
 
-### AI-021 — Gantt Timeline in Evidence Bundle
+### ✅ AI-021 — Gantt Timeline in Evidence Bundle (COMPLETE)
 
 **What:** A per-story, per-sprint test execution timeline showing each condition
 as a horizontal bar sized by duration. Bars labelled with the condition ref
@@ -386,7 +403,7 @@ Gantt makes this visible without the tester having to articulate it.
 
 ---
 
-### AI-022 — Coverage Heat Map
+### ✅ AI-022 — Coverage Heat Map (COMPLETE)
 
 **What:** A cross-story, cross-sprint grid showing coverage confidence for each
 story × condition type combination (or story × sprint, or story × source,
@@ -503,9 +520,9 @@ automation tester would do: open the page, find the element, copy the locator.
 - One locator repair per invocation — not batch
 - Never guesses a replacement — only records what the tester clicks
 
-### AI-024 — Accessibility Tree Enrichment
-**What:** Add `page.accessibility.snapshot()` to scraping pipeline...
-[rest of entries from spec file]
+### ✅ AI-024 — Accessibility Tree Enrichment (COMPLETE — 2026-05-17)
+**Implemented:** `src/accessibility_enricher.py`, `tests/test_accessibility_enricher.py`, CDP snapshot in `src/scraper.py` (+ journey/stateful scrapers per B-0XX).
+**Spec:** `docs/specs/FEATURE_SPEC_AI024_accessibility_tree_enrichment.md`
 
 ### AI-025 — Visual Regression Detection (Planning Required)
 **What:** Post-run screenshot comparison against baselines...
