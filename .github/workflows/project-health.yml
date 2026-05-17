@@ -19,15 +19,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
-      - name: Install uv (package manager)
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.x"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -45,15 +43,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.x"
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Run ruff
         run: uv run ruff check .
@@ -71,18 +70,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.x"
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --frozen
 
       - name: Run mypy
-        run: uv run mypy .
+        run: uv run mypy src/ cli/
 
   pytest:
     name: PyTest (Unit Tests)
@@ -94,18 +94,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.14
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          version: "0.5.x"
+        uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
       - name: Run pytest
-        run: uv run pytest -v --tb=short
+        run: uv run pytest tests/ -v --tb=short

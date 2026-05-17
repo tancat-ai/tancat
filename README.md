@@ -5,7 +5,7 @@ An AI-powered tool that generates Playwright Python test scripts from user stori
 | Metric | Status |
 |--------|--------|
 | CI/CD Pipeline | [![CI](https://github.com/lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/AI-Playwright-Test-Generator/actions) |
-| Python Version | ![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg) |
+| Python Version | ![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg) |
 | License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | Code Quality | [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) |
 
@@ -133,7 +133,7 @@ Use `scripts/uat_automationexercise.py` for batch quality validation on supporte
 
 ## Prerequisites
 
-- **Python 3.13+**
+- **Python 3.14+** (template strings / `t"..."` supported)
 - **Ollama** with a model (recommended: `qwen3.5:35b`)
 - **Docker** (optional — for containerized runs)
 

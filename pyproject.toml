@@ -41,7 +41,7 @@ packages = ["src", "cli"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py313"
+target-version = "py314"
 exclude = ["generated_tests", "scratch", "notebooks"]
 [tool.ruff.lint]
 select = [
@@ -58,7 +58,7 @@ ignore = ["E501", "B027"]
 [tool.ruff.lint.isort]
 known-first-party = ["src", "cli"]
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.14"
 exclude = ["generated_tests", "scripts", "scratch"]
 warn_return_any = false
 warn_unused_configs = true

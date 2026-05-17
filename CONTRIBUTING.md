@@ -46,7 +46,7 @@ By participating you agree to abide by its terms. Please be respectful and const
 
 ## Development Setup
 
-**Requirements:** Python 3.13+, [uv](https://github.com/astral-sh/uv), Git, Ollama
+**Requirements:** Python 3.14+, [uv](https://github.com/astral-sh/uv), Git, Ollama
 
 ```bash
 # 1. Fork and clone
