@@ -32,7 +32,7 @@ def print_menu(options: list[str], prompt: str = "Choose an option") -> int:
             idx = int(choice) - 1
             if 0 <= idx < len(options):
                 return idx
-        except (ValueError, KeyboardInterrupt):
+        except ValueError, KeyboardInterrupt:
             pass
         print(yellow("  Invalid choice. Please try again."))
 

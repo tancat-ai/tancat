@@ -88,7 +88,7 @@ def _parse_duration(value: str | None, unit: str | None = None) -> float:
         return 0.0
     try:
         num = float(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.0
     if unit == "ms":
         return num / 1000.0

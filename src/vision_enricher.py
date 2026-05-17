@@ -298,7 +298,7 @@ class VisionEnricher:
                 json_text = "\n".join(lines[1:-1]) if len(lines) > 2 else lines[1] if len(lines) > 1 else ""
             data = json.loads(json_text)
             return {k: data.get(k) for k in defaults}
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError, ValueError:
             pass
 
         # Fallback: extract key-value pairs from text

@@ -37,7 +37,7 @@ def _default_disambiguation_threshold() -> int:
     """Return the disambiguation threshold from environment or default."""
     try:
         return int(os.environ.get("DISAMBIGUATION_THRESHOLD", "5"))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return _DEFAULT_DISAMBIGUATION_THRESHOLD
 
 
@@ -79,7 +79,7 @@ def _default_min_confidence() -> float:
     """Return the minimum confidence threshold from environment or default."""
     try:
         return float(os.environ.get("PLACEHOLDER_MIN_CONFIDENCE", "0.3"))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return 0.3
 
 

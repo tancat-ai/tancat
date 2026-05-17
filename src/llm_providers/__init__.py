@@ -324,7 +324,7 @@ def auto_detect_provider() -> LLMProvider:
         resp = httpx.get(lm_url, timeout=2.0)
         if resp.status_code == 200:
             return LMStudioProvider()
-    except (httpx.ConnectError, httpx.TimeoutException):
+    except httpx.ConnectError, httpx.TimeoutException:
         pass
 
     # 2. Try Ollama
@@ -333,7 +333,7 @@ def auto_detect_provider() -> LLMProvider:
         resp = httpx.get(ollama_url, timeout=2.0)
         if resp.status_code == 200:
             return OllamaProvider()
-    except (httpx.ConnectError, httpx.TimeoutException):
+    except httpx.ConnectError, httpx.TimeoutException:
         pass
 
     raise ConnectionError("No local LLM providers (LM Studio or Ollama) are currently active.")
