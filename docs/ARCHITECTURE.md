@@ -47,7 +47,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 
 | Module | Role |
 |--------|------|
-| `src/scraper.py` (`PageScraper`) | Stateless HTTP scraper using httpx + BeautifulSoup. Extracts DOM metadata (selectors, text, role) for placeholder resolution. Locators are NEVER injected into LLM prompts. |
+| `src/scraper.py` (`PageScraper`) | Stateless browser scraper. Extracts DOM metadata, captures visibility, screenshot bytes, and element bounding boxes for placeholder resolution and visual enrichment. `scrape_with_enrichment()` applies vision metadata enrichment to captured results. Locators are NEVER injected into LLM prompts. |
 | `src/stateful_scraper.py` (`StatefulPageScraper`) | Session-aware browser automation for pages requiring authentication state (cart, checkout). Falls back to PageScraper if session scrape produces no elements. |
 | `src/journey_scraper.py` (`CartSeedingScraper`) | Journey-aware scraper — seeds the cart with items, then scrapes cart/checkout pages that require session state. |
 

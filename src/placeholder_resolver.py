@@ -352,6 +352,8 @@ class PlaceholderResolver:
                             product_word_set = set(" ".join(raw_product_words).lower().split())
                             if product_word_set and all(pw in element_id_lower for pw in product_word_set):
                                 haystack_score += 20
+                    if element.get("_journey_discovered") == "true":
+                        haystack_score += 5
                     ranked.append((haystack_score, element))
                     continue
 
@@ -436,6 +438,9 @@ class PlaceholderResolver:
                 score += 1
             if "button" in description.lower() and role in {"button", "submit"}:
                 score += 1
+
+            if element.get("_journey_discovered") == "true":
+                score += 5
 
             if action == "CLICK":
                 if role in {"button", "link", "a", "submit"}:

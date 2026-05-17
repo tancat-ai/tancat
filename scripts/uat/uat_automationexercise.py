@@ -214,6 +214,18 @@ def _verify_b0xx_enrichment() -> bool:
     return all_pass
 
 
+def find_unresolved_placeholder_artifacts(final_code: str) -> tuple[list[str], bool]:
+    """Return unresolved placeholder tokens and whether unresolved skip statements exist."""
+    placeholders_found = re.findall(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code)
+    skips_found = (
+        'pytest.skip("Unresolved placeholder' in final_code
+        or "pytest.skip('Unresolved placeholder" in final_code
+        or 'pytest.skip("Skipping: unresolved placeholders' in final_code
+        or "pytest.skip('Skipping: unresolved placeholders" in final_code
+    )
+    return placeholders_found, skips_found
+
+
 async def run_uat() -> None:
     args = parse_args()
     load_dotenv()
@@ -299,11 +311,10 @@ async def run_uat() -> None:
             print("❌ UAT FAILED: Generated code is too short or empty.")
             return
 
+        all_pass = True
+
         # Check for placeholder artifacts that should have been resolved.
-        placeholders_found = re.findall(r"\{\{(?:CLICK|FILL|GOTO|URL|ASSERT):", final_code)
-        skips_found = (
-            'pytest.skip("Unresolved placeholder' in final_code or "pytest.skip('Unresolved placeholder" in final_code
-        )
+        placeholders_found, skips_found = find_unresolved_placeholder_artifacts(final_code)
 
         if placeholders_found or skips_found:
             print("⚠️  UAT WARNING: Unresolved placeholders or placeholder skips found in generated code.")
@@ -311,6 +322,7 @@ async def run_uat() -> None:
                 print(f"   Found {len(placeholders_found)} placeholder tokens.")
             if skips_found:
                 print("   Placeholder unresolved skip statements were inserted.")
+            all_pass = False
         else:
             print("✅ No unresolved placeholders found.")
 
@@ -337,7 +349,6 @@ async def run_uat() -> None:
             checks[test_id] = test_id in final_code
 
         print("\n[Validation]")
-        all_pass = True
         for check_name, passed in checks.items():
             status = "✅" if passed else "❌"
             print(f"  {status} {check_name}: {'found' if passed else 'MISSING'}")

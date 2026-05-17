@@ -22,6 +22,18 @@ Last updated: 2026-05-17 (doc audit, resolver restructure Phases 1–2, UrlResol
 
 ---
 
+## 🟡 AI-027 — Visual Element Enrichment (IN PROGRESS — Session 3 of 4)
+
+**What:** Vision-based element enrichment for improved placeholder resolution on multi-product sites.
+**Session 1 complete:** `VisionEnricher` + vision capability detection.
+**Session 2 complete:** Screenshot capture during scraping, with interactive element bounding boxes stored in memory.
+**Session 3 complete:** Vision enrichment service with element crop, mocked LLM call path, response parsing, and scraper enrichment bridge.
+**Remaining:** Journey selector propagation and enriched resolver text matching.
+**Spec:** `docs/specs/FEATURE_SPEC_visual_element_enrichment.md`
+**Priority:** High — placeholder resolution quality on multi-product sites
+
+---
+
 ## ✅ Closed Bugs
 
 ### B-001 — LLM generates async standalone tests instead of pytest sync
@@ -75,14 +87,35 @@ writing if code fails syntax check.
 **Priority:** Medium — AI-009 should prevent recurrence
 
 ### B-012 — Pass 1 false positive: "add to cart" matches cart nav link
+**Status:** ✅ FIXED (2026-05-17)
 **Symptom:** CLICK:'Add to cart' button resolves to a[href="/view_cart"] (text="Cart")
 because "cart" appears in both the description and the nav link text.
 **Root cause:** Pass 1 minimum length guard (3 chars) allows short common words
 to match across unrelated elements.
-**Fix:** Use role signal from description ("button" keyword → prefer role=button
-over role=link) as secondary filter in Pass 1, or require matched text to be
-more specific (longer or multi-word).
-**Priority:** High — causes wrong element in generated tests
+**Fix implemented:** Action verb awareness in `_pass1_text_match()` — when the
+description contains action verbs (add, remove, place, buy, etc.), the element
+text must also contain at least one of those action words. Prevents "View Cart"
+from matching "Add to cart button" because "View Cart" lacks the word "add".
+**Files changed:** `src/placeholder_orchestrator.py` — `_pass1_text_match()`
+**Verification:** UAT automationexercise.com 6/6 tests pass (was 4/6).
+
+### B-015 — Journey discovery selects wrong element for action descriptions
+**Symptom:** Journey discovery clicks `a[href="/view_cart"]` for "Add to cart button
+next to Blue Top product" — the Cart link, not the Add to cart button. This is
+visible in UAT logs: `[journey_discovery] Attempting to click selector: a[href="/view_cart"]`
+**Root cause:** The `JourneyScraper` uses its own element selection logic (separate
+from `PlaceholderOrchestrator`) to find elements to click during journey discovery.
+It does NOT use the Pass 1 action verb fix from B-012. The journey scraper's
+selection likely uses text substring matching similar to the old Pass 1, so "cart"
+in the description matches the Cart link.
+**Impact:** Journey discovery visits wrong pages, producing incorrect scraped data
+for downstream pages. However, Fix 1 for B-012 in the resolution phase compensates
+for this — even with noisy journey data, the resolver correctly picks the Add to
+cart button. So tests pass despite journey discovery being wrong.
+**Fix:** Apply the same action verb awareness logic to the JourneyScraper's element
+selection, or have journey discovery use the PlaceholderOrchestrator's resolution
+pipeline instead of its own selection logic.
+**Priority:** Medium — tests pass despite the issue because B-012 fix compensates
 
 ### B-013 — Journey discovery stops one page short for checkout-step-two
 **Symptom:** "finish button" on checkout-step-two.html never resolves because

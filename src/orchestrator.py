@@ -251,6 +251,7 @@ class TestOrchestrator:
         scraped_errors: dict[str, str] = {
             url: _error for url, (elements, _error, _final) in raw_scraped_data.items() if _error
         }
+        all_journey_scraped_data: dict[str, list[dict[str, Any]]] = {}
 
         # Approach 2: User-provided journey execution (Phase B — authenticated scraping)
         if self._journey_steps and len(self._journey_steps) > 0:
@@ -261,6 +262,7 @@ class TestOrchestrator:
                 starting_url=self._starting_url,
             )
             journey_scraped: dict[str, list[dict[str, Any]]] = journey_result.captured_pages
+            all_journey_scraped_data.update(journey_scraped)
 
             # Record diagnostics
             self._pipeline_diagnostics["journey_failed_steps"] = journey_result.failed_steps
@@ -283,12 +285,20 @@ class TestOrchestrator:
             discovery_data = await self._scrape_journeys_statefully(
                 journeys, self._starting_url, self._credential_profile
             )
+            all_journey_scraped_data.update(discovery_data)
             # Journey-aware data takes precedence as it has correct state
             for url, elements in discovery_data.items():
                 if elements:
                     scraped_data[url] = elements
                     self._debug(f"journey discovery enriched: {url} ({len(elements)} elements)")
             self._debug("phase=journey_discovery done")
+
+        journey_selector_data = self._extract_journey_selectors(all_journey_scraped_data)
+        for url, elements in journey_selector_data.items():
+            if url not in scraped_data:
+                scraped_data[url] = elements
+            else:
+                scraped_data[url] = scraped_data[url] + elements
 
         # Track redirects to maintain correct page context
         redirects: dict[str, str] = {
@@ -359,6 +369,34 @@ class TestOrchestrator:
             unresolved_placeholders=unresolved,
         )
         return final_code
+
+    def _extract_journey_selectors(
+        self,
+        all_scraped_data: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Build synthetic resolver elements from journey-discovered selectors."""
+        journey_elements: dict[str, list[dict[str, Any]]] = {}
+        for url, elements in all_scraped_data.items():
+            synthetic: list[dict[str, Any]] = []
+            for element in elements:
+                selector = str(element.get("selector", "")).strip()
+                if not selector:
+                    continue
+                synthetic.append(
+                    {
+                        "selector": selector,
+                        "text": element.get("text", ""),
+                        "role": element.get("role", ""),
+                        "href": element.get("href", ""),
+                        "aria_label": element.get("aria_label", ""),
+                        "accessible_name": element.get("accessible_name", ""),
+                        "is_visible": element.get("is_visible", True),
+                        "_journey_discovered": "true",
+                    }
+                )
+            if synthetic:
+                journey_elements[url] = synthetic
+        return journey_elements
 
     async def _scrape_journeys_statefully(
         self,

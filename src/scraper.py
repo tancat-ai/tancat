@@ -2,18 +2,166 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
 from src.element_enricher import ElementEnricher
+
+
+@dataclass
+class ScrapeResult:
+    """Scraped page data, with optional visual capture metadata."""
+
+    url: str
+    elements: list[dict[str, Any]]
+    title: str = ""
+    html_snippet: str = ""
+    error: str | None = None
+    final_url: str | None = None
+    a11y_snapshot: dict[str, Any] | None = None
+    screenshot_bytes: bytes | None = None
+    element_boxes: list[dict[str, Any]] | None = None
+
+
+def _normalise_locator_bbox(bbox: Any) -> dict[str, float] | None:
+    """Return a numeric bbox dict when Playwright reports a visible region."""
+    if not bbox:
+        return None
+
+    width = float(bbox.get("width", 0) or 0)
+    height = float(bbox.get("height", 0) or 0)
+    if width <= 0 or height <= 0:
+        return None
+
+    return {
+        "x": float(bbox.get("x", 0) or 0),
+        "y": float(bbox.get("y", 0) or 0),
+        "width": width,
+        "height": height,
+    }
+
+
+def _selector_from_locator(locator: Any, index: int) -> str:
+    """Build a best-effort selector for a live Playwright locator."""
+    try:
+        selector = locator.evaluate(
+            """(node) => {
+                const tag = node.tagName.toLowerCase();
+                if (node.id) return `#${node.id}`;
+                for (const attr of ["data-testid", "data-test", "data-qa"]) {
+                    const value = node.getAttribute(attr);
+                    if (value) return `[${attr}="${value}"]`;
+                }
+                const productId = node.getAttribute("data-product-id");
+                if (productId) {
+                    const classes = Array.from(node.classList || []).filter(Boolean).join(".");
+                    return classes ? `${tag}.${classes}[data-product-id="${productId}"]` : `${tag}[data-product-id="${productId}"]`;
+                }
+                if (tag === "a") {
+                    const href = node.getAttribute("href");
+                    if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
+                        try {
+                            const parsed = new URL(href, window.location.href);
+                            return `a[href="${parsed.pathname || href}"]`;
+                        } catch {
+                            return `a[href="${href}"]`;
+                        }
+                    }
+                }
+                const name = node.getAttribute("name");
+                if (name) return `${tag}[name="${name}"]`;
+                const classes = Array.from(node.classList || []).filter(Boolean).join(".");
+                if (classes) return `.${classes}`;
+                return tag;
+            }"""
+        )
+        if selector:
+            return str(selector)
+    except Exception:
+        pass
+    return f"interactive[{index}]"
+
+
+def capture_page_screenshot(
+    page: Page,
+    url: str,
+    full_page: bool = True,
+) -> tuple[bytes, list[dict[str, Any]]]:
+    """Capture a page screenshot and bounding boxes for interactive elements."""
+    screenshot_bytes = page.screenshot(full_page=full_page, type="png")
+    interactive_locator = page.locator("button, a, input, select, [onclick], [role=button], [tabindex]")
+    element_boxes: list[dict[str, Any]] = []
+
+    try:
+        count = interactive_locator.count()
+    except Exception:
+        return screenshot_bytes, element_boxes
+
+    for index in range(count):
+        try:
+            locator = interactive_locator.nth(index)
+            bbox = _normalise_locator_bbox(locator.bounding_box())
+            if bbox is None:
+                continue
+
+            selector = _selector_from_locator(locator, index)
+            is_visible = True
+            try:
+                is_visible = bool(locator.is_visible())
+            except Exception:
+                pass
+
+            element_boxes.append(
+                {
+                    "selector": selector,
+                    "bbox": bbox,
+                    "element_index": index,
+                    "is_visible": is_visible,
+                    "url": url,
+                }
+            )
+        except Exception:
+            continue
+
+    return screenshot_bytes, element_boxes
+
+
+def scrape_with_enrichment(
+    scrape_results: list[ScrapeResult],
+    provider: str,
+    model: str,
+    timeout: int = 60,
+) -> list[ScrapeResult]:
+    """Apply vision enrichment to scrape results that include screenshot data."""
+    from src.vision_enricher import VisionEnricher
+
+    if not VisionEnricher.is_vision_capable(provider, model):
+        return scrape_results
+
+    enriched_results: list[ScrapeResult] = []
+    for result in scrape_results:
+        if result.screenshot_bytes and result.element_boxes:
+            result.elements = PageScraper._attach_element_boxes(result.elements, result.element_boxes)
+            result.elements = VisionEnricher.enrich_elements(
+                elements=result.elements,
+                screenshot_bytes=result.screenshot_bytes,
+                provider=provider,
+                model=model,
+                timeout=timeout,
+            )
+        enriched_results.append(result)
+
+    return enriched_results
 
 
 class PageScraper:
@@ -21,6 +169,7 @@ class PageScraper:
 
     def __init__(self, timeout_ms: int = 30000) -> None:
         self.timeout_ms = timeout_ms
+        self.last_scrape_results: dict[str, ScrapeResult] = {}
 
     def _debug(self, message: str) -> None:
         """Print debug message if logging is enabled."""
@@ -74,9 +223,29 @@ class PageScraper:
         a11y_snapshot = data.get("a11y_snapshot") or {}
         error = data.get("error")
         final_url = data.get("final_url", url)
+        screenshot_bytes = None
+        screenshot_base64 = data.get("screenshot_base64")
+        if isinstance(screenshot_base64, str) and screenshot_base64:
+            try:
+                screenshot_bytes = base64.b64decode(screenshot_base64)
+            except ValueError:
+                screenshot_bytes = None
+        element_boxes = data.get("element_boxes") or []
 
         # Enrich elements with computed accessibility names (AI-024)
         elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)
+        elements = self._attach_element_boxes(elements, element_boxes)
+        self.last_scrape_results[url] = ScrapeResult(
+            url=url,
+            elements=elements,
+            title=str(data.get("title", "")),
+            html_snippet=str(data.get("html_snippet", "")),
+            error=error,
+            final_url=final_url,
+            a11y_snapshot=a11y_snapshot,
+            screenshot_bytes=screenshot_bytes,
+            element_boxes=element_boxes,
+        )
 
         return elements, error, final_url
 
@@ -131,6 +300,78 @@ class PageScraper:
 
         except Exception as e:
             return [], {}, str(e), url
+
+    def _scrape_url_sync_result(self, url: str) -> ScrapeResult:
+        """Synchronous scrape result including screenshot bytes and element boxes."""
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                page = context.new_page()
+
+                response = page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
+                if not response:
+                    browser.close()
+                    return ScrapeResult(url=url, elements=[], error=f"No response from {url}", final_url=url)
+
+                if response.status >= 400:
+                    final_url = page.url
+                    browser.close()
+                    return ScrapeResult(url=url, elements=[], error=f"HTTP {response.status}", final_url=final_url)
+
+                final_url = page.url
+                title = page.title()
+                html_content = page.content()
+                elements = self._extract_elements_from_html(html_content, base_url=final_url)
+                elements = self._capture_element_visibility(page, elements)
+
+                a11y_snapshot: dict[str, Any] = {}
+                try:
+                    cdp = context.new_cdp_session(page)
+                    ax_result = cdp.send("Accessibility.getFullAXTree")
+                    a11y_snapshot = AccessibilityEnricher._transform_cdp_ax_tree(ax_result.get("nodes", []))
+                except Exception as e:
+                    self._debug(f"CDP accessibility tree failed: {e} â€” skipping a11y enrichment")
+
+                screenshot_bytes, element_boxes = capture_page_screenshot(page, final_url)
+                elements = self._attach_element_boxes(elements, element_boxes)
+
+                browser.close()
+                return ScrapeResult(
+                    url=url,
+                    elements=elements,
+                    title=title,
+                    html_snippet=html_content[:2000],
+                    error=None,
+                    final_url=final_url,
+                    a11y_snapshot=a11y_snapshot,
+                    screenshot_bytes=screenshot_bytes,
+                    element_boxes=element_boxes,
+                )
+
+        except Exception as e:
+            return ScrapeResult(url=url, elements=[], error=str(e), final_url=url)
+
+    @staticmethod
+    def _attach_element_boxes(
+        elements: list[dict[str, Any]],
+        element_boxes: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Attach matching bounding boxes to scraped elements by selector."""
+        boxes_by_selector: dict[str, dict[str, Any]] = {
+            str(box.get("selector", "")): box for box in element_boxes if box.get("selector")
+        }
+        for index, element in enumerate(elements):
+            selector = str(element.get("selector", ""))
+            matching_box = boxes_by_selector.get(selector)
+            if matching_box:
+                element["_bbox"] = matching_box.get("bbox")
+                element["_element_box_index"] = matching_box.get("element_index")
+            else:
+                element["_element_box_index"] = index
+        return elements
 
     def _capture_element_visibility(
         self,
@@ -394,13 +635,19 @@ def _subprocess_entrypoint() -> None:
     timeout_ms = payload.get("timeout_ms", 30000)
 
     scraper = PageScraper(timeout_ms=timeout_ms)
-    elements, a11y_snapshot, error, final_url = scraper._scrape_url_sync(url)
+    scrape_result = scraper._scrape_url_sync_result(url)
 
     result = {
-        "elements": elements,
-        "a11y_snapshot": a11y_snapshot,
-        "error": error,
-        "final_url": final_url,
+        "elements": scrape_result.elements,
+        "a11y_snapshot": scrape_result.a11y_snapshot or {},
+        "error": scrape_result.error,
+        "final_url": scrape_result.final_url or url,
+        "title": scrape_result.title,
+        "html_snippet": scrape_result.html_snippet,
+        "element_boxes": scrape_result.element_boxes or [],
+        "screenshot_base64": base64.b64encode(scrape_result.screenshot_bytes).decode("ascii")
+        if scrape_result.screenshot_bytes
+        else "",
     }
     print(json.dumps(result))
 

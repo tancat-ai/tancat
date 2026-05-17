@@ -669,16 +669,35 @@ class PlaceholderOrchestrator:
 
         Minimum element text length of 3 characters prevents
         single-character matches ('a', 'x') producing false wins.
+
+        REGRESSION FIX (2026-05-17): When the description contains action verbs
+        (add, remove, place, buy, etc.), require the element text to contain at
+        least one of those action words. This prevents "Add to cart button" from
+        matching the "View Cart" link just because both contain the word "cart".
         """
         if action not in {"CLICK", "FILL"}:
             return None
 
         norm_description = description.lower()
 
+        # Check if the description contains action verbs — these need stricter matching
+        desc_words = set(norm_description.split())
+        has_action_verb = bool(desc_words & PlaceholderResolver.ACTION_VERBS)
+
         for elements in pages_data.values():
             for element in elements:
                 norm_text = self._normalise_element_text(element)
                 if len(norm_text) >= 3 and norm_text in norm_description:
+                    # When action verbs are present, require the element text to
+                    # contain at least one action word from the description.
+                    # This prevents "cart" in "View Cart" from beating "Add to cart"
+                    # when the description is "Add to cart button next to Blue Top".
+                    if has_action_verb:
+                        text_words = set(norm_text.split())
+                        action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
+                        if not (text_words & action_words_in_desc):
+                            # Element text lacks the action verb — skip it
+                            continue
                     return element
 
         return None

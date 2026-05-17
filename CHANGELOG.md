@@ -10,6 +10,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- AI-027 Session 2 screenshot capture during scraping: `ScrapeResult`, in-memory screenshot bytes, and interactive element bounding boxes for later vision enrichment.
+- AI-027 Session 3 vision enrichment service: element crop, vision LLM call path, structured response parsing, and scraper enrichment bridge.
 - **Refactor 2026-05-10 (Parts 1-7)** — Modular extraction reducing `streamlit_app.py` from 918 → 362 lines (60% reduction) per REFACTOR_PLAN_2026-05-10.md
   - `src/ui_pipeline.py` — Pipeline execution helpers extracted from `streamlit_app.py` (business logic, no rendering)
   - `src/ui_renderers.py` — Streamlit rendering helpers extracted from `streamlit_app.py` (pure UI, no business logic)

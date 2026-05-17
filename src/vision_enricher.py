@@ -210,13 +210,9 @@ class VisionEnricher:
         """
         if not cls.is_vision_capable(provider, model):
             # No vision capability — return elements unchanged
-            for elem in elements:
-                elem["_enriched"] = False
             return elements
 
         if not elements or not screenshot_bytes:
-            for elem in elements:
-                elem["_enriched"] = False
             return elements
 
         # Import here to avoid circular import

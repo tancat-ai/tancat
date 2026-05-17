@@ -38,6 +38,16 @@
 2. `jira.md` — Jira attachment format (`!filename.png|thumbnail!`)
 3. `standalone.html` — base64-embedded, fully self-contained
 
+### Screenshot Capture During Scraping
+- **Use:** One in-memory screenshot per scraped page, with interactive element bounding boxes
+- **Why:** Vision enrichment can crop elements without re-driving the browser
+- **Don't use:** Disk writes for scrape screenshots; these bytes are transient pipeline data
+
+### Vision Enrichment Pipeline
+- **Use:** `VisionEnricher.enrich_elements()` crops each element image, sends it to a vision LLM, parses structured JSON, and stores metadata on the element dict
+- **Failure mode:** Enrichment errors are silent per element; the original element is preserved with `_enrichment_error`
+- **Skip mode:** Non-vision models and missing screenshots return elements unchanged
+
 ### Skeleton-First Pipeline: Two-Phase Generation
 1. **Phase 1 (LLM):** Generates skeletons with placeholder syntax `{{ACTION:description}}`
 2. **Phase 2 (Resolver):** Fills placeholders from scraped DOM elements

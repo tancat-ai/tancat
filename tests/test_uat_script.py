@@ -29,3 +29,30 @@ def test_parse_args_supports_site_option() -> None:
     module = load_uat_module()
     args = module.parse_args(["--site", "saucedemo"])
     assert args.site == "saucedemo"
+
+
+def test_find_unresolved_placeholder_artifacts_detects_tokens_and_skips() -> None:
+    module = load_uat_module()
+    code = """
+def test_example(page):
+    pytest.skip("Skipping: unresolved placeholders for: 'checkout button'")
+    pytest.skip("Unresolved placeholder: {{CLICK:checkout button}}")
+"""
+
+    placeholders, has_skip = module.find_unresolved_placeholder_artifacts(code)
+
+    assert placeholders == ["{{CLICK:"]
+    assert has_skip is True
+
+
+def test_find_unresolved_placeholder_artifacts_accepts_resolved_code() -> None:
+    module = load_uat_module()
+    code = """
+def test_example(page):
+    evidence_tracker.click("#checkout", label="checkout button")
+"""
+
+    placeholders, has_skip = module.find_unresolved_placeholder_artifacts(code)
+
+    assert placeholders == []
+    assert has_skip is False

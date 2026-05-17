@@ -242,7 +242,7 @@ class TestEnrichElementsNoVision:
         )
         assert len(result) == 2
         for elem in result:
-            assert elem["_enriched"] is False
+            assert "_enriched" not in elem
             assert elem["tag"] in ("button", "img")
 
     def test_returns_empty_list_when_no_elements(self) -> None:
@@ -263,7 +263,7 @@ class TestEnrichElementsNoVision:
             model="qwen2.5-vl",
         )
         assert len(result) == 1
-        assert result[0]["_enriched"] is False
+        assert "_enriched" not in result[0]
 
 
 # ---------------------------------------------------------------------------
