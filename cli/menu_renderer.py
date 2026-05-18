@@ -61,9 +61,9 @@ def _read_key() -> str:
     import sys
 
     try:
-        char = msvcrt.getwch()  # wide char, handles Unicode
+        char = msvcrt.getwch()  # type: ignore[attr-defined] # wide char, handles Unicode
         if char in ("\x00", "\xe0"):  # extended key prefix (arrows, F-keys)
-            char2 = msvcrt.getwch()
+            char2 = msvcrt.getwch()  # type: ignore[attr-defined]
             up_code = "H"  # arrow up
             down_code = "P"  # arrow down
             if char2 == up_code:
