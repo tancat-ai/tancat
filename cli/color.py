@@ -37,3 +37,26 @@ def yellow(text: str) -> str:
 
 def bold(text: str) -> str:
     return _c(text, "1")
+
+
+# ── Retro (CHOICE-style) phosphor colours ──────────────────────────────────
+
+
+def phosphor_green(text: str) -> str:
+    """Bright green — ANSI 100. Used for selected/highlighted menu items."""
+    return _c(text, "100")
+
+
+def dim_green(text: str) -> str:
+    """Dim/half-bright green — ANSI 2 + 32 combo. Used for non-selected items."""
+    return _c(text, "2;32")
+
+
+def inverse_green(text: str) -> str:
+    """Inverse video — green background, black text. Used for the '>' cursor."""
+    return _c(text, "7;32")
+
+
+def phosphor_reset() -> str:
+    """ANSI reset code as a standalone string. Useful for mid-line colour changes."""
+    return "\033[0m"

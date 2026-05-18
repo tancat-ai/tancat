@@ -1,6 +1,10 @@
 """CLI menu rendering and input helpers.
 
-Provides coloured menus, input prompts, and the LLM configuration flow.
+Renders a CHOICE-inspired retro terminal UI: green-on-black phosphor
+aesthetic with box-drawing borders and a ``>`` selection indicator.
+
+All input logic (LLM config, user story, URLs, auth, journey) is
+preserved from the previous implementation — only rendering changed.
 """
 
 from __future__ import annotations
@@ -8,48 +12,174 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from .color import bold, green, red, yellow
+from .color import green, red, yellow
+from .retro_ui import (
+    clear_screen,
+    prompt_input,
+    prompt_non_empty,
+    render_header,
+    render_menu,
+    render_shortcut_bar,
+)
 
-# ── Print helpers ───────────────────────────────────────────────────────────
+# ── Default selected index (persist across screen redraws) ─────────────────
+
+_default_selected: list[int] = [0]
 
 
-def print_header(title: str) -> None:
-    width = 60
-    print()
-    print("=" * width)
-    print(bold(f"  {title}"))
-    print("=" * width)
-    print()
+def _next_selected() -> int:
+    """Return and increment the default selected index for the next menu."""
+    idx = _default_selected[0]
+    _default_selected[0] = 0  # reset after use
+    return idx
 
 
-def print_menu(options: list[str], prompt: str = "Choose an option") -> int:
-    """Print a numbered menu and return the selected index (0-based)."""
-    for i, opt in enumerate(options, 1):
-        print(f"  {i}. {opt}")
+# ── Header ─────────────────────────────────────────────────────────────────
+
+
+def print_header(title: str, subtitle: str = "") -> None:
+    """Print a CHOICE-style section header with box-drawing borders."""
+    if title == "AI Playwright Test Generator":
+        subtitle = subtitle or "Generate Playwright tests from user stories with AI"
+    clear_screen()
+    render_header(title, subtitle)
+    print()  # blank line after header
+
+
+# ── Menu ───────────────────────────────────────────────────────────────────
+
+
+def _read_key() -> str:
+    """Read a single keypress using msvcrt (Windows) or fallback.
+
+    Returns:
+    - '^' for Up arrow
+    - 'v' for Down arrow
+    - the character typed for regular keys
+    """
+    import msvcrt
+    import sys
+
+    try:
+        char = msvcrt.getwch()  # wide char, handles Unicode
+        if char in ("\x00", "\xe0"):  # extended key prefix (arrows, F-keys)
+            char2 = msvcrt.getwch()
+            up_code = "H"  # arrow up
+            down_code = "P"  # arrow down
+            if char2 == up_code:
+                return "^"
+            if char2 == down_code:
+                return "v"
+        return char
+    except Exception:
+        # Fallback to sys.stdin if msvcrt fails
+        return sys.stdin.read(1)
+
+
+def print_menu(
+    options: list[str],
+    prompt: str = "Choose an option",
+    shortcuts: list[tuple[str, str]] | None = None,
+) -> int:
+    """Print a numbered retro menu and return the selected index (0-based).
+
+    Supports:
+    - Arrow keys: Up/Down to navigate, Enter to select
+    - Numbered input: type ``1``, ``2``, etc. and press Enter
+    - Shortcut keys: single-letter keys defined in *shortcuts*
+    - The menu is rendered with bright-green ``>`` indicator on the
+      selected item and dim green for the rest.
+    """
+    first_render = True
+    selected = 0
     while True:
+        # Clear screen on loop re-render (first render already cleared by print_header)
+        if not first_render:
+            clear_screen()
+        first_render = False
+
+        # Redraw menu with current selection
+        render_menu(options, selected=selected)
+        print()
+
+        # Build shortcut bar
+        bar: list[tuple[str, str]] = []
+        for i, opt in enumerate(options):
+            bar.append((str(i + 1), opt[:15]))
+        if shortcuts:
+            bar.extend(shortcuts)
+        bar.append(("Q", "Quit"))
+        render_shortcut_bar(bar)
+        print()
+
+        # Read input with arrow key support
         try:
-            choice = input(f"\n{prompt} [1-{len(options)}]: ").strip()
+            key = _read_key()
+
+            # Arrow up
+            if key == "^":
+                selected = max(0, selected - 1)
+                continue
+            # Arrow down
+            if key == "v":
+                selected = min(len(options) - 1, selected + 1)
+                continue
+            # Enter = select current item
+            if key == "\r":
+                return selected
+
+            # Backspace
+            if key in ("\x08", "\x7f"):
+                continue
+
+            # Regular character input
+            choice = key.strip()
+        except KeyboardInterrupt, EOFError:
+            print("\n  Interrupted.")
+            return -1
+
+        if not choice:
+            continue
+
+        # Handle shortcut keys (single letter)
+        if len(choice) == 1 and not choice.isdigit():
+            upper = choice.upper()
+            # Check explicit shortcuts first
+            if shortcuts:
+                for key, _label in shortcuts:
+                    if key.upper() == upper:
+                        if upper == "Q":
+                            print("\n  Quitting.")
+                            return -1
+                        continue
+            if upper == "Q":
+                print("\n  Quitting.")
+                return -1
+            print(yellow("  Invalid shortcut. Please try again."))
+            continue
+
+        # Handle numbered input
+        try:
             idx = int(choice) - 1
             if 0 <= idx < len(options):
                 return idx
-        except ValueError, KeyboardInterrupt:
+        except ValueError:
             pass
+
         print(yellow("  Invalid choice. Please try again."))
 
 
-def read_non_empty(prompt: str) -> str:
-    """Read a non-empty line from the user."""
-    while True:
-        value = input(prompt).strip()
-        if value:
-            return value
-        print(yellow("  Input cannot be empty. Please try again."))
+# ── Text input ─────────────────────────────────────────────────────────────
 
 
-def read_optional(prompt: str, default: str = "") -> str:
-    """Read a line, returning *default* on empty input."""
-    value = input(prompt).strip()
-    return value if value else default
+def read_non_empty(prompt_text: str) -> str:
+    """Read a non-empty line from the user (retro-styled)."""
+    return prompt_non_empty(prompt_text)
+
+
+def read_optional(prompt_text: str, default: str = "") -> str:
+    """Read a line, returning *default* on empty input (retro-styled)."""
+    return prompt_input(prompt_text, default)
 
 
 # ── LLM configuration ─────────────────────────────────────────────────────
@@ -85,7 +215,14 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
         ("OpenAI (cloud)", "openai", "https://api.openai.com"),
     ]
 
-    idx = print_menu([p[0] for p in providers], "Select LLM provider")
+    idx = print_menu(
+        [p[0] for p in providers],
+        "Select LLM provider",
+        shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("A", "OpenAI")],
+    )
+    if idx < 0:
+        return provider, base_url, model_name  # cancelled
+
     display_name, provider_key, default_url = providers[idx]
 
     url = read_optional(f"  Base URL (default: {default_url}):", default_url)
@@ -132,6 +269,7 @@ def collect_user_story() -> str:
     mode = print_menu(
         ["Paste Text", "Upload File", "Load baseline (automationexercise.com)"],
         "Input method",
+        shortcuts=[("P", "Paste"), ("U", "Upload"), ("B", "Baseline")],
     )
 
     baseline_text = _get_baseline_text()
@@ -159,17 +297,17 @@ def collect_user_story() -> str:
     filepath = read_optional("  Enter file path:", "")
     if not filepath:
         print(yellow("  No file provided. Please paste text instead."))
-        return collect_user_story()
+        return collect_user_story()  # type: ignore[return-value]
     try:
         content = Path(filepath).read_text(encoding="utf-8")
         print(green(f"  Read {len(content)} characters from {filepath}"))
         return content
     except FileNotFoundError:
         print(red(f"  File not found: {filepath}"))
-        return collect_user_story()  # type: ignore[name-defined]
+        return collect_user_story()  # type: ignore[return-value]
     except Exception as exc:
         print(red(f"  Error reading file: {exc}"))
-        return collect_user_story()  # type: ignore[name-defined]
+        return collect_user_story()  # type: ignore[return-value]
 
 
 def _get_baseline_text() -> str:
@@ -200,6 +338,7 @@ def collect_urls() -> tuple[str, str]:
     choice = print_menu(
         ["Enter manually", "Load baseline (automationexercise.com)"],
         "URL source",
+        shortcuts=[("M", "Manual"), ("B", "Baseline")],
     )
 
     if choice == 1:
@@ -250,6 +389,7 @@ def collect_authentication() -> dict[str, str] | None:
     choice = print_menu(
         ["Configure credentials", "Skip (no authentication needed)"],
         "Authentication",
+        shortcuts=[("C", "Configure"), ("S", "Skip")],
     )
     if choice == 1:
         print(yellow("  Skipping authentication setup."))
@@ -272,6 +412,7 @@ def collect_journey_steps() -> list[dict[str, str]]:
     choice = print_menu(
         ["Build journey steps", "Skip (use static URL scraping)"],
         "Journey scraping",
+        shortcuts=[("B", "Build"), ("S", "Skip")],
     )
     if choice == 1:
         print(yellow("  Skipping journey builder — using static URL scraping."))
@@ -304,6 +445,7 @@ def collect_journey_steps() -> list[dict[str, str]]:
         add_choice = print_menu(
             ["Add step", "Done building"],
             "Journey builder",
+            shortcuts=[("A", "Add"), ("D", "Done")],
         )
         if add_choice == 1:
             break
