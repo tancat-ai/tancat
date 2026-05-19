@@ -198,6 +198,11 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
             response = httpx.get(f"{provider_url}/v1/models", timeout=5.0)
             response.raise_for_status()
             return [m["id"] for m in response.json().get("data", [])]
+        elif provider_name == "openai-local":
+            response = httpx.get(f"{provider_url}/v1/models", timeout=5.0)
+            if response.status_code in (200, 401):
+                return [m["id"] for m in response.json().get("data", [])]
+            return []
         elif provider_name == "openai":
             return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
     except Exception:
@@ -212,13 +217,14 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
     providers: list[tuple[str, str, str]] = [
         ("Ollama (local)", "ollama", "http://localhost:11434"),
         ("LM Studio (local)", "lm-studio", "http://localhost:1234"),
+        ("OpenAI-Compatible (local)", "openai-local", "http://localhost:8080"),
         ("OpenAI (cloud)", "openai", "https://api.openai.com"),
     ]
 
     idx = print_menu(
         [p[0] for p in providers],
         "Select LLM provider",
-        shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("A", "OpenAI")],
+        shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("C", "OpenAI-Local"), ("A", "OpenAI")],
     )
     if idx < 0:
         return provider, base_url, model_name  # cancelled
@@ -256,6 +262,8 @@ def _default_model(provider: str) -> str:
         return "qwen3.5:35b"
     if provider == "lm-studio":
         return "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
+    if provider == "openai-local":
+        return "llama"
     return "gpt-4o"
 
 

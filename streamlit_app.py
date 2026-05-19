@@ -30,7 +30,7 @@ from src.ui_renderers import (
     render_journey_builder,
 )
 
-st.set_page_config(page_title="AI Playwright Generator", page_icon=":test_tube:", layout="wide")
+st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.png", layout="wide")
 
 
 def _init_session_state() -> None:
@@ -131,8 +131,29 @@ consent_mode = st.sidebar.selectbox(
 # ---------------------------------------------------------------------------
 # Main content
 # ---------------------------------------------------------------------------
-st.title("AI Playwright Test Generator")
-st.markdown("Generate placeholder-first pytest sync Playwright tests, then resolve them against scraped pages.")
+# Mascot logo — alongside the title using a flexbox HTML container
+_logo_path = Path(__file__).resolve().parent / "assets" / "logo.png"
+if _logo_path.exists():
+    # Read logo as base64 to embed in inline HTML
+    import base64
+
+    with open(_logo_path, "rb") as f:
+        _logo_b64 = base64.b64encode(f.read()).decode()
+    st.markdown(
+        f"""
+        <div style="display:flex;align-items:center;gap:20px;margin-bottom:8px;">
+            <img src="data:image/png;base64,{_logo_b64}" style="width:100px;height:100px;object-fit:contain;flex-shrink:0;border-radius:12px;" />
+            <div>
+                <h1 style="margin:0;font-size:2.5rem;">AI Playwright Test Generator</h1>
+                <p style="margin:4px 0 0 0;color:#ccc;font-size:1rem;">Generate placeholder-first pytest sync Playwright tests, then resolve them against scraped pages.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    st.title("AI Playwright Test Generator")
+    st.markdown("Generate placeholder-first pytest sync Playwright tests, then resolve them against scraped pages.")
 
 # Baseline preset button
 if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):

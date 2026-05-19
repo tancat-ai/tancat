@@ -53,6 +53,7 @@ from .pipeline_runner import (
     view_failure_diagnostics,
     view_reports,
 )
+from .retro_ui import render_state
 from .session import Session, create_session
 
 # ── Main menu ─────────────────────────────────────────────────────────────
@@ -114,20 +115,28 @@ async def interactive_session() -> None:
         menu_items.extend(["Save & Exit", "Quit"])
 
         # Show current state summary
-        print(yellow("  State:"))
+        state: list[str] = []
         if session.provider:
-            print(f"    LLM: {session.provider} / {session.model_name}")
+            state.append(f"  LLM : {session.provider} / {session.model_name}")
         if session.starting_url:
-            print(f"    URL: {session.starting_url}")
+            state.append(f"  URL : {session.starting_url}")
         if session.raw_requirements:
-            print(f"    Requirements: {len(session.raw_requirements)} chars")
+            state.append(f"  Story : {len(session.raw_requirements)} chars")
         if session.plan_confirmed:
-            print("    Plan: Signed off")
+            state.append("  Plan : Signed off")
         if session.pipeline_saved_path:
-            print(f"    Output: {session.pipeline_saved_path}")
+            state.append(f"  Out   : {session.pipeline_saved_path}")
+        render_state(state)
         print()
 
-        idx = print_menu(menu_items, "Main menu")
+        # Build context-sensitive shortcuts
+        main_shortcuts: list[tuple[str, str]] = [("Q", "Quit")]
+        if session.raw_requirements and session.starting_url:
+            main_shortcuts.insert(0, ("R", "Run Pipeline"))
+        if session.pipeline_results:
+            main_shortcuts.insert(1, ("V", "View Reports"))
+
+        idx = print_menu(menu_items, "Main menu", shortcuts=main_shortcuts)
 
         # Route to handler
         if idx == 0 and (menu_items[0] == "Configure LLM" or menu_items[0] == "Re-configure LLM"):
