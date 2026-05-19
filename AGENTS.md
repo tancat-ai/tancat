@@ -197,6 +197,14 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 **LM Studio model detection** — When using LM Studio without `LM_STUDIO_MODEL` set, the system auto-detects the model currently loaded in memory via `/api/v0/models` (state=`"loaded"`). This avoids triggering a model reload when the user has a different model loaded than the fallback default. Set `LM_STUDIO_MODEL` only to force a specific model.
 
+**OpenAI-Compatible (local) provider** — For llama.cpp, vLLM, text-gen-webui, or any local OpenAI-compatible server. Select "OpenAI-Compatible (local)" from the provider menu to:
+- Skip API key requirement (uses dummy key internally)
+- Auto-detect the server by probing ports: 8080 (llama.cpp), 8000 (vLLM), 5000 (text-gen-webui)
+- Auto-detect available models via `/v1/models`
+- No `.env` editing required
+
+For cloud OpenAI, select "OpenAI (cloud)" which requires `OPENAI_API_KEY`. The error message for missing API key now directs users to the local option.
+
 **Setup:**
 ```bash
 uv sync
