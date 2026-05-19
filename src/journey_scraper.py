@@ -647,7 +647,17 @@ class JourneyScraper:
                                 )
                                 output[current_url] = elements
 
-                            current_url = page.url
+                            # Detect URL changes after click actions (clicks that cause navigation)
+                            # and auto-scrape the new page so elements are available for resolution.
+                            new_url = page.url
+                            if step.action == "click" and new_url != current_url and current_url:
+                                self._debug(f"Click caused navigation: {current_url} -> {new_url}")
+                                elements = self._scrape_current_page(  # B-0XX: pass context
+                                    page, new_url, context
+                                )
+                                output[new_url] = elements
+
+                            current_url = new_url
                             last_error = None
                             break
 
