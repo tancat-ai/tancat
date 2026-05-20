@@ -48,10 +48,9 @@ def test_streamlit_prompt_format_resolves_without_error() -> None:
 
 
 def test_skeleton_prompt_format_resolves_without_error() -> None:
-    """Skeleton prompt should render cleanly with keyword-based PAGES_NEEDED examples."""
+    """Skeleton prompt should render cleanly without PAGES_NEEDED (pages discovered by journey scraper)."""
     rendered = get_skeleton_prompt_template()
-    assert "PAGES_NEEDED" in rendered
-    assert "KEYWORDS" in rendered or "keyword" in rendered.lower()
+    assert "PAGES_NEEDED" not in rendered  # Removed per FEATURE_SPEC_remove_pages_needed
     assert "{{GOTO:page keyword}}" in rendered
 
 

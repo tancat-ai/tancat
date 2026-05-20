@@ -574,19 +574,15 @@ class TestOrchestrator:
         return fragment
 
     def _combine_condition_fragments(self, fragments: list[str]) -> str:
-        """Combine one-condition skeleton fragments into a single skeleton module."""
+        """Combine one-condition skeleton fragments into a single skeleton module.
+
+        Pages are now discovered organically by the journey scraper at runtime.
+        PAGES_NEEDED pre-declaration is no longer emitted in combined output.
+        """
         body_blocks: list[str] = []
-        page_requirements: list[tuple[str, str]] = []
 
         for fragment in fragments:
-            fragment_pages = self.parser.parse_pages_needed(fragment)
-            page_requirements.extend(fragment_pages)
             fragment_body = self._strip_imports_and_pages_needed(fragment).strip()
-
-            if fragment_pages:
-                primary_url, _description = fragment_pages[0]
-                fragment_body = f"# JOURNEY_START_URL: {primary_url}\n{fragment_body}"
-
             body_blocks.append(fragment_body)
 
         combined_parts = [
@@ -595,16 +591,6 @@ class TestOrchestrator:
             "",
             "\n\n".join(block for block in body_blocks if block),
         ]
-
-        unique_pages = list(dict.fromkeys(page_requirements))
-        if unique_pages:
-            page_lines = ["# PAGES_NEEDED:"]
-            for url, description in unique_pages:
-                if description:
-                    page_lines.append(f"# - {url} ({description})")
-                else:
-                    page_lines.append(f"# - {url}")
-            combined_parts.extend(["", "\n".join(page_lines)])
 
         return "\n".join(part for part in combined_parts if part != "")
 

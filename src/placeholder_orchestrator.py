@@ -820,7 +820,9 @@ class PlaceholderOrchestrator:
             )
 
         if not all_ranked:
-            if action == "ASSERT" and self._is_page_state_assertion(description):
+            # No candidates scored at all — for ASSERT, fall back to page-state detection
+            # since abstract descriptions (e.g. "checkout form visible") produce zero matches.
+            if action == "ASSERT":
                 return self._select_page_state_candidate(pages_data, description)
             return None
 
@@ -876,7 +878,10 @@ class PlaceholderOrchestrator:
             top_candidate = shortlisted[0]
             if self._validate_text_match(top_candidate, description):
                 return top_candidate
-            if action == "ASSERT" and self._is_page_state_assertion(description):
+            # Score-based page-state detection for ASSERT: low scores indicate abstract
+            # descriptions (e.g. "checkout form visible") that don't map to specific elements.
+            # Threshold 30 sits between poor word-overlap scores (1-10) and structural matches (80+).
+            if action == "ASSERT" and global_top_score < 30:
                 page_loaded_candidate = self._select_page_loaded_candidate(shortlisted, description)
                 if page_loaded_candidate is not None:
                     return page_loaded_candidate
@@ -886,22 +891,6 @@ class PlaceholderOrchestrator:
                 description,
             )
         return None
-
-    @staticmethod
-    def _is_page_state_assertion(description: str) -> bool:
-        """Return True for broad assertions that a named page/state is loaded."""
-        lowered = description.lower()
-        return any(
-            term in lowered
-            for term in (
-                "page",
-                "loaded",
-                "badge updated",
-                "thank you",
-                "success",
-                "summary",
-            )
-        )
 
     @staticmethod
     def _select_page_state_candidate(

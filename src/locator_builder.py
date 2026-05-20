@@ -121,3 +121,62 @@ def build_robust_locator(element: dict) -> str | None:
         return f'[aria-label="{escaped_label}"]'
 
     return None
+
+
+def _token_overlap(description_tokens: set[str], element_tokens: set[str]) -> float:
+    """Compute Jaccard-like overlap between two token sets.
+
+    Returns a value in [0, 1] representing how many description tokens
+    are covered by the element tokens.
+    """
+    if not description_tokens or not element_tokens:
+        return 0.0
+    matches = len(description_tokens & element_tokens)
+    union = len(description_tokens | element_tokens)
+    return matches / union if union > 0 else 0.0
+
+
+def build_selector_relaxed(description: str, page_elements: list[dict]) -> str | None:
+    """Build a selector with relaxed matching criteria.
+
+    Used as a fallback when the strict selector build fails.
+    Relaxes: exact text match to partial match, requires all attributes to any attribute.
+
+    This function uses a simple keyword-based approach: it tokenizes the
+    description and scores elements by how many tokens appear in their text,
+    attributes, or role. A lower confidence threshold (0.2) is used compared
+    to strict matching (0.3).
+
+    Args:
+        description: Human-readable description of the target element
+            (e.g., "cart link", "submit button").
+        page_elements: List of element metadata dictionaries as returned
+            by the scraper.
+
+    Returns:
+        A relaxed locator string, or None if no element meets the threshold.
+    """
+    tokens = set(description.lower().split())
+    if not tokens or not page_elements:
+        return None
+
+    best_element: dict | None = None
+    best_score: float = 0.0
+
+    for elem in page_elements:
+        # Build a token set from everything we know about this element
+        elem_tokens: set[str] = set()
+        for key in ("text", "aria_label", "role", "id", "classes"):
+            value = str(elem.get(key, "")).lower()
+            if value:
+                elem_tokens.update(value.split())
+
+        score = _token_overlap(tokens, elem_tokens)
+        if score > best_score:
+            best_score = score
+            best_element = elem
+
+    # Relaxed threshold: 0.2 (vs 0.3 strict)
+    if best_score >= 0.2 and best_element is not None:
+        return build_robust_locator(best_element)
+    return None

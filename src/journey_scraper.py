@@ -490,6 +490,11 @@ class JourneyScraper:
         self._credential_profile = credential_profile
         self._html_scraper = PageScraper(timeout_ms=timeout_ms)
         self._resolver = PlaceholderResolver()
+        # Stores URL → elements mapping after scraping completes.
+        # Populated by _scrape_journey_via_subprocess and _scrape_journey_sync.
+        self._captured_pages: dict[str, list[dict[str, Any]]] = {}
+        # Context log for tracking locator failures and skipped steps.
+        self._context_log: list[dict[str, Any]] = []
 
     def _debug(self, message: str) -> None:
         """Print debug message to stderr if logging is enabled."""
@@ -577,6 +582,7 @@ class JourneyScraper:
         output: dict[str, list[dict[str, Any]]] = {}
         for url, elements in data.items():
             output[url] = elements if isinstance(elements, list) else []
+        self._captured_pages = output
         return output
 
     def _scrape_journey_sync(self, steps: list[JourneyStep]) -> dict[str, list[dict[str, Any]]]:
@@ -616,6 +622,30 @@ class JourneyScraper:
                                 selector = step.selector
                                 if not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
+                                    if selector is None:
+                                        # Retry with relaxed criteria
+                                        selector = self._discover_selector_relaxed(page, step.action, step.description)
+                                        if selector is not None:
+                                            self._context_log.append(
+                                                {
+                                                    "event": "locator_relaxed_fallback",
+                                                    "step": step_index,
+                                                    "action": step.action,
+                                                    "description": step.description,
+                                                    "selector": selector,
+                                                }
+                                            )
+                                        else:
+                                            self._context_log.append(
+                                                {
+                                                    "event": "step_skipped",
+                                                    "step": step_index,
+                                                    "reason": "locator_not_found_even_relaxed",
+                                                    "action": step.action,
+                                                    "description": step.description,
+                                                    "page_url": page.url,
+                                                }
+                                            )
                                 if selector:
                                     self._click_selector(page, selector, step.timeout_ms)
 
@@ -623,6 +653,30 @@ class JourneyScraper:
                                 selector = step.selector
                                 if not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
+                                    if selector is None:
+                                        # Retry with relaxed criteria
+                                        selector = self._discover_selector_relaxed(page, step.action, step.description)
+                                        if selector is not None:
+                                            self._context_log.append(
+                                                {
+                                                    "event": "locator_relaxed_fallback",
+                                                    "step": step_index,
+                                                    "action": step.action,
+                                                    "description": step.description,
+                                                    "selector": selector,
+                                                }
+                                            )
+                                        else:
+                                            self._context_log.append(
+                                                {
+                                                    "event": "step_skipped",
+                                                    "step": step_index,
+                                                    "reason": "locator_not_found_even_relaxed",
+                                                    "action": step.action,
+                                                    "description": step.description,
+                                                    "page_url": page.url,
+                                                }
+                                            )
                                 if selector and step.text:
                                     self._fill_selector(page, selector, step.text, step.timeout_ms)
 
@@ -675,7 +729,80 @@ class JourneyScraper:
                 context.close()
                 browser.close()
 
+        self._captured_pages = output
         return output
+
+    def get_pages_visited(self) -> list[str]:
+        """Return unique URLs visited during the journey.
+
+        Extracts page URLs from the captured output dictionary keys.
+        This is the authoritative list of pages discovered organically
+        by the journey scraper, replacing the need for PAGES_NEEDED
+        pre-declaration.
+        """
+        return (
+            list(dict.fromkeys(url for url in self._captured_pages if url)) if hasattr(self, "_captured_pages") else []
+        )
+
+    # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
+
+    def get_skipped_steps(self) -> list[dict]:
+        """Return steps that were skipped during the journey."""
+        return [e for e in self._context_log if e.get("event") == "step_skipped"]
+
+    def get_locator_warnings(self) -> list[dict]:
+        """Return locator-not-found events from the context log."""
+        return [e for e in self._context_log if e.get("event") == "locator_not_found"]
+
+    @staticmethod
+    def _list_available_elements(page: Any, limit: int = 10) -> list[dict]:
+        """List clickable elements on the page for diagnostic purposes."""
+        elements: list[dict] = []
+        for el in page.query_selector_all("a, button, input, [role=button], [role=link]")[:limit]:
+            elements.append(
+                {
+                    "tag": el.evaluate("el => el.tagName"),
+                    "text": (el.evaluate("el => el.textContent?.trim()") or "")[:50],
+                    "id": el.evaluate("el => el.id"),
+                    "class": (el.evaluate("el => el.className?.split(' ')[0]") or ""),
+                }
+            )
+        return elements
+
+    def _discover_selector_relaxed(self, page: Any, action: str, description: str) -> str | None:
+        """Find a selector using relaxed matching criteria.
+
+        Used as a fallback when strict _discover_selector returns None.
+        Relaxes: exact/contains match -> substring match, requires high confidence -> any match.
+        """
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+
+        html = page.content()
+        elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
+
+        norm_desc = re.sub(r"[^\w\s]", " ", description).lower().split()
+        if not norm_desc:
+            return None
+
+        # Substring match: any element whose text contains *any* keyword from the description
+        for element in elements:
+            raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
+            norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+            if len(norm_text) < 2:
+                continue
+            # Match if at least one keyword appears in the element text
+            if any(kw in norm_text for kw in norm_desc if len(kw) >= 2):
+                robust = build_robust_locator(element)
+                if robust:
+                    return robust
+                sel = element.get("selector")
+                if sel:
+                    return sel
+
+        return None
 
     def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
         """Find the best selector for a description on the current live page."""
@@ -707,11 +834,33 @@ class JourneyScraper:
 
         ranked = self._resolver.rank_candidates(action, description, elements)
         if not ranked:
+            self._context_log.append(
+                {
+                    "event": "locator_not_found",
+                    "action": action,
+                    "description": description,
+                    "page_url": page.url,
+                    "best_candidate_score": 0,
+                    "available_elements": self._list_available_elements(page),
+                }
+            )
             return None
 
-            # Pick top candidate and build a robust locator
+        # Pick top candidate and build a robust locator
         _score, element = ranked[0]
         robust = build_robust_locator(element)
+        if robust is None and not element.get("selector"):
+            self._context_log.append(
+                {
+                    "event": "locator_not_found",
+                    "action": action,
+                    "description": description,
+                    "page_url": page.url,
+                    "best_candidate_score": _score,
+                    "available_elements": self._list_available_elements(page),
+                }
+            )
+            return None
         return robust or element.get("selector")
 
     def _navigate_to(self, page: Any, url: str, timeout_ms: int) -> str:

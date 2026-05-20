@@ -173,6 +173,9 @@ class SkeletonParser:
     def parse_pages_needed(self, code: str) -> list[tuple[str, str]]:
         """Return the pages listed in the `# PAGES_NEEDED:` block as (keyword, description) tuples.
 
+        DEPRECATED: Pages are now discovered organically by the journey scraper at runtime.
+        This method is retained for backward compatibility with existing skeletons.
+
         The LLM writes keywords like:
             # - cart (shopping cart page)
             # - checkout (checkout page)

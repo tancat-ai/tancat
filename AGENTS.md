@@ -94,13 +94,7 @@ AI-Playwright-Test-Generator/
 │   └── test_case_orchestrator.py
 │   └── evidence_generator.py
 ├── docs/                        # Documentation hub
-│   ├── specs/                   # Feature specification documents
-│   │   ├── FEATURE_SPEC_intelligent_scraping_pipeline.md
-│   │   ├── FEATURE_SPEC_multi_page_scraping.md
-│   │   ├── FEATURE_SPEC_multi_provider_llm.md
-│   │   ├── FEATURE_SPEC_page_context_scraper.md
-│   │   ├── FEATURE_SPEC_run_results.md
-│   │   └── FEATURE_SPEC_AI009_phase_b.md
+│   ├── specs/
 │   ├── ARCHITECTURE.md
 │   ├── PROJECT_KNOWLEDGE.md
 │   ├── PROMPT_EXAMPLES.md
@@ -379,6 +373,13 @@ Consolidated entry point for all debug scripts. Run `--help` for available comma
 - Targeted candidate filtering (Cell 4b)
 
 ---
+
+## 12b. Current Feature Specifications
+
+| Spec | Status | Description |
+|------|--------|-------------|
+| `docs/specs/FEATURE_SPEC_remove_pages_needed.md` | In Progress | Replace PAGES_NEEDED with inline scrape-on-navigation |
+| `docs/specs/FEATURE_SPEC_journey_scraper_silent_failure.md` | In Progress | Fix `_discover_selector` silent failure when all strategies fail |
 
 ## 13. Known Issues — Placeholder Resolution
 
