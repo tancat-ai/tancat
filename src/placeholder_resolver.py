@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from src.intent_matcher import IntentMatcher
+from src.placeholder_scorers import PlaceholderScorer
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
@@ -297,9 +298,6 @@ class PlaceholderResolver:
             # to be hidden (display:none, off-screen, behind overlays, etc.). Prefer visible
             # candidates so generated tests interact with actually-useful page elements.
             if element.get("is_visible") is False:
-                # Exception: ASSERT placeholders may intentionally check visibility of hidden-to-view
-                # but still-rendered elements (e.g., success messages that appear after action).
-                # Even then, penalize heavily to prefer truly-visible alternatives.
                 if action != "ASSERT":
                     logger.debug(
                         "Skipping hidden element '%s' (is_visible=False) for placeholder '%s' (action=%s)",
@@ -307,265 +305,27 @@ class PlaceholderResolver:
                         description,
                         action,
                     )
-                # Apply penalty by reducing score — if it drops below threshold, element won't be ranked
-                # Since we haven't computed the score yet, skip this element entirely for non-ASSERT actions.
-                if action != "ASSERT":
                     continue
-                # For ASSERT: continue but note in scoring (penalty applied after base score)
+                # For ASSERT: continue but apply heavy visibility penalty in scorer
 
-            # Extract visual enrichment variables for use in scoring
-            lowered = description.replace("_", " ").lower()
-            icon_classes = str(element.get("icon_classes", "")).lower()
-            visual_desc = str(element.get("visual_description", "")).lower()
-            parent_text = str(element.get("parent_text", "")).lower()
-
+            # Intent gate — skip elements that don't match the action intent
             if action == "FILL" and not IntentMatcher._is_fillable(element):
                 continue
 
             if not IntentMatcher.matches(action, description, element):
                 continue
 
+            # ASSERT gate: haystack matches must be assertion candidates
             haystack = self._build_element_haystack(element).lower()
             if haystack and normalized_description in haystack:
                 if action == "ASSERT" and not self._is_assertion_candidate(element):
                     continue
-                else:
-                    # Base score is 100 for haystack matches, but apply product-ID bonus
-                    # to differentiate between products (e.g., backpack vs fleece-jacket).
-                    haystack_score = 100
-                    if action == "CLICK" and {"add", "cart"}.issubset(desc_words):
-                        # Use raw words (no expansion) for product-ID matching in haystack branch too.
-                        raw_product_words = SemanticMatcher.get_words(description, expand_aliases=False) - {
-                            "add",
-                            "cart",
-                            "button",
-                            "item",
-                            "product",
-                            "for",
-                            "to",
-                            "the",
-                            "a",
-                            "an",
-                        }
-                        if raw_product_words:
-                            element_id_lower = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
-                            product_word_set = set(" ".join(raw_product_words).lower().split())
-                            if product_word_set and all(pw in element_id_lower for pw in product_word_set):
-                                haystack_score += 20
-                    if element.get("_journey_discovered") == "true":
-                        haystack_score += 5
-                    ranked.append((haystack_score, element))
-                    continue
 
-            element_words = SemanticMatcher.get_words(haystack, expand_aliases=False)
-            score = len(desc_words.intersection(element_words))
-            role = str(element.get("role", "")).strip().lower()
-            href = str(element.get("href", "")).strip().lower()
-
-            # Content words for scoring (defined early for use in structural match and penalty sections)
-            desc_content_words = desc_words - {"click", "tap", "press"}
-
-            # Structural match bonus: when data-test or id contains meaningful
-            # description keywords, treat it as a strong match. This handles icon/nav
-            # elements like [data-test="shopping-cart-link"] for "shopping cart icon"
-            # where the haystack doesn't contain "icon" but the structural attribute
-            # is a near-perfect match for the intent.
-            data_test_words = set(str(element.get("data_test", "")).lower().replace("-", " ").replace("_", " ").split())
-            id_words = set(str(element.get("id", "")).lower().replace("-", " ").replace("_", " ").split())
-            structural_words = data_test_words | id_words
-            # Only count meaningful content words (not stop words)
-            structural_content = (
-                structural_words & desc_content_words if action == "CLICK" else structural_words & desc_words
+            # Delegate scoring to PlaceholderScorer
+            score = PlaceholderScorer.compute_element_score(
+                action, description, element, selector, self.match_threshold
             )
-            if len(structural_content) >= 2:
-                # Strong structural match — boost to near-haystack level
-                score = max(score, 80 + len(structural_content) * 5)
-
-            if action == "CLICK" and "cart" in desc_words and ("cart" in href or "cart" in element_words):
-                score += 2
-            if action == "CLICK" and "checkout" in desc_words and "checkout" in href:
-                score += 2
-            if action == "CLICK" and "checkout" in desc_words and "payment" in href and "payment" not in desc_words:
-                # Avoid jumping straight to payment when the user intent is checkout.
-                score -= 3
-            if action == "CLICK" and {"add", "cart"}.issubset(desc_words):
-                # Use raw description words (without token expansion) for product-ID matching.
-                # desc_words includes TOKEN_EXPANSIONS (e.g. "add" -> {"buy", "basket", "place"})
-                # which would cause the all() check below to fail.  We need only the actual
-                # product name words from the original description.
-                raw_product_words = SemanticMatcher.get_words(description, expand_aliases=False) - {
-                    "add",
-                    "cart",
-                    "button",
-                    "item",
-                    "product",
-                    "for",
-                    "to",
-                    "the",
-                    "a",
-                    "an",
-                }
-                product_words = desc_words - {
-                    "add",
-                    "cart",
-                    "button",
-                    "item",
-                    "product",
-                    "for",
-                    "to",
-                    "the",
-                    "a",
-                    "an",
-                }
-                if product_words:
-                    matched_product_words = len(product_words.intersection(element_words))
-                    score += matched_product_words * 4
-                    # Strong bonus when ALL product name words match the element ID.
-                    # This ensures "Sauce Labs Backpack" prefers #add-to-cart-sauce-labs-backpack
-                    # over #add-to-cart-sauce-labs-fleece-jacket. Without this, the tiebreaker
-                    # (selector length) incorrectly favors longer IDs.
-                    element_id_lower = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
-                    # Use raw words (no expansion) so "sauce labs backpack" checks against the ID
-                    # rather than the expanded set {"sauce", "labs", "backpack", "buy", "basket", ...}.
-                    product_word_set = set(" ".join(raw_product_words).lower().split())
-                    if product_word_set and all(pw in element_id_lower for pw in product_word_set):
-                        score += 20  # Large bonus for exact product-ID match
-            if action == "ASSERT" and {"cart", "product"}.intersection(desc_words) and "cart" in href:
-                score -= 2
-            if action == "ASSERT" and self._is_assertion_candidate(element):
-                score += 2
-            if "link" in description.lower() and role == "a":
-                score += 1
-            if "button" in description.lower() and role in {"button", "submit"}:
-                score += 1
-
-            if element.get("_journey_discovered") == "true":
-                score += 5
-
-            if action == "CLICK":
-                if role in {"button", "link", "a", "submit"}:
-                    score += 3
-                if href:
-                    score += 2
-                if not str(element.get("text", "")).strip() and not href and "data-" in selector.lower():
-                    score -= 4
-
-            if action == "FILL" and self._is_fillable_element(element):
-                score += 3
-
-            # Extract element text once for use in multiple scoring rules below.
-            element_text = str(element.get("text", "")).strip()
-
-            # Visibility penalty for ASSERT actions (Session 2 continuation): hidden elements get
-            # a heavy score reduction so visible alternatives rank higher.
-            if action == "ASSERT" and element.get("is_visible") is False:
-                score -= 40
-
-            # Text-content penalty for CLICK actions: elements with NO visible text should be
-            # penalized when the description contains meaningful content words (not just stop words).
-            # This prevents an empty newsletter input (#subscribe) from beating a button with
-            # "Continue Shopping" text.  Increased from -5 to -10 to more strongly prefer
-            # elements with visible, descriptive text over bare structural elements.
-            #
-            # EXCEPTION: icon/nav elements with strong structural matches (data-test or id
-            # containing relevant description words) should NOT be penalized. IntentMatcher
-            # already approved them, and the structural match is more reliable than text.
-            # This fixes: "shopping cart icon" resolving to "Add to cart" button instead of
-            # [data-test="shopping-cart-link"].
-            if action == "CLICK":
-                desc_content_words = desc_words - {"click", "tap", "press"}
-                if not element_text and desc_content_words:
-                    # Check for strong structural match: data-test or id contains description words
-                    data_test = str(element.get("data_test", "")).lower().replace("-", " ").replace("_", " ")
-                    element_id = str(element.get("id", "")).lower().replace("-", " ").replace("_", " ")
-                    structural_haystack = f"{data_test} {element_id}"
-                    structural_words = set(structural_haystack.split())
-                    structural_overlap = len(desc_content_words & structural_words)
-                    has_strong_structural_match = structural_overlap >= 2
-
-                    if has_strong_structural_match:
-                        # IntentMatcher approved + structural match — light penalty only
-                        score -= 2
-                    else:
-                        score -= 10
-
-            # ASSERT-specific penalty: single-class selectors (e.g. ".btn") are overly generic
-            # and often match hidden modal buttons or unrelated page elements.  Penalize them
-            # so the resolver prefers elements with specific text content matching the description.
-            if action == "ASSERT":
-                selector_lower = selector.lower()
-                # Detect single-class selectors: exactly one class, no ID, no data-attrs, no href
-                is_single_class = (
-                    selector_lower.startswith(".")
-                    and selector_lower.count(".") == 1
-                    and "[" not in selector_lower
-                    and "#" not in selector_lower
-                )
-                if is_single_class and not element_text:
-                    score -= 5
-
-            # Visual enrichment bonus: icon-aware matching
-            if action == "CLICK":
-                # Icon-only elements get a small bonus when description mentions icons/buttons
-                is_icon = element.get("is_icon", False)
-                is_decorative = element.get("is_decorative", False)
-
-                # Decorative elements should be excluded
-                if is_decorative:
-                    score -= 10
-
-                if is_icon:
-                    # Description mentions "icon", "button", or "click" — icon elements are good matches
-                    if any(term in lowered for term in ("icon", "button", "click", "btn", "arrow", "chevron")):
-                        score += 3
-                    # Element has icon classes — bonus for icon-related descriptions
-                    if icon_classes and any(
-                        term in icon_classes
-                        for term in ("fa-", "fas", "far", "fab", "bi-", "mdi-", "eicon-", "octicon-")
-                    ):
-                        score += 2
-                    # Visual description contains relevant keywords
-                    if visual_desc and any(term in visual_desc for term in ("icon", "button", "label", "aria-label")):
-                        score += 1
-
-                # Parent text bonus: if description matches parent context
-                if parent_text and parent_text != lowered:
-                    parent_words = set(parent_text.split())
-                    desc_word_set = set(lowered.replace("_", " ").split())
-                    parent_overlap = len(parent_words.intersection(desc_word_set))
-                    if parent_overlap > 0:
-                        score += parent_overlap
-
-                # Visual description bonus
-                if visual_desc and visual_desc != lowered:
-                    visual_words = set(visual_desc.replace("_", " ").split())
-                    desc_word_set = set(lowered.replace("_", " ").split())
-                    visual_overlap = len(visual_words.intersection(desc_word_set))
-                    if visual_overlap > 0:
-                        score += visual_overlap
-
-            # Text-content bonus: when element's visible text directly matches the
-            # action description, apply +10 bonus. This breaks ties where multiple
-            # candidates have similar structural scores but only one has the right text.
-            # Example: "Products" link (text="Products") should beat brand links
-            # that happen to share the same attribute scores.
-            if element_text:
-                norm_elem_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
-                norm_desc_text = re.sub(r"['\"']", "", description)
-                norm_desc_text = re.sub(r"[_\s]+", " ", norm_desc_text).strip().lower()
-                # Direct containment: element text is contained in description or vice versa
-                if norm_elem_text in norm_desc_text or norm_desc_text in norm_elem_text:
-                    score += 10
-                # Word overlap bonus: significant words overlap
-                else:
-                    elem_text_words = set(norm_elem_text.split())
-                    desc_text_words = set(norm_desc_text.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
-                    if desc_text_words:
-                        text_overlap = len(elem_text_words & desc_text_words)
-                        if text_overlap >= max(1, len(desc_text_words) // 2):
-                            score += 5
-
-            if score >= self.match_threshold:
+            if score is not None:
                 ranked.append((score, element))
 
         # Sort by: 1) score desc, 2) text length desc (prefer more descriptive elements),
