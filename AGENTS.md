@@ -142,7 +142,8 @@ AI-Playwright-Test-Generator/
 │   ├── evidence_loader.py       # Loads evidence JSON from test packages for reports
 │   ├── evidence_serializer.py   # Evidence JSON serialization (extracted from evidence_tracker)
 │   ├── form_detector.py         # Form detection and selector constants (extracted from journey_scraper)
-│   ├── intent_matcher.py        # Intent classification for placeholders (extracted from placeholder_resolver)
+│   ├── intent_matcher.py        # Intent classification for placeholders (extracted from placeholder_resolver, refactored 2026-05-20)
+│   ├── placeholder_scorers.py   # Composite scoring engine — individual testable scoring functions (extracted 2026-05-21)
 │   ├── llm_reasoning_filter.py  # LLM reasoning text detection/stripping (extracted from code_postprocessor)
 │   ├── code_normalizer.py       # Code normalization transforms (extracted from code_postprocessor)
 │   ├── semantic_matcher.py      # Token-based semantic similarity (extracted from placeholder_resolver)
@@ -214,9 +215,13 @@ bash launch_dev.sh     # UI + mock insurance site (dev only)
 
 **Run tests:**
 ```bash
-pytest -v                           # Tool's own unit tests only
-pytest generated_tests/test_X.py -v  # Run a specific generated test explicitly
+pytest -n auto -x -q                   # Parallel (default) — 778 tests in ~2min
+pytest -v                              # Single-process with output
+pytest generated_tests/test_X.py -v    # Run a specific generated test explicitly
+pytest --cov=src --cov-report=html -v  # With coverage (CI only — adds ~10min)
 ```
+
+**Test Performance** — The 778-test suite runs in ~2min with `-n auto` (pytest-xdist parallel). Coverage adds ~10min overhead, so only use for CI gates, not local development.
 
 ---
 

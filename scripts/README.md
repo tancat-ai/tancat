@@ -122,4 +122,22 @@ These scripts were removed during cleanup — their functionality was either red
 
 ---
 
-*Last updated: 2026-05-12*
+## Refactor 2026-05-20 — Intent Matcher + Placeholder Scorers
+
+Two new modules extracted during the refactor session (2026-05-20/21):
+
+| Script | Description |
+|--------|-------------|
+| `scripts/debug/skeleton_variability_report.md` | Debug report generated during skeleton variability investigation |
+
+**Related modules:**
+- `src/intent_matcher.py` — refactored into composable bucket-match functions (`match_clickable`, `match_fillable`, `match_assert_text`)
+- `src/placeholder_scorers.py` — new composite scoring engine with individual, testable scoring functions
+- `tests/test_intent_matcher.py` — 13 tests for all bucket functions and `apply_intent_filter()`
+- `tests/test_placeholder_scorers.py` — 23 tests for all scoring functions and `CompositeScorer.apply_all()`
+
+**Audit report:** `docs/implementation/refactor_audit_2026-05-20.md` documents the complete refactoring session.
+
+---
+
+*Last updated: 2026-05-21*

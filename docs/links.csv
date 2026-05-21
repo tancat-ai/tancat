@@ -142,6 +142,10 @@ source,target,type
 ./docs/archived/session_05_pipeline_rebuild_plan.md,./src/orchestrator.py,proximity
 ./docs/archived/session_05_pipeline_rebuild_plan.md,./src/scraper.py,proximity
 ./docs/archived/session_05_pipeline_rebuild_plan.md,./src/test_generator.py,proximity
+./docs/implementation/refactor_audit_2026-05-20.md,./src/llm_client.py,proximity
+./docs/implementation/refactor_audit_2026-05-20.md,./src/orchestrator.py,proximity
+./docs/implementation/refactor_audit_2026-05-20.md,./src/scraper.py,proximity
+./docs/implementation/refactor_audit_2026-05-20.md,./src/test_generator.py,proximity
 ./docs/plans/AI-016_plan.md,./src/llm_client.py,proximity
 ./docs/plans/AI-016_plan.md,./src/orchestrator.py,proximity
 ./docs/plans/AI-016_plan.md,./src/pipeline_models.py,proximity
@@ -708,6 +712,10 @@ source,target,type
 ./src/placeholder_orchestrator.py,./src/url_inference.py,import
 ./src/placeholder_orchestrator.py,./src/url_resolver.py,import
 ./src/placeholder_orchestrator.py,./src/url_utils.py,import
+./src/placeholder_resolver.py,./src/intent_matcher.py,import
+./src/placeholder_resolver.py,./src/placeholder_scorers.py,import
+./src/placeholder_resolver.py,./src/semantic_matcher.py,import
+./src/placeholder_scorers.py,./src/semantic_matcher.py,import
 ./src/prerequisite_injector.py,./src/pipeline_models.py,import
 ./src/report_builder.py,./src/coverage_utils.py,import
 ./src/report_builder.py,./src/evidence_loader.py,import
@@ -754,6 +762,7 @@ source,target,type
 ./src/ui_renderers.py,./src/ui_pipeline.py,import
 ./src/url_inference.py,./src/placeholder_resolver.py,import
 ./src/url_resolver.py,./src/url_utils.py,import
+./src/vision_enricher.py,./src/llm_client.py,import
 ./streamlit_app.py,./src/llm_client.py,import
 ./streamlit_app.py,./src/pytest_output_parser.py,import
 ./streamlit_app.py,./src/test_plan.py,import
@@ -835,6 +844,8 @@ source,target,type
 ./tests/test_placeholder_resolver_text_validation.py,./src/locator_scorer.py,import
 ./tests/test_placeholder_resolver_text_validation.py,./src/placeholder_resolver.py,import
 ./tests/test_placeholder_resolver_text_validation.py,./tests/resolver_test_helpers.py,import
+./tests/test_placeholder_scorers.py,./src/placeholder_scorers.py,import
+./tests/test_placeholder_scorers.py,./src/semantic_matcher.py,import
 ./tests/test_prerequisite_injector.py,./src/pipeline_models.py,import
 ./tests/test_prerequisite_injector.py,./src/prerequisite_injector.py,import
 ./tests/test_prompt_utils.py,./src/prompt_utils.py,import

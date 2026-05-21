@@ -11,7 +11,6 @@ label,group,size,color
 ./CONTRIBUTING.md,Documentation,165,#F7DC6F
 ./Dockerfile,Configuration,29,#BB8FCE
 ./LICENSE,Configuration,201,#BB8FCE
-./NUL,Other,0,#AEB6BF
 ./README.md,Documentation,227,#F7DC6F
 ./SECURITY.md,Documentation,96,#F7DC6F
 ./bench_windows_vulkan_mtp_20260520_100044.json,Other,189,#AEB6BF
@@ -37,8 +36,9 @@ label,group,size,color
 ./docs/archived/session_03_orchestrator.md,Documentation,29,#F7DC6F
 ./docs/archived/session_04_final_polish.md,Documentation,23,#F7DC6F
 ./docs/archived/session_05_pipeline_rebuild_plan.md,Documentation,300,#F7DC6F
-./docs/links.csv,Other,671,#AEB6BF
-./docs/nodes.csv,Other,268,#AEB6BF
+./docs/implementation/refactor_audit_2026-05-20.md,Documentation,132,#F7DC6F
+./docs/links.csv,Other,876,#AEB6BF
+./docs/nodes.csv,Other,270,#AEB6BF
 ./docs/plans/AI-016_plan.md,Documentation,28,#F7DC6F
 ./docs/plans/AI-017_plan.md,Documentation,26,#F7DC6F
 ./docs/plans/AI-018_plan.md,Documentation,25,#F7DC6F
@@ -125,8 +125,8 @@ label,group,size,color
 ./pyproject.toml,Configuration,83,#BB8FCE
 ./pytest.ini,Configuration,11,#BB8FCE
 ./scripts/3d map/audit_3d_map.py,utility,226,#98D8C8
-./scripts/3d map/generate_3d_map.py,utility,557,#98D8C8
-./scripts/3d_map_data.json,Other,6137,#AEB6BF
+./scripts/3d map/generate_3d_map.py,utility,720,#98D8C8
+./scripts/3d_map_data.json,Other,7425,#AEB6BF
 ./scripts/README.md,Documentation,125,#F7DC6F
 ./scripts/apply_b0xx_journey_fix.py,utility,220,#98D8C8
 ./scripts/debug/debug_all.py,utility,166,#98D8C8
@@ -162,7 +162,7 @@ label,group,size,color
 ./src/gantt_utils.py,utility,194,#98D8C8
 ./src/heatmap_utils.py,utility,719,#98D8C8
 ./src/hover_click_utils.py,utility,208,#98D8C8
-./src/intent_matcher.py,utility,333,#98D8C8
+./src/intent_matcher.py,utility,561,#98D8C8
 ./src/journey_auth_detector.py,utility,69,#98D8C8
 ./src/journey_scraper.py,context,1193,#96CEB4
 ./src/llm_client.py,intelligence,388,#45B7D1
@@ -180,7 +180,8 @@ label,group,size,color
 ./src/pipeline_run_service.py,orchestration,71,#4ECDC4
 ./src/pipeline_writer.py,orchestration,205,#4ECDC4
 ./src/placeholder_orchestrator.py,refinement,1013,#FFEAA7
-./src/placeholder_resolver.py,refinement,622,#FFEAA7
+./src/placeholder_resolver.py,refinement,382,#FFEAA7
+./src/placeholder_scorers.py,utility,394,#98D8C8
 ./src/prerequisite_injector.py,utility,488,#98D8C8
 ./src/prompt_utils.py,intelligence,167,#45B7D1
 ./src/pytest_output_parser.py,utility,314,#98D8C8
@@ -243,8 +244,9 @@ label,group,size,color
 ./tests/test_pipeline_run_service.py,utility,52,#98D8C8
 ./tests/test_pipeline_writer.py,utility,234,#98D8C8
 ./tests/test_placeholder_resolution_guardrails.py,utility,253,#98D8C8
-./tests/test_placeholder_resolver.py,utility,941,#98D8C8
+./tests/test_placeholder_resolver.py,utility,861,#98D8C8
 ./tests/test_placeholder_resolver_text_validation.py,utility,142,#98D8C8
+./tests/test_placeholder_scorers.py,utility,540,#98D8C8
 ./tests/test_prerequisite_injector.py,utility,622,#98D8C8
 ./tests/test_prompt_utils.py,utility,116,#98D8C8
 ./tests/test_pytest_output_parser.py,utility,490,#98D8C8

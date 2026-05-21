@@ -109,7 +109,8 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/state_tracker.py` | DOM state tracking — detects changes and URL transitions. Extracted from `journey_scraper.py`. |
 | `src/form_detector.py` | Form detection and element classification (selector constants). Extracted from `journey_scraper.py`. |
 | `src/semantic_matcher.py` | Token-based semantic similarity for placeholder matching. Extracted from `placeholder_resolver.py`. |
-| `src/intent_matcher.py` | Intent-based element filtering for placeholder resolution. Extracted from `placeholder_resolver.py`. |
+| `src/intent_matcher.py` | Intent-based element filtering for placeholder resolution. Extracted from `placeholder_resolver.py`, then refactored (2026-05-20) into composable bucket-match functions. |
+| `src/placeholder_scorers.py` | Composite scoring engine. Individual, testable scoring functions (text_content_bonus, structural_match, product_id_match, click_role_bonus, etc.) and `CompositeScorer.apply_all()`. Extracted from inline scoring in `placeholder_resolver.py` (2026-05-21). |
 | `src/code_normalizer.py` | Deterministic code normalization transforms. Extracted from `code_postprocessor.py`. |
 | `src/llm_reasoning_filter.py` | LLM reasoning text detection and stripping. Extracted from `code_postprocessor.py`. |
 
