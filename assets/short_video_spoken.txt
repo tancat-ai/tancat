@@ -1,0 +1,9 @@
+00-05: "Want tests written from user stories? Watch this."
+05-15: "Paste a user story and set the target site — plain English, acceptance criteria included."
+15-30: "Click generate. The AI scrapes the page, resolves selectors, and writes pytest + Playwright code for you."
+30-34: "Run the test — Playwright executes in a real browser or via CLI and reports the result."
+34-36: "Results: two tests passed — quick validation."
+36-40: "Open the HTML report to show screenshots and coverage — ready to share with stakeholders."
+40-45: "Export the Python test or JSON report and add it to your CI. Try it: github.com/lacattano/AI-Playwright-Test-Generator"
+
+Recording guidance: Keep tone brisk; each line should be single-sentence and read in ~5–8 seconds.
