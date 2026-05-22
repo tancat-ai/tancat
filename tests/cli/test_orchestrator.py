@@ -17,7 +17,7 @@ from src.config import GENERATED_TESTS_DIR, LLM_ANALYSIS_MODE, AnalysisMode
 
 
 @dataclass
-class TestOrchestrationResult:
+class OrchestrationResult:
     """Container for orchestration results."""
 
     generated_files: list[str] = field(default_factory=list)
@@ -47,7 +47,7 @@ class TestCaseOrchestrator:
 
     def process(
         self, raw_input: str, explicit_format: str | None = None, url: str | None = None
-    ) -> TestOrchestrationResult:
+    ) -> OrchestrationResult:
         """
         Process user input through full orchestration pipeline.
 
@@ -57,9 +57,9 @@ class TestCaseOrchestrator:
             url: Optional URL to capture page context for test generation
 
         Returns:
-            TestOrchestrationResult with generated files and summary
+            OrchestrationResult with generated files and summary
         """
-        result = TestOrchestrationResult()
+        result = OrchestrationResult()
 
         try:
             # Step 1: Parse input
