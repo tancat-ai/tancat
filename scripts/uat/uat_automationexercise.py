@@ -128,7 +128,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--provider",
-        choices=["ollama", "lm-studio", "openai"],
+        choices=["ollama", "lm-studio", "openai", "openai-local"],
         default=None,
         help="LLM provider (default: from .env or ollama)",
     )

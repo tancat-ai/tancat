@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 import streamlit.components.v1 as components
 
 from src.coverage_utils import build_coverage_analysis, build_coverage_display_rows
+from src.failure_classifier import FailureCategory, classify_failure
 from src.gantt_utils import (
     build_gantt_chart,
     build_gantt_summary_sentences,
@@ -20,7 +21,7 @@ from src.gantt_utils import (
     safe_read_sidecar,
 )
 from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
-from src.pytest_output_parser import RunResult
+from src.pytest_output_parser import RunResult, TestResult
 from src.report_utils import generate_annotated_journey, generate_suite_heatmap
 
 # ---------------------------------------------------------------------------
@@ -549,16 +550,16 @@ def _store_run_report() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Run results display
+# Run results display (includes AI-023 locator repair buttons)
 # ---------------------------------------------------------------------------
 
 
 class RunResultsDisplay:
-    """Renders the test run results."""
+    """Renders the test run results with failure classification and repair buttons."""
 
     @staticmethod
     def render(run_result: RunResult) -> None:
-        """Display run metrics, coverage, and download buttons."""
+        """Display run metrics, coverage, results table with repair buttons, and downloads."""
         if st.session_state.get("pipeline_run_command"):
             st.caption(f"Command: {st.session_state.pipeline_run_command}")
 
@@ -579,6 +580,12 @@ class RunResultsDisplay:
         if coverage_rows:
             st.dataframe([row.to_dict() for row in coverage_rows], width="stretch")
 
+        # Results table with repair buttons
+        _render_results_table(run_result.results)
+
+        # Repair panel (shown after user clicks repair button)
+        _render_repair_panel()
+
         # Pytest output
         if st.session_state.get("pipeline_run_output"):
             with st.expander("Pytest Output", expanded=run_result.errors > 0):
@@ -586,6 +593,220 @@ class RunResultsDisplay:
 
         # Download buttons
         RenderDownloads.render()
+
+
+def _render_results_table(results: list[TestResult]) -> None:
+    """Render per-test results as a table with repair buttons for locator failures."""
+    for result in results:
+        status_icon = "✅" if result.status == "passed" else ("❌" if result.status == "failed" else "⏭️")
+        row_col1, row_col2, row_col3 = st.columns([0.05, 3, 0.5])
+
+        with row_col1:
+            st.write(status_icon)
+        with row_col2:
+            st.write(f"**{result.name}**")
+            if result.error_message:
+                st.caption(result.error_message[:200] + ("..." if len(result.error_message) > 200 else ""))
+        with row_col3:
+            st.caption(f"{result.duration:.2f}s")
+
+        # AI-023: Show repair button for locator failures
+        if result.status == "failed" and result.error_message:
+            detail = classify_failure(result.error_message)
+            if detail.category in (FailureCategory.LOCATOR_TIMEOUT, FailureCategory.STRICT_VIOLATION):
+                locator_label = detail.raw_locator if detail.raw_locator else "unknown locator"
+                if st.button(
+                    f"🔧 Fix locator: `{locator_label}`",
+                    key=f"repair_{result.name}",
+                    help="Open a browser to click the correct element",
+                ):
+                    st.session_state.repair_target = detail
+                    st.session_state.repair_status = "waiting"
+                    st.session_state.repair_test_name = result.name
+                    st.session_state.repair_test_file = result.file_path
+                    st.rerun()
+            elif detail.category == FailureCategory.ASSERTION_FAILURE:
+                st.caption("ℹ️ Assertion failure — the element was found but page content was unexpected.")
+            elif detail.category == FailureCategory.NAVIGATION_ERROR:
+                st.caption("ℹ️ Navigation error — check the URL and network connectivity.")
+
+
+def _render_repair_panel() -> None:
+    """Render the locator repair panel when in repair mode."""
+    repair_status = st.session_state.get("repair_status")
+
+    if repair_status == "waiting":
+        _render_repair_waiting_panel()
+    elif repair_status == "browser_requested":
+        _render_repair_browser_session()
+    elif repair_status in ("patched", "error"):
+        _render_repair_result_panel()
+
+
+def _render_repair_waiting_panel() -> None:
+    """Show the 'waiting' repair panel with explanation and action buttons."""
+    detail = st.session_state.get("repair_target")
+    test_file = st.session_state.get("repair_test_file", "unknown")
+
+    st.divider()
+    st.subheader("🔧 Locator Repair Mode")
+
+    locator_label = detail.raw_locator if detail and detail.raw_locator else "unknown"
+    st.write(f"**Failed locator:** `{locator_label}`")
+    st.write(f"**Test file:** `{test_file}`")
+    st.write(f"**Error:** {detail.error_message[:300] if detail else 'Unknown'}")
+
+    st.info(
+        "The browser will open at the page where this test got stuck. "
+        "Click the element you want to use as the locator. "
+        "The test file will be updated automatically."
+    )
+
+    fix_col, cancel_col = st.columns([1, 1])
+    with fix_col:
+        if st.button("🌐 Open browser and fix locator", type="primary"):
+            st.session_state.repair_status = "browser_requested"
+            st.rerun()
+    with cancel_col:
+        if st.button("Cancel"):
+            st.session_state.repair_status = None
+            st.session_state.repair_target = None
+            st.rerun()
+
+
+def _render_repair_browser_session() -> None:
+    """Run the headed browser codegen session and apply the patch."""
+    from src.locator_repair import LocatorPatch, apply_patch_to_file
+
+    detail = st.session_state.get("repair_target")
+    base_url = st.session_state.get("base_url", "")
+    failure_url = detail.failure_url if detail and detail.failure_url else base_url
+
+    if not failure_url:
+        st.session_state.repair_status = "error"
+        st.session_state.repair_message = "❌ No URL available for browser session."
+        st.rerun()
+
+    with st.spinner(f"⏳ Browser is opening at `{failure_url}` — click the element you want to use..."):
+        replacement = run_codegen_session(failure_url, timeout_seconds=120)
+
+    if replacement:
+        patch = LocatorPatch(
+            original_locator=detail.raw_locator if detail and detail.raw_locator else "",
+            repaired_locator=replacement,
+            line_number=detail.line_number if detail and detail.line_number else 1,
+            test_file=st.session_state.get("repair_test_file", st.session_state.get("pipeline_saved_path", "")),
+        )
+        try:
+            apply_patch_to_file(patch)
+            st.session_state.repair_status = "patched"
+            st.session_state.repair_message = (
+                f"✅ Locator patched: `{replacement}`\n"
+                f"Changed line(s) in `{patch.test_file}`\n"
+                "Click **▶️ Run Generated Tests** to verify the fix."
+            )
+        except Exception as exc:
+            st.session_state.repair_status = "error"
+            st.session_state.repair_message = f"❌ Could not patch: {exc}"
+    else:
+        st.session_state.repair_status = "error"
+        st.session_state.repair_message = "❌ No locator captured. The browser may have timed out or been closed."
+
+    st.rerun()
+
+
+def _render_repair_result_panel() -> None:
+    """Show the repair result (success or error) with actions."""
+    st.divider()
+    st.subheader("🔧 Locator Repair Result")
+
+    message = st.session_state.get("repair_message", "")
+    status = st.session_state.get("repair_status")
+
+    if status == "patched":
+        st.success(message)
+    else:
+        st.error(message)
+
+    # Show updated test code if patched
+    if status == "patched":
+        test_file = st.session_state.get("repair_test_file", "")
+        if test_file and Path(test_file).exists():
+            with st.expander("Updated test file", expanded=True):
+                st.code(Path(test_file).read_text(encoding="utf-8"), language="python")
+
+    re_run_col, reset_col = st.columns([1, 1])
+    with re_run_col:
+        if st.button("▶️ Run Generated Tests", disabled=(status != "patched"), type="primary"):
+            st.session_state.repair_status = None
+            st.session_state.repair_target = None
+            _handle_run_tests()
+    with reset_col:
+        if st.button("Done"):
+            st.session_state.repair_status = None
+            st.session_state.repair_target = None
+            st.session_state.repair_message = None
+            st.rerun()
+
+
+def run_codegen_session(url: str, timeout_seconds: int = 120) -> str | None:
+    """Launch headed Playwright codegen and capture the first locator from the recorded script.
+
+    Args:
+        url: URL to navigate to.
+        timeout_seconds: Maximum time to wait for a click.
+
+    Returns:
+        The locator string captured from the clicked element, or None.
+    """
+    import re
+    import subprocess
+    from datetime import datetime
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"/tmp/repair_locator_{timestamp}.py"
+
+    proc = subprocess.Popen(
+        ["playwright", "codegen", "--output", output_file, url],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    try:
+        proc.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return None
+
+    if not Path(output_file).exists():
+        return None
+
+    content = Path(output_file).read_text(encoding="utf-8")
+    Path(output_file).unlink(missing_ok=True)
+
+    # Extract first locator string from the generated script
+    # Matches: .locator("..."), .get_by_test_id("..."), .get_by_role("...", name="...")
+    locator_pattern = re.compile(
+        r'\.(?:locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder)\(\s*["\']([^"\']+)["\']',
+    )
+    match = locator_pattern.search(content)
+    if match:
+        return match.group(1)
+
+    # For get_by_role with name= keyword, extract the selector expression
+    role_pattern = re.compile(r'\.get_by_role\(\s*["\']([^"\']+)["\'].*?name=\s*["\']([^"\']+)["\']')
+    role_match = role_pattern.search(content)
+    if role_match:
+        role = role_match.group(1)
+        name = role_match.group(2)
+        return f"get_by_role('{role}', name='{name}')"
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Download buttons
+# ---------------------------------------------------------------------------
 
 
 class RenderDownloads:

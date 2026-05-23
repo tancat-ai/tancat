@@ -11,11 +11,6 @@
 
 ## MCP Server Usage
 
-### MCPunk — use before editing existing code
-- Before modifying any existing function or class, use MCPunk to search
-  for related functions, usages, and dependents first
-- Do not read entire files when MCPunk can retrieve the relevant chunk
-
 ### Context7 — use before writing code that touches any external library
 - Always fetch current docs for: Playwright, Streamlit, pytest, uv, ruff, mypy
 - Do not rely on training knowledge for library APIs — it may be outdated

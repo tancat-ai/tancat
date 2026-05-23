@@ -10,7 +10,7 @@ from src.test_generator import TestGenerator
 
 
 def _disable_journey_discovery(orchestrator: TestOrchestrator) -> None:
-    orchestrator._scrape_journeys_statefully = AsyncMock(return_value={})  # type: ignore[method-assign]
+    orchestrator._scrape_journeys_statefully = AsyncMock(return_value=({}, []))  # type: ignore[method-assign]
 
 
 def test_run_pipeline_replaces_placeholders_with_scraped_locators() -> None:
@@ -843,33 +843,40 @@ def test_02_add_item(page):
         }
     )
     orchestrator._scrape_journeys_statefully = AsyncMock(  # type: ignore[method-assign]
-        return_value={
-            "https://www.saucedemo.com/inventory.html": [
-                {
-                    "selector": "#add-to-cart-sauce-labs-backpack",
-                    "text": "Add to cart",
-                    "role": "button",
-                    "id": "add-to-cart-sauce-labs-backpack",
-                    "data_test": "add-to-cart-sauce-labs-backpack",
-                },
-                {
-                    "selector": '.shopping_cart_link[data-test="shopping-cart-link"]',
-                    "text": "",
-                    "role": "a",
-                    "href": "https://www.saucedemo.com/cart.html",
-                    "classes": "shopping_cart_link",
-                    "data_test": "shopping-cart-link",
-                },
+        return_value=(
+            {
+                "https://www.saucedemo.com/inventory.html": [
+                    {
+                        "selector": "#add-to-cart-sauce-labs-backpack",
+                        "text": "Add to cart",
+                        "role": "button",
+                        "id": "add-to-cart-sauce-labs-backpack",
+                        "data_test": "add-to-cart-sauce-labs-backpack",
+                    },
+                    {
+                        "selector": '.shopping_cart_link[data-test="shopping-cart-link"]',
+                        "text": "",
+                        "role": "a",
+                        "href": "https://www.saucedemo.com/cart.html",
+                        "classes": "shopping_cart_link",
+                        "data_test": "shopping-cart-link",
+                    },
+                ],
+                "https://www.saucedemo.com/cart.html": [
+                    {
+                        "selector": "#checkout",
+                        "text": "Checkout",
+                        "role": "button",
+                        "id": "checkout",
+                    }
+                ],
+            },
+            [
+                "https://www.saucedemo.com",
+                "https://www.saucedemo.com/inventory.html",
+                "https://www.saucedemo.com/cart.html",
             ],
-            "https://www.saucedemo.com/cart.html": [
-                {
-                    "selector": "#checkout",
-                    "text": "Checkout",
-                    "role": "button",
-                    "id": "checkout",
-                }
-            ],
-        }
+        )
     )
 
     final_code = asyncio.run(

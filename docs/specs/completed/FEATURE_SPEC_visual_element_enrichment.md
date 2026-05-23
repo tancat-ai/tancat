@@ -1,8 +1,9 @@
 # FEATURE SPEC: AI-027 — Visual Element Enrichment
 
-**Status:** Design complete — ready for implementation  
+**Status:** Complete — implemented and verified  
 **Priority:** High — placeholder resolution quality on multi-product sites  
 **Created:** 2026-05-13  
+**Completed:** 2026-05-22  
 **Spec author:** Architecture review  
 **Cline sessions:** 4 (strict order, one session per task)
 

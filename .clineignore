@@ -11,10 +11,7 @@ htmlcov/
 # Build/misc
 *.pyc
 
-# Kanban memory bank (large files excluded)
-cline-mcp-memory-bank/node_modules/
-cline-mcp-memory-bank/build/
-cline-mcp-memory-bank/logo.png
+
 
 node_modules/
 .git/

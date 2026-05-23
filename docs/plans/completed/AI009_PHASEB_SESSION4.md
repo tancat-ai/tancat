@@ -1,4 +1,4 @@
-on # Session 4: Orchestrator Integration + End-to-End Verification
+# Session 4: Orchestrator Integration + End-to-End Verification
 
 **AI-009 Phase B — Authenticated Journey Scraping**  
 **Created:** 2026-05-12  

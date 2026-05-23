@@ -7,8 +7,8 @@
 **Target files:** `src/orchestrator.py`, `src/skeleton_parser.py`, `src/prompt_utils.py`, `src/placeholder_orchestrator.py`  
 **Estimated effort:** 1 day  
 **Created:** 2026-05-20  
-**Completed:** 2026-05-20  
-**Commit:** See session commit
+**Completed:** 2026-05-22  
+**Commit:** 83695e91668b0fd1fea5b5fe6a2a0cc88c8a6682
 
 ---
 
@@ -146,7 +146,7 @@ def parse_pages_needed(self, skeleton: str) -> list[tuple[str, str]]:
 - [x] Pipeline runs successfully without PAGES_NEEDED in skeleton output
 - [x] All pages are still scraped correctly (verified by context_log navigation events)
 - [x] Placeholder resolution works correctly (same or better than before)
-- [x] Existing tests pass (backward compatible) — 129 tests passed
+- [x] Existing tests pass (backward compatible) — 776 tests passed
 - [x] New test added: page discovery without PAGES_NEEDED
 - [x] Variability script shows no regression in page coverage
 
@@ -185,4 +185,4 @@ This fix **only** solves the PAGES_NEEDED reliability problem. It does NOT solve
 
 ---
 
-*Last updated: 2026-05-20 (completed)*
+*Last updated: 2026-05-22 (completed)*

@@ -42,16 +42,17 @@ logger = logging.getLogger(__name__)
 class PipelineRunResult:
     """Captured metadata for the most recent pipeline run."""
 
-    skeleton_code: str
-    final_code: str
-    pages_to_scrape: list[str]
-    scraped_pages: dict[str, list[dict[str, str]]]
+    skeleton_code: str = ""
+    final_code: str = ""
+    pages_to_scrape: list[str] = field(default_factory=list)
+    scraped_pages: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     scraped_errors: dict[str, str] = field(default_factory=dict)
     page_requirements: list[PageRequirement] = field(default_factory=list)
     journeys: list[TestJourney] = field(default_factory=list)
     scraped_page_records: list[ScrapedPage] = field(default_factory=list)
     generated_page_objects: list[GeneratedPageObject] = field(default_factory=list)
     unresolved_placeholders: list[str] = field(default_factory=list)
+    pages_visited: list[str] = field(default_factory=list)
 
 
 class TestOrchestrator:
@@ -279,10 +280,10 @@ class TestOrchestrator:
             self._debug("phase=journey_execution done")
 
         # Approach 3: Stateful journey discovery (the "User-Driven" fix)
+        pages_visited: list[str] = []
         if self._starting_url:
             self._debug("phase=journey_discovery start")
-            # Always enable discovery logs in the orchestrator debug output
-            discovery_data = await self._scrape_journeys_statefully(
+            discovery_data, pages_visited = await self._scrape_journeys_statefully(
                 journeys, self._starting_url, self._credential_profile
             )
             all_journey_scraped_data.update(discovery_data)
@@ -367,6 +368,7 @@ class TestOrchestrator:
             scraped_page_records=scraped_page_records,
             generated_page_objects=generated_page_objects,
             unresolved_placeholders=unresolved,
+            pages_visited=pages_visited,
         )
         return final_code
 
@@ -403,10 +405,14 @@ class TestOrchestrator:
         journeys: list[TestJourney],
         starting_url: str,
         credential_profile: CredentialProfile | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Scrape pages by following the generated skeleton journeys step-by-step."""
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+        """Scrape pages by following the generated skeleton journeys step-by-step.
+
+        Returns a tuple of (scraped_data, pages_visited) where pages_visited is
+        extracted from the journey scraper's context log.
+        """
         if not starting_url:
-            return {}
+            return {}, []
 
         all_scraped_data: dict[str, list[dict[str, Any]]] = {}
         scraper = JourneyScraper(
@@ -453,7 +459,8 @@ class TestOrchestrator:
             journey_data = await scraper.scrape_journey(steps, credential_profile=credential_profile)
             all_scraped_data.update(journey_data)
 
-        return all_scraped_data
+        pages_visited = scraper.get_pages_visited()
+        return all_scraped_data, pages_visited
 
     @staticmethod
     def _build_generation_conditions(
