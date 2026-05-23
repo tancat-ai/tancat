@@ -49,6 +49,28 @@ def print_header(title: str, subtitle: str = "") -> None:
 # ── Menu ───────────────────────────────────────────────────────────────────
 
 
+def _flush_msvcrt_buffer() -> None:
+    """Flush any residual keystrokes left in the msvcrt input buffer.
+
+    After using msvcrt.getwch() for menu navigation, residual characters
+    from pasted multi-line input can remain in the buffer and corrupt
+    subsequent input() calls. This function drains the buffer before
+    switching to line-oriented input via input().
+    """
+    import msvcrt
+    import time
+
+    try:
+        # Drain any remaining characters from the msvcrt buffer
+        # by polling for a short period.
+        for _ in range(10):
+            if msvcrt.kbhit():
+                msvcrt.getwch()  # type: ignore[attr-defined]
+            time.sleep(0.01)
+    except Exception:
+        pass
+
+
 def _read_key() -> str:
     """Read a single keypress using msvcrt (Windows) or fallback.
 
@@ -126,6 +148,9 @@ def print_menu(
                 continue
             # Enter = select current item
             if key == "\r":
+                # Flush buffer before returning so subsequent input() calls
+                # don't see residual keystrokes from the menu navigation.
+                _flush_msvcrt_buffer()
                 return selected
 
             # Backspace
@@ -149,10 +174,12 @@ def print_menu(
                 for key, _label in shortcuts:
                     if key.upper() == upper:
                         if upper == "Q":
+                            _flush_msvcrt_buffer()
                             print("\n  Quitting.")
                             return -1
                         continue
             if upper == "Q":
+                _flush_msvcrt_buffer()
                 print("\n  Quitting.")
                 return -1
             print(yellow("  Invalid shortcut. Please try again."))
@@ -162,6 +189,7 @@ def print_menu(
         try:
             idx = int(choice) - 1
             if 0 <= idx < len(options):
+                _flush_msvcrt_buffer()
                 return idx
         except ValueError:
             pass
@@ -287,6 +315,7 @@ def collect_user_story() -> str:
         return baseline_text
 
     if mode == 0:
+        # Buffer was already flushed by print_menu on selection.
         print("\n  Paste your user story and acceptance criteria below.")
         print("  (End with an empty line or Ctrl+D / Ctrl+Z on Windows)")
         print("  ---")
