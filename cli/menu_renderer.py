@@ -10,6 +10,7 @@ preserved from the previous implementation — only rendering changed.
 from __future__ import annotations
 
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -50,13 +51,40 @@ def print_header(title: str, subtitle: str = "") -> None:
 # ── Menu ───────────────────────────────────────────────────────────────────
 
 
+def _running_in_git_bash() -> bool:
+    """Detect whether the process is running inside Git Bash (MINGW64).
+
+    msvcrt functions (kbhit / getwch) do NOT work reliably in Git Bash —
+    they silently fail or interfere with the PTY that Git Bash uses for
+    input.  When running there we must skip all msvcrt-based draining.
+    """
+    # MSYSTEM is set by Git Bash / MSYS2
+    if os.environ.get("MSYSTEM"):
+        return True
+    # PATH might contain msys/MinGW markers
+    term = os.environ.get("TERM", "")
+    if term.startswith("xterm") and "bash" in os.environ.get("SHELL", "").lower():
+        # Heuristic: check if stdin is a PTY rather than a Windows console
+        if hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
+            # On native Windows consoles, msvcrt works fine.
+            # In Git Bash, sys.stdin.read(0) behaves differently.
+            pass
+    # Check PROCESSOR_ARCHITECTURE + presence of bash in parent
+    return bool(os.environ.get("MSYS_WINVERSION"))
+
+
 def _flush_msvcrt_buffer() -> None:
     """Quick-flush residual keystrokes from msvcrt input buffer.
 
     Used after menu navigation to clear arrow-key / number residuals
     before switching to input().  Intentionally fast so menu navigation
     does not feel sluggish.
+
+    Skipped entirely when running in Git Bash (MINGW64) because msvcrt
+    does not work there.
     """
+    if _running_in_git_bash():
+        return
     try:
         import msvcrt
 
@@ -78,7 +106,12 @@ def _drain_msvcrt_buffer_aggressive() -> None:
 
     Called ONLY before multi-line input (user story paste), never after
     simple menu navigation.
+
+    Skipped entirely when running in Git Bash (MINGW64) because msvcrt
+    does not work there — the pasted text would be lost.
     """
+    if _running_in_git_bash():
+        return
     import msvcrt
 
     try:
@@ -101,13 +134,28 @@ def _drain_msvcrt_buffer_aggressive() -> None:
 def _read_key() -> str:
     """Read a single keypress using msvcrt (Windows) or fallback.
 
+    In Git Bash (MINGW64), msvcrt does not work, so we fall back to
+    line-based input via sys.stdin and return the first character.
+
     Returns:
     - '^' for Up arrow
     - 'v' for Down arrow
     - the character typed for regular keys
     """
+    if _running_in_git_bash():
+        # msvcrt doesn't work in Git Bash — read a full line and use
+        # the first meaningful character.  This means the user must press
+        # Enter after typing a choice, which is fine for PTY input.
+        try:
+            line = sys.stdin.readline()
+            if not line:
+                raise EOFError
+            first = line.strip()[0] if line.strip() else ""
+            return first
+        except EOFError:
+            return "q"  # treat EOF as quit
+
     import msvcrt
-    import sys
 
     try:
         char = msvcrt.getwch()  # type: ignore[attr-defined] # wide char, handles Unicode

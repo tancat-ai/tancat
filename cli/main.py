@@ -20,7 +20,12 @@ import json
 import sys
 from typing import Any
 
-# Load .env BEFORE any other imports so env vars are available
+# Force UTF-8 encoding on Windows when running under Git Bash (MINGW64)
+# where stdout may default to cp1252, causing UnicodeEncodeError for
+# box-drawing characters (┌, ─, ┐ etc.) used in the retro UI.
+if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", "CP65001"):
+    sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)  # pyright: ignore[assignment]
+
 try:
     from dotenv import load_dotenv as _load_dotenv
 
