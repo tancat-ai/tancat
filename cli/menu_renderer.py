@@ -10,6 +10,7 @@ preserved from the previous implementation — only rendering changed.
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 from .color import green, red, yellow
@@ -50,22 +51,36 @@ def print_header(title: str, subtitle: str = "") -> None:
 
 
 def _flush_msvcrt_buffer() -> None:
-    """Flush any residual keystrokes left in the msvcrt input buffer.
+    """Flush residual keystrokes left in the msvcrt input buffer.
 
-    After using msvcrt.getwch() for menu navigation, residual characters
-    from pasted multi-line input can remain in the buffer and corrupt
-    subsequent input() calls. This function drains the buffer before
-    switching to line-oriented input via input().
+    After using msvcrt.getwch() for menu navigation, pasted multi-line
+    input may still be sitting in the Windows console input buffer.
+    If not drained before switching to input(), those stale characters
+    are consumed by input() first, causing corrupted or empty reads.
+
+    Uses an aggressive drain loop: keeps polling until the buffer stays
+    empty for a sustained period, ensuring burst-pasted characters are
+    fully consumed even when they arrive late from the console driver.
     """
     import msvcrt
     import time
 
     try:
-        # Drain any remaining characters from the msvcrt buffer
-        # by polling for a short period.
-        for _ in range(10):
-            if msvcrt.kbhit():
-                msvcrt.getwch()  # type: ignore[attr-defined]
+        # Aggressive drain: keep pulling characters until the buffer
+        # stays empty for at least 200 ms.  This handles the case where
+        # Windows delivers pasted text in multiple bursts to the console
+        # input queue.
+        empty_start = time.monotonic()
+        while True:
+            found = False
+            for _ in range(50):
+                if msvcrt.kbhit():
+                    msvcrt.getwch()  # type: ignore[attr-defined]
+                    found = True
+            if not found:
+                if time.monotonic() - empty_start >= 0.2:
+                    break  # buffer clean for 200 ms
+                empty_start = time.monotonic()
             time.sleep(0.01)
     except Exception:
         pass
@@ -316,11 +331,20 @@ def collect_user_story() -> str:
 
     if mode == 0:
         # Buffer was already flushed by print_menu on selection.
+        # Flush again immediately before input() to catch any characters
+        # that arrived between the menu return and this block.
+        _flush_msvcrt_buffer()
         print("\n  Paste your user story and acceptance criteria below.")
         print("  (End with an empty line or Ctrl+D / Ctrl+Z on Windows)")
         print("  ---")
         lines: list[str] = []
         try:
+            import sys
+
+            # Small delay ensures the console driver has fully transitioned
+            # from msvcrt mode back to line-buffered stdin before we read.
+            sys.stdout.flush()
+            time.sleep(0.1)
             while True:
                 line = input()
                 if not line and lines:
