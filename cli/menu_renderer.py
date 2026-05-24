@@ -92,11 +92,11 @@ def _drain_stdin_immediate() -> int:
 def _flush_msvcrt_buffer() -> None:
     """Quick-flush residual keystrokes from msvcrt input buffer.
 
-    Skipped in Git Bash (MINGW64) — falls back to stdin drain there.
+    In Git Bash (MINGW64), do NOT drain stdin — pasted text goes through
+    the PTY's stdin pipe, so draining it would consume the user's input.
     """
     if _running_in_git_bash():
-        _drain_stdin_immediate()
-        return
+        return  # Don't drain stdin in Git Bash — pasted text goes there
     try:
         import msvcrt
 
@@ -112,15 +112,11 @@ def _flush_msvcrt_buffer() -> None:
 def _drain_msvcrt_buffer_aggressive() -> None:
     """Aggressive drain for multi-line paste — wait until buffer stays empty.
 
-    Skipped in Git Bash (MINGW64) — uses stdin drain there instead.
+    In Git Bash (MINGW64), do NOT drain stdin — pasted text goes through
+    the PTY's stdin pipe, so draining it would consume the user's input.
     """
     if _running_in_git_bash():
-        for _ in range(3):
-            consumed = _drain_stdin_immediate()
-            if consumed == 0:
-                break
-            time.sleep(0.05)
-        return
+        return  # Don't drain stdin in Git Bash — pasted text goes there
     import msvcrt
 
     try:
