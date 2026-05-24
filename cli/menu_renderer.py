@@ -58,32 +58,44 @@ def _running_in_git_bash() -> bool:
     they silently fail or interfere with the PTY that Git Bash uses for
     input.  When running there we must skip all msvcrt-based draining.
     """
-    # MSYSTEM is set by Git Bash / MSYS2
     if os.environ.get("MSYSTEM"):
         return True
-    # PATH might contain msys/MinGW markers
-    term = os.environ.get("TERM", "")
-    if term.startswith("xterm") and "bash" in os.environ.get("SHELL", "").lower():
-        # Heuristic: check if stdin is a PTY rather than a Windows console
-        if hasattr(sys.stdin, "isatty") and sys.stdin.isatty():
-            # On native Windows consoles, msvcrt works fine.
-            # In Git Bash, sys.stdin.read(0) behaves differently.
-            pass
-    # Check PROCESSOR_ARCHITECTURE + presence of bash in parent
     return bool(os.environ.get("MSYS_WINVERSION"))
+
+
+def _drain_stdin_immediate() -> int:
+    """Drain immediately-available data from stdin using select (non-blocking).
+
+    Returns the number of lines consumed (for diagnostic logging).
+    Uses select.select with 0 timeout so it never blocks.
+    Works in Git Bash (MINGW64) where msvcrt is unavailable.
+    """
+    import select
+
+    lines_consumed = 0
+    try:
+        readable, _, _ = select.select([sys.stdin], [], [], 0.0)
+        if readable:
+            while True:
+                readable2, _, _ = select.select([sys.stdin], [], [], 0.0)
+                if not readable2:
+                    break
+                data = sys.stdin.readline()
+                if not data:
+                    break
+                lines_consumed += 1
+    except Exception:
+        pass
+    return lines_consumed
 
 
 def _flush_msvcrt_buffer() -> None:
     """Quick-flush residual keystrokes from msvcrt input buffer.
 
-    Used after menu navigation to clear arrow-key / number residuals
-    before switching to input().  Intentionally fast so menu navigation
-    does not feel sluggish.
-
-    Skipped entirely when running in Git Bash (MINGW64) because msvcrt
-    does not work there.
+    Skipped in Git Bash (MINGW64) — falls back to stdin drain there.
     """
     if _running_in_git_bash():
+        _drain_stdin_immediate()
         return
     try:
         import msvcrt
@@ -100,17 +112,14 @@ def _flush_msvcrt_buffer() -> None:
 def _drain_msvcrt_buffer_aggressive() -> None:
     """Aggressive drain for multi-line paste — wait until buffer stays empty.
 
-    Windows delivers pasted text in multiple bursts to the console input
-    queue.  This keeps polling until the buffer stays empty for 200 ms,
-    ensuring all burst-pasted characters are consumed before input().
-
-    Called ONLY before multi-line input (user story paste), never after
-    simple menu navigation.
-
-    Skipped entirely when running in Git Bash (MINGW64) because msvcrt
-    does not work there — the pasted text would be lost.
+    Skipped in Git Bash (MINGW64) — uses stdin drain there instead.
     """
     if _running_in_git_bash():
+        for _ in range(3):
+            consumed = _drain_stdin_immediate()
+            if consumed == 0:
+                break
+            time.sleep(0.05)
         return
     import msvcrt
 
@@ -124,7 +133,7 @@ def _drain_msvcrt_buffer_aggressive() -> None:
                     found = True
             if not found:
                 if time.monotonic() - empty_start >= 0.2:
-                    break  # buffer clean for 200 ms
+                    break
                 empty_start = time.monotonic()
             time.sleep(0.01)
     except Exception:
@@ -143,9 +152,6 @@ def _read_key() -> str:
     - the character typed for regular keys
     """
     if _running_in_git_bash():
-        # msvcrt doesn't work in Git Bash — read a full line and use
-        # the first meaningful character.  This means the user must press
-        # Enter after typing a choice, which is fine for PTY input.
         try:
             line = sys.stdin.readline()
             if not line:
@@ -153,23 +159,20 @@ def _read_key() -> str:
             first = line.strip()[0] if line.strip() else ""
             return first
         except EOFError:
-            return "q"  # treat EOF as quit
+            return "q"
 
     import msvcrt
 
     try:
-        char = msvcrt.getwch()  # type: ignore[attr-defined] # wide char, handles Unicode
-        if char in ("\x00", "\xe0"):  # extended key prefix (arrows, F-keys)
+        char = msvcrt.getwch()  # type: ignore[attr-defined]
+        if char in ("\x00", "\xe0"):
             char2 = msvcrt.getwch()  # type: ignore[attr-defined]
-            up_code = "H"  # arrow up
-            down_code = "P"  # arrow down
-            if char2 == up_code:
+            if char2 == "H":
                 return "^"
-            if char2 == down_code:
+            if char2 == "P":
                 return "v"
         return char
     except Exception:
-        # Fallback to sys.stdin if msvcrt fails
         return sys.stdin.read(1)
 
 
@@ -184,22 +187,17 @@ def print_menu(
     - Arrow keys: Up/Down to navigate, Enter to select
     - Numbered input: type ``1``, ``2``, etc. and press Enter
     - Shortcut keys: single-letter keys defined in *shortcuts*
-    - The menu is rendered with bright-green ``>`` indicator on the
-      selected item and dim green for the rest.
     """
     first_render = True
     selected = 0
     while True:
-        # Clear screen on loop re-render (first render already cleared by print_header)
         if not first_render:
             clear_screen()
         first_render = False
 
-        # Redraw menu with current selection
         render_menu(options, selected=selected)
         print()
 
-        # Build shortcut bar
         bar: list[tuple[str, str]] = []
         for i, opt in enumerate(options):
             bar.append((str(i + 1), opt[:15]))
@@ -209,30 +207,22 @@ def print_menu(
         render_shortcut_bar(bar)
         print()
 
-        # Read input with arrow key support
         try:
             key = _read_key()
 
-            # Arrow up
             if key == "^":
                 selected = max(0, selected - 1)
                 continue
-            # Arrow down
             if key == "v":
                 selected = min(len(options) - 1, selected + 1)
                 continue
-            # Enter = select current item
             if key == "\r":
-                # Flush buffer before returning so subsequent input() calls
-                # don't see residual keystrokes from the menu navigation.
                 _flush_msvcrt_buffer()
                 return selected
 
-            # Backspace
             if key in ("\x08", "\x7f"):
                 continue
 
-            # Regular character input
             choice = key.strip()
         except KeyboardInterrupt, EOFError:
             print("\n  Interrupted.")
@@ -241,10 +231,8 @@ def print_menu(
         if not choice:
             continue
 
-        # Handle shortcut keys (single letter)
         if len(choice) == 1 and not choice.isdigit():
             upper = choice.upper()
-            # Check explicit shortcuts first
             if shortcuts:
                 for key, _label in shortcuts:
                     if key.upper() == upper:
@@ -260,7 +248,6 @@ def print_menu(
             print(yellow("  Invalid shortcut. Please try again."))
             continue
 
-        # Handle numbered input
         try:
             idx = int(choice) - 1
             if 0 <= idx < len(options):
@@ -330,7 +317,7 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
         shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("C", "OpenAI-Local"), ("A", "OpenAI")],
     )
     if idx < 0:
-        return provider, base_url, model_name  # cancelled
+        return provider, base_url, model_name
 
     display_name, provider_key, default_url = providers[idx]
 
@@ -390,8 +377,6 @@ def collect_user_story() -> str:
         return baseline_text
 
     if mode == 0:
-        # print_menu already did a quick flush on selection.  Now run the
-        # aggressive drain to handle multi-line paste bursts on Windows.
         _drain_msvcrt_buffer_aggressive()
         print("\n  Paste your user story and acceptance criteria below.")
         print("  (End with an empty line or Ctrl+D / Ctrl+Z on Windows)")
@@ -586,7 +571,6 @@ def collect_journey_steps() -> list[dict[str, str]]:
             new_step["text"] = raw_value
         elif action == "wait":
             new_step["selector"] = read_non_empty("  Selector to wait for:")
-        # "scrape" steps capture page context — no extra fields needed
 
         steps.append(new_step)
         print(green(f"  ✓ Added {action} step.\n"))
