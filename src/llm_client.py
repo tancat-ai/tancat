@@ -101,8 +101,13 @@ class LLMClient:
             env_model = os.environ.get("OPENAI_MODEL")
             if env_model:
                 return env_model
+        elif self._provider.provider_name == "openai-local":
+            env_model = os.environ.get("OPENAI_MODEL")
+            if env_model:
+                return env_model
 
-        # 2. For LM Studio, check what model is currently loaded in memory
+        # 2. For local providers that expose a loaded/available model endpoint,
+        # prefer the model already hosted by the user's server.
         if self._provider.provider_name == "lm-studio":
             from src.llm_providers import LMStudioProvider
 
@@ -111,9 +116,17 @@ class LLMClient:
                 if loaded:
                     self._debug(f"Using loaded model: {loaded}")
                     return loaded
+        if self._provider.provider_name == "openai-local":
+            from src.llm_providers import OpenAIProvider
+
+            if isinstance(self._provider, OpenAIProvider):
+                loaded = self._provider.get_loaded_model(timeout=5)
+                if loaded:
+                    self._debug(f"Using local OpenAI-compatible model: {loaded}")
+                    return loaded
 
         # 3. If no env var, try to list models and pick the first one (for local providers)
-        if self._provider.provider_name in ("ollama", "lm-studio"):
+        if self._provider.provider_name in ("ollama", "lm-studio", "openai-local"):
             try:
                 models = self.list_models(timeout=5)
                 if models:
@@ -127,6 +140,8 @@ class LLMClient:
             return "qwen2.5:7b"
         if self._provider.provider_name == "lm-studio":
             return "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
+        if self._provider.provider_name == "openai-local":
+            return "llama"
         return "gpt-4o"
 
     @property

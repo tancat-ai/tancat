@@ -30,6 +30,23 @@ class TestLLMClientInitialization:
             LLMClient._session_base_url = None
             LLMClient._session_model = None
 
+    @patch("src.llm_client.auto_detect_provider")
+    def test_openai_local_uses_available_model_instead_of_cloud_default(
+        self,
+        mock_auto_detect_provider: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify local OpenAI-compatible servers do not fall back to gpt-4o."""
+        monkeypatch.delenv("OPENAI_MODEL", raising=False)
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "openai-local"
+        mock_provider.list_models.return_value = ["local-qwen"]
+        mock_auto_detect_provider.return_value = mock_provider
+
+        client = LLMClient()
+
+        assert client.model == "local-qwen"
+
 
 class TestOllamaProviderIntegration:
     """Tests for the Ollama provider wrapper using the official Ollama client."""
