@@ -73,6 +73,19 @@ provider = config["provider"]
 default_provider_url, default_model = _get_provider_defaults(provider)
 provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
 
+# Render API Key input for cloud OpenAI provider and propagate to environment
+if provider == "openai":
+    import os
+
+    openai_api_key = st.sidebar.text_input(
+        "OpenAI API Key",
+        type="password",
+        value=os.environ.get("OPENAI_API_KEY", ""),
+        help="Required for Cloud OpenAI.",
+    )
+    if openai_api_key:
+        os.environ["OPENAI_API_KEY"] = openai_api_key
+
 # Propagate user-selected provider to ALL fallback LLMClient() instances
 # throughout the pipeline so they don't fall back to .env.
 LLMClient.set_session_provider(provider, provider_base_url)
@@ -102,6 +115,20 @@ if not st.session_state.get("starting_url") and st.session_state.get("Starting U
     st.session_state.starting_url = st.session_state.get("Starting URL")
 if not st.session_state.get("additional_urls") and st.session_state.get("Additional URLs"):
     st.session_state.additional_urls = st.session_state.get("Additional URLs")
+
+# Baseline preset button — MUST run before sidebar widgets that share keys
+# because Streamlit disallows modifying session_state after a widget owns that key.
+if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):
+    st.session_state.starting_url = RequirementsInput.BASELINE_STARTING_URL
+    st.session_state.additional_urls = RequirementsInput.BASELINE_ADDITIONAL_URLS
+    st.session_state.requirements_text = RequirementsInput.BASELINE_REQUIREMENTS
+    st.session_state.pipeline_error = ""
+    st.session_state.pipeline_results = ""
+    st.session_state.pipeline_skeleton = ""
+    st.session_state.pipeline_scrape_summary = ""
+    st.session_state.pipeline_saved_path = ""
+    st.session_state.pipeline_manifest_path = ""
+    st.rerun()
 
 base_url = st.sidebar.text_input(
     "Starting URL",
@@ -154,19 +181,6 @@ if _logo_path.exists():
 else:
     st.title("AI Playwright Test Generator")
     st.markdown("Generate placeholder-first pytest sync Playwright tests, then resolve them against scraped pages.")
-
-# Baseline preset button
-if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):
-    st.session_state.starting_url = RequirementsInput.BASELINE_STARTING_URL
-    st.session_state.additional_urls = RequirementsInput.BASELINE_ADDITIONAL_URLS
-    st.session_state.requirements_text = RequirementsInput.BASELINE_REQUIREMENTS
-    st.session_state.pipeline_error = ""
-    st.session_state.pipeline_results = ""
-    st.session_state.pipeline_skeleton = ""
-    st.session_state.pipeline_scrape_summary = ""
-    st.session_state.pipeline_saved_path = ""
-    st.session_state.pipeline_manifest_path = ""
-    st.rerun()
 
 # ---------------------------------------------------------------------------
 # Requirements input

@@ -8,19 +8,18 @@ from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
 from src.journey_scraper import CartSeedingScraper, CredentialProfile
-from src.locator_builder import build_robust_locator
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 from src.semantic_candidate_ranker import SemanticCandidateRanker
-from src.semantic_matcher import SemanticMatcher
 from src.stateful_scraper import StatefulPageScraper
-from src.url_inference import infer_next_page_url
 from src.url_resolver import UrlResolver
 from src.url_utils import (
     build_common_path_candidates,
     extract_route_concepts,
+    extract_seed_domain,
+    filter_urls_to_allowed_domain,
     heuristic_url_from_description,
 )
 
@@ -207,7 +206,7 @@ class PlaceholderOrchestrator:
         """Resolve placeholders step by step while tracking the active page for each test."""
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
         lines = skeleton_code.splitlines()
-        line_resolutions: dict[int, list[tuple[str, str, str, str, str]]] = {}
+        line_resolutions: dict[int, list[tuple[str, str, str, str]]] = {}
         all_placeholder_uses = self._all_placeholder_uses(skeleton_code)
         fallback_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
         errors = scraped_errors or {}
@@ -230,28 +229,19 @@ class PlaceholderOrchestrator:
                     current_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
 
                 for placeholder in step.placeholders:
-                    # Extract value from FILL:desc:value format
-                    fill_value = ""
-                    action = placeholder.action
-                    description = placeholder.description
-                    if action == "FILL" and ":" in description:
-                        parts = description.split(":", 1)
-                        description = parts[0]
-                        fill_value = parts[1]
-
                     resolved_value, next_url = await self._resolve_placeholder_for_page(
-                        action=action,
-                        description=description,
+                        action=placeholder.action,
+                        description=placeholder.description,
                         current_url=current_url,
                         scraped_data=scraped_data,
                         scraped_errors=errors,
                     )
 
                     if "pytest.skip" in resolved_value:
-                        journey_unresolved[journey.test_name].append(description)
+                        journey_unresolved[journey.test_name].append(placeholder.description)
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
-                            (placeholder.token, action, resolved_value, description, fill_value)
+                            (placeholder.token, placeholder.action, resolved_value, placeholder.description)
                         )
 
                     if next_url:
@@ -261,60 +251,45 @@ class PlaceholderOrchestrator:
         resolved_tokens = {
             token
             for replacements in line_resolutions.values()
-            for token, _action, _resolved_value, _description, _ in replacements
+            for token, _action, _resolved_value, _description in replacements
         }
 
         for use in all_placeholder_uses:
             if use.token in resolved_tokens:
                 continue
 
-            # Extract value from FILL:desc:value format
-            fill_value = ""
-            action = use.action
-            description = use.description
-
-            if action == "FILL" and ":" in description:
-                # Split only on the first colon to handle descriptions that might have colons
-                parts = description.split(":", 1)
-                description = parts[0]
-                fill_value = parts[1]
-
             journey_name = self._find_journey_for_line(use.line_number, journeys)
             if journey_name:
                 resolved_value, _ = await self._resolve_placeholder_for_page(
-                    action=action,
-                    description=description,
+                    action=use.action,
+                    description=use.description,
                     current_url=fallback_url,
                     scraped_data=scraped_data,
                     scraped_errors=errors,
                 )
                 if "pytest.skip" in resolved_value:
-                    journey_unresolved.setdefault(journey_name, []).append(description)
+                    journey_unresolved.setdefault(journey_name, []).append(use.description)
                 else:
-                    if journey_name in journey_unresolved:
-                        journey_unresolved[journey_name] = [
-                            unresolved for unresolved in journey_unresolved[journey_name] if unresolved != description
-                        ]
                     line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value)
+                        (use.token, use.action, resolved_value, use.description)
                     )
             else:
                 resolved_value, _ = await self._resolve_placeholder_for_page(
-                    action=action,
-                    description=description,
+                    action=use.action,
+                    description=use.description,
                     current_url=fallback_url,
                     scraped_data=scraped_data,
                     scraped_errors=errors,
                 )
                 line_resolutions.setdefault(use.line_number, []).append(
-                    (use.token, action, resolved_value, description, fill_value)
+                    (use.token, use.action, resolved_value, use.description)
                 )
 
         # 3. Apply line-level replacements first.
         final_lines: list[str] = []
         for line_number, line in enumerate(lines, start=1):
             updated_line = line
-            for token, action, resolved_value, description, _fill_value in line_resolutions.get(line_number, []):
+            for token, action, resolved_value, description in line_resolutions.get(line_number, []):
                 updated_line = replace_token_in_line(
                     updated_line,
                     action,
@@ -322,7 +297,6 @@ class PlaceholderOrchestrator:
                     resolved_value,
                     duplicate_selectors,
                     description,
-                    fill_value=_fill_value,
                 )
             final_lines.append(updated_line)
 
@@ -338,15 +312,6 @@ class PlaceholderOrchestrator:
         final_lines = self._remove_old_placeholder_skips(final_lines, journeys)
 
         return "\n".join(final_lines)
-
-    @staticmethod
-    def _extract_fill_text(line: str) -> str | None:
-        """Extract the second argument from an evidence_tracker.fill() call."""
-        # Match evidence_tracker.fill(placeholder, "text") or similar
-        match = re.search(r"fill\(.+?,\s*['\"](.+?)['\"]\)", line)
-        if match:
-            return match.group(1)
-        return None
 
     @staticmethod
     def _all_placeholder_uses(code: str) -> list:
@@ -453,19 +418,15 @@ class PlaceholderOrchestrator:
         user_story: str,
         conditions: str,
     ) -> list[str]:
-        """Return a tightly-scoped list of URLs needed for the current journeys.
-
-        Note: page_requirements now contain keywords (not URLs). URL resolution
-        happens via UrlResolver (Phase 3). For now, rely on seed_urls + heuristic
-        path candidates built from placeholder descriptions and user story context.
-        """
-        # Collect keywords for logging (actual URL resolution happens in UrlResolver)
-        keywords = [page_requirement.keyword for page_requirement in page_requirements]
+        """Return a tightly-scoped list of URLs needed for the current journeys."""
+        allowed_domains = extract_seed_domain(seed_urls)
+        raw_required_urls = [page_requirement.keyword for page_requirement in page_requirements]
+        required_urls = filter_urls_to_allowed_domain(raw_required_urls, allowed_domains)
         placeholder_descriptions = [
             placeholder.description for journey in journeys for placeholder in journey.placeholders
         ]
-        concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions, *keywords])
-        return list(dict.fromkeys(seed_urls + build_common_path_candidates(seed_urls, concepts)))
+        concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions])
+        return list(dict.fromkeys(seed_urls + required_urls + build_common_path_candidates(seed_urls, concepts)))
 
     def _verify_page_context(
         self,
@@ -526,29 +487,14 @@ class PlaceholderOrchestrator:
         scoped_pages = self._build_scoped_pages(current_url, scraped_data)
 
         if action in {"GOTO", "URL"}:
-            # Step 1: Try UrlResolver (keyword → URL mapping from scraped URLs)
-            url_from_resolver = self.url_resolver.resolve(description)
-            if url_from_resolver:
-                logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
-                return repr(url_from_resolver), url_from_resolver
-
-            # Step 2: Try PlaceholderResolver (scraped element matching)
             resolved_url = self.resolver.resolve_url(description, scoped_pages or scraped_data)
             if resolved_url:
                 return repr(resolved_url), resolved_url
-
-            # Step 3: Heuristic fallback
             if current_url:
                 heuristic = heuristic_url_from_description(current_url, description)
                 if heuristic:
                     await self._ensure_scraped(heuristic, scraped_data, scraped_errors)
                     return repr(heuristic), heuristic
-
-            # Step 4: Try seed URL as last resort
-            seed_url = self.url_resolver.get_seed_url()
-            if seed_url:
-                logger.debug("Falling back to seed URL for '%s': %s", description, seed_url)
-                return repr(seed_url), seed_url
 
             error_msg = f"Locator for '{description}' not found on scraped pages."
             if current_url and scraped_errors and current_url in scraped_errors:
@@ -577,13 +523,16 @@ class PlaceholderOrchestrator:
             # B3: Verify page context — log warning for cross-page mismatches
             self._verify_page_context(description, matched_element, current_url, scraped_data)
 
-            # _find_best_element_for_current_page() has already selected the element
-            # via the priority chain (text → structural → scoring/LLM).
-            robust_selector = build_robust_locator(matched_element)
+            # Call _build_robust_locator directly — bypasses find_best_match's text
+            # validation gate which rejects most elements and causes raw CSS selectors
+            # to be used as fallback instead of the robust locator logic.
+            # Stage 1 (_find_best_element_for_current_page) has already selected the
+            # best element via word-overlap ranking — we trust that result here.
+            robust_selector = PlaceholderResolver._build_robust_locator(matched_element)
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)
-            next_url = infer_next_page_url(action, description, matched_element, scraped_data, current_url)
+            next_url = self._infer_next_page_url(action, description, matched_element, scraped_data, current_url)
             if next_url:
                 await self._ensure_scraped(next_url, scraped_data, scraped_errors)
             return selector, next_url
@@ -626,152 +575,6 @@ class PlaceholderOrchestrator:
         )
         return None
 
-    @staticmethod
-    def _log_resolve_pass(
-        pass_number: int,
-        pass_name: str,
-        description: str,
-        element: dict[str, str] | None,
-    ) -> None:
-        if element is None:
-            return
-        logger.info(
-            "[RESOLVE] '%s' | pass=%d (%s) | selector=%s",
-            description,
-            pass_number,
-            pass_name,
-            element.get("selector", ""),
-        )
-
-    def _normalise_element_text(self, element: dict[str, str]) -> str:
-        """Extract and normalise element text for Pass 1 matching.
-
-        Priority: accessible_name → aria_label → text.
-        Strips non-ASCII characters (icon fonts), lowercases,
-        and strips whitespace.
-        """
-        raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
-        return re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
-
-    def _pass1_text_match(
-        self,
-        action: str,
-        description: str,
-        pages_data: dict[str, list[dict[str, str]]],
-    ) -> dict[str, str] | None:
-        """Pass 1 — fast text match before scoring.
-
-        Returns the first element whose normalised text is
-        contained in the normalised description.
-        Only fires for CLICK and FILL — ASSERT tokens for
-        page state will not match element text and should
-        fall through to the scoring path.
-
-        Minimum element text length of 3 characters prevents
-        single-character matches ('a', 'x') producing false wins.
-
-        REGRESSION FIX (2026-05-17): When the description contains action verbs
-        (add, remove, place, buy, etc.), require the element text to contain at
-        least one of those action words. This prevents "Add to cart button" from
-        matching the "View Cart" link just because both contain the word "cart".
-        """
-        if action not in {"CLICK", "FILL"}:
-            return None
-
-        norm_description = description.lower()
-
-        # Check if the description contains action verbs — these need stricter matching
-        desc_words = set(norm_description.split())
-        has_action_verb = bool(desc_words & PlaceholderResolver.ACTION_VERBS)
-
-        for elements in pages_data.values():
-            for element in elements:
-                norm_text = self._normalise_element_text(element)
-                if len(norm_text) >= 3 and norm_text in norm_description:
-                    # When action verbs are present, require the element text to
-                    # contain at least one action word from the description.
-                    # This prevents "cart" in "View Cart" from beating "Add to cart"
-                    # when the description is "Add to cart button next to Blue Top".
-                    if has_action_verb:
-                        text_words = set(norm_text.split())
-                        action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
-                        if not (text_words & action_words_in_desc):
-                            # Element text lacks the action verb — skip it
-                            continue
-                    return element
-
-        return None
-
-    def _pass1_assert_text_match(
-        self,
-        action: str,
-        description: str,
-        pages_data: dict[str, list[dict[str, str]]],
-    ) -> dict[str, str] | None:
-        """Pass 1 (ASSERT) — match text-bearing elements whose label appears in the description."""
-        if action != "ASSERT":
-            return None
-
-        norm_description = description.lower()
-        text_bearing_roles = {
-            "heading",
-            "paragraph",
-            "text",
-            "status",
-            "alert",
-            "region",
-            "article",
-            "listitem",
-            "cell",
-            "columnheader",
-            "rowheader",
-        }
-        text_bearing_tags = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "li", "td", "th"}
-
-        for elements in pages_data.values():
-            for element in elements:
-                role = str(element.get("role", "")).strip().lower()
-                tag = str(element.get("tag", "")).strip().lower()
-                if role not in text_bearing_roles and tag not in text_bearing_tags:
-                    continue
-                norm_text = self._normalise_element_text(element)
-                if len(norm_text) >= 3 and norm_text in norm_description:
-                    return element
-
-        return None
-
-    def _pass2_structural_match(
-        self,
-        action: str,
-        description: str,
-        pages_data: dict[str, list[dict[str, str]]],
-    ) -> dict[str, str] | None:
-        """Pass 2 — match stable attributes (id, data-test, aria) to description keywords."""
-        if action not in {"CLICK", "FILL", "ASSERT"}:
-            return None
-
-        desc_words = SemanticMatcher.get_words(description, expand_aliases=False)
-        if not desc_words:
-            return None
-
-        structural_fields = ("id", "data_test", "aria_label", "accessible_name", "name")
-
-        for elements in pages_data.values():
-            for element in elements:
-                for field in structural_fields:
-                    raw = str(element.get(field, "")).strip()
-                    if len(raw) < 2:
-                        continue
-                    field_words = SemanticMatcher.get_words(raw, expand_aliases=False)
-                    overlap = desc_words & field_words
-                    if len(overlap) >= 2:
-                        return element
-                    normalized_field = raw.lower().replace("_", " ").replace("-", " ")
-                    if normalized_field in description.lower():
-                        return element
-
-        return None
-
     async def _find_best_element_for_current_page(
         self,
         action: str,
@@ -779,67 +582,39 @@ class PlaceholderOrchestrator:
         current_url: str | None,
         pages_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, str] | None:
-        """Return the best element match across the supplied page mapping.
+        """Return the global best element match across all pages in the supplied page mapping.
 
-        IMPORTANT: Collects candidates from ALL pages first, then selects the global
-        best match. This prevents returning a low-quality match from an early page
-        when a much better match exists on a later page (e.g., finding a cart page
-        element for "username input" instead of the login page element).
+        Collects top candidates from every page, then ranks them globally so that a
+        good match on a later page is not overshadowed by a weak match on an earlier
+        page (dict-order bug regression guard).
         """
-        # Pass 1 — fast text match (CLICK/FILL)
-        pass1_result = self._pass1_text_match(action, description, pages_data)
-        if pass1_result is not None:
-            self._log_resolve_pass(1, "text match", description, pass1_result)
-            return pass1_result
-
-        # Pass 1 — ASSERT text-bearing elements
-        pass1_assert = self._pass1_assert_text_match(action, description, pages_data)
-        if pass1_assert is not None:
-            self._log_resolve_pass(1, "assert text match", description, pass1_assert)
-            return pass1_assert
-
-        # Pass 2 — structural attribute match
-        pass2_result = self._pass2_structural_match(action, description, pages_data)
-        if pass2_result is not None:
-            self._log_resolve_pass(2, "structural match", description, pass2_result)
-            return pass2_result
-
-        # Pass 3 — scoring shortlist + semantic ranker (legacy path)
-        logger.debug("[RESOLVE] '%s' | pass=3 (scoring)", description)
-
-        # Collect ALL ranked candidates across ALL pages
-        all_ranked: list[tuple[float, dict[str, str]]] = []
-        for url, elements in pages_data.items():
+        # Phase 1: collect top candidates from every page
+        all_candidates: list[tuple[int, dict[str, str]]] = []
+        for elements in pages_data.values():
             ranked_candidates = self.resolver.rank_candidates(action, description, elements)
-            all_ranked.extend(ranked_candidates)
-            logger.debug(
-                "  PAGE %s: %d candidates, top_score=%s",
-                url,
-                len(ranked_candidates),
-                ranked_candidates[0][0] if ranked_candidates else "N/A",
-            )
-
-        if not all_ranked:
-            # No candidates scored at all — for ASSERT, fall back to page-state detection
-            # since abstract descriptions (e.g. "checkout form visible") produce zero matches.
-            if action == "ASSERT":
-                return self._select_page_state_candidate(pages_data, description)
+            if not ranked_candidates:
+                continue
+            top_score = ranked_candidates[0][0]
+            threshold = max(1, top_score - 2)
+            page_count = 0
+            for score, element in ranked_candidates:
+                if score >= threshold:
+                    all_candidates.append((score, element))
+                    page_count += 1
+                    if page_count >= 20:  # Safely cap the current page allocation
+                        break
+        if not all_candidates:
             return None
 
-        # Sort by score descending to get the global best match
-        all_ranked.sort(key=lambda x: x[0], reverse=True)
-        global_top_score = all_ranked[0][0]
-        logger.debug(
-            "GLOBAL top_score=%s for '%s' (selector=%s)",
-            global_top_score,
-            description,
-            all_ranked[0][1].get("selector", ""),
-        )
+        # Sort globally by score descending
+        all_candidates.sort(key=lambda x: x[0], reverse=True)
 
-        # Use a threshold-based shortlist from the global ranking.
-        threshold = max(1, global_top_score - 2)
-        shortlisted = [element for score, element in all_ranked if score >= threshold][:4]
+        # Build a global shortlist (top elements across all pages)
+        global_top_score = all_candidates[0][0]
+        global_threshold = max(1, global_top_score - 2)
+        shortlisted = [element for score, element in all_candidates if score >= global_threshold][:8]
 
+        # Phase 2: semantic ranking if there's ambiguity
         matched_element = None
         if len(shortlisted) > 1 and action in {"ASSERT", "CLICK", "FILL"}:
             matched_element = await self.semantic_ranker.choose_best_candidate(
@@ -849,83 +624,52 @@ class PlaceholderOrchestrator:
                 candidates=shortlisted,
             )
 
-        # Text validation gate: validate the LLM's choice, then try remaining candidates.
-        validated = self._validate_text_match(matched_element, description) if matched_element else None
-        if validated is not None:
-            return validated
+        # If semantic ranking wasn't run or returned nothing, default to the top candidate
+        if matched_element is None and shortlisted:
+            matched_element = shortlisted[0]
+
+        # Phase 3: text validation gate
+        if matched_element:
+            validated = self._validate_text_match(matched_element, description)
+            if validated is not None:
+                return validated
 
         # LLM's choice failed text validation — try remaining candidates in rank order
         for candidate in shortlisted:
             if self._validate_text_match(candidate, description):
                 return candidate
 
-        # Text validation failed all shortlisted candidates — fall back to the LLM's
-        # choice anyway but log a warning for diagnostics.
-        if matched_element is not None:
+        # Reject the primary match when none of the shortlisted candidates pass validation.
+        if matched_element:
             element_text = str(matched_element.get("text", "")).strip()
             logger.warning(
-                "LLM-selected element '%s' fails text validation for '%s' — "
-                "using anyway (diagnostic review recommended).",
+                "LLM-selected element '%s' fails text validation for '%s' — rejecting match.",
                 element_text,
-                description,
-            )
-            if action == "ASSERT":
-                return matched_element
-            return matched_element
-
-        # No LLM selection — use top candidate with text validation
-        if shortlisted:
-            top_candidate = shortlisted[0]
-            if self._validate_text_match(top_candidate, description):
-                return top_candidate
-            # Score-based page-state detection for ASSERT: low scores indicate abstract
-            # descriptions (e.g. "checkout form visible") that don't map to specific elements.
-            # Threshold 30 sits between poor word-overlap scores (1-10) and structural matches (80+).
-            if action == "ASSERT" and global_top_score < 30:
-                page_loaded_candidate = self._select_page_loaded_candidate(shortlisted, description)
-                if page_loaded_candidate is not None:
-                    return page_loaded_candidate
-            logger.info(
-                "Top-ranked element '%s' fails text validation for '%s' — skipping (unresolved placeholder).",
-                str(top_candidate.get("text", "")).strip(),
                 description,
             )
         return None
 
-    @staticmethod
-    def _select_page_state_candidate(
-        pages_data: dict[str, list[dict[str, str]]],
+    def _infer_next_page_url(
+        self,
+        action: str,
         description: str,
-    ) -> dict[str, str] | None:
-        """Pick a stable visible candidate from the current page for broad page-state assertions."""
-        candidates = [element for elements in pages_data.values() for element in elements]
-        return PlaceholderOrchestrator._select_page_loaded_candidate(candidates, description)
+        matched_element: dict[str, str],
+        scraped_data: dict[str, list[dict[str, str]]],
+        current_url: str | None,
+    ) -> str | None:
+        """Infer the next active page after a resolved step when navigation is implied."""
+        href = str(matched_element.get("href", "")).strip()
+        if action == "CLICK" and href:
+            if href.startswith(("http://", "https://")):
+                return href
+            if current_url:
+                return urljoin(current_url, href)
+            return href
 
-    @staticmethod
-    def _select_page_loaded_candidate(
-        candidates: list[dict[str, str]],
-        description: str = "",
-    ) -> dict[str, str] | None:
-        """Pick a stable visible page element for generic "page loaded" assertions."""
-        lowered = description.lower()
-        if "cart badge" in lowered or "badge updated" in lowered:
-            for candidate in candidates:
-                candidate_text = " ".join(
-                    str(candidate.get(field, "")).lower()
-                    for field in ("selector", "text", "classes", "data_test", "aria_label", "accessible_name")
-                )
-                if "cart" in candidate_text and ("badge" in candidate_text or str(candidate.get("text", "")).strip()):
-                    return candidate
+        if action == "CLICK" and any(term in description.lower() for term in ("cart", "checkout", "product", "home")):
+            return self.resolver.resolve_url(description, scraped_data)
 
-        for candidate in candidates:
-            role = str(candidate.get("role", "")).strip().lower()
-            selector = str(candidate.get("selector", "")).strip()
-            if not selector or role in {"hidden", "password", "email", "text", "input"}:
-                continue
-            if str(candidate.get("is_visible", "true")).lower() == "false":
-                continue
-            return candidate
-        return candidates[0] if candidates else None
+        return None
 
     def _select_initial_page_url(
         self,
@@ -940,21 +684,14 @@ class PlaceholderOrchestrator:
         if journey_start_url and journey_start_url in scraped_data:
             return journey_start_url
 
-        # Only resolve a GOTO/URL for initial page selection if it appears in the
-        # FIRST step of the journey. If the journey starts with CLICK/FILL/ASSERT,
-        # the initial page should be the fallback (seed URL), not a GOTO that appears
-        # later in the journey.
-        if journey.steps:
-            first_step = journey.steps[0]
-            for placeholder in first_step.placeholders:
-                if placeholder.action in {"GOTO", "URL"}:
-                    resolved_url = self.resolver.resolve_url(
-                        placeholder.description,
-                        self._page_requirements_to_pages(page_requirements, scraped_data) or scraped_data,
-                    )
-                    if resolved_url:
-                        return resolved_url
-                    break
+        for placeholder in journey.placeholders:
+            if placeholder.action in {"GOTO", "URL"}:
+                resolved_url = self.resolver.resolve_url(
+                    placeholder.description,
+                    self._page_requirements_to_pages(page_requirements, scraped_data) or scraped_data,
+                )
+                if resolved_url:
+                    return resolved_url
 
         return self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
 
@@ -982,32 +719,26 @@ class PlaceholderOrchestrator:
         page_requirements: list[PageRequirement],
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, list[dict[str, str]]] | None:
-        """Return scraped data filtered to pages declared in PAGES_NEEDED keywords."""
-        if not page_requirements or not scraped_data:
-            return None
+        """Return scraped data filtered to explicitly required pages."""
+        requirement_urls: set[str] = set()
+        for page_requirement in page_requirements:
+            resolved_url = self.url_resolver.resolve(page_requirement.keyword)
+            requirement_urls.add(resolved_url or page_requirement.keyword)
 
-        filtered: dict[str, list[dict[str, str]]] = {}
-        for requirement in page_requirements:
-            resolved_url = self.url_resolver.resolve(requirement.keyword)
-            if resolved_url and resolved_url in scraped_data:
-                filtered[resolved_url] = scraped_data[resolved_url]
+        scoped = {url: elements for url, elements in scraped_data.items() if url in requirement_urls}
+        return scoped or None
 
-        return filtered if filtered else None
-
+    @staticmethod
     def _select_fallback_page_url(
-        self,
         page_requirements: list[PageRequirement],
         seed_urls: list[str],
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> str | None:
         """Return the default page URL to use when no journey-specific page is known."""
+        for page_requirement in page_requirements:
+            if page_requirement.keyword in scraped_data:
+                return page_requirement.keyword
         for seed_url in seed_urls:
             if seed_url in scraped_data:
                 return seed_url
-
-        for requirement in page_requirements:
-            resolved_url = self.url_resolver.resolve(requirement.keyword)
-            if resolved_url and resolved_url in scraped_data:
-                return resolved_url
-
         return next(iter(scraped_data), None)

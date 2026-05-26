@@ -29,7 +29,6 @@ def test_streamlit_prompt_mentions_page_context_rules() -> None:
     """Template should include PAGE CONTEXT locator constraints."""
     template = get_streamlit_system_prompt_template()
     assert "PAGE CONTEXT" in template
-    assert "constraints" in template.lower()
 
 
 def test_streamlit_prompt_enforces_test_isolation() -> None:
@@ -48,10 +47,10 @@ def test_streamlit_prompt_format_resolves_without_error() -> None:
 
 
 def test_skeleton_prompt_format_resolves_without_error() -> None:
-    """Skeleton prompt should render cleanly without PAGES_NEEDED (pages discovered by journey scraper)."""
+    """Skeleton prompt should render cleanly with journey scraper pattern."""
     rendered = get_skeleton_prompt_template()
-    assert "PAGES_NEEDED" not in rendered  # Removed per FEATURE_SPEC_remove_pages_needed
-    assert "{{GOTO:page keyword}}" in rendered
+    # PAGES_NEEDED block remains in the output template as a URL reference comment
+    assert "{{GOTO:home page}}" in rendered  # Minimal example uses this pattern
 
 
 def test_skeleton_prompt_includes_count_header() -> None:

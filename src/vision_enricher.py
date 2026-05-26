@@ -19,7 +19,7 @@ import base64
 import io
 import json
 import re
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
@@ -240,7 +240,8 @@ class VisionEnricher:
 
                 # Call vision LLM
                 client = LLMClient(provider=provider, model=model)
-                response = client.create_vision_completion(
+                create_vision_completion = cast(Any, client).create_vision_completion
+                response = create_vision_completion(
                     image_base64=image_b64,
                     prompt=prompt,
                 )

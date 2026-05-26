@@ -158,7 +158,19 @@ class PlaceholderScorer:
         readonly = element.get("readonly", False)
         if disabled or readonly:
             return False
-        fillable_roles = {"textbox", "searchbox", "search_box", "combobox", "spinbutton"}
+        fillable_roles = {
+            "textbox",
+            "searchbox",
+            "search_box",
+            "combobox",
+            "spinbutton",
+            "input",
+            "email",
+            "password",
+            "text",
+            "tel",
+            "number",
+        }
         fillable_tags = {"input", "textarea", "select"}
         input_types = {"text", "search", "email", "password", "tel", "url", "number"}
         if role in fillable_roles:
@@ -199,7 +211,22 @@ class PlaceholderScorer:
         structural_content = structural_words & desc_content_words
         if len(structural_content) >= 2:
             return 80 + len(structural_content) * 5
+        if len(structural_content) == 1 and PlaceholderScorer._role_matches_description(action, description, element):
+            return 45
         return 0
+
+    @staticmethod
+    def _role_matches_description(action: str, description: str, element: dict[str, Any]) -> bool:
+        """Return true when the element role fits the requested interaction shape."""
+        role = str(element.get("role", "")).strip().lower()
+        lowered = description.lower()
+        if action == "CLICK" and "button" in lowered:
+            return role in {"button", "submit"}
+        if action == "CLICK" and "link" in lowered:
+            return role in {"a", "link"}
+        if action == "FILL":
+            return PlaceholderScorer._is_fillable(element)
+        return False
 
     @staticmethod
     def _href_bonus(

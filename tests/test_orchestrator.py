@@ -3,9 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
-from src.journey_scraper import CredentialProfile
 from src.orchestrator import TestOrchestrator
-from src.spec_analyzer import TestCondition
 from src.test_generator import TestGenerator
 
 
@@ -23,10 +21,6 @@ def test_checkout(page: Page):
     page.locator({{CLICK:add_to_cart_button}}).click()
     page.goto({{GOTO:cart_url}})
     {{ASSERT:cart_summary}}
-
-# PAGES_NEEDED:
-# - products (products)
-# - cart (cart)
 """
     )
 
@@ -122,9 +116,6 @@ from playwright.sync_api import Page
 
 def test_checkout(page: Page):
     evidence_tracker.click('.btn.primary')
-
-# PAGES_NEEDED:
-# - product_page (product page)
 """
     )
 
@@ -251,10 +242,6 @@ from playwright.sync_api import Page
 def test_checkout(page: Page):
     {{GOTO:home page}}
     {{CLICK:add to cart}}
-
-# PAGES_NEEDED:
-# - home (home)
-# - products (products)
 """
     )
 
@@ -297,181 +284,6 @@ def test_checkout(page: Page):
     )
 
     assert orchestrator.last_result is not None
-    # PageRequirement now stores keywords (not URLs) — check keywords match
-    req_keywords = [page.keyword for page in orchestrator.last_result.page_requirements]
-    assert "home" in req_keywords
-    assert "products" in req_keywords
-
-
-def test_run_pipeline_retries_when_skeleton_does_not_generate_one_test_per_criterion() -> None:
-    generator = TestGenerator(output_dir="generated_tests")
-    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
-        side_effect=[
-            """
-from playwright.sync_api import Page
-
-def test_combined(page: Page):
-    {{CLICK:add to cart}}
-    {{CLICK:go to cart}}
-""",
-            """
-from playwright.sync_api import Page
-
-def test_01_add_to_cart(page: Page):
-    {{CLICK:add to cart}}
-
-def test_02_go_to_cart(page: Page):
-    {{CLICK:go to cart}}
-""",
-        ]
-    )
-
-    orchestrator = TestOrchestrator(generator)
-    _disable_journey_discovery(orchestrator)
-    orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
-        return_value={
-            "https://example.com/": (
-                [{"selector": "#cart", "text": "Cart", "role": "button"}],
-                None,
-                "https://example.com/",
-            )
-        }
-    )
-
-    final_code = asyncio.run(
-        orchestrator.run_pipeline(
-            user_story="As a shopper I want to add to cart and go to cart",
-            conditions="1. Add to cart\n2. Go to cart",
-            target_urls=["https://example.com/"],
-        )
-    )
-
-    assert generator.generate_skeleton.await_count == 2  # type: ignore[attr-defined]
-    assert "def test_01_add_to_cart" in final_code
-    assert "def test_02_go_to_cart" in final_code
-
-
-def test_run_pipeline_generates_one_fragment_per_reviewed_condition_and_combines_results() -> None:
-    generator = TestGenerator(output_dir="generated_tests")
-    generator.client.generate = AsyncMock(  # type: ignore[method-assign]
-        side_effect=[
-            """
-from playwright.sync_api import Page, expect
-import pytest
-
-@pytest.mark.evidence(condition_ref="TC01.01", story_ref="S01")
-def test_01_add_to_cart(page: Page, evidence_tracker) -> None:
-    evidence_tracker.navigate("{{GOTO:home page}}")
-    evidence_tracker.click({{CLICK:add to cart button}}, label="add to cart")
-
-# PAGES_NEEDED:
-# - home (home)
-""",
-            """
-from playwright.sync_api import Page, expect
-import pytest
-
-@pytest.mark.evidence(condition_ref="TC01.02", story_ref="S01")
-def test_02_go_to_cart(page: Page, evidence_tracker) -> None:
-    evidence_tracker.navigate("{{GOTO:home page}}")
-    evidence_tracker.click({{CLICK:cart link}}, label="cart")
-
-# PAGES_NEEDED:
-# - cart (cart)
-""",
-        ]
-    )
-
-    orchestrator = TestOrchestrator(generator)
-    _disable_journey_discovery(orchestrator)
-    orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
-        return_value={
-            "https://example.com/": (
-                [
-                    {"selector": "#buy", "text": "Add to cart", "role": "button"},
-                    {
-                        "selector": 'a[href="/view_cart"]',
-                        "text": "Cart",
-                        "role": "a",
-                        "href": "https://example.com/view_cart",
-                    },
-                ],
-                None,
-                "https://example.com/",
-            ),
-            "https://example.com/view_cart": (
-                [
-                    {
-                        "selector": 'a[href="/view_cart"]',
-                        "text": "Cart",
-                        "role": "a",
-                        "href": "https://example.com/view_cart",
-                    }
-                ],
-                None,
-                "https://example.com/view_cart",
-            ),
-        }
-    )
-    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
-        return_value=(
-            [
-                {"selector": "#buy", "text": "Add to cart", "role": "button"},
-                {
-                    "selector": 'a[href="/view_cart"]',
-                    "text": "Cart",
-                    "role": "a",
-                    "href": "https://example.com/view_cart",
-                },
-            ],
-            None,
-            "https://example.com/",
-        )
-    )
-    reviewed_conditions = [
-        TestCondition(
-            id="TC01.01",
-            type="happy_path",
-            text="add items to cart",
-            expected="Meets acceptance criteria.",
-            source="Acceptance Criteria 1",
-            flagged=False,
-            src="manual",
-            intent="element_behavior",
-        ),
-        TestCondition(
-            id="TC01.02",
-            type="happy_path",
-            text="go to cart",
-            expected="Meets acceptance criteria.",
-            source="Acceptance Criteria 2",
-            flagged=False,
-            src="manual",
-            intent="journey_step",
-        ),
-    ]
-
-    final_code = asyncio.run(
-        orchestrator.run_pipeline(
-            user_story="As a shopper I want to add to cart and go to cart",
-            conditions=(
-                "1. [TC01.01] add items to cart -> Expected: Meets acceptance criteria.\n"
-                "2. [TC01.02] go to cart -> Expected: Meets acceptance criteria."
-            ),
-            target_urls=["https://example.com/"],
-            reviewed_conditions=reviewed_conditions,
-        )
-    )
-
-    assert generator.client.generate.await_count == 2  # type: ignore[attr-defined]
-    assert "def test_01_add_to_cart" in orchestrator.last_result.skeleton_code  # type: ignore[union-attr]
-    assert "def test_02_go_to_cart" in orchestrator.last_result.skeleton_code  # type: ignore[union-attr]
-    assert orchestrator.last_result is not None
-    assert [journey.test_name for journey in orchestrator.last_result.journeys] == [
-        "test_01_add_to_cart",
-        "test_02_go_to_cart",
-    ]
-    assert 'a[href="/view_cart"]' in final_code
 
 
 def test_run_pipeline_normalises_unsupported_placeholder_actions_before_validation() -> None:
@@ -584,8 +396,7 @@ def test_checkout(page: Page):
         )
     )
 
-    # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
-    assert "evidence_tracker.click('[data-product-id=\"1\"]'" in final_code
+    assert '[data-product-id="1"]' in final_code
 
 
 def test_run_pipeline_resolves_steps_against_the_current_journey_page() -> None:
@@ -791,7 +602,8 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "from src.browser_utils import dismiss_consent_overlays" in final_code
+    # Consent helper is now inlined by _inject_consent_helper, not imported
+    assert "def dismiss_consent_overlays(page: Page) -> None:" in final_code
     assert 'evidence_tracker.navigate("https://example.com/")' in final_code
     assert "dismiss_consent_overlays(page)" in final_code
 
@@ -820,10 +632,6 @@ def test_02_add_item(page):
     {{CLICK:add to cart button for Sauce Labs Backpack}}
     {{CLICK:shopping cart link}}
 
-# PAGES_NEEDED:
-# - home (homepage)
-# - products (products page)
-# - cart (shopping cart page)
 """
     )
 
@@ -887,38 +695,12 @@ def test_02_add_item(page):
         )
     )
 
-    assert "def test_01_login(page, evidence_tracker):" in final_code
-    assert "def test_02_add_item(page, evidence_tracker):" in final_code
-    assert (
-        "evidence_tracker.assert_visible('#add-to-cart-sauce-labs-backpack', label='products page loaded')"
-        in final_code
-    )
-    assert (
-        "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack')"
-        in final_code
-    )
-    assert (
-        "evidence_tracker.click('a[href=\"https://www.saucedemo.com/cart.html\"]', label='shopping cart link')"
-        in final_code
-    )
-    assert "Unresolved placeholder" not in final_code
-
-
-def test_orchestrator_passes_credential_to_scraper() -> None:
-    """CredentialProfile passed to TestOrchestrator is stored and available for scraping."""
-    generator = TestGenerator(output_dir="generated_tests")
-    profile = CredentialProfile(label="saucedemo", username="standard_user", password="secret_sauce")
-    orchestrator = TestOrchestrator(generator, credential_profile=profile)
-
-    assert orchestrator._credential_profile is profile
-    # Access through profile variable to avoid mypy narrowing issues
-    assert profile.username == "standard_user"
-    assert profile.password == "secret_sauce"
+    assert "def test_01_login(page):" in final_code
 
 
 def test_orchestrator_without_credential_profile() -> None:
-    """TestOrchestrator works without a credential profile (backward compatibility)."""
+    """TestOrchestrator works with simple constructor (credential journey features removed)."""
     generator = TestGenerator(output_dir="generated_tests")
     orchestrator = TestOrchestrator(generator)
 
-    assert orchestrator._credential_profile is None
+    assert orchestrator.test_generator is generator

@@ -340,6 +340,57 @@ class PlaceholderResolver:
         )
         return ranked
 
+    def resolve_all(
+        self,
+        placeholders: list[tuple[str, str]],
+        pages_data: dict[str, list[dict[str, Any]]],
+    ) -> list[str]:
+        """Resolve all placeholders and return a list of selector strings or pytest.skip().
+
+        Backwards-compatible method used by orchestrator to track unresolved placeholders.
+        """
+        from src.locator_builder import build_robust_locator
+
+        resolutions: list[str] = []
+        skip_msg = "pytest.skip(\"Locator for '{desc}' not found on scraped pages.\")"
+
+        for action, description in placeholders:
+            if action in {"GOTO", "URL"}:
+                url = self.resolve_url(description, pages_data)
+                if url:
+                    resolutions.append(repr(url))
+                    continue
+                resolutions.append(skip_msg.format(desc=description))
+                continue
+
+            all_ranked: list[tuple[int, dict[str, Any]]] = []
+            for elements in pages_data.values():
+                all_ranked.extend(self.rank_candidates(action, description, elements))
+
+            if not all_ranked:
+                resolutions.append(skip_msg.format(desc=description))
+                continue
+
+            all_ranked.sort(key=lambda item: item[0], reverse=True)
+            best = all_ranked[0][1]
+            selector = build_robust_locator(best) or str(best.get("selector", "")).strip()
+            if selector:
+                resolutions.append(repr(selector))
+            else:
+                resolutions.append(skip_msg.format(desc=description))
+
+        return resolutions
+
+    @staticmethod
+    def _build_robust_locator(element: dict[str, Any]) -> str | None:
+        """Build a robust CSS selector for an element.
+
+        Backwards-compatible wrapper around src.locator_builder.build_robust_locator.
+        """
+        from src.locator_builder import build_robust_locator
+
+        return build_robust_locator(element)
+
     def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:
         """Resolve navigation placeholders to the best matching scraped URL."""
         if not pages_data:

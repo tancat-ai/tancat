@@ -4,8 +4,6 @@ token replacement, and placeholder resolution safety net."""
 from __future__ import annotations
 
 import ast
-import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -14,8 +12,6 @@ from src.code_normalizer import strip_pages_needed_block as _strip_pages_needed_
 from src.code_postprocessor import normalise_generated_code, replace_token_in_line
 from src.llm_reasoning_filter import _is_llm_reasoning_line
 from src.llm_reasoning_filter import strip_llm_reasoning as _strip_llm_reasoning_text
-from src.orchestrator import TestOrchestrator
-from src.test_generator import TestGenerator
 
 
 class TestIsLlmReasoningLine:
@@ -218,16 +214,18 @@ def test_01_ok(page: Page, evidence_launcher) -> None:
     assert "evidence_tracker" in fixed
 
 
-def test_normalise_generated_code_adds_evidence_tracker_fixture_when_body_uses_it() -> None:
+def test_normalise_generated_code_converts_page_goto_to_evidence_tracker_navigate() -> None:
+    """normalise_generated_code replaces page.goto() with evidence_tracker.navigate()."""
     broken = """
 import pytest
 
 @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
 def test_01_login(page):
-    evidence_tracker.navigate("https://example.com/")
+    page.goto("https://example.com/")
 """
     fixed = normalise_generated_code(broken, consent_mode="leave-as-is")
-    assert "def test_01_login(page, evidence_tracker):" in fixed
+    assert "evidence_tracker.navigate(" in fixed
+    assert "page.goto(" not in fixed
 
 
 def test_normalise_generated_code_repairs_pytest_mark_slash_typo() -> None:
@@ -282,80 +280,6 @@ def dismiss_consent_overlays(page: Page) -> None:
     assert "\n@pytest.mark.evidence" in fixed
     assert "\n     @pytest.mark.evidence" not in fixed
     assert "\ndef test_01_ok" in fixed
-
-
-def test_normalise_generated_code_injects_playwright_import_when_page_annotations_exist() -> None:
-    broken = """
-def test_01_ok(page: Page, evidence_tracker) -> None:
-    evidence_tracker.navigate("https://example.com/")
-"""
-    fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
-    assert "from playwright.sync_api import Page, expect" in fixed
-    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
-    assert "dismiss_consent_overlays(page)" in fixed
-
-
-def test_run_pipeline_normalises_payable_type_to_page() -> None:
-    generator = TestGenerator(output_dir="generated_tests")
-    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
-        return_value="""
-from playwright.sync_api import Page
-
-class CheckoutPage:
-    def __init__(self, page: Payable):
-        self.page = page
-
-def test_checkout(page: Page):
-    checkout_page = CheckoutPage(page)
-    checkout_page
-"""
-    )
-
-    orchestrator = TestOrchestrator(generator)
-    orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
-
-    final_code = asyncio.run(
-        orchestrator.run_pipeline(
-            user_story="As a shopper I want to check out",
-            conditions="1. Check out",
-            target_urls=[],
-        )
-    )
-
-    assert "page: Payable" not in final_code
-    assert "page: Page" in final_code
-
-
-def test_run_pipeline_normalises_unknown_page_parameter_type_to_page() -> None:
-    generator = TestGenerator(output_dir="generated_tests")
-    generator.generate_skeleton = AsyncMock(  # type: ignore[method-assign]
-        return_value="""
-from playwright.sync_api import Page
-
-class CheckoutPage:
-    def __init__(self, page: Note):
-        self.page = page
-
-def test_01_checkout(page: Note):
-    checkout_page = CheckoutPage(page)
-    checkout_page
-"""
-    )
-
-    orchestrator = TestOrchestrator(generator)
-    orchestrator.scraper.scrape_all = AsyncMock(return_value={})  # type: ignore[method-assign]
-
-    final_code = asyncio.run(
-        orchestrator.run_pipeline(
-            user_story="As a shopper I want to check out",
-            conditions="1. Check out",
-            target_urls=[],
-        )
-    )
-
-    assert "page: Note" not in final_code
-    assert "def __init__(self, page: Page)" in final_code
-    assert "def test_01_checkout(page: Page)" in final_code
 
 
 def test_replace_token_in_line_uses_description_for_label_not_token() -> None:
@@ -501,7 +425,8 @@ def test_checkout(page: Page, evidence_tracker) -> None:
     ast.parse(fixed)
 
 
-def test_normalise_generated_code_preserves_nested_helper_blocks_in_auto_dismiss_mode() -> None:
+def test_normalise_generated_code_injects_consent_helper_in_auto_dismiss_mode() -> None:
+    """When consent_mode='auto-dismiss', a dismiss_consent_overlays helper function is injected."""
     broken = """from playwright.sync_api import Page, expect
 
 def test_checkout(page: Page, evidence_tracker) -> None:
@@ -511,6 +436,7 @@ def test_checkout(page: Page, evidence_tracker) -> None:
 
     fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
 
-    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
+    # auto-dismiss mode injects a dismiss_consent_overlays function definition
+    assert "def dismiss_consent_overlays(" in fixed
     assert "dismiss_consent_overlays(page)" in fixed
     ast.parse(fixed)

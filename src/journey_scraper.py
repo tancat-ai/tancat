@@ -15,31 +15,15 @@ import asyncio
 import json
 import os
 import random
-import re
 import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
-from src.accessibility_enricher import AccessibilityEnricher
-from src.form_detector import (
-    ADD_TO_CART_SELECTORS,
-    CONTINUE_SHOPPING_SELECTORS,
-    PRODUCT_SELECTORS,
-)
-from src.journey_auth_detector import (
-    detect_auth_redirect,
-    detect_captcha,
-    detect_mfa,
-    detect_sso,
-)
-from src.locator_builder import build_robust_locator
-from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
 
 
@@ -65,6 +49,18 @@ class JourneyStep:
 
 
 @dataclass
+class CredentialProfile:
+    """User-defined credentials for authenticated journey scraping.
+
+    Stored in session state only — never persisted to disk.
+    """
+
+    label: str
+    username: str
+    password: str
+
+
+@dataclass
 class ScrapedStep:
     """Result of scraping at a specific journey step.
 
@@ -79,18 +75,6 @@ class ScrapedStep:
     elements: list[dict[str, Any]]
     step_index: int
     step_description: str = ""
-
-
-@dataclass
-class CredentialProfile:
-    """User-defined credentials for authenticated journey scraping.
-
-    Stored in session state only — never persisted to disk.
-    """
-
-    label: str
-    username: str
-    password: str
 
 
 @dataclass
@@ -128,326 +112,6 @@ def _substitute_templates(text: str, credential_profile: CredentialProfile | Non
     return result
 
 
-# ───────────────────────────────────────────────────────────────
-# _execute_journey_sync  (runs inside a subprocess)
-# ───────────────────────────────────────────────────────────────
-
-
-def _execute_journey_sync(
-    journey_steps: list[JourneyStep],
-    credential_profile: CredentialProfile | None = None,
-    timeout_ms: int = 30_000,
-    starting_url: str | None = None,
-) -> JourneyResult:
-    """Execute journey steps in a single Playwright browser session.
-
-    Checks for auth redirects, SSO, MFA, and CAPTCHA — returns explicit errors.
-    """
-    captured_pages: dict[str, list[dict[str, Any]]] = {}
-    failed_steps: list[str] = []
-    redirected_urls: list[str] = []
-    error_message: str | None = None
-
-    # Determine base domain for SSO detection
-    base_domain: str = ""
-    if starting_url:
-        base_domain = urlparse(starting_url).netloc
-
-    scraper = JourneyScraper(
-        starting_url=starting_url or "",
-        timeout_ms=timeout_ms,
-        headless=True,
-    )
-    html_scraper = PageScraper(timeout_ms=timeout_ms)
-
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context()
-        page = context.new_page()
-        page.set_default_timeout(timeout_ms)
-
-        try:
-            # Navigate to starting URL if provided
-            if starting_url:
-                page.goto(starting_url, wait_until="networkidle", timeout=timeout_ms)
-                JourneyScraper._dismiss_consent_overlays(page)
-                base_domain = urlparse(page.url).netloc
-
-            current_url: str = page.url
-
-            for step_index, step in enumerate(journey_steps):
-                if error_message:
-                    # Journey stopped by detection — record remaining as failed
-                    failed_steps.append(f"Step {step_index + 1} ({step.action}): journey stopped — {error_message}")
-                    continue
-
-                step_description = step.description or f"{step.action} step"
-
-                try:
-                    if step.action == "goto" or step.action == "navigate":
-                        target_url = step.url or ""
-                        if not target_url:
-                            failed_steps.append(f"Step {step_index + 1}: goto/navigate without url")
-                            continue
-
-                        page.goto(target_url, wait_until="networkidle", timeout=step.timeout_ms)
-                        JourneyScraper._dismiss_consent_overlays(page)
-
-                        current_url = page.url
-
-                        # Update base_domain from first navigation
-                        if not base_domain:
-                            base_domain = urlparse(current_url).netloc
-
-                        # Auth redirect detection
-                        page_title = page.title()
-                        h1_text = ""
-                        try:
-                            h1_el = page.locator("h1").first
-                            if h1_el.count() > 0:
-                                h1_text = h1_el.inner_text()
-                        except Exception:
-                            pass
-
-                        if detect_auth_redirect(current_url, target_url, page_title, h1_text):
-                            failed_steps.append(
-                                f"Step {step_index + 1}: Page redirected to login — add a login step before this page"
-                            )
-                            if current_url not in redirected_urls:
-                                redirected_urls.append(current_url)
-
-                        # SSO detection
-                        if base_domain and detect_sso(base_domain, current_url):
-                            error_message = (
-                                "SSO/OAuth redirect detected — automated login not supported for this provider"
-                            )
-                            failed_steps.append(f"Step {step_index + 1}: {error_message}")
-
-                        # CAPTCHA detection
-                        html = page.content()
-                        if detect_captcha(html):
-                            error_message = "CAPTCHA detected — automated login not supported"
-                            failed_steps.append(f"Step {step_index + 1}: {error_message}")
-
-                        # MFA detection
-                        if detect_mfa(html):
-                            error_message = "MFA prompt detected — automated login not supported"
-                            failed_steps.append(f"Step {step_index + 1}: {error_message}")
-
-                    elif step.action == "click":
-                        selector = step.selector
-                        text = step.text
-                        if not selector and text:
-                            # Try text-based click
-                            try:
-                                page.get_by_text(text, exact=False).first.click(timeout=step.timeout_ms)
-                            except Exception:
-                                failed_steps.append(f"Step {step_index + 1}: Could not click text '{text}'")
-                            continue
-                        if not selector:
-                            failed_steps.append(f"Step {step_index + 1}: click without selector or text")
-                            continue
-                        try:
-                            scraper._click_selector(page, selector, step.timeout_ms)
-                        except Exception as e:
-                            failed_steps.append(f"Step {step_index + 1}: click '{selector}' failed — {e}")
-
-                    elif step.action == "fill":
-                        selector = step.selector
-                        if not selector:
-                            failed_steps.append(f"Step {step_index + 1}: fill without selector")
-                            continue
-                        fill_text = step.text or ""
-                        fill_text = _substitute_templates(fill_text, credential_profile)
-                        try:
-                            scraper._fill_selector(page, selector, fill_text, step.timeout_ms)
-                        except Exception as e:
-                            failed_steps.append(f"Step {step_index + 1}: fill '{selector}' failed — {e}")
-
-                    elif step.action == "submit":
-                        # Submit — click submit button
-                        submit_selectors = [
-                            "input[type='submit']",
-                            "button[type='submit']",
-                            "button:has-text('Submit')",
-                            "button:has-text('submit')",
-                        ]
-                        clicked = False
-                        for sel in submit_selectors:
-                            try:
-                                loc = page.locator(sel).first
-                                if loc.count() > 0:
-                                    loc.click(timeout=step.timeout_ms)
-                                    clicked = True
-                                    break
-                            except Exception:
-                                continue
-                        if not clicked:
-                            failed_steps.append(f"Step {step_index + 1}: submit — no submit button found")
-
-                    elif step.action == "capture":
-                        html = page.content()
-                        elements = html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-                        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
-                        try:
-                            enriched = _capture_element_visibility_sync(page, elements)
-                            a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
-                            if a11y_snapshot is not None:
-                                enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
-                            captured_pages[current_url] = enriched
-                        except Exception:
-                            # Enrichment is additive — fall back to unenriched elements on failure
-                            captured_pages[current_url] = elements
-
-                    elif step.action == "wait":
-                        wait_desc = step.description or "1.0"
-                        try:
-                            wait_seconds = float(wait_desc)
-                        except ValueError:
-                            wait_seconds = 1.0
-                        page.wait_for_timeout(int(wait_seconds * 1000))
-                        # Also wait for selector if provided
-                        if step.selector:
-                            try:
-                                page.wait_for_selector(step.selector, timeout=step.timeout_ms)
-                            except Exception:
-                                pass
-
-                except Exception as e:
-                    failed_steps.append(f"Step {step_index + 1} ({step_description}): {e}")
-
-                current_url = page.url
-
-        finally:
-            context.close()
-            browser.close()
-
-    success = error_message is None and not failed_steps
-    return JourneyResult(
-        success=success,
-        captured_pages=captured_pages,
-        failed_steps=failed_steps,
-        error_message=error_message,
-        redirected_urls=redirected_urls,
-    )
-
-
-# ───────────────────────────────────────────────────────────────
-# execute_journey  (public API — subprocess pattern)
-# ───────────────────────────────────────────────────────────────
-
-
-def execute_journey(
-    journey_steps: list[JourneyStep],
-    credential_profile: CredentialProfile | None = None,
-    timeout_ms: int = 30_000,
-    starting_url: str | None = None,
-) -> JourneyResult:
-    """Execute a journey in a subprocess (avoids ProactorEventLoop on Windows).
-
-    Serialises steps to JSON, spawns subprocess, deserialises JourneyResult.
-    """
-    # Serialize inputs
-    steps_data = [asdict(s) for s in journey_steps]
-    credential_data = asdict(credential_profile) if credential_profile else None
-
-    payload = {
-        "journey_steps": steps_data,
-        "credential_profile": credential_data,
-        "timeout_ms": timeout_ms,
-        "starting_url": starting_url,
-    }
-
-    subprocess_path = str(Path(__file__).resolve())
-    completed = subprocess.run(
-        [sys.executable, subprocess_path, "--execute-journey"],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=max(120, timeout_ms // 1000 * max(1, len(journey_steps))),
-    )
-
-    if completed.stderr:
-        print(completed.stderr, flush=True, file=sys.stderr)
-
-    if completed.returncode != 0:
-        return JourneyResult(
-            success=False,
-            captured_pages={},
-            failed_steps=["Subprocess failed to execute journey"],
-            error_message=completed.stderr.strip() if completed.stderr else "Subprocess error",
-        )
-
-    try:
-        data = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError:
-        return JourneyResult(
-            success=False,
-            captured_pages={},
-            failed_steps=["Failed to parse subprocess output"],
-            error_message="Invalid JSON from subprocess",
-        )
-
-    if not isinstance(data, dict):
-        return JourneyResult(
-            success=False,
-            captured_pages={},
-            failed_steps=["Subprocess returned unexpected output"],
-        )
-
-    return JourneyResult.from_dict(data)
-
-
-# ────────────────────────────────────────────────────────────────
-# B-0XX: Enrichment helpers for consistent scrape quality
-# Reused across _execute_journey_sync, JourneyScraper._scrape_current_page,
-# and JourneyScraper._discover_selector to match PageScraper enrichment pipeline.
-# ────────────────────────────────────────────────────────────────
-
-
-def _capture_element_visibility_sync(
-    page: Any,
-    elements: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Check runtime visibility of each scraped element using Playwright is_visible()."""
-    for elem in elements:
-        selector = elem.get("selector")
-        if not selector:
-            continue
-        try:
-            loc = page.locator(selector).first
-            elem["is_visible"] = loc.is_visible()
-        except Exception:
-            pass  # Keep default is_visible value on lookup failure
-    return elements
-
-
-def _capture_a11y_snapshot_sync(
-    context: Any,
-    page: Any,
-) -> dict[str, Any] | None:
-    """Capture accessibility snapshot via CDP. Returns None if unavailable."""
-    try:
-        cdp_session = context.new_cdp_session(page)
-    except Exception:
-        return None
-
-    a11y_snapshot: dict[str, Any] = {"nodes": []}
-    try:
-        tree_response = cdp_session.send("Accessibility.getFullAXTree")
-        a11y_snapshot["nodes"] = tree_response.get("nodes", []) if isinstance(tree_response, dict) else []
-    except Exception:
-        pass  # Return empty nodes list on CDP failure
-
-    try:
-        cdp_session.detach()
-    except Exception:
-        pass
-
-    return a11y_snapshot
-
-
 class JourneyScraper:
     """Scrape pages by following a user journey step-by-step.
 
@@ -480,32 +144,18 @@ class JourneyScraper:
         max_retries: int = 2,
         base_backoff_ms: int = 1000,
         headless: bool = True,
-        credential_profile: CredentialProfile | None = None,
     ) -> None:
         self.starting_url = starting_url.strip()
         self.timeout_ms = timeout_ms
         self.max_retries = max_retries
         self.base_backoff_ms = base_backoff_ms
         self.headless = headless
-        self._credential_profile = credential_profile
         self._html_scraper = PageScraper(timeout_ms=timeout_ms)
-        self._resolver = PlaceholderResolver()
-        # Stores URL → elements mapping after scraping completes.
-        # Populated by _scrape_journey_via_subprocess and _scrape_journey_sync.
-        self._captured_pages: dict[str, list[dict[str, Any]]] = {}
-        # Context log for tracking locator failures and skipped steps.
         self._context_log: list[dict[str, Any]] = []
-
-    def _debug(self, message: str) -> None:
-        """Print debug message to stderr if logging is enabled."""
-        if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
-            print(f"[journey_discovery] {message}", flush=True, file=sys.stderr)
 
     async def scrape_journey(
         self,
         steps: list[JourneyStep],
-        *,
-        credential_profile: CredentialProfile | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Follow the journey and return scraped elements per URL.
 
@@ -523,15 +173,9 @@ class JourneyScraper:
         if not cleaned:
             return {}
 
-        # Use the credential_profile passed at call-site, or fall back to instance-level
-        effective_profile = credential_profile or self._credential_profile
-        return await asyncio.to_thread(self._scrape_journey_via_subprocess, cleaned, effective_profile)
+        return await asyncio.to_thread(self._scrape_journey_via_subprocess, cleaned)
 
-    def _scrape_journey_via_subprocess(
-        self,
-        steps: list[JourneyStep],
-        credential_profile: CredentialProfile | None = None,
-    ) -> dict[str, list[dict[str, Any]]]:
+    def _scrape_journey_via_subprocess(self, steps: list[JourneyStep]) -> dict[str, list[dict[str, Any]]]:
         """Run the sync Playwright journey in a clean subprocess (avoids Windows nested loop issues)."""
         # Serialize steps to JSON for subprocess
         steps_data = [
@@ -552,7 +196,6 @@ class JourneyScraper:
             "base_backoff_ms": self.base_backoff_ms,
             "headless": self.headless,
             "steps": steps_data,
-            "credential_profile": asdict(credential_profile) if credential_profile else None,
         }
         subprocess_path = str(Path(__file__).resolve())
         completed = subprocess.run(
@@ -563,11 +206,6 @@ class JourneyScraper:
             check=False,
             timeout=max(120, int(self.timeout_ms / 1000) * max(1, len(steps))),
         )
-
-        # Surface subprocess stderr for real-time debugging
-        if completed.stderr:
-            print(completed.stderr, flush=True, file=sys.stderr)
-
         if completed.returncode != 0:
             return {}
 
@@ -582,7 +220,6 @@ class JourneyScraper:
         output: dict[str, list[dict[str, Any]]] = {}
         for url, elements in data.items():
             output[url] = elements if isinstance(elements, list) else []
-        self._captured_pages = output
         return output
 
     def _scrape_journey_sync(self, steps: list[JourneyStep]) -> dict[str, list[dict[str, Any]]]:
@@ -600,85 +237,22 @@ class JourneyScraper:
                 # Start at the starting URL to establish session
                 if self.starting_url:
                     current_url = self.starting_url
-                    self._debug(f"Navigating to starting URL: {self.starting_url}")
-                    page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
+                    page.goto(self.starting_url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
-                    # Scrape the starting page so elements are available for placeholder resolution.
-                    # Without this, pages like login forms are never captured since auto-scrape
-                    # only triggers after explicit navigate steps (line 244), not initial load.
-                    elements = self._scrape_current_page(page, current_url, context)  # B-0XX: pass context
-                    output[current_url] = elements
 
                 for step_index, step in enumerate(steps):
                     last_error: Exception | None = None
-                    self._debug(f"Step {step_index + 1}/{len(steps)}: {step.action} '{step.description}'")
 
                     for attempt in range(1, self.max_retries + 1):
                         try:
                             if step.action == "navigate" and step.url:
                                 current_url = self._navigate_to(page, step.url, step.timeout_ms)
 
-                            elif step.action == "click":
-                                selector = step.selector
-                                if not selector and step.description:
-                                    selector = self._discover_selector(page, step.action, step.description)
-                                    if selector is None:
-                                        # Retry with relaxed criteria
-                                        selector = self._discover_selector_relaxed(page, step.action, step.description)
-                                        if selector is not None:
-                                            self._context_log.append(
-                                                {
-                                                    "event": "locator_relaxed_fallback",
-                                                    "step": step_index,
-                                                    "action": step.action,
-                                                    "description": step.description,
-                                                    "selector": selector,
-                                                }
-                                            )
-                                        else:
-                                            self._context_log.append(
-                                                {
-                                                    "event": "step_skipped",
-                                                    "step": step_index,
-                                                    "reason": "locator_not_found_even_relaxed",
-                                                    "action": step.action,
-                                                    "description": step.description,
-                                                    "page_url": page.url,
-                                                }
-                                            )
-                                if selector:
-                                    self._click_selector(page, selector, step.timeout_ms)
+                            elif step.action == "click" and step.selector:
+                                self._click_selector(page, step.selector, step.timeout_ms)
 
-                            elif step.action == "fill":
-                                selector = step.selector
-                                if not selector and step.description:
-                                    selector = self._discover_selector(page, step.action, step.description)
-                                    if selector is None:
-                                        # Retry with relaxed criteria
-                                        selector = self._discover_selector_relaxed(page, step.action, step.description)
-                                        if selector is not None:
-                                            self._context_log.append(
-                                                {
-                                                    "event": "locator_relaxed_fallback",
-                                                    "step": step_index,
-                                                    "action": step.action,
-                                                    "description": step.description,
-                                                    "selector": selector,
-                                                }
-                                            )
-                                        else:
-                                            self._context_log.append(
-                                                {
-                                                    "event": "step_skipped",
-                                                    "step": step_index,
-                                                    "reason": "locator_not_found_even_relaxed",
-                                                    "action": step.action,
-                                                    "description": step.description,
-                                                    "page_url": page.url,
-                                                }
-                                            )
-                                if selector and step.text:
-                                    self._fill_selector(page, selector, step.text, step.timeout_ms)
+                            elif step.action == "fill" and step.selector and step.text:
+                                self._fill_selector(page, step.selector, step.text, step.timeout_ms)
 
                             elif step.action == "wait":
                                 wait_time = (
@@ -689,29 +263,14 @@ class JourneyScraper:
                                 page.wait_for_timeout(int(wait_time * 1000))
 
                             elif step.action == "scrape" and current_url:
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, current_url, context
-                                )
+                                elements = self._scrape_current_page(page, current_url)
                                 output[current_url] = elements
 
                             # Auto-scrape after navigation if no explicit scrape step
                             if step.action == "navigate" and current_url:
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, current_url, context
-                                )
+                                elements = self._scrape_current_page(page, current_url)
                                 output[current_url] = elements
 
-                            # Detect URL changes after click actions (clicks that cause navigation)
-                            # and auto-scrape the new page so elements are available for resolution.
-                            new_url = page.url
-                            if step.action == "click" and new_url != current_url and current_url:
-                                self._debug(f"Click caused navigation: {current_url} -> {new_url}")
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, new_url, context
-                                )
-                                output[new_url] = elements
-
-                            current_url = new_url
                             last_error = None
                             break
 
@@ -729,139 +288,7 @@ class JourneyScraper:
                 context.close()
                 browser.close()
 
-        self._captured_pages = output
         return output
-
-    def get_pages_visited(self) -> list[str]:
-        """Return unique URLs visited during the journey.
-
-        Extracts page URLs from the captured output dictionary keys.
-        This is the authoritative list of pages discovered organically
-        by the journey scraper, replacing the need for PAGES_NEEDED
-        pre-declaration.
-        """
-        return (
-            list(dict.fromkeys(url for url in self._captured_pages if url)) if hasattr(self, "_captured_pages") else []
-        )
-
-    # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
-
-    def get_skipped_steps(self) -> list[dict]:
-        """Return steps that were skipped during the journey."""
-        return [e for e in self._context_log if e.get("event") == "step_skipped"]
-
-    def get_locator_warnings(self) -> list[dict]:
-        """Return locator-not-found events from the context log."""
-        return [e for e in self._context_log if e.get("event") == "locator_not_found"]
-
-    @staticmethod
-    def _list_available_elements(page: Any, limit: int = 10) -> list[dict]:
-        """List clickable elements on the page for diagnostic purposes."""
-        elements: list[dict] = []
-        for el in page.query_selector_all("a, button, input, [role=button], [role=link]")[:limit]:
-            elements.append(
-                {
-                    "tag": el.evaluate("el => el.tagName"),
-                    "text": (el.evaluate("el => el.textContent?.trim()") or "")[:50],
-                    "id": el.evaluate("el => el.id"),
-                    "class": (el.evaluate("el => el.className?.split(' ')[0]") or ""),
-                }
-            )
-        return elements
-
-    def _discover_selector_relaxed(self, page: Any, action: str, description: str) -> str | None:
-        """Find a selector using relaxed matching criteria.
-
-        Used as a fallback when strict _discover_selector returns None.
-        Relaxes: exact/contains match -> substring match, requires high confidence -> any match.
-        """
-        try:
-            page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            pass
-
-        html = page.content()
-        elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-
-        norm_desc = re.sub(r"[^\w\s]", " ", description).lower().split()
-        if not norm_desc:
-            return None
-
-        # Substring match: any element whose text contains *any* keyword from the description
-        for element in elements:
-            raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
-            norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
-            if len(norm_text) < 2:
-                continue
-            # Match if at least one keyword appears in the element text
-            if any(kw in norm_text for kw in norm_desc if len(kw) >= 2):
-                robust = build_robust_locator(element)
-                if robust:
-                    return robust
-                sel = element.get("selector")
-                if sel:
-                    return sel
-
-        return None
-
-    def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
-        """Find the best selector for a description on the current live page."""
-        # Ensure the page is stable and rendered
-        try:
-            page.wait_for_load_state("networkidle", timeout=5000)
-        except Exception:
-            pass
-
-        html = page.content()
-        elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-
-        # B-0XX: Apply enrichment for better candidate quality in selector discovery
-        try:
-            elements = _capture_element_visibility_sync(page, elements)
-        except Exception:
-            pass  # Additive — continue with unenriched on failure
-
-        self._debug(f"Scraped {len(elements)} elements for discovery of '{description}'")
-
-        # We don't have LLM context here, so we use rank_candidates directly
-        norm_desc = re.sub(r"[^\w\s]", " ", description).lower()
-        for element in elements:
-            raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
-            norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
-            if len(norm_text) >= 3 and norm_text in norm_desc:
-                robust = build_robust_locator(element)
-                return robust or element.get("selector")
-
-        ranked = self._resolver.rank_candidates(action, description, elements)
-        if not ranked:
-            self._context_log.append(
-                {
-                    "event": "locator_not_found",
-                    "action": action,
-                    "description": description,
-                    "page_url": page.url,
-                    "best_candidate_score": 0,
-                    "available_elements": self._list_available_elements(page),
-                }
-            )
-            return None
-
-        # Pick top candidate and build a robust locator
-        _score, element = ranked[0]
-        robust = build_robust_locator(element)
-        if robust is None and not element.get("selector"):
-            self._context_log.append(
-                {
-                    "event": "locator_not_found",
-                    "action": action,
-                    "description": description,
-                    "page_url": page.url,
-                    "best_candidate_score": _score,
-                    "available_elements": self._list_available_elements(page),
-                }
-            )
-            return None
-        return robust or element.get("selector")
 
     def _navigate_to(self, page: Any, url: str, timeout_ms: int) -> str:
         """Navigate to a URL and return the final URL.
@@ -877,10 +304,6 @@ class JourneyScraper:
 
         response = page.goto(full_url, wait_until="networkidle", timeout=timeout_ms)
         if response:
-            try:
-                page.wait_for_load_state("networkidle", timeout=5000)
-            except Exception:
-                pass
             page.wait_for_timeout(1000)  # Extra wait for stable DOM
             self._dismiss_consent_overlays(page)
             return page.url
@@ -888,70 +311,156 @@ class JourneyScraper:
 
     def _click_selector(self, page: Any, selector: str, timeout_ms: int) -> None:
         """Click an element by selector, with scroll-into-view and retry."""
-        self._debug(f"Attempting to click selector: {selector}")
         locator = page.locator(selector).first
         if locator.count() == 0:
-            self._debug(f"Click failed: Locator {selector} not found on page.")
             return
 
         try:
             locator.scroll_into_view_if_needed(timeout=min(2000, timeout_ms))
-        except Exception as e:
-            self._debug(f"Scroll into view failed: {e}")
+        except Exception:
+            pass
 
-        try:
-            locator.click(timeout=min(5000, timeout_ms))
-            self._debug(f"Clicked successfully: {selector}")
-        except Exception as e:
-            self._debug(f"Click exception: {e}")
-            raise
+        locator.click(timeout=min(5000, timeout_ms))
         page.wait_for_timeout(500)  # Brief wait for page transition
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
         """Fill an input element by selector."""
-        self._debug(f"Attempting to fill selector: {selector} with text: {text}")
         locator = page.locator(selector).first
         if locator.count() == 0:
-            self._debug(f"Fill failed: Locator {selector} not found on page.")
             return
-        try:
-            locator.fill(text)
-            self._debug(f"Filled successfully: {selector}")
-        except Exception as e:
-            self._debug(f"Fill exception: {e}")
-            raise
+        locator.fill(text)
 
-    def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
-        """Scrape elements from the current page state.
+    def _scrape_current_page(self, page: Any, url: str) -> list[dict[str, Any]]:
+        """Scrape elements from the current page state."""
+        html = page.content()
+        return self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
+
+    def _list_available_elements(self, page: Any, limit: int = 10) -> list[dict[str, str]]:
+        """Diagnostic helper: list clickable elements available on the current page.
 
         Args:
-            page: Live Playwright page object.
-            url: Current page URL for base_url in extraction.
-            context: Optional browser context for CDP a11y snapshot (B-0XX).
+            page: Playwright page object.
+            limit: Maximum number of elements to return.
+
+        Returns:
+            List of element dictionaries with tag, text, id, class keys.
         """
-        html = page.content()
-        elements = self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
+        selector = "a, button, input[type='submit'], input[type='button'], [role='link'], [role='button'], [onclick]"
+        elements = page.query_selector_all(selector)
+        result: list[dict[str, str]] = []
+        for el in elements[:limit]:
+            result.append(
+                {
+                    "tag": el.evaluate("el => el.tagName") or "",
+                    "text": el.evaluate("el => el.textContent?.trim()") or "",
+                    "id": el.evaluate("el => el.id") or "",
+                    "class": el.evaluate("el => el.className?.split(' ')[0]") or "",
+                }
+            )
+        return result
 
-        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
-        try:
-            enriched = _capture_element_visibility_sync(page, elements)
-            if context is not None:
-                a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
-                if a11y_snapshot is not None:
-                    enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
-            return enriched
-        except Exception:
-            # Enrichment is additive — fall back to unenriched elements on failure
-            pass
+    def get_skipped_steps(self) -> list[dict[str, Any]]:
+        """Return list of skipped steps from the context log.
 
-        return elements
+        Returns:
+            List of log entries where event is "step_skipped".
+        """
+        return [entry for entry in getattr(self, "_context_log", []) if entry.get("event") == "step_skipped"]
+
+    def get_locator_warnings(self) -> list[dict[str, Any]]:
+        """Return list of locator_not_found events from the context log.
+
+        Returns:
+            List of log entries where event is "locator_not_found".
+        """
+        return [entry for entry in getattr(self, "_context_log", []) if entry.get("event") == "locator_not_found"]
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:
-        """Delegate to central consent dismissal utility."""
-        from src.browser_utils import dismiss_consent_overlays
+        """Best-effort dismissal of consent, cookie, and ad-overlay popups.
 
-        dismiss_consent_overlays(page)  # type: ignore[arg-type]
+        Handles:
+        - Standard GDPR consent buttons (Consent, Accept, Agree, etc.)
+        - Google Consent TVM (fc-consent-root / fc-dialog-overlay)
+        - Google AdSense vignette overlays
+        - General modal overlays that intercept pointer events
+        """
+        # --- 1. Standard consent/cookie banner buttons ---
+        selectors = [
+            "button:has-text('Consent')",
+            "button:has-text('Accept')",
+            "button:has-text('Continue')",
+            "button:has-text('OK')",
+            "button:has-text('Got it')",
+            "button:has-text('I Agree')",
+            "button:has-text('Agree')",
+            "button[aria-label='Close']",
+            "button[aria-label='close']",
+            ".cc-banner button",
+            ".cookie-banner button",
+        ]
+        for selector in selectors:
+            try:
+                loc = page.locator(selector).first
+                if loc.count() > 0 and loc.is_visible():
+                    loc.click(timeout=2000)
+                    page.wait_for_timeout(300)
+                    break
+            except Exception:
+                continue
+
+        # --- 2. Google Consent TVM (Two-Party Mode) ---
+        try:
+            consent_btn = page.locator(".fc-consent-root button:has-text('Consent')").first
+            if consent_btn.count() > 0 and consent_btn.is_visible():
+                consent_btn.click(timeout=2000)
+                page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        try:
+            manage_btn = page.locator(".fc-consent-root button:has-text('Manage options')").first
+            if manage_btn.count() > 0 and manage_btn.is_visible():
+                manage_btn.click(timeout=2000)
+                page.wait_for_timeout(500)
+        except Exception:
+            pass
+
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+        except Exception:
+            pass
+
+        # --- 3. Remove Google Consent TVM DOM elements via JavaScript ---
+        try:
+            page.evaluate(
+                """
+                () => {
+                    const consentRoot = document.querySelector('.fc-consent-root');
+                    if (consentRoot) { consentRoot.remove(); }
+                    const dialogOverlay = document.querySelector('.fc-dialog-overlay');
+                    if (dialogOverlay) { dialogOverlay.remove(); }
+                    document.querySelectorAll('[class*=consent], [class*=cookie-banner], [class*=cookie-modal]').forEach(el => el.remove());
+                    const allElements = document.querySelectorAll('*');
+                    for (const el of allElements) {
+                        const style = window.getComputedStyle(el);
+                        const zIndex = parseInt(style.zIndex, 10);
+                        if (zIndex > 10000 && el.tagName !== 'IFRAME') { el.remove(); }
+                    }
+                }
+                """
+            )
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+        # --- 4. Dismiss ad overlays ---
+        try:
+            page.keyboard.press("Escape")
+            page.wait_for_timeout(200)
+        except Exception:
+            pass
 
 
 class CartSeedingScraper(JourneyScraper):
@@ -969,10 +478,35 @@ class CartSeedingScraper(JourneyScraper):
     "scrape cart with items" use case.
     """
 
-    # Class-level selector constants (re-exported from form_detector for compatibility)
-    PRODUCT_SELECTORS: list[str] = PRODUCT_SELECTORS
-    ADD_TO_CART_SELECTORS: list[str] = ADD_TO_CART_SELECTORS
-    CONTINUE_SHOPPING_SELECTORS: list[str] = CONTINUE_SHOPPING_SELECTORS
+    # Selectors for finding a product to add to cart
+    PRODUCT_SELECTORS = [
+        "[data-product-id]:visible",
+        'a:has-text("Shop Now")',
+        'a:has-text("View Product")',
+        'a[href*="product_detail"]',
+        'a[href*="product"]',
+        ".product-card a",
+        "div[class*='product'] a",
+    ]
+
+    # Selectors for the "Add to Cart" button on the product page
+    ADD_TO_CART_SELECTORS = [
+        'button:has-text("Add to cart")',
+        'a:has-text("Add to cart")',
+        'input[type="submit"][value*="cart"]',
+        ".add-to-cart",
+        'button:has-text("Buy")',
+    ]
+
+    # Selectors for the "Continue Shopping" modal button
+    CONTINUE_SHOPPING_SELECTORS = [
+        'button:has-text("Continue Shopping")',
+        'button:has-text("Close")',
+        'button[aria-label="Close"]',
+        ".close-modal",
+        ".modal-footer button",
+        'a:has-text("Continue Shopping")',
+    ]
 
     def __init__(
         self,
@@ -985,7 +519,7 @@ class CartSeedingScraper(JourneyScraper):
         Args:
             starting_url: The home page URL (used to establish session).
             products_url: Optional explicit products page URL. If not provided,
-                          derived from starting_url by appending "/products".
+                         derived from starting_url by appending "/products".
             **kwargs: Additional arguments passed to JourneyScraper.
         """
         super().__init__(starting_url, **kwargs)
@@ -1032,7 +566,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=PRODUCT_SELECTORS[0],  # Use first matching selector
+                selector=self.PRODUCT_SELECTORS[0],  # Use first matching selector
                 description="select a product",
             )
         )
@@ -1041,7 +575,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=ADD_TO_CART_SELECTORS[0],
+                selector=self.ADD_TO_CART_SELECTORS[0],
                 description="add product to cart",
             )
         )
@@ -1050,7 +584,7 @@ class CartSeedingScraper(JourneyScraper):
         steps.append(
             JourneyStep(
                 action="click",
-                selector=CONTINUE_SHOPPING_SELECTORS[0],
+                selector=self.CONTINUE_SHOPPING_SELECTORS[0],
                 description="dismiss confirmation modal",
             )
         )
@@ -1075,6 +609,46 @@ class CartSeedingScraper(JourneyScraper):
             )
 
         return await self.scrape_journey(steps)
+
+    def _list_available_elements(self, page: Any, limit: int = 10) -> list[dict[str, str]]:
+        """Diagnostic helper: list clickable elements available on the current page.
+
+        Args:
+            page: Playwright page object.
+            limit: Maximum number of elements to return.
+
+        Returns:
+            List of element dictionaries with tag, text, id, class keys.
+        """
+        selector = "a, button, input[type='submit'], input[type='button'], [role='link'], [role='button'], [onclick]"
+        elements = page.query_selector_all(selector)
+        result: list[dict[str, str]] = []
+        for el in elements[:limit]:
+            result.append(
+                {
+                    "tag": el.evaluate("el => el.tagName") or "",
+                    "text": el.evaluate("el => el.textContent?.trim()") or "",
+                    "id": el.evaluate("el => el.id") or "",
+                    "class": el.evaluate("el => el.className?.split(' ')[0]") or "",
+                }
+            )
+        return result
+
+    def get_skipped_steps(self) -> list[dict[str, Any]]:
+        """Return list of skipped steps from the context log.
+
+        Returns:
+            List of log entries where event is "step_skipped".
+        """
+        return [entry for entry in getattr(self, "_context_log", []) if entry.get("event") == "step_skipped"]
+
+    def get_locator_warnings(self) -> list[dict[str, Any]]:
+        """Return list of locator_not_found events from the context log.
+
+        Returns:
+            List of log entries where event is "locator_not_found".
+        """
+        return [entry for entry in getattr(self, "_context_log", []) if entry.get("event") == "locator_not_found"]
 
     @staticmethod
     def _ensure_full_url(url: str) -> str:
@@ -1130,64 +704,6 @@ def _run_subprocess_entry() -> int:
     return 0
 
 
-def _run_execute_journey_entry() -> int:
-    """Entry point for the subprocess-backed execute_journey."""
-    payload = json.loads(sys.stdin.read() or "{}")
-    if not isinstance(payload, dict):
-        print(
-            json.dumps(
-                JourneyResult(
-                    success=False,
-                    captured_pages={},
-                    failed_steps=["Invalid payload"],
-                    error_message="Invalid JSON payload",
-                ).to_dict()
-            )
-        )
-        return 1
-
-    # Reconstruct journey steps
-    steps_data = payload.get("journey_steps", [])
-    steps: list[JourneyStep] = []
-    for s in steps_data:
-        if not isinstance(s, dict):
-            continue
-        steps.append(
-            JourneyStep(
-                action=str(s.get("action", "")),
-                url=str(s["url"]) if s.get("url") else None,
-                selector=str(s["selector"]) if s.get("selector") else None,
-                text=str(s["text"]) if s.get("text") else None,
-                description=str(s.get("description", "")),
-                timeout_ms=int(s.get("timeout_ms", 30_000)),
-            )
-        )
-
-    # Reconstruct credential profile
-    credential_data = payload.get("credential_profile")
-    credential_profile: CredentialProfile | None = None
-    if credential_data and isinstance(credential_data, dict):
-        credential_profile = CredentialProfile(
-            label=str(credential_data.get("label", "")),
-            username=str(credential_data.get("username", "")),
-            password=str(credential_data.get("password", "")),
-        )
-
-    timeout_ms = int(payload.get("timeout_ms", 30_000))
-    starting_url = payload.get("starting_url")
-
-    result = _execute_journey_sync(
-        journey_steps=steps,
-        credential_profile=credential_profile,
-        timeout_ms=timeout_ms,
-        starting_url=starting_url,
-    )
-    print(json.dumps(result.to_dict()))
-    return 0
-
-
 if __name__ == "__main__":
     if "--journey-scrape" in sys.argv:
         raise SystemExit(_run_subprocess_entry())
-    if "--execute-journey" in sys.argv:
-        raise SystemExit(_run_execute_journey_entry())

@@ -361,7 +361,17 @@ class SidebarConfig:
     def render() -> dict[str, str]:
         """Render sidebar and return provider configuration."""
         st.sidebar.title("Configuration")
-        provider = st.sidebar.selectbox("LLM Provider", ["ollama", "lm-studio"])
+        provider_labels = {
+            "ollama": "Ollama (local)",
+            "lm-studio": "LM Studio (local)",
+            "openai-local": "OpenAI-Compatible (local)",
+            "openai": "OpenAI (cloud)",
+        }
+        provider = st.sidebar.selectbox(
+            "LLM Provider",
+            options=["ollama", "lm-studio", "openai-local", "openai"],
+            format_func=lambda x: provider_labels.get(x, x),
+        )
         return {"provider": provider}
 
 

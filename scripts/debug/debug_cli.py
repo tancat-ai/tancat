@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+
+from cli.menu_renderer import _running_in_git_bash
 
 # Print environment diagnostics
 print("=" * 60)
@@ -21,8 +24,6 @@ print(f"Platform: {sys.platform}")
 print()
 
 # Test Git Bash detection
-from cli.menu_renderer import _running_in_git_bash
-
 print("=" * 60)
 print("Git Bash Detection")
 print("=" * 60)
@@ -40,25 +41,25 @@ print("or just press a key (if native console)")
 print("This will block until input is received.")
 print()
 
-import threading
-import time
-
 result = ["(timeout)"]
 
-def read_key_threaded():
+
+def read_key_threaded() -> None:
     from cli.menu_renderer import _read_key
+
     try:
         val = _read_key()
         result[0] = repr(val)
     except Exception as e:
         result[0] = f"Exception: {e}"
 
+
 t = threading.Thread(target=read_key_threaded, daemon=True)
 t.start()
 t.join(timeout=3)
 
 if t.is_alive():
-    print(f"_read_key() is BLOCKING after 3 seconds (thread still alive)")
+    print("_read_key() is BLOCKING after 3 seconds (thread still alive)")
     print("This confirms the bug: _read_key() does not return in Git Bash")
 else:
     print(f"_read_key() returned: {result[0]}")
@@ -71,6 +72,7 @@ print("=" * 60)
 # Test if select works on stdin
 try:
     import select
+
     readable, _, _ = select.select([sys.stdin], [], [], 0.5)
     if readable:
         print("stdin has data available via select")
@@ -88,8 +90,9 @@ print("Testing tty.tcsetattr / termios for non-blocking")
 print("=" * 60)
 
 try:
-    import termios
-    import tty
+    import termios  # noqa: F401
+    import tty  # noqa: F401
+
     print("termios and tty modules available")
     # Can't actually test without a real TTY context
 except ImportError as e:

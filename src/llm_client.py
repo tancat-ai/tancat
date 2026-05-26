@@ -7,13 +7,7 @@ import os
 import re
 from typing import Any
 
-from src.llm_providers import (
-    ChatCompletion,
-    ChatMessage,
-    auto_detect_provider,
-    create_provider_from_env,
-    get_provider,
-)
+from src.llm_providers import ChatCompletion, ChatMessage, create_provider_from_env, get_provider
 
 
 class LLMClient:
@@ -72,11 +66,7 @@ class LLMClient:
         if selected_provider is not None:
             self._provider = get_provider(selected_provider, base_url=base_url, api_key=api_key)
         else:
-            try:
-                self._provider = auto_detect_provider()
-            except ConnectionError:
-                # Fallback to env if auto-detect fails
-                self._provider = create_provider_from_env()
+            self._provider = create_provider_from_env()
 
         selected_model = model
         if selected_model is None and self._session_model is not None:
@@ -88,46 +78,11 @@ class LLMClient:
 
     def _get_default_model(self) -> str:
         """Return the default model name for the configured provider."""
-        # 1. Check for provider-specific environment variables first
         if self._provider.provider_name == "ollama":
-            env_model = os.environ.get("OLLAMA_MODEL")
-            if env_model:
-                return env_model
-        elif self._provider.provider_name == "lm-studio":
-            env_model = os.environ.get("LM_STUDIO_MODEL")
-            if env_model:
-                return env_model
-        elif self._provider.provider_name == "openai":
-            env_model = os.environ.get("OPENAI_MODEL")
-            if env_model:
-                return env_model
-
-        # 2. For LM Studio, check what model is currently loaded in memory
+            return os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
         if self._provider.provider_name == "lm-studio":
-            from src.llm_providers import LMStudioProvider
-
-            if isinstance(self._provider, LMStudioProvider):
-                loaded = self._provider.get_loaded_model(timeout=5)
-                if loaded:
-                    self._debug(f"Using loaded model: {loaded}")
-                    return loaded
-
-        # 3. If no env var, try to list models and pick the first one (for local providers)
-        if self._provider.provider_name in ("ollama", "lm-studio"):
-            try:
-                models = self.list_models(timeout=5)
-                if models:
-                    self._debug(f"Auto-detected model: {models[0]}")
-                    return models[0]
-            except Exception as e:
-                self._debug(f"Failed to auto-detect model: {e}")
-
-        # 4. Final fallbacks
-        if self._provider.provider_name == "ollama":
-            return "qwen2.5:7b"
-        if self._provider.provider_name == "lm-studio":
-            return "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
-        return "gpt-4o"
+            return os.environ.get("LM_STUDIO_MODEL", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF")
+        return os.environ.get("OPENAI_MODEL", "gpt-4o")
 
     @property
     def provider_name(self) -> str:
@@ -186,14 +141,10 @@ class LLMClient:
             return ""
 
         cleaned = re.sub(r"<channel\|>+", "\n", raw_text).strip()
-        cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned)
-        if "</think>" in cleaned:
-            cleaned = cleaned.split("</think>")[-1]
-        cleaned = cleaned.strip()
-
-        fence_matches = re.findall(r"```(?:python)?\n(.*?)```", cleaned, re.S)
-        if fence_matches:
-            return "\n\n".join(m.strip() for m in fence_matches if m.strip())
+        cleaned = re.sub(r"(?is)<think>.*?</think>", "", cleaned).strip()
+        fence_match = re.search(r"```(?:python)?\n(.+?)```", cleaned, re.S)
+        if fence_match:
+            return fence_match.group(1).strip()
 
         if re.match(r"^```(?:python)?\s*```$", cleaned, re.S):
             return ""
@@ -298,89 +249,6 @@ INSTRUCTIONS:
             "provider_used": self.provider_name,
             "tokens_used": completion.usage or {},
         }
-
-    def create_vision_completion(
-        self,
-        image_base64: str,
-        prompt: str,
-    ) -> str:
-        """Send a vision-capable LLM an image + text prompt.
-
-        Uses the same provider infrastructure as complete() but
-        sends the image as base64 data URI in the message content.
-
-        For ollama/lm-studio: uses chat completions with images field.
-        For openai: uses chat.completions.create() with image_url content part.
-
-        Args:
-            image_base64: Base64-encoded PNG image string (without data URI prefix).
-            prompt: Text prompt for the vision LLM.
-
-        Returns:
-            Text response from the vision LLM.
-
-        Raises:
-            ValueError: If the provider/model does not support vision.
-        """
-        if not prompt or not prompt.strip():
-            raise ValueError("Prompt cannot be empty")
-
-        self.reset_conversation()
-
-        # Build message content with image + text
-        if self.provider_name in ("ollama", "lm-studio"):
-            # Ollama format: images as base64 array in message
-            ollama_content: list[dict[str, Any]] = [
-                {"type": "text", "text": prompt},
-            ]
-            # Add image as base64 data URI
-            image_data_uri = f"data:image/png;base64,{image_base64}"
-            ollama_content.append({"type": "image_url", "image_url": image_data_uri})
-
-            self._conversation_history.append(
-                ChatMessage(role="user", content=ollama_content)  # type: ignore[arg-type]
-            )
-        else:
-            # OpenAI-compatible format
-            openai_content: list[dict[str, Any]] = [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_base64}",
-                        "detail": "high",
-                    },
-                },
-                {"type": "text", "text": prompt},
-            ]
-
-            self._conversation_history.append(
-                ChatMessage(role="user", content=openai_content)  # type: ignore[arg-type]
-            )
-
-        import time
-
-        start_time = time.time()
-        try:
-            self._debug(f"Calling vision provider={self.provider_name} model={self._model}")
-            completion = self._provider.complete(
-                messages=self._conversation_history,
-                model=self._model,
-                timeout=120,
-            )
-            elapsed = time.time() - start_time
-            content_len = len(completion.content) if completion.content else 0
-            self._debug(f"Received vision completion in {elapsed:.2f}s, length={content_len} chars")
-
-            if not completion.content or len(completion.content) < 10:
-                print(f"Warning: Vision LLM returned suspiciously short response: '{completion.content}'")
-
-            self._conversation_history.append(ChatMessage(role="assistant", content=completion.content))
-            return completion.content or ""
-        except Exception as e:
-            elapsed = time.time() - start_time
-            self._debug(f"Vision LLM call failed after {elapsed:.2f}s: {e}")
-            self._conversation_history.pop()
-            raise
 
 
 def create_llm_client(provider_name: str | None = None, model: str | None = None) -> LLMClient:

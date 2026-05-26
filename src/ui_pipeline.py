@@ -26,6 +26,10 @@ def _get_provider_defaults(provider: str) -> tuple[str, str]:
     """Return (base_url, model) defaults for the given provider."""
     if provider == "lm-studio":
         return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
+    elif provider == "openai-local":
+        return "http://localhost:8080/v1", "llama"
+    elif provider == "openai":
+        return "https://api.openai.com/v1", "gpt-4o"
     return "http://localhost:11434", "qwen3.5:35b"
 
 
@@ -167,11 +171,7 @@ async def run_pipeline(
         conditions_text = criteria
 
     generator = TestGenerator(client=client, model_name=model_name)
-    orchestrator = TestOrchestrator(
-        generator,
-        credential_profile=credential_profile,
-        journey_steps=journey_steps,
-    )
+    orchestrator = TestOrchestrator(generator)
 
     final_code = await orchestrator.run_pipeline(
         user_story=user_story,
