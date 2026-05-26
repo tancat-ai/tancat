@@ -64,6 +64,17 @@ def _init_session_state() -> None:
 
 _init_session_state()
 
+if st.session_state.pop("_load_baseline_requested", False):
+    st.session_state.starting_url = RequirementsInput.BASELINE_STARTING_URL
+    st.session_state.additional_urls = RequirementsInput.BASELINE_ADDITIONAL_URLS
+    st.session_state.requirements_text = RequirementsInput.BASELINE_REQUIREMENTS
+    st.session_state.pipeline_error = ""
+    st.session_state.pipeline_results = ""
+    st.session_state.pipeline_skeleton = ""
+    st.session_state.pipeline_scrape_summary = ""
+    st.session_state.pipeline_saved_path = ""
+    st.session_state.pipeline_manifest_path = ""
+
 # ---------------------------------------------------------------------------
 # Sidebar configuration
 # ---------------------------------------------------------------------------
@@ -93,6 +104,8 @@ if available_models:
         model_name = model_option
 else:
     model_name = st.sidebar.text_input("Model", value=default_model)
+
+LLMClient.set_session_provider(provider, provider_base_url, model_name)
 
 st.sidebar.divider()
 st.sidebar.title("Pages To Scrape")
@@ -157,15 +170,7 @@ else:
 
 # Baseline preset button
 if st.sidebar.button("Load baseline (automationexercise.com)", type="secondary"):
-    st.session_state.starting_url = RequirementsInput.BASELINE_STARTING_URL
-    st.session_state.additional_urls = RequirementsInput.BASELINE_ADDITIONAL_URLS
-    st.session_state.requirements_text = RequirementsInput.BASELINE_REQUIREMENTS
-    st.session_state.pipeline_error = ""
-    st.session_state.pipeline_results = ""
-    st.session_state.pipeline_skeleton = ""
-    st.session_state.pipeline_scrape_summary = ""
-    st.session_state.pipeline_saved_path = ""
-    st.session_state.pipeline_manifest_path = ""
+    st.session_state._load_baseline_requested = True
     st.rerun()
 
 # ---------------------------------------------------------------------------

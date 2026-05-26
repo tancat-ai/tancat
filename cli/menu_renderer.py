@@ -152,8 +152,14 @@ def _read_key() -> str:
             line = sys.stdin.readline()
             if not line:
                 raise EOFError
-            first = line.strip()[0] if line.strip() else ""
-            return first
+            value = line.strip()
+            if not value:
+                return "\r"
+            if value in ("\x1b[A", "\x1bOA"):
+                return "^"
+            if value in ("\x1b[B", "\x1bOB"):
+                return "v"
+            return value
         except EOFError:
             return "q"
 

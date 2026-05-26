@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import streamlit as st
 
@@ -361,7 +361,25 @@ class SidebarConfig:
     def render() -> dict[str, str]:
         """Render sidebar and return provider configuration."""
         st.sidebar.title("Configuration")
-        provider = st.sidebar.selectbox("LLM Provider", ["ollama", "lm-studio"])
+        provider_labels = {
+            "ollama": "Ollama (local)",
+            "lm-studio": "LM Studio (local)",
+            "openai-local": "OpenAI-Compatible (local)",
+            "openai": "OpenAI (cloud)",
+        }
+        provider_options = ("ollama", "lm-studio", "openai-local", "openai")
+
+        def _format_provider(value: str) -> str:
+            return provider_labels[value]
+
+        provider = cast(
+            str,
+            st.sidebar.selectbox(
+                "LLM Provider",
+                provider_options,
+                format_func=_format_provider,
+            ),
+        )
         return {"provider": provider}
 
 

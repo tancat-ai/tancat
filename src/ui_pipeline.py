@@ -26,6 +26,10 @@ def _get_provider_defaults(provider: str) -> tuple[str, str]:
     """Return (base_url, model) defaults for the given provider."""
     if provider == "lm-studio":
         return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
+    if provider == "openai-local":
+        return "http://localhost:8080", "llama"
+    if provider == "openai":
+        return "https://api.openai.com/v1", "gpt-4o"
     return "http://localhost:11434", "qwen3.5:35b"
 
 
