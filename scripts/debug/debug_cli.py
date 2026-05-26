@@ -6,8 +6,12 @@ Runs the menu input loop with diagnostic output to identify where blocking occur
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sys
+import threading
+
+from cli.menu_renderer import _read_key, _running_in_git_bash
 
 # Print environment diagnostics
 print("=" * 60)
@@ -19,9 +23,6 @@ print(f"TERM: {os.environ.get('TERM', '')}")
 print(f"SHELL: {os.environ.get('SHELL', '')}")
 print(f"Platform: {sys.platform}")
 print()
-
-# Test Git Bash detection
-from cli.menu_renderer import _running_in_git_bash
 
 print("=" * 60)
 print("Git Bash Detection")
@@ -40,13 +41,10 @@ print("or just press a key (if native console)")
 print("This will block until input is received.")
 print()
 
-import threading
-import time
-
 result = ["(timeout)"]
 
-def read_key_threaded():
-    from cli.menu_renderer import _read_key
+
+def read_key_threaded() -> None:
     try:
         val = _read_key()
         result[0] = repr(val)
@@ -58,7 +56,7 @@ t.start()
 t.join(timeout=3)
 
 if t.is_alive():
-    print(f"_read_key() is BLOCKING after 3 seconds (thread still alive)")
+    print("_read_key() is BLOCKING after 3 seconds (thread still alive)")
     print("This confirms the bug: _read_key() does not return in Git Bash")
 else:
     print(f"_read_key() returned: {result[0]}")
@@ -88,9 +86,10 @@ print("Testing tty.tcsetattr / termios for non-blocking")
 print("=" * 60)
 
 try:
-    import termios
-    import tty
-    print("termios and tty modules available")
+    if importlib.util.find_spec("termios") and importlib.util.find_spec("tty"):
+        print("termios and tty modules available")
+    else:
+        print("termios/tty not available")
     # Can't actually test without a real TTY context
 except ImportError as e:
     print(f"termios/tty not available: {e}")
