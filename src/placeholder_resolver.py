@@ -33,11 +33,6 @@ def _css_escape_id(value: str) -> str:
     """
     if not value:
         return value
-    # CSS selector special characters that must be escaped in an ID component.
-    # Per CSS Selectors Level 3, these need backslash escaping when not in a string.
-    # CSS identifiers allow letters, digits, underscores, and hyphens without escaping.
-    # Only escape true CSS delimiter/special characters.
-    # See: https://drafts.csswg.org/selectors-3/#character-set
     escape_chars = r'"\'' + r"""#&*,/><:=?@[\]^`{|}~!$%();+""" + "\t\n\r\x0c"
     result = []
     for char in value:
@@ -93,7 +88,6 @@ class PlaceholderResolver:
             str(element.get("accessible_name", "")),
             str(element.get("data_test", "")),
         ]
-        # Normalize delimiters to spaces for better string containment matching
         raw_haystack = " ".join(part for part in parts if part).lower()
         return re.sub(r"[_-]+", " ", raw_haystack)
 
@@ -105,7 +99,6 @@ class PlaceholderResolver:
         name = str(element.get("name", "")).strip().lower()
         element_id = str(element.get("id", "")).strip().lower()
 
-        # Never attempt to fill hidden inputs (e.g., CSRF tokens).
         if role == "hidden":
             return False
         if any(term in name or term in element_id or term in selector for term in ("csrf", "token", "authenticity")):
@@ -142,12 +135,6 @@ class PlaceholderResolver:
             return True
         return False
 
-    # Words that describe the UI interaction pattern rather than the content itself.
-    # These should be stripped from placeholder descriptions before text matching
-    # so that "Add to cart button next to a product" focuses on "add cart product"
-    # rather than failing because the element text "Add to cart" lacks "button", "next", etc.
-    # IMPORTANT: Do NOT strip words like "link", "icon", "header", "cart" — these are
-    # meaningful content descriptors that help distinguish between elements.
     ACTION_CONTEXT_WORDS = {
         "a",
         "an",
@@ -182,9 +169,6 @@ class PlaceholderResolver:
         "with",
     }
 
-    # Action verbs that signal a specific interaction (add, buy, remove, etc.).
-    # When the description uses navigation language ("link", "icon") but the element
-    # text contains action verbs, reject the match — they represent different intents.
     ACTION_VERBS = {
         "add",
         "buy",
@@ -201,10 +185,9 @@ class PlaceholderResolver:
         "close",
         "dismiss",
         "cancel",
+        "click",
     }
 
-    # Navigation language that indicates the user wants to navigate TO something,
-    # not perform an action ON something.
     NAVIGATION_WORDS = {
         "link",
         "icon",
@@ -219,41 +202,22 @@ class PlaceholderResolver:
 
     @staticmethod
     def text_matches_description(element_text: str, action_description: str) -> bool:
-        """Check if element's visible text plausibly matches the action description.
-
-        Uses case-insensitive containment with whitespace normalization.
-        Handles two common patterns:
-        1. Direct text overlap: "Add to cart" matches "Add to cart button"
-        2. Action + qualifier split: "add to cart button for Sauce Labs Backpack"
-           splits on "for"/"next to"/"on" → action part "add to cart button" is validated
-           against element text, ignoring the product qualifier.
-
-        Intent-level filtering is handled by _matches_intent_bucket() in rank_candidates().
-        This method only validates text overlap, not intent compatibility.
-        """
+        """Check if element's visible text plausibly matches the action description."""
         if not action_description:
             return False
 
-        # Normalize underscores to spaces (LLM often generates "add_to_cart_button" style)
-        # Strip LLM-generated quotes — common problem: "'Products'" should match "Products"
         norm_desc = re.sub(r"['\"']", "", action_description)
         norm_desc = re.sub(r"[_\s]+", " ", norm_desc).strip().lower()
-
-        # Split description on qualifier separators to isolate the action part.
-        # "add to cart button for Sauce Labs Backpack" -> "add to cart button"
-        # "click remove button next to broken red light" -> "click remove button"
         action_part = re.split(r"\s+(?:for|next\s+to|beside|on|with|by|above|below)\s+", norm_desc)[0]
 
         if element_text:
             norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
 
-            # Direct containment (most reliable check) - check against both full desc and action part
             if norm_text in norm_desc or norm_desc in norm_text:
                 return True
             if norm_text in action_part or action_part in norm_text:
                 return True
 
-            # Word-level overlap with action-context words stripped
             desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
             text_words = set(norm_text.split())
             if desc_words and text_words:
@@ -261,7 +225,6 @@ class PlaceholderResolver:
                 if overlap >= max(1, len(desc_words) // 2):
                     return True
 
-            # Check if at least one significant action word overlaps
             action_words = set(action_part.split()) & PlaceholderResolver.ACTION_VERBS
             if action_words and action_words & text_words:
                 return True
@@ -287,16 +250,10 @@ class PlaceholderResolver:
             if not selector:
                 continue
 
-            # Skip hidden elements entirely — never select elements that are
-            # explicitly marked as hidden (e.g. CSRF tokens, consent framework inputs).
             role = str(element.get("role", "")).strip().lower()
             if role == "hidden":
                 continue
 
-            # Penalize elements marked as invisible at runtime (Session 2: Visibility Capture).
-            # Elements with is_visible=False were checked against the live browser DOM and found
-            # to be hidden (display:none, off-screen, behind overlays, etc.). Prefer visible
-            # candidates so generated tests interact with actually-useful page elements.
             if element.get("is_visible") is False:
                 if action != "ASSERT":
                     logger.debug(
@@ -306,9 +263,7 @@ class PlaceholderResolver:
                         action,
                     )
                     continue
-                # For ASSERT: continue but apply heavy visibility penalty in scorer
 
-            # Intent gate — skip elements that don't match the action intent
             if action == "FILL" and not IntentMatcher._is_fillable(element):
                 continue
 
@@ -328,8 +283,7 @@ class PlaceholderResolver:
             if score is not None:
                 ranked.append((score, element))
 
-        # Sort by: 1) score desc, 2) text length desc (prefer more descriptive elements),
-        # 3) selector specificity desc (prefer longer, more specific selectors).
+        # Sort globally: 1) score desc, 2) text length desc, 3) selector specificity desc.
         ranked.sort(
             key=lambda item: (
                 item[0],
@@ -338,7 +292,9 @@ class PlaceholderResolver:
             ),
             reverse=True,
         )
-        return ranked
+
+        # Enforce global slice cap across all available pool items
+        return ranked[:20]
 
     def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:
         """Resolve navigation placeholders to the best matching scraped URL."""
@@ -347,8 +303,7 @@ class PlaceholderResolver:
 
         desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
-            first_url = next(iter(pages_data), None)
-            return first_url
+            return next(iter(pages_data), None)
 
         best_score = -1
         best_url: str | None = None

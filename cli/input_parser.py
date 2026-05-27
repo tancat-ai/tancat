@@ -157,12 +157,10 @@ class FormatDetector:
         if gherkin_matches >= 2:
             return "gherkin", 0.9
 
-        # Check for bullets
-        bullet_matches = 0
-        for pattern in cls.PATTERNS["bullets"]["patterns"]:
-            if pattern.search(text):
-                bullet_matches += 1
-        if bullet_matches >= 3:
+        # Check for bullets — count individual bullet lines, not pattern matches
+        bullet_line_pattern = re.compile(r"^(?:-|\*|\d+\.)\s+\w+", re.MULTILINE)
+        bullet_lines = bullet_line_pattern.findall(text)
+        if len(bullet_lines) >= 3:
             return "bullets", 0.8
 
         # Default to plain text
@@ -214,8 +212,8 @@ class JiraParser:
             r"^(?:Description)[:\s]*\n?\s*(.+?)(?=\n(?:Acceptance|Issue|Summary|Key)[:\s]*|$)", re.MULTILINE | re.DOTALL
         ),
         "acceptance_criteria": re.compile(
-            r"^(?:Acceptance\s+Criteria)[:\s]*\n?\s*(.+?)(?=\n(?:Issue|Summary|Description|Acceptance)[:\s]*|$)",
-            re.MULTILINE | re.DOTALL,
+            r"^(?:Acceptance\s+Criteria)[:\s]*\n?\s*([\s\S]+?)(?=\n(?:Issue|Summary|Description|Acceptance)[:\s]*\s*$|\Z)",
+            re.MULTILINE,
         ),
     }
 
@@ -263,8 +261,9 @@ class JiraParser:
         lines = [line.strip() for line in ac_text.split("\n") if line.strip()]
 
         for line in lines:
-            # Remove bullet points and numbering
-            clean_line = re.sub(r"^[\-\*\d]+\.\s*", "", line)
+            # Remove bullet points and numbering — handle "- item", "* item", "1. item"
+            clean_line = re.sub(r"^[\-\*]\s*", "", line)
+            clean_line = re.sub(r"^\d+\.\s*", "", clean_line)
 
             # Determine test type based on keywords
             test_type = cls._determine_test_type(clean_line)
@@ -341,7 +340,7 @@ class GherkinParser:
         """Extract all scenarios from Gherkin text."""
         scenarios = []
         pattern = re.compile(
-            r"^Scenario:\s*(.+?)\n((?:[\s]*(?:Given|When|Then|And|But)\s+.*?)+?)(?=\n(?:Scenario|Feature|@|\Z))",
+            r"^Scenario:\s*(.+?)\n((?:\s*(?:Given|When|Then|And|But)\s+.*?)+?)(?=\n(?:Scenario|Feature|@)|\Z)",
             re.MULTILINE,
         )
 
@@ -395,18 +394,22 @@ class GherkinParser:
 class BulletParser:
     """Parse bullet-point style acceptance criteria."""
 
-    BULLET_REGEX = re.compile(r"^[\-\*\d]+\.\s*(.+)", re.MULTILINE)
+    BULLET_REGEX = re.compile(r"^[\-\*]\s+(.+)|^\d+\.\s+(.+)", re.MULTILINE)
 
     @classmethod
     def parse(cls, text: str) -> list[TestCase]:
         """Extract test cases from bullet-point list."""
         test_cases = []
 
-        matches = cls.BULLET_REGEX.findall(text)
+        matches = cls.BULLET_REGEX.finditer(text)
 
         for match in matches:
+            # finditer with alternation returns a tuple-group; pick the non-None group
+            line = match.group(1) or match.group(2)
             test_case = TestCase(
-                title=cls._generate_title(match), description=match.strip(), test_type=cls._determine_test_type(match)
+                title=cls._generate_title(line),
+                description=line.strip(),
+                test_type=cls._determine_test_type(line),
             )
             test_cases.append(test_case)
 
