@@ -51,6 +51,7 @@ def read_key_threaded() -> None:
     except Exception as e:
         result[0] = f"Exception: {e}"
 
+
 t = threading.Thread(target=read_key_threaded, daemon=True)
 t.start()
 t.join(timeout=3)
@@ -69,6 +70,7 @@ print("=" * 60)
 # Test if select works on stdin
 try:
     import select
+
     readable, _, _ = select.select([sys.stdin], [], [], 0.5)
     if readable:
         print("stdin has data available via select")

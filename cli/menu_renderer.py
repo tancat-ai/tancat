@@ -101,7 +101,7 @@ def _flush_msvcrt_buffer() -> None:
         import msvcrt
 
         for _ in range(10):
-            if msvcrt.kbhit():
+            if msvcrt.kbhit():  # type: ignore[attr-defined]
                 msvcrt.getwch()  # type: ignore[attr-defined]
             else:
                 break
@@ -124,7 +124,7 @@ def _drain_msvcrt_buffer_aggressive() -> None:
         while True:
             found = False
             for _ in range(50):
-                if msvcrt.kbhit():
+                if msvcrt.kbhit():  # type: ignore[attr-defined]
                     msvcrt.getwch()  # type: ignore[attr-defined]
                     found = True
             if not found:
