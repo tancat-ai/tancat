@@ -1,0 +1,58 @@
+# Scenario: menu_navigation
+**Date:** 2026-05-29 09:09:41
+**Steps:** 5
+**Status:** PASS
+---
+## Step 1: Initial menu
+- **Sent:** `<wait>`
+- **Duration:** 0ms
+- **Status:** OK
+```
+[H[J┌──────────────────────────────────────────────────────────────────────────┐
+│  AI Playwright
+```
+---
+## Step 2: Down arrow
+- **Sent:** `<Down>`
+- **Duration:** 0ms
+- **Status:** OK
+```
+[H[J┌──────────────────────────────────────────────────────────────────────────┐
+│  AI Playwright
+```
+---
+## Step 3: Up arrow
+- **Sent:** `<Up>`
+- **Duration:** 0ms
+- **Status:** OK
+```
+[H[J┌──────────────────────────────────────────────────────────────────────────┐
+│  AI Playwright
+```
+---
+## Step 4: Select first item
+- **Sent:** `<Enter>`
+- **Duration:** 0ms
+- **Status:** OK
+```
+ Test Generator                                             │
+│  Generate Playwright tests from user stories with AI                      │
+├──────────────────────────────────────────────────────────────────────────┤
+
+   State:
+     LLM
+```
+---
+## Step 5: Quit with Q
+- **Sent:** `'q'`
+- **Duration:** 0ms
+- **Status:** OK
+```
+ Test Generator                                             │
+│  Generate Playwright tests from user stories with AI                      │
+├──────────────────────────────────────────────────────────────────────────┤
+
+   State:
+     LLM
+```
+---

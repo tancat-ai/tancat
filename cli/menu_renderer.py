@@ -199,6 +199,7 @@ def print_menu(
 
         render_menu(options, selected=selected)
         print()
+        sys.stdout.flush()
 
         bar: list[tuple[str, str]] = []
         for i, opt in enumerate(options):

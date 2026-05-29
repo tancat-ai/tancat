@@ -211,10 +211,10 @@ def render_menu(
     for i, item in enumerate(items):
         if i == selected:
             # Bright green with inverse-video cursor
-            print("   " + _inverse("> ") + _green(item, bright=True))
+            print("   " + _inverse("> ") + _green(item, bright=True), flush=True)
         else:
             # Standard/dim green
-            print("   " + _green("  " + item, bright=False))
+            print("   " + _green("  " + item, bright=False), flush=True)
 
 
 def render_state(state_lines: list[str]) -> None:
@@ -262,9 +262,9 @@ def render_shortcut_bar(shortcuts: list[tuple[str, str]]) -> None:
         shortcut_text = shortcut_text[: inner - 3] + "..."
     padded = shortcut_text + " " * (inner - len(shortcut_text))
 
-    print(_color_line(BOX.tee_r + BOX.h_line * inner + BOX.tee_l))
-    print(_color_line(BOX.v_line + " " + padded + BOX.v_line))
-    print(_color_line(BOX.corner_bl + BOX.h_line * inner + BOX.corner_br))
+    print(_color_line(BOX.tee_r + BOX.h_line * inner + BOX.tee_l), flush=True)
+    print(_color_line(BOX.v_line + " " + padded + BOX.v_line), flush=True)
+    print(_color_line(BOX.corner_bl + BOX.h_line * inner + BOX.corner_br), flush=True)
 
 
 def render_separator() -> None:

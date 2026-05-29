@@ -1,0 +1,23 @@
+# Scenario: quit_shortcut
+**Date:** 2026-05-29 09:09:49
+**Steps:** 2
+**Status:** PASS
+---
+## Step 1: Main menu
+- **Sent:** `<wait>`
+- **Duration:** 0ms
+- **Status:** OK
+```
+[H[J┌──────────────────────────────────────────────────────────────────────────┐
+│  AI Playwright
+```
+---
+## Step 2: Press Q
+- **Sent:** `'q'`
+- **Duration:** 0ms
+- **Status:** OK
+```
+[H[J┌──────────────────────────────────────────────────────────────────────────┐
+│  AI Playwright
+```
+---

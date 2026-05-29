@@ -20,21 +20,6 @@ import json
 import sys
 from typing import Any
 
-# Force UTF-8 encoding on Windows when running under Git Bash (MINGW64)
-# where stdout may default to cp1252, causing UnicodeEncodeError for
-# box-drawing characters (┌, ─, ┐ etc.) used in the retro UI.
-if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", "CP65001"):
-    sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)  # pyright: ignore[assignment]
-
-try:
-    from dotenv import load_dotenv as _load_dotenv
-
-    _load_dotenv()
-except ImportError:
-    pass  # python-dotenv not installed — env must be set externally
-
-# ── Sub-module imports ────────────────────────────────────────────────────
-
 from src.journey_scraper import CredentialProfile, JourneyStep
 
 from .color import green, yellow
@@ -60,6 +45,38 @@ from .pipeline_runner import (
 )
 from .retro_ui import render_state
 from .session import Session, create_session
+
+# Force UTF-8 encoding on Windows when running under Git Bash (MINGW64)
+# where stdout may default to cp1252, causing UnicodeEncodeError for
+# box-drawing characters (┌, ─, ┐ etc.) used in the retro UI.
+# Ensure line buffering so menu output flushes when stdout is redirected.
+stdout_stream = sys.stdout
+if hasattr(stdout_stream, "reconfigure"):
+    stdout_stream.reconfigure(encoding="utf-8", line_buffering=True)
+else:
+    if stdout_stream.encoding and stdout_stream.encoding.upper() not in ("UTF-8", "UTF8", "CP65001"):
+        sys.stdout = open(
+            stdout_stream.fileno(),
+            mode="w",
+            encoding="utf-8",
+            buffering=1,
+            closefd=False,
+        )  # pyright: ignore[assignment]
+    else:
+        sys.stdout = open(
+            stdout_stream.fileno(),
+            mode="w",
+            encoding=stdout_stream.encoding or "utf-8",
+            buffering=1,
+            closefd=False,
+        )  # pyright: ignore[assignment]
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+
+    _load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed — env must be set externally
 
 # ── Main menu ─────────────────────────────────────────────────────────────
 

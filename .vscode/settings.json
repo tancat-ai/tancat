@@ -1,3 +1,19 @@
 {
-    "python.defaultInterpreterPath": "C:\\Users\\l_a_c\\code\\AI-Playwright-Test-Generator\\.venv\\Scripts\\python.exe",
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+    "terminal.integrated.env.windows": {
+        "VIRTUAL_ENV": "${workspaceFolder}/.venv",
+        "PATH": "${workspaceFolder}/.venv/Scripts;${envPath}"
+    },
+    "terminal.integrated.activateEnvironment": true,
+    "terminal.integrated.automationProfile.windows": {
+        "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+        "args": ["-l"]
+    },
+    "terminal.integrated.profiles.windows": {
+        "Git Bash": {
+            "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+            "args": ["-l"]
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "Git Bash"
 }
