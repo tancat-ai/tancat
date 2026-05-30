@@ -15,16 +15,22 @@ from src.evidence_loader import (
     get_failure_diagnostics,
     load_evidence_for_package,
 )
-from src.llm_client import LLMClient
-from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
-from src.pipeline_writer import PipelineArtifactWriter
 from src.pytest_output_parser import RunResult
-from src.spec_analyzer import SpecAnalyzer
-from src.test_generator import TestGenerator
-from src.test_plan import TestPlan, build_story_ref
-from src.user_story_parser import FeatureParser
+from src.ui_pipeline import (
+    PipelineSessionState,
+    parse_requirements_text,
+)
+from src.ui_pipeline import (
+    build_test_plan as ui_build_test_plan,
+)
+from src.ui_pipeline import (
+    parse_target_urls as ui_parse_target_urls,
+)
+from src.ui_pipeline import (
+    run_pipeline as ui_run_pipeline,
+)
 
 from .color import cyan, green, red, yellow
 from .menu_renderer import print_header, print_menu, read_optional
@@ -34,14 +40,7 @@ from .menu_renderer import print_header, print_menu, read_optional
 
 def parse_requirements(raw: str) -> tuple[str, str]:
     """Parse raw text into user story and acceptance criteria."""
-    parser = FeatureParser()
-    result = parser.parse(raw)
-    if result.success and result.specification is not None:
-        spec = result.specification
-        req_model = parser.build_requirement_model(spec)
-        return spec.user_story.strip(), req_model.to_numbered_text().strip()
-    cleaned = raw.strip()
-    return cleaned, cleaned
+    return parse_requirements_text(raw)
 
 
 # ── Living test plan ──────────────────────────────────────────────────────
@@ -56,23 +55,16 @@ async def build_test_plan(session: Any) -> None:
         print(yellow("  Could not parse user story or criteria. Proceeding without plan."))
         return
 
-    client = LLMClient(
-        provider=session.provider,
-        model=session.model_name,
-        base_url=session.provider_base_url,
-    )
-    analyzer = SpecAnalyzer(llm_client=client)
-    spec_text = f"User Story:\n{user_story}\n\nAcceptance Criteria:\n{criteria}"
-
     try:
-        conditions = analyzer.analyze(spec_text)
-        session.test_plan = TestPlan.from_conditions(
-            story_ref=build_story_ref(user_story),
-            sprint="Backlog",
-            conditions=conditions,
+        session.test_plan = ui_build_test_plan(
+            user_story=user_story,
+            criteria=criteria,
+            provider=session.provider,
+            provider_base_url=session.provider_base_url,
+            model_name=session.model_name,
         )
-        session.pipeline_conditions = conditions
-        print(green(f"  Plan built: {len(conditions)} condition(s) derived."))
+        session.pipeline_conditions = session.test_plan.conditions
+        print(green(f"  Plan built: {len(session.pipeline_conditions)} condition(s) derived."))
     except Exception as exc:
         print(yellow(f"  Could not build plan ({exc}). Proceeding without plan."))
         return
@@ -133,7 +125,7 @@ async def run_pipeline(session: Any) -> None:
     print_header("Running Intelligent Pipeline")
 
     user_story, criteria = parse_requirements(session.raw_requirements)
-    target_urls = parse_target_urls(session.starting_url, session.additional_urls)
+    target_urls = ui_parse_target_urls(session.starting_url, session.additional_urls)
 
     if not user_story.strip():
         session.pipeline_error = "Please provide a user story."
@@ -157,37 +149,24 @@ async def run_pipeline(session: Any) -> None:
 
     print(cyan("  Running pipeline — this may take a few minutes…"))
 
-    client = LLMClient(
-        provider=session.provider,
-        model=session.model_name,
-        base_url=session.provider_base_url,
-    )
-    generator = TestGenerator(client=client, model_name=session.model_name)
-    orchestrator = TestOrchestrator(
-        generator,
-        credential_profile=session.credential_profile,
-        journey_steps=session.journey_steps if session.journey_steps else None,
-    )
-
     conditions = list(session.pipeline_conditions or [])
     if not conditions and session.test_plan:
         conditions = session.test_plan.conditions
 
-    conditions_text = (
-        "\n".join(f"{i}. [{c.id}] {c.text} -> Expected: {c.expected}" for i, c in enumerate(conditions, 1))
-        if conditions
-        else criteria
-    )
-
-    final_code: str | None = None
     try:
-        print(cyan("  Phase 1: Generating placeholder skeleton"))
-        final_code = await orchestrator.run_pipeline(
+        ui_session = PipelineSessionState()
+        await ui_run_pipeline(
             user_story=user_story,
-            conditions=conditions_text,
+            criteria=criteria,
+            provider=session.provider,
+            provider_base_url=session.provider_base_url,
+            model_name=session.model_name,
             target_urls=target_urls,
             consent_mode=session.consent_mode,
             reviewed_conditions=conditions,
+            session=ui_session,
+            credential_profile=session.credential_profile,
+            journey_steps=session.journey_steps if session.journey_steps else None,
         )
     except Exception as exc:
         session.pipeline_error = str(exc)
@@ -196,30 +175,20 @@ async def run_pipeline(session: Any) -> None:
         print(red(f"  ✗ Pipeline failed: {session.pipeline_error}"))
         return
 
-    last_result = orchestrator.last_result
-    if last_result is None:
-        session.pipeline_error = "Pipeline returned no result."
-        print(red(f"  ✗ {session.pipeline_error}"))
-        return
+    session.pipeline_results = ui_session.get("pipeline_results")
+    session.pipeline_skeleton = ui_session.get("pipeline_skeleton") or ""
+    session.pipeline_urls = ui_session.get("pipeline_urls") or []
+    session.pipeline_scraped_pages = ui_session.get("pipeline_scraped_pages") or {}
+    session.pipeline_unresolved = ui_session.get("pipeline_unresolved") or []
+    session.pipeline_criteria = ui_session.get("pipeline_criteria") or criteria
+    session.pipeline_saved_path = ui_session.get("pipeline_saved_path") or ""
+    session.pipeline_manifest_path = ui_session.get("pipeline_manifest_path") or ""
 
-    session.pipeline_results = final_code
-    session.pipeline_skeleton = last_result.skeleton_code
-    session.pipeline_urls = last_result.pages_to_scrape
-    session.pipeline_scraped_pages = last_result.scraped_pages
-    session.pipeline_unresolved = last_result.unresolved_placeholders
-    session.pipeline_criteria = conditions_text
+    if session.pipeline_saved_path:
+        print(green(f"  ✓ Tests saved to: {session.pipeline_saved_path}"))
+    else:
+        print(yellow("  ⚠ Pipeline completed, but no test artifact path was produced."))
 
-    primary_url = target_urls[0] if target_urls else ""
-    artifact_writer = PipelineArtifactWriter()
-    artifact_set = artifact_writer.write_run_artifacts(
-        run_result=last_result,
-        story_text=user_story,
-        base_url=primary_url,
-    )
-    session.pipeline_saved_path = artifact_set.test_file_path
-    session.pipeline_manifest_path = artifact_set.manifest_path
-
-    print(green(f"  ✓ Tests saved to: {session.pipeline_saved_path}"))
     if session.pipeline_unresolved:
         print(yellow(f"  ⚠ {len(session.pipeline_unresolved)} unresolved placeholder(s) — converted to skips."))
     else:

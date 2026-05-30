@@ -23,30 +23,38 @@ def clear_screen() -> None:
     """Clear the terminal and move cursor to 0,0.
 
     Uses ANSI escape sequences which work on modern Windows (Win10+),
-    macOS, and Linux terminals.
+    macOS, and Linux terminals. When stdout is not a TTY (e.g. subprocess
+    pipe, CI logging), writes a separator line instead so captured output
+    remains readable.
     """
-    # \033[H = move cursor to home position (0,0)
-    # \033[J = clear from cursor to end of screen
-    sys.stdout.write("\033[H\033[J")
+    if sys.stdout.isatty():
+        # \033[H = move cursor to home position (0,0)
+        # \033[J = clear from cursor to end of screen
+        sys.stdout.write("\033[H\033[J")
+    else:
+        sys.stdout.write("\n" + "=" * 78 + "\n")
     sys.stdout.flush()
 
 
 def move_cursor(x: int = 0, y: int = 0) -> None:
     """Move cursor to absolute position (column x, row y)."""
-    sys.stdout.write(f"\033[{y + 1};{x + 1}H")
-    sys.stdout.flush()
+    if sys.stdout.isatty():
+        sys.stdout.write(f"\033[{y + 1};{x + 1}H")
+        sys.stdout.flush()
 
 
 def hide_cursor() -> None:
     """Hide the terminal cursor for a cleaner retro look."""
-    sys.stdout.write("\033[?25l")
-    sys.stdout.flush()
+    if sys.stdout.isatty():
+        sys.stdout.write("\033[?25l")
+        sys.stdout.flush()
 
 
 def show_cursor() -> None:
     """Show the terminal cursor."""
-    sys.stdout.write("\033[?25h")
-    sys.stdout.flush()
+    if sys.stdout.isatty():
+        sys.stdout.write("\033[?25h")
+        sys.stdout.flush()
 
 
 # ── Box-drawing characters ─────────────────────────────────────────────────
@@ -209,12 +217,13 @@ def render_menu(
           Re-enter Target URLs
     """
     for i, item in enumerate(items):
+        numbered_item = f"[{i + 1}] {item}"
         if i == selected:
             # Bright green with inverse-video cursor
-            print("   " + _inverse("> ") + _green(item, bright=True), flush=True)
+            print("   " + _inverse("> ") + _green(numbered_item, bright=True), flush=True)
         else:
             # Standard/dim green
-            print("   " + _green("  " + item, bright=False), flush=True)
+            print("   " + _green("  " + numbered_item, bright=False), flush=True)
 
 
 def render_state(state_lines: list[str]) -> None:
@@ -257,9 +266,13 @@ def render_shortcut_bar(shortcuts: list[tuple[str, str]]) -> None:
         parts.append(f"[{key}]{label}")
     shortcut_text = "  ".join(parts)
 
-    # Pad/truncate using plain text length
+    # Truncate at word boundaries to avoid cutting shortcuts in half
     if len(shortcut_text) > inner:
-        shortcut_text = shortcut_text[: inner - 3] + "..."
+        truncated = shortcut_text[: inner - 3]
+        last_space = truncated.rfind("  ")
+        if last_space > 0:
+            truncated = truncated[:last_space]
+        shortcut_text = truncated + "..."
     padded = shortcut_text + " " * (inner - len(shortcut_text))
 
     print(_color_line(BOX.tee_r + BOX.h_line * inner + BOX.tee_l), flush=True)
@@ -298,7 +311,7 @@ def prompt_input(prompt_text: str, default: str = "") -> str:
 
     Returns the user's input (or *default* on empty input).
     """
-    prompt = _green("  " + prompt_text, bright=True)
+    prompt = _green(prompt_text, bright=True)
     if default:
         prompt += f" (default: {default})"
     prompt += ": "

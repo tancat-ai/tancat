@@ -14,6 +14,7 @@ manual inspection and optional assertions.
 
 Requires no external dependencies - uses subprocess.Popen with pipes.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 # ── Types ──────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class StepResult:
@@ -141,7 +143,7 @@ class SubprocessChild:
                     self.before = self._buffer[: m.start()]
                     self.match = m
                     # Remove matched text from buffer, keep remaining
-                    self._buffer = self._buffer[m.end():]
+                    self._buffer = self._buffer[m.end() :]
                     return 0
             time.sleep(0.05)
 
@@ -149,9 +151,7 @@ class SubprocessChild:
         if self._proc.poll() is not None:
             raise EOFError(f"Process exited with code {self._proc.returncode}")
 
-        raise TimeoutError(
-            f"Timeout after {t}s waiting for pattern: {pattern!r}"
-        )
+        raise TimeoutError(f"Timeout after {t}s waiting for pattern: {pattern!r}")
 
     def _read_nonblocking(self) -> str:
         """Read available output on Windows where select() doesn't work for pipes.
@@ -251,12 +251,14 @@ class CliWalkthrough:
         ]
 
         for step in self.steps:
-            lines.extend([
-                f"## {step.step_name}",
-                f"- **Sent:** `{_describe(step.sent)}`",
-                f"- **Duration:** {step.duration_ms}ms",
-                f"- **Status:** {'OK' if step.success else 'FAIL'}",
-            ])
+            lines.extend(
+                [
+                    f"## {step.step_name}",
+                    f"- **Sent:** `{_describe(step.sent)}`",
+                    f"- **Duration:** {step.duration_ms}ms",
+                    f"- **Status:** {'OK' if step.success else 'FAIL'}",
+                ]
+            )
             if step.error:
                 lines.append(f"- **Error:** {step.error}")
             lines.append("```")
@@ -280,17 +282,9 @@ def scenario_menu_navigation(child: Any, snapshot_dir: Path) -> ScenarioResult:
         child.expect(r"AI Playwright|Main menu", timeout=10.0)
         w.log("Initial menu", "<wait>")
 
-        child.sendline("\x1b[B")
-        time.sleep(0.3)
-        w.log("Down arrow", "<Down>")
-
-        child.sendline("\x1b[A")
-        time.sleep(0.3)
-        w.log("Up arrow", "<Up>")
-
-        child.sendline("")
+        child.sendline("1")
         child.expect(r"LLM|Provider|Configure|Select|Base URL", timeout=10.0)
-        w.log("Select first item", "<Enter>")
+        w.log("Select Configure LLM", "1<Enter>")
 
         child.sendline("q")
         time.sleep(0.3)
@@ -408,13 +402,90 @@ def scenario_screen_clipping(child: Any, snapshot_dir: Path) -> ScenarioResult:
     return result
 
 
-# ── Scenario registry ──────────────────────────────────────────────────────
+def scenario_duplicate_shortcut(child: Any, snapshot_dir: Path) -> ScenarioResult:
+    """Verify shortcut bar does not contain duplicate keys.
+
+    Regression test for Issue 1: when a shortcut key (e.g. "Q") already
+    exists in the numeric option keys, the shortcut bar rendered it
+    twice (e.g. "Q1" instead of "Q"). The fix deduplicates before
+    appending the Quit shortcut.
+    """
+    result = ScenarioResult(
+        name="Duplicate Shortcut Guard",
+        description=scenario_duplicate_shortcut.__doc__ or "",
+    )
+    t0 = time.monotonic()
+    try:
+        w = CliWalkthrough(child, snapshot_dir)
+
+        child.expect(r"AI Playwright|Configure LLM", timeout=10.0)
+        w.log("Main menu", "<wait>")
+
+        # Navigate to a screen that has both numeric shortcuts and
+        # explicit letter shortcuts (e.g. LLM Configuration ->
+        # options "O", "L", "C", "A" plus numeric "1".."4").
+        child.sendline("1")
+        child.expect(r"LLM|Provider|Select|Ollama", timeout=10.0)
+        provider_snapshot = w._capture_snapshot()
+        w.log("LLM provider screen", "1<Enter>")
+
+        # Count occurrences of each shortcut key bracket in the snapshot.
+        # Shortcut bar lines look like:  ┌─────────────────────────────────┐
+        #                                │ [1]Configure  [O]Ollama  [Q]Quit │
+        #                                └─────────────────────────────────┘
+        # Extract all single-char keys inside [...]
+        import re as _re
+
+        bracket_keys = _re.findall(r"\[([A-Za-z0-9])\]", provider_snapshot)
+
+        # Check for any duplicate single-character keys.
+        seen: dict[str, int] = {}
+        duplicates: list[str] = []
+        for k in bracket_keys:
+            seen[k] = seen.get(k, 0) + 1
+            if seen[k] > 1 and k not in duplicates:
+                duplicates.append(k)
+
+        # Also check for duplicate labels in shortcut bar.
+        # Shortcut bar lines look like: [1]Configure  [Q]Quit  [Q]Quit
+        # Extract label after each bracket key: [key]LABEL
+        label_pattern = _re.findall(r"\[[A-Za-z0-9]+\](\S+)", provider_snapshot)
+        label_counts: dict[str, int] = {}
+        dup_labels: list[str] = []
+        for lbl in label_pattern:
+            label_counts[lbl] = label_counts.get(lbl, 0) + 1
+            if label_counts[lbl] > 1 and lbl not in dup_labels:
+                dup_labels.append(lbl)
+
+        status = len(duplicates) == 0 and len(dup_labels) == 0
+        errors: list[str] = []
+        if duplicates:
+            errors.append(f"Duplicate shortcut keys: {duplicates}")
+        if dup_labels:
+            errors.append(f"Duplicate shortcut labels: {dup_labels}")
+        error = "; ".join(errors)
+        w.log("Duplicate check", "analyze", success=status, error=error)
+
+        out = w.save_snapshots("duplicate_shortcut")
+        result.steps = w.steps
+        result.success = status
+        print(f"  {'OK' if status else 'FAIL'} Duplicate Shortcut Guard -> snapshots: {out}")
+
+    except Exception as e:
+        result.success = False
+        result.error = str(e)
+        print(f"  FAIL Duplicate Shortcut Guard -> {e}")
+
+    result.total_duration_ms = int((time.monotonic() - t0) * 1000)
+    return result
+
 
 SCENARIOS: dict[str, Callable[[Any, Path], ScenarioResult]] = {
     "menu_navigation": scenario_menu_navigation,
     "provider_selection": scenario_provider_selection,
     "quit_shortcut": scenario_quit_shortcut,
     "screen_clipping": scenario_screen_clipping,
+    "duplicate_shortcut": scenario_duplicate_shortcut,
 }
 
 

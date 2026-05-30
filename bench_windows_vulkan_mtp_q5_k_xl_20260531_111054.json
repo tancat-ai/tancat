@@ -1,0 +1,189 @@
+{
+  "label": "Windows Vulkan MTP Q5_K_XL",
+  "url": "http://localhost:8080",
+  "model": "Qwen3.6-27B-UD-Q5_K_XL.gguf",
+  "timestamp": "2026-05-31T11:10:54.307355",
+  "runs_per_prompt": 3,
+  "results": {
+    "short_coding": {
+      "description": "Short coding task (low TTFT stress)",
+      "runs": 3,
+      "ttft_ms": {
+        "mean": 2192.5,
+        "median": 2192.7,
+        "min": 2185.7,
+        "max": 2199.1,
+        "stdev": 6.7
+      },
+      "tps": {
+        "mean": 17.88,
+        "median": 17.89,
+        "min": 17.85,
+        "max": 17.91,
+        "stdev": 0.03
+      },
+      "tokens_mean": 300,
+      "raw": [
+        {
+          "ttft_ms": 2192.7,
+          "total_ms": 19001.3,
+          "gen_ms": 16808.6,
+          "tokens": 300,
+          "tps": 17.85,
+          "output_preview": "Here's a thinking process:  1.  **Understand the User Request:**    - **Task:** Write a Python function to flatten a nes"
+        },
+        {
+          "ttft_ms": 2199.1,
+          "total_ms": 18963.9,
+          "gen_ms": 16764.9,
+          "tokens": 300,
+          "tps": 17.89,
+          "output_preview": "Here's a thinking process:  1.  **Understand the User Request:**    - **Task:** Write a Python function to flatten a nes"
+        },
+        {
+          "ttft_ms": 2185.7,
+          "total_ms": 18933.5,
+          "gen_ms": 16747.8,
+          "tokens": 300,
+          "tps": 17.91,
+          "output_preview": "Here's a thinking process:  1.  **Understand the User Request:**    - **Task:** Write a Python function to flatten a nes"
+        }
+      ]
+    },
+    "medium_analysis": {
+      "description": "Medium analysis task (balanced)",
+      "runs": 3,
+      "ttft_ms": {
+        "mean": 2503.6,
+        "median": 2195.4,
+        "min": 2183.2,
+        "max": 3132.1,
+        "stdev": 544.4
+      },
+      "tps": {
+        "mean": 17.31,
+        "median": 17.35,
+        "min": 17.09,
+        "max": 17.49,
+        "stdev": 0.2
+      },
+      "tokens_mean": 600,
+      "raw": [
+        {
+          "ttft_ms": 3132.1,
+          "total_ms": 38239.2,
+          "gen_ms": 35107.2,
+          "tokens": 600,
+          "tps": 17.09,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - FastAPI application with a specific structure    "
+        },
+        {
+          "ttft_ms": 2183.2,
+          "total_ms": 36484.3,
+          "gen_ms": 34301.0,
+          "tokens": 600,
+          "tps": 17.49,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - FastAPI application with a specific structure    "
+        },
+        {
+          "ttft_ms": 2195.4,
+          "total_ms": 36769.2,
+          "gen_ms": 34573.8,
+          "tokens": 600,
+          "tps": 17.35,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - FastAPI application with a specific structure    "
+        }
+      ]
+    },
+    "long_generation": {
+      "description": "Long generation task (sustained throughput)",
+      "runs": 3,
+      "ttft_ms": {
+        "mean": 2492.1,
+        "median": 2191.4,
+        "min": 2185.8,
+        "max": 3099.1,
+        "stdev": 525.7
+      },
+      "tps": {
+        "mean": 18.1,
+        "median": 18.38,
+        "min": 17.46,
+        "max": 18.46,
+        "stdev": 0.56
+      },
+      "tokens_mean": 1200,
+      "raw": [
+        {
+          "ttft_ms": 3099.1,
+          "total_ms": 71845.3,
+          "gen_ms": 68746.1,
+          "tokens": 1200,
+          "tps": 17.46,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - **Framework:** Playwright Python    - **Format:**"
+        },
+        {
+          "ttft_ms": 2185.8,
+          "total_ms": 67195.1,
+          "gen_ms": 65009.3,
+          "tokens": 1200,
+          "tps": 18.46,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - **Framework:** Playwright Python    - **Format:**"
+        },
+        {
+          "ttft_ms": 2191.4,
+          "total_ms": 67476.8,
+          "gen_ms": 65285.3,
+          "tokens": 1200,
+          "tps": 18.38,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Requirements:**    - **Framework:** Playwright Python    - **Format:**"
+        }
+      ]
+    },
+    "multi_turn": {
+      "description": "Multi-turn conversation (context handling)",
+      "runs": 3,
+      "ttft_ms": {
+        "mean": 2799.9,
+        "median": 2492.4,
+        "min": 2484.7,
+        "max": 3422.5,
+        "stdev": 539.2
+      },
+      "tps": {
+        "mean": 16.72,
+        "median": 16.63,
+        "min": 16.59,
+        "max": 16.95,
+        "stdev": 0.2
+      },
+      "tokens_mean": 500,
+      "raw": [
+        {
+          "ttft_ms": 3422.5,
+          "total_ms": 32913.5,
+          "gen_ms": 29491.0,
+          "tokens": 500,
+          "tps": 16.95,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Goal**: The user is building a Streamlit app that generates Playwright"
+        },
+        {
+          "ttft_ms": 2492.4,
+          "total_ms": 32635.0,
+          "gen_ms": 30142.7,
+          "tokens": 500,
+          "tps": 16.59,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Goal**: The user is building a Streamlit app that generates Playwright"
+        },
+        {
+          "ttft_ms": 2484.7,
+          "total_ms": 32553.8,
+          "gen_ms": 30069.1,
+          "tokens": 500,
+          "tps": 16.63,
+          "output_preview": "Here's a thinking process:  1.  **Understand User Goal**: The user is building a Streamlit app that generates Playwright"
+        }
+      ]
+    }
+  }
+}

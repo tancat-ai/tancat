@@ -1,0 +1,21 @@
+uv{
+  "status": "completed",
+  "target_directory": "cli",
+  "total_files": 12,
+  "completed": [
+    "cli/__init__.py",
+    "cli/color.py",
+    "cli/config.py",
+    "cli/evidence_generator.py",
+    "cli/input_parser.py",
+    "cli/main.py",
+    "cli/menu_renderer.py",
+    "cli/pipeline_runner.py",
+    "cli/report_generator.py",
+    "cli/retro_ui.py",
+    "cli/session.py",
+    "cli/test_case_orchestrator.py"
+  ],
+  "pending": [],
+  "errors": []
+}

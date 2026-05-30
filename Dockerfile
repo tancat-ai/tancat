@@ -26,4 +26,4 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Default command
-CMD ["python", "main.py"]
+CMD ["python", "-m", "cli.main"]

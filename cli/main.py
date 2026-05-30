@@ -151,14 +151,19 @@ async def interactive_session() -> None:
         render_state(state)
         print()
 
-        # Build context-sensitive shortcuts
-        main_shortcuts: list[tuple[str, str]] = [("Q", "Quit")]
+        # Build context-sensitive shortcuts (Q/Quit is auto-added by menu_renderer)
+        main_shortcuts: list[tuple[str, str]] = []
         if session.raw_requirements and session.starting_url:
-            main_shortcuts.insert(0, ("R", "Run Pipeline"))
+            main_shortcuts.append(("R", "Run Pipeline"))
         if session.pipeline_results:
-            main_shortcuts.insert(1, ("V", "View Reports"))
+            main_shortcuts.append(("V", "View Reports"))
 
         idx = print_menu(menu_items, "Main menu", shortcuts=main_shortcuts)
+
+        # print_menu returns -1 when user presses Q (Quit shortcut)
+        if idx < 0:
+            print(yellow("  Quitting without saving."))
+            return
 
         # Route to handler
         if idx == 0 and (menu_items[0] == "Configure LLM" or menu_items[0] == "Re-configure LLM"):

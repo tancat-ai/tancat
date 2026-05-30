@@ -28,6 +28,8 @@ from cli.retro_ui import (
 class TestClearScreen:
     def test_clear_screen_sends_ansi_codes(self) -> None:
         buf = io.StringIO()
+        # Mock isatty() to return True so ANSI codes are written
+        buf.isatty = lambda: True  # type: ignore[method-assign]
         with patch.object(sys, "stdout", buf):
             clear_screen()
         output = buf.getvalue()
@@ -52,6 +54,7 @@ class TestClearScreen:
 class TestMoveCursor:
     def test_move_cursor_position(self) -> None:
         buf = io.StringIO()
+        buf.isatty = lambda: True  # type: ignore[method-assign]
         with patch.object(sys, "stdout", buf):
             move_cursor(x=5, y=10)
         assert "\033[11;6H" in buf.getvalue()
@@ -60,12 +63,14 @@ class TestMoveCursor:
 class TestCursorVisibility:
     def test_hide_cursor(self) -> None:
         buf = io.StringIO()
+        buf.isatty = lambda: True  # type: ignore[method-assign]
         with patch.object(sys, "stdout", buf):
             hide_cursor()
         assert "\033[?25l" in buf.getvalue()
 
     def test_show_cursor(self) -> None:
         buf = io.StringIO()
+        buf.isatty = lambda: True  # type: ignore[method-assign]
         with patch.object(sys, "stdout", buf):
             show_cursor()
         assert "\033[?25h" in buf.getvalue()

@@ -21,8 +21,7 @@
 
 ### CLI Entry Point
 - **Use:** `cli/main.py` via `bash launch_cli.sh` or `python -m cli.main`
-- **Don't use:** root `main.py` for new behavior. It is a deprecated compatibility wrapper only.
-- **Reason:** The older root menu flow predates the skeleton-first pipeline and was superseded by the argparse CLI module.
+- **Why:** The older root menu flow has been removed; the CLI now lives in `cli/main.py` only.
 
 ### Testable Helpers Location: `src/` modules
 - **Use:** `src/<module>.py` for testable functions
@@ -101,7 +100,7 @@ OLLAMA_BASE_URL=http://localhost:11434
 
 | File | Status |
 |------|--------|
-| `main.py` | Deprecated wrapper to `cli.main`. Keep it minimal and do not restore the retired pre-pipeline CLI menu. |
+| `main.py` | Removed legacy compatibility wrapper. Use `cli/main.py` only. |
 
 ## Protected Directories
 

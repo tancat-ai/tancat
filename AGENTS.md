@@ -57,7 +57,7 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 
 | File | Status |
 |------|--------|
-| `main.py` | Deprecated wrapper only. The retired pre-pipeline CLI menu was superseded by `cli/main.py`. Do not add new behavior here; route users to `python -m cli.main` or `bash launch_cli.sh`. |
+| `main.py` | Removed legacy compatibility wrapper. Use `cli/main.py` instead. |
 
 ## 3a. Protected Directories
 
@@ -75,7 +75,6 @@ Tests are written to `generated_tests/`, run via pytest, and evidence exported a
 ```
 AI-Playwright-Test-Generator/
 ├── streamlit_app.py             # Streamlit UI — primary entry point
-├── main.py                      # Deprecated wrapper to cli/main.py
 ├── launch_ui.sh                 # Start UI only (general use)
 ├── launch_dev.sh                # Start UI + mock insurance site (dev/demo only)
 ├── launch_cli.sh                # Start interactive CLI via python -m cli.main
@@ -275,12 +274,21 @@ Follow this pattern for every new `src/` module:
 3. Import into `streamlit_app.py` if needed — never define logic there directly
 4. Run `ruff check src/<module_name>.py` and `mypy src/<module_name>.py` before committing
 5. Move playwright imports to module level (not inside function bodies)
+6. Create `markdown_docs/src/<module_name>.py.md` module doc using the `document-manager` skill
+7. Update `markdown_docs/.sweep_progress.json` to mark the module as documented
 
 ---
 
-## 10. Work Session Rules (Lessons from AI Sessions)
+## 10. Documentation Maintenance
 
-These rules exist because of real failures. Follow them.
+### Module Docs (`markdown_docs/src/`)
+- All `src/` modules have standalone markdown docs in `markdown_docs/src/<module_name>.py.md`
+- Use the `document-manager` skill to generate or update module docs
+- When adding a new module: create the module doc in the same session
+- When doing a breaking refactor: update affected module docs before completing
+- Check `markdown_docs/.sweep_progress.json` for documentation coverage status
+
+---
 
 - **Run the app end-to-end before declaring a feature done.** An AI declared AI-001 complete without running the app — introduced 5 separate bugs.
 - **One feature per session.** Mixing tools or features mid-session creates inconsistency.

@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import terminal_adapter
 from .color import green, red, yellow
 from .retro_ui import (
     clear_screen,
@@ -58,9 +59,7 @@ def _running_in_git_bash() -> bool:
     they silently fail or interfere with the PTY that Git Bash uses for
     input.  When running there we must skip all msvcrt-based draining.
     """
-    if os.environ.get("MSYSTEM"):
-        return True
-    return bool(os.environ.get("MSYS_WINVERSION"))
+    return terminal_adapter.terminal.running_in_git_bash()
 
 
 def _drain_stdin_immediate() -> int:
@@ -95,18 +94,7 @@ def _flush_msvcrt_buffer() -> None:
     In Git Bash (MINGW64), do NOT drain stdin — pasted text goes through
     the PTY's stdin pipe, so draining it would consume the user's input.
     """
-    if _running_in_git_bash():
-        return  # Don't drain stdin in Git Bash — pasted text goes there
-    try:
-        import msvcrt
-
-        for _ in range(10):
-            if msvcrt.kbhit():  # type: ignore[attr-defined]
-                msvcrt.getwch()  # type: ignore[attr-defined]
-            else:
-                break
-    except Exception:
-        pass
+    terminal_adapter.terminal.flush()
 
 
 def _drain_msvcrt_buffer_aggressive() -> None:
@@ -115,67 +103,41 @@ def _drain_msvcrt_buffer_aggressive() -> None:
     In Git Bash (MINGW64), do NOT drain stdin — pasted text goes through
     the PTY's stdin pipe, so draining it would consume the user's input.
     """
-    if _running_in_git_bash():
-        return  # Don't drain stdin in Git Bash — pasted text goes there
-    import msvcrt
-
-    try:
-        empty_start = time.monotonic()
-        while True:
-            found = False
-            for _ in range(50):
-                if msvcrt.kbhit():  # type: ignore[attr-defined]
-                    msvcrt.getwch()  # type: ignore[attr-defined]
-                    found = True
-            if not found:
-                if time.monotonic() - empty_start >= 0.2:
-                    break
-                empty_start = time.monotonic()
-            time.sleep(0.01)
-    except Exception:
-        pass
+    # Best-effort aggressive flush using the standard flush implementation.
+    terminal_adapter.terminal.flush()
 
 
 def _read_key() -> str:
-    """Read a single keypress using msvcrt (Windows) or fallback.
+    """Read a single keypress using msvcrt (Windows) or non-blocking fallback.
 
-    In Git Bash (MINGW64), msvcrt does not work, so we fall back to
-    line-based input via sys.stdin and return the first character.
+    In Git Bash (MINGW64), msvcrt does not work and termios/tty are
+    unavailable.  Instead we use a background thread + select to read
+    stdin without blocking indefinitely.  The thread yields after data
+    arrives (or after a short timeout), so the menu stays responsive.
 
     Returns:
     - '^' for Up arrow
     - 'v' for Down arrow
     - the character typed for regular keys
     """
-    if _running_in_git_bash():
-        try:
-            line = sys.stdin.readline()
-            if not line:
-                raise EOFError
-            value = line.strip()
-            if not value:
-                return "\r"
-            if value in ("\x1b[A", "\x1bOA"):
-                return "^"
-            if value in ("\x1b[B", "\x1bOB"):
-                return "v"
-            return value
-        except EOFError:
-            return "q"
+    return terminal_adapter.terminal.read_key()
 
-    import msvcrt
 
-    try:
-        char = msvcrt.getwch()  # type: ignore[attr-defined]
-        if char in ("\x00", "\xe0"):
-            char2 = msvcrt.getwch()  # type: ignore[attr-defined]
-            if char2 == "H":
-                return "^"
-            if char2 == "P":
-                return "v"
-        return char
-    except Exception:
-        return sys.stdin.read(1)
+def _read_key_git_bash() -> str:
+    """Non-blocking key reader for Git Bash (MINGW64).
+
+    Uses a background thread that calls ``select.select`` on stdin with a
+    short timeout so the menu never hangs when no input is available.
+    Falls back to line-based input (Enter to confirm) when arrow-key
+    escape sequences are not supported by the terminal.
+    """
+    # Delegated to terminal adapter for consistency and testability.
+    return terminal_adapter.terminal.read_key()
+
+
+def set_terminal_adapter(adapter: terminal_adapter.TerminalAdapter) -> None:
+    """Replace the active terminal adapter (used for testing/injection)."""
+    terminal_adapter.terminal = adapter
 
 
 def print_menu(
@@ -201,53 +163,96 @@ def print_menu(
         print()
         sys.stdout.flush()
 
+        def _format_shortcuts(entries: list[tuple[str, str]]) -> str:
+            return "  ".join(f"[{key}]{label}" for key, label in entries)
+
         bar: list[tuple[str, str]] = []
         for i, opt in enumerate(options):
-            bar.append((str(i + 1), opt[:15]))
+            label = opt.split(" (", 1)[0]
+            bar.append((str(i + 1), label))
+
         if shortcuts:
-            bar.extend(shortcuts)
-        bar.append(("Q", "Quit"))
+            existing_labels = {v.lower() for _, v in bar}
+            for s in shortcuts:
+                if s[1].lower() not in existing_labels:
+                    bar.append(s)
+                    existing_labels.add(s[1].lower())
+
+        existing_keys = {k for k, _ in bar}
+        existing_labels = {v.lower() for _, v in bar}
+        if "Q" not in existing_keys and "quit" not in existing_labels:
+            bar.append(("Q", "Quit"))
+
+        try:
+            inner = max(40, os.get_terminal_size().columns - 2)
+        except OSError:
+            inner = 78
+        if len(_format_shortcuts(bar)) > inner and shortcuts:
+            bar = bar[: len(options)] + [(key, key) for key, _ in shortcuts]
+            existing_keys = {k for k, _ in bar}
+            existing_labels = {v.lower() for _, v in bar}
+            if "Q" not in existing_keys and "quit" not in existing_labels:
+                bar.append(("Q", "Quit"))
+        if len(_format_shortcuts(bar)) > inner:
+            bar = bar[: len(options)]
+            existing_keys = {k for k, _ in bar}
+            existing_labels = {v.lower() for _, v in bar}
+            if "Q" not in existing_keys and "quit" not in existing_labels:
+                bar.append(("Q", "Quit"))
+
         render_shortcut_bar(bar)
         print()
 
-        try:
-            key = _read_key()
+        if _running_in_git_bash():
+            try:
+                choice = input("   Enter selection: ").strip()
+            except KeyboardInterrupt, EOFError:
+                print("\n  Interrupted.")
+                return -1
+        else:
+            try:
+                key = _read_key()
+                if not key:
+                    try:
+                        choice = input("   Enter selection: ").strip()
+                    except KeyboardInterrupt, EOFError:
+                        print("\n  Interrupted.")
+                        return -1
+                else:
+                    if key == "^":
+                        selected = max(0, selected - 1)
+                        continue
+                    if key == "v":
+                        selected = min(len(options) - 1, selected + 1)
+                        continue
+                    if key == "\r":
+                        _flush_msvcrt_buffer()
+                        return selected
 
-            if key == "^":
-                selected = max(0, selected - 1)
-                continue
-            if key == "v":
-                selected = min(len(options) - 1, selected + 1)
-                continue
-            if key == "\r":
-                _flush_msvcrt_buffer()
-                return selected
+                    if key in ("\x08", "\x7f"):
+                        continue
 
-            if key in ("\x08", "\x7f"):
-                continue
-
-            choice = key.strip()
-        except KeyboardInterrupt, EOFError:
-            print("\n  Interrupted.")
-            return -1
+                    choice = key.strip()
+            except KeyboardInterrupt, EOFError:
+                print("\n  Interrupted.")
+                return -1
 
         if not choice:
             continue
 
         if len(choice) == 1 and not choice.isdigit():
             upper = choice.upper()
-            if shortcuts:
-                for key, _label in shortcuts:
-                    if key.upper() == upper:
-                        if upper == "Q":
-                            _flush_msvcrt_buffer()
-                            print("\n  Quitting.")
-                            return -1
-                        continue
+            # Always handle Q (Quit) immediately — do not trap it in shortcut loops
             if upper == "Q":
                 _flush_msvcrt_buffer()
                 print("\n  Quitting.")
                 return -1
+            # Check registered shortcuts (non-Quit)
+            if shortcuts:
+                for key, _label in shortcuts:
+                    if key.upper() == upper:
+                        print(yellow(f"  Shortcut '{key}' is not available on this screen."))
+                        return -1  # Return to caller; caller handles routing
             print(yellow("  Invalid shortcut. Please try again."))
             continue
 
@@ -280,26 +285,32 @@ def read_optional(prompt_text: str, default: str = "") -> str:
 
 def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
     """Try to list available models for the given provider."""
-    try:
-        import httpx
+    import httpx
 
+    try:
         if provider_name == "ollama":
-            response = httpx.get(f"{provider_url}/api/tags", timeout=5.0)
+            response = httpx.get(f"{provider_url}/api/tags", timeout=2.0)
             response.raise_for_status()
             return [m["name"] for m in response.json().get("models", [])]
         elif provider_name == "lm-studio":
-            response = httpx.get(f"{provider_url}/v1/models", timeout=5.0)
+            response = httpx.get(f"{provider_url}/v1/models", timeout=2.0)
             response.raise_for_status()
             return [m["id"] for m in response.json().get("data", [])]
         elif provider_name == "openai-local":
-            response = httpx.get(f"{provider_url}/v1/models", timeout=5.0)
+            response = httpx.get(f"{provider_url}/v1/models", timeout=2.0)
             if response.status_code in (200, 401):
                 return [m["id"] for m in response.json().get("data", [])]
             return []
         elif provider_name == "openai":
             return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
-    except Exception:
-        pass
+    except httpx.ConnectError as e:
+        print(yellow(f"  ⚠ Cannot connect to {provider_url}: {e}"))
+    except httpx.TimeoutException as e:
+        print(yellow(f"  ⚠ Connection to {provider_url} timed out: {e}"))
+    except httpx.HTTPStatusError as e:
+        print(yellow(f"  ⚠ HTTP error from {provider_url}: {e.response.status_code}"))
+    except Exception as e:
+        print(yellow(f"  ⚠ Failed to list models: {e}"))
     return []
 
 
@@ -324,7 +335,7 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
 
     display_name, provider_key, default_url = providers[idx]
 
-    url = read_optional(f"  Base URL (default: {default_url}):", default_url)
+    url = read_optional("  Base URL", default_url)
 
     models = _get_available_models(provider_key, url)
     if models:
@@ -344,7 +355,7 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
     else:
         print(f"\n  Could not auto-detect models for {provider_key}.")
         fallback = model_name or _default_model(provider_key)
-        selected_model = read_optional(f"  Model name (default: {fallback}):", fallback)
+        selected_model = read_optional("  Model name", fallback)
 
     print(green(f"  ✓ Provider: {provider_key} | URL: {url} | Model: {selected_model}"))
     return provider_key, url, selected_model

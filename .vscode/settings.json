@@ -15,5 +15,14 @@
             "args": ["-l"]
         }
     },
-    "terminal.integrated.defaultProfile.windows": "Git Bash"
+    "terminal.integrated.defaultProfile.windows": "Git Bash",
+    "chat.tools.terminal.autoApprove": {
+        "/^python - <<'PY'\ntry:\n    pass\nexcept KeyboardInterrupt, EOFError:\n    pass\nprint\\('ok'\\)\nPY$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "printf": true,
+        "env": true,
+        "pytest": true
+    }
 }
