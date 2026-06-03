@@ -6,29 +6,49 @@ import io
 
 import pytest
 
-from cli import menu_renderer
+from cli import menu_renderer, terminal_adapter
+
+
+class _StringIOAdapter(terminal_adapter.TerminalAdapter):
+    """TerminalAdapter that reads from a StringIO (for Git Bash simulation)."""
+
+    def __init__(self, input_str: str) -> None:
+        self._buf = io.StringIO(input_str)
+
+    def running_in_git_bash(self) -> bool:
+        return True
+
+    def _read_key_git_bash(self) -> str:
+        line = self._buf.readline()
+        if line:
+            return self._normalize_git_bash_input(line)
+        return ""
+
+
+def _make_adapter(input_str: str) -> terminal_adapter.TerminalAdapter:
+    return _StringIOAdapter(input_str)
 
 
 def test_read_key_preserves_multi_digit_git_bash_input(monkeypatch: pytest.MonkeyPatch) -> None:
     """Git Bash line input should preserve choices like 11 instead of truncating to 1."""
-    monkeypatch.setenv("MSYSTEM", "MINGW64")
-    monkeypatch.setattr(menu_renderer.sys, "stdin", io.StringIO("11\n"))
+    adapter = _make_adapter("11\n")
+    menu_renderer.set_terminal_adapter(adapter)
 
     assert menu_renderer._read_key() == "11"
 
 
 def test_read_key_maps_blank_git_bash_line_to_enter(monkeypatch: pytest.MonkeyPatch) -> None:
     """A blank Git Bash line should behave like pressing Enter on the selected item."""
-    monkeypatch.setenv("MSYSTEM", "MINGW64")
-    monkeypatch.setattr(menu_renderer.sys, "stdin", io.StringIO("\n"))
+    adapter = _make_adapter("\n")
+    menu_renderer.set_terminal_adapter(adapter)
 
     assert menu_renderer._read_key() == "\r"
 
 
 def test_read_key_maps_git_bash_arrow_sequence_with_newline(monkeypatch: pytest.MonkeyPatch) -> None:
     """Git Bash arrow escape sequences with trailing newline should still map to arrows."""
-    monkeypatch.setenv("MSYSTEM", "MINGW64")
-    monkeypatch.setattr(menu_renderer.sys, "stdin", io.StringIO("\x1b[B\n"))
+    adapter = _make_adapter("\x1b[B\n")
+    menu_renderer.set_terminal_adapter(adapter)
 
     assert menu_renderer._read_key() == "v"
 
