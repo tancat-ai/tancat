@@ -25,6 +25,7 @@ from src.ui_renderers import (
     RequirementsInput,
     ResultsPanel,
     RunResultsDisplay,
+    SavedPackagePanel,
     SidebarConfig,
     render_credential_profiles,
     render_journey_builder,
@@ -106,6 +107,9 @@ else:
     model_name = st.sidebar.text_input("Model", value=default_model)
 
 LLMClient.set_session_provider(provider, provider_base_url, model_name)
+
+# AI-026: Saved package loader (sidebar)
+SavedPackagePanel().render_sidebar()
 
 st.sidebar.divider()
 st.sidebar.title("Pages To Scrape")
@@ -404,6 +408,11 @@ if st.session_state.pipeline_results:
     run_result = st.session_state.pipeline_run_result
     if isinstance(run_result, RunResult):
         RunResultsDisplay.render(run_result)
+
+# ---------------------------------------------------------------------------
+# AI-026: Saved package main panel (rendered when a package is loaded)
+# ---------------------------------------------------------------------------
+SavedPackagePanel().render_main_panel()
 
 # ---------------------------------------------------------------------------
 # Evidence viewer

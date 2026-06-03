@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.pytest_output_parser import RunResult, format_pytest_output_for_display, parse_pytest_output
+from src.run_result_persistence import persist_run_result
 from src.run_utils import build_pytest_run_command, get_failed_nodeids
 
 
@@ -32,6 +33,7 @@ class PipelineRunService:
         rerun_failed_only: bool = False,
         previous_run: RunResult | None = None,
         cwd: str | None = None,
+        persist: bool = False,
     ) -> PipelineExecutionResult:
         """Run a saved generated test file and return parsed results."""
         failed_nodeids = get_failed_nodeids(previous_run.results) if rerun_failed_only and previous_run else []
@@ -63,6 +65,11 @@ class PipelineRunService:
 
         raw_output = "\n".join(part for part in [completed.stdout, completed.stderr] if part).strip()
         run_result = parse_pytest_output(raw_output)
+
+        # Persist run result to disk for historical comparison
+        if persist:
+            persist_run_result(run_result, test_package=saved_path)
+
         return PipelineExecutionResult(
             command=command,
             run_result=run_result,

@@ -30,8 +30,11 @@ from .menu_renderer import (
     collect_urls,
     collect_user_story,
     configure_llm,
+    list_saved_packages,
     print_header,
     print_menu,
+    select_saved_package,
+    show_package_metadata,
 )
 from .pipeline_runner import (
     build_test_plan,
@@ -42,6 +45,7 @@ from .pipeline_runner import (
     show_skeleton,
     view_failure_diagnostics,
     view_reports,
+    view_saved_package_diagnostics,
 )
 from .retro_ui import render_state
 from .session import Session, create_session
@@ -134,6 +138,24 @@ async def interactive_session() -> None:
                 ]
             )
 
+        # AI-026: persisted-package commands (always available)
+        if session.loaded_package_manifest:
+            manifest = session.loaded_package_manifest
+            test_count = len(manifest.generated_test_files)
+            run_count = manifest.run_results_count or 0
+            state_label = f"{test_count} tests, {run_count} runs"
+            menu_items.extend(
+                [
+                    f"Loaded : {manifest.package_name} ({state_label})",
+                    "Show Package Metadata",
+                    "Re-run Saved Suite",
+                    "View Saved Package Diagnostics",
+                    "Clear Loaded Package",
+                ]
+            )
+        else:
+            menu_items.append("Load Existing Generated Tests")
+
         menu_items.extend(["Save & Exit", "Quit"])
 
         # Show current state summary
@@ -199,6 +221,17 @@ async def interactive_session() -> None:
             view_reports(session)
         elif menu_items[idx] == "View Failure Diagnostics":
             view_failure_diagnostics(session)
+        # AI-026: persisted-package commands
+        elif menu_items[idx] == "Load Existing Generated Tests":
+            _load_saved_packages_inline(session)
+        elif menu_items[idx] == "Show Package Metadata":
+            _show_package_metadata_inline(session)
+        elif menu_items[idx] == "Re-run Saved Suite":
+            _rerun_saved_suite(session)
+        elif menu_items[idx] == "View Saved Package Diagnostics":
+            _view_saved_package_diagnostics_inline(session)
+        elif menu_items[idx] == "Clear Loaded Package":
+            _clear_loaded_package(session)
         elif menu_items[idx] == "Save & Exit":
             print(green("  Session saved. Goodbye!"))
             return
@@ -257,6 +290,102 @@ def _collect_journey_inline(session: Session) -> None:
     session.journey_steps = converted
     if session.journey_steps:
         print(green(f"  ✓ Journey configured with {len(session.journey_steps)} step(s)."))
+
+
+# ── AI-026: persisted-package inline handlers ────────────────────────────
+
+
+def _load_saved_packages_inline(session: Session) -> None:
+    """Load an existing saved package from disk."""
+    from pathlib import Path
+
+    from src.pipeline_artifact_manager import load_package_manifest
+    from src.run_result_persistence import load_all_run_results
+
+    packages = list_saved_packages()
+    if not packages:
+        print(yellow("  No saved test packages found in generated_tests/"))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    idx = select_saved_package(packages)
+    if idx < 0:
+        return
+
+    package = packages[idx]
+    package_dir = Path(package["path"])
+    manifest = load_package_manifest(package_dir)
+    session.loaded_package_manifest = manifest
+    session.pipeline_saved_path = package_dir
+
+    # Load run history
+    run_results = load_all_run_results(package_dir)
+    session.loaded_package_run_results = run_results
+
+    print(green(f"  ✓ Loaded package: {manifest.package_name}"))
+    if manifest.source_story:
+        story = manifest.source_story[:80]
+        print(f"  Story : {story}...") if len(manifest.source_story) > 80 else print(f"  Story : {story}")
+    print(f"  Tests : {len(manifest.generated_test_files)}")
+    print(f"  Runs  : {len(run_results) if run_results else 0}")
+    print()
+    print("  Press Enter to continue...")
+    input()
+
+
+def _show_package_metadata_inline(session: Session) -> None:
+    """Show metadata for the currently loaded package."""
+    if not session.loaded_package_manifest:
+        print(yellow("  No package loaded. Use 'Load Existing Generated Tests' first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    package = {"path": str(session.pipeline_saved_path or "")}
+    package["name"] = session.loaded_package_manifest.package_name
+    package["created_at"] = session.loaded_package_manifest.created_at or ""
+    package["test_count"] = str(len(session.loaded_package_manifest.generated_test_files))
+    if session.loaded_package_run_results:
+        package["run_count"] = str(len(session.loaded_package_run_results))
+    show_package_metadata(package)
+
+
+def _rerun_saved_suite(session: Session) -> None:
+    """Re-run tests from the loaded saved package."""
+    from .pipeline_runner import run_saved_test_from_package
+
+    if not session.loaded_package_manifest or not session.pipeline_saved_path:
+        print(yellow("  No package loaded. Use 'Load Existing Generated Tests' first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    run_saved_test_from_package(session.pipeline_saved_path, session)
+
+
+def _view_saved_package_diagnostics_inline(session: Session) -> None:
+    """View failure diagnostics for the loaded saved package (AI-026 Step 6)."""
+    if not session.loaded_package_manifest or not session.pipeline_saved_path:
+        print(yellow("  No package loaded. Use 'Load Existing Generated Tests' first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    view_saved_package_diagnostics(session.pipeline_saved_path)
+    print()
+    print("  Press Enter to continue...")
+    input()
+
+
+def _clear_loaded_package(session: Session) -> None:
+    """Clear the currently loaded package."""
+    session.loaded_package_manifest = None
+    session.loaded_package_run_results = None
+    session.pipeline_saved_path = ""
+    print(green("  ✓ Cleared loaded package."))
+    print("  Press Enter to continue...")
+    input()
 
 
 # ── Legacy parameter-based commands (kept for backward compatibility) ────

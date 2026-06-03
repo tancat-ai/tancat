@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -10,10 +11,13 @@ from typing import TYPE_CHECKING, Any
 
 from src.code_validator import validate_python_syntax
 from src.file_utils import slugify
+from src.pipeline_artifact_manager import PackageManifest, save_package_manifest
 from src.pipeline_models import ManifestRecord, PipelineArtifactSet
 
 if TYPE_CHECKING:
     from src.orchestrator import PipelineRunResult
+
+logger = logging.getLogger(__name__)
 
 
 class PipelineArtifactWriter:
@@ -28,8 +32,20 @@ class PipelineArtifactWriter:
         run_result: PipelineRunResult,
         story_text: str,
         base_url: str = "",
+        provider: str = "",
+        model: str = "",
+        additional_urls: list[str] | None = None,
     ) -> PipelineArtifactSet:
-        """Write one structured artifact package for a pipeline run."""
+        """Write one structured artifact package for a pipeline run.
+
+        Args:
+            run_result: Pipeline run output from orchestrator.
+            story_text: Original user story / requirements text.
+            base_url: Starting URL the pipeline was run against.
+            provider: LLM provider used (e.g. "ollama", "lm-studio").
+            model: LLM model name used (e.g. "qwen3.5:35b").
+            additional_urls: Extra URLs beyond the base_url.
+        """
         validation_error = validate_python_syntax(run_result.final_code)
         if validation_error:
             raise ValueError(f"Generated code failed syntax validation: {validation_error}")
@@ -75,6 +91,19 @@ class PipelineArtifactWriter:
             encoding="utf-8",
         )
 
+        # Persist package manifest (metadata companion to scrape_manifest.json)
+        self._save_package_manifest(
+            package_dir=package_dir,
+            run_result=run_result,
+            story_text=story_text,
+            base_url=base_url,
+            provider=provider,
+            model=model,
+            additional_urls=additional_urls or [],
+            test_file_path=test_file_path,
+            page_object_paths=page_object_paths,
+        )
+
         return PipelineArtifactSet(
             run_id=package_dir.name,
             test_file_path=str(test_file_path.absolute()),
@@ -83,6 +112,39 @@ class PipelineArtifactWriter:
             pages=run_result.scraped_page_records,
             records=records,
         )
+
+    def _save_package_manifest(
+        self,
+        *,
+        package_dir: Path,
+        run_result: PipelineRunResult,
+        story_text: str,
+        base_url: str,
+        provider: str,
+        model: str,
+        additional_urls: list[str],
+        test_file_path: Path,
+        page_object_paths: list[str],
+    ) -> None:
+        """Persist a PackageManifest alongside the generated artifacts."""
+        # Derive test file names from absolute paths
+        test_files = [Path(f).name for f in [str(test_file_path)]]
+        po_files = [Path(f).name for f in page_object_paths]
+
+        manifest = PackageManifest(
+            package_name=package_dir.name,
+            created_at=datetime.now().isoformat(),
+            source_story=story_text,
+            starting_url=base_url,
+            additional_urls=additional_urls,
+            provider=provider,
+            model=model,
+            generated_test_files=test_files,
+            page_object_files=po_files,
+            scrape_manifest_path="scrape_manifest.json",
+        )
+        save_package_manifest(package_root=package_dir, manifest=manifest)
+        logger.info("Saved package_manifest.json in %s", package_dir.name)
 
     def _build_package_dir(self, story_text: str) -> Path:
         """Return the directory path for one generated package."""

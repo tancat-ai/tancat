@@ -1,7 +1,7 @@
-uv{
+{
   "status": "completed",
   "target_directory": "cli",
-  "total_files": 12,
+  "total_files": 13,
   "completed": [
     "cli/__init__.py",
     "cli/color.py",
@@ -12,6 +12,7 @@ uv{
     "cli/menu_renderer.py",
     "cli/pipeline_runner.py",
     "cli/report_generator.py",
+    "cli/run_results_display.py",
     "cli/retro_ui.py",
     "cli/session.py",
     "cli/test_case_orchestrator.py"

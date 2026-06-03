@@ -67,8 +67,10 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 
 | Module | Role |
 |--------|------|
-| `src/pipeline_writer.py` (`PipelineWriter`) | Physical creation of `.py` files in `generated_tests/`, including package structuring, file normalization, and `manifest.json`. |
-| `src/pipeline_run_service.py` | Tracks pipeline run history: run_id, timestamps, artifacts. |
+| `src/pipeline_writer.py` (`PipelineWriter`) | Physical creation of `.py` files in `generated_tests/`, including package structuring, file normalization, `scrape_manifest.json`, and `package_manifest.json`. |
+| `src/pipeline_artifact_manager.py` (`PackageManifest`) | Package metadata persistence. Handles `package_manifest.json` save/load/discovery. Complementary to `run_result_persistence.py` (which handles pytest run outcomes). Provides `find_existing_packages()` for both CLI and Streamlit. |
+| `src/run_result_persistence.py` | Pytest run-outcome persistence: persist/load run results, flakiness detection, run comparison, and run history aggregation. |
+| `src/pipeline_run_service.py` | Tracks pipeline run history: run_id, timestamps, artifacts. Supports `run_saved_test()` for re-running from saved package paths. |
 | `src/pipeline_report_service.py` | Aggregates execution results, coverage metrics, and screenshots into HTML/Markdown/Jira reports. |
 | `src/report_builder.py` | Builds report dictionaries from test results merged with evidence data. |
 | `src/report_formatters.py` | Renders reports in 3 formats: local MD, Jira MD, base64 HTML. Includes failure diagnostics section. |
@@ -76,24 +78,6 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/evidence_loader.py` | Loads evidence JSON from test packages for report generation. |
 | `src/failure_reporter.py` | Generates "Failure Diagnostics" sections with page URL, failure note, suggested alternatives, available elements, screenshot paths. |
 
-### 📦 Data Models (Shared Layer)
-
-| Module | Data Classes |
-|--------|-------------|
-| `src/pipeline_models.py` | `PlaceholderUse`, `TestStep`, `PageRequirement`, `TestJourney`, `ScrapedPage`, `GeneratedPageObject`, `ManifestRecord`, `PipelineArtifactSet` |
-
-### 🖥️ UI Layer (Streamlit Support)
-
-| Module | Role |
-|--------|------|
-| `src/ui_pipeline.py` | Pipeline execution helpers for Streamlit UI — business logic only (no rendering). Contains `run_pipeline()`, `build_test_plan()`, `execute_saved_test()`, `build_report_bundle()`. Extracted from `streamlit_app.py` to enable testing outside Streamlit context. |
-| `src/ui_renderers.py` | Streamlit rendering helpers — pure UI, no business logic. Contains `SidebarConfig`, `RequirementsInput`, `ResultsPanel`, `RunResultsDisplay`, `EvidenceViewer`. Extracted from `streamlit_app.py`. |
-
-### 🔧 Utility Modules
-
-| Module | Role |
-|--------|------|
-| `src/file_utils.py` | `save_generated_test()`, `normalise_code_newlines()` helpers. |
 | `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
 | `src/url_inference.py` | URL transition inference for journey-aware placeholder resolution. Extracted from `placeholder_orchestrator.py`. |
 | `src/pytest_output_parser.py` | Parses pytest stdout → structured results for reporting. |

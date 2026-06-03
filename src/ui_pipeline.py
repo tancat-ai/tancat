@@ -218,12 +218,16 @@ async def run_pipeline(
 
     # Write artifacts
     primary_url = target_urls[0] if target_urls else ""
+    additional_urls = target_urls[1:] if len(target_urls) > 1 else []
     if last_result is not None:
         artifact_writer = PipelineArtifactWriter()
         artifact_set = artifact_writer.write_run_artifacts(
             run_result=last_result,
             story_text=user_story,
             base_url=primary_url,
+            provider=provider,
+            model=model_name,
+            additional_urls=additional_urls,
         )
         session.set("pipeline_saved_path", artifact_set.test_file_path)
         session.set("pipeline_manifest_path", artifact_set.manifest_path)

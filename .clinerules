@@ -1,9 +1,11 @@
 # .clinerules — Cline Operational Rules
 
 ## Session Start (do this before any work)
-1. Read memory-bank files in full
-2. Read AGENTS.md in full
-3. Confirm active task with the user before writing any code
+1. Read activeContext.md — this is sufficient for most tasks
+2. Read projectContext.md, decisionLog.md, progress.md ONLY if the task
+   requires full project history or is a memory bank update
+3. DO NOT re-read AGENTS.md — it is already in your system prompt
+4. Confirm active task with the user before writing any code
 
 ## Session End (do this before closing)
 1. Update memory bank with any new decisions, patterns, or gotchas discovered
@@ -15,10 +17,9 @@
 - Always fetch current docs for: Playwright, Streamlit, pytest, uv, ruff, mypy
 - Do not rely on training knowledge for library APIs — it may be outdated
 
-### Memory Bank — use for project state, not code
-- Store: architecture decisions, settled conventions, known gotchas, session outcomes
-- Do not store: code snippets, file contents, anything already in AGENTS.md
-- Prune stale entries — outdated memory actively causes mistakes
+## Memory Bank Maintenance (Direct File Access)
+- The memory bank files live at the project root (`activeContext.md`, `decisionLog.md`, `progress.md`, `projectContext.md`).
+- Do not use external MCP tools to write to these. Use native file writing tools to update them directly.
 
 ## Debugging Pipeline Issues
 

@@ -89,6 +89,7 @@ AI-Playwright-Test-Generator/
 │   ├── menu_renderer.py         # Menu rendering functions
 │   ├── pipeline_runner.py       # Pipeline execution from CLI
 │   ├── report_generator.py
+│   ├── run_results_display.py   # CLI structured run results (metrics, table, failure classification)
 │   ├── session.py               # CLI session state dataclass
 │   └── test_case_orchestrator.py
 │   └── evidence_generator.py
@@ -404,5 +405,18 @@ Consolidated entry point for all debug scripts. Run `--help` for available comma
 
 ---
 
-*Last updated: 2026-05-15*
+## 14. CLI Structured Run Results (Completed 2026-06-02)
+
+The CLI now displays structured run results matching the Streamlit UI quality:
+
+- **Metrics line** — `render_run_metrics()` shows colored summary: `✅ 5 passed, 1 failed, 0 errors in 12.3s`
+- **Results table** — `render_results_table()` renders ASCII table with test name, status badge, duration
+- **Failure details** — `render_failure_details()` shows classified failure type (timeout, strict violation, assertion, navigation) with repair suggestions
+- **Raw output** — `render_raw_output()` optionally expands raw pytest output
+- Integrated into `cli/pipeline_runner.py` after `run_saved_test()` returns
+- 31 unit tests in `tests/test_cli_run_results_display.py`
+
+---
+
+*Last updated: 2026-06-02*
 *Supersedes: docs/PROJECT_KNOWLEDGE.md for LLM/AI use. docs/PROJECT_KNOWLEDGE.md remains the human reference.*

@@ -55,6 +55,16 @@ class TerminalAdapter:
                 return ""
 
     def _read_key_git_bash(self) -> str:
+        # Fast path: try readline directly — works for StringIO (tests) and
+        # piped input.  Falls back to threaded os.read for interactive TTYs.
+        try:
+            line = sys.stdin.readline()
+            if line:
+                return self._normalize_git_bash_input(line)
+        except Exception:
+            pass
+
+        # Slow path: threaded byte-level read for interactive TTY.
         import select
         import threading
 
@@ -78,7 +88,11 @@ class TerminalAdapter:
                     try:
                         raw_byte = os.read(sys.stdin.fileno(), 1)
                     except OSError, AttributeError:
-                        ch = sys.stdin.read(1)
+                        line = sys.stdin.readline()
+                        if not line:
+                            break
+                        buf.extend(line)
+                        break
                     else:
                         ch = raw_byte.decode("utf-8", errors="replace")
                     if not ch:
@@ -103,7 +117,10 @@ class TerminalAdapter:
         if not buf:
             return ""
 
-        raw = "".join(buf)
+        return self._normalize_git_bash_input("".join(buf))
+
+    def _normalize_git_bash_input(self, raw: str) -> str:
+        """Normalise raw Git Bash input into a key token."""
         normalized = raw.rstrip("\n\r")
 
         if raw in ("\r", "\n", "\r\n"):

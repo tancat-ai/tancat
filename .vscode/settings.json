@@ -2,7 +2,7 @@
     "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
     "terminal.integrated.env.windows": {
         "VIRTUAL_ENV": "${workspaceFolder}/.venv",
-        "PATH": "${workspaceFolder}/.venv/Scripts;${envPath}"
+        "PATH": "${workspaceFolder}/.venv/Scripts;${env:PATH}"
     },
     "terminal.integrated.activateEnvironment": true,
     "terminal.integrated.automationProfile.windows": {

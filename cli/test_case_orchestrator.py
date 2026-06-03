@@ -295,6 +295,8 @@ class TestCaseOrchestrator:
                     run_result=orchestrator.last_result,
                     story_text="Main Flow",
                     base_url=target_urls[0] if target_urls else "",
+                    provider=client.provider_name,
+                    model=client.model,
                 )
                 generated.append(artifact_set.test_file_path)
                 print(f"    [OK] Saved to {artifact_set.test_file_path}")
@@ -332,6 +334,8 @@ class TestCaseOrchestrator:
                     run_result=orchestrator.last_result,
                     story_text=case_user_story,
                     base_url=target_urls[0] if target_urls else "",
+                    provider=client.provider_name,
+                    model=client.model,
                 )
                 generated.append(artifact_set.test_file_path)
                 print(f"    [OK] Saved to {artifact_set.test_file_path}")

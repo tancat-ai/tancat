@@ -16,6 +16,7 @@ Streamlit rendering helpers — pure UI, no business logic. Extracted from strea
 | `RunResultsDisplay` | Renders test run results with failure classification and repair buttons |
 | `RenderDownloads` | Renders report download buttons (Manifest, Local, Jira, HTML) |
 | `EvidenceViewer` | Renders evidence viewer: annotated screenshots, Gantt, heatmap |
+| `SavedPackagePanel` | Renders saved package panel: load/reload saved test packages with metadata, run history, and flakiness (AI-026) |
 
 ## Functions
 | Function | Description |
@@ -30,4 +31,4 @@ Streamlit rendering helpers — pure UI, no business logic. Extracted from strea
 | `_render_repair_*` | Locator repair panel rendering (waiting, browser, result) |
 
 ## Dependencies
-- `streamlit`, `src.coverage_utils`, `src.failure_classifier`, `src.gantt_utils`, `src.heatmap_utils`, `src.locator_repair`, `src.ui_pipeline`
+- `streamlit`, `src.coverage_utils`, `src.failure_classifier`, `src.gantt_utils`, `src.heatmap_utils`, `src.locator_repair`, `src.ui_pipeline`, `src.pipeline_artifact_manager`, `src.run_result_persistence`

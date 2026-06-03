@@ -1,7 +1,9 @@
 # Session 4: Orchestrator Integration + End-to-End Verification
 
 **AI-009 Phase B — Authenticated Journey Scraping**  
+**Status:** ✅ COMPLETE  
 **Created:** 2026-05-12  
+**Completed:** 2026-05-13  
 **Depends on:** Sessions 1-3 (data models, credential wiring, UI complete)  
 **Original spec:** `docs/specs/FEATURE_SPEC_AI009_phase_b.md`
 

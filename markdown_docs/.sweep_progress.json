@@ -1,7 +1,7 @@
 {
   "status": "completed",
   "target_directory": "src",
-  "total_files": 66,
+  "total_files": 68,
   "completed": [
     "src/__init__.py",
     "src/accessibility_enricher.py",
@@ -38,6 +38,7 @@
     "src/orchestrator.py",
     "src/page_context_tracker.py",
     "src/page_object_builder.py",
+    "src/pipeline_artifact_manager.py",
     "src/pipeline_models.py",
     "src/pipeline_report_service.py",
     "src/pipeline_run_service.py",
@@ -51,6 +52,7 @@
     "src/report_builder.py",
     "src/report_formatters.py",
     "src/report_utils.py",
+    "src/run_result_persistence.py",
     "src/run_utils.py",
     "src/scraper.py",
     "src/screenshot_capture.py",

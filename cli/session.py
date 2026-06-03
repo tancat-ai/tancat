@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from src.journey_scraper import CredentialProfile, JourneyStep
+from src.pipeline_artifact_manager import PackageManifest
 from src.pytest_output_parser import RunResult
+from src.run_result_persistence import PersistedRunResult
 from src.spec_analyzer import TestCondition
 from src.test_plan import TestPlan
 
@@ -23,7 +26,7 @@ class Session:
     # Pipeline artifacts
     pipeline_results: str | None = None
     pipeline_skeleton: str = ""
-    pipeline_saved_path: str = ""
+    pipeline_saved_path: str | Path = ""
     pipeline_manifest_path: str = ""
     pipeline_error: str = ""
     pipeline_unresolved: list[str] = field(default_factory=list)
@@ -66,6 +69,11 @@ class Session:
     # Authentication / Journey (AI-009 Phase B)
     credential_profile: CredentialProfile | None = None
     journey_steps: list[JourneyStep] = field(default_factory=list)
+
+    # Persisted package state (AI-026)
+    loaded_package_manifest: PackageManifest | None = None
+    loaded_package_run_results: list[PersistedRunResult] | None = None
+    loaded_package_flaky_tests: list[tuple[str, dict[str, int]]] = field(default_factory=list)
 
 
 def _env_or_default(key: str, default: str) -> str:

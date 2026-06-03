@@ -566,8 +566,14 @@ def collect_journey_steps() -> list[dict[str, str]]:
         )
         if add_choice == 1:
             break
+        if add_choice < 0:
+            print(yellow("  Quitting journey builder."))
+            return steps
 
         action_idx = print_menu(JOURNEY_STEP_ACTIONS, "Step type")
+        if action_idx < 0:
+            print(yellow("  Quitting journey builder."))
+            return steps
         action = JOURNEY_STEP_ACTIONS[action_idx]
 
         new_step: dict[str, str] = {"action": action}
@@ -609,3 +615,85 @@ def open_file(path: str) -> None:
             subprocess.run(["xdg-open", path], check=True)
     except Exception:
         pass
+
+
+# ── AI-026: Saved package management ──────────────────────────────────────
+
+
+def list_saved_packages() -> list[dict[str, str]]:
+    """Discover saved test packages in generated_tests/ and return summary dicts.
+
+    Returns a list of dicts with keys: name, created_at, test_count, run_count, path.
+    Sorted by created_at descending (newest first).
+    """
+    from src.pipeline_artifact_manager import find_existing_packages
+
+    packages_dir = Path("generated_tests")
+    if not packages_dir.exists():
+        return []
+
+    manifests = find_existing_packages(packages_dir)
+    results: list[dict[str, str]] = []
+    for manifest in manifests:
+        package_dir = packages_dir / manifest.package_name
+        run_count = manifest.run_results_count
+        results.append(
+            {
+                "name": manifest.package_name,
+                "created_at": manifest.created_at[:19] if manifest.created_at else "unknown",
+                "test_count": str(len(manifest.generated_test_files)),
+                "run_count": str(run_count) if run_count else "0",
+                "path": str(package_dir),
+            }
+        )
+    return results
+
+
+def select_saved_package(packages: list[dict[str, str]]) -> int:
+    """Render a numbered list of saved packages and return the selected index."""
+    print_header("Saved Test Packages")
+
+    if not packages:
+        print(yellow("  No saved test packages found in generated_tests/"))
+        print("  Press Enter to continue...")
+        input()
+        return -1
+
+    items = []
+    for pkg in packages:
+        label = f"{pkg['name']} ({pkg['created_at']})"
+        detail = f"{pkg['test_count']} tests, {pkg['run_count']} runs"
+        items.append(f"{label} — {detail}")
+
+    idx = print_menu(items, "Select a saved package")
+    return idx
+
+
+def show_package_metadata(package: dict[str, str]) -> None:
+    """Display package metadata in a structured table."""
+    from src.pipeline_artifact_manager import load_package_manifest
+
+    package_dir = Path(package["path"])
+    manifest = load_package_manifest(package_dir)
+
+    print_header(f"Package: {manifest.package_name}")
+    print(f"  Created     : {manifest.created_at}")
+    if manifest.source_story:
+        story = manifest.source_story[:80] + "..." if len(manifest.source_story) > 80 else manifest.source_story
+        print(f"  Story       : {story}")
+    if manifest.starting_url:
+        print(f"  URL         : {manifest.starting_url}")
+    if manifest.additional_urls:
+        print(f"  Extra URLs  : {len(manifest.additional_urls)}")
+    if manifest.provider:
+        print(f"  Provider    : {manifest.provider} / {manifest.model}")
+    print(f"  Tests       : {len(manifest.generated_test_files)}")
+    print(f"  Page objs   : {len(manifest.page_object_files)}")
+    print(f"  Run count   : {manifest.run_results_count}")
+    if manifest.last_run_at:
+        print(f"  Last run    : {manifest.last_run_at}")
+    if manifest.reports:
+        print(f"  Reports     : {len(manifest.reports)}")
+    print()
+    print("  Press Enter to continue...")
+    input()

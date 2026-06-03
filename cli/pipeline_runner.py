@@ -15,9 +15,11 @@ from src.evidence_loader import (
     get_failure_diagnostics,
     load_evidence_for_package,
 )
+from src.pipeline_artifact_manager import find_existing_packages
 from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pytest_output_parser import RunResult
+from src.run_result_persistence import load_all_run_results
 from src.ui_pipeline import (
     PipelineSessionState,
     parse_requirements_text,
@@ -34,6 +36,7 @@ from src.ui_pipeline import (
 
 from .color import cyan, green, red, yellow
 from .menu_renderer import print_header, print_menu, read_optional
+from .run_results_display import render_run_results
 
 # ── Requirements parsing ──────────────────────────────────────────────────
 
@@ -235,7 +238,7 @@ def run_generated_tests(session: Any, rerun_failed: bool = False) -> None:
 
 
 def display_run_results(session: Any) -> None:
-    """Display pytest results and metrics."""
+    """Display pytest results using structured run results view."""
     run_result = session.pipeline_run_result
     if not isinstance(run_result, RunResult):
         print(yellow("  No test results to display."))
@@ -246,18 +249,7 @@ def display_run_results(session: Any) -> None:
         print(f"  Command: {session.pipeline_run_command}")
     print()
 
-    if run_result.errors > 0:
-        print(red("  Pytest hit a collection or import error."))
-
-    print(
-        f"  Total: {run_result.total}  Passed: {run_result.passed}  "
-        f"Failed: {run_result.failed}  Skipped: {run_result.skipped}  Errors: {run_result.errors}"
-    )
-
-    if session.pipeline_run_output:
-        print()
-        print("  --- Pytest Output ---")
-        print(session.pipeline_run_output)
+    render_run_results(run_result, show_raw=False)
 
 
 # ── Reports ───────────────────────────────────────────────────────────────
@@ -416,28 +408,11 @@ def view_failure_diagnostics(session: Any) -> None:
         print(yellow(f"  Total failed tests: {failed_count}"))
 
 
-# ── Scrape summary ────────────────────────────────────────────────────────
-
-
-def show_scrape_summary(session: Any) -> None:
-    print_header("Scrape Summary")
-    if session.pipeline_urls:
-        for url in session.pipeline_urls:
-            elem_count = len(session.pipeline_scraped_pages.get(url, []))
-            print(f"  - {url} ({elem_count} elements)")
-    else:
-        print("  No URLs were scraped.")
-    if session.pipeline_unresolved:
-        print()
-        print(yellow(f"  {len(session.pipeline_unresolved)} unresolved placeholder(s):"))
-        for ph in session.pipeline_unresolved:
-            print(f"    - {ph}")
-
-
 # ── Skeleton viewer ───────────────────────────────────────────────────────
 
 
 def show_skeleton(session: Any) -> None:
+    """Display the generated skeleton (pre-resolution)."""
     print_header("Generated Skeleton (pre-resolution)")
     if session.pipeline_skeleton:
         print(session.pipeline_skeleton[:4000])
@@ -445,3 +420,251 @@ def show_skeleton(session: Any) -> None:
             print("  ... (truncated)")
     else:
         print("  No skeleton available.")
+
+
+# ── Scrape summary ────────────────────────────────────────────────────────
+
+
+def show_scrape_summary(session: Any) -> None:
+    """Display summary of scraped URLs and their elements."""
+    print_header("Scrape Summary")
+    if session.pipeline_urls:
+        for url in session.pipeline_urls:
+            elem_count = len(session.pipeline_scraped_pages.get(url, []))
+            print(f"  - {url} ({elem_count} elements)")
+    else:
+        print("  No URLs were scraped.")
+
+
+# ── AI-026: view failure diagnostics for loaded packages ───────────────────
+
+
+def view_saved_package_diagnostics(package_dir: str | Path) -> None:
+    """View failure diagnostics for a loaded saved package (AI-026 Step 6).
+
+    Loads evidence JSON from the package's evidence/ directory and displays
+    failure diagnostics along with report paths from the package manifest.
+    This extends view_failure_diagnostics() to work with persisted packages
+    rather than only the current session.
+    """
+    from src.evidence_loader import (
+        get_failure_diagnostics,
+        load_evidence_for_package,
+    )
+    from src.pipeline_artifact_manager import load_package_manifest
+
+    print_header("Failure Diagnostics (Saved Package)")
+
+    pkg_path = Path(package_dir)
+    manifest = load_package_manifest(pkg_path, reconstruct=True)
+
+    # Show report paths from manifest
+    if manifest.reports:
+        print(cyan("  Reports:"))
+        for report in manifest.reports:
+            fmt = report.get("format", "unknown")
+            path = report.get("path", "")
+            generated = report.get("generated_at", "")
+            print(f"    [{fmt}] {path}")
+            if generated:
+                print(f"           Generated: {generated}")
+    else:
+        print(yellow("  No reports recorded for this package."))
+
+    # Show evidence paths from manifest
+    if manifest.evidence_paths:
+        print(cyan("  Evidence paths:"))
+        for ev_path in manifest.evidence_paths:
+            print(f"    {ev_path}")
+    else:
+        print(yellow("  No evidence paths recorded in manifest."))
+
+    print()
+
+    # Load evidence JSON files
+    evidence_map = load_evidence_for_package(str(pkg_path))
+    if not evidence_map:
+        print(yellow("  No evidence files found in package evidence/ directory."))
+        return
+
+    print(green(f"  Found {len(evidence_map)} evidence file(s)"))
+    print()
+
+    # Display diagnostics per test
+    failed_count = 0
+    for test_name, evidence in evidence_map.items():
+        diag = get_failure_diagnostics(evidence)
+        if not diag["failed_steps"]:
+            continue
+
+        failed_count += 1
+        print(red(f"  Test: {test_name}"))
+        print(f"    Status: {diag['test_status']}")
+        print(f"    URL: {diag['page_url']}")
+        if diag.get("page_title"):
+            print(f"    Title: {diag['page_title']}")
+
+        for step in diag["failed_steps"]:
+            print(f"    Step {step.get('step_number', '?')}: {step.get('step_type', '?')}")
+            print(f"      Label: {step.get('label', 'N/A')}")
+            print(f"      Locator: {step.get('locator', 'N/A')}")
+            print(f"      Error: {step.get('error_summary', 'N/A')[:200]}")
+            if step.get("failure_note"):
+                print(f"      Note: {step['failure_note']}")
+            if step.get("suggested_locators"):
+                print("      Suggested alternatives:")
+                for loc in step["suggested_locators"][:5]:
+                    print(f"        - {loc}")
+            if step.get("available_elements"):
+                roles: dict[str, int] = {}
+                for elem in step["available_elements"]:
+                    role = elem.get("role", "unknown")
+                    roles[role] = roles.get(role, 0) + 1
+                summary = ", ".join(f"[{r}]x{c}" for r, c in sorted(roles.items()))
+                print(f"      Available elements: {summary}")
+
+        print()
+
+    if failed_count == 0:
+        print(green("  No failures found in evidence — all tests passed!"))
+    else:
+        print(yellow(f"  Total failed tests with diagnostics: {failed_count}"))
+
+
+# ── AI-026: re-run saved package ──────────────────────────────────────────
+
+
+def run_saved_test_from_package(
+    package_dir: str | Path,
+    session: Any,
+    rerun_failed: bool = False,
+) -> None:
+    """Run tests from a loaded saved package (AI-026).
+
+    Sets up session state with the loaded package path, then runs the tests
+    and displays structured results.
+    """
+    print_header(f"Running: {Path(package_dir).name}")
+
+    # Set pipeline_saved_path to the package directory so downstream tools work
+    session.pipeline_saved_path = package_dir
+
+    try:
+        print(cyan("  Running tests with pytest..."))
+        exec_result = PipelineRunService().run_saved_test(
+            str(package_dir),
+            rerun_failed_only=rerun_failed,
+            previous_run=session.pipeline_run_result if rerun_failed else None,
+        )
+        session.pipeline_run_result = exec_result.run_result
+        session.pipeline_run_output = exec_result.display_output
+        session.pipeline_run_command = " ".join(exec_result.command)
+        session.pipeline_run_return_code = exec_result.return_code
+
+        # Display structured results
+        print()
+        if session.pipeline_run_command:
+            print(f"  Command: {session.pipeline_run_command}")
+        print()
+
+        if isinstance(session.pipeline_run_result, RunResult):
+            render_run_results(session.pipeline_run_result, show_raw=False)
+
+        if session.pipeline_run_return_code == 0:
+            print()
+            print(green("  All tests passed!"))
+        else:
+            print()
+            print(yellow(f"  Tests completed with return code {session.pipeline_run_return_code}"))
+
+        # Update manifest's last_run_at
+        from src.pipeline_artifact_manager import (
+            load_package_manifest as _load_manifest,
+        )
+        from src.pipeline_artifact_manager import (
+            save_package_manifest as _save_manifest,
+        )
+        from src.pipeline_artifact_manager import update_last_run_at
+
+        manifest_path = Path(package_dir) / "package_manifest.json"
+        if manifest_path.exists():
+            manifest = _load_manifest(Path(package_dir))
+            update_last_run_at(manifest)
+            _save_manifest(Path(package_dir), manifest)
+
+    except Exception as exc:
+        session.pipeline_error = f"Failed to run saved package: {exc}"
+        print(red(f"  ✗ {session.pipeline_error}"))
+
+
+# ── AI-026: load existing packages ────────────────────────────────────────
+
+
+def load_existing_packages(session: Any) -> None:
+    """Discover and load an existing generated test package (AI-026)."""
+
+    print_header("Load Existing Generated Tests")
+
+    packages_dir = Path("generated_tests")
+    if not packages_dir.exists():
+        print(yellow("  No generated_tests/ directory found."))
+        return
+
+    packages = find_existing_packages(packages_dir)  # type: ignore[misc]
+    if not packages:
+        print(yellow("  No existing packages found in generated_tests/."))
+        return
+
+    print(f"\n  {'#':<4} {'Package':<45} {'Created':<12} {'Tests':<6} {'Runs':<6}")
+    print("  " + "-" * 80)
+    for i, pkg in enumerate(packages):
+        test_count = len(pkg.generated_test_files)
+        run_count = pkg.run_results_count
+        created_str = pkg.created_at[:16] if pkg.created_at else "unknown"
+        print(f"  {i + 1:<4} {pkg.package_name:<45} {created_str:<12} {test_count:<6} {run_count:<6}")
+    print()
+
+    # Prompt user to select
+    try:
+        choice_input = input(f"  Select package (1-{len(packages)}), or Enter to cancel: ").strip()
+    except EOFError, KeyboardInterrupt:
+        print()
+        return
+
+    if not choice_input:
+        print(yellow("  Cancelled."))
+        return
+
+    try:
+        choice_index = int(choice_input) - 1
+        if choice_index < 0 or choice_index >= len(packages):
+            print(yellow("  Invalid selection."))
+            return
+    except ValueError:
+        print(yellow("  Invalid input."))
+        return
+
+    selected = packages[choice_index]
+    package_dir = packages_dir / selected.package_name
+
+    # Load run history
+    run_results = []
+    try:
+        run_results = load_all_run_results(package_dir)
+    except Exception:
+        pass  # No run results yet, which is fine
+
+    # Populate session
+    session.loaded_package_manifest = selected
+    session.loaded_package_path = str(package_dir)
+    session.loaded_package_run_results = run_results
+    session.pipeline_saved_path = str(package_dir)
+
+    test_count = len(selected.generated_test_files)
+    run_count = len(run_results)
+    print(green(f"\n  ✓ Loaded: {selected.package_name} ({test_count} tests, {run_count} runs)"))
+    if selected.source_story:
+        print(f"  Story : {selected.source_story[:80]}{'...' if len(selected.source_story) > 80 else ''}")
+    if selected.starting_url:
+        print(f"  URL   : {selected.starting_url}")
+    print()
