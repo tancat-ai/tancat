@@ -418,14 +418,28 @@ class CartAssertStrategy(IntentStrategy):
 
 
 class SuccessAssertStrategy(IntentStrategy):
-    """Thank-you / order-confirmed / success ASSERT matching."""
+    """Thank-you / order-confirmed / success ASSERT matching.
 
-    _SUCCESS_TERMS = (
+    Requires BOTH a success/confirmation keyword AND a message-like keyword
+    in the description to avoid over-claiming generic "confirmation message"
+    assertions that may target cart items or product confirmations.
+    """
+
+    _SUCCESS_KEYWORDS = (
         "thank you",
         "thankyou",
         "success",
         "order confirmed",
         "order complete",
+    )
+    _MESSAGE_KEYWORDS = (
+        "confirmation message",
+        "success message",
+        "success alert",
+        "notification",
+        "popup",
+        "alert message",
+        "confirmation popup",
     )
     _SUCCESS_ELEMENT_TEXT = (
         "thank you",
@@ -441,8 +455,15 @@ class SuccessAssertStrategy(IntentStrategy):
         if action != "ASSERT":
             return None
         lowered = description.replace("_", " ").lower()
-        if not any(term in lowered for term in self._SUCCESS_TERMS):
+
+        # Require BOTH a success keyword AND a message keyword to avoid
+        # over-claiming generic "confirmation message" assertions.
+        has_success = any(term in lowered for term in self._SUCCESS_KEYWORDS)
+        has_message = any(term in lowered for term in self._MESSAGE_KEYWORDS)
+
+        if not (has_success and has_message):
             return None
+
         all_text = _all_element_text(element)
         return any(term in all_text for term in self._SUCCESS_ELEMENT_TEXT)
 

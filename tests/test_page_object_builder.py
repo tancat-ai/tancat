@@ -72,3 +72,154 @@ def test_build_page_object_uses_first_for_duplicate_click_selectors() -> None:
     page_object = builder.build_page_object(scraped_page)
 
     assert "self.page.locator('[data-product-id=\"1\"]').first.click()" in page_object.module_source
+
+
+# ── Evidence-aware POM tests (AI-010 Phase 1) ────────────────────────────────
+
+
+def test_build_evidence_aware_pom_imports_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=1,
+        elements=[{"selector": "#search", "role": "text", "placeholder": "Search"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "from src.evidence_tracker import EvidenceTracker" in page_object.module_source
+
+
+def test_evidence_aware_pom_init_accepts_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=1,
+        elements=[{"selector": "#search", "role": "text", "placeholder": "Search"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "def __init__(self, page: Page, tracker: EvidenceTracker) -> None:" in page_object.module_source
+    assert "self.tracker = tracker" in page_object.module_source
+
+
+def test_evidence_aware_pom_click_delegates_to_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=1,
+        elements=[{"selector": "#submit-btn", "role": "button", "text": "Submit"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.click('#submit-btn', label='submit')" in page_object.module_source
+    assert "self.page.locator" not in page_object.module_source
+
+
+def test_evidence_aware_pom_fill_delegates_to_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=1,
+        elements=[{"selector": "#username", "role": "text", "placeholder": "Username"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.fill('#username', value, label='username')" in page_object.module_source
+
+
+def test_evidence_aware_pom_navigate_delegates_to_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=0,
+        elements=[],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.navigate(self.URL)" in page_object.module_source
+    assert "self.page.goto" not in page_object.module_source
+
+
+def test_evidence_aware_pom_label_derived_from_method_name() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/products",
+        element_count=1,
+        elements=[{"selector": "#add-to-cart", "role": "button", "text": "Add to Cart"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    # "add_item_to_cart" -> label "add item to cart"
+    assert "label='add item to cart'" in page_object.module_source
+
+
+def test_backward_compatible_no_tracker() -> None:
+    """Without use_evidence_tracker, generates raw page.locator (default behaviour)."""
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=2,
+        elements=[
+            {"selector": "#username", "role": "text", "placeholder": "Username"},
+            {"selector": "#login-btn", "role": "button", "text": "Login"},
+        ],
+    )
+
+    page_object = builder.build_page_object(scraped_page)
+
+    # Default mode uses page.locator
+    assert "self.page.locator('#username').fill(value)" in page_object.module_source
+    assert "self.page.locator('#login-btn').click()" in page_object.module_source
+    # Default mode does NOT import EvidenceTracker
+    assert "EvidenceTracker" not in page_object.module_source
+    # Default mode uses simple __init__
+    assert "def __init__(self, page: Page) -> None:" in page_object.module_source
+
+
+def test_evidence_aware_pom_navigate_method() -> None:
+    """Evidence-aware POM navigate() uses tracker.navigate instead of page.goto."""
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/products",
+        element_count=1,
+        elements=[{"selector": "#item", "role": "button", "text": "Item"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.navigate(self.URL)" in page_object.module_source
+
+
+def test_evidence_aware_pom_select_delegates_to_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=1,
+        elements=[{"selector": "#country", "role": "select", "text": "Country"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.fill('#country', value, label='country')" in page_object.module_source
+
+
+def test_evidence_aware_pom_cart_navigation_delegates_to_tracker() -> None:
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/products",
+        element_count=1,
+        elements=[
+            {"selector": 'a[href="/cart"]', "role": "a", "text": "Cart", "href": "https://example.com/cart"},
+        ],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "self.tracker.click('a[href=\"/cart\"]', label='" in page_object.module_source
+    assert "def navigate_to_cart(self) -> None" in page_object.module_source

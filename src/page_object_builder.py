@@ -28,18 +28,28 @@ class PageObjectBuilder:
         *,
         file_path: str = "",
         class_name: str | None = None,
+        use_evidence_tracker: bool = False,
     ) -> GeneratedPageObject:
-        """Return metadata plus source code for a page object module."""
+        """Return metadata plus source code for a page object module.
+
+        Args:
+            scraped_page: Scraped page metadata to build from.
+            file_path: Override default file path.
+            class_name: Override auto-derived class name.
+            use_evidence_tracker: When True, generate evidence-aware POM methods
+                that delegate to ``EvidenceTracker`` instead of raw ``page.locator()``.
+        """
         resolved_class_name = class_name or self._derive_class_name(scraped_page.url)
         module_name = self._to_module_name(resolved_class_name)
         resolved_file_path = file_path or f"generated_tests/pages/{module_name}.py"
-        methods = self._build_methods(scraped_page)
+        methods = self._build_methods(scraped_page, use_evidence_tracker=use_evidence_tracker)
         method_names = [method_name for method_name, _source in methods]
         module_source = self._build_module_source(
             class_name=resolved_class_name,
             url=scraped_page.url,
             methods=methods,
             element_count=scraped_page.element_count,
+            use_evidence_tracker=use_evidence_tracker,
         )
 
         return GeneratedPageObject(
@@ -79,7 +89,12 @@ class PageObjectBuilder:
         snake = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
         return snake.strip("_")
 
-    def _build_methods(self, scraped_page: ScrapedPage) -> list[tuple[str, str]]:
+    def _build_methods(
+        self,
+        scraped_page: ScrapedPage,
+        *,
+        use_evidence_tracker: bool = False,
+    ) -> list[tuple[str, str]]:
         """Return generated method names and source snippets for one page."""
         methods: list[tuple[str, str]] = []
         seen_names: set[str] = set()
@@ -105,6 +120,7 @@ class PageObjectBuilder:
                 selector,
                 str(element.get("role", "")).strip().lower(),
                 prefer_first=selector_counts.get(selector, 0) > 1,
+                use_evidence_tracker=use_evidence_tracker,
             )
             methods.append((method_name, method_source))
             seen_names.add(method_name)
@@ -146,8 +162,27 @@ class PageObjectBuilder:
         return f"click_{base_name}"
 
     @staticmethod
-    def _build_method_source(method_name: str, selector: str, role: str, *, prefer_first: bool = False) -> str:
-        """Return one page object method source block."""
+    def _build_method_source(
+        method_name: str,
+        selector: str,
+        role: str,
+        *,
+        prefer_first: bool = False,
+        use_evidence_tracker: bool = False,
+    ) -> str:
+        """Return one page object method source block.
+
+        Args:
+            method_name: The generated method name.
+            selector: The locator selector string.
+            role: The ARIA role of the element.
+            prefer_first: Use ``.first`` when duplicate selectors exist.
+            use_evidence_tracker: Generate evidence-aware method delegating to
+                ``self.tracker`` instead of ``self.page.locator()``.
+        """
+        if use_evidence_tracker:
+            return PageObjectBuilder._build_evidence_method_source(method_name, selector, role)
+        # Existing page.locator() path (backward compatible)
         escaped_selector = repr(selector)
         locator_expression = f"self.page.locator({escaped_selector})"
         if prefer_first:
@@ -163,6 +198,34 @@ class PageObjectBuilder:
             return f"    def {method_name}(self) -> None:\n        {locator_expression}.click()\n"
         return f"    def {method_name}(self) -> None:\n        {locator_expression}.click()\n"
 
+    @staticmethod
+    def _build_evidence_method_source(
+        method_name: str,
+        selector: str,
+        role: str,
+    ) -> str:
+        """Return an evidence-aware method source block delegating to EvidenceTracker.
+
+        The generated methods use ``self.tracker.click()``, ``self.tracker.fill()``,
+        etc., so that every interaction is captured in the sidecar evidence JSON.
+        """
+        label = method_name.replace("click_", "").replace("fill_", "").replace("select_", "").replace("_", " ")
+
+        if method_name.startswith("fill_"):
+            return (
+                f"    def {method_name}(self, value: str) -> None:\n"
+                f"        self.tracker.fill({selector!r}, value, label={label!r})\n"
+            )
+        if method_name.startswith("select_"):
+            # EvidenceTracker doesn't have a native select; use click as fallback
+            return (
+                f"    def {method_name}(self, value: str) -> None:\n"
+                f"        self.tracker.fill({selector!r}, value, label={label!r})\n"
+            )
+        if role == "a" and method_name.startswith("navigate_to_"):
+            return f"    def {method_name}(self) -> None:\n        self.tracker.click({selector!r}, label={label!r})\n"
+        return f"    def {method_name}(self) -> None:\n        self.tracker.click({selector!r}, label={label!r})\n"
+
     def _build_module_source(
         self,
         *,
@@ -170,8 +233,18 @@ class PageObjectBuilder:
         url: str,
         methods: list[tuple[str, str]],
         element_count: int,
+        use_evidence_tracker: bool = False,
     ) -> str:
-        """Return the final Python module source."""
+        """Return the final Python module source.
+
+        Args:
+            class_name: Page object class name.
+            url: Page URL.
+            methods: List of (method_name, source) tuples.
+            element_count: Number of scraped elements.
+            use_evidence_tracker: Generate evidence-aware module with
+                ``EvidenceTracker`` dependency injection.
+        """
         method_blocks = "\n".join(method_source.rstrip() for _name, method_source in methods)
         if method_blocks:
             method_blocks = f"\n{method_blocks}\n"
@@ -182,16 +255,30 @@ class PageObjectBuilder:
                 "        pass\n"
             )
 
+        if use_evidence_tracker:
+            imports = (
+                '"""Auto-generated page object module."""\n\n'
+                "from playwright.sync_api import Page\n"
+                "from src.evidence_tracker import EvidenceTracker\n\n\n"
+            )
+            init_code = (
+                "    def __init__(self, page: Page, tracker: EvidenceTracker) -> None:\n"
+                "        self.page = page\n"
+                "        self.tracker = tracker\n\n"
+            )
+            navigate_code = "    def navigate(self) -> None:\n        self.tracker.navigate(self.URL)\n\n"
+        else:
+            imports = '"""Auto-generated page object module."""\n\nfrom playwright.sync_api import Page\n\n\n'
+            init_code = "    def __init__(self, page: Page) -> None:\n        self.page = page\n\n"
+            navigate_code = "    def navigate(self) -> None:\n        self.page.goto(self.URL)\n\n"
+
         return (
-            '"""Auto-generated page object module."""\n\n'
-            "from playwright.sync_api import Page\n\n\n"
+            f"{imports}"
             f"class {class_name}:\n"
             f'    """Page Object for {url}. Scraped elements: {element_count}."""\n\n'
             f'    URL = "{url}"\n\n'
-            "    def __init__(self, page: Page) -> None:\n"
-            "        self.page = page\n\n"
-            "    def navigate(self) -> None:\n"
-            "        self.page.goto(self.URL)\n\n"
+            f"{init_code}"
+            f"{navigate_code}"
             "    def __getattr__(self, name):\n"
             "        def fallback(*args, **kwargs):\n"
             "            import pytest\n"

@@ -65,6 +65,26 @@ class PlaceholderScorer:
         "an",
     }
 
+    # Terms that signal a message-like assertion target.
+    MESSAGE_LIKE_TERMS: tuple[str, ...] = (
+        "message",
+        "confirmation",
+        "success",
+        "alert",
+        "notification",
+        "popup",
+    )
+
+    # Text terms that signal confirmation-like content.
+    CONFIRMATION_TEXT_TERMS: tuple[str, ...] = (
+        "confirm",
+        "success",
+        "thank",
+        "order",
+        "complete",
+        "done",
+    )
+
     @staticmethod
     def compute_element_score(
         action: str,
@@ -130,6 +150,8 @@ class PlaceholderScorer:
         score += PlaceholderScorer._visual_enrichment_bonus(
             action, description, element, lowered, icon_classes, visual_desc, parent_text
         )
+        score += PlaceholderScorer._assert_action_penalty(action, description, element)
+        score += PlaceholderScorer._assert_message_bonus(action, description, element)
         score += PlaceholderScorer._text_content_bonus(description, element)
 
         return score if score >= match_threshold else None
@@ -374,8 +396,86 @@ class PlaceholderScorer:
                 bonus += visual_overlap
         return bonus
 
+    # ------------------------------------------------------------------
+    # B-014: ASSERT intent-aware scoring
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_message_like_assertion(description: str) -> bool:
+        """Return True if the description signals a message-like assertion target."""
+        lowered = description.lower()
+        return any(term in lowered for term in PlaceholderScorer.MESSAGE_LIKE_TERMS)
+
+    @staticmethod
+    def _assert_action_penalty(action: str, description: str, element: dict[str, Any]) -> int:
+        """Penalize interactive elements for ASSERT targeting message-like descriptions.
+
+        ASSERT for "confirmation message" should not resolve to buttons or
+        action-oriented links. This penalty ensures display elements are
+        preferred over interactive ones for message assertions.
+        """
+        if action != "ASSERT":
+            return 0
+
+        if not PlaceholderScorer._is_message_like_assertion(description):
+            return 0
+
+        role = str(element.get("role", "")).strip().lower()
+        tag = str(element.get("tag", "")).strip().lower()
+        href = str(element.get("href", "")).strip()
+
+        # Buttons are poor assertion targets for messages
+        if role in {"button", "submit"} or tag == "button":
+            return -15
+
+        # Links with action-oriented hrefs are poor targets
+        if (role == "link" or tag == "a") and href:
+            if any(term in href.lower() for term in ("delete", "remove", "cart", "action")):
+                return -10
+
+        return 0
+
+    @staticmethod
+    def _assert_message_bonus(action: str, description: str, element: dict[str, Any]) -> int:
+        """Reward display elements for ASSERT targeting message-like descriptions.
+
+        Dialog/alert roles and content elements with confirmation-like text
+        are ideal targets for ASSERT tokens seeking messages.
+        """
+        if action != "ASSERT":
+            return 0
+
+        if not PlaceholderScorer._is_message_like_assertion(description):
+            return 0
+
+        role = str(element.get("role", "")).strip().lower()
+        tag = str(element.get("tag", "")).strip().lower()
+        text = str(element.get("text", "")).strip().lower()
+        aria_label = str(element.get("aria_label", "")).strip().lower()
+        aria_role = str(element.get("aria_role", "")).strip().lower()
+
+        # Dialog/alert roles are ideal for confirmation messages
+        if role in {"dialog", "alertdialog", "alert", "status"}:
+            return 15
+
+        # ARIA-based alert roles
+        if aria_role in {"dialog", "alertdialog", "alert", "status"}:
+            return 12
+
+        # Content elements with confirmation-like text
+        if tag in {"div", "p", "span"} and text:
+            if any(term in text for term in PlaceholderScorer.CONFIRMATION_TEXT_TERMS):
+                return 10
+
+        # ARIA label with confirmation-like content
+        if aria_label and any(term in aria_label for term in PlaceholderScorer.CONFIRMATION_TEXT_TERMS):
+            return 8
+
+        return 0
+
     @staticmethod
     def _text_content_bonus(description: str, element: dict[str, Any]) -> int:
+        """Reward elements whose text content overlaps with the description."""
         element_text = str(element.get("text", "")).strip()
         if not element_text:
             return 0

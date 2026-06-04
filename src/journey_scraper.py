@@ -40,6 +40,7 @@ from src.journey_auth_detector import (
 )
 from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
+from src.placeholder_scorers import PlaceholderScorer
 from src.scraper import PageScraper
 
 
@@ -805,7 +806,14 @@ class JourneyScraper:
         return None
 
     def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
-        """Find the best selector for a description on the current live page."""
+        """Find the best selector for a description on the current live page.
+
+        Uses PlaceholderScorer.compute_element_score() (same engine as
+        PlaceholderOrchestrator) to rank candidates. Falls back to LLM-based
+        SemanticCandidateRanker when no element passes scoring.
+
+        B-015: Unified ranking pipeline — discovery and resolution share scoring logic.
+        """
         # Ensure the page is stable and rendered
         try:
             page.wait_for_load_state("networkidle", timeout=5000)
@@ -823,15 +831,32 @@ class JourneyScraper:
 
         self._debug(f"Scraped {len(elements)} elements for discovery of '{description}'")
 
-        # We don't have LLM context here, so we use rank_candidates directly
-        norm_desc = re.sub(r"[^\w\s]", " ", description).lower()
-        for element in elements:
-            raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
-            norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
-            if len(norm_text) >= 3 and norm_text in norm_desc:
-                robust = build_robust_locator(element)
-                return robust or element.get("selector")
+        # Stage 1: Score all candidates with PlaceholderScorer (unified scoring)
+        best_element: dict[str, Any] | None = None
+        best_score: float = -1
 
+        for element in elements:
+            selector = element.get("selector", "")
+            score = PlaceholderScorer.compute_element_score(
+                action=action,
+                description=description,
+                element=element,
+                selector=selector,
+                match_threshold=0,  # Accept all in discovery phase; pick highest
+            )
+            if score is not None and score > best_score:
+                best_score = score
+                best_element = element
+
+        if best_element is not None:
+            robust = build_robust_locator(best_element)
+            if robust or best_element.get("selector"):
+                self._debug(
+                    f"Selected '{robust or best_element.get('selector')}' (score={best_score}) for '{description}'"
+                )
+                return robust or best_element.get("selector")
+
+        # Stage 2: LLM-based fallback via PlaceholderResolver.rank_candidates
         ranked = self._resolver.rank_candidates(action, description, elements)
         if not ranked:
             self._context_log.append(
