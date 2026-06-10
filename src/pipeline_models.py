@@ -3,7 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from enum import StrEnum
 from typing import Any
+
+
+class ExportMode(StrEnum):
+    """Controls how exported test files are produced.
+
+    - POM: export pages/ directory with clean POM classes
+    - FLAT: export only test files (no pages/)
+    """
+
+    POM = "pom"
+    FLAT = "flat"
 
 
 @dataclass(frozen=True)
@@ -141,6 +153,7 @@ class PipelineArtifactSet:
     manifest_path: str = ""
     pages: list[ScrapedPage] = field(default_factory=list)
     records: list[ManifestRecord] = field(default_factory=list)
+    pom_mode: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly representation."""
@@ -151,4 +164,5 @@ class PipelineArtifactSet:
             "manifest_path": self.manifest_path,
             "pages": [page.to_dict() for page in self.pages],
             "records": [record.to_dict() for record in self.records],
+            "pom_mode": self.pom_mode,
         }

@@ -46,14 +46,15 @@ Each `<module_name>.py.md` file covers:
 | [url_resolver.py.md](./url_resolver.py.md) | Resolves URLs for navigation placeholders |
 | [url_utils.py.md](./url_utils.py.md) | URL normalization and comparison utilities |
 
-### Code Pipeline (6)
+### Code Pipeline (7)
 | Doc | Module |
 |-----|--------|
 | [test_generator.py.md](./test_generator.py.md) | Working test generation pipeline (PROTECTED) |
 | [skeleton_parser.py.md](./skeleton_parser.py.md) | Parses basic skeleton structures from LLM output |
 | [code_normalizer.py.md](./code_normalizer.py.md) | Code normalization transforms |
-| [code_postprocessor.py.md](./code_postprocessor.py.md) | Post-processing for generated code |
+| [code_postprocessor.py.md](./code_postprocessor.py.md) | Post-processing for generated code + export stripping |
 | [code_validator.py.md](./code_validator.py.md) | Validates generated test code structure |
+| [export_service.py.md](./export_service.py.md) | Exports clean test suites stripping EvidenceTracker |
 | [page_object_builder.py.md](./page_object_builder.py.md) | Page Object Model generation |
 
 ### Evidence / Reports (9)
@@ -129,5 +130,6 @@ Each `<module_name>.py.md` file covers:
 
 ## Generation Info
 - **Generated:** 2026-05-30
-- **Total modules:** 66
+- **Updated:** 2026-06-08 — added `export_service.py`
+- **Total modules:** 67
 - **Status:** Complete

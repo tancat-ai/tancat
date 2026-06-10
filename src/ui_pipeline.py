@@ -144,6 +144,7 @@ async def run_pipeline(
     session: PipelineSessionState | None = None,
     credential_profile: CredentialProfile | None = None,
     journey_steps: list[JourneyStep] | None = None,
+    pom_mode: bool = False,
 ) -> None:
     """Execute the full skeleton-first pipeline.
 
@@ -175,6 +176,7 @@ async def run_pipeline(
         generator,
         credential_profile=credential_profile,
         journey_steps=journey_steps,
+        pom_mode=pom_mode,
     )
 
     final_code = await orchestrator.run_pipeline(

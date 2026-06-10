@@ -60,8 +60,9 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/page_object_builder.py` (`PageObjectBuilder`) | Generates Page Object Model classes from scraped page data for test maintainability. |
 | `src/skeleton_parser.py` (`SkeletonParser`) | Parses LLM-generated skeleton code → extracts `TestJourney[]`, `PlaceholderUse[]`, `PageRequirement[]`. Normalizes placeholder actions. |
 | `src/skeleton_parser.py` (`SkeletonValidator`) | Validates skeleton uses ONLY placeholders, not real CSS selectors (prevents hallucination). |
-| `src/code_postprocessor.py` (`normalise_generated_code()`) | Final code normalization: consent mode handling, newline fixes (`normalise_code_newlines()`), import ordering. |
+| `src/code_postprocessor.py` (`normalise_generated_code()`) | Final code normalization: consent mode handling, newline fixes (`normalise_code_newlines()`), import ordering. Also provides `strip_evidence_from_test_code()` and `strip_evidence_from_pom()` for export. |
 | `src/code_validator.py` (`CodeValidator`) | Validates generated Python for syntax errors and common issues. |
+| `src/export_service.py` (`ExportService`) | Exports clean test suites from generated packages. Supports POM mode (with page objects) and FLAT mode (tests only). Strips EvidenceTracker artifacts for production-ready output. Added 2026-06-08. |
 
 ### 💾 Persistence & Reporting Layer
 
@@ -208,6 +209,7 @@ graph TD
         ReportSvc[src/pipeline_report_service.py]
         RBuild[src/report_builder.py]
         RFormat[src/report_formatters.py]
+        ExportSvc[src/export_service.py]
         ETrack[src/evidence_tracker.py]
         ESerial[src/evidence_serializer.py]
         SScape[src/screenshot_capture.py]
@@ -262,6 +264,7 @@ graph TD
     PostProc --> LLMFilter
     PostProc --> Val
     Orch --> Writer
+    ExportSvc --> PostProc
     Writer --> RunSvc
     Writer --> ReportSvc
     ReportSvc --> RBuild
@@ -335,21 +338,21 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 
 - **Implementing changes to a specific module** — read the relevant `*.py.md` first for function signatures and type contracts
 - **Tasking an LLM** — reference the specific module doc(s) in your prompt rather than the full architecture file to reduce context window waste
-- **Onboarding** — follow [`markdown_docs/src/README.md`](../markdown_docs/src/README.md) which indexes all 66 modules by category
+- **Onboarding** — follow [`markdown_docs/src/README.md`](../markdown_docs/src/README.md) which indexes all 67 modules by category
 
 | Category | Module Docs |
 |----------|-------------|
 | Pipeline Core | [orchestrator](../markdown_docs/src/orchestrator.py.md), [pipeline_models](../markdown_docs/src/pipeline_models.py.md), [pipeline_writer](../markdown_docs/src/pipeline_writer.py.md), [pipeline_run_service](../markdown_docs/src/pipeline_run_service.py.md), [pipeline_report_service](../markdown_docs/src/pipeline_report_service.py.md) |
 | Scraper Chain | [scraper](../markdown_docs/src/scraper.py.md), [journey_scraper](../markdown_docs/src/journey_scraper.py.md), [stateful_scraper](../markdown_docs/src/stateful_scraper.py.md), [state_tracker](../markdown_docs/src/state_tracker.py.md), [form_detector](../markdown_docs/src/form_detector.py.md) |
 | Placeholder System | [placeholder_orchestrator](../markdown_docs/src/placeholder_orchestrator.py.md), [placeholder_resolver](../markdown_docs/src/placeholder_resolver.py.md), [placeholder_scorers](../markdown_docs/src/placeholder_scorers.py.md), [intent_matcher](../markdown_docs/src/intent_matcher.py.md), [semantic_candidate_ranker](../markdown_docs/src/semantic_candidate_ranker.py.md) |
-| Code Pipeline | [test_generator](../markdown_docs/src/test_generator.py.md), [skeleton_parser](../markdown_docs/src/skeleton_parser.py.md), [code_normalizer](../markdown_docs/src/code_normalizer.py.md), [code_postprocessor](../markdown_docs/src/code_postprocessor.py.md), [code_validator](../markdown_docs/src/code_validator.py.md) |
+| Code Pipeline | [test_generator](../markdown_docs/src/test_generator.py.md), [skeleton_parser](../markdown_docs/src/skeleton_parser.py.md), [code_normalizer](../markdown_docs/src/code_normalizer.py.md), [code_postprocessor](../markdown_docs/src/code_postprocessor.py.md), [code_validator](../markdown_docs/src/code_validator.py.md), [export_service](../markdown_docs/src/export_service.py.md) |
 | Evidence / Reports | [evidence_tracker](../markdown_docs/src/evidence_tracker.py.md), [evidence_loader](../markdown_docs/src/evidence_loader.py.md), [report_builder](../markdown_docs/src/report_builder.py.md), [report_formatters](../markdown_docs/src/report_formatters.py.md), [failure_reporter](../markdown_docs/src/failure_reporter.py.md) |
 | Locator System | [locator_builder](../markdown_docs/src/locator_builder.py.md), [locator_fallback](../markdown_docs/src/locator_fallback.py.md), [locator_repair](../markdown_docs/src/locator_repair.py.md), [locator_scorer](../markdown_docs/src/locator_scorer.py.md) |
 | LLM | [llm_client](../markdown_docs/src/llm_client.py.md), [llm_errors](../markdown_docs/src/llm_errors.py.md), [llm_reasoning_filter](../markdown_docs/src/llm_reasoning_filter.py.md), [prompt_utils](../markdown_docs/src/prompt_utils.py.md) |
-| Full index | [markdown_docs/src/README.md](../markdown_docs/src/README.md) — all 66 modules by category |
+| Full index | [markdown_docs/src/README.md](../markdown_docs/src/README.md) — all 67 modules by category |
 
 > **Do not merge module docs into this file.** This document covers system-level architecture (data flows, dependency graph, pipeline phases). Module docs cover function-level details (signatures, type hints, internal patterns). They are complementary — cross-references keep both lean.
 
 ---
 
- *Last updated: 2026-05-30*
+ *Last updated: 2026-06-08*

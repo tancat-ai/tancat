@@ -36,6 +36,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 # ── Help & Usage ───────────────────────────────────────────────────────────
 
 
+@pytest.mark.subprocess
 class TestHelpOutput:
     def test_help_flag_returns_zero(self) -> None:
         result = _run_cli("--help")
@@ -57,6 +58,7 @@ class TestHelpOutput:
 # ── Generate subcommand ───────────────────────────────────────────────────
 
 
+@pytest.mark.subprocess
 class TestGenerateSubcommand:
     def test_generate_help(self) -> None:
         result = _run_cli("generate", "--help")
@@ -82,6 +84,7 @@ class TestGenerateSubcommand:
 # ── Invalid arguments ──────────────────────────────────────────────────────
 
 
+@pytest.mark.subprocess
 class TestInvalidArguments:
     def test_unknown_flag_fails(self) -> None:
         result = _run_cli("--unknown-flag")
@@ -97,6 +100,7 @@ class TestInvalidArguments:
 # ── Test subcommand ────────────────────────────────────────────────────────
 
 
+@pytest.mark.subprocess
 class TestTestSubcommand:
     def test_test_subcommand_runs(self) -> None:
         result = _run_cli("test")
@@ -106,6 +110,7 @@ class TestTestSubcommand:
 # ── Help subcommand ────────────────────────────────────────────────────────
 
 
+@pytest.mark.subprocess
 class TestHelpSubcommand:
     def test_help_subcommand_runs(self) -> None:
         result = _run_cli("help")

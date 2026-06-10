@@ -53,6 +53,7 @@ class PipelineRunResult:
     generated_page_objects: list[GeneratedPageObject] = field(default_factory=list)
     unresolved_placeholders: list[str] = field(default_factory=list)
     pages_visited: list[str] = field(default_factory=list)
+    pom_mode: bool = False
 
 
 class TestOrchestrator:
@@ -66,14 +67,16 @@ class TestOrchestrator:
         *,
         credential_profile: CredentialProfile | None = None,
         journey_steps: list[JourneyStep] | None = None,
+        pom_mode: bool = False,
     ) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()
         self._starting_url: str | None = None
         self._credential_profile = credential_profile
         self._journey_steps: list[JourneyStep] | None = journey_steps
+        self._pom_mode = pom_mode
         self._placeholder_orchestrator = PlaceholderOrchestrator(
-            starting_url=None, credential_profile=self._credential_profile
+            starting_url=None, credential_profile=self._credential_profile, pom_mode=pom_mode
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None
@@ -369,6 +372,7 @@ class TestOrchestrator:
             generated_page_objects=generated_page_objects,
             unresolved_placeholders=unresolved,
             pages_visited=pages_visited,
+            pom_mode=self._pom_mode,
         )
         return final_code
 

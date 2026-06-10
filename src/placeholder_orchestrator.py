@@ -28,7 +28,12 @@ logger = logging.getLogger(__name__)
 
 
 class PlaceholderOrchestrator:
-    """Coordinate placeholder resolution, stateful scraping, and page artifact generation."""
+    """Coordinate placeholder resolution, scraping, and page artifact generation.
+
+    When ``pom_mode`` is enabled, the orchestrator generates tests that import and use
+    evidence-aware Page Object Model classes instead of flat ``evidence_tracker`` calls.
+    Assertions remain as direct ``evidence_tracker`` calls regardless of POM mode.
+    """
 
     __test__ = False  # type: ignore[assignment]
 
@@ -36,14 +41,29 @@ class PlaceholderOrchestrator:
         self,
         starting_url: str | None = None,
         credential_profile: CredentialProfile | None = None,
+        pom_mode: bool = False,
     ) -> None:
+        """Initialise the placeholder resolution orchestrator.
+
+        Args:
+            starting_url: Base URL for session-aware scraping.
+            credential_profile: Credentials for stateful scraping.
+            pom_mode: When True, generate tests using evidence-aware POM classes
+                instead of flat ``evidence_tracker`` calls. Assertions remain direct.
+        """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
+        self._pom_mode = pom_mode
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.page_object_builder = PageObjectBuilder()
         self.semantic_ranker = SemanticCandidateRanker(None)
         self.url_resolver = UrlResolver()
+
+    @property
+    def pom_mode(self) -> bool:
+        """Return whether POM-mode output is enabled."""
+        return self._pom_mode
 
     async def _ensure_scraped(
         self,
@@ -181,7 +201,12 @@ class PlaceholderOrchestrator:
         return scraped_page_records
 
     def _build_page_object_artifacts(self, scraped_pages: list[ScrapedPage]) -> list[GeneratedPageObject]:
-        """Return page object artifacts generated from scraped pages."""
+        """Return page object artifacts generated from scraped pages.
+
+        When ``pom_mode`` is enabled, page objects are built with
+        ``use_evidence_tracker=True`` so generated methods delegate to
+        ``self.tracker.click()`` / ``self.tracker.fill()`` etc.
+        """
         generated_objects: list[GeneratedPageObject] = []
 
         for scraped_page in scraped_pages:
@@ -189,10 +214,101 @@ class PlaceholderOrchestrator:
                 self.page_object_builder.build_page_object(
                     scraped_page,
                     file_path=self.page_object_builder.get_default_file_path(scraped_page.url),
+                    use_evidence_tracker=self._pom_mode,
                 )
             )
 
         return generated_objects
+
+    # ── POM mode helpers ──────────────────────────────────────────
+
+    def _build_pom_url_map(self, page_objects: list[GeneratedPageObject]) -> dict[str, GeneratedPageObject]:
+        """Build a mapping from URL to page object for POM mode resolution.
+
+        Returns a dict where keys are the page URLs and values are the
+        corresponding GeneratedPageObject instances.
+        """
+        url_map: dict[str, GeneratedPageObject] = {}
+        for po in page_objects:
+            url_map[po.url] = po
+        return url_map
+
+    def _build_pom_imports(self, page_objects: list[GeneratedPageObject]) -> list[str]:
+        """Generate import statements for POM mode test files.
+
+        Returns lines like::
+            from pages.home_page import HomePage
+        """
+        imports: list[str] = []
+        for po in page_objects:
+            module_name = po.module_name
+            class_name = po.class_name
+            imports.append(f"from pages.{module_name} import {class_name}")
+        return imports
+
+    def _build_pom_instantiation(self, page_objects: list[GeneratedPageObject]) -> list[str]:
+        """Generate POM instance instantiation lines for test fixtures.
+
+        Returns lines like::
+            home_page = HomePage(page)
+        """
+        lines: list[str] = []
+        for po in page_objects:
+            class_name = po.class_name
+            # Derive instance variable name from module_name with underscore
+            instance_name = po.module_name.replace("-", "_")
+            lines.append(f"    {instance_name} = {class_name}(page)")
+        return lines
+
+    def _get_pom_instance_name(self, url: str | None, page_objects: list[GeneratedPageObject]) -> str | None:
+        """Return the POM instance variable name for the given URL.
+
+        Returns None if no page object is found for the URL.
+        """
+        if not url:
+            return None
+        for po in page_objects:
+            if po.url == url:
+                return po.module_name.replace("-", "_")
+        return None
+
+    def _get_pom_method_call(
+        self,
+        action: str,
+        description: str,
+        resolved_selector: str,
+        pom_instance_name: str,
+        fill_value: str = "",
+    ) -> str | None:
+        """Generate a POM method call for the given action.
+
+        Returns the method call string, or None if POM mode is not active
+        or if the action should remain as a direct evidence_tracker call.
+
+        In POM mode:
+        - CLICK -> {instance}.click("label")
+        - FILL -> {instance}.fill("label", "value")
+        - GOTO/URL -> page.goto(url) (navigation stays direct)
+        - ASSERT -> evidence_tracker.assert_visible() (assertions stay direct)
+        """
+        if not self._pom_mode:
+            return None
+
+        # ASSERT always remains as direct evidence_tracker call
+        if action == "ASSERT":
+            return None
+
+        # GOTO/URL remain as direct page.goto
+        if action in {"GOTO", "URL"}:
+            return None
+
+        label = description
+        if action == "CLICK":
+            return f"{pom_instance_name}.click({label!r})"
+        if action == "FILL":
+            return f"{pom_instance_name}.fill({label!r}, {fill_value!r})"
+
+        return None
 
     async def _replace_placeholders_sequentially(
         self,

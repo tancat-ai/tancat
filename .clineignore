@@ -23,13 +23,12 @@ evidence/
 .tmp/
 tmp_*.py
 *.log
+bench_*
 
 # ── Scratch & experimental ────────────────────────────────────────
 scratch/
 
 # ── MCP Memory Bank (regenerated) ─────────────────────────────────
-memory-bank/
-cline-mcp-memory-bank/
 
 # ── Build/Node ────────────────────────────────────────────────────
 node_modules/
@@ -53,3 +52,18 @@ playwright/.cache/
 *.py[o]
 *.so
 *.egg-info/
+
+# ── Context window reduction ──────────────────────────────────────
+# Exclude large doc directories from file listing (kept on disk)
+docs/reference/
+docs/archived/
+docs/session_*.md
+docs/test_suite_audit_*.md
+docs/private/
+markdown_docs/
+
+# ── Generated test output (many files, regenerated) ───────────────
+generated_tests/test_*.py
+
+# ── Test artifacts ────────────────────────────────────────────────
+tests/integration/

@@ -1,42 +1,23 @@
 # .clinerules — Cline Operational Rules
 
-## Session Start (do this before any work)
-1. Read activeContext.md — this is sufficient for most tasks
-2. Read projectContext.md, decisionLog.md, progress.md ONLY if the task
-   requires full project history or is a memory bank update
-3. DO NOT re-read AGENTS.md — it is already in your system prompt
-4. Confirm active task with the user before writing any code
+## Session Lifecycle
+- **Start**: Read `activeContext.md`. Only read `projectContext.md`/`decisionLog.md`/`progress.md` if task requires full history.
+- **DO NOT** re-read `AGENTS.md` — it is already in your system prompt.
+- **End**: Update memory bank with new decisions/patterns/gotchas. Document bugs in protected files to `BACKLOG.md` instead of editing.
 
-## Session End (do this before closing)
-1. Update memory bank with any new decisions, patterns, or gotchas discovered
-2. If a bug was found in a protected file, add it to BACKLOG.md instead of editing
+## MCP Usage
+- **Context7**: Fetch current docs before writing code touching external libraries (Playwright, Streamlit, pytest, uv, ruff, mypy).
+- **Memory Bank**: Files at project root. Use native file writing (not MCP tools).
 
-## MCP Server Usage
+## Debugging
+- **Preferred**: `notebooks/debug_pipeline.ipynb` for placeholder/scraper issues.
+- **Fallback**: `scripts/debug/debug_pipeline.py`.
+- **E2E**: `scripts/uat/uat_automationexercise.py` after placeholder fixes.
 
-### Context7 — use before writing code that touches any external library
-- Always fetch current docs for: Playwright, Streamlit, pytest, uv, ruff, mypy
-- Do not rely on training knowledge for library APIs — it may be outdated
+## Terminal Rules
+- Git Bash (MINGW64) on Windows. Forward slashes only. POSIX commands only (`cat`, `ls`, `grep`).
+- Use python one-liners for complex text processing to avoid shell escaping bugs.
 
-## Memory Bank Maintenance (Direct File Access)
-- The memory bank files live at the project root (`activeContext.md`, `decisionLog.md`, `progress.md`, `projectContext.md`).
-- Do not use external MCP tools to write to these. Use native file writing tools to update them directly.
-
-## Debugging Pipeline Issues
-
-When diagnosing placeholder resolution problems, scraper output, or skeleton generation:
-- **Preferred:** Use `notebooks/debug_pipeline.ipynb` for interactive, cell-by-cell debugging with state preservation
-- **Fallback:** Use `scripts/debug/debug_pipeline.py` when Jupyter is unavailable
-- **E2E validation:** Use `scripts/uat/uat_automationexercise.py` after fixing placeholder-related issues
-- Do not modify pipeline modules without first establishing baseline behavior in the notebook
-
-# Terminal Environment Rules
-- The terminal is Git Bash (MINGW64) on Windows.
-- ALWAYS use forward slashes (`/`) for all paths and executable targets (e.g., `.venv/Scripts/python.exe`, `src/journey_scraper.py`).
-- NEVER use Windows CMD/PowerShell built-ins (e.g., do not use `type`, `dir`, `findstr`).
-- ALWAYS use standard POSIX/Bash equivalents (`cat`, `ls`, `grep`).
-- If you need to check if a file exists or do complex text processing, favor short python one-liners (e.g., `python -c "..."`) to avoid shell-specific escaping bugs.
-
-## General Discipline
-- One feature per session (see AGENTS.md §10)
-- Never declare work done without running end-to-end
-- Always: ruff → mypy → pytest → human reviews diff → then commit
+## Discipline
+- One feature per session. Never declare done without end-to-end verification.
+- Always: `ruff` → `mypy` → `pytest` → human reviews diff → commit.

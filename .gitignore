@@ -64,7 +64,8 @@ coverage.xml
 htmlcov/
 .tox/
 test-results/
-
+exported_tests/
+bench_*
 # ── Type Checking ─────────────────────────────────────────────────────────────
 .mypy_cache/
 

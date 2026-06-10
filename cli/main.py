@@ -38,6 +38,7 @@ from .menu_renderer import (
 )
 from .pipeline_runner import (
     build_test_plan,
+    export_clean_package,
     generate_reports,
     run_generated_tests,
     run_pipeline,
@@ -105,6 +106,7 @@ async def interactive_session() -> None:
                 menu_items.append("Re-enter Target URLs")
 
             menu_items.append("Consent Mode")
+            menu_items.append("POM Mode")
 
             # Authentication / Journey (AI-009 Phase B)
             auth_label = "Configure Authentication"
@@ -135,6 +137,7 @@ async def interactive_session() -> None:
                     "Generate Reports",
                     "View Reports",
                     "View Failure Diagnostics",
+                    "Export Clean Package",
                 ]
             )
 
@@ -196,6 +199,12 @@ async def interactive_session() -> None:
             _collect_urls_inline(session)
         elif menu_items[idx] == "Consent Mode":
             session.consent_mode = collect_consent_mode()
+        elif menu_items[idx] == "POM Mode":
+            session.pom_mode = not session.pom_mode
+            if session.pom_mode:
+                print(green("  POM Mode: ON — generated tests will include Page Object Model artifacts"))
+            else:
+                print(yellow("  POM Mode: OFF — generated tests will use inline locators only"))
         elif "Authentication" in menu_items[idx]:
             _collect_authentication_inline(session)
         elif "Journey" in menu_items[idx]:
@@ -221,6 +230,8 @@ async def interactive_session() -> None:
             view_reports(session)
         elif menu_items[idx] == "View Failure Diagnostics":
             view_failure_diagnostics(session)
+        elif menu_items[idx] == "Export Clean Package":
+            export_clean_package(session)
         # AI-026: persisted-package commands
         elif menu_items[idx] == "Load Existing Generated Tests":
             _load_saved_packages_inline(session)

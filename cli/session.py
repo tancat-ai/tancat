@@ -62,6 +62,7 @@ class Session:
 
     # Pipeline settings
     consent_mode: str = "auto-dismiss"
+    pom_mode: bool = False
 
     # Requirements
     raw_requirements: str = ""

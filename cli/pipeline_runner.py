@@ -15,7 +15,9 @@ from src.evidence_loader import (
     get_failure_diagnostics,
     load_evidence_for_package,
 )
+from src.export_service import export_clean_suite
 from src.pipeline_artifact_manager import find_existing_packages
+from src.pipeline_models import ExportMode
 from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pytest_output_parser import RunResult
@@ -37,6 +39,60 @@ from src.ui_pipeline import (
 from .color import cyan, green, red, yellow
 from .menu_renderer import print_header, print_menu, read_optional
 from .run_results_display import render_run_results
+
+# ── Export ────────────────────────────────────────────────────────────────
+
+
+def export_clean_package(session: Any) -> None:
+    """Export a clean test suite without EvidenceTracker dependency."""
+    from .menu_renderer import print_menu
+
+    print_header("Export Clean Package")
+
+    if not session.pipeline_saved_path:
+        print(yellow("  No generated test package found. Run the pipeline first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    source_path = Path(session.pipeline_saved_path)
+    if not source_path.exists():
+        print(yellow(f"  Package directory not found: {source_path}"))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    # Choose export mode
+    mode_choice = print_menu(
+        [
+            "Flat (inline locators)",
+            "POM (page-object modules)",
+        ],
+        "Select export mode:",
+    )
+
+    export_mode = ExportMode.FLAT if mode_choice == 0 else ExportMode.POM
+    mode_label = "Flat" if export_mode == ExportMode.FLAT else "POM"
+
+    print(f"\n  Exporting ({mode_label})...\n")
+
+    try:
+        result = export_clean_suite(
+            source_package_dir=source_path,
+            export_mode=export_mode,
+            output_base_dir="exported_tests",
+            story_slug=session.story_slug or "",
+        )
+        print(green(result.summary()))
+        print()
+    except FileNotFoundError as exc:
+        print(red(f"  Export failed: {exc}"))
+    except Exception as exc:
+        print(red(f"  Export failed: {exc}"))
+
+    print("  Press Enter to continue...")
+    input()
+
 
 # ── Requirements parsing ──────────────────────────────────────────────────
 
@@ -170,6 +226,7 @@ async def run_pipeline(session: Any) -> None:
             session=ui_session,
             credential_profile=session.credential_profile,
             journey_steps=session.journey_steps if session.journey_steps else None,
+            pom_mode=session.pom_mode,
         )
     except Exception as exc:
         session.pipeline_error = str(exc)

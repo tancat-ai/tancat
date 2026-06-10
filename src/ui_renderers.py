@@ -359,8 +359,13 @@ class SidebarConfig:
     """Renders the configuration sidebar and returns the selected values."""
 
     @staticmethod
-    def render() -> dict[str, str]:
-        """Render sidebar and return provider configuration."""
+    def render() -> dict[str, Any]:
+        """Render sidebar and return provider configuration.
+
+        Returns a dict with:
+        - provider: str — selected LLM provider key
+        - pom_mode: bool — Page Object Model generation mode
+        """
         st.sidebar.title("Configuration")
         provider_labels = {
             "ollama": "Ollama (local)",
@@ -381,7 +386,21 @@ class SidebarConfig:
                 format_func=_format_provider,
             ),
         )
-        return {"provider": provider}
+
+        # AI-010 Phase 4: POM mode toggle
+        if "pom_mode" not in st.session_state:
+            st.session_state["pom_mode"] = False
+
+        st.sidebar.divider()
+        st.sidebar.subheader("Test Structure")
+        pom_mode = st.sidebar.toggle(
+            "Page Object Model",
+            value=st.session_state.pom_mode,
+            help="Generate tests using Page Object Model classes with evidence-aware locators",
+        )
+        st.session_state.pom_mode = pom_mode
+
+        return {"provider": provider, "pom_mode": pom_mode}
 
 
 # ---------------------------------------------------------------------------
@@ -562,9 +581,33 @@ def _store_run_report() -> None:
         saved_path=st.session_state.pipeline_saved_path,
     )
     store_report_bundle(bundle, session)
-    # Sync back to st.session_state
-    for key, value in session._state.items():
-        if key.startswith("pipeline_"):
+    # Sync pipeline-managed keys back to st.session_state using a whitelist.
+    # Avoids overwriting widget-owned keys (e.g. test_plan_signoff_notes).
+    _PIPELINE_KEYS = {
+        "pipeline_results",
+        "pipeline_skeleton",
+        "pipeline_saved_path",
+        "pipeline_manifest_path",
+        "pipeline_error",
+        "pipeline_unresolved",
+        "pipeline_scraped_pages",
+        "pipeline_urls",
+        "pipeline_criteria",
+        "pipeline_conditions",
+        "pipeline_run_result",
+        "pipeline_run_output",
+        "pipeline_run_command",
+        "pipeline_run_return_code",
+        "pipeline_local_report",
+        "pipeline_jira_report",
+        "pipeline_html_report",
+        "pipeline_local_report_path",
+        "pipeline_jira_report_path",
+        "pipeline_html_report_path",
+    }
+    for key in _PIPELINE_KEYS:
+        value = session.get(key)
+        if value is not None:
             st.session_state[key] = value
 
 
@@ -1407,6 +1450,31 @@ class SavedPackagePanel:
             saved_path=st.session_state.get("pipeline_saved_path", ""),
         )
         store_report_bundle(bundle, session)
-        for key, value in session._state.items():
-            if key.startswith("pipeline_"):
+        # Sync pipeline-managed keys back using a whitelist.
+        # Avoids overwriting widget-owned keys (e.g. test_plan_signoff_notes).
+        _PIPELINE_KEYS = {
+            "pipeline_results",
+            "pipeline_skeleton",
+            "pipeline_saved_path",
+            "pipeline_manifest_path",
+            "pipeline_error",
+            "pipeline_unresolved",
+            "pipeline_scraped_pages",
+            "pipeline_urls",
+            "pipeline_criteria",
+            "pipeline_conditions",
+            "pipeline_run_result",
+            "pipeline_run_output",
+            "pipeline_run_command",
+            "pipeline_run_return_code",
+            "pipeline_local_report",
+            "pipeline_jira_report",
+            "pipeline_html_report",
+            "pipeline_local_report_path",
+            "pipeline_jira_report_path",
+            "pipeline_html_report_path",
+        }
+        for key in _PIPELINE_KEYS:
+            value = session.get(key)
+            if value is not None:
                 st.session_state[key] = value

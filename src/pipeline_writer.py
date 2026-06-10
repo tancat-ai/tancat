@@ -111,6 +111,7 @@ class PipelineArtifactWriter:
             manifest_path=str(manifest_path.absolute()),
             pages=run_result.scraped_page_records,
             records=records,
+            pom_mode=getattr(run_result, "pom_mode", False),
         )
 
     def _save_package_manifest(

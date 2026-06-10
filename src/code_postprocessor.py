@@ -265,6 +265,243 @@ def _ensure_evidence_tracker_fixture(code: str) -> str:
     return "\n".join(updated_lines)
 
 
+def inject_import(code: str, import_line: str) -> str:
+    """Inject an import line at the top of the file (after any docstring)."""
+    lines = code.splitlines(keepends=True)
+    insert_at = 0
+    # Skip module docstring
+    if lines and lines[0].strip().startswith('"""'):
+        for i, line in enumerate(lines):
+            insert_at = i + 1
+            if '"""' in line and i > 0:
+                break
+    # Don't duplicate
+    if any(import_line.split()[0] in line for line in lines):
+        return code
+    lines.insert(insert_at, import_line + "\n")
+    return "".join(lines)
+
+
+def strip_evidence_from_test_code(code: str) -> str:
+    """Convert evidence-aware test code to clean Playwright test code.
+
+    Before: evidence_tracker.click("#button", label="button")
+    After:  page.locator("#button").click()
+
+    Before: evidence_tracker.fill("#input", "value", label="input")
+    After:  page.locator("#input").fill("value")
+
+    Before: def test_x(page, evidence_tracker: EvidenceTracker):
+    After:  def test_x(page):
+    """
+    result = code
+
+    # evidence_tracker.click(selector, label=...) -> page.locator(selector).click()
+    result = re.sub(
+        r"evidence_tracker\.click\(([^,]+),\s*label=[^\)]*\)",
+        r"page.locator(\1).click()",
+        result,
+    )
+
+    # evidence_tracker.fill(selector, value, label=...) -> page.locator(selector).fill(value)
+    result = re.sub(
+        r"evidence_tracker\.fill\(([^,]+),\s*([^,]+),\s*label=[^\)]*\)",
+        r"page.locator(\1).fill(\2)",
+        result,
+    )
+
+    # evidence_tracker.navigate(url) or evidence_tracker.navigate(url, label=...) -> page.goto(url)
+    result = re.sub(
+        r"evidence_tracker\.navigate\(([^,]+)(?:,\s*label=[^\)]*)?\)",
+        r"page.goto(\1)",
+        result,
+    )
+
+    # evidence_tracker.assert_visible(selector, label=...) -> expect(page.locator(selector)).to_be_visible()
+    result = re.sub(
+        r"evidence_tracker\.assert_visible\(([^,]+),\s*label=[^\)]*\)",
+        r"expect(page.locator(\1)).to_be_visible()",
+        result,
+    )
+
+    # evidence_tracker.assert_visible(selector) without label= -> expect(page.locator(selector)).to_be_visible()
+    result = re.sub(
+        r"evidence_tracker\.assert_visible\(([^,)]+)\s*\)",
+        r"expect(page.locator(\1)).to_be_visible()",
+        result,
+    )
+
+    # evidence_tracker.select(selector, value, label=...) -> page.locator(selector).select_option(value)
+    result = re.sub(
+        r"evidence_tracker\.select\(([^,]+),\s*([^,]+),\s*label=[^\)]*\)",
+        r"page.locator(\1).select_option(\2)",
+        result,
+    )
+
+    # evidence_tracker.get_text(selector, label=...) -> page.locator(selector).text_content()
+    result = re.sub(
+        r"evidence_tracker\.get_text\(([^,]+),\s*label=[^\)]*\)",
+        r"page.locator(\1).text_content()",
+        result,
+    )
+
+    # --- Clean up test signatures: remove evidence_tracker parameter ---
+    # Handle type-hinted parameter first: evidence_tracker: EvidenceTracker
+    result = re.sub(
+        r"(def\s+test_\w+)\(page,\s*evidence_tracker\s*:\s*EvidenceTracker\s*\):",
+        r"\1(page):",
+        result,
+    )
+    # Handle bare parameter: evidence_tracker
+    result = re.sub(
+        r"(def\s+test_\w+)\(page,\s*evidence_tracker\s*\):",
+        r"\1(page):",
+        result,
+    )
+    # Handle evidence_tracker in middle position (type-hinted)
+    result = re.sub(
+        r"(def\s+test_\w+\([^)]*?)\s*,\s*evidence_tracker\s*:\s*EvidenceTracker(.*?)\):",
+        lambda m: f"{m.group(1)}{m.group(2)}):",
+        result,
+    )
+    # Handle evidence_tracker in middle position (bare)
+    result = re.sub(
+        r"(def\s+test_\w+\([^)]*?)\s*,\s*evidence_tracker(.*?)\):",
+        lambda m: f"{m.group(1)}{m.group(2)}):",
+        result,
+    )
+
+    # --- Import cleanup ---
+    # Remove EvidenceTracker import
+    result = re.sub(
+        r"^from src\.evidence_tracker import EvidenceTracker\s*$",
+        "",
+        result,
+        flags=re.MULTILINE,
+    )
+
+    # Remove dismiss_consent_overlays import
+    result = re.sub(
+        r"^from src\.browser_utils import dismiss_consent_overlays\s*$",
+        "",
+        result,
+        flags=re.MULTILINE,
+    )
+
+    # Remove @pytest.mark.evidence decorator
+    result = re.sub(
+        r"^@pytest\.mark\.evidence\s*$",
+        "",
+        result,
+        flags=re.MULTILINE,
+    )
+
+    # Ensure playwright import includes expect
+    if "expect(" in result:
+        result = re.sub(
+            r"from playwright\.sync_api import Page\b",
+            "from playwright.sync_api import Page, expect",
+            result,
+        )
+        # Ensure the import exists
+        if "from playwright.sync_api import Page" not in result:
+            result = inject_import(result, "from playwright.sync_api import Page, expect")
+    elif "page." in result:
+        if "from playwright.sync_api import Page" not in result:
+            result = inject_import(result, "from playwright.sync_api import Page, expect")
+
+    # Remove dismiss_consent_overlays(page) calls
+    result = re.sub(r"^\s*dismiss_consent_overlays\(page\)\s*$", "", result, flags=re.MULTILINE)
+    result = re.sub(r"^\s*dismiss_consent_overlays\(self\.page\)\s*$", "", result, flags=re.MULTILINE)
+
+    # Remove blank lines that were left behind (collapse multiple blank lines to one)
+    result = re.sub(r"\n{3,}", "\n\n", result)
+
+    return result
+
+
+def strip_evidence_from_pom(code: str) -> str:
+    """Convert evidence-aware POM to clean POM for export.
+
+    Before: self.tracker.click("#button", label="button")
+    After:  self.page.locator("#button").click()
+
+    Before: def __init__(self, page: Page, tracker: EvidenceTracker) -> None:
+    After:  def __init__(self, page: Page) -> None:
+    """
+    result = code
+
+    # Remove EvidenceTracker import
+    result = re.sub(r"^from src\.evidence_tracker import EvidenceTracker\s*$", "", result, flags=re.MULTILINE)
+
+    # Replace __init__ signature: remove tracker parameter
+    result = re.sub(
+        r"def __init__\(self, page: Page, tracker: EvidenceTracker\) -> None:",
+        "def __init__(self, page: Page) -> None:",
+        result,
+    )
+
+    # Replace self.tracker = tracker with self.tracker = None (or remove)
+    result = re.sub(r"^\s*self\.tracker = tracker\s*$", "", result, flags=re.MULTILINE)
+
+    # self.tracker.click(selector, label=...) -> self.page.locator(selector).click()
+    result = re.sub(
+        r"self\.tracker\.click\(([^,]+),\s*label=[^\)]*\)",
+        r"self.page.locator(\1).click()",
+        result,
+    )
+
+    # self.tracker.fill(selector, value, label=...) -> self.page.locator(selector).fill(value)
+    result = re.sub(
+        r"self\.tracker\.fill\(([^,]+),\s*([^,]+),\s*label=[^\)]*\)",
+        r"self.page.locator(\1).fill(\2)",
+        result,
+    )
+
+    # self.tracker.assert_visible(selector, label=...) -> expect(self.page.locator(selector)).to_be_visible()
+    result = re.sub(
+        r"self\.tracker\.assert_visible\(([^,]+),\s*label=[^\)]*\)",
+        r"expect(self.page.locator(\1)).to_be_visible()",
+        result,
+    )
+
+    # self.tracker.get_text(selector, label=...) -> self.page.locator(selector).text_content()
+    result = re.sub(
+        r"self\.tracker\.get_text\(([^,]+),\s*label=[^\)]*\)",
+        r"self.page.locator(\1).text_content()",
+        result,
+    )
+
+    # self.tracker.select(selector, value, label=...) -> self.page.locator(selector).select_option(value)
+    result = re.sub(
+        r"self\.tracker\.select\(([^,]+),\s*([^,]+),\s*label=[^\)]*\)",
+        r"self.page.locator(\1).select_option(\2)",
+        result,
+    )
+
+    # self.tracker.navigate(url) -> self.page.goto(url)
+    result = re.sub(
+        r"self\.tracker\.navigate\(([^,)]+)(?:,\s*label=[^\)]*)?\)",
+        r"self.page.goto(\1)",
+        result,
+    )
+
+    # Ensure expect import if needed
+    if "expect(" in result:
+        result = re.sub(
+            r"from playwright\.sync_api import Page\b",
+            "from playwright.sync_api import Page, expect",
+            result,
+        )
+        if "from playwright.sync_api import Page" not in result:
+            result = inject_import(result, "from playwright.sync_api import Page, expect")
+
+    # Remove blank lines that were left behind
+    result = re.sub(r"\n{3,}", "\n\n", result)
+
+    return result
+
+
 def flatten_inner_functions(code: str) -> str:
     """Remove nested 'def inner():' style wrappers and move their decorators up."""
     lines = code.splitlines()
@@ -336,22 +573,6 @@ def flatten_inner_functions(code: str) -> str:
         i += 1
 
     return "\n".join(updated_lines)
-
-
-def inject_import(code: str, import_line: str) -> str:
-    """Insert an import at the very top of the generated file."""
-    lines = code.splitlines()
-
-    stripped_target = import_line.strip()
-    lines = [ln for ln in lines if ln.strip() != stripped_target]
-
-    insert_at = 0
-    if lines and lines[0].startswith("from __future__ import"):
-        insert_at = 1
-        while insert_at < len(lines) and not lines[insert_at].strip():
-            insert_at += 1
-    lines.insert(insert_at, import_line)
-    return "\n".join(lines)
 
 
 def rewrite_page_references_in_class_methods(code: str) -> str:

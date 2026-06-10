@@ -1,7 +1,7 @@
 ﻿# BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-05-17 (doc audit, resolver restructure Phases 1–2, UrlResolver Phase 3)
+Last updated: 2026-06-08 (Phase 4 Export core shipped)
 
 ---
 
@@ -17,6 +17,7 @@ Last updated: 2026-05-17 (doc audit, resolver restructure Phases 1–2, UrlResol
 | Resolver restructure Phase 0–1 | **Complete** | Dead methods removed from `placeholder_resolver.py` |
 | Resolver restructure Phase 2 | **Partial** | Pass 1 (CLICK/FILL + ASSERT text), Pass 2 structural, Pass 3 scoring+LLM; pass logging added |
 | AI-019 | **Superseded** | Skeleton uses placeholders; `code_postprocessor` injects `evidence_tracker` — no LLM evidence rules needed |
+| Phase 4 Export (core) | **Complete** | `ExportMode` enum, `ExportService.export()`, `strip_evidence_from_test_code()`, `strip_evidence_from_pom()`. 28 tests. **TODO:** Streamlit panel + CLI menu. |
 
 **Still open (high level):** AI-010 POM toggle, AI-011 run history chart, AI-023 repair loop, AI-026 CLI reload, AI-004 Run Now gaps, Session 3 ASSERT prompt specificity.
 

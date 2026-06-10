@@ -81,6 +81,7 @@ if st.session_state.pop("_load_baseline_requested", False):
 # ---------------------------------------------------------------------------
 config = SidebarConfig.render()
 provider = config["provider"]
+pom_mode = config.get("pom_mode", False)
 
 default_provider_url, default_model = _get_provider_defaults(provider)
 provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
@@ -366,17 +367,99 @@ if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
                         session=session,
                         credential_profile=st.session_state._active_credential_profile,
                         journey_steps=st.session_state._active_journey_steps,
+                        pom_mode=pom_mode,
                     )
                 )
-                # Sync session state back to st.session_state
-                for key, value in session._state.items():
-                    st.session_state[key] = value
+                # Sync pipeline-managed keys back to st.session_state.
+                # Use a whitelist to avoid overwriting widget-owned keys
+                # (e.g. test_plan_signoff_notes) which would raise:
+                #   st.session_state.<key> cannot be modified after the widget
+                #   with key <key> is instantiated
+                _PIPELINE_KEYS = {
+                    "pipeline_results",
+                    "pipeline_skeleton",
+                    "pipeline_saved_path",
+                    "pipeline_manifest_path",
+                    "pipeline_error",
+                    "pipeline_unresolved",
+                    "pipeline_scraped_pages",
+                    "pipeline_urls",
+                    "pipeline_criteria",
+                    "pipeline_conditions",
+                    "pipeline_run_result",
+                    "pipeline_run_output",
+                    "pipeline_run_command",
+                    "pipeline_run_return_code",
+                    "pipeline_local_report",
+                    "pipeline_jira_report",
+                    "pipeline_html_report",
+                    "pipeline_local_report_path",
+                    "pipeline_jira_report_path",
+                    "pipeline_html_report_path",
+                }
+                for key in _PIPELINE_KEYS:
+                    value = session.get(key)
+                    if value is not None:
+                        st.session_state[key] = value
                 status.update(label="Pipeline complete", state="complete", expanded=False)
         except Exception as exc:
             st.session_state.pipeline_error = str(exc)
 
 if st.session_state.pipeline_error:
     st.error(st.session_state.pipeline_error)
+
+# ---------------------------------------------------------------------------
+# Export panel — clean test package without EvidenceTracker
+# ---------------------------------------------------------------------------
+if st.session_state.pipeline_saved_path:
+    st.divider()
+    st.subheader("📦 Export Test Package")
+
+    export_mode_choice = st.selectbox(
+        "Export Mode",
+        options=["Flat (inline locators)", "POM (page-object modules)"],
+        help="Flat: single test files with inline locators. POM: separate page-object modules.",
+        key="export_mode_selection",
+    )
+
+    if st.button("Export Clean Package", type="primary", key="export_button"):
+        from pathlib import Path
+
+        from src.export_service import export_clean_suite
+        from src.pipeline_models import ExportMode
+
+        source_path = Path(st.session_state.pipeline_saved_path)
+        export_mode = ExportMode.FLAT if "Flat" in export_mode_choice else ExportMode.POM
+
+        try:
+            with st.status("Exporting clean test package...", expanded=True) as status:
+                st.write(f"Source: {source_path}")
+                st.write(f"Mode: {'POM' if export_mode == ExportMode.POM else 'Flat'}")
+
+                result = export_clean_suite(
+                    source_package_dir=source_path,
+                    export_mode=export_mode,
+                    output_base_dir="exported_tests",
+                    story_slug=st.session_state.get("story_slug", ""),
+                )
+
+                st.success(f"✅ Exported to: `{result.export_dir}`")
+                st.write(f"  - Test files: {len(result.test_files)}")
+                st.write(f"  - Page objects: {len(result.page_objects)}")
+                st.write("  - Conftest: 1")
+                st.write("  - README: 1")
+
+                st.session_state.export_result = result
+                status.update(label="Export complete", state="complete", expanded=False)
+        except FileNotFoundError as exc:
+            st.error(f"Export failed: {exc}")
+        except Exception as exc:
+            st.error(f"Export failed: {exc}")
+
+    # Show previous export result if stored
+    export_result = st.session_state.get("export_result")
+    if export_result and not st.session_state.get("export_button_pressed"):
+        st.info(f"Last export: `{export_result.export_dir}` — {len(export_result.test_files)} test(s)")
 
 # ---------------------------------------------------------------------------
 # Scraper error surfacing (Task 5)
