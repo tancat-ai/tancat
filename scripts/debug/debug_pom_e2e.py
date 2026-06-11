@@ -12,17 +12,14 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import sys
 from pathlib import Path
-
-import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from src.config import PipelineConfig
-from src.orchestrator import TestOrchestrator
 from src.journey_scraper import CredentialProfile
+from src.orchestrator import TestOrchestrator
 
 # --- Configuration ---
 BASE_URL = "https://automationexercise.com"
@@ -34,7 +31,7 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "generated_tests"
 POM_MODE = True
 
 print("=" * 60)
-print(f"POM Mode E2E Verification")
+print("POM Mode E2E Verification")
 print(f"POM Mode: {POM_MODE}")
 print(f"Base URL: {BASE_URL}")
 print("=" * 60)
@@ -126,7 +123,7 @@ if pom_inits:
 else:
     print("  FAIL: POM not instantiated with evidence_tracker")
     print("  Looking for instantiation pattern...")
-    init_lines = [l.strip() for l in test_content.splitlines() if "=" in l and "Page" in l or "page," in l]
+    init_lines = [line.strip() for line in test_content.splitlines() if "=" in line and "Page" in line or "page," in line]
     print(f"  Candidate lines: {init_lines[:5]}")
 
 # --- Step 3: Check POM class files ---
@@ -151,7 +148,7 @@ if pages_dir.exists():
             tracker_calls = re.findall(r"self\.tracker\.\w+", pom_content)
             print(f"    OK: Uses evidence tracker: {set(tracker_calls)}")
         else:
-            print(f"    FAIL: Does not use self.tracker.*")
+            print("    FAIL: Does not use self.tracker.*")
 else:
     print("  FAIL: pages/ directory not found")
 
@@ -172,6 +169,7 @@ else:
 print("\n" + "=" * 60)
 print("Verification Summary")
 print("=" * 60)
+
 print(f"Test package: {test_pkg}")
 print(f"POM imports found: {bool(pom_imports)}")
 print(f"POM methods found: {bool(pom_methods)}")
