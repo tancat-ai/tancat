@@ -8,6 +8,7 @@ the AutomationExercise site, then verifies:
 3. Evidence sidecar JSON is generated
 4. Failure diagnostics are captured
 """
+
 from __future__ import annotations
 
 import json
@@ -123,7 +124,9 @@ if pom_inits:
 else:
     print("  FAIL: POM not instantiated with evidence_tracker")
     print("  Looking for instantiation pattern...")
-    init_lines = [line.strip() for line in test_content.splitlines() if "=" in line and "Page" in line or "page," in line]
+    init_lines = [
+        line.strip() for line in test_content.splitlines() if "=" in line and "Page" in line or "page," in line
+    ]
     print(f"  Candidate lines: {init_lines[:5]}")
 
 # --- Step 3: Check POM class files ---
