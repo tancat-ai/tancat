@@ -101,7 +101,7 @@ def test_build_pom_imports() -> None:
 
 
 def test_build_pom_instantiation() -> None:
-    """_build_pom_instantiation should generate correct instance lines."""
+    """_build_pom_instantiation should generate correct instance lines with EvidenceTracker."""
     orch = PlaceholderOrchestrator()
     po_home = GeneratedPageObject(
         url="https://example.com/home",
@@ -115,9 +115,15 @@ def test_build_pom_instantiation() -> None:
         module_name="view_cart_page",
         file_path="pages/view_cart_page.py",
     )
+    # Default use_evidence_tracker=True generates instances with tracker parameter
     lines = orch._build_pom_instantiation([po_home, po_view_cart])
-    assert "    home_page = HomePage(page)" in lines
-    assert "    view_cart_page = ViewCartPage(page)" in lines
+    assert "    home_page = HomePage(page, evidence_tracker)" in lines
+    assert "    view_cart_page = ViewCartPage(page, evidence_tracker)" in lines
+
+    # use_evidence_tracker=False generates plain instances (backward compatible)
+    plain_lines = orch._build_pom_instantiation([po_home, po_view_cart], use_evidence_tracker=False)
+    assert "    home_page = HomePage(page)" in plain_lines
+    assert "    view_cart_page = ViewCartPage(page)" in plain_lines
 
 
 def test_get_pom_instance_name_matches_url() -> None:

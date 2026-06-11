@@ -66,4 +66,4 @@ markdown_docs/
 generated_tests/test_*.py
 
 # ── Test artifacts ────────────────────────────────────────────────
-tests/integration/
+

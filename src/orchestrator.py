@@ -341,6 +341,19 @@ class TestOrchestrator:
         )
         self._debug("phase=resolve_placeholders done")
 
+        # Inject POM imports and instantiations when POM mode is enabled
+        if self._pom_mode and generated_page_objects:
+            self._debug("phase=pom_injection start")
+            pom_imports = self._placeholder_orchestrator._build_pom_imports(generated_page_objects)
+            pom_instantiation = self._placeholder_orchestrator._build_pom_instantiation(
+                generated_page_objects, use_evidence_tracker=True
+            )
+            if pom_imports:
+                final_code = self._inject_pom_imports(final_code, pom_imports)
+            if pom_instantiation:
+                final_code = self._inject_pom_instantiation(final_code, pom_instantiation)
+            self._debug("phase=pom_injection done")
+
         # Prerequisite injection: detect dependency chains and inject auth steps
         self._debug("phase=prerequisite_injection start")
         injector = PrerequisiteInjector()
@@ -650,6 +663,45 @@ class TestOrchestrator:
         """
         # Deduplicate while preserving order — journey discovery handles the rest
         return list(dict.fromkeys(seed_urls))
+
+    @staticmethod
+    def _inject_pom_imports(code: str, pom_imports: list[str]) -> str:
+        """Inject POM import statements after existing imports.
+
+        Finds the last existing import line and inserts POM imports after it.
+        """
+        lines = code.splitlines()
+        insert_index: int = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("from ") or stripped.startswith("import "):
+                insert_index = i + 1
+            elif stripped and not stripped.startswith("#"):
+                # First non-import, non-comment line — stop scanning
+                break
+
+        import_block = "\n".join(pom_imports)
+        new_lines = lines[:insert_index] + [import_block, ""] + lines[insert_index:]
+        return "\n".join(new_lines)
+
+    @staticmethod
+    def _inject_pom_instantiation(code: str, pom_instantiation: list[str]) -> str:
+        """Inject POM instantiation lines at the start of each test function.
+
+        Finds each `def test_` line and inserts indented instantiation lines after it.
+        """
+        lines = code.splitlines()
+        indented_lines = [f"    {line}" for line in pom_instantiation]
+        instantiation_block = "\n".join(indented_lines)
+        new_lines: list[str] = []
+
+        for line in lines:
+            new_lines.append(line)
+            stripped = line.strip()
+            if stripped.startswith("def test_") and "(" in stripped and ":":
+                new_lines.append(instantiation_block)
+
+        return "\n".join(new_lines)
 
     # Backwards-compatible delegation methods for code that references these directly on TestOrchestrator.
     async def _resolve_placeholder_for_page(

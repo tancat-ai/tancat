@@ -59,6 +59,7 @@ class PlaceholderOrchestrator:
         self.page_object_builder = PageObjectBuilder()
         self.semantic_ranker = SemanticCandidateRanker(None)
         self.url_resolver = UrlResolver()
+        self._generated_page_objects: list[GeneratedPageObject] = []
 
     @property
     def pom_mode(self) -> bool:
@@ -218,6 +219,7 @@ class PlaceholderOrchestrator:
                 )
             )
 
+        self._generated_page_objects = generated_objects
         return generated_objects
 
     # ── POM mode helpers ──────────────────────────────────────────
@@ -246,18 +248,28 @@ class PlaceholderOrchestrator:
             imports.append(f"from pages.{module_name} import {class_name}")
         return imports
 
-    def _build_pom_instantiation(self, page_objects: list[GeneratedPageObject]) -> list[str]:
-        """Generate POM instance instantiation lines for test fixtures.
+    def _build_pom_instantiation(
+        self,
+        page_objects: list[GeneratedPageObject],
+        *,
+        use_evidence_tracker: bool = True,
+    ) -> list[str]:
+        """Generate POM instance instantiation lines for test functions.
 
-        Returns lines like::
+        In evidence-aware POM mode (default), generates lines like::
+            home_page = HomePage(page, evidence_tracker)
+
+        In legacy mode::
             home_page = HomePage(page)
         """
         lines: list[str] = []
         for po in page_objects:
             class_name = po.class_name
-            # Derive instance variable name from module_name with underscore
             instance_name = po.module_name.replace("-", "_")
-            lines.append(f"    {instance_name} = {class_name}(page)")
+            if use_evidence_tracker:
+                lines.append(f"    {instance_name} = {class_name}(page, evidence_tracker)")
+            else:
+                lines.append(f"    {instance_name} = {class_name}(page)")
         return lines
 
     def _get_pom_instance_name(self, url: str | None, page_objects: list[GeneratedPageObject]) -> str | None:
@@ -323,7 +335,7 @@ class PlaceholderOrchestrator:
         """Resolve placeholders step by step while tracking the active page for each test."""
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
         lines = skeleton_code.splitlines()
-        line_resolutions: dict[int, list[tuple[str, str, str, str, str]]] = {}
+        line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None]]] = {}
         all_placeholder_uses = self._all_placeholder_uses(skeleton_code)
         fallback_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
         errors = scraped_errors or {}
@@ -367,7 +379,7 @@ class PlaceholderOrchestrator:
                         journey_unresolved[journey.test_name].append(description)
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
-                            (placeholder.token, action, resolved_value, description, fill_value)
+                            (placeholder.token, action, resolved_value, description, fill_value, current_url)
                         )
 
                     if next_url:
@@ -377,7 +389,7 @@ class PlaceholderOrchestrator:
         resolved_tokens = {
             token
             for replacements in line_resolutions.values()
-            for token, _action, _resolved_value, _description, _ in replacements
+            for token, _action, _resolved_value, _description, _fill, _url in replacements
         }
 
         for use in all_placeholder_uses:
@@ -412,7 +424,7 @@ class PlaceholderOrchestrator:
                             unresolved for unresolved in journey_unresolved[journey_name] if unresolved != description
                         ]
                     line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value)
+                        (use.token, action, resolved_value, description, fill_value, fallback_url)
                     )
             else:
                 resolved_value, _ = await self._resolve_placeholder_for_page(
@@ -423,14 +435,35 @@ class PlaceholderOrchestrator:
                     scraped_errors=errors,
                 )
                 line_resolutions.setdefault(use.line_number, []).append(
-                    (use.token, action, resolved_value, description, fill_value)
+                    (use.token, action, resolved_value, description, fill_value, fallback_url)
                 )
 
         # 3. Apply line-level replacements first.
         final_lines: list[str] = []
         for line_number, line in enumerate(lines, start=1):
             updated_line = line
-            for token, action, resolved_value, description, _fill_value in line_resolutions.get(line_number, []):
+            for token, action, resolved_value, description, fill_value, current_url in line_resolutions.get(
+                line_number, []
+            ):
+                if self._pom_mode and action in {"CLICK", "FILL"}:
+                    instance_name = self._get_pom_instance_name(current_url, self._generated_page_objects)
+                    if instance_name:
+                        pom_call = self._get_pom_method_call(
+                            action=action,
+                            description=description,
+                            resolved_selector=resolved_value,
+                            pom_instance_name=instance_name,
+                            fill_value=fill_value,
+                        )
+                        if pom_call:
+                            # Preserve indentation and replace token with POM call
+                            indent = line[: len(line) - len(line.lstrip())]
+                            updated_line = updated_line.replace(token, pom_call)
+                            # If the line was JUST the token, we need to ensure it has the indent
+                            if updated_line.strip() == pom_call:
+                                updated_line = f"{indent}{pom_call}"
+                            continue
+
                 updated_line = replace_token_in_line(
                     updated_line,
                     action,
@@ -438,7 +471,7 @@ class PlaceholderOrchestrator:
                     resolved_value,
                     duplicate_selectors,
                     description,
-                    fill_value=_fill_value,
+                    fill_value=fill_value,
                 )
             final_lines.append(updated_line)
 
