@@ -195,3 +195,18 @@ def render_run_results(run: RunResult, *, show_raw: bool = False) -> None:
         render_raw_output(run, expanded=True)
     elif run.raw_output:
         render_raw_output(run, expanded=False)
+
+
+# ── Run History Summary ────────────────────────────────────────────────────
+
+
+def render_run_history_summary() -> None:
+    """Display the run history summary using ASCII tables.
+
+    Shows recent run history, flaky tests, and comparison between
+    the last two runs.
+    """
+    from src.run_history_cli import format_full_history_summary
+
+    summary = format_full_history_summary()
+    print(summary)

@@ -944,7 +944,7 @@ class EvidenceViewer:
             )
             return
 
-        evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map"])
+        evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map", "Run History"])
 
         with evidence_tabs[0]:
             self._render_annotated_screenshot(sidecars)
@@ -954,6 +954,9 @@ class EvidenceViewer:
 
         with evidence_tabs[2]:
             self._render_coverage_heatmap(evidence_dirs)
+
+        with evidence_tabs[3]:
+            self._render_run_history()
 
         st.divider()
         self._render_suite_heatmap(sidecars, evidence_dirs)
@@ -1148,6 +1151,61 @@ class EvidenceViewer:
             page_url=selected_url,
         )
         components.html(suite_html, height=850, scrolling=True)
+
+    def _render_run_history(self) -> None:
+        """Render the Run History tab with interactive chart."""
+        from pathlib import Path
+
+        from src.run_history_chart import build_run_history_chart
+        from src.run_result_persistence import load_all_run_results
+
+        st.subheader("Run History")
+
+        # Load run data from generated_tests directory
+        generated_tests_dir = Path("generated_tests")
+        runs = load_all_run_results(generated_tests_dir)
+        if not runs:
+            st.info("No run history available yet. Run generated tests to collect data.")
+            return
+
+        # Summary stats
+        total_runs = len(runs)
+        total_passed = sum(r.passed for r in runs)
+        total_failed = sum(r.failed for r in runs)
+        total_tests = total_passed + total_failed
+        avg_pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0.0
+
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Total Runs", total_runs)
+        s2.metric("Avg Pass Rate", f"{avg_pass_rate:.1f}%")
+        s3.metric("Total Passed", total_passed)
+        s4.metric("Total Failed", total_failed)
+
+        # Chart
+        flaky_col = st.columns(1)
+        with flaky_col[0]:
+            show_flaky = st.checkbox("Show Flaky Test Markers", value=True)
+
+        chart = build_run_history_chart(runs, include_flaky_markers=show_flaky)
+        st.plotly_chart(chart, use_container_width=True)
+
+        # Run details table
+        with st.expander("Run Details"):
+            rows = []
+            for run in runs:
+                rows.append(
+                    {
+                        "Run ID": run.run_id,
+                        "Package": run.test_package,
+                        "Total": run.total,
+                        "Passed": run.passed,
+                        "Failed": run.failed,
+                        "Skipped": run.skipped,
+                        "Errors": run.errors,
+                        "Duration": f"{run.duration:.1f}s",
+                    }
+                )
+            st.dataframe(rows, width="stretch")
 
 
 # ---------------------------------------------------------------------------
