@@ -365,9 +365,9 @@ No protected files are modified. All changes are in:
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `tests/test_run_history_chart.py` | ~8 | Chart builder edge cases, data mapping |
-| `tests/test_run_history_cli.py` | ~6 | ASCII formatting, truncation, empty states |
-| **Total** | **~14** | **New modules fully tested** |
+| `tests/test_run_history_chart.py` | 10 | Chart builder edge cases, data mapping |
+| `tests/test_run_history_cli.py` | 19 | ASCII formatting, truncation, empty states |
+| **Total** | **29** | **New modules fully tested** |
 
 Integration verification: EvidenceViewer tab renders without errors when no run history exists (empty state test).
 
@@ -382,7 +382,7 @@ Integration verification: EvidenceViewer tab renders without errors when no run 
 - [x] Streamlit UI: Run History tab renders with scope selector, chart, flaky tests, comparison
 - [x] CLI: History summary displays after test run with 2+ runs
 - [x] Empty state: Graceful message when no runs exist
-- [x] Export: run_results/ included in exported packages (verified existing behavior)
+- [x] Export: run_results/ copied to exported packages (added to `src/export_service.py`)
 
 **Session notes:**
 - Run single-process (`pytest -x -q`) to avoid VS Code crashes with parallel xdist workers
@@ -390,6 +390,8 @@ Integration verification: EvidenceViewer tab renders without errors when no run 
 - Scope selector filters by package: "Current Package" default, "All Runs" option
 - Flaky tests shown in expandable section with pass/fail counts and flakiness score
 - Run comparison shows improved/regressed/new_failures between last 2 runs
+- Export service: `run_results/` directory now copied to `evidence/run_results/` in exported packages
+- CLI: `render_run_history_summary()` wired into `cli/pipeline_runner.py` at 2 call sites (test run and package rerun)
 
 ---
 

@@ -81,6 +81,16 @@ def export_clean_suite(
     if manifest_src.exists():
         shutil.copy2(str(manifest_src), str(export_dir / "scrape_manifest.json"))
 
+    # Copy run_results/ directory (AI-011: preserve run history in exports)
+    run_results_src = source / "evidence" / "run_results"
+    if not run_results_src.exists():
+        # Also check for run_results at package root level
+        run_results_src = source / "run_results"
+    if run_results_src.exists():
+        run_results_dest = export_dir / "evidence" / "run_results"
+        run_results_dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(str(run_results_src), str(run_results_dest), dirs_exist_ok=True)
+
     # Update package_manifest.json with export info
     _update_package_manifest(source, export_dir, export_mode)
 
