@@ -38,7 +38,7 @@ from src.ui_pipeline import (
 
 from .color import cyan, green, red, yellow
 from .menu_renderer import print_header, print_menu, read_optional
-from .run_results_display import render_run_results
+from .run_results_display import render_run_history_summary, render_run_results
 
 # ── Export ────────────────────────────────────────────────────────────────
 
@@ -295,7 +295,11 @@ def run_generated_tests(session: Any, rerun_failed: bool = False) -> None:
 
 
 def display_run_results(session: Any) -> None:
-    """Display pytest results using structured run results view."""
+    """Display pytest results using structured run results view.
+
+    After displaying the current run results, appends the run history
+    summary showing recent trends, flaky tests, and run comparison.
+    """
     run_result = session.pipeline_run_result
     if not isinstance(run_result, RunResult):
         print(yellow("  No test results to display."))
@@ -307,6 +311,9 @@ def display_run_results(session: Any) -> None:
     print()
 
     render_run_results(run_result, show_raw=False)
+
+    # Run history summary (AI-011 Phase 4)
+    render_run_history_summary()
 
 
 # ── Reports ───────────────────────────────────────────────────────────────
@@ -626,6 +633,9 @@ def run_saved_test_from_package(
 
         if isinstance(session.pipeline_run_result, RunResult):
             render_run_results(session.pipeline_run_result, show_raw=False)
+
+            # Run history summary (AI-011 Phase 4)
+            render_run_history_summary()
 
         if session.pipeline_run_return_code == 0:
             print()
