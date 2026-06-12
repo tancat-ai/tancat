@@ -1153,11 +1153,21 @@ class EvidenceViewer:
         components.html(suite_html, height=850, scrolling=True)
 
     def _render_run_history(self) -> None:
-        """Render the Run History tab with interactive chart."""
-        from pathlib import Path
+        """Render the Run History tab with chart, flaky tests, and comparison.
 
+        Implements Phase 3 of AI-011 spec:
+        - Scope selector (Current Package / All Runs)
+        - Stacked bar chart with flaky markers (Plotly)
+        - Flaky test indicators (expandable table)
+        - Run comparison panel (improved/regressed/new_failures)
+        """
         from src.run_history_chart import build_run_history_chart
-        from src.run_result_persistence import load_all_run_results
+        from src.run_result_persistence import (
+            compare_latest_runs,
+            compare_runs,
+            get_flaky_tests,
+            load_all_run_results,
+        )
 
         st.subheader("Run History")
 
@@ -1165,13 +1175,24 @@ class EvidenceViewer:
         generated_tests_dir = Path("generated_tests")
         runs = load_all_run_results(generated_tests_dir)
         if not runs:
-            st.info("No run history available yet. Run generated tests to collect data.")
+            st.info("No run history available. Run tests first to see trends here.")
             return
 
+        # Scope selector — filter by package
+        packages: list[str] = list({r.test_package for r in runs if r.test_package}) or ["All"]
+        packages_sorted = sorted(packages)
+        scope_options = ["All"] + packages_sorted if packages_sorted != ["All"] else ["All"]
+        scope = st.selectbox(
+            "Scope",
+            options=scope_options,
+            key="run_history_scope",
+        )
+        filtered_runs = self._filter_runs_by_package(runs, scope)
+
         # Summary stats
-        total_runs = len(runs)
-        total_passed = sum(r.passed for r in runs)
-        total_failed = sum(r.failed for r in runs)
+        total_runs = len(filtered_runs)
+        total_passed = sum(r.passed for r in filtered_runs)
+        total_failed = sum(r.failed for r in filtered_runs)
         total_tests = total_passed + total_failed
         avg_pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0.0
 
@@ -1182,30 +1203,79 @@ class EvidenceViewer:
         s4.metric("Total Failed", total_failed)
 
         # Chart
-        flaky_col = st.columns(1)
-        with flaky_col[0]:
-            show_flaky = st.checkbox("Show Flaky Test Markers", value=True)
-
-        chart = build_run_history_chart(runs, include_flaky_markers=show_flaky)
+        show_flaky = st.checkbox("Show Flaky Test Markers", value=True, key="run_history_show_flaky")
+        chart = build_run_history_chart(filtered_runs, include_flaky_markers=show_flaky)
         st.plotly_chart(chart, use_container_width=True)
 
-        # Run details table
-        with st.expander("Run Details"):
-            rows = []
-            for run in runs:
-                rows.append(
-                    {
-                        "Run ID": run.run_id,
-                        "Package": run.test_package,
-                        "Total": run.total,
-                        "Passed": run.passed,
-                        "Failed": run.failed,
-                        "Skipped": run.skipped,
-                        "Errors": run.errors,
-                        "Duration": f"{run.duration:.1f}s",
-                    }
-                )
-            st.dataframe(rows, width="stretch")
+        # Flaky tests (expandable)
+        flaky = get_flaky_tests(filtered_runs)
+        flaky_count = len(flaky)
+        with st.expander(f"Flaky Tests ({flaky_count})", expanded=flaky_count > 0):
+            if flaky:
+                flaky_rows = []
+                for test_name, counts in flaky:
+                    passed_c = counts.get("passed", 0)
+                    failed_c = counts.get("failed", 0)
+                    total_c = passed_c + failed_c
+                    flakiness = (failed_c / total_c) if total_c > 0 else 0.0
+                    flaky_rows.append(
+                        {
+                            "Test Name": test_name,
+                            "Passed": passed_c,
+                            "Failed": failed_c,
+                            "Flakiness Score": f"{flakiness:.2f} ",
+                        }
+                    )
+                st.dataframe(flaky_rows, width="stretch")
+            else:
+                st.success("No flaky tests detected ✅")
+
+        # Run comparison
+        if len(filtered_runs) >= 2:
+            # Compare last two filtered runs directly
+            comparison = compare_runs(filtered_runs[-2], filtered_runs[-1])
+            with st.expander("Last Run Comparison", expanded=True):
+                self._render_run_comparison(comparison)
+        else:
+            comparison_none = compare_latest_runs(directory=None)
+            if comparison_none:
+                with st.expander("Last Run Comparison", expanded=True):
+                    self._render_run_comparison(comparison_none)
+
+    def _filter_runs_by_package(self, runs: list, scope: str) -> list:
+        """Filter runs by package scope selection."""
+        if scope == "All":
+            return runs
+        return [r for r in runs if r.test_package == scope]
+
+    def _render_run_comparison(self, comparison: Any) -> None:
+        """Render run comparison with improved/regressed/new_failures sections."""
+        # Improved tests: green checkmark list
+        improved = comparison.improved
+        if improved:
+            st.success(f"Improved ({len(improved)}):")
+            for test in improved:
+                st.write(f"- ✓ {test}")
+        else:
+            st.success("Improved: (none)")
+
+        # Regressed tests: red warning list
+        regressed = comparison.regressed
+        if regressed:
+            st.error(f"Regressed ({len(regressed)}):")
+            for test in regressed:
+                st.write(f"- ✗ {test}")
+        else:
+            st.info("Regressed: (none)")
+
+        # New failures: orange alert list
+        new_failures = comparison.new_failures
+        if new_failures:
+            st.warning(f"New Failures ({len(new_failures)}):")
+            for test in new_failures:
+                st.write(f"- ⚠ {test}")
+        else:
+            st.info("New Failures: (none)")
 
 
 # ---------------------------------------------------------------------------

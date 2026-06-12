@@ -1,6 +1,6 @@
 # FEATURE SPEC — AI-011: Run History Chart
 
-**Status:** Draft — 2026-06-11
+**Status:** Complete — 2026-06-12
 **Created:** 2026-06-11
 **Supersedes:** N/A
 **Depends on:** `src/run_result_persistence.py` (stable), `src/ui_renderers.py`, `cli/run_results_display.py`
@@ -375,27 +375,31 @@ Integration verification: EvidenceViewer tab renders without errors when no run 
 
 ## Verification Criteria
 
-- [ ] `ruff check src/run_history_chart.py src/run_history_cli.py` — clean
-- [ ] `mypy src/run_history_chart.py src/run_history_cli.py` — clean
-- [ ] `pytest tests/test_run_history_chart.py tests/test_run_history_cli.py -v` — all pass
-- [ ] Full test suite: `pytest -n auto -x -q` — no regressions
-- [ ] Streamlit UI: Run History tab renders with mock data
-- [ ] CLI: History summary displays after test run with 2+ runs
-- [ ] Empty state: Graceful message when no runs exist
-- [ ] Export: run_results/ included in exported packages
+- [x] `ruff check src/run_history_chart.py src/run_history_cli.py` — clean
+- [x] `mypy src/run_history_chart.py src/run_history_cli.py` — clean
+- [x] `pytest tests/test_run_history_chart.py tests/test_run_history_cli.py -v` — 29 pass
+- [x] Full test suite: `pytest -x -q` — 1166 passed, 1 skipped, no regressions
+- [x] Streamlit UI: Run History tab renders with scope selector, chart, flaky tests, comparison
+- [x] CLI: History summary displays after test run with 2+ runs
+- [x] Empty state: Graceful message when no runs exist
+- [x] Export: run_results/ included in exported packages (verified existing behavior)
+
+**Session notes:**
+- Run single-process (`pytest -x -q`) to avoid VS Code crashes with parallel xdist workers
+- `_render_run_history()` uses `st.expander()` (not `st.expanded()`), `compare_runs()` (not `compare_latest_runs()`)
+- Scope selector filters by package: "Current Package" default, "All Runs" option
+- Flaky tests shown in expandable section with pass/fail counts and flakiness score
+- Run comparison shows improved/regressed/new_failures between last 2 runs
 
 ---
 
 ## Estimated Effort
 
-**1 session (~2-3 hours):**
-- 30 min: `src/run_history_chart.py` + tests
-- 20 min: `src/run_history_cli.py` + tests
-- 20 min: Streamlit tab integration (`src/ui_renderers.py`)
-- 15 min: CLI integration (`cli/run_results_display.py`)
-- 15 min: Export service verification (`src/export_service.py`)
-- 20 min: ruff → mypy → pytest → commit
+**Actual: 2 sessions (~3 hours total):**
+- Session 1: `src/run_history_chart.py` (10 tests) + `src/run_history_cli.py` (19 tests)
+- Session 2: Streamlit tab integration (`src/ui_renderers.py`), CLI integration verification, export verification
+- ruff → mypy → pytest (single-process) → commit
 
 ---
 
-*Last updated: 2026-06-11*
+*Last updated: 2026-06-12*
