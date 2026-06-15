@@ -10,6 +10,7 @@ No Streamlit imports — fully unit-testable in isolation.
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -247,10 +248,29 @@ def _scan_page_object_files(package_root: Path) -> list[str]:
 
 
 def _count_run_results(package_root: Path) -> int:
-    """Count run-result JSON files in or under the package."""
-    # Run results may live inside the package or in evidence/run_results/
+    """Count run results. Prefers SQLite DB, falls back to JSON file count.
+
+    AI-012: SQLite-first approach. If a SQLite database exists with run
+    data, return the count from there. Otherwise fall back to counting
+    legacy JSON files.
+    """
+    # Check for SQLite database first (AI-012)
+    for db_name in ("playwright_tests.db",):
+        for db_location in (package_root / "evidence" / db_name, package_root / db_name):
+            if db_location.exists():
+                try:
+                    conn = sqlite3.connect(str(db_location))
+                    cursor = conn.execute("SELECT COUNT(*) FROM runs")
+                    count = cursor.fetchone()[0]
+                    conn.close()
+                    return count
+                except sqlite3.OperationalError, sqlite3.DatabaseError:
+                    # Database exists but may be empty or corrupted
+                    pass
+                break
+
+    # Fallback: count JSON files (legacy packages)
     direct = list(package_root.glob("run_results_*.json"))
-    # Also check evidence subdirectory
     evidence_dir = package_root / "evidence"
     if evidence_dir.is_dir():
         evidence_dir_results = list(evidence_dir.glob("run_results_*.json"))

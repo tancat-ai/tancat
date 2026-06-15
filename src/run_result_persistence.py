@@ -1,21 +1,21 @@
 """Persist run results to disk for historical comparison and flaky-test tracking.
 
-Provides thin JSON persistence for ``RunResult`` objects so that consecutive
-pytest runs can be compared over time.  Stored artefacts live under
-``evidence/run_results/`` as one file per run, named by ISO-8601 timestamp.
+Provides SQLite-backed persistence for ``RunResult`` objects so that consecutive
+pytest runs can be compared over time.
 
 No Streamlit imports — fully unit-testable in isolation.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.pytest_output_parser import RunResult
+
+if TYPE_CHECKING:
+    from src.sqlite_persistence import SQLitePersistence
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -66,16 +66,33 @@ class RunHistory:
 
 
 # ---------------------------------------------------------------------------
-# Persistence operations
+# SQLite singleton (lazy initialization to avoid circular imports)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DIR = Path("evidence/run_results")
+_db: SQLitePersistence | None = None
 
 
-def _default_dir() -> Path:
-    """Return the default persistence directory (creates if needed)."""
-    _DEFAULT_DIR.mkdir(parents=True, exist_ok=True)
-    return _DEFAULT_DIR
+def _get_db() -> SQLitePersistence:
+    """Return the global SQLitePersistence singleton (lazy init)."""
+    global _db
+    if _db is None:
+        from src.sqlite_persistence import SQLitePersistence
+
+        _db = SQLitePersistence()
+    return _db
+
+
+def _reset_db() -> None:
+    """Reset the global DB singleton. Used in tests for isolation."""
+    global _db
+    if _db is not None:
+        _db.close()
+        _db = None
+
+
+# ---------------------------------------------------------------------------
+# Public API — delegates to SQLite backend
+# ---------------------------------------------------------------------------
 
 
 def persist_run_result(
@@ -83,94 +100,63 @@ def persist_run_result(
     test_package: str = "",
     directory: Path | None = None,
 ) -> Path:
-    """Write a single ``RunResult`` to disk and return the file path.
-
-    The filename encodes an ISO-8601 UTC timestamp so that runs are
-    naturally sortable.
+    """Write a single ``RunResult`` to the SQLite database.
 
     Args:
         run_result: Parsed pytest result to persist.
         test_package: Path or identifier of the test package that was run.
-        directory: Override directory; defaults to ``evidence/run_results``.
+        directory: Unused (kept for backwards compatibility).
 
     Returns:
-        Absolute path to the written JSON file.
+        Path to the SQLite database file.
     """
-    target_dir = directory or _default_dir()
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now(UTC).isoformat()
-    safe_id = timestamp.replace(":", "-").replace("+", "-")
-    filename = f"run_{safe_id}.json"
-    filepath = (target_dir / filename).resolve()
-
-    persisted = PersistedRunResult(
-        run_id=timestamp,
-        test_package=test_package,
-        results=[
-            PersistedTestResult(
-                name=r.name,
-                status=r.status,
-                duration=r.duration,
-                error_message=r.error_message,
-                file_path=r.file_path,
-            )
-            for r in run_result.results
-        ],
-        total=run_result.total,
-        passed=run_result.passed,
-        failed=run_result.failed,
-        skipped=run_result.skipped,
-        errors=run_result.errors,
-        duration=run_result.duration,
-        raw_output=run_result.raw_output,
-    )
-
-    filepath.write_text(
-        json.dumps(asdict(persisted), indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
-    return filepath
+    _get_db().persist_run_result(run_result, test_package)
+    return _get_db().db_path
 
 
 def load_run_result(filepath: Path) -> PersistedRunResult:
-    """Load a single persisted run result from disk."""
-    data = json.loads(filepath.read_text(encoding="utf-8"))
-    test_results = [
-        PersistedTestResult(
-            name=r["name"],
-            status=r["status"],
-            duration=r["duration"],
-            error_message=r["error_message"],
-            file_path=r["file_path"],
-        )
-        for r in data["results"]
-    ]
-    return PersistedRunResult(
-        run_id=data["run_id"],
-        test_package=data["test_package"],
-        results=test_results,
-        total=data["total"],
-        passed=data["passed"],
-        failed=data["failed"],
-        skipped=data["skipped"],
-        errors=data["errors"],
-        duration=data["duration"],
-        raw_output=data.get("raw_output", ""),
-    )
+    """Load a single persisted run result from SQLite.
+
+    Extracts the run_id from the filepath stem.
+
+    Args:
+        filepath: A Path whose stem is the run_id (ISO-8601 timestamp).
+
+    Returns:
+        The persisted run result.
+
+    Raises:
+        ValueError: If the run is not found in the database.
+    """
+    run_id = filepath.stem
+    result = _get_db().load_run_result(run_id)
+    if result is None:
+        raise ValueError(f"Run not found: {run_id}")
+    return result
 
 
-def list_run_results(directory: Path | None = None) -> list[Path]:
-    """Return sorted list of persisted run-result file paths (oldest first)."""
-    target_dir = directory or _default_dir()
-    if not target_dir.exists():
-        return []
-    return sorted(target_dir.glob("run_*.json"))
+def list_run_results(directory: Path | None = None) -> list[str]:
+    """Return sorted list of run IDs (oldest first).
+
+    Args:
+        directory: Unused (kept for backwards compatibility).
+
+    Returns:
+        List of ISO-8601 run ID strings.
+    """
+    return _get_db().list_run_results()
 
 
 def load_all_run_results(directory: Path | None = None) -> list[PersistedRunResult]:
-    """Load every persisted run result (oldest first)."""
-    return [load_run_result(p) for p in list_run_results(directory)]
+    """Load every persisted run result (oldest first).
+
+    Args:
+        directory: Unused (kept for backwards compatibility).
+
+    Returns:
+        List of persisted run results.
+    """
+    return _get_db().load_all_run_results()
 
 
 # ---------------------------------------------------------------------------
@@ -186,12 +172,13 @@ def compute_run_history(
 
     Args:
         runs: Explicit list of runs to analyse. When *None*, loads all
-              persisted runs from ``directory``.
-        directory: Directory to scan when ``runs`` is *None*.
+              persisted runs from the SQLite database.
+        directory: Unused (kept for backwards compatibility).
     """
     if runs is None:
-        runs = load_all_run_results(directory)
+        return _get_db().compute_run_history()
 
+    # If explicit runs provided, compute in-memory (for backwards compat)
     history = RunHistory()
     history.total_runs = len(runs)
 
@@ -228,10 +215,19 @@ def get_flaky_tests(
     A test is considered *flaky* when it has both passes and failures
     (or errors) across at least ``min_runs`` observations.
 
+    Args:
+        runs: Explicit list of runs. When *None*, uses SQLite database.
+        directory: Unused (kept for backwards compatibility).
+        min_runs: Minimum number of observations to consider a test flaky.
+
     Returns:
         List of ``(test_name, counts)`` tuples sorted by flakiness score
         (ratio of minority outcome to total runs, descending).
     """
+    if runs is None:
+        return _get_db().get_flaky_tests(min_runs)
+
+    # In-memory fallback for explicit runs
     history = compute_run_history(runs, directory)
 
     flaky: list[tuple[str, dict[str, int]]] = []
@@ -332,15 +328,11 @@ def delete_old_runs(
     keep: int = 50,
     directory: Path | None = None,
 ) -> int:
-    """Delete oldest run-result files, keeping the most recent ``keep`` runs.
+    """Delete oldest run results, keeping the most recent ``keep`` runs.
 
-    Returns the number of files deleted.
+    Returns the number of runs deleted.
     """
-    all_files = list_run_results(directory)
-    to_delete = all_files[:-keep] if len(all_files) > keep else []
-    for filepath in to_delete:
-        filepath.unlink(missing_ok=True)
-    return len(to_delete)
+    return _get_db().delete_old_runs(keep)
 
 
 def to_dict(run: PersistedRunResult) -> dict[str, Any]:

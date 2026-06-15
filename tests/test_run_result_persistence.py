@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from src.pytest_output_parser import RunResult, TestResult
 from src.run_result_persistence import (
@@ -11,6 +14,7 @@ from src.run_result_persistence import (
     PersistedTestResult,
     RunComparison,
     RunHistory,
+    _reset_db,
     compare_latest_runs,
     compare_runs,
     compute_run_history,
@@ -19,10 +23,25 @@ from src.run_result_persistence import (
     get_flaky_tests,
     list_run_results,
     load_all_run_results,
-    load_run_result,
     persist_run_result,
     to_dict,
 )
+
+# ---------------------------------------------------------------------------
+# Fixtures — isolate SQLite singleton per test
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _isolated_db(tmp_path: Path) -> Generator[Path]:
+    """Reset the SQLite singleton before each test to a fresh temp database."""
+    _reset_db()
+    db_path = tmp_path / "run_results.sqlite"
+    # Patch the default DB path in sqlite_persistence module where it's actually used
+    with patch("src.sqlite_persistence._DEFAULT_DB_FILE", db_path):
+        yield tmp_path
+    _reset_db()
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -97,26 +116,30 @@ def _make_persisted(
 
 
 class TestPersistAndLoad:
-    def test_persist_creates_file(self, tmp_path: Path) -> None:
+    def test_persist_returns_db_path(self, tmp_path: Path) -> None:
+        """persist_run_result returns the SQLite db path (not a JSON file)."""
         run = _make_run()
         path = persist_run_result(run, test_package="pkg", directory=tmp_path)
         assert path.exists()
-        assert path.name.startswith("run_")
-        assert path.suffix == ".json"
+        assert path.suffix == ".sqlite"
 
-    def test_persist_writes_valid_json(self, tmp_path: Path) -> None:
+    def test_persist_writes_to_database(self, tmp_path: Path) -> None:
+        """Data written to SQLite can be loaded back."""
         run = _make_run()
-        path = persist_run_result(run, directory=tmp_path)
-        data = json.loads(path.read_text(encoding="utf-8"))
-        assert data["total"] == 3
-        assert data["passed"] == 2
-        assert data["failed"] == 1
+        persist_run_result(run, directory=tmp_path)
+        # Verify data is in DB by loading all results
+        runs = load_all_run_results(tmp_path)
+        assert len(runs) == 1
+        assert runs[0].total == 3
+        assert runs[0].passed == 2
+        assert runs[0].failed == 1
 
     def test_load_round_trips(self, tmp_path: Path) -> None:
         run = _make_run()
-        path = persist_run_result(run, test_package="mypkg", directory=tmp_path)
-        loaded = load_run_result(path)
-        assert loaded.run_id == path.name.replace("run_", "").replace(".json", "") or True  # ID is ISO timestamp
+        persist_run_result(run, test_package="mypkg", directory=tmp_path)
+        runs = load_all_run_results(tmp_path)
+        assert len(runs) == 1
+        loaded = runs[0]
         assert loaded.test_package == "mypkg"
         assert loaded.total == 3
         assert loaded.passed == 2
@@ -125,24 +148,24 @@ class TestPersistAndLoad:
 
     def test_load_preserves_test_results(self, tmp_path: Path) -> None:
         run = _make_run()
-        path = persist_run_result(run, directory=tmp_path)
-        loaded = load_run_result(path)
+        persist_run_result(run, directory=tmp_path)
+        loaded = load_all_run_results(tmp_path)[0]
         names = [r.name for r in loaded.results]
         assert "test_01" in names
         assert "test_03" in names
 
     def test_load_preserves_error_message(self, tmp_path: Path) -> None:
         run = _make_run()
-        path = persist_run_result(run, directory=tmp_path)
-        loaded = load_run_result(path)
+        persist_run_result(run, directory=tmp_path)
+        loaded = load_all_run_results(tmp_path)[0]
         failing = [r for r in loaded.results if r.name == "test_03"]
         assert len(failing) == 1
         assert failing[0].error_message == "AssertionError"
 
     def test_empty_run(self, tmp_path: Path) -> None:
         run = RunResult()
-        path = persist_run_result(run, directory=tmp_path)
-        loaded = load_run_result(path)
+        persist_run_result(run, directory=tmp_path)
+        loaded = load_all_run_results(tmp_path)[0]
         assert loaded.total == 0
         assert loaded.results == []
 
@@ -153,16 +176,16 @@ class TestPersistAndLoad:
 
 
 class TestListAndLoadAll:
-    def test_list_empty_directory(self, tmp_path: Path) -> None:
+    def test_list_empty_database(self, tmp_path: Path) -> None:
+        """list_run_results returns empty list when no runs persisted."""
         assert list_run_results(tmp_path) == []
 
-    def test_list_returns_sorted_paths(self, tmp_path: Path) -> None:
-        (tmp_path / "evidence" / "run_results").mkdir(parents=True)
+    def test_list_returns_sorted_run_ids(self, tmp_path: Path) -> None:
         for _i in range(3):
-            persist_run_result(_make_run(), directory=tmp_path / "evidence" / "run_results")
-        paths = list_run_results(tmp_path / "evidence" / "run_results")
-        assert len(paths) == 3
-        assert paths == sorted(paths)
+            persist_run_result(_make_run(), directory=tmp_path)
+        run_ids = list_run_results(tmp_path)
+        assert len(run_ids) == 3
+        assert run_ids == sorted(run_ids)
 
     def test_load_all_returns_runs(self, tmp_path: Path) -> None:
         persist_run_result(_make_run(), directory=tmp_path)
@@ -170,8 +193,7 @@ class TestListAndLoadAll:
         runs = load_all_run_results(tmp_path)
         assert len(runs) == 2
 
-    def test_load_all_empty_when_no_files(self, tmp_path: Path) -> None:
-        # Directory exists but has no run files
+    def test_load_all_empty_when_no_runs(self, tmp_path: Path) -> None:
         assert load_all_run_results(tmp_path) == []
 
 

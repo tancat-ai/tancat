@@ -10,12 +10,12 @@ No server process required — ``sqlite3`` is in the Python standard library.
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.pytest_output_parser import RunResult
+from src.run_result_persistence import PersistedRunResult, PersistedTestResult, RunHistory
 
 # ---------------------------------------------------------------------------
 # Default database location
@@ -60,51 +60,6 @@ _SCHEMA_SQL: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_test_results_status ON test_results(status)",
     "CREATE INDEX IF NOT EXISTS idx_test_results_name_status ON test_results(name, status)",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Data classes (mirror run_result_persistence dataclasses)
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class PersistedTestResult:
-    """Serializable mirror of :class:`TestResult`."""
-
-    name: str = ""
-    status: str = ""
-    duration: float = 0.0
-    error_message: str = ""
-    file_path: str = ""
-
-
-@dataclass
-class PersistedRunResult:
-    """Serializable mirror of :class:`RunResult` with persistence metadata."""
-
-    run_id: str = ""
-    test_package: str = ""
-    results: list[PersistedTestResult] = field(default_factory=list)
-    total: int = 0
-    passed: int = 0
-    failed: int = 0
-    skipped: int = 0
-    errors: int = 0
-    duration: float = 0.0
-    raw_output: str = ""
-    flaky_tests: list[str] = field(default_factory=list)
-
-
-@dataclass
-class RunHistory:
-    """Aggregated statistics across multiple persisted runs."""
-
-    total_runs: int = 0
-    total_passed: int = 0
-    total_failed: int = 0
-    total_skipped: int = 0
-    total_errors: int = 0
-    test_flakiness: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

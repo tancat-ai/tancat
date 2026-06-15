@@ -81,15 +81,22 @@ def export_clean_suite(
     if manifest_src.exists():
         shutil.copy2(str(manifest_src), str(export_dir / "scrape_manifest.json"))
 
-    # Copy run_results/ directory (AI-011: preserve run history in exports)
-    run_results_src = source / "evidence" / "run_results"
-    if not run_results_src.exists():
-        # Also check for run_results at package root level
-        run_results_src = source / "run_results"
-    if run_results_src.exists():
-        run_results_dest = export_dir / "evidence" / "run_results"
-        run_results_dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(run_results_src), str(run_results_dest), dirs_exist_ok=True)
+    # Copy SQLite database (AI-012: single file replaces JSON directory)
+    sqlite_db_src = source / "evidence" / "playwright_tests.db"
+    if not sqlite_db_src.exists():
+        # Also check for DB at package root level
+        sqlite_db_src = source / "playwright_tests.db"
+    if sqlite_db_src.exists():
+        evidence_dest = export_dir / "evidence"
+        evidence_dest.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(sqlite_db_src), str(evidence_dest / "playwright_tests.db"))
+        # Also copy WAL and SHM files if they exist (WAL mode artifacts)
+        for wal_file in ("playwright_tests.db-wal", "playwright_tests.db-shm"):
+            wal_src = source / "evidence" / wal_file
+            if not wal_src.exists():
+                wal_src = source / wal_file
+            if wal_src.exists():
+                shutil.copy2(str(wal_src), str(evidence_dest / wal_file))
 
     # Update package_manifest.json with export info
     _update_package_manifest(source, export_dir, export_mode)
@@ -202,6 +209,10 @@ def _generate_export_readme(export_dir: Path, export_mode: ExportMode, source: P
         except json.JSONDecodeError:
             pass
 
+    # Check if SQLite DB was included in export
+    has_sqlite = (export_dir / "evidence" / "playwright_tests.db").exists()
+    sqlite_note = "- `evidence/playwright_tests.db` — Run history (SQLite)" if has_sqlite else ""
+
     readme = f"""# Exported Test Suite: {package_name}
 
 **Generated:** {generated_at}
@@ -214,6 +225,7 @@ def _generate_export_readme(export_dir: Path, export_mode: ExportMode, source: P
 ## Contents
 - `test_*.py` — Generated test files
 {pages_note}
+{sqlite_note}
 - `scrape_manifest.json` — Original scrape data
 - `package_manifest.json` — Package metadata
 
