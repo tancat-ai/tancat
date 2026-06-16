@@ -14,6 +14,7 @@ from src.run_result_persistence import (
     PersistedTestResult,
     RunComparison,
     RunHistory,
+    _legacy_load_json,
     _reset_db,
     compare_latest_runs,
     compare_runs,
@@ -23,6 +24,7 @@ from src.run_result_persistence import (
     get_flaky_tests,
     list_run_results,
     load_all_run_results,
+    load_run_result,
     persist_run_result,
     to_dict,
 )
@@ -526,3 +528,126 @@ class TestRunHistoryDefaults:
         h = RunHistory()
         assert h.total_runs == 0
         assert h.test_flakiness == {}
+
+
+# ---------------------------------------------------------------------------
+# JSON legacy loader — backwards compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestLegacyJsonLoader:
+    def test_load_json_file(self, tmp_path: Path) -> None:
+        """_legacy_load_json reads a JSON file and returns PersistedRunResult."""
+        json_data = {
+            "run_id": "2026-06-01T10:00:00+00:00",
+            "test_package": "legacy_pkg",
+            "results": [
+                {
+                    "name": "test_old_01",
+                    "status": "passed",
+                    "duration": 0.3,
+                    "error_message": "",
+                    "file_path": "test_legacy.py",
+                },
+                {
+                    "name": "test_old_02",
+                    "status": "failed",
+                    "duration": 0.4,
+                    "error_message": "AssertionError: expected True",
+                    "file_path": "test_legacy.py",
+                },
+            ],
+            "total": 2,
+            "passed": 1,
+            "failed": 1,
+            "skipped": 0,
+            "errors": 0,
+            "duration": 0.7,
+            "raw_output": "legacy pytest output",
+        }
+        json_file = tmp_path / "2026-06-01T10-00-00.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            import json
+
+            json.dump(json_data, f)
+
+        result = _legacy_load_json(json_file)
+        assert result.run_id == "2026-06-01T10:00:00+00:00"
+        assert result.test_package == "legacy_pkg"
+        assert result.total == 2
+        assert result.passed == 1
+        assert result.failed == 1
+        assert len(result.results) == 2
+        assert result.results[0].name == "test_old_01"
+        assert result.results[1].error_message == "AssertionError: expected True"
+
+    def test_load_json_missing_raw_output(self, tmp_path: Path) -> None:
+        """JSON files without raw_output key default to empty string."""
+        json_data = {
+            "run_id": "2026-06-02T10:00:00+00:00",
+            "test_package": "pkg",
+            "results": [],
+            "total": 0,
+            "passed": 0,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "duration": 0.0,
+        }
+        json_file = tmp_path / "2026-06-02T10-00-00.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            import json
+
+            json.dump(json_data, f)
+
+        result = _legacy_load_json(json_file)
+        assert result.raw_output == ""
+
+
+class TestLoadRunResultBackwardsCompat:
+    def test_load_json_file_dispatches_to_legacy(self, tmp_path: Path) -> None:
+        """load_run_result with .json suffix uses legacy loader."""
+        json_data = {
+            "run_id": "2026-06-03T10:00:00+00:00",
+            "test_package": "pkg",
+            "results": [
+                {
+                    "name": "test_a",
+                    "status": "passed",
+                    "duration": 0.1,
+                    "error_message": "",
+                    "file_path": "t.py",
+                },
+            ],
+            "total": 1,
+            "passed": 1,
+            "failed": 0,
+            "skipped": 0,
+            "errors": 0,
+            "duration": 0.1,
+        }
+        json_file = tmp_path / "2026-06-03T10-00-00.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            import json
+
+            json.dump(json_data, f)
+
+        result = load_run_result(json_file)
+        assert result.run_id == "2026-06-03T10:00:00+00:00"
+        assert result.results[0].name == "test_a"
+
+    def test_load_sqlite_file_dispatches_to_db(self, tmp_path: Path) -> None:
+        """load_run_result with .sqlite suffix uses SQLite loader."""
+        from src.run_result_persistence import _get_db
+
+        run = _make_run()
+        persist_run_result(run, directory=tmp_path)
+
+        db = _get_db()
+        run_ids = db.list_run_results()
+        assert len(run_ids) == 1
+        # Simulate calling load_run_result with a .sqlite path
+        sqlite_file = tmp_path / f"{run_ids[0]}.sqlite"
+        result = load_run_result(sqlite_file)
+        assert result.total == 3
+        assert result.passed == 2

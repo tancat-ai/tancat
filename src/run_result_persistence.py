@@ -1,13 +1,15 @@
 """Persist run results to disk for historical comparison and flaky-test tracking.
 
 Provides SQLite-backed persistence for ``RunResult`` objects so that consecutive
-pytest runs can be compared over time.
+pytest runs can be compared over time.  Legacy JSON files continue to load via
+``_legacy_load_json`` for backwards compatibility during the transition period.
 
 No Streamlit imports — fully unit-testable in isolation.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -114,13 +116,37 @@ def persist_run_result(
     return _get_db().db_path
 
 
-def load_run_result(filepath: Path) -> PersistedRunResult:
-    """Load a single persisted run result from SQLite.
+def _legacy_load_json(filepath: Path) -> PersistedRunResult:
+    """Load a legacy JSON run result file.
 
-    Extracts the run_id from the filepath stem.
+    Used for backwards compatibility during the transition from JSON-based
+    persistence to SQLite.  The JSON format expects a dict matching the
+    ``PersistedRunResult`` dataclass structure.
+
+    Parameters
+    ----------
+    filepath :
+        Path to a ``.json`` file produced by the old persistence layer.
+
+    Returns
+    -------
+    PersistedRunResult
+    """
+    with open(filepath, encoding="utf-8") as f:
+        data = json.load(f)
+    return from_dict(data)
+
+
+def load_run_result(filepath: Path) -> PersistedRunResult:
+    """Load a single persisted run result.
+
+    **Backwards compatible dispatch:**
+
+    - ``.json`` files → legacy JSON loader
+    - ``.sqlite`` files → SQLite database (run_id extracted from stem)
 
     Args:
-        filepath: A Path whose stem is the run_id (ISO-8601 timestamp).
+        filepath: A Path to a JSON file or a SQLite reference file.
 
     Returns:
         The persisted run result.
@@ -128,6 +154,9 @@ def load_run_result(filepath: Path) -> PersistedRunResult:
     Raises:
         ValueError: If the run is not found in the database.
     """
+    if filepath.suffix == ".json":
+        return _legacy_load_json(filepath)
+
     run_id = filepath.stem
     result = _get_db().load_run_result(run_id)
     if result is None:
