@@ -336,6 +336,146 @@ class SQLitePersistence:
         return flaky
 
     # ------------------------------------------------------------------
+    # Query Interface — ad-hoc SQL queries for charts, Jira, heatmaps
+    # ------------------------------------------------------------------
+
+    def query_test_history(
+        self,
+        test_name_pattern: str = "%",
+        status: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        include_flaky: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Rich query returning structured dicts for flexible consumption.
+
+        Designed for human-readable API output, Jira/heatmap/Gantt exporters,
+        and future LLM semantic search integration.
+
+        Parameters
+        ----------
+        test_name_pattern :
+            SQL LIKE pattern for test name filtering (default: ``"%"`` = all).
+        status :
+            Filter by test result status (``"passed"``, ``"failed"``, etc.).
+        date_from / date_to :
+            ISO-8601 date range boundaries (inclusive).
+        include_flaky :
+            If ``True``, only returns tests that appear in the flaky set.
+
+        Returns
+        -------
+        list[dict]
+            Each dict has keys: run_id, test_name, status, duration,
+            error_message, file_path, created_at.
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        conditions.append("tr.name LIKE ?")
+        params.append(test_name_pattern)
+
+        if status is not None:
+            conditions.append("tr.status = ?")
+            params.append(status)
+
+        if date_from is not None:
+            conditions.append("r.created_at >= ?")
+            params.append(date_from)
+
+        if date_to is not None:
+            conditions.append("r.created_at <= ?")
+            params.append(date_to)
+
+        if include_flaky:
+            # Subquery: tests that have both passes and failures/errors
+            conditions.append(
+                "tr.name IN ("
+                "SELECT name FROM test_results"
+                " GROUP BY name"
+                " HAVING SUM(CASE WHEN status = 'passed' THEN 1 ELSE 0 END) > 0"
+                "    AND (SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) > 0"
+                "         OR SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0)"
+                ")"
+            )
+
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        sql = f"""
+        SELECT
+            r.run_id,
+            tr.name        AS test_name,
+            tr.status,
+            tr.duration,
+            tr.error_message,
+            tr.file_path,
+            r.created_at
+        FROM test_results tr
+        JOIN runs r ON tr.run_id = r.run_id
+        {where_clause}
+        ORDER BY r.created_at, tr.id
+        """
+
+        rows = self._conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_run_stats_for_chart(
+        self,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Chart-optimized aggregation query.
+
+        Returns one row per run with aggregated stats, suitable for feeding
+        directly into a stacked bar chart builder.
+
+        Parameters
+        ----------
+        date_from / date_to :
+            ISO-8601 date range boundaries (inclusive).
+
+        Returns
+        -------
+        list[dict]
+            Each dict has keys: run_id, passed, failed, skipped, errors,
+            total, pass_rate, duration, created_at.
+        """
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if date_from is not None:
+            conditions.append("created_at >= ?")
+            params.append(date_from)
+
+        if date_to is not None:
+            conditions.append("created_at <= ?")
+            params.append(date_to)
+
+        where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        sql = f"""
+        SELECT
+            run_id,
+            passed,
+            failed,
+            skipped,
+            errors,
+            total,
+            CASE WHEN (passed + failed + errors) > 0
+                 THEN ROUND(CAST(passed AS REAL) / (passed + failed + errors) * 100, 1)
+                 ELSE 0.0
+            END AS pass_rate,
+            duration,
+            created_at
+        FROM runs
+        {where_clause}
+        ORDER BY created_at
+        """
+
+        rows = self._conn.execute(sql, params).fetchall()
+        return [dict(row) for row in rows]
+
+    # ------------------------------------------------------------------
     # Housekeeping — delete old runs
     # ------------------------------------------------------------------
 

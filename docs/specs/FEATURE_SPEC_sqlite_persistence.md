@@ -2,7 +2,7 @@
 
 **Feature ID:** AI-012
 **Created:** 2026-06-14
-**Status:** In Progress
+**Status:** Complete
 **Priority:** Medium (Tier 3 — Infrastructure)
 **Depends on:** AI-026 (CLI Persist, shipped), AI-011 (Run History Chart, shipped)
 
@@ -241,17 +241,20 @@ WHERE tr.status IN ('failed', 'error')
 
 ### Phase 3 — Export Integration (Session 2)
 - **Decision (2026-06-15):** Option B — SQLite ONLY in exports. No transition period needed since SQLite is the source of truth. JSON legacy loader removed immediately.
-- [ ] `export_service.py` copies `.sqlite` file (replaces JSON directory copy)
-- [ ] `pipeline_artifact_manager.py` references new format (`_count_run_results` SQLite-aware)
-- [ ] Remove JSON legacy loader (`_legacy_load_json`, `_legacy_persist_run_result`) from `run_result_persistence.py`
-- [ ] Simplify `load_run_result()` to SQLite-only
-- [ ] Update export README template to mention `.sqlite` file
-- [ ] Tests for export SQLite inclusion
+- [x] `export_service.py` copies `.sqlite` file (replaces JSON directory copy)
+- [x] `pipeline_artifact_manager.py` references new format (`_count_run_results` SQLite-aware)
+- [x] Remove JSON legacy loader (`_legacy_load_json`, `_legacy_persist_run_result`) from `run_result_persistence.py`
+- [x] Simplify `load_run_result()` to SQLite-only
+- [x] Update export README template to mention `.sqlite` file
+- [x] Tests for export SQLite inclusion
 
-### Phase 4 — Query Interface for Charts (Session 2)
-- [ ] `query_test_history()` method
-- [ ] `run_history_chart.py` uses SQL queries
-- [ ] Performance improvement measurable vs. JSON loading
+### Phase 4 — Query Interface for Charts ✅ COMPLETE
+- [x] `query_test_history()` method — rich filtering (name, status, date range, flaky), returns dicts
+- [x] `get_run_stats_for_chart()` method — chart-optimized SQL aggregation
+- [x] `build_chart_from_db()` convenience function in run_history_chart.py
+- [x] Flaky detection uses SQL-backed `get_flaky_tests()`
+- [x] 20 new tests: 8 query_test_history + 6 get_run_stats_for_chart + 6 build_chart_from_db
+- [x] All 1215 tests pass, ruff + mypy green
 
 ---
 
@@ -312,9 +315,21 @@ No data migration required. New runs go to SQLite. Old JSON files remain readabl
 - 99 tests pass: 37 persistence + 30 sqlite + 32 consumer tests
 - `ruff` → `mypy` → `pytest` all green
 
-### Session 3 (2026-06-15) — Phase 3 In Progress
+### Session 3 (2026-06-15) — Phase 3 ✅ COMPLETE
 - **Decision:** Option B — SQLite ONLY in exports. No transition period.
-- **Decision:** JSON legacy loader removed immediately (no existing consumers depend on JSON in exports)
+- **Decision:** JSON legacy loader removed immediately.
+- export_service.py copies `.sqlite` file instead of JSON directory
+- Export README updated for SQLite-only format
+- pipeline_artifact_manager.py counts SQLite DB alongside JSON test files
+- 1195 tests pass, ruff/mypy/pytest green
+
+### Session 4 (2026-06-15) — Phase 4 ✅ COMPLETE
+- **Decision:** No backwards compatibility needed — dev tool, no historical data
+- Implemented `query_test_history()` with name pattern, status, date range, and flaky filters
+- Implemented `get_run_stats_for_chart()` with SQL aggregation (pass_rate computed in SQL)
+- Added `build_chart_from_db()` convenience function using Plotly
+- 20 new tests added (92 total persistence/chart tests)
+- All 1215 tests pass, ruff + mypy green
 
 ---
 

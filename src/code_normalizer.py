@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 __all__ = [
+    "normalize_whitespace",
     "convert_standalone_placeholders",
     "replace_remaining_placeholders",
     "strip_pages_needed_block",
@@ -19,6 +20,28 @@ __all__ = [
     "replace_bare_ellipsis",
     "ensure_test_navigation",
 ]
+
+
+def normalize_whitespace(code: str) -> str:
+    """Convert all tabs to 4 spaces and normalize line endings.
+
+    LLMs may emit code using tabs for indentation, which conflicts with
+    the 4-space indentation used by the rest of the normalization pipeline
+    (e.g., ensure_test_navigation). Running this function first ensures
+    all indentation is consistent before other transforms are applied.
+
+    Args:
+        code: Python source code that may contain tabs.
+
+    Returns:
+        Code with all tabs replaced by 4 spaces and consistent line endings.
+    """
+    # Normalize line endings to \n
+    code = code.replace("\r\n", "\n").replace("\r", "\n")
+    # Replace tabs with 4 spaces (Python standard)
+    code = code.expandtabs(4)
+    return code
+
 
 # Regex to match standalone placeholder lines
 _STANDALONE_PLACEHOLDER_RE = re.compile(
@@ -146,6 +169,15 @@ def fix_module_scope_indentation(code: str) -> str:
     return "\n".join(fixed)
 
 
+# Control-flow statements that legitimately introduce a nested indent block.
+_CONTROL_FLOW_RE = re.compile(r"^(if |for |while |with |try:|async with |async for )")
+
+
+def _is_control_flow_line(line: str) -> bool:
+    """Return True if *line* is a control-flow statement ending with ':'."""
+    return line.rstrip().endswith(":") and _CONTROL_FLOW_RE.match(line) is not None
+
+
 def fix_indentation(code: str) -> str:
     """Fix inconsistent indentation inside test functions and class methods."""
     lines = code.splitlines()
@@ -162,7 +194,10 @@ def fix_indentation(code: str) -> str:
         if re.match(r"^\s*def\s+", line):
             inside_function = True
             func_indent = indent + 4
-            previous_significant_indent = indent
+            # CRITICAL: set previous_significant_indent to func_indent (not the
+            # def's own indent) so that the first body-line is compared against
+            # the expected body indent level.
+            previous_significant_indent = func_indent
             previous_significant_line = stripped
             updated_lines.append(line)
             continue
@@ -188,10 +223,16 @@ def fix_indentation(code: str) -> str:
                 previous_significant_line = stripped
                 continue
 
+            # Fix accidental extra indentation.  A line is "accidentally"
+            # over-indented when the previous significant line was at
+            # func_indent AND was NOT a control-flow statement that
+            # legitimately opens a nested block (if/for/while/with/try).
+            # This also catches the first body-line after a def statement
+            # (previous_significant_indent == func_indent after the fix above).
             accidental_extra_indent = (
                 indent > func_indent
                 and previous_significant_indent == func_indent
-                and not previous_significant_line.rstrip().endswith(":")
+                and not _is_control_flow_line(previous_significant_line)
                 and not re.match(r"^(elif |else:|except\b|finally:)", stripped)
             )
             if accidental_extra_indent:
@@ -322,7 +363,11 @@ def replace_bare_ellipsis(code: str) -> str:
 
 
 def ensure_test_navigation(code: str, target_url: str | None = None) -> str:
-    """Inject an initial navigation to the given URL if a test lacks navigation."""
+    """Inject an initial navigation to the given URL if a test lacks navigation.
+
+    Detects the indentation style used in each test function's body and
+    mirrors it for injected lines, avoiding mixed-indentation SyntaxErrors.
+    """
     if target_url:
         url = target_url
     else:
@@ -336,17 +381,29 @@ def ensure_test_navigation(code: str, target_url: str | None = None) -> str:
 
         url = first_url.group(0)
 
+    def _detect_body_indent(body: str) -> str:
+        """Return the indentation string used by the first significant body line."""
+        for bl in body.splitlines():
+            bl_stripped = bl.lstrip()
+            if bl_stripped and not bl_stripped.startswith("#"):
+                detected = len(bl) - len(bl_stripped)
+                if detected > 0:
+                    return " " * detected
+        return "    "  # safe default
+
     def _inject_nav(match: re.Match[str]) -> str:
         body = match.group(2)
         if "navigate(" in body or "goto(" in body:
             return match.group(0)
 
-        indent = "    "
+        indent = _detect_body_indent(body)
         nav_line = f'\n{indent}evidence_tracker.navigate("{url}")\n{indent}dismiss_consent_overlays(page)'
         return f"{match.group(1)}{nav_line}{body}"
 
+    # Match any test function that has evidence_tracker in its signature.
+    # This is more flexible than requiring the exact "(page: Page, evidence_tracker) -> None:" signature.
     return re.sub(
-        r"(def test_\w+\(page: Page, evidence_tracker\) -> None:)(.*?(?=\n\n|\ndef |\Z))",
+        r"(def test_\w+\([^)]*evidence_tracker[^)]*\)[^:]*:)(.*?(?=\n\n|\ndef |\Z))",
         _inject_nav,
         code,
         flags=re.S,

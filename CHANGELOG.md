@@ -10,6 +10,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- `normalize_whitespace()` in `src/code_normalizer.py` — converts tabs to spaces and normalizes line endings (\r\n → \n) before other normalization transforms, preventing SyntaxError when LLMs emit tab-indented code
+- `tests/test_code_normalizer.py` — 9 unit tests for `normalize_whitespace`, pipeline integration, and `ensure_test_navigation`
 - AI-027 Session 2 screenshot capture during scraping: `ScrapeResult`, in-memory screenshot bytes, and interactive element bounding boxes for later vision enrichment.
 - AI-027 Session 3 vision enrichment service: element crop, vision LLM call path, structured response parsing, and scraper enrichment bridge.
 - **Refactor 2026-05-10 (Parts 1-7)** — Modular extraction reducing `streamlit_app.py` from 918 → 362 lines (60% reduction) per REFACTOR_PLAN_2026-05-10.md
@@ -48,6 +50,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Deprecated test files: `tests/src/`, `tests/example_test.py`, `tests/uat_pipeline_test.py`
 
 ### Fixed
+- **Tab indentation SyntaxError** — LLMs emitting tab-indented code now normalized to spaces via `normalize_whitespace()` before `ensure_test_navigation()` injects 4-space indented navigation lines, preventing "unindent does not match" SyntaxErrors
 - Pass 1 text match added to `PlaceholderOrchestrator._find_best_element_for_current_page()` — resolves nav links by element text before scoring, eliminating Products link tie bug
 - Pass 1 text match added to `JourneyScraper._find_selector_for_step()` — journey discovery now navigates to correct pages (e.g. /products not /brand_products/*)  
 - `resolve_all()` diagnostic replaced with regex scan of final_code — eliminates 25+ LLM timeout calls post-pipeline (runtime: 1263s → 165s)

@@ -452,3 +452,119 @@ class TestIntegration:
         deleted = db.delete_old_runs(keep=1)
         assert deleted == 1
         assert len(db.list_run_results()) == 1
+
+
+# ---------------------------------------------------------------------------
+# query_test_history
+# ---------------------------------------------------------------------------
+
+
+class TestQueryTestHistory:
+    def test_returns_all_results_by_default(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        results = db.query_test_history()
+        assert len(results) == 3
+        assert {r["test_name"] for r in results} == {"test_login", "test_checkout", "test_search"}
+
+    def test_filters_by_name_pattern(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        results = db.query_test_history(test_name_pattern="test_login")
+        assert len(results) == 1
+        assert results[0]["test_name"] == "test_login"
+
+    def test_filters_by_status(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        results = db.query_test_history(status="passed")
+        assert len(results) == 1
+        assert results[0]["status"] == "passed"
+
+    def test_filters_by_date_range(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        run_id = db.persist_run_result(sample_run_result)
+        results = db.query_test_history(date_from=run_id, date_to=run_id)
+        assert len(results) == 3
+
+    def test_date_range_excludes_other_runs(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        id2 = db.persist_run_result(sample_run_result)
+        # Only include second run
+        results = db.query_test_history(date_from=id2, date_to=id2)
+        assert len(results) == 3
+        assert all(r["run_id"] == id2 for r in results)
+
+    def test_include_flaky_filter(
+        self,
+        db: SQLitePersistence,
+        sample_run_result: RunResult,
+        sample_run_result_2: RunResult,
+    ) -> None:
+        db.persist_run_result(sample_run_result)
+        db.persist_run_result(sample_run_result_2)
+        results = db.query_test_history(include_flaky=True)
+        # Only flaky tests returned (test_login and test_checkout)
+        names = {r["test_name"] for r in results}
+        assert "test_login" in names
+        assert "test_checkout" in names
+        # test_search is not flaky (skipped then passed, no fail/error)
+        assert "test_search" not in names
+
+    def test_returns_dict_with_expected_keys(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        results = db.query_test_history()
+        assert len(results) >= 1
+        row = results[0]
+        assert "run_id" in row
+        assert "test_name" in row
+        assert "status" in row
+        assert "duration" in row
+        assert "error_message" in row
+        assert "file_path" in row
+        assert "created_at" in row
+
+    def test_empty_db_returns_empty_list(self, db: SQLitePersistence) -> None:
+        assert db.query_test_history() == []
+
+
+# ---------------------------------------------------------------------------
+# get_run_stats_for_chart
+# ---------------------------------------------------------------------------
+
+
+class TestGetRunStatsForChart:
+    def test_returns_stats_per_run(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        stats = db.get_run_stats_for_chart()
+        assert len(stats) == 1
+        assert stats[0]["passed"] == 1
+        assert stats[0]["failed"] == 1
+        assert stats[0]["skipped"] == 1
+        assert stats[0]["total"] == 3
+
+    def test_includes_pass_rate(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        stats = db.get_run_stats_for_chart()
+        # pass_rate = passed / (passed + failed + errors) * 100
+        # = 1 / (1 + 1 + 0) * 100 = 50.0
+        assert stats[0]["pass_rate"] == 50.0
+
+    def test_zero_total_gives_zero_pass_rate(self, db: SQLitePersistence) -> None:
+        db.persist_run_result(RunResult())
+        stats = db.get_run_stats_for_chart()
+        assert stats[0]["pass_rate"] == 0.0
+
+    def test_filters_by_date_range(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        id2 = db.persist_run_result(sample_run_result)
+        # Narrow range: only second run
+        stats = db.get_run_stats_for_chart(date_from=id2, date_to=id2)
+        assert len(stats) == 1
+        assert stats[0]["run_id"] == id2
+
+    def test_returns_sorted_by_created_at(self, db: SQLitePersistence, sample_run_result: RunResult) -> None:
+        db.persist_run_result(sample_run_result)
+        db.persist_run_result(sample_run_result)
+        stats = db.get_run_stats_for_chart()
+        assert len(stats) == 2
+        assert stats[0]["run_id"] <= stats[1]["run_id"]
+
+    def test_empty_db_returns_empty(self, db: SQLitePersistence) -> None:
+        assert db.get_run_stats_for_chart() == []

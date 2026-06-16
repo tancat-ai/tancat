@@ -16,6 +16,7 @@ from .code_normalizer import (
     ensure_test_navigation,
     fix_indentation,
     fix_module_scope_indentation,
+    normalize_whitespace,
     replace_bare_ellipsis,
     replace_remaining_placeholders,
     strip_pages_needed_block,
@@ -27,7 +28,11 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     """Apply small deterministic fixes to common skeleton-generation mistakes."""
     fixed_code = code
 
-    # First: strip LLM reasoning text that may have leaked into the code block
+    # First: normalize whitespace (tabs → spaces, \r\n → \n) to ensure consistent
+    # indentation before any other transforms are applied.
+    fixed_code = normalize_whitespace(fixed_code)
+
+    # Second: strip LLM reasoning text that may have leaked into the code block
     fixed_code = strip_llm_reasoning(fixed_code)
 
     # Convert standalone placeholder lines and unwrap evidence_tracker-wrapped placeholders.
