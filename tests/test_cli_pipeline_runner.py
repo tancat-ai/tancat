@@ -12,14 +12,14 @@ from unittest.mock import patch
 
 import pytest
 
-from cli.pipeline_runner import (
+from src.cli.pipeline_runner import (
     display_run_results,
     load_existing_packages,
     parse_requirements,
     parse_target_urls,
     run_saved_test_from_package,
 )
-from cli.session import Session
+from src.cli.session import Session
 from src.pipeline_artifact_manager import PackageManifest
 from src.pipeline_run_service import PipelineExecutionResult
 from src.pytest_output_parser import RunResult
@@ -183,8 +183,8 @@ class TestLoadExistingPackages:
         )
 
         with (
-            patch("cli.pipeline_runner.find_existing_packages", return_value=[manifest]),
-            patch("cli.pipeline_runner.load_all_run_results", return_value=[{"test_01_login": "passed"}]),
+            patch("src.cli.pipeline_runner.find_existing_packages", return_value=[manifest]),
+            patch("src.cli.pipeline_runner.load_all_run_results", return_value=[{"test_01_login": "passed"}]),
             patch("builtins.input", return_value="1"),
         ):
             load_existing_packages(session)
@@ -198,7 +198,7 @@ class TestLoadExistingPackages:
         """Verify graceful exit when no packages exist."""
         session = Session()
 
-        with patch("cli.pipeline_runner.find_existing_packages") as mock_find:
+        with patch("src.cli.pipeline_runner.find_existing_packages") as mock_find:
             mock_find.return_value = []
             load_existing_packages(session)
 
@@ -218,7 +218,7 @@ class TestLoadExistingPackages:
         session = Session()
 
         with (
-            patch("cli.pipeline_runner.find_existing_packages", return_value=[manifest]),
+            patch("src.cli.pipeline_runner.find_existing_packages", return_value=[manifest]),
             patch("builtins.input", return_value="99"),
         ):
             load_existing_packages(session)

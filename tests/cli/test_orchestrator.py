@@ -63,7 +63,7 @@ class TestCaseOrchestrator:
 
         try:
             # Step 1: Parse input
-            from cli.input_parser import InputParser
+            from src.cli.input_parser import InputParser
 
             parser = InputParser()
             parsed = parser.parse(raw_input, explicit_format)

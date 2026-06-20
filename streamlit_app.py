@@ -11,6 +11,13 @@ import streamlit as st
 from src.llm_client import LLMClient
 from src.pytest_output_parser import RunResult
 from src.test_plan import TestPlan, apply_editor_rows
+from src.ui.ui_evidence import EvidenceViewer
+from src.ui.ui_journey import render_credential_profiles, render_journey_builder
+from src.ui.ui_requirements import RequirementsInput
+from src.ui.ui_results import ResultsPanel
+from src.ui.ui_run_results import RunResultsDisplay
+from src.ui.ui_saved_packages import SavedPackagePanel
+from src.ui.ui_sidebar import SidebarConfig
 from src.ui_pipeline import (
     PipelineSessionState,
     _get_provider_defaults,
@@ -19,16 +26,6 @@ from src.ui_pipeline import (
     parse_target_urls,
     plan_rows_from_plan,
     run_pipeline,
-)
-from src.ui_renderers import (
-    EvidenceViewer,
-    RequirementsInput,
-    ResultsPanel,
-    RunResultsDisplay,
-    SavedPackagePanel,
-    SidebarConfig,
-    render_credential_profiles,
-    render_journey_builder,
 )
 
 st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.png", layout="wide")

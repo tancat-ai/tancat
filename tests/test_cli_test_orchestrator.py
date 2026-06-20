@@ -6,9 +6,9 @@ from pathlib import Path
 
 from _pytest.monkeypatch import MonkeyPatch
 
-from cli.input_parser import ParsedInput, TestCase
-from cli.test_case_orchestrator import TestCaseOrchestrator
 from src.analyzer import AnalyzedTestCase
+from src.cli.input_parser import ParsedInput, TestCase
+from src.cli.test_case_orchestrator import TestCaseOrchestrator
 from src.config import AnalysisMode
 
 

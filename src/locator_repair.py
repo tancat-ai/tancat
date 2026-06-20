@@ -2,6 +2,7 @@
 
 Provides file-level surgery that replaces only the locator string while
 preserving the surrounding action (`.click()`, `.fill()`, etc).
+Also launches headed Playwright codegen for interactive locator capture.
 
 Design-time only — not used at test runtime.
 """
@@ -9,7 +10,9 @@ Design-time only — not used at test runtime.
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 
@@ -131,6 +134,54 @@ def apply_patch_to_file(patch: LocatorPatch) -> None:
     patched_source = apply_patch(patch)
     test_path = Path(patch.test_file)
     test_path.write_text(patched_source, encoding="utf-8")
+
+
+def run_codegen_session(url: str, timeout_seconds: int = 120) -> str | None:
+    """Launch headed Playwright codegen and capture the first locator from the recorded script.
+
+    Args:
+        url: URL to navigate to.
+        timeout_seconds: Maximum time to wait for a click.
+
+    Returns:
+        The locator string captured from the clicked element, or None.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = f"/tmp/repair_locator_{timestamp}.py"
+
+    proc = subprocess.Popen(
+        ["playwright", "codegen", "--output", output_file, url],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    try:
+        proc.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return None
+
+    if not Path(output_file).exists():
+        return None
+
+    content = Path(output_file).read_text(encoding="utf-8")
+    Path(output_file).unlink(missing_ok=True)
+
+    locator_pattern = re.compile(
+        r'\.(?:locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder)\(\s*["\']([^"\']+)["\']',
+    )
+    match = locator_pattern.search(content)
+    if match:
+        return match.group(1)
+
+    role_pattern = re.compile(r'\.get_by_role\(\s*["\']([^"\']+)["\'].*?name=\s*["\']([^"\']+)["\']')
+    role_match = role_pattern.search(content)
+    if role_match:
+        role = role_match.group(1)
+        name = role_match.group(2)
+        return f"get_by_role('{role}', name='{name}')"
+
+    return None
 
 
 def extract_locator_from_line(line: str) -> str | None:

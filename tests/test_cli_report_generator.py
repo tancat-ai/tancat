@@ -5,8 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from cli.report_generator import JiraReportGenerator
 from src.analyzer import AnalyzedTestCase
+from src.cli.report_generator import JiraReportGenerator
 from src.config import ReportFormat
 
 

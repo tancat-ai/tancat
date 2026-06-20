@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from _pytest.capture import CaptureFixture
 
-from cli.run_results_display import (
+from src.cli.run_results_display import (
     _status_badge,
     _suggestion_for_category,
     render_failure_details,

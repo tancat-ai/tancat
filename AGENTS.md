@@ -188,5 +188,21 @@ Full detail: see `docs/reference/agents_archive.md` §13.
 
 ---
 
-*Last updated: 2026-06-10*
+## Agent skills
+
+### Issue tracker
+
+Local markdown — issues live in `BACKLOG.md`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Mapped to emoji-backed status strings (`🆕 new`, `❓ needs-info`, `🟡 ready-for-agent`, `👤 ready-for-human`, `superseded`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` at repo root + `docs/adr/` for ADRs. See `docs/agents/domain.md`.
+
+---
+
+*Last updated: 2026-06-20*
 *Historical/reference sections: `docs/reference/agents_archive.md`*

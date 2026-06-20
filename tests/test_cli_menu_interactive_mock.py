@@ -1,5 +1,5 @@
 from cli import menu_renderer
-from cli.testing_terminal import QueueTerminal
+from src.cli.testing_terminal import QueueTerminal
 
 
 def test_print_menu_numeric_selection_single_digit() -> None:

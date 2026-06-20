@@ -47,8 +47,8 @@ def _load_user_story(path: str | None = None) -> str:
 
 def _run_cli_pipeline(user_story: str, url: str | None) -> dict[str, Any]:
     """Execute the CLI pipeline and return results."""
-    from cli.input_parser import InputParser
-    from cli.test_case_orchestrator import TestCaseOrchestrator
+    from src.cli.input_parser import InputParser
+    from src.cli.test_case_orchestrator import TestCaseOrchestrator
 
     parser = InputParser()
     parsed = parser.parse(user_story, None)

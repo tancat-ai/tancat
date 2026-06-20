@@ -6,7 +6,7 @@ See: docs/plans/CLI_JOURNEY_BUILDER_FIX.md
 """
 
 from cli import menu_renderer
-from cli.testing_terminal import QueueTerminal
+from src.cli.testing_terminal import QueueTerminal
 
 
 def test_journey_builder_quit_returns_negative() -> None:

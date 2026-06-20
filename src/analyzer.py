@@ -211,7 +211,7 @@ class KeywordAnalyzer:
         """Analyze a ParsedInput object and return AnalysisResult.
 
         Args:
-            parsed: ParsedInput from cli.input_parser.InputParser
+            parsed: ParsedInput from src.cli.input_parser.InputParser
 
         Returns:
             AnalysisResult with analyzed test cases.

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from cli.pipeline_runner import view_saved_package_diagnostics
+from src.cli.pipeline_runner import view_saved_package_diagnostics
 
 
 class TestViewSavedPackageDiagnostics:

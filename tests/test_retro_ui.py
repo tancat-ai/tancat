@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from cli.retro_ui import (
+from src.cli.retro_ui import (
     _bold,
     _dim,
     _effective_width,
@@ -155,7 +155,7 @@ class TestPromptInput:
 
 class TestBoxChars:
     def test_box_characters_present(self) -> None:
-        from cli.retro_ui import BOX
+        from src.cli.retro_ui import BOX
 
         assert BOX.corner_tl == "┌"  # type: ignore[attr-defined]
         assert BOX.corner_tr == "┐"  # type: ignore[attr-defined]
@@ -169,7 +169,7 @@ class TestBoxChars:
 
 class TestRenderHeader:
     def test_render_header_outputs_box(self, capsys: pytest.CaptureFixture) -> None:
-        from cli.retro_ui import render_header
+        from src.cli.retro_ui import render_header
 
         render_header("Test Title", "Subtitle")
         captured = capsys.readouterr().out
@@ -182,7 +182,7 @@ class TestRenderHeader:
 
 class TestRenderMenu:
     def test_render_menu_highlights_selected(self, capsys: pytest.CaptureFixture) -> None:
-        from cli.retro_ui import render_menu
+        from src.cli.retro_ui import render_menu
 
         render_menu(["Option A", "Option B", "Option C"], selected=1)
         captured = capsys.readouterr().out
@@ -195,7 +195,7 @@ class TestRenderMenu:
 
 class TestRenderState:
     def test_render_state_outputs_lines(self, capsys: pytest.CaptureFixture) -> None:
-        from cli.retro_ui import render_state
+        from src.cli.retro_ui import render_state
 
         render_state(["  LLM : ollama / qwen3.5", "  URL : http://localhost"])
         captured = capsys.readouterr().out
@@ -204,7 +204,7 @@ class TestRenderState:
         assert "URL" in captured
 
     def test_render_state_empty_does_nothing(self, capsys: pytest.CaptureFixture) -> None:
-        from cli.retro_ui import render_state
+        from src.cli.retro_ui import render_state
 
         render_state([])
         captured = capsys.readouterr().out
@@ -213,7 +213,7 @@ class TestRenderState:
 
 class TestRenderShortcutBar:
     def test_render_shortcut_bar_outputs_box(self, capsys: pytest.CaptureFixture) -> None:
-        from cli.retro_ui import render_shortcut_bar
+        from src.cli.retro_ui import render_shortcut_bar
 
         render_shortcut_bar([("1", "Select"), ("Q", "Quit")])
         captured = capsys.readouterr().out
@@ -230,25 +230,25 @@ class TestRenderShortcutBar:
 
 class TestColorPhosphor:
     def test_phosphor_green(self) -> None:
-        from cli.color import phosphor_green
+        from src.cli.color import phosphor_green
 
         result = phosphor_green("test")
         assert "test" in result
 
     def test_dim_green(self) -> None:
-        from cli.color import dim_green
+        from src.cli.color import dim_green
 
         result = dim_green("test")
         assert "test" in result
 
     def test_inverse_green(self) -> None:
-        from cli.color import inverse_green
+        from src.cli.color import inverse_green
 
         result = inverse_green("> ")
         assert "> " in result
 
     def test_phosphor_reset(self) -> None:
-        from cli.color import phosphor_reset
+        from src.cli.color import phosphor_reset
 
         result = phosphor_reset()
         assert "\033[0m" == result

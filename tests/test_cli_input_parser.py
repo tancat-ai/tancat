@@ -1,6 +1,6 @@
 """Tests for cli/input_parser.py — multi-format input parsing."""
 
-from cli.input_parser import (
+from src.cli.input_parser import (
     BulletParser,
     FormatDetector,
     GherkinParser,

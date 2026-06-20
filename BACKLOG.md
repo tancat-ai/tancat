@@ -138,6 +138,23 @@ match. Needs design session before implementation.
 **Priority:** High — silent wrong assertions are worse than skips
 ---
 
+### REF-001 — Rename `src/ui_pipeline.py` / rethink `src/ui/` naming
+**What:** `src/ui_pipeline.py` is shared pipeline orchestration used by both
+`streamlit_app.py` (Streamlit UI) and `src/cli/pipeline_runner.py` (CLI UI).
+The `ui_` prefix implies it's Streamlit-only, but it's infrastructure.
+Similarly, `src/ui/` holds Streamlit components while the CLI lives in `src/cli/` —
+both are user interfaces, so the naming is inconsistent.
+
+**Proposed rename:**
+- `src/ui_pipeline.py` → `src/pipeline.py` (or `src/pipeline_orchestration.py`)
+- `src/ui/` → keep as-is for now (Streamlit-specific rendering) or rename to `src/streamlit/`
+- Consider whether `src/cli/` and `src/ui/` should share a parent like `src/interface/`
+
+**Impact:** Medium — affects imports in ~10 files. No logic changes.
+**Priority:** Low — cosmetic, but prevents future confusion.
+
+---
+
 ## 🟡 Active Improvements (Prioritised)
 
 ### AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)

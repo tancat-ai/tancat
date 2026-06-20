@@ -11,7 +11,7 @@ import os
 import sys
 import threading
 
-from cli.menu_renderer import _read_key, _running_in_git_bash
+from src.cli.menu_renderer import _read_key, _running_in_git_bash
 
 # Print environment diagnostics
 print("=" * 60)
