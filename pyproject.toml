@@ -44,7 +44,7 @@ packages = ["src", "cli"]
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-exclude = ["generated_tests", "scratch", "notebooks"]
+exclude = ["generated_tests", "scratch", "notebooks", "scripts/debug"]
 [tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
