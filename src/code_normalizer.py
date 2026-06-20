@@ -84,16 +84,6 @@ def replace_remaining_placeholders(code: str) -> str:
     """Replace any unresolved {{ACTION:description}} placeholders with pytest.skip()."""
     placeholder_pattern = re.compile(r"\{\{[A-Z_]+:(.+?)\}\}", re.DOTALL)
 
-    def _is_inside_quotes(text_before: str) -> bool:
-        in_single = False
-        in_double = False
-        for ch in text_before:
-            if ch == "'" and not in_double:
-                in_single = not in_single
-            elif ch == '"' and not in_single:
-                in_double = not in_double
-        return in_single or in_double
-
     output_lines: list[str] = []
     for line in code.splitlines():
         if "{{" not in line:
@@ -108,14 +98,10 @@ def replace_remaining_placeholders(code: str) -> str:
             output_lines.append(line)
             continue
 
-        all_inside_quotes = all(_is_inside_quotes(the_content[: match.start()]) for match in matches)
-        if all_inside_quotes:
-            output_lines.append(line)
-            continue
-
+        # Detect if ANY placeholder is inside a function call (e.g., evidence_tracker.click('{{CLICK:x}}'))
+        # The placeholder may be inside quotes as a string argument - that still counts as a function call.
         has_function_call = any(
-            not _is_inside_quotes(the_content[: match.start()])
-            and re.search(r"[A-Za-z_][A-Za-z0-9_]*\s*\(", the_content[: match.start()])
+            re.search(r"[A-Za-z_][A-Za-z0-9_]*\s*\(", the_content[: match.start()])
             and ")" in the_content[match.end() :]
             for match in matches
         )
@@ -128,7 +114,7 @@ def replace_remaining_placeholders(code: str) -> str:
 
             def _handle_match(m: re.Match) -> str:
                 text = m.group(0)
-                return f'pytest.skip("Unresolved placeholder: {text}")'
+                return f"pytest.skip({text!r})"
 
             new_content = placeholder_pattern.sub(_handle_match, the_content)
             output_lines.append(f"{indent}{new_content}")
@@ -287,7 +273,11 @@ def dedent_indented_test_blocks(code: str) -> str:
 
 
 def deduplicate_skip_calls(code: str) -> str:
-    """Remove duplicate consecutive pytest.skip() calls in test blocks."""
+    """Remove duplicate consecutive pytest.skip() calls in test blocks.
+
+    Also ensures pytest.skip() calls appear AFTER navigation steps, not before.
+    This prevents tests from being skipped immediately before they navigate.
+    """
     lines = code.splitlines()
     updated_lines: list[str] = []
     pending_skips: list[str] = []
@@ -315,6 +305,13 @@ def deduplicate_skip_calls(code: str) -> str:
 
         if in_test and stripped.startswith("pytest.skip("):
             pending_skips.append(line)
+            continue
+
+        # Flush skips before non-skip lines, BUT defer flushing if this is a
+        # navigate/goto line. This ensures skips appear AFTER navigation.
+        if in_test and ("navigate(" in stripped or "goto(" in stripped):
+            # Don't flush yet - wait until after navigation
+            updated_lines.append(line)
             continue
 
         _flush_skips()

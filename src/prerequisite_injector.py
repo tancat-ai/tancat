@@ -336,11 +336,11 @@ class PrerequisiteInjector:
             if has_fill and has_login_intent:
                 return journey.test_name
 
-        # Fallback: if no explicit login found, use the first test
-        # (it may navigate and interact with the starting URL)
-        if journeys:
-            return journeys[0].test_name
-
+        # STRICT: Do NOT fallback to the first test if it doesn't contain login steps.
+        # The previous fallback caused false-positive prerequisite injection where
+        # non-auth tests (e.g., "browse categories") had their steps injected into
+        # other tests, breaking those tests by clicking unrelated elements before
+        # navigation. See BACKLOG.md entry for "Prerequisite injector false positives".
         return None
 
     def _needs_prerequisite_injection(
@@ -417,7 +417,11 @@ class PrerequisiteInjector:
         journey: TestJourney,
         condition_ref: str = "",
     ) -> list[PrerequisiteStep]:
-        """Extract resolved evidence_tracker steps from a journey.
+        """Extract resolved evidence_tracker ACTION steps from a journey.
+
+        Only extracts action steps (navigate, click, fill) - NOT assertions.
+        Assertions from a prerequisite test are meaningless when injected into
+        a different test context.
 
         Preserves original indentation so steps can be injected with correct indent.
         """
@@ -427,8 +431,11 @@ class PrerequisiteInjector:
             raw = step.raw_line.strip()
             if not raw:
                 continue
-            # Only include evidence_tracker calls (resolved steps)
+            # Only include evidence_tracker ACTION calls (navigate, click, fill)
+            # Exclude assertions - they are test-specific and meaningless when injected
             if "evidence_tracker." in raw:
+                if self._is_assertion_step(raw):
+                    continue
                 # Preserve original indentation from the source test
                 original_line = step.raw_line
                 steps.append(
@@ -440,6 +447,20 @@ class PrerequisiteInjector:
                 )
 
         return steps
+
+    @staticmethod
+    def _is_assertion_step(raw_line: str) -> bool:
+        """Return True if the line is an assertion (should not be injected)."""
+        assertion_methods = (
+            "assert_visible",
+            "assert_text",
+            "assert_checked",
+            "assert_value",
+            "assert_title",
+            "assert_url",
+            "assert_count",
+        )
+        return any(f"evidence_tracker.{method}" in raw_line for method in assertion_methods)
 
     @staticmethod
     def _detect_body_indent(lines: list[str], def_line_index: int) -> str:

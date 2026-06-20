@@ -118,26 +118,52 @@ def dismiss_consent_overlays(page: Page) -> None:
         page.evaluate(
             """
             () => {
+                // Remove Google Consent TVM root and overlay
+                const consentRoot = document.querySelector('.fc-consent-root');
+                if (consentRoot) { consentRoot.remove(); }
+                const dialogOverlay = document.querySelector('.fc-dialog-overlay');
+                if (dialogOverlay) { dialogOverlay.remove(); }
+
+                // Remove Google Vignette (standard ad overlay)
                 const vignette = document.getElementById('google_vignette');
                 if (vignette) {
                     vignette.style.display = 'none';
                     vignette.style.visibility = 'hidden';
+                    vignette.remove();
                 }
+
+                // Remove all Google Ads slots and their host containers
                 document.querySelectorAll('ins.adsbygoogle').forEach(el => {
                     el.style.display = 'none';
                     el.style.visibility = 'hidden';
+                    if (el.parentNode) { el.parentNode.removeChild(el); }
                 });
+
+                // Remove ASWIFT (AdSense Swift) host divs that intercept clicks
+                document.querySelectorAll('[id^="aswift_"]').forEach(el => {
+                    el.style.display = 'none';
+                    el.style.visibility = 'hidden';
+                    el.style.pointerEvents = 'none';
+                    if (el.parentNode) { el.parentNode.removeChild(el); }
+                });
+
+                // Remove ad iframes
                 document.querySelectorAll('iframe[id*="aswift"], iframe[title="Advertisement"]').forEach(el => {
                     el.style.display = 'none';
                     el.style.visibility = 'hidden';
+                    if (el.parentNode) { el.parentNode.removeChild(el); }
                 });
+
+                // Remove general ad containers
                 document.querySelectorAll('[class*="ads"], [id*="google_ads"]').forEach(el => {
                     el.style.display = 'none';
                     el.style.visibility = 'hidden';
+                    if (el.parentNode) { el.parentNode.removeChild(el); }
                 });
+
             }
             """
         )
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(500)
     except Exception:
         pass

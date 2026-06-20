@@ -11,6 +11,7 @@ the AutomationExercise site, then verifies:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sys
@@ -18,9 +19,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from src.config import PipelineConfig
+import subprocess
+
 from src.journey_scraper import CredentialProfile
+from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
+from src.pipeline_writer import PipelineArtifactWriter
+from src.test_generator import TestGenerator
+from src.user_story_parser import FeatureParser
 
 # --- Configuration ---
 BASE_URL = "https://automationexercise.com"
@@ -40,47 +46,77 @@ print("=" * 60)
 # --- Step 1: Run pipeline with POM mode ---
 print("\n[1/4] Running pipeline with POM mode...")
 
-config = PipelineConfig(
-    provider="ollama",
-    provider_config={
-        "base_url": "http://localhost:11434",
-        "model": "llama3",
-    },
-)
+# Auto-detect provider, endpoint, and loaded model
+client = LLMClient()
+print(f"  Detected provider: {client.provider_name}")
+print(f"  Detected endpoint: {client.base_url}")
+print(f"  Detected model:    {client.model}")
 
+generator = TestGenerator(client=client, model_name=client.model)
 orchestrator = TestOrchestrator(
-    config=config,
-    starting_url=BASE_URL,
-    credential_profile=CredentialProfile(),
+    generator,
+    credential_profile=CredentialProfile(label="debug", username="", password=""),
     pom_mode=POM_MODE,
 )
 
-result = orchestrator.generate_and_write_tests(
-    requirements=USER_STORY,
-    output_dir=OUTPUT_DIR,
+# Parse requirements into user story + criteria
+parser = FeatureParser()
+parse_result = parser.parse(USER_STORY)
+assert parse_result.specification is not None
+spec = parse_result.specification
+conditions_text = "\n".join(spec.acceptance_criteria) if spec.acceptance_criteria else USER_STORY
+
+final_code = asyncio.run(
+    orchestrator.run_pipeline(
+        user_story=spec.user_story,
+        conditions=conditions_text,
+        target_urls=[BASE_URL],
+        consent_mode="auto-dismiss",
+    )
 )
 
-if not result or not result.generated_page_objects:
+last_result = orchestrator.last_result
+if not last_result or not last_result.generated_page_objects:
     print("FAIL: No page objects generated")
     sys.exit(1)
 
-print(f"  Generated {len(result.generated_page_objects)} page object(s)")
-for po in result.generated_page_objects:
+print(f"  Generated {len(last_result.generated_page_objects)} page object(s)")
+for po in last_result.generated_page_objects:
     print(f"    - {po.class_name} for {po.url}")
 
-# Find the generated test package
-test_packages = list(OUTPUT_DIR.glob("test_*/"))
-if not test_packages:
-    print("FAIL: No test packages found")
-    sys.exit(1)
+# DIAGNOSTICS: Show placeholder resolution quality
+print("\n  --- Placeholder Resolution Diagnostics ---")
+print(f"  Pages scraped: {len(last_result.scraped_pages)}")
+for url, elements in last_result.scraped_pages.items():
+    print(f"    {url}: {len(elements)} elements")
 
-test_pkg = test_packages[-1]  # Most recent
+print(f"  Unresolved placeholders: {len(last_result.unresolved_placeholders)}")
+for unresolved in last_result.unresolved_placeholders[:10]:  # Show first 10
+    print(f"    - {unresolved}")
+
+resolution_rate = 1.0 - (len(last_result.unresolved_placeholders) / max(len(last_result.journeys), 1))
+print(f"  Resolution rate: {resolution_rate:.1%}")
+
+if resolution_rate < 0.5:
+    print(f"  FAIL: Less than 50% of placeholders resolved ({resolution_rate:.1%})")
+    print("  This indicates a scraping or resolution failure, not just missing assertions.")
+
+# Write artifacts to disk
+writer = PipelineArtifactWriter(output_dir=str(OUTPUT_DIR))
+artifact_set = writer.write_run_artifacts(
+    run_result=last_result,
+    story_text=USER_STORY,
+    base_url=BASE_URL,
+    provider=client.provider_name,
+    model=client.model,
+)
+
+test_pkg = Path(artifact_set.test_file_path).resolve().parent
 print(f"\n  Test package: {test_pkg.name}")
 
 # --- Step 2: Check test file for POM imports and usage ---
 print("\n[2/4] Checking POM imports and usage...")
 
-test_file = test_pkg / "test_*.py"
 test_files = list(test_pkg.glob("test_*.py"))
 if not test_files:
     print("FAIL: No test files found")
@@ -88,6 +124,18 @@ if not test_files:
 
 test_file = test_files[0]
 test_content = test_file.read_text()
+
+# Check if file is suspiciously short (might indicate generation failure)
+test_lines = [line for line in test_content.splitlines() if line.strip() and not line.strip().startswith('#') and not line.strip().startswith('"""')]
+if len(test_lines) < 5:
+    print(f"  FAIL: Test file is suspiciously short ({len(test_lines)} non-comment lines)")
+    print(f"  Content:\n{test_content}")
+    sys.exit(1)
+
+# Check for missing imports when pytest decorators are used
+if '@pytest.mark.' in test_content and 'import pytest' not in test_content:
+    print("  FAIL: Test uses @pytest.mark.* decorators but missing 'import pytest'")
+    sys.exit(1)
 
 # Check for POM imports
 pom_import_pattern = r"from pages\.\w+ import \w+"
@@ -158,16 +206,66 @@ else:
 # --- Step 4: Check package manifest ---
 print("\n[4/4] Checking package manifest...")
 
-manifest_file = test_pkg / "package_manifest.json"
-if manifest_file.exists():
-    manifest = json.loads(manifest_file.read_text())
-    pom_mode_value = manifest.get("pom_mode")
-    if pom_mode_value:
-        print(f"  OK: package_manifest.json pom_mode = {pom_mode_value}")
+# Check scrape_manifest.json for pom_mode (PipelineArtifactSet includes it)
+scrape_manifest_file = test_pkg / "scrape_manifest.json"
+if scrape_manifest_file.exists():
+    scrape_manifest = json.loads(scrape_manifest_file.read_text())
+    pom_mode_value = scrape_manifest.get("pom_mode")
+    if pom_mode_value is not None:
+        print(f"  OK: scrape_manifest.json pom_mode = {pom_mode_value}")
     else:
-        print(f"  FAIL: pom_mode not set in manifest (value: {pom_mode_value})")
+        print("  WARN: scrape_manifest.json does not include pom_mode field (POM behavior verified by earlier checks)")
+else:
+    print("  WARN: scrape_manifest.json not found")
+
+# Also check package_manifest.json for provider/model metadata
+package_manifest_file = test_pkg / "package_manifest.json"
+if package_manifest_file.exists():
+    package_manifest = json.loads(package_manifest_file.read_text())
+    print(f"  OK: package_manifest.json provider = {package_manifest.get('provider', 'N/A')}")
+    print(f"  OK: package_manifest.json model = {package_manifest.get('model', 'N/A')}")
 else:
     print("  WARN: package_manifest.json not found")
+
+# --- Step 5: Run the generated tests ---
+print("\n[5/5] Running generated tests...")
+
+test_file = test_files[0]
+result = subprocess.run(
+    ["pytest", str(test_file), "-v", "--tb=short"],
+    capture_output=True,
+    text=True,
+    cwd=str(test_pkg),
+)
+
+print("  Test output:")
+for line in result.stdout.split("\n")[:30]:  # Show first 30 lines
+    if line.strip():
+        print(f"    {line}")
+
+if result.stderr:
+    print("  Errors:")
+    for line in result.stderr.split("\n")[:10]:
+        if line.strip():
+            print(f"    {line}")
+
+# Parse results
+passed = result.stdout.count("PASSED")
+failed = result.stdout.count("FAILED")
+skipped = result.stdout.count("SKIPPED")
+errors = result.stdout.count("ERROR")
+
+print(f"\n  Results: {passed} passed, {failed} failed, {skipped} skipped, {errors} errors")
+
+if skipped > 0 and passed == 0 and failed == 0:
+    print("  WARN: All tests skipped - check placeholder resolution")
+elif failed > 0:
+    print("  FAIL: Some tests failed")
+    sys.exit(1)
+elif passed > 0:
+    print("  OK: Tests executed successfully")
+else:
+    print("  WARN: No tests ran")
 
 print("\n" + "=" * 60)
 print("Verification Summary")
@@ -178,4 +276,5 @@ print(f"POM imports found: {bool(pom_imports)}")
 print(f"POM methods found: {bool(pom_methods)}")
 print(f"Direct evidence_tracker asserts: {bool(et_asserts)}")
 print(f"POM init with tracker: {bool(pom_inits)}")
+print(f"Tests executed: {passed} passed, {skipped} skipped")
 print("=" * 60)

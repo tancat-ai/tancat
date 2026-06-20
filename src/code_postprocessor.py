@@ -118,6 +118,10 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # Replace bare `...` (ellipsis) in test functions with pytest.skip()
     fixed_code = replace_bare_ellipsis(fixed_code)
 
+    # FINAL safety net: run fix_indentation one more time after all transformations
+    # This catches any indentation issues introduced by later steps
+    fixed_code = fix_indentation(fixed_code)
+
     return fixed_code
 
 
@@ -231,7 +235,16 @@ def replace_token_in_line(
 
 
 def _ensure_evidence_tracker_fixture(code: str) -> str:
-    """Add the evidence_tracker pytest fixture argument to tests that use it."""
+    """Add the evidence_tracker and page pytest fixture arguments to tests that use evidence_tracker.
+
+    The evidence_tracker fixture depends on the page fixture from Playwright,
+    so both must be present in the function signature. Additionally, page is
+    needed for dismiss_consent_overlays(page) and POM instantiation.
+
+    CRITICAL: Any test that uses evidence_tracker OR references a POM class
+    (e.g., HomePage(page, evidence_tracker)) MUST have both `page: Page` and
+    `evidence_tracker` parameters, even if the body only uses the POM.
+    """
     lines = code.splitlines()
     updated_lines: list[str] = []
     index = 0
@@ -253,16 +266,52 @@ def _ensure_evidence_tracker_fixture(code: str) -> str:
             block_lines.append(next_line)
             lookahead += 1
 
-        if "evidence_tracker." not in "\n".join(block_lines):
+        body = "\n".join(block_lines)
+
+        # Detect evidence_tracker usage
+        needs_evidence_tracker = "evidence_tracker." in body
+
+        # Detect patterns that require the 'page' fixture:
+        # - POM instantiation: HomePage(page, ...) or any *Page(page, ...)
+        # - dismiss_consent_overlays(page) — injected AFTER this function, so always assume needed
+        # - Any bare 'page.' reference that's not self.page.
+        pom_pattern = re.search(r"=\s*\w+Page\(page", body)
+        bare_page_reference = re.search(r"(?<!self\.)page\.(goto|locator|click|fill|wait_for|deselect|select)", body)
+        dismiss_consent_usage = "dismiss_consent_overlays(" in body
+
+        # CRITICAL FIX: If evidence_tracker is used, page is ALWAYS needed
+        # because dismiss_consent_overlays(page) is injected after navigation steps,
+        # and POM instantiation requires page.
+        needs_page = bool(pom_pattern) or bool(bare_page_reference) or needs_evidence_tracker or dismiss_consent_usage
+
+        # If a POM class is instantiated (e.g., HomePage(page, evidence_tracker)),
+        # both page and evidence_tracker are needed regardless of body content
+        pom_instantiation = re.search(r"=\s*\w+Page\(", body)
+        if pom_instantiation:
+            needs_page = True
+            needs_evidence_tracker = True
+
+        if not needs_evidence_tracker and not needs_page:
             updated_lines.append(line)
             index += 1
             continue
 
         params = [param.strip() for param in match.group(3).split(",") if param.strip()]
         param_names = [param.split(":", 1)[0].split("=", 1)[0].strip() for param in params]
-        if "evidence_tracker" not in param_names:
+
+        # 'page' must always be present when evidence_tracker is used (fixture dependency)
+        # and when POM instantiation uses page
+        if "page" not in param_names:
+            params.insert(0, "page: Page")
+        else:
+            # Ensure page is first since evidence_tracker depends on it
+            params = [p for p in params if p.split(":", 1)[0].split("=", 1)[0].strip() != "page"]
+            params.insert(0, "page: Page")
+
+        if needs_evidence_tracker and "evidence_tracker" not in param_names:
             params.append("evidence_tracker")
-            line = f"{match.group(1)}def {match.group(2)}({', '.join(params)}){match.group(4)}:"
+
+        line = f"{match.group(1)}def {match.group(2)}({', '.join(params)}){match.group(4)}:"
 
         updated_lines.append(line)
         index += 1
@@ -280,8 +329,9 @@ def inject_import(code: str, import_line: str) -> str:
             insert_at = i + 1
             if '"""' in line and i > 0:
                 break
-    # Don't duplicate
-    if any(import_line.split()[0] in line for line in lines):
+    # Don't duplicate - check for exact import match (normalized whitespace)
+    normalized_new = " ".join(import_line.split())
+    if any(normalized_new in " ".join(line.split()) for line in lines):
         return code
     lines.insert(insert_at, import_line + "\n")
     return "".join(lines)

@@ -85,6 +85,25 @@ class PlaceholderScorer:
         "done",
     )
 
+    # Terms that signal page-level semantic assertions.
+    PAGE_LEVEL_ASSERT_TERMS: tuple[str, ...] = (
+        "listed",
+        "displayed",
+        "appear",
+        "appears",
+        "visible",
+        "shown",
+        "present",
+        "correct details",
+        "summary",
+        "confirmation popup",
+        "popup appears",
+        "order summary",
+        "details",
+        "item details",
+        "cart item",
+    )
+
     @staticmethod
     def compute_element_score(
         action: str,
@@ -153,6 +172,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._assert_action_penalty(action, description, element)
         score += PlaceholderScorer._assert_message_bonus(action, description, element)
         score += PlaceholderScorer._text_content_bonus(description, element)
+        score += PlaceholderScorer._page_level_assert_bonus(action, description, element)
 
         return score if score >= match_threshold else None
 
@@ -423,8 +443,20 @@ class PlaceholderScorer:
         role = str(element.get("role", "")).strip().lower()
         tag = str(element.get("tag", "")).strip().lower()
         href = str(element.get("href", "")).strip()
+        classes = str(element.get("classes", "")).lower()
+        selector = str(element.get("selector", "")).lower()
+        text = str(element.get("text", "")).lower()
 
-        # Buttons are poor assertion targets for messages
+        # Buttons that are part of a modal/dialog are VALID popup assertion targets.
+        # They prove the popup exists (e.g., "Continue Shopping" button in cart modal).
+        is_modal_element = any(
+            term in classes or term in selector for term in ("modal", "dialog", "close-modal", "overlay")
+        )
+        is_popup_button = any(term in text for term in ("continue", "close", "confirm", "ok"))
+        if is_modal_element and is_popup_button:
+            return 0  # No penalty for buttons inside modals
+
+        # Buttons are poor assertion targets for messages (unless modal-related)
         if role in {"button", "submit"} or tag == "button":
             return -15
 
@@ -491,4 +523,90 @@ class PlaceholderScorer:
             text_overlap = len(elem_text_words & desc_text_words)
             if text_overlap >= max(1, len(desc_text_words) // 2):
                 return 5
+        return 0
+
+    @staticmethod
+    def _page_level_assert_bonus(action: str, description: str, element: dict[str, Any]) -> int:
+        """Bonus for page-level semantic assertions (e.g., 'order summary displayed').
+
+        These assertions don't map to specific element text but describe
+        the presence of content on a page. We reward content-bearing elements
+        when the description contains page-level semantic terms.
+        """
+        if action != "ASSERT":
+            return 0
+
+        lowered = description.replace("_", " ").lower()
+        if not any(term in lowered for term in PlaceholderScorer.PAGE_LEVEL_ASSERT_TERMS):
+            return 0
+
+        role = str(element.get("role", "")).strip().lower()
+        tag = str(element.get("tag", "")).strip().lower()
+        text = str(element.get("text", "")).strip()
+        classes = str(element.get("classes", "")).lower()
+        selector = str(element.get("selector", "")).lower()
+
+        # ── Structural context bonus ──
+        # Reward elements inside tables/lists when the description mentions
+        # cart items, order details, or similar table/list concepts.
+        table_keywords = ("cart", "item", "order", "listed", "details", "summary", "product")
+        has_table_context = any(term in lowered for term in table_keywords)
+        if has_table_context:
+            # Elements in table structures (selector contains table/tr/td/th)
+            if any(term in selector for term in ("table", "tbody", "tr", "td", "th")):
+                if role in {"cell", "row", "columnheader", "rowheader"} and text:
+                    return 8  # Strong signal: table cell with text for cart/order assertion
+            # List items
+            if role in {"listitem"} and tag in {"li"} and text:
+                return 6
+
+        # Content-bearing elements get a base bonus
+        content_roles = {
+            "cell",
+            "row",
+            "columnheader",
+            "rowheader",
+            "listitem",
+            "list",
+            "treeitem",
+            "region",
+            "article",
+            "section",
+            "heading",
+            "paragraph",
+            "text",
+        }
+        content_tags = {
+            "td",
+            "th",
+            "tr",
+            "li",
+            "ul",
+            "ol",
+            "table",
+            "div",
+            "p",
+            "span",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+        }
+
+        if (role in content_roles or tag in content_tags) and text:
+            return 3
+
+        # Modal/dialog elements for popup assertions
+        if any(term in lowered for term in ("popup", "confirmation popup", "appears")):
+            if role in {"dialog", "alertdialog", "alert", "status"}:
+                return 10
+            if any(
+                term in classes or term in selector for term in ("modal", "dialog", "popup", "overlay", "close-modal")
+            ):
+                return 8
+            if any(term in text.lower() for term in ("continue", "close", "confirm", "success", "thank")):
+                return 6
+
         return 0

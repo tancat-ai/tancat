@@ -123,18 +123,77 @@ class PlaceholderOrchestrator:
 
             cart_scraper = CartSeedingScraper(self._starting_url)
             cart_map = await cart_scraper.scrape_cart_pages(absolute_targets)
-            for url in cart_checkout_targets:
-                normalized_url = url if url.startswith(("http://", "https://")) else urljoin(self._starting_url, url)
-                existing = scraped_data.get(url, [])
-                candidate = cart_map.get(normalized_url, [])
-                if len(candidate) > len(existing):
-                    upgraded[url] = candidate
+
+            # Merge cart-seeded data for ALL URLs the scraper captured.
+            # This includes:
+            # - /view_cart and /checkout (replaces empty-cart data with seeded data)
+            # - /product_details/* (contains transient popup elements from the capture step)
+            # - The home page and category pages (may have richer data after interaction)
+            for captured_url, candidate in cart_map.items():
+                if not candidate:
+                    continue
+
+                # Find the matching URL in scraped_data (handle fragment differences)
+                matched_url: str | None = None
+                for existing_url in scraped_data:
+                    existing_parsed = urlparse(existing_url)
+                    candidate_parsed = urlparse(captured_url)
+                    # Match on BOTH domain and path — don't mix data from different sites
+                    if existing_parsed.netloc == candidate_parsed.netloc and existing_parsed.path.rstrip(
+                        "/"
+                    ) == candidate_parsed.path.rstrip("/"):
+                        matched_url = existing_url
+                        break
+
+                if matched_url is None and candidate:
+                    # URL not in scraped_data — add it directly.
+                    # This captures transient pages (e.g., product detail with popup)
+                    # that the journey scraper didn't visit but the cart-seeded scraper did.
+                    upgraded[captured_url] = candidate
                     logger.info(
-                        "Journey scrape improved '%s': %d → %d elements",
-                        url,
-                        len(existing),
+                        "Cart-seeded scrape added new URL '%s': %d elements",
+                        captured_url,
                         len(candidate),
                     )
+
+                elif matched_url and candidate:
+                    existing = scraped_data.get(matched_url, [])
+                    # For cart/checkout: always replace (seeded > empty)
+                    # For product detail pages: merge popup elements if we have fewer
+                    candidate_parsed = urlparse(captured_url)  # noqa: PLC1101
+                    candidate_path = candidate_parsed.path.rstrip("/")
+                    if candidate_path in {"/view_cart", "/checkout"}:
+                        if candidate and len(candidate) > len(existing):
+                            # Only replace if cart-seeded data is richer than what we already have.
+                            # This prevents empty/low-quality scrapes from overwriting good data.
+                            upgraded[matched_url] = candidate
+                            logger.info(
+                                "Cart-seeded scrape replaced '%s': %d → %d elements",
+                                matched_url,
+                                len(existing),
+                                len(candidate),
+                            )
+                    elif len(candidate) < len(existing):
+                        # Product detail pages: merge popup elements from the capture step
+                        # The cart-seeded scrape has fewer elements because it captured
+                        # the page during interaction (with popup overlay), not a full static scrape.
+                        # We merge elements that contain modal/popup indicators.
+                        existing_selectors = {e.get("selector", "") for e in existing}
+                        merged = list(existing)
+                        for elem in candidate:
+                            sel = elem.get("selector", "")
+                            if sel and sel not in existing_selectors:
+                                merged.append(elem)
+                                existing_selectors.add(sel)
+                        if len(merged) > len(existing):
+                            upgraded[matched_url] = merged
+                            logger.info(
+                                "Cart-seeded scrape merged '%s': %d → %d elements (%d new)",
+                                matched_url,
+                                len(existing),
+                                len(merged),
+                                len(merged) - len(existing),
+                            )
 
         # Phase 2: Known session-dependent URL patterns (non-cart)
         stateful_targets: list[str] = []
@@ -267,9 +326,9 @@ class PlaceholderOrchestrator:
             class_name = po.class_name
             instance_name = po.module_name.replace("-", "_")
             if use_evidence_tracker:
-                lines.append(f"    {instance_name} = {class_name}(page, evidence_tracker)")
+                lines.append(f"{instance_name} = {class_name}(page, evidence_tracker)")
             else:
-                lines.append(f"    {instance_name} = {class_name}(page)")
+                lines.append(f"{instance_name} = {class_name}(page)")
         return lines
 
     def _get_pom_instance_name(self, url: str | None, page_objects: list[GeneratedPageObject]) -> str | None:
@@ -377,6 +436,8 @@ class PlaceholderOrchestrator:
 
                     if "pytest.skip" in resolved_value:
                         journey_unresolved[journey.test_name].append(description)
+                        # Do NOT add failed resolutions to line_resolutions —
+                        # only the consolidated skip at the test top should appear.
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
                             (placeholder.token, action, resolved_value, description, fill_value, current_url)
@@ -434,9 +495,10 @@ class PlaceholderOrchestrator:
                     scraped_data=scraped_data,
                     scraped_errors=errors,
                 )
-                line_resolutions.setdefault(use.line_number, []).append(
-                    (use.token, action, resolved_value, description, fill_value, fallback_url)
-                )
+                if "pytest.skip" not in resolved_value:
+                    line_resolutions.setdefault(use.line_number, []).append(
+                        (use.token, action, resolved_value, description, fill_value, fallback_url)
+                    )
 
         # 3. Apply line-level replacements first.
         final_lines: list[str] = []
@@ -458,7 +520,16 @@ class PlaceholderOrchestrator:
                         if pom_call:
                             # Preserve indentation and replace token with POM call
                             indent = line[: len(line) - len(line.lstrip())]
-                            updated_line = updated_line.replace(token, pom_call)
+                            # Check if token is wrapped in a page.*() call (LLM emitted page.click("{{CLICK:...}}") instead of bare placeholder)
+                            wrapped_pattern = re.compile(
+                                r'(page\.\w+)\s*\(\s*["\']?' + re.escape(token) + r'["\']?\s*\)'
+                            )
+                            wrapped_match = wrapped_pattern.search(updated_line)
+                            if wrapped_match:
+                                # Replace the entire function call, not just the token
+                                updated_line = updated_line.replace(wrapped_match.group(0), pom_call)
+                            else:
+                                updated_line = updated_line.replace(token, pom_call)
                             # If the line was JUST the token, we need to ensure it has the indent
                             if updated_line.strip() == pom_call:
                                 updated_line = f"{indent}{pom_call}"
@@ -486,6 +557,12 @@ class PlaceholderOrchestrator:
         # 6. Remove old per-placeholder skip lines.
         final_lines = self._remove_old_placeholder_skips(final_lines, journeys)
 
+        # 7. Remove any remaining raw placeholder lines within test bodies.
+        # These are covered by the consolidated skip at the test top, and
+        # leaving them would cause code_normalizer to convert them into
+        # additional pytest.skip('{{...}}') lines after this function returns.
+        final_lines = self._remove_raw_placeholder_lines(final_lines)
+
         return "\n".join(final_lines)
 
     @staticmethod
@@ -511,15 +588,49 @@ class PlaceholderOrchestrator:
         lines: list[str],
         journeys: list[TestJourney],
     ) -> list[str]:
-        """Filter out old per-placeholder skip lines generated by the skeleton."""
-        placeholder_skip_re = re.compile(
+        """Filter out old per-placeholder skip lines generated by code_normalizer.
+
+        Removes lines like:
+        - pytest.skip('Unresolved placeholder in this step. {{CLICK:...}}')
+        - pytest.skip('{{ASSERT:Product categories are visible}}')
+        - pytest.skip("{{CLICK:Proceed to checkout button}}")
+
+        These are left over when the orchestrator fails to resolve a placeholder
+        and code_normalizer replaces the raw token with a pytest.skip() call.
+        The consolidated skip inserted by _insert_consolidated_skips() replaces these.
+        """
+        # Match pytest.skip('{{ACTION:description}}') - raw placeholder token
+        raw_placeholder_skip_re = re.compile(r"""pytest\.skip\(\s*['"]\{\{[A-Z_]+:.*?\}\}['"]\s*\)""")
+        # Match pytest.skip('Unresolved placeholder in this step. {{...}}')
+        unresolved_skip_re = re.compile(
             r"""pytest\.skip\(\s*['"]Unresolved placeholder in this step\.\s*\{\{.*?\}\}['"]\s*\)"""
         )
         result_lines: list[str] = []
 
         for line in lines:
             stripped = line.strip()
-            if placeholder_skip_re.match(stripped):
+            if raw_placeholder_skip_re.match(stripped):
+                continue
+            if unresolved_skip_re.match(stripped):
+                continue
+            result_lines.append(line)
+
+        return result_lines
+
+    @staticmethod
+    def _remove_raw_placeholder_lines(lines: list[str]) -> list[str]:
+        """Remove any remaining raw {{ACTION:description}} placeholder lines.
+
+        After resolution, any surviving raw placeholder tokens are covered by
+        the consolidated skip at the test top. Removing them prevents
+        code_normalizer from converting them into additional pytest.skip()
+        lines later in the pipeline.
+        """
+        raw_placeholder_re = re.compile(r"^\s*\{\{[A-Z_]+:.*?\}\}\s*$")
+        result_lines: list[str] = []
+
+        for line in lines:
+            if raw_placeholder_re.match(line):
                 continue
             result_lines.append(line)
 
@@ -543,7 +654,11 @@ class PlaceholderOrchestrator:
         journey_unresolved: dict[str, list[str]],
         original_lines: list[str],
     ) -> list[str]:
-        """Insert a single consolidated pytest.skip() at the start of each test with unresolved placeholders."""
+        """Insert a single consolidated pytest.skip() at the start of each test with unresolved placeholders.
+
+        The skip is placed AFTER any consent-dismiss or POM-instantiation lines,
+        so that dismiss_consent_overlays(page) still runs before the skip.
+        """
         skip_messages: dict[str, str] = {}
         for test_name, unresolved_list in journey_unresolved.items():
             if unresolved_list:
@@ -575,8 +690,28 @@ class PlaceholderOrchestrator:
 
                     indent = "    "
                     skip_line = f"{indent}pytest.skip({skip_messages[test_name]!r})"
-                    result_lines.append(skip_line)
-                    inserted_for.add(test_name)
+
+                    # Scan ahead to find where dismiss_consent_overlays is called,
+                    # then insert the skip AFTER it so consent dismiss still runs.
+                    insert_after = index
+                    for scan_idx in range(index + 1, min(index + 15, len(lines))):
+                        scan_stripped = lines[scan_idx].strip()
+                        if "pytest.skip(" in scan_stripped:
+                            # Already has a skip - don't insert another
+                            inserted_for.add(test_name)
+                            break
+                        if "dismiss_consent_overlays(" in scan_stripped and not scan_stripped.startswith("pytest."):
+                            insert_after = scan_idx
+
+                    if test_name not in inserted_for:
+                        # Insert skip line after the consent dismiss block
+                        indent_line = (
+                            " " * (len(lines[insert_after]) - len(lines[insert_after].lstrip()))
+                            if insert_after > index
+                            else indent
+                        )
+                        result_lines.append(f"{indent_line}{skip_line.strip()}")
+                        inserted_for.add(test_name)
 
         return result_lines
 
@@ -857,11 +992,53 @@ class PlaceholderOrchestrator:
         description: str,
         pages_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, str] | None:
-        """Pass 1 (ASSERT) — match text-bearing elements whose label appears in the description."""
+        """Pass 1 (ASSERT) — match text-bearing elements whose label appears in the description.
+
+        Requires the element text to contain at least 2 of the description's content words
+        to avoid false positives like "Summary" matching "cart summary" when "Cart Summary"
+        exists on a different page.
+        """
         if action != "ASSERT":
             return None
 
         norm_description = description.lower()
+        desc_words = set(norm_description.split())
+
+        # Stop words that are too common to be useful for matching
+        stop_words = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "and",
+            "or",
+            "but",
+            "not",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "by",
+            "from",
+            "of",
+            "as",
+            "into",
+            "through",
+            "page",
+            "element",
+            "visible",
+            "displayed",
+            "shown",
+        }
+        desc_content_words = desc_words - stop_words
+
         text_bearing_roles = {
             "heading",
             "paragraph",
@@ -877,6 +1054,9 @@ class PlaceholderOrchestrator:
         }
         text_bearing_tags = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "li", "td", "th"}
 
+        # If description has multiple content words, require multi-word match
+        requires_multi_word = len(desc_content_words) >= 2
+
         for elements in pages_data.values():
             for element in elements:
                 role = str(element.get("role", "")).strip().lower()
@@ -885,6 +1065,12 @@ class PlaceholderOrchestrator:
                     continue
                 norm_text = self._normalise_element_text(element)
                 if len(norm_text) >= 3 and norm_text in norm_description:
+                    if requires_multi_word:
+                        # Require the element text to contain at least 2 content words from description
+                        elem_words = set(norm_text.lower().replace("_", " ").split())
+                        overlap = elem_words & desc_content_words
+                        if len(overlap) < 2:
+                            continue
                     return element
 
         return None
@@ -969,10 +1155,10 @@ class PlaceholderOrchestrator:
             )
 
         if not all_ranked:
-            # No candidates scored at all — for ASSERT, fall back to page-state detection
-            # since abstract descriptions (e.g. "checkout form visible") produce zero matches.
-            if action == "ASSERT":
-                return self._select_page_state_candidate(pages_data, description)
+            # No candidates scored at all — for ASSERT, do NOT fall back to a random element.
+            # Returning a generic element (e.g., a[href="/"]) for an assertion like
+            # "cart page table of added items" produces tests that pass for the wrong reason.
+            # It's better to skip the test with a clear message than assert the wrong element.
             return None
 
         # Sort by score descending to get the global best match
@@ -1027,13 +1213,6 @@ class PlaceholderOrchestrator:
             top_candidate = shortlisted[0]
             if self._validate_text_match(top_candidate, description):
                 return top_candidate
-            # Score-based page-state detection for ASSERT: low scores indicate abstract
-            # descriptions (e.g. "checkout form visible") that don't map to specific elements.
-            # Threshold 30 sits between poor word-overlap scores (1-10) and structural matches (80+).
-            if action == "ASSERT" and global_top_score < 30:
-                page_loaded_candidate = self._select_page_loaded_candidate(shortlisted, description)
-                if page_loaded_candidate is not None:
-                    return page_loaded_candidate
             logger.info(
                 "Top-ranked element '%s' fails text validation for '%s' — skipping (unresolved placeholder).",
                 str(top_candidate.get("text", "")).strip(),
@@ -1042,20 +1221,16 @@ class PlaceholderOrchestrator:
         return None
 
     @staticmethod
-    def _select_page_state_candidate(
-        pages_data: dict[str, list[dict[str, str]]],
-        description: str,
-    ) -> dict[str, str] | None:
-        """Pick a stable visible candidate from the current page for broad page-state assertions."""
-        candidates = [element for elements in pages_data.values() for element in elements]
-        return PlaceholderOrchestrator._select_page_loaded_candidate(candidates, description)
-
-    @staticmethod
     def _select_page_loaded_candidate(
         candidates: list[dict[str, str]],
         description: str = "",
     ) -> dict[str, str] | None:
-        """Pick a stable visible page element for generic "page loaded" assertions."""
+        """Pick a stable visible page element for generic "page loaded" assertions.
+
+        Only returns a candidate if the description contains specific keywords that
+        we can match against element metadata. For generic descriptions, returns None
+        so the placeholder remains unresolved and the test skips with a clear message.
+        """
         lowered = description.lower()
         if "cart badge" in lowered or "badge updated" in lowered:
             for candidate in candidates:
@@ -1066,15 +1241,7 @@ class PlaceholderOrchestrator:
                 if "cart" in candidate_text and ("badge" in candidate_text or str(candidate.get("text", "")).strip()):
                     return candidate
 
-        for candidate in candidates:
-            role = str(candidate.get("role", "")).strip().lower()
-            selector = str(candidate.get("selector", "")).strip()
-            if not selector or role in {"hidden", "password", "email", "text", "input"}:
-                continue
-            if str(candidate.get("is_visible", "true")).lower() == "false":
-                continue
-            return candidate
-        return candidates[0] if candidates else None
+        return None
 
     def _select_initial_page_url(
         self,

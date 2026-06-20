@@ -33,7 +33,7 @@ from src.skeleton_parser import SkeletonParser
 from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
-from src.url_utils import extract_route_concepts
+from src.url_utils import build_common_path_candidates, extract_route_concepts
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +304,14 @@ class TestOrchestrator:
             else:
                 scraped_data[url] = scraped_data[url] + elements
 
+        # Approach 4: Upgrade stateful pages with cart-seeding scraper.
+        # This captures transient states (confirmation popups) and gated pages
+        # (cart/checkout) that require a seeded session.
+        if self._starting_url:
+            self._debug("phase=stateful_upgrade start")
+            scraped_data = await self._placeholder_orchestrator._upgrade_stateful_pages(scraped_data)
+            self._debug("phase=stateful_upgrade done")
+
         # Track redirects to maintain correct page context
         redirects: dict[str, str] = {
             url: final_url for url, (_elems, _err, final_url) in raw_scraped_data.items() if url != final_url
@@ -326,10 +334,15 @@ class TestOrchestrator:
             )
             self._debug(f"url_resolver mappings: {self._placeholder_orchestrator.url_resolver.get_all_mappings()}")
 
+        # Build page objects from ALL scraped URLs, not just the initial candidate list.
+        # Journey discovery, stateful scraping, and cart seeding may have added extra
+        # pages beyond the initial candidate set. Each unique URL gets its own page object.
+        all_scraped_urls = list(scraped_data.keys())
         scraped_page_records = self._placeholder_orchestrator._build_scraped_page_records(
-            pages_to_scrape, scraped_data, scraped_errors, redirects
+            all_scraped_urls, scraped_data, scraped_errors, redirects
         )
         generated_page_objects = self._placeholder_orchestrator._build_page_object_artifacts(scraped_page_records)
+        self._debug(f"Built {len(generated_page_objects)} page objects from {len(all_scraped_urls)} scraped URLs")
         self._debug("phase=resolve_placeholders start")
         final_code = await self._placeholder_orchestrator._replace_placeholders_sequentially(
             skeleton_code=skeleton_code,
@@ -652,17 +665,39 @@ class TestOrchestrator:
         user_story: str,
         conditions: str,
     ) -> list[str]:
-        """Return seed URLs only — journey discovery finds all reachable pages.
+        """Return URLs to pre-scrape before placeholder resolution.
 
-        URL guessing via common path patterns has been removed because the journey
-        scraper navigates the site statefully, following links and form submissions,
-        capturing all pages and elements without guessing URL patterns.
+        Combines:
+        - Seed URLs (the starting page)
+        - URLs explicitly referenced by GOTO/URL placeholders in journeys
+        - Common path candidates derived from user story and placeholder descriptions
 
-        The scraper captures actual URLs it visits (including redirects), so any page
-        the site actually has will be discovered through navigation from seed pages.
+        Pre-scraping these URLs ensures placeholder resolution has element data
+        available for all pages referenced in the test journeys, not just the
+        pages the journey scraper happens to visit.
         """
-        # Deduplicate while preserving order — journey discovery handles the rest
-        return list(dict.fromkeys(seed_urls))
+        candidate_urls: list[str] = list(seed_urls)
+
+        # Collect URLs from GOTO/URL placeholders in journeys
+        for journey in journeys:
+            for step in journey.steps:
+                for placeholder in step.placeholders:
+                    if placeholder.action in {"GOTO", "URL"}:
+                        desc = placeholder.description
+                        # Handle keyword descriptions like "home", "cart", "checkout"
+                        # by resolving them through the placeholder resolver
+                        resolved = self.resolver.resolve_url(desc, {})
+                        if resolved:
+                            candidate_urls.append(resolved)
+                        elif desc.startswith("http"):
+                            candidate_urls.append(desc)
+
+        # Add heuristic path candidates from user story and conditions
+        concepts = extract_route_concepts([user_story, conditions])
+        candidate_urls.extend(build_common_path_candidates(seed_urls, concepts))
+
+        # Deduplicate while preserving order
+        return list(dict.fromkeys(candidate_urls))
 
     @staticmethod
     def _inject_pom_imports(code: str, pom_imports: list[str]) -> str:

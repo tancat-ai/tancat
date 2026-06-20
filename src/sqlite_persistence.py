@@ -81,7 +81,7 @@ class SQLitePersistence:
         self._db_path = db_path or _DEFAULT_DB_FILE
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._conn: sqlite3.Connection = sqlite3.connect(str(self._db_path))
+        self._conn: sqlite3.Connection = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
         # PRAGMA configuration — WAL for concurrency, FK enforcement for CASCADE

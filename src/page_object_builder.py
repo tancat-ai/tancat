@@ -81,7 +81,11 @@ class PageObjectBuilder:
             return "HomePage"
 
         words = [part.capitalize() for part in re.split(r"[^a-zA-Z0-9]+", last_segment) if part]
-        return f"{''.join(words) or 'Generated'}Page"
+        # Filter out parts that are purely numeric to avoid invalid identifiers like "1Page"
+        words = [part for part in words if not part.isdigit()]
+        if not words:
+            return "GeneratedPage"
+        return f"{''.join(words)}Page"
 
     @staticmethod
     def _to_module_name(class_name: str) -> str:

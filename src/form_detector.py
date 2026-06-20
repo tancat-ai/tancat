@@ -10,16 +10,18 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 PRODUCT_SELECTORS: list[str] = [
-    "[data-product-id]",
+    "a[href*='/product_details/']",
     "a[href*='/product/']",
-    "a[href*='/product']",
-    ".product-item",
+    ".product-item a[href*='/product']",
     ".product-link",
     ".product-title a",
-    ".products a",
+    ".products a[href*='product_details']",
+    "[data-product-id]",
 ]
 
 ADD_TO_CART_SELECTORS: list[str] = [
+    'button:has-text("Add to cart")',
+    "button.btn-default.cart",
     'button[type="submit"]',
     "input[type='submit']",
     ".add-to-cart",
@@ -28,9 +30,10 @@ ADD_TO_CART_SELECTORS: list[str] = [
 ]
 
 CONTINUE_SHOPPING_SELECTORS: list[str] = [
+    'button:has-text("Continue Shopping")',
+    "button.btn-success.close-modal",
     ".continue-shopping",
     "[data-action='continue-shopping']",
-    'button:has-text("Continue Shopping")',
     'a:has-text("Continue Shopping")',
     ".modal-close",
     ".close-btn",

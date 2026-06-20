@@ -476,8 +476,8 @@ class TestHelperMethods:
         result = injector._find_auth_test([auth_journey], "https://example.com")
         assert result == "test_01_login"
 
-    def test_find_auth_test_fallback_to_first(self) -> None:
-        """When no login pattern is found, fallback to first journey."""
+    def test_find_auth_test_no_auth_returns_none(self) -> None:
+        """When no login pattern is found, return None (no auth prerequisite)."""
         journey = _journey(
             test_name="test_01_view_home",
             steps=[
@@ -491,8 +491,8 @@ class TestHelperMethods:
 
         injector = PrerequisiteInjector()
         result = injector._find_auth_test([journey], "https://example.com")
-        # Fallback to first test
-        assert result == "test_01_view_home"
+        # No auth pattern found, so return None
+        assert result is None
 
 
 # -- Integration test --

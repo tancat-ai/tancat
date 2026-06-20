@@ -214,6 +214,16 @@ async def run_pipeline(
     # Validate generated code
     syntax_error = validate_python_syntax(final_code)
     if syntax_error:
+        # Debug: store failing code lines in session state for UI display
+        lines = final_code.splitlines()
+        debug_lines: list[str] = []
+        start_line = max(0, 5)  # Line 6 (0-indexed)
+        end_line = min(len(lines), 15)
+        for i in range(start_line, end_line):
+            line_repr = repr(lines[i])
+            debug_lines.append(f"Line {i + 1}: {line_repr}")
+        session.set("pipeline_syntax_debug", "\n".join(debug_lines))
+        session.set("pipeline_full_code", final_code)
         session.set("pipeline_saved_path", "")
         session.set("pipeline_manifest_path", "")
         raise ValueError(f"Generated code failed syntax validation: {syntax_error}")

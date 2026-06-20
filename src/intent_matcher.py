@@ -417,6 +417,139 @@ class CartAssertStrategy(IntentStrategy):
         return is_content and not is_nav
 
 
+class PopupAssertStrategy(IntentStrategy):
+    """ASSERT matching for confirmation popups/modals/alerts.
+
+    Handles generic descriptions like:
+    - "confirmation popup appears"
+    - "product added confirmation popup"
+    - "success alert is visible"
+
+    Matches elements that are inside or are modals/dialogs/alerts.
+    """
+
+    _POPUP_KEYWORDS = (
+        "popup",
+        "confirmation popup",
+        "confirmation message",
+        "success message",
+        "success alert",
+        "notification",
+        "alert message",
+        "appears",
+        "appearing",
+    )
+
+    _POPUP_ELEMENT_SIGNALS = (
+        "modal",
+        "dialog",
+        "popup",
+        "overlay",
+        "alert",
+        "notification",
+        "continue shopping",
+        "close-modal",
+        "close-btn",
+        "btn-success",
+    )
+
+    def match(self, action: str, description: str, element: dict[str, Any]) -> bool | None:
+        if action != "ASSERT":
+            return None
+
+        lowered = description.replace("_", " ").lower()
+        has_popup_keyword = any(term in lowered for term in self._POPUP_KEYWORDS)
+        if not has_popup_keyword:
+            return None
+
+        all_text = _all_element_text(element)
+        role = str(element.get("role", "")).strip().lower()
+        tag = str(element.get("tag", "")).strip().lower()
+        classes = str(element.get("classes", "")).lower()
+        selector = str(element.get("selector", "")).lower()
+
+        # Match modal/dialog roles
+        if role in {"dialog", "alertdialog", "alert", "status"}:
+            return True
+
+        # Match elements with modal/dialog classes
+        if any(signal in classes or signal in selector or signal in all_text for signal in self._POPUP_ELEMENT_SIGNALS):
+            return True
+
+        # Match content elements inside modal-like context
+        if tag in {"div", "p", "span", "h2", "h3", "button"}:
+            text = str(element.get("text", "")).strip().lower()
+            parent_text = str(element.get("parent_text", "")).lower()
+            if any(
+                term in text or term in parent_text
+                for term in ("continue", "close", "confirm", "success", "thank", "added", "order", "purchase")
+            ):
+                return True
+
+        return None
+
+
+class GenericAssertStrategy(IntentStrategy):
+    """Fallback ASSERT matching for high-level semantic descriptions.
+
+    Handles descriptions like:
+    - "added item listed with correct details"
+    - "order summary is displayed"
+    - "product listings appear"
+
+    Matches elements that represent content displays (tables, lists, headings).
+    """
+
+    _CONTENT_DISPLAY_TERMS = (
+        "listed",
+        "displayed",
+        "appear",
+        "appears",
+        "visible",
+        "shown",
+        "present",
+        "correct details",
+        "summary",
+    )
+
+    _CONTENT_ROLES = {
+        "cell",
+        "row",
+        "columnheader",
+        "rowheader",
+        "listitem",
+        "list",
+        "treeitem",
+        "region",
+        "article",
+        "section",
+        "heading",
+        "paragraph",
+        "text",
+    }
+
+    _CONTENT_TAGS = {"td", "th", "tr", "li", "ul", "ol", "table", "div", "p", "span", "h1", "h2", "h3"}
+
+    def match(self, action: str, description: str, element: dict[str, Any]) -> bool | None:
+        if action != "ASSERT":
+            return None
+
+        lowered = description.replace("_", " ").lower()
+        has_content_term = any(term in lowered for term in self._CONTENT_DISPLAY_TERMS)
+        if not has_content_term:
+            return None
+
+        role = str(element.get("role", "")).strip().lower()
+        tag = str(element.get("tag", "")).strip().lower()
+        text = str(element.get("text", "")).strip()
+
+        # Content display elements with text are good candidates
+        if (role in self._CONTENT_ROLES or tag in self._CONTENT_TAGS) and text:
+            return True
+
+        return None
+
+
 class SuccessAssertStrategy(IntentStrategy):
     """Thank-you / order-confirmed / success ASSERT matching.
 
@@ -541,6 +674,8 @@ class IntentMatcher:
                 CartIntentStrategy(),
                 CheckoutIntentStrategy(),
                 CartAssertStrategy(),
+                PopupAssertStrategy(),
+                GenericAssertStrategy(),
                 SuccessAssertStrategy(),
                 ContinueShoppingStrategy(),
                 ProductNameStrategy(),

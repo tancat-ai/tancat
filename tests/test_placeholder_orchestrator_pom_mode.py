@@ -116,14 +116,15 @@ def test_build_pom_instantiation() -> None:
         file_path="pages/view_cart_page.py",
     )
     # Default use_evidence_tracker=True generates instances with tracker parameter
+    # Lines are NOT pre-indented; _inject_pom_instantiation adds indentation
     lines = orch._build_pom_instantiation([po_home, po_view_cart])
-    assert "    home_page = HomePage(page, evidence_tracker)" in lines
-    assert "    view_cart_page = ViewCartPage(page, evidence_tracker)" in lines
+    assert "home_page = HomePage(page, evidence_tracker)" in lines
+    assert "view_cart_page = ViewCartPage(page, evidence_tracker)" in lines
 
     # use_evidence_tracker=False generates plain instances (backward compatible)
     plain_lines = orch._build_pom_instantiation([po_home, po_view_cart], use_evidence_tracker=False)
-    assert "    home_page = HomePage(page)" in plain_lines
-    assert "    view_cart_page = ViewCartPage(page)" in plain_lines
+    assert "home_page = HomePage(page)" in plain_lines
+    assert "view_cart_page = ViewCartPage(page)" in plain_lines
 
 
 def test_get_pom_instance_name_matches_url() -> None:

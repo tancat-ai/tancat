@@ -289,15 +289,15 @@ def _execute_journey_sync(
                     elif step.action == "capture":
                         html = page.content()
                         elements = html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
-                        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
+                        # For transient captures (e.g., popups), skip visibility enrichment.
+                        # By the time is_visible() runs, the element may have already
+                        # started its exit animation. The a11y snapshot still helps.
                         try:
-                            enriched = _capture_element_visibility_sync(page, elements)
                             a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
                             if a11y_snapshot is not None:
-                                enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
-                            captured_pages[current_url] = enriched
+                                elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)  # type: ignore[arg-type]
+                            captured_pages[current_url] = elements
                         except Exception:
-                            # Enrichment is additive — fall back to unenriched elements on failure
                             captured_pages[current_url] = elements
 
                     elif step.action == "wait":
@@ -520,7 +520,7 @@ class JourneyScraper:
             Dictionary mapping URL → list of scraped elements.
             Elements from later steps may overwrite earlier elements for the same URL.
         """
-        cleaned = [s for s in steps if s and s.action in ("navigate", "click", "fill", "wait", "scrape")]
+        cleaned = [s for s in steps if s and s.action in ("navigate", "click", "fill", "wait", "scrape", "capture")]
         if not cleaned:
             return {}
 
@@ -620,6 +620,10 @@ class JourneyScraper:
                                 current_url = self._navigate_to(page, step.url, step.timeout_ms)
 
                             elif step.action == "click":
+                                # Dismiss transient overlays (ads, consent) before every click
+                                # to prevent pointer-event interception from dynamically loaded ads.
+                                self._dismiss_consent_overlays(page)
+
                                 selector = step.selector
                                 if not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
@@ -693,6 +697,19 @@ class JourneyScraper:
                                 elements = self._scrape_current_page(  # B-0XX: pass context
                                     page, current_url, context
                                 )
+                                output[current_url] = elements
+
+                            elif step.action == "capture" and current_url:
+                                # Transient capture — skip visibility enrichment so that
+                                # popups/modals that auto-dismiss are not penalized.
+                                html = page.content()
+                                elements = self._html_scraper._extract_elements_from_html(html, base_url=current_url)  # noqa: SLF001
+                                try:
+                                    a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                                    if a11y_snapshot is not None:
+                                        elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)  # type: ignore[arg-type]
+                                except Exception:
+                                    pass
                                 output[current_url] = elements
 
                             # Auto-scrape after navigation if no explicit scrape step
@@ -1034,7 +1051,8 @@ class CartSeedingScraper(JourneyScraper):
 
         This method:
         1. Seeds the cart by adding an item (via the products page)
-        2. Then scrapes each target URL (cart, checkout, etc.)
+        2. Captures the confirmation popup state (for resolver to find)
+        3. Then scrapes each target URL (cart, checkout, etc.)
 
         Args:
             cart_urls: URLs to scrape (e.g., [/view_cart, /checkout]).
@@ -1068,6 +1086,15 @@ class CartSeedingScraper(JourneyScraper):
                 action="click",
                 selector=ADD_TO_CART_SELECTORS[0],
                 description="add product to cart",
+            )
+        )
+
+        # Step 3b: CAPTURE confirmation popup state BEFORE dismissing it.
+        # This allows the resolver to find elements like "Added confirmation popup"
+        steps.append(
+            JourneyStep(
+                action="capture",
+                description="capture confirmation popup state",
             )
         )
 
