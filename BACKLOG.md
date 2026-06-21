@@ -1,7 +1,26 @@
 ﻿# BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-06-08 (Phase 4 Export core shipped)
+Last updated: 2026-06-21 (CI/CD consolidation shipped)
+
+---
+
+### ✅ CI-001 — Consolidate CI/CD Pipeline (2026-06-21)
+**What:** Merged `ci.yml` and `project-health.yml` into a single gated pipeline.
+**Changes:**
+- Gate chain: sanitizer → ruff → mypy → pytest (fail fast, no wasted minutes)
+- Added `concurrency` block to auto-cancel stale runs on same branch
+- Added `setup-uv` caching (`enable-cache: true`) — caches `.venv` between runs
+- Added Playwright browser cache via `actions/cache` keyed on `uv.lock` hash
+- Added `--frozen` to all `uv sync` calls — fails if lockfile is stale
+- Added failure artifact upload (`test-results/`, `screenshots/`) with 7-day retention
+- Deleted `project-health.yml`
+
+### ✅ CI-002 — Fix project_sanitizer bugs (2026-06-21)
+- Fixed `PROJECT_ROOT` resolution (`.parent.parent` → `.parent.parent.parent`)
+- Added `exported_tests/` to `SKIP_DIRS`
+- Orphan `.md` files are warning-only (exit 0), not CI-breaking
+- Deleted junk `scripts/debug/cli_test_capture.log`
 
 ---
 
@@ -1085,5 +1104,43 @@ modular components (InputParser, UserStoryAnalyzer, TestCaseOrchestrator, etc.)
 - `tests/test_prompt_utils.py` — verify prompt includes new guidance
 
 **Expected outcome:** ASSERT placeholders carry enough context for the resolver to pick specific, meaningful elements instead of generic `.btn` matches.
+
+---
+
+## 🚀 CI/CD Tier 3 — Future Pipeline Enhancements
+
+> Planned additions to the consolidated CI pipeline. Implement when the underlying features exist.
+
+### CI-003 — SQLite Migration Validation
+**When:** During AI-012 (SQLite Persistence) implementation
+**What:** Add a static-analysis step that creates a fresh in-memory/temp SQLite database
+and runs `PRAGMA integrity_check` against any DDL migrations. Catches schema syntax
+errors before they hit `main`.
+**How:** Small pytest fixture or standalone script that applies migrations to a temp DB
+and asserts `integrity_check` returns `ok`.
+
+### CI-004 — Graph-Store Compiler Check
+**When:** When `nodes.csv`/`links.csv` are consumed by CI
+**What:** After `project_sanitizer.py` audits links.csv, add an explicit SQLite query
+assertion that compiles the graph-store and verifies no orphaned relational paths
+exist in the static codebase mapping.
+**How:** Extend sanitizer Step 3 to compile into an in-memory SQLite DB and run
+`SELECT COUNT(*) FROM edges WHERE source_id NOT IN (SELECT id FROM nodes)` —
+must return 0.
+
+### CI-005 — Eval Harness Freeze Gate (Phase 5)
+**When:** When Phase 5 multi-agent evaluation harness exists
+**What:** Secondary `workflow_dispatch` workflow that runs evaluation metrics over
+a dataset of generated test slices. Saves expensive token consumption on standard
+commits while keeping a clean ledger of score regressions.
+**How:** New `.github/workflows/eval-harness.yml` triggered manually. Produces
+a markdown summary of pass-rate regressions vs the previous eval run.
+
+### CI-006 — Performance Regression Gate
+**When:** When test suite exceeds 5 minutes in CI
+**What:** Track test suite duration over time and alert if a single commit adds
+>30% to total runtime.
+**How:** Store `pytest` summary duration in an artifact, compare against last
+10 runs using `gh run view` JSON output.
 
 
