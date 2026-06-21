@@ -177,6 +177,8 @@ async def run_pipeline(
         credential_profile=credential_profile,
         journey_steps=journey_steps,
         pom_mode=pom_mode,
+        provider=provider,
+        model=model_name,
     )
 
     final_code = await orchestrator.run_pipeline(

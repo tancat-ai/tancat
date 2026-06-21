@@ -27,7 +27,7 @@ from src.prompt_utils import (
     count_conditions,
     prepare_conditions_for_generation,
 )
-from src.scraper import PageScraper
+from src.scraper import PageScraper, scrape_with_enrichment
 from src.semantic_candidate_ranker import SemanticCandidateRanker
 from src.skeleton_parser import SkeletonParser
 from src.skeleton_validator import SkeletonValidator
@@ -68,6 +68,8 @@ class TestOrchestrator:
         credential_profile: CredentialProfile | None = None,
         journey_steps: list[JourneyStep] | None = None,
         pom_mode: bool = False,
+        provider: str = "",
+        model: str = "",
     ) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()
@@ -75,6 +77,8 @@ class TestOrchestrator:
         self._credential_profile = credential_profile
         self._journey_steps: list[JourneyStep] | None = journey_steps
         self._pom_mode = pom_mode
+        self._provider = provider
+        self._model = model
         self._placeholder_orchestrator = PlaceholderOrchestrator(
             starting_url=None, credential_profile=self._credential_profile, pom_mode=pom_mode
         )
@@ -249,12 +253,34 @@ class TestOrchestrator:
 
         # Approach 1: Initial static scrape
         raw_scraped_data = await self._scraper.scrape_all(pages_to_scrape) if pages_to_scrape else {}
-        scraped_data: dict[str, list[dict[str, Any]]] = {
-            url: elements for url, (elements, error, _final_url) in raw_scraped_data.items()
-        }
-        scraped_errors: dict[str, str] = {
-            url: _error for url, (elements, _error, _final) in raw_scraped_data.items() if _error
-        }
+
+        # AI-027: Apply vision enrichment to scraped elements when possible
+        # Must run BEFORE building scraped_data so enriched elements flow through
+        if self._scraper.last_scrape_results:
+            results = list(self._scraper.last_scrape_results.values())
+            enriched = scrape_with_enrichment(
+                scrape_results=results,
+                provider=self._provider,
+                model=self._model,
+            )
+            # Update the scraper's stored results with enriched elements
+            for result in enriched:
+                self._scraper.last_scrape_results[result.url] = result
+
+        # Re-extract elements from (now enriched) ScrapeResult objects
+        # Fall back to raw_scraped_data if last_scrape_results is empty (mocked tests)
+        scraped_data: dict[str, list[dict[str, Any]]]
+        scraped_errors: dict[str, str]
+        if self._scraper.last_scrape_results:
+            scraped_data = {}
+            scraped_errors = {}
+            for url, result in self._scraper.last_scrape_results.items():
+                scraped_data[url] = result.elements
+                if result.error:
+                    scraped_errors[url] = result.error
+        else:
+            scraped_data = {url: elements for url, (elements, _error, _final_url) in raw_scraped_data.items()}
+            scraped_errors = {url: _error for url, (_elements, _error, _final) in raw_scraped_data.items() if _error}
         all_journey_scraped_data: dict[str, list[dict[str, Any]]] = {}
 
         # Approach 2: User-provided journey execution (Phase B — authenticated scraping)

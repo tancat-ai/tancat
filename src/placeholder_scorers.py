@@ -173,6 +173,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._assert_message_bonus(action, description, element)
         score += PlaceholderScorer._text_content_bonus(description, element)
         score += PlaceholderScorer._page_level_assert_bonus(action, description, element)
+        score += PlaceholderScorer._vision_enriched_bonus(action, description, element)
 
         return score if score >= match_threshold else None
 
@@ -414,6 +415,70 @@ class PlaceholderScorer:
             visual_overlap = len(visual_words.intersection(desc_word_set))
             if visual_overlap > 0:
                 bonus += visual_overlap
+        return bonus
+
+    # ------------------------------------------------------------------
+    # AI-027: Vision-enriched field scoring
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _vision_enriched_bonus(
+        action: str,
+        description: str,
+        element: dict[str, Any],
+    ) -> int:
+        """Score boost for elements enriched by the vision LLM.
+
+        Uses vision-derived fields (product_name, price, visual_label,
+        enrichment_note) to match placeholder descriptions that reference
+        specific products or visual characteristics.
+        """
+        if not element.get("_enriched"):
+            return 0
+
+        bonus = 0
+        desc_lower = description.replace("_", " ").lower()
+        desc_words = set(desc_lower.split())
+
+        # product_name: high-value match for e-commerce descriptions
+        product_name = str(element.get("product_name", "") or "").lower()
+        if product_name:
+            product_words = set(product_name.split())
+            overlap = len(desc_words.intersection(product_words))
+            if overlap >= 2:
+                bonus += overlap * 5  # +10 for 2-word match, +15 for 3-word, etc.
+            elif product_name in desc_lower:
+                bonus += 10
+
+        # price: match if description mentions a price
+        price = str(element.get("price", "") or "").lower()
+        if price and any(term in desc_lower for term in ("price", "$", "cost")):
+            bonus += 3
+
+        # visual_label: moderate match for descriptive labels
+        visual_label = str(element.get("visual_label", "") or "").lower()
+        if visual_label:
+            label_words = set(visual_label.split())
+            overlap = len(desc_words.intersection(label_words))
+            if overlap > 0:
+                bonus += overlap * 2
+
+        # enrichment_note: low-value contextual match
+        note = str(element.get("enrichment_note", "") or "").lower()
+        if note:
+            note_words = set(note.split())
+            overlap = len(desc_words.intersection(note_words))
+            if overlap > 0:
+                bonus += overlap
+
+        # description field from vision
+        vision_desc = str(element.get("description", "") or "").lower()
+        if vision_desc:
+            vision_words = set(vision_desc.split())
+            overlap = len(desc_words.intersection(vision_words))
+            if overlap > 0:
+                bonus += overlap * 2
+
         return bonus
 
     # ------------------------------------------------------------------
