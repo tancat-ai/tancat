@@ -97,6 +97,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/placeholder_scorers.py` | Composite scoring engine. Individual, testable scoring functions (text_content_bonus, structural_match, product_id_match, click_role_bonus, etc.) and `CompositeScorer.apply_all()`. Extracted from inline scoring in `placeholder_resolver.py` (2026-05-21). |
 | `src/code_normalizer.py` | Deterministic code normalization transforms. Extracted from `code_postprocessor.py`. |
 | `src/llm_reasoning_filter.py` | LLM reasoning text detection and stripping. Extracted from `code_postprocessor.py`. |
+| `src/browser_utils.py` | Browser interaction utilities: consent overlay dismissal, ad overlay removal. Uses structural container detection (known consent provider classes) and position-based overlay detection — no global text matching. Called by generated tests, evidence tracker, journey scraper, and stateful scraper. Rewritten 2026-06-23 (B-015 fix). |
 
 ---
 
@@ -329,6 +330,8 @@ graph TD
 | Generated test fails: `ERR_CONNECTION_REFUSED` | Target site unreachable (not a tool bug) | Runtime |
 | Journey count mismatch | `skeleton_parser.py` — LLM didn't generate enough functions | 2 |
 | Import error outside Streamlit context | Never import `streamlit_app.py` — triggers `st.set_page_config()` crash | Entry |
+| Journey discovery navigates to wrong page | `browser_utils.py` — `dismiss_consent_overlays()` clicks non-overlay buttons | 3 |
+| Consent banner dismissal breaks page navigation | `browser_utils.py` — global text matching matches app buttons | 3 |
 
 ---
 
@@ -355,4 +358,4 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 
 ---
 
- *Last updated: 2026-06-08*
+ *Last updated: 2026-06-23*

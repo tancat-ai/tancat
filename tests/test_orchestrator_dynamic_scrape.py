@@ -25,7 +25,7 @@ def test_resolve_placeholder_scrapes_current_url_on_demand(monkeypatch: pytest.M
     monkeypatch.setattr(orchestrator.scraper, "scrape_url", fake_scrape_url)
 
     scraped_data: dict[str, list[dict[str, str]]] = {}
-    _selector, next_url = asyncio.run(
+    _selector, next_url, _at = asyncio.run(
         orchestrator._placeholder_orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
             "CLICK",
             "products link",

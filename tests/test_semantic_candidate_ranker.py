@@ -17,7 +17,7 @@ class _FakeGenerator:
 
 
 def test_choose_best_candidate_returns_selected_shortlisted_candidate() -> None:
-    ranker = SemanticCandidateRanker(_FakeGenerator({"selected_index": 1}))
+    ranker = SemanticCandidateRanker(_FakeGenerator({"selected_index": 1, "assertion_type": "toBeVisible"}))
     candidates = [
         {"selector": "#cart-link", "text": "Cart", "role": "a"},
         {"selector": ".cart_description", "text": "Blue Top", "role": "div"},
@@ -34,7 +34,11 @@ def test_choose_best_candidate_returns_selected_shortlisted_candidate() -> None:
         )
     )
 
-    assert result == candidates[1]
+    # B-020: ASSERT results include assertion_type and expected_value
+    assert result is not None
+    assert result["selector"] == ".cart_description"
+    assert result["assertion_type"] == "toBeVisible"
+    assert "expected_value" in result
 
 
 def test_choose_best_candidate_returns_none_for_invalid_json() -> None:

@@ -527,6 +527,26 @@ class JourneyScraper:
                 selector=selector,
                 match_threshold=0,  # Accept all in discovery phase; pick highest
             )
+
+            # B-019: Penalize display elements for interactive actions.
+            # FILL requires <input>/<textarea>/<select>. CLICK prefers
+            # <button>/<a>/<input>. Display divs/spans can match by text
+            # but fail at runtime — apply a penalty to prevent them winning.
+            if score is not None:
+                role = str(element.get("role", "")).lower()
+                if action == "fill" and role not in ("text", "password", "searchbox", "textbox", "combobox"):
+                    score -= 50  # Hard penalty — display elements can't be filled
+                elif action == "click" and role not in (
+                    "button",
+                    "submit",
+                    "link",
+                    "menuitem",
+                    "tab",
+                    "checkbox",
+                    "radio",
+                ):
+                    score -= 20  # Softer penalty — clicks on non-interactive elements sometimes work
+
             if score is not None and score > best_score:
                 best_score = score
                 best_element = element

@@ -11,6 +11,10 @@ from src.test_generator import TestGenerator
 
 def _disable_journey_discovery(orchestrator: TestOrchestrator) -> None:
     orchestrator._scrape_journeys_statefully = AsyncMock(return_value=({}, []))  # type: ignore[method-assign]
+    # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data
+    orchestrator._placeholder_orchestrator._upgrade_stateful_pages = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda data: data
+    )
 
 
 def test_run_pipeline_replaces_placeholders_with_scraped_locators() -> None:
@@ -99,8 +103,11 @@ def test_checkout(page: Page):
     )
     assert "evidence_tracker.navigate(" in final_code
     assert "https://example.com/view_cart" in final_code
-    # ID-based selector preferred over text-based for assert
-    assert "evidence_tracker.assert_visible('#cart-summary', label=" in final_code
+    # B-020: ASSERT can resolve to assert_visible or assert_text depending on LLM assertion_type
+    assert (
+        "evidence_tracker.assert_visible('#cart-summary', label=" in final_code
+        or "evidence_tracker.assert_text('#cart-summary', label=" in final_code
+    )
     assert orchestrator.last_result is not None
     assert [journey.test_name for journey in orchestrator.last_result.journeys] == ["test_checkout"]
     scraped_urls = [page.url for page in orchestrator.last_result.scraped_page_records]
@@ -670,7 +677,11 @@ def test_02_verify_cart(page: Page):
     # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
     assert "evidence_tracker.click('a[href=\"/view_cart\"]'" in final_code
     assert "evidence_tracker.navigate('https://example.com/view_cart')" in final_code
-    assert "evidence_tracker.assert_visible('#cart-summary'" in final_code
+    # B-020: ASSERT can resolve to assert_visible or assert_text depending on LLM assertion_type
+    assert (
+        "evidence_tracker.assert_visible('#cart-summary'" in final_code
+        or "evidence_tracker.assert_text('#cart-summary'" in final_code
+    )
     assert "#hero-summary" not in final_code
 
 
@@ -732,7 +743,11 @@ def test_01_verify_cart(page: Page):
         )
     )
 
-    assert "evidence_tracker.assert_visible('.cart_description'" in final_code
+    # B-020: ASSERT can resolve to assert_visible or assert_text
+    assert (
+        "evidence_tracker.assert_visible('.cart_description'" in final_code
+        or "evidence_tracker.assert_text('.cart_description'" in final_code
+    )
 
 
 def test_run_pipeline_injects_consent_helper_in_auto_dismiss_mode() -> None:
@@ -877,6 +892,10 @@ def test_02_add_item(page):
                 "https://www.saucedemo.com/cart.html",
             ],
         )
+    )
+    # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data
+    orchestrator._placeholder_orchestrator._upgrade_stateful_pages = AsyncMock(  # type: ignore[method-assign]
+        side_effect=lambda data: data
     )
 
     final_code = asyncio.run(

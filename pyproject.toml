@@ -61,7 +61,7 @@ ignore = ["E501", "B027"]
 known-first-party = ["src", "cli"]
 [tool.mypy]
 python_version = "3.14"
-exclude = ["generated_tests", "scripts", "scratch"]
+exclude = ["generated_tests", "exported_tests", "scripts", "scratch"]
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true

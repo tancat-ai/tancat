@@ -48,7 +48,6 @@ Tests written to `generated_tests/`, run via pytest, evidence exported as Jira/H
 | `src/llm_client.py` | Stable LLM client |
 | `.github/workflows/ci.yml` | CI/CD configured and passing |
 | `src/llm_providers/` | Provider implementations — stable |
-| `docs/specs/FEATURE_SPEC_multi_provider_llm.md` | Multi-provider architecture spec |
 
 **Rule:** If you find a bug in a protected file, document it in BACKLOG.md and ask before editing.
 

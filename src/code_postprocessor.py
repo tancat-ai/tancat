@@ -125,6 +125,27 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     return fixed_code
 
 
+# B-020: Map assertion types to evidence_tracker method names.
+_ASSERTION_TO_ET_METHOD: dict[str, str] = {
+    "toBeVisible": "assert_visible",
+    "toHaveText": "assert_text",
+    "toContainText": "assert_text_contains",
+    "toBeDisabled": "assert_disabled",
+    "toBeEnabled": "assert_enabled",
+    "toBeChecked": "assert_checked",
+    "toBeEmpty": "assert_empty",
+    "toHaveValue": "assert_value",
+    "toHaveCount": "assert_count",
+    "toHaveClass": "assert_visible",  # no dedicated method yet, fall back
+    "toHaveAttribute": "assert_visible",  # no dedicated method yet, fall back
+}
+
+
+def _assertion_type_to_et_method(assertion_type: str) -> str:
+    """Map a Playwright assertion type to the corresponding evidence_tracker method."""
+    return _ASSERTION_TO_ET_METHOD.get(assertion_type, "assert_visible")
+
+
 def replace_token_in_line(
     line: str,
     action: str,
@@ -133,8 +154,15 @@ def replace_token_in_line(
     duplicate_selectors: set[str],
     description: str = "",
     fill_value: str = "",
+    assertion_type: str = "toBeVisible",
 ) -> str:
-    """Replace a single placeholder token within a code line."""
+    """Replace a single placeholder token within a code line.
+
+    Args:
+        assertion_type: B-020 assertion type for ASSERT actions
+            (e.g. "toBeVisible", "toHaveText", "toContainText").
+            Default is "toBeVisible" for backward compatibility.
+    """
     stripped = line.strip()
     indent = line[: len(line) - len(line.lstrip())]
 
@@ -174,16 +202,19 @@ def replace_token_in_line(
         assert_value = resolved_value
         if not (resolved_value.startswith("'") or resolved_value.startswith('"')):
             assert_value = repr(resolved_value)
+
+        # B-020: route to correct evidence_tracker method by assertion_type
+        et_method = _assertion_type_to_et_method(assertion_type)
         if stripped == token:
-            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
+            return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
-            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
+            return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         locator_only_patterns = {
             f"page.locator({token})",
             f"self.page.locator({token})",
         }
         if stripped in locator_only_patterns:
-            return f"{indent}evidence_tracker.assert_visible({assert_value}, label={repr(step_label)})"
+            return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         return line.replace(token, resolved_value)
 
     if action == "FILL":

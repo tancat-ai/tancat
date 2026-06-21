@@ -511,6 +511,105 @@ class PageScraper:
 
         return str(soup)
 
+    @staticmethod
+    def _get_direct_text(tag: Any) -> str:
+        """Get only direct text content of a tag, not inherited from children.
+
+        Used for B-019 display elements to avoid container divs inheriting
+        all descendant text (e.g. <div class=login_container> containing
+        form fields would get all their text via get_text()).
+        """
+        parts: list[str] = []
+        for child in tag.children:
+            if hasattr(child, "name") and child.name is None:
+                # Text node (not a tag)
+                parts.append(str(child))
+        return " ".join(parts).strip()
+
+    @staticmethod
+    def _build_element_dict(
+        tag: Any,
+        base_url: str,
+        labels: dict[str, str],
+    ) -> dict[str, Any] | None:
+        """Build a scraped element dict from a BeautifulSoup tag.
+
+        Shared between the interactive and display (B-019) extraction passes.
+        """
+        from urllib.parse import urlparse
+
+        href = PageScraper._normalise_href(base_url, str(tag.get("href", "")))
+
+        selector = ""
+
+        # 1. ID (most specific)
+        if tag.get("id"):
+            selector = f"#{tag.get('id')}"
+
+        # 2. Test-oriented data attributes (standalone)
+        if not selector:
+            for attribute in ("data-testid", "data-test", "data-qa"):
+                val = tag.get(attribute)
+                if val:
+                    selector = f'[{attribute}="{val}"]'
+                    break
+
+        # 3. Other data attributes with tag+class context
+        if not selector:
+            for attribute in ("data-product-id",):
+                val = tag.get(attribute)
+                if val:
+                    class_list = tag.get("class")
+                    classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
+                    tag_name = tag.name
+                    if classes:
+                        class_part = "." + ".".join(part for part in classes.split() if part)
+                        selector = f'{tag_name}{class_part}[{attribute}="{val}"]'
+                    else:
+                        selector = f'{tag_name}[{attribute}="{val}"]'
+                    break
+
+        # 4. href for links
+        if not selector and tag.name == "a" and href:
+            href_path = urlparse(href).path or href
+            selector = f'a[href="{href_path}"]'
+
+        # 5. Name attribute
+        if not selector and tag.get("name"):
+            selector = f'{tag.name}[name="{tag.get("name")}"]'
+
+        # 6. Class names
+        if not selector:
+            class_list = tag.get("class")
+            classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
+            if classes:
+                selector = "." + ".".join(part for part in classes.split() if part)
+
+        # 7. Tag name fallback
+        if not selector:
+            selector = tag.name
+
+        text_content = tag.get_text(" ", strip=True)
+        tag_id = tag.get("id")
+        if not text_content and tag_id and tag_id in labels:
+            text_content = labels[str(tag_id)]
+
+        return {
+            "selector": selector,
+            "text": text_content,
+            "role": str(tag.get("role", tag.get("type", tag.name))),
+            "href": href,
+            "title": str(tag.get("title", "")).strip(),
+            "aria_label": str(tag.get("aria-label", "")).strip(),
+            "data_test": str(tag.get("data-test", "")).strip(),
+            "name": str(tag.get("name", "")).strip(),
+            "id": str(tag.get("id", "")).strip(),
+            "classes": " ".join(_class_attr) if isinstance(_class_attr := tag.get("class"), list) else "",
+            "value": str(tag.get("value", "")).strip(),
+            "placeholder": str(tag.get("placeholder", "")).strip(),
+            "is_visible": True,
+        }
+
     def _extract_elements_from_html(self, html: str, base_url: str = "") -> list[dict[str, Any]]:
         """Extract elements from rendered HTML, removing consent overlays first.
 
@@ -525,6 +624,10 @@ class PageScraper:
         elements: list[dict[str, Any]] = []
         interactive_tags = ["button", "a", "input", "select", "textarea"]
 
+        # B-019: Display elements — headings, text-bearing containers, and data-test elements.
+        # Captured separately so ASSERT placeholders have non-interactive candidates.
+        display_tags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "div", "section", "main", "article"]
+
         labels: dict[str, str] = {}
         for label in soup.find_all("label"):
             for_id = label.get("for")
@@ -532,83 +635,52 @@ class PageScraper:
                 labels[str(for_id)] = label.get_text(" ", strip=True)
 
         for tag in soup.find_all(interactive_tags):
-            href = self._normalise_href(base_url, str(tag.get("href", "")))
+            element = self._build_element_dict(tag, base_url, labels)
+            if element is not None:
+                elements.append(element)
 
-            # Map BS4 object back to conceptual selector — same priority as _build_selector
-            selector = ""
+        # B-019: Second pass — capture display elements (headings, text containers).
+        # These give ASSERT placeholders non-interactive candidates to match.
+        # Skip elements already captured (by id + selector) to avoid duplicates.
+        captured_ids: set[str] = set()
+        for el in elements:
+            eid = el.get("id", "")
+            if eid:
+                captured_ids.add(eid)
 
-            # 1. ID (most specific)
-            if tag.get("id"):
-                selector = f"#{tag.get('id')}"
-
-            # 2. Test-oriented data attributes (standalone)
-            if not selector:
-                for attribute in ("data-testid", "data-test", "data-qa"):
-                    val = tag.get(attribute)
-                    if val:
-                        selector = f'[{attribute}="{val}"]'
-                        break
-
-            # 3. Other data attributes with tag+class context
-            if not selector:
-                for attribute in ("data-product-id",):
-                    val = tag.get(attribute)
-                    if val:
-                        class_list = tag.get("class")
-                        classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
-                        tag_name = tag.name
-                        if classes:
-                            class_part = "." + ".".join(part for part in classes.split() if part)
-                            selector = f'{tag_name}{class_part}[{attribute}="{val}"]'
-                        else:
-                            selector = f'{tag_name}[{attribute}="{val}"]'
-                        break
-
-            # 4. href for links
-            if not selector and tag.name == "a" and href:
-                href_path = urlparse(href).path or href
-                selector = f'a[href="{href_path}"]'
-
-            # 5. Name attribute
-            if not selector and tag.get("name"):
-                selector = f'{tag.name}[name="{tag.get("name")}"]'
-
-            # 6. Class names
-            if not selector:
-                class_list = tag.get("class")
-                classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
-                if classes:
-                    selector = "." + ".".join(part for part in classes.split() if part)
-
-            # 7. Tag name fallback
-            if not selector:
-                selector = tag.name
-
-            text_content = tag.get_text(" ", strip=True)
+        for tag in soup.find_all(display_tags):
+            # Skip if already captured as interactive (same id)
             tag_id = tag.get("id")
-            if not text_content and tag_id and tag_id in labels:
-                text_content = labels[str(tag_id)]
+            if tag_id and tag_id in captured_ids:
+                continue
 
-            elements.append(
-                {
-                    "selector": selector,
-                    "text": text_content,
-                    "role": str(tag.get("role", tag.get("type", tag.name))),
-                    "href": href,
-                    "title": str(tag.get("title", "")).strip(),
-                    "aria_label": str(tag.get("aria-label", "")).strip(),
-                    "data_test": str(tag.get("data-test", "")).strip(),
-                    "name": str(tag.get("name", "")).strip(),
-                    "id": str(tag.get("id", "")).strip(),
-                    "classes": " ".join(_class_attr) if isinstance(_class_attr := tag.get("class"), list) else "",
-                    "value": str(tag.get("value", "")).strip(),
-                    "placeholder": str(tag.get("placeholder", "")).strip(),
-                    # Session 2: Visibility flag — set to True at extraction time;
-                    # _capture_element_visibility() overwrites this with the live DOM
-                    # check result (True/False) before returning.
-                    "is_visible": True,
-                }
-            )
+            data_test = str(tag.get("data-test", "")).strip()
+
+            # For <div> without data-test, use direct text only to avoid
+            # container divs inheriting all descendant text.
+            if tag.name == "div" and not data_test:
+                direct_text = self._get_direct_text(tag)
+                # Only keep divs that have meaningful direct text
+                if len(direct_text) < 3:
+                    continue
+            else:
+                # Headings, spans, etc. — use full text (they're leaf elements)
+                direct_text = tag.get_text(" ", strip=True)
+
+            # For all elements, use full text for the element dict
+            # (needed for matching), but use direct text for filtering
+            text_content = tag.get_text(" ", strip=True)
+
+            if len(direct_text) < 3 and not data_test:
+                continue
+
+            # Skip text that's too long — likely a container, not a leaf element
+            if len(text_content) > 300:
+                continue
+
+            element = self._build_element_dict(tag, base_url, labels)
+            if element is not None:
+                elements.append(element)
 
         # Enrich elements with visual and contextual metadata
         elements = ElementEnricher.enrich_batch(elements)

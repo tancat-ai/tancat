@@ -404,6 +404,240 @@ class EvidenceTracker:
             )
             raise
 
+    # --- B-020: Additional assertion methods ---
+
+    def assert_text(self, locator: str, expected: str, label: str = "") -> None:
+        """Assert the element's text content matches the expected string exactly."""
+        if not label:
+            label = f"Assert text: {expected}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="visible", timeout=5000)
+            actual = (loc.text_content() or "").strip()
+            if actual != expected:
+                raise AssertionError(f"Expected text '{expected}' but got '{actual}'")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=actual,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_text_contains(self, locator: str, expected: str, label: str = "") -> None:
+        """Assert the element's text content contains the expected substring."""
+        if not label:
+            label = f"Assert text contains: {expected}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="visible", timeout=5000)
+            actual = (loc.text_content() or "").strip()
+            if expected not in actual:
+                raise AssertionError(f"Text '{actual}' does not contain '{expected}'")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=actual,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_disabled(self, locator: str, label: str = "") -> None:
+        """Assert the element is disabled."""
+        if not label:
+            label = f"Assert disabled: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="attached", timeout=5000)
+            if loc.is_enabled():
+                raise AssertionError(f"Element {locator} is enabled but expected disabled")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_enabled(self, locator: str, label: str = "") -> None:
+        """Assert the element is enabled."""
+        if not label:
+            label = f"Assert enabled: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="visible", timeout=5000)
+            if not loc.is_enabled():
+                raise AssertionError(f"Element {locator} is disabled but expected enabled")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_checked(self, locator: str, label: str = "") -> None:
+        """Assert a checkbox or radio button is checked."""
+        if not label:
+            label = f"Assert checked: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="attached", timeout=5000)
+            if not loc.is_checked():
+                raise AssertionError(f"Element {locator} is not checked")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_count(self, locator: str, expected: int, label: str = "") -> None:
+        """Assert the number of elements matching the locator equals expected."""
+        if not label:
+            label = f"Assert count: {expected}"
+        _t0 = time.time()
+        try:
+            actual = self.page.locator(locator).count()
+            if actual != expected:
+                raise AssertionError(f"Expected {expected} elements but found {actual}")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=str(actual),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_value(self, locator: str, expected: str, label: str = "") -> None:
+        """Assert an input/textarea/select has the expected value attribute."""
+        if not label:
+            label = f"Assert value: {expected}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="visible", timeout=5000)
+            actual = loc.get_attribute("value") or ""
+            if actual != expected:
+                raise AssertionError(f"Expected value '{expected}' but got '{actual}'")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=actual,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_empty(self, locator: str, label: str = "") -> None:
+        """Assert an element has no text and no child elements."""
+        if not label:
+            label = f"Assert empty: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="attached", timeout=5000)
+            text = (loc.text_content() or "").strip()
+            children = loc.locator("* ").count()
+            if text or children > 0:
+                raise AssertionError(f"Element is not empty: text='{text}', children={children}")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
     def write(self, status: str = "passed") -> str:
         """Writes the sidecar and updates history."""
         self.run_history["total_runs"] += 1

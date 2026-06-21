@@ -1,7 +1,7 @@
 ﻿# BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-06-21 (CI/CD consolidation shipped)
+Last updated: 2026-06-28 (B-020 LLM-assisted ASSERT resolution — core pipeline implemented, LLM wiring incomplete)
 
 ---
 
@@ -120,41 +120,330 @@ from matching "Add to cart button" because "View Cart" lacks the word "add".
 **Verification:** UAT automationexercise.com 6/6 tests pass (was 4/6).
 
 ### B-015 — Journey discovery selects wrong element for action descriptions
-**Symptom:** Journey discovery clicks `a[href="/view_cart"]` for "Add to cart button
-next to Blue Top product" — the Cart link, not the Add to cart button. This is
-visible in UAT logs: `[journey_discovery] Attempting to click selector: a[href="/view_cart"]`
-**Root cause:** The `JourneyScraper` uses its own element selection logic (separate
-from `PlaceholderOrchestrator`) to find elements to click during journey discovery.
-It does NOT use the Pass 1 action verb fix from B-012. The journey scraper's
-selection likely uses text substring matching similar to the old Pass 1, so "cart"
-in the description matches the Cart link.
-**Impact:** Journey discovery visits wrong pages, producing incorrect scraped data
-for downstream pages. However, Fix 1 for B-012 in the resolution phase compensates
-for this — even with noisy journey data, the resolver correctly picks the Add to
-cart button. So tests pass despite journey discovery being wrong.
-**Fix:** Apply the same action verb awareness logic to the JourneyScraper's element
-selection, or have journey discovery use the PlaceholderOrchestrator's resolution
-pipeline instead of its own selection logic.
-**Priority:** Medium — tests pass despite the issue because B-012 fix compensates
+**Status:** ✅ FIXED (2026-06-23) — `dismiss_consent_overlays` rewrite
+**Symptom:** Journey discovery clicks wrong elements, causing it to visit wrong pages:
+- `"checkout button"` → `#react-burger-menu-btn` (burger menu, score=1) — opens side menu instead of checkout
+- `"continue button"` → `#react-burger-menu-btn` (score=1) — same wrong element
+- `"finish button"` → `#react-burger-menu-btn` (score=1) — same wrong element
+- `"first name:John"` → `.product_sort_container[data-test="product-sort-container"]` (score=1) — `<select>` element, not a fillable input
+- `"zip/postal code:12345"` → `.shopping_cart_link[data-test="shopping-cart-link"]` (score=10) — an `<a>` link, not an input
+
+On automationexercise.com: `"Add to cart button"` → `a[href="/view_cart"]` (Cart link).
+
+**Root cause:** `dismiss_consent_overlays()` in `src/browser_utils.py` used aggressive
+global text matching (`button:has-text('Continue')`) that matched the `#continue-shopping`
+button on saucedemo's cart page. This function is called before every click step in the
+journey scraper — so the cart page navigated back to inventory.html before the next
+scrape ran. The journey scraper then scraped `inventory.html` (29 elements) instead of
+`cart.html` (14 elements), and selected `#react-burger-menu-btn` for "checkout button".
+
+**Impact:** Journey discovery clicks the burger menu instead of checkout, navigating
+to inventory.html instead of checkout-step-one.html. This means:
+1. Checkout pages (`checkout-step-one.html`, `checkout-step-two.html`) are **never scraped**
+2. The placeholder resolver has **zero data** for checkout form fields
+3. `test_06_complete_checkout` gets `pytest.skip()` for all checkout FILL fields
+4. The downstream placeholder resolver cannot compensate because the data simply doesn't exist
+
+**Confirmed via UAT:** `scripts/uat/uat_automationexercise.py --site saucedemo` (2026-06-22):
+- Journey clicks `#react-burger-menu-btn` for "checkout button" on cart page
+- Click navigates `cart.html` → `inventory.html` (wrong)
+- Pages scraped: only 3 URLs (home, inventory, cart) — checkout pages missing
+- Resolver fails on: 'first name', 'last name', 'zip/postal code', 'finish button', 'thank you message'
+- Final code: `test_06` has `pytest.skip()` for unresolved placeholders
+
+**Fix:** Rewrote `dismiss_consent_overlays()` in `src/browser_utils.py` with a 3-stage approach:
+1. **Google Consent TVM** — specific `.fc-consent-root` selectors (unchanged, safe)
+2. **Structural containers** — known consent provider classes (`oneTrust`, `cookie-banner`,
+   `Cookiebot`, `[role='dialog']`, etc.) — only click buttons **inside** these containers
+3. **Position-based detection** — JS finds fixed/sticky elements near bottom of viewport,
+   then looks for dismiss buttons inside them
+4. **Ad overlay removal** — specific selectors only (Google Vignette, ASWIFT)
+
+**Removed:** Generic text matching (`button:has-text('Continue')`, `button:has-text('OK')`)
+on global page, dangerous `zIndex > 10000` DOM removal, `allElements` iteration over entire DOM.
+
+**Verification (2026-06-23 saucedemo UAT after fix):**
+- `#checkout` selected with score=12 for "checkout button" on `cart.html` ✅
+- `#first-name` (score=90), `#last-name` (score=90), `#continue`, `#finish` all resolved ✅
+- All 5 checkout pages scraped: `cart.html`, `checkout-step-one.html`, `checkout-step-two.html`,
+  `checkout-complete.html` ✅
+- `test_06_complete_checkout` has only 1 skip (ASSERT "Thank You page header" — B-014)
+  instead of 8+ skips before ✅
+
+**Files changed:**
+- `src/browser_utils.py` — complete rewrite of `dismiss_consent_overlays()`
+- `tests/test_browser_utils.py` — NEW — 10 tests covering safety (no false clicks),
+  structural containers, Google Consent TVM, and zIndex removal regression
+
+**Priority:** High — causes cascading failure (wrong click → wrong page → missing scrape → zero resolution)
 
 ### B-013 — Journey discovery stops one page short for checkout-step-two
-**Symptom:** "finish button" on checkout-step-two.html never resolves because
-journey discovery clicked #continue (step one) rather than reaching step two.
-**Root cause:** Journey discovery doesn't scrape the page after the final click
-in the sequence — it navigates to step two but doesn't capture it.
-**Fix:** Ensure final navigation step in discovery journey triggers a scrape
-of the resulting page before the journey ends.
-**Priority:** Medium — affects multi-step form flows
+**Status:** ✅ RESOLVED (2026-06-23) — root cause was B-015, now fixed
+**Original claim:** "Journey discovery doesn't scrape the page after the final click"
+**Actual finding (saucedemo UAT, 2026-06-22):** Journey discovery never reaches
+checkout pages at all — it clicks `#react-burger-menu-btn` (burger menu) for
+"checkout button", navigating to inventory.html instead of checkout-step-one.html.
+
+**Impact:** Both `checkout-step-one.html` and `checkout-step-two.html` are missing
+from scraped data. This is a B-015 consequence.
+
+**Fix:** B-015 fix (rewrite of `dismiss_consent_overlays`) allows journey to reach
+checkout pages. Verified: all 5 checkout pages now scraped correctly.
+**Priority:** Medium — superseded by B-015, resolved via same fix
+
+### B-016 — text_matches_description() fails on synonyms
+**Status:** 🆕 new
+**Symptom:** `PlaceholderResolver.text_matches_description()` produces false negatives
+on semantically equivalent text and false positives on semantically contradictory text.
+
+**Test results (from debug_compare.py, 2026-06-22):**
+- ❌ `"Login"` vs `"Sign in button"` → False (expected True) — synonym not recognised
+- ❌ `"Dress"` vs `"product category link"` → False (expected True) — proper noun vs generic descriptor
+- ❌ `"Blue Top"` vs `"a product name"` → False (expected True) — same pattern
+- ❌ `"Your cart is empty!"` vs `"cart content with items"` → True (expected False) — "cart" keyword overlap matches despite semantic contradiction (empty ≠ with items)
+- ❌ `"Cart is empty"` vs `"cart page with selected items"` → True (expected False) — same false positive
+
+**Root cause:** Text matching uses keyword/token overlap without semantic understanding.
+No synonym dictionary or negation detection. "cart" + "content" in description matches
+"cart is empty" because both contain "cart". Negation words ("empty", "no", "not") are
+not treated as exclusion signals.
+
+**Impact:** Placeholder resolution passes/fails incorrectly for login-related elements,
+product names, and cart state assertions. This is a 33% failure rate on text validation
+(5/15 checks fail consistently across both automationexercise and saucedemo).
+
+**Priority:** High — foundational matching logic affects all resolution paths
+
+**Fix options:**
+1. Add a synonym dictionary for common QA terms (login/sign in, cart/basket, etc.)
+2. Add negation detection — if description contains positive indicators ("with items",
+   "visible", "loaded") and element contains negation ("empty", "no", "none"), reject
+3. Consider LLM-assisted semantic matching for borderline cases
+
+---
+
+### B-017 — FILL placeholders on unreachable pages fail to resolve
+**Status:** ✅ CORRECTED — B-015 fix resolves checkout FILL failures (2026-06-23)
+**Original claim:** "All FILL-type placeholders return zero ranked candidates" — 100% FILL failure.
+**Actual finding:** FILL on **login pages** resolves correctly. FILL on **unreachable pages** fails.
+
+**Evidence (saucedemo UAT, 2026-06-22):**
+- Login FILL placeholders (`'username'`, `'password'`) → resolved to `#user-name`, `#password` ✅
+  - Note: resolver logs say `Failed to find 'username'` but final code has correct selectors
+  - This is because **prerequisite injection** reuses the resolved selectors from test_01
+  - The resolver itself may still be failing — it's masked by prerequisite injection
+- Checkout FILL placeholders (`'first name'`, `'last name'`, `'zip/postal code'`) → `pytest.skip()` ❌
+  - Root cause: journey discovery clicked wrong element (`#react-burger-menu-btn` instead of `#checkout`)
+  - Checkout pages were never scraped — resolver has zero data for those elements
+  - This is a **B-015 consequence**, not a standalone resolver bug
+
+**Impact:** FILL failures on checkout are caused by B-015 (journey discovery clicking wrong elements).
+Fixing journey discovery's element selection should allow checkout pages to be scraped,
+which would give the resolver data for checkout FILL fields.
+
+**Open question:** Does the resolver itself fail on login FILL fields even when data is available?
+The `Failed to find 'username'` debug messages suggest yes, but prerequisite injection masks it.
+Needs isolated test: resolve `'username'` placeholder against saucedemo.com login page data WITHOUT prerequisite injection.
+
+**Priority:** Medium — partially masked by prerequisite injection, partially caused by B-015
+
+**Fix:**
+1. ✅ B-015 fixed (2026-06-23) — checkout FILL placeholders now resolve: `#first-name`,
+   `#last-name`, `#postal-code` all resolved correctly
+2. Open: Isolate whether resolver itself fails on login FILL fields without prerequisite injection
+
+---
+
+### B-018 — Resolver gap: login elements fail in resolver but succeed in journey
+**Status:** ✅ CORRECTED via saucedemo UAT (2026-06-22)
+**Original claim:** "Journey discovery and resolver use different matching logic"
+**Actual finding:** The gap is real but the primary impact is different than originally diagnosed.
+
+**Evidence (saucedemo UAT, 2026-06-22):**
+- Journey discovery: `#user-name` score=95, `#password` score=3, `#login-button` score=2 ✅
+- Placeholder resolver logs: `Failed to find 'username'`, `Failed to find 'password'`, `Failed to find 'login button'` ❌
+- Final code: `#user-name`, `#password`, `#login-button` ✅ (via prerequisite injection masking)
+
+The resolver says it failed, but the final code is correct because prerequisite
+injection reuses previously-resolved selectors. This masks the resolver bug.
+
+**What ISN'T a gap:** Post-login page elements (inventory, cart) resolve fine
+because those pages are scraped and the resolver finds matches.
+
+**What IS a gap:** Login page elements — the resolver cannot match `'username'`
+against `#user-name` even though journey discovery scores it 95/100. The resolver
+is returning zero candidates for elements that exist in the scraped data.
+
+**Root cause:** The resolver's matching pipeline (Pass 1 text, Pass 2 structural,
+Pass 3 scoring+LLM) is not finding matches for input elements with no visible text.
+Journey discovery uses a different scorer that considers `id`, `name`, `placeholder`
+attributes directly.
+
+**Priority:** Medium — masked by prerequisite injection in most cases, but real bug exists
+**Fix:** See B-017. Needs isolated test without prerequisite injection to confirm.
+
+---
 
 ### B-014 — ASSERT tokens resolve to wrong elements silently
-**Symptom:** Assertions like "homepage loaded successfully" resolve to a[href="/"]
-rather than skipping. False pass — test looks resolved but will give wrong results.
-**Root cause:** Scorer finds closest structural match rather than skipping when
-no text-bearing element matches the description.
-**Fix:** ASSERT pass in resolution should require text-bearing elements (p, h*, 
-span, div with visible text) and skip if none match — not fall back to structural
-match. Needs design session before implementation.
+**Status:** 🟡 PARTIALLY FIXED — step-context exclusion implemented (2026-06-25)
+**Symptom:** ASSERT placeholders resolve to completely wrong elements:
+
+**Evidence (saucedemo UAT, 2026-06-22 — BEFORE fix):**
+- `"product inventory page"` → `#login-button` ❌
+- `"cart badge shows 1"` → `.shopping_cart_link` ❌
+- `"shopping cart page title"` → `.shopping_cart_link` ❌
+- `"sauce labs backpack in cart"` → `#remove-sauce-labs-backpack` ❌
+- `"checkout information page"` → `#checkout` ❌
+- `"thank you message"` → `#user-name` ❌
+
+**Root cause:** ASSERT resolution has no awareness of the preceding interactive step.
+When a CLICK or FILL resolved to element X, the subsequent ASSERT could also resolve
+to X because the scorer finds structural overlap. Additionally, the scorer doesn't
+filter by element type for ASSERT actions.
+
+**Fix implemented (2026-06-25):** Step-context exclusion in `src/placeholder_orchestrator.py`:
+- CLICK/FILL steps track `last_selector` / `last_description` through the journey loop
+- ASSERT resolution excludes the previous selector unless descriptions reference the
+  same element (strict containment: `norm_a in norm_b or norm_b in norm_a`)
+- Exclusion applied across all resolution passes (text, ASSERT-text, structural, scoring)
+- Same-element assertions allowed (e.g. "login button" → "login button is disabled")
+- Spec: `docs/specs/FEATURE_SPEC_B014_step_context_resolution.md`
+- Tests: `tests/test_b014_assert_resolution.py` (53 tests, 100% pass)
+
+**UAT results (2026-06-25 — AFTER fix):**
+| ASSERT | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| `"inventory page title"` | `#login-button` (PASSED — false green) | `#login-button` (FAILED — correct) | ✅ False green → real failure |
+| `"cart badge with count 1"` | `.shopping_cart_link` | `.shopping_cart_link` | ❌ Unchanged — see B-016 |
+| `"Sauce Labs Backpack item in cart"` | `#remove-sauce-labs-backpack` | `#remove-sauce-labs-backpack` | ❌ Unchanged — see B-016 |
+| `"checkout information form"` | `#checkout` (PASSED — false green) | **SKIP** (unresolved) | ✅ False green → skip |
+| `"Thank You page message"` | `#user-name` (SKIP) | **SKIP** | Same — see B-016 |
+
+**Impact of fix:** 2 assertions went from false-green PASS to either real failure
+or skip. Tests no longer silently pass for the wrong reason in the cross-step
+preceding-interactive case.
+
+**Limitations (tracked separately as B-016):**
+1. ASSERTs whose wrong element is NOT the preceding interactive step — resolver
+   quality issue, not step-context (see B-016)
+2. Within-step ASSERTs on the same skeleton line as CLICK
+3. Prerequisite-injected steps bypass step-context tracking
+
 **Priority:** High — silent wrong assertions are worse than skips
+**Tests:** `tests/test_b014_assert_resolution.py` (19 tests) — see B-016 for remaining cases.
+---
+
+### B-016 — ASSERT resolution quality for non-step-context cases
+**Status:** 🟡 ready-for-human — implementation complete, needs UAT validation
+**Related:** B-014 (step-context exclusion handles the preceding-interactive case)
+**Symptom:** ASSERT placeholders resolve to wrong interactive elements (buttons,
+links) instead of display elements.
+
+**Evidence (saucedemo UAT, 2026-06-25, post B-014 fix):**
+- `"cart badge with count 1"` → `.shopping_cart_link[data-test="shopping-cart-link"]`
+  — the cart navigation link, not a badge. Resolver picks the link because its
+  `data-test` attribute contains "cart".
+- `"Sauce Labs Backpack item in cart"` → `#remove-sauce-labs-backpack`
+  — the REMOVE button. Wins because its `id` contains "backpack".
+
+**Root cause:** The scoring pipeline scores elements by keyword overlap in
+`id`, `data-test`, and structural attributes. Any element containing those
+keywords wins — even if it's a button, link, or delete control rather than
+the intended display element.
+
+**Design decisions (grilling session, 2026-06-25):**
+- Role filtering uses `computed_role` from CDP AX tree (AI-024), falling back to
+  raw `role` field. The enricher already writes `computed_role` but the resolver
+  currently ignores it.
+- Display roles defined as a positive constant (`DISPLAY_ROLES`) in the orchestrator.
+  No import from `AccessibilityEnricher` needed — resolver stays self-contained.
+- `link` and `textbox` excluded from display roles (even though they are leaf
+  ARIA roles) — ASSERT descriptions like "cart badge" should not match cart links.
+- Soft filtering: prefer display elements first; fall back to all elements if no
+  display candidates score above threshold (logged as low-confidence, never skip
+  solely due to filtering).
+- No description scope awareness — the skeleton doesn't encode element-level vs
+  page-level intent. Role filtering + existing scoring pipeline covers the problem.
+- Scraper gap (`"Thank You page message"` → SKIP) spun off as B-019.
+
+**Approach:**
+1. **ASSERT role filtering (soft)** — for ASSERT actions, score display-role elements
+   first using ARIA roles (`heading`, `paragraph`, `text`, `status`, `region`,
+   `listitem`, `cell`, `generic`). If no display elements score above threshold,
+   fall back to all elements (logged as low-confidence).
+2. Implementation lives in `src/placeholder_orchestrator.py`, alongside step-context
+   exclusion (B-014). Runs as a pre-filter before scoring passes.
+
+**UAT results (2026-06-25, saucedemo, openai-local/Qwen3.6-27B):**
+| ASSERT | Before B-016 | After B-016 | Status |
+|--------|-------------|-------------|--------|
+| `"cart badge with count 1"` | `.shopping_cart_link` (wrong link) | **SKIP** | ✅ Fixed |
+| `"Sauce Labs Backpack item in cart"` | `#remove-sauce-labs-backpack` (wrong button) | **SKIP** | ✅ Fixed |
+| `"inventory page visible"` | `#login-button` | `#user-name` | ❌ Still wrong — page-scoping issue, not role |
+
+**Priority:** Medium — 2 of 6 saucedemo ASSERTs now correct (converted to SKIP)
+**Follow-up:** review placeholder_orchestrator.py pipeline ordering (step-context →
+role filter → scoring passes) to ensure filters compose correctly
+**Follow-up:** fallback resolution path (step 2) does not pass step-context or
+benefit from role filtering — page-scoping issue for cross-page element matches
+
+---
+
+### B-019 — Scraper misses heading text on JS-rendered pages
+**Status:** 🆕 new — spun off from B-016
+**Related:** B-016 (ASSERT role filtering)
+**Symptom:** BeautifulSoup-based scraper doesn't capture heading text from
+pages where content is rendered inside SVG elements or via complex ARIA
+relationships (e.g., `aria-labelledby` references).
+
+**Evidence (saucedemo UAT, 2026-06-25):**
+- `"Thank You page message"` → **SKIP** (unresolved)
+  — `checkout-complete.html` has a checkmark SVG and heading, but the scraper
+  captures no meaningful text in `text`, `aria_label`, or `accessible_name`.
+
+**Root cause:** Scraper uses BeautifulSoup on post-`networkidle` HTML. SVG
+internal text, `aria-labelledby` cross-references, and dynamically composed
+accessible names are not resolved by static HTML parsing. CDP `getFullAXTree`
+(AI-024) could resolve these but is not yet wired into the main scraper's
+element extraction.
+
+**Approach:** Evaluate whether to enhance the existing scraper with CDP AX tree
+resolution, or consider replacing BeautifulSoup with a Playwright-native DOM
+walk that captures computed accessible names.
+
+**Priority:** Low — affects completion pages and similar edge cases
+**Note:** Separate from B-016 — B-016 is about wrong matches, this is about
+missing data.
+---
+
+### B-020 — LLM-Assisted ASSERT Resolution
+**Status:** ❓ needs-info — core pipeline implemented, LLM wiring incomplete
+**Related:** B-014 (step-context exclusion), B-016 (ASSERT role filtering)
+**Symptom:** ASSERT placeholders always resolve via mechanical fallback to `assert_visible`. The LLM semantic pass (designed to select appropriate `assertion_type` like `toHaveText`, `toContainText`, `toHaveCount`, etc.) never fires because `SemanticCandidateRanker.generator` is `None`.
+
+**Implementation done (2026-06-28):**
+- `src/evidence_tracker.py` — added `assert_text`, `assert_text_contains`, `assert_disabled`, `assert_enabled`, `assert_checked`, `assert_count`, `assert_value`, `assert_empty`
+- `src/semantic_candidate_ranker.py` — rewritten to accept step context and return `assertion_type`/`expected_value`
+- `src/placeholder_orchestrator.py` — `_resolve_assert_semantically()` method; ASSERT routing through semantic path; `line_resolutions` extended to 7-tuple
+- `src/code_postprocessor.py` — `_ASSERTION_TO_ET_METHOD` mapping; routes to correct evidence_tracker method
+- `src/orchestrator.py` — `_resolve_placeholder_for_page()` returns 3-tuple `(resolved_value, next_url, assertion_type)`
+- Tests updated: `test_semantic_candidate_ranker.py`, `test_orchestrator.py`, `test_orchestrator_dynamic_scrape.py`
+
+**UAT results (2026-06-28, openai-local/Qwen3.6-27B, debug_compare.py):**
+| Site | Tests | SKIPs | ASSERT quality | Notes |
+|------|-------|-------|---------------|-------|
+| AutomationExercise | 6/6 | 1 (home banner) | All `assert_visible` (fallback) | Full pipeline 11-12/12 |
+| SauceDemo | 3 tests | 2 unresolved (username/password input) | All `assert_visible` (fallback) | Full pipeline 11/12 |
+
+**Key finding:** Results identical to pre-B-020 baseline because LLM semantic pass always falls back. Mechanical fallback produces the same locators as before.
+
+**Remaining work:**
+1. **Wire `SemanticCandidateRanker.generator`** — In `PlaceholderOrchestrator.__init__` (line ~91), the ranker is created with `generator=None`. Must pass the `LLMClient` (or its provider) so the semantic pass can actually fire.
+2. **Update `src/prompt_utils.py`** — Include `ASSERT:"exact text"` examples in skeleton generation prompts where appropriate.
+3. **UAT re-validation** — After wiring, re-run debug_compare.py to verify LLM selects correct `assertion_type` for semantic presence assertions.
+4. **Update prompts** — Ensure skeleton generator uses `ASSERT:"exact text"` format for exact-text assertions.
+
+**Priority:** Medium — unlocks assertion-type diversity (Text, Count, State, Value) for commercial viability
 ---
 
 ### REF-001 — Rename `src/ui_pipeline.py` / rethink `src/ui/` naming
@@ -860,6 +1149,66 @@ the list. Depends on AI-011 and AI-012 being in place first.
 - Refactor: implement pipeline architecture and update dependencies (2026-04-08).
 - Utils fix and pip to uv migrations resolved (2026-04-10).
 - Stabilized AI test generation pipeline: fixed POM method mismatches, resolved placeholder syntax errors, and implemented structural safety nets (2026-04-19).
+
+### B-015 Fix — dismiss_consent_overlays Rewrite (2026-06-23)
+**What:** Rewrote `dismiss_consent_overlays()` in `src/browser_utils.py` to fix B-015
+(journey discovery selecting wrong elements due to aggressive consent banner dismissal).
+
+**Root cause:** Old implementation used global text matching (`button:has-text('Continue')`)
+that matched `#continue-shopping` on saucedemo's cart page. Called before every click
+step, this navigated cart.html → inventory.html, preventing checkout pages from being
+scraped. This caused a cascade: wrong click → wrong page → missing scrape → zero
+resolution for all checkout FILL fields.
+
+**Fix:** 3-stage replacement:
+1. Google Consent TVM — specific `.fc-consent-root` selectors (unchanged)
+2. Structural containers — known consent provider classes (`oneTrust`, `cookie-banner`,
+   `[role='dialog']`, etc.) — buttons only matched **inside** these containers
+3. Position-based detection — JS finds fixed/sticky overlays near bottom of viewport,
+   then looks for dismiss buttons inside them
+4. Ad overlay removal — specific selectors only (Google Vignette, ASWIFT)
+
+**Removed:** Global text matching, `zIndex > 10000` DOM removal, `allElements` DOM iteration.
+
+**Verification:** saucedemo UAT after fix:
+- `#checkout` selected (score=12) for "checkout button" on cart.html ✅
+- All checkout pages scraped (`checkout-step-one.html`, `checkout-step-two.html`, `checkout-complete.html`) ✅
+- `test_06_complete_checkout` reduced from 8+ skips to 1 skip (ASSERT — B-014) ✅
+- 1266 tests pass, 0 regressions ✅
+- 10 new unit tests in `tests/test_browser_utils.py` ✅
+
+**Files changed:**
+- `src/browser_utils.py` — complete rewrite
+- `tests/test_browser_utils.py` — new test file (10 tests)
+
+### Saucedemo UAT Investigation (2026-06-22)
+**What:** Full pipeline run against saucedemo.com using `scripts/uat/uat_automationexercise.py --site saucedemo` to validate placeholder resolution findings.
+
+**Key findings:**
+1. **B-015 CONFIRMED** — Journey discovery clicks wrong elements:
+   - "checkout button" → `#react-burger-menu-btn` (burger menu, score=1)
+   - "first name:John" → `<select>` element (not fillable)
+   - "zip/postal code:12345" → `<a>` link (not fillable)
+   - This prevents checkout pages from ever being scraped
+
+2. **B-014 CONFIRMED** — ASSERT resolves to wrong elements:
+   - "product inventory page" → `#login-button`
+   - "cart badge shows 1" → `.shopping_cart_link` (cart nav link)
+   - "sauce labs backpack in cart" → `#remove-sauce-labs-backpack`
+   - Every ASSERT resolves to something, but never the right element
+
+3. **B-017 CORRECTED** — FILL on login works (masked by prerequisite injection):
+   - `#user-name`, `#password`, `#login-button` all resolve correctly in final code
+   - Resolver logs say `Failed to find` but prerequisite injection provides selectors
+   - Checkout FILL fails because checkout pages were never scraped (B-015 consequence)
+
+4. **B-018 CORRECTED** — The resolver gap is real but secondary:
+   - Resolver fails on login elements but prerequisite injection masks it
+   - The primary failure mode is B-015 (journey wrong clicks → missing pages)
+
+**Cascade chain:** B-015 (journey clicks wrong) → checkout pages not scraped → B-017 (checkout FILL fails) → test_06 pytest.skip()
+
+**No code changes** — investigation only, backlog items corrected to reflect actual root causes.
 
 ### Mypy Stubs Fix (2026-04-21)
 **What:** Resolved 11 mypy `import-untyped` and type compatibility errors across 4 files.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
@@ -26,6 +27,35 @@ from src.url_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+# B-016: Display roles for ASSERT role filtering.
+# These are leaf-level ARIA roles that present information to the user.
+# Interactive roles (button, link, textbox) are excluded — ASSERT descriptions
+# like "cart badge" should not match cart links by keyword overlap.
+DISPLAY_ROLES = frozenset(
+    {
+        "heading",
+        "paragraph",
+        "text",
+        "status",
+        "alert",
+        "listitem",
+        "cell",
+        "columnheader",
+        "rowheader",
+        "image",
+        "strong",
+        "em",
+        "caption",
+        "figure",
+        "label",  # <label> elements present form field descriptions
+        "generic",  # <span>, <div> — common containers for text content
+    }
+)
+
+# B-016: Maximum score gap between best display-role element and global top
+# before we fall back to non-display elements. Tunable after UAT.
+ROLE_FALLBACK_GAP = 3
 
 
 class PlaceholderOrchestrator:
@@ -395,7 +425,8 @@ class PlaceholderOrchestrator:
         """Resolve placeholders step by step while tracking the active page for each test."""
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
         lines = skeleton_code.splitlines()
-        line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None]]] = {}
+        # B-020: 7th element is assertion_type (str | None)
+        line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]] = {}
         all_placeholder_uses = self._all_placeholder_uses(skeleton_code)
         fallback_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
         errors = scraped_errors or {}
@@ -413,6 +444,12 @@ class PlaceholderOrchestrator:
             )
             journey_unresolved[journey.test_name] = []
 
+            # B-014: track the last interactive selector for ASSERT exclusion
+            last_selector: str | None = None
+            last_description: str | None = None
+            # B-020: track resolved step history for LLM semantic context
+            resolved_steps: list[str] = []
+
             for step in journey.steps:
                 if current_url is None:
                     current_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
@@ -427,12 +464,15 @@ class PlaceholderOrchestrator:
                         description = parts[0]
                         fill_value = parts[1]
 
-                    resolved_value, next_url = await self._resolve_placeholder_for_page(
+                    resolved_value, next_url, assertion_type = await self._resolve_placeholder_for_page(
                         action=action,
                         description=description,
                         current_url=current_url,
                         scraped_data=scraped_data,
                         scraped_errors=errors,
+                        previous_selector=last_selector,
+                        previous_description=last_description,
+                        resolved_steps=resolved_steps,
                     )
 
                     if "pytest.skip" in resolved_value:
@@ -441,8 +481,24 @@ class PlaceholderOrchestrator:
                         # only the consolidated skip at the test top should appear.
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
-                            (placeholder.token, action, resolved_value, description, fill_value, current_url)
+                            (
+                                placeholder.token,
+                                action,
+                                resolved_value,
+                                description,
+                                fill_value,
+                                current_url,
+                                assertion_type,
+                            )
                         )
+                        # Track selector for ASSERT exclusion — only CLICK/FILL set the bar
+                        if action in {"CLICK", "FILL"}:
+                            last_selector = resolved_value
+                            last_description = description
+                        # B-020: record step for LLM context (CLICK/FILL only)
+                        if action in {"CLICK", "FILL"}:
+                            selector_short = resolved_value.strip("'\"")
+                            resolved_steps.append(f"{action}: {description} -> {selector_short}")
 
                     if next_url:
                         current_url = next_url
@@ -451,7 +507,7 @@ class PlaceholderOrchestrator:
         resolved_tokens = {
             token
             for replacements in line_resolutions.values()
-            for token, _action, _resolved_value, _description, _fill, _url in replacements
+            for token, _action, _resolved_value, _description, _fill, _url, _at in replacements
         }
 
         for use in all_placeholder_uses:
@@ -471,7 +527,7 @@ class PlaceholderOrchestrator:
 
             journey_name = self._find_journey_for_line(use.line_number, journeys)
             if journey_name:
-                resolved_value, _ = await self._resolve_placeholder_for_page(
+                resolved_value, _, assertion_type = await self._resolve_placeholder_for_page(
                     action=action,
                     description=description,
                     current_url=fallback_url,
@@ -486,10 +542,10 @@ class PlaceholderOrchestrator:
                             unresolved for unresolved in journey_unresolved[journey_name] if unresolved != description
                         ]
                     line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value, fallback_url)
+                        (use.token, action, resolved_value, description, fill_value, fallback_url, assertion_type)
                     )
             else:
-                resolved_value, _ = await self._resolve_placeholder_for_page(
+                resolved_value, _, assertion_type = await self._resolve_placeholder_for_page(
                     action=action,
                     description=description,
                     current_url=fallback_url,
@@ -498,16 +554,22 @@ class PlaceholderOrchestrator:
                 )
                 if "pytest.skip" not in resolved_value:
                     line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value, fallback_url)
+                        (use.token, action, resolved_value, description, fill_value, fallback_url, assertion_type)
                     )
 
         # 3. Apply line-level replacements first.
         final_lines: list[str] = []
         for line_number, line in enumerate(lines, start=1):
             updated_line = line
-            for token, action, resolved_value, description, fill_value, current_url in line_resolutions.get(
-                line_number, []
-            ):
+            for (
+                token,
+                action,
+                resolved_value,
+                description,
+                fill_value,
+                current_url,
+                assertion_type,
+            ) in line_resolutions.get(line_number, []):
                 if self._pom_mode and action in {"CLICK", "FILL"}:
                     instance_name = self._get_pom_instance_name(current_url, self._generated_page_objects)
                     if instance_name:
@@ -544,6 +606,7 @@ class PlaceholderOrchestrator:
                     duplicate_selectors,
                     description,
                     fill_value=fill_value,
+                    assertion_type=assertion_type or "toBeVisible",
                 )
             final_lines.append(updated_line)
 
@@ -798,6 +861,63 @@ class PlaceholderOrchestrator:
         )
         return False
 
+    def _build_excluded_selectors(
+        self,
+        action: str,
+        description: str,
+        previous_selector: str | None,
+        previous_description: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> set[str]:
+        """Build a set of selectors to exclude for this resolution.
+
+        For ASSERT: excludes the previous step's selector unless descriptions match
+        (meaning the test is asserting the same element's state).
+        For CLICK/FILL: returns empty set (no exclusion needed).
+        """
+        if action != "ASSERT" or not previous_selector:
+            return set()
+
+        # Allow reuse if descriptions reference the same element.
+        # Use a strict containment check: one description must be contained
+        # in the other (normalised), or they share ≥ 75% of content words.
+        # This prevents false reuse like "add to cart for Backpack" matching
+        # "Backpack name in cart" — those describe different elements.
+        if previous_description and self._descriptions_reference_same_element(previous_description, description):
+            return set()
+
+        # Find all selector forms for the previously resolved element
+        excluded: set[str] = {previous_selector}
+        for elements in pages_data.values():
+            for element in elements:
+                raw_selector = str(element.get("selector", "")).strip()
+                robust = build_robust_locator(element)
+                # Match against both robust locator and raw selector
+                if (robust and robust == previous_selector) or raw_selector == previous_selector:
+                    if robust:
+                        excluded.add(robust)
+                    if raw_selector:
+                        excluded.add(raw_selector)
+
+        return excluded
+
+    @staticmethod
+    def _descriptions_reference_same_element(desc_a: str, desc_b: str) -> bool:
+        """Return True when two descriptions likely reference the same element.
+
+        Uses strict containment: one normalised description must be contained
+        within the other. This catches 'login button' vs 'login button is
+        disabled' but NOT 'add to cart for Backpack' vs 'Backpack name in cart'.
+        """
+        norm_a = re.sub(r"[_\-]", " ", desc_a).strip().lower()
+        norm_b = re.sub(r"[_\-]", " ", desc_b).strip().lower()
+
+        # Direct containment — strongest signal
+        if norm_a in norm_b or norm_b in norm_a:
+            return True
+
+        return False
+
     async def _resolve_placeholder_for_page(
         self,
         action: str,
@@ -805,8 +925,20 @@ class PlaceholderOrchestrator:
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
         scraped_errors: dict[str, str] | None = None,
-    ) -> tuple[str, str | None]:
-        """Resolve one placeholder using the active page first, then fall back to known pages."""
+        previous_selector: str | None = None,
+        previous_description: str | None = None,
+        resolved_steps: list[str] | None = None,
+    ) -> tuple[str, str | None, str | None]:
+        """Resolve one placeholder using the active page first, then fall back to known pages.
+
+        Args:
+            previous_selector: The selector resolved by the previous interactive step.
+            previous_description: The description from the previous interactive step.
+                Used for B-014 step-context exclusion: an ASSERT should not resolve
+                to the same element as the preceding CLICK/FILL unless the descriptions
+                semantically reference the same element.
+            resolved_steps: B-020 list of compressed step descriptions for LLM context.
+        """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
         scoped_pages = self._build_scoped_pages(current_url, scraped_data)
 
@@ -815,30 +947,30 @@ class PlaceholderOrchestrator:
             url_from_resolver = self.url_resolver.resolve(description)
             if url_from_resolver:
                 logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
-                return repr(url_from_resolver), url_from_resolver
+                return repr(url_from_resolver), url_from_resolver, None
 
             # Step 2: Try PlaceholderResolver (scraped element matching)
             resolved_url = self.resolver.resolve_url(description, scoped_pages or scraped_data)
             if resolved_url:
-                return repr(resolved_url), resolved_url
+                return repr(resolved_url), resolved_url, None
 
             # Step 3: Heuristic fallback
             if current_url:
                 heuristic = heuristic_url_from_description(current_url, description)
                 if heuristic:
                     await self._ensure_scraped(heuristic, scraped_data, scraped_errors)
-                    return repr(heuristic), heuristic
+                    return repr(heuristic), heuristic, None
 
             # Step 4: Try seed URL as last resort
             seed_url = self.url_resolver.get_seed_url()
             if seed_url:
                 logger.debug("Falling back to seed URL for '%s': %s", description, seed_url)
-                return repr(seed_url), seed_url
+                return repr(seed_url), seed_url, None
 
             error_msg = f"Locator for '{description}' not found on scraped pages."
             if current_url and scraped_errors and current_url in scraped_errors:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
-            return f'pytest.skip("{error_msg}")', None
+            return f'pytest.skip("{error_msg}")', None, None
 
         # When scoped_pages is empty (current_url not in scraped_data), fall back to
         # ALL scraped pages. The "no fallback" rule prevents using wrong-page elements
@@ -846,8 +978,19 @@ class PlaceholderOrchestrator:
         # normalization differences (trailing slash, query params, etc.), we must
         # search all pages to find the element.
         pages_to_search = scoped_pages if scoped_pages else scraped_data
+
+        # B-014: build excluded selectors for ASSERT
+        excluded = self._build_excluded_selectors(
+            action, description, previous_selector, previous_description, pages_to_search
+        )
+
         matched_element = await self._find_best_element_for_current_page(
-            action, description, current_url, pages_to_search
+            action,
+            description,
+            current_url,
+            pages_to_search,
+            excluded_selectors=excluded or None,
+            resolved_steps=resolved_steps,
         )
         # Do NOT fall back to elements from other pages. Each action must resolve
         # against the CURRENT page context — falling back to elements scraped from a
@@ -871,11 +1014,13 @@ class PlaceholderOrchestrator:
             next_url = infer_next_page_url(action, description, matched_element, scraped_data, current_url)
             if next_url:
                 await self._ensure_scraped(next_url, scraped_data, scraped_errors)
-            return selector, next_url
+            # B-020: extract assertion_type from matched_element for ASSERT actions
+            assertion_type = matched_element.get("assertion_type") if action == "ASSERT" else None
+            return selector, next_url, assertion_type
 
         error_msg = f"Locator for '{description}' not found on scraped pages."
         print(f"[DEBUG] Failed to find '{description}'. Available scraped URLs: {list(scraped_data.keys())}")
-        return f'pytest.skip("{error_msg}")', None
+        return f'pytest.skip("{error_msg}")', None, None
 
     @staticmethod
     def _build_scoped_pages(
@@ -937,6 +1082,165 @@ class PlaceholderOrchestrator:
         """
         raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
         return re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+
+    def _get_effective_role(self, element: dict[str, str]) -> str:
+        """Resolve ARIA role: computed_role (CDP AX tree) -> raw role (HTML attr/tag).
+
+        B-016: computed_role is set by the accessibility enricher (AI-024) and
+        contains the proper computed ARIA role. Falls back to the raw ``role``
+        field which is the HTML role attribute or tag-name fallback.
+        """
+        return str(element.get("computed_role") or element.get("role", "")).strip().lower()
+
+    # Implicit ARIA role mapping for HTML tags.
+    # Used when computed_role is unavailable (e.g. journey scraper enrichment fails).
+    _TAG_TO_ROLE: dict[str, str] = {
+        "a": "link",
+        "abbr": "text",
+        "address": "paragraph",
+        "article": "article",
+        "aside": "complementary",
+        "b": "strong",
+        "bdi": "text",
+        "bdo": "text",
+        "blockquote": "blockquote",
+        "button": "button",
+        "caption": "caption",
+        "cite": "text",
+        "code": "text",
+        "data": "text",
+        "dd": "definition",
+        "del": "deletion",
+        "details": "group",
+        "dfn": "text",
+        "div": "generic",
+        "dl": "list",
+        "dt": "term",
+        "em": "em",
+        "embed": "embed",
+        "fieldset": "group",
+        "figure": "figure",
+        "footer": "contentinfo",
+        "h1": "heading",
+        "h2": "heading",
+        "h3": "heading",
+        "h4": "heading",
+        "h5": "heading",
+        "h6": "heading",
+        "header": "banner",
+        "hr": "separator",
+        "i": "em",
+        "img": "image",
+        "input": "textbox",  # simplified — type determines actual role
+        "ins": "insertion",
+        "kbd": "text",
+        "label": "label",
+        "legend": "legend",
+        "li": "listitem",
+        "main": "main",
+        "mark": "text",
+        "nav": "navigation",
+        "ol": "list",
+        "output": "status",
+        "p": "paragraph",
+        "picture": "generic",
+        "pre": "text",
+        "progress": "progressbar",
+        "q": "text",
+        "rb": "text",
+        "rp": "text",
+        "rt": "text",
+        "rtc": "text",
+        "ruby": "text",
+        "s": "deletion",
+        "samp": "text",
+        "section": "region",
+        "select": "listbox",  # simplified
+        "small": "text",
+        "span": "generic",
+        "strong": "strong",
+        "sub": "text",
+        "sup": "text",
+        "table": "table",
+        "tbody": "rowgroup",
+        "td": "cell",
+        "textarea": "textbox",
+        "tfoot": "rowgroup",
+        "th": "columnheader",  # simplified — scope determines row/column
+        "thead": "rowgroup",
+        "time": "text",
+        "tr": "row",
+        "u": "text",
+        "ul": "list",
+        "var": "text",
+    }
+
+    def _is_display_role(self, element: dict[str, str]) -> bool:
+        """Check if an element's effective role is a display (non-interactive) role.
+
+        B-016: Used for ASSERT role filtering. Resolution priority:
+        1. ``computed_role`` from CDP AX tree enrichment (authoritative when present)
+        2. ``role`` field — if it's a known ARIA role name (not a tag name), use it
+        3. ``tag`` field — mapped through implicit ARIA role table
+        4. ``role`` field as tag name — mapped through implicit ARIA role table
+
+        The scraper stores tag names in the ``role`` field when no explicit
+        role attribute exists. The enricher writes ``computed_role`` from the
+        AX tree but often fails to match elements, leaving it None.
+        """
+        # 1. computed_role from CDP AX tree — authoritative
+        computed = str(element.get("computed_role", "")).strip().lower()
+        if computed:
+            return computed in DISPLAY_ROLES
+
+        # 2. raw role field — could be explicit ARIA role or tag-name fallback
+        raw_role = str(element.get("role", "")).strip().lower()
+
+        # 3. tag field if available
+        tag = str(element.get("tag", "")).strip().lower()
+
+        # Check if raw_role is an explicit ARIA role (not a tag name)
+        if raw_role in DISPLAY_ROLES:
+            return True
+
+        # Map via tag name (tag field first, then role-as-tag fallback)
+        effective_tag = tag if tag else raw_role
+        mapped_role = self._TAG_TO_ROLE.get(effective_tag, "")
+        return mapped_role in DISPLAY_ROLES
+
+    def _pass0_exact_text_match(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str] | None:
+        """Pass 0 — exact text match for ASSERT descriptions wrapped in quotes.
+
+        B-020: When the skeleton emits ASSERT:"exact text here", strip the quotes
+        and do literal string equality against element text. This bypasses all
+        scoring and LLM calls for the simple "verify text is X" case.
+        """
+        if action != "ASSERT":
+            return None
+
+        # Strip surrounding quotes if present
+        text = description
+        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
+            text = text[1:-1]
+        if not text:
+            return None
+
+        norm_target = text.strip().lower()
+        if len(norm_target) < 2:
+            return None
+
+        for elements in pages_data.values():
+            for element in elements:
+                norm_text = self._normalise_element_text(element)
+                if norm_text == norm_target:
+                    return element
+
+        return None
 
     def _pass1_text_match(
         self,
@@ -1060,9 +1364,10 @@ class PlaceholderOrchestrator:
 
         for elements in pages_data.values():
             for element in elements:
-                role = str(element.get("role", "")).strip().lower()
+                # B-016: check computed_role (CDP AX tree) first, then raw role, then tag
+                effective_role = str(element.get("computed_role") or element.get("role", "")).strip().lower()
                 tag = str(element.get("tag", "")).strip().lower()
-                if role not in text_bearing_roles and tag not in text_bearing_tags:
+                if effective_role not in text_bearing_roles and tag not in text_bearing_tags:
                     continue
                 norm_text = self._normalise_element_text(element)
                 if len(norm_text) >= 3 and norm_text in norm_description:
@@ -1094,6 +1399,9 @@ class PlaceholderOrchestrator:
 
         for elements in pages_data.values():
             for element in elements:
+                # B-016: for ASSERT, prefer display elements over interactive ones
+                if action == "ASSERT" and not self._is_display_role(element):
+                    continue
                 for field in structural_fields:
                     raw = str(element.get(field, "")).strip()
                     if len(raw) < 2:
@@ -1108,12 +1416,25 @@ class PlaceholderOrchestrator:
 
         return None
 
+    @staticmethod
+    def _is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool:
+        """Check if an element should be excluded from consideration."""
+        raw = str(element.get("selector", "")).strip()
+        if raw in excluded_selectors:
+            return True
+        robust = build_robust_locator(element)
+        if robust and robust in excluded_selectors:
+            return True
+        return False
+
     async def _find_best_element_for_current_page(
         self,
         action: str,
         description: str,
         current_url: str | None,
         pages_data: dict[str, list[dict[str, str]]],
+        excluded_selectors: set[str] | None = None,
+        resolved_steps: list[str] | None = None,
     ) -> dict[str, str] | None:
         """Return the best element match across the supplied page mapping.
 
@@ -1121,24 +1442,59 @@ class PlaceholderOrchestrator:
         best match. This prevents returning a low-quality match from an early page
         when a much better match exists on a later page (e.g., finding a cart page
         element for "username input" instead of the login page element).
+
+        Args:
+            excluded_selectors: Selectors to exclude from consideration. Used by
+                B-014 step-context: prevents ASSERT from resolving to the same
+                element as the preceding CLICK/FILL step.
+            resolved_steps: B-020 list of compressed prior step descriptions.
         """
+        # B-020 Pass 0 — exact text match for ASSERT:"exact text"
+        pass0_result = self._pass0_exact_text_match(action, description, pages_data)
+        if pass0_result is not None:
+            if not excluded_selectors or not self._is_excluded(pass0_result, excluded_selectors):
+                self._log_resolve_pass(0, "exact text match", description, pass0_result)
+                # Tag with assertion_type for code_postprocessor
+                pass0_result["assertion_type"] = "toHaveText"
+                pass0_result["expected_value"] = description.strip("'\"")
+                return pass0_result
+            logger.debug(
+                "[RESOLVE] '%s' | pass=0 exact text EXCLUDED (step context)",
+                description,
+            )
+
         # Pass 1 — fast text match (CLICK/FILL)
         pass1_result = self._pass1_text_match(action, description, pages_data)
         if pass1_result is not None:
-            self._log_resolve_pass(1, "text match", description, pass1_result)
-            return pass1_result
+            if not excluded_selectors or not self._is_excluded(pass1_result, excluded_selectors):
+                self._log_resolve_pass(1, "text match", description, pass1_result)
+                return pass1_result
+            logger.debug(
+                "[RESOLVE] '%s' | pass=1 text match EXCLUDED (step context)",
+                description,
+            )
 
         # Pass 1 — ASSERT text-bearing elements
         pass1_assert = self._pass1_assert_text_match(action, description, pages_data)
         if pass1_assert is not None:
-            self._log_resolve_pass(1, "assert text match", description, pass1_assert)
-            return pass1_assert
+            if not excluded_selectors or not self._is_excluded(pass1_assert, excluded_selectors):
+                self._log_resolve_pass(1, "assert text match", description, pass1_assert)
+                return pass1_assert
+            logger.debug(
+                "[RESOLVE] '%s' | pass=1 assert text match EXCLUDED (step context)",
+                description,
+            )
 
         # Pass 2 — structural attribute match
         pass2_result = self._pass2_structural_match(action, description, pages_data)
         if pass2_result is not None:
-            self._log_resolve_pass(2, "structural match", description, pass2_result)
-            return pass2_result
+            if not excluded_selectors or not self._is_excluded(pass2_result, excluded_selectors):
+                self._log_resolve_pass(2, "structural match", description, pass2_result)
+                return pass2_result
+            logger.debug(
+                "[RESOLVE] '%s' | pass=2 structural match EXCLUDED (step context)",
+                description,
+            )
 
         # Pass 3 — scoring shortlist + semantic ranker (legacy path)
         logger.debug("[RESOLVE] '%s' | pass=3 (scoring)", description)
@@ -1155,6 +1511,61 @@ class PlaceholderOrchestrator:
                 ranked_candidates[0][0] if ranked_candidates else "N/A",
             )
 
+        # B-014: filter out excluded selectors from scoring candidates
+        if excluded_selectors:
+            before = len(all_ranked)
+            all_ranked = [
+                (score, elem) for score, elem in all_ranked if not self._is_excluded(elem, excluded_selectors)
+            ]
+            if len(all_ranked) < before:
+                logger.debug(
+                    "[RESOLVE] '%s' | excluded %d candidate(s) (step context)",
+                    description,
+                    before - len(all_ranked),
+                )
+
+        # Sort by score descending so all_ranked[0] is the global best.
+        all_ranked.sort(key=lambda x: x[0], reverse=True)
+
+        # B-016: soft role filtering for ASSERT — prefer display-role elements.
+        # If the best display-role element scores within ROLE_FALLBACK_GAP of the
+        # global top, use it. Otherwise fall back to the global best with a warning.
+        if action == "ASSERT" and all_ranked:
+            display_ranked = [(s, e) for s, e in all_ranked if self._is_display_role(e)]
+            global_top_score_all = all_ranked[0][0]
+
+            if display_ranked:
+                best_display_score = display_ranked[0][0]
+                gap = global_top_score_all - best_display_score
+
+                if gap <= ROLE_FALLBACK_GAP:
+                    # Display element is competitive — use it
+                    logger.debug(
+                        "[RESOLVE] '%s' | B-016 role filter: using display element "
+                        "(score=%s, gap=%d from global top %s)",
+                        description,
+                        best_display_score,
+                        gap,
+                        global_top_score_all,
+                    )
+                    all_ranked = display_ranked
+                else:
+                    logger.warning(
+                        "[RESOLVE] '%s' | B-016 low-confidence fallback: "
+                        "best display score=%s is %d below global top=%s — "
+                        "using non-display element",
+                        description,
+                        best_display_score,
+                        gap,
+                        global_top_score_all,
+                    )
+            else:
+                logger.debug(
+                    "[RESOLVE] '%s' | B-016: no display-role candidates, scoring all %d elements",
+                    description,
+                    len(all_ranked),
+                )
+
         if not all_ranked:
             # No candidates scored at all — for ASSERT, do NOT fall back to a random element.
             # Returning a generic element (e.g., a[href="/"]) for an assertion like
@@ -1162,8 +1573,6 @@ class PlaceholderOrchestrator:
             # It's better to skip the test with a clear message than assert the wrong element.
             return None
 
-        # Sort by score descending to get the global best match
-        all_ranked.sort(key=lambda x: x[0], reverse=True)
         global_top_score = all_ranked[0][0]
         logger.debug(
             "GLOBAL top_score=%s for '%s' (selector=%s)",
@@ -1172,12 +1581,22 @@ class PlaceholderOrchestrator:
             all_ranked[0][1].get("selector", ""),
         )
 
-        # Use a threshold-based shortlist from the global ranking.
+        # B-020: ASSERT gets a semantic LLM pass with step context.
+        # Non-ASSERT actions keep the mechanical shortlist + LLM path.
+        if action == "ASSERT":
+            return await self._resolve_assert_semantically(
+                all_ranked=all_ranked,
+                description=description,
+                current_url=current_url,
+                resolved_steps=resolved_steps,
+            )
+
+        # Non-ASSERT: threshold-based shortlist from global ranking.
         threshold = max(1, global_top_score - 2)
         shortlisted = [element for score, element in all_ranked if score >= threshold][:4]
 
         matched_element = None
-        if len(shortlisted) > 1 and action in {"ASSERT", "CLICK", "FILL"}:
+        if len(shortlisted) > 1 and action in {"CLICK", "FILL"}:
             matched_element = await self.semantic_ranker.choose_best_candidate(
                 action=action,
                 description=description,
@@ -1205,8 +1624,6 @@ class PlaceholderOrchestrator:
                 element_text,
                 description,
             )
-            if action == "ASSERT":
-                return matched_element
             return matched_element
 
         # No LLM selection — use top candidate with text validation
@@ -1220,6 +1637,80 @@ class PlaceholderOrchestrator:
                 description,
             )
         return None
+
+    async def _resolve_assert_semantically(
+        self,
+        *,
+        all_ranked: list[tuple[float, dict[str, str]]],
+        description: str,
+        current_url: str | None,
+        resolved_steps: list[str] | None = None,
+    ) -> dict[str, str] | None:
+        """B-020: Resolve ASSERT using LLM semantic ranking with step context.
+
+        Builds a curated candidate pool of display elements + top scorers,
+        then delegates to the LLM which selects both the best element and
+        the appropriate assertion type.
+        """
+        # Build candidate pool: top 3 scorers + top 3 display elements (deduplicated)
+        seen_selectors: set[str] = set()
+        candidate_pool: list[dict[str, Any]] = []
+
+        # Add top scorers first (up to 3)
+        for _score, element in all_ranked[:3]:
+            sel = element.get("selector", "")
+            if sel and sel not in seen_selectors:
+                seen_selectors.add(sel)
+                candidate_pool.append(element)
+
+        # Add display-role elements (up to 3 more)
+        for _score, element in all_ranked:
+            if len(candidate_pool) >= 6:
+                break
+            if self._is_display_role(element):
+                sel = element.get("selector", "")
+                if sel and sel not in seen_selectors:
+                    seen_selectors.add(sel)
+                    candidate_pool.append(element)
+
+        logger.debug("[B-020] ASSERT semantic pass for '%s': %d candidates in pool", description, len(candidate_pool))
+
+        if not candidate_pool:
+            return None
+
+        # Single candidate — fast path
+        if len(candidate_pool) == 1:
+            result = dict(candidate_pool[0])
+            result["assertion_type"] = "toBeVisible"
+            return result
+
+        # LLM semantic ranking with step context
+        matched_element = await self.semantic_ranker.choose_best_candidate(
+            action="ASSERT",
+            description=description,
+            current_url=current_url,
+            candidates=candidate_pool,
+            previous_steps=resolved_steps,
+        )
+
+        if matched_element is not None:
+            assertion_type = matched_element.get("assertion_type", "toBeVisible")
+            logger.info(
+                "[B-020] ASSERT '%s' -> selector=%s, assertion_type=%s",
+                description,
+                matched_element.get("selector", ""),
+                assertion_type,
+            )
+            return matched_element
+
+        # LLM failed — fall back to mechanical top score with toBeVisible default
+        logger.warning(
+            "[B-020] ASSERT '%s': LLM semantic pass failed, falling back to top scorer",
+            description,
+        )
+        fallback = dict(all_ranked[0][1])
+        fallback["assertion_type"] = "toBeVisible"
+        return fallback
 
     @staticmethod
     def _select_page_loaded_candidate(

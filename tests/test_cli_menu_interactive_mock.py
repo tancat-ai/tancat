@@ -5,7 +5,7 @@ from src.cli.testing_terminal import QueueTerminal
 def test_print_menu_numeric_selection_single_digit() -> None:
     qt = QueueTerminal(inputs=["1"])
     # inject
-    menu_renderer.set_terminal_adapter(qt)
+    menu_renderer.set_terminal_adapter(qt)  # type: ignore[arg-type]
     try:
         idx = menu_renderer.print_menu(["One", "Two", "Three"], prompt="Choose")
         assert idx == 0
@@ -19,7 +19,7 @@ def test_print_menu_numeric_selection_multi_digit() -> None:
     # Create 15 options and select 12
     options = [f"Item {i + 1}" for i in range(15)]
     qt = QueueTerminal(inputs=["12"])
-    menu_renderer.set_terminal_adapter(qt)
+    menu_renderer.set_terminal_adapter(qt)  # type: ignore[arg-type]
     try:
         idx = menu_renderer.print_menu(options)
         assert idx == 11
@@ -31,7 +31,7 @@ def test_print_menu_numeric_selection_multi_digit() -> None:
 
 def test_print_menu_arrow_navigation_then_enter() -> None:
     qt = QueueTerminal(inputs=["v", "\r"])  # move down, then enter
-    menu_renderer.set_terminal_adapter(qt)
+    menu_renderer.set_terminal_adapter(qt)  # type: ignore[arg-type]
     try:
         idx = menu_renderer.print_menu(["A", "B", "C"])
         assert idx == 1

@@ -772,8 +772,13 @@ class TestOrchestrator:
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
         scraped_errors: dict[str, str] | None = None,
-    ) -> tuple[str, str | None]:
-        """Backwards-compatible: delegate to PlaceholderOrchestrator._resolve_placeholder_for_page."""
+    ) -> tuple[str, str | None, str | None]:
+        """Backwards-compatible: delegate to PlaceholderOrchestrator._resolve_placeholder_for_page.
+
+        Returns:
+            3-tuple of (resolved_value, next_url, assertion_type).
+            assertion_type is None for non-ASSERT actions.
+        """
         return await self._placeholder_orchestrator._resolve_placeholder_for_page(
             action=action,
             description=description,
