@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.code_validator import validate_python_syntax
-from src.journey_scraper import CredentialProfile, JourneyStep
+from src.journey_models import CredentialProfile, JourneyStep
 from src.llm_client import LLMClient
 from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportBundle, PipelineReportService

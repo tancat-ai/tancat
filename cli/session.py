@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.journey_scraper import CredentialProfile, JourneyStep
+from src.journey_models import CredentialProfile, JourneyStep
 from src.pipeline_artifact_manager import PackageManifest
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult

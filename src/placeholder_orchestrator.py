@@ -7,7 +7,8 @@ import re
 from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
-from src.journey_scraper import CartSeedingScraper, CredentialProfile
+from src.journey_models import CredentialProfile
+from src.journey_scraper import CartSeedingScraper
 from src.locator_builder import build_robust_locator
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney

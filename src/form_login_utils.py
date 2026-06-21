@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.journey_scraper import CredentialProfile
+from src.journey_models import CredentialProfile
 
 # ── Public API ──────────────────────────────────────────────────
 

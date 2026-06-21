@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
 from src.form_login_utils import attempt_login
-from src.journey_scraper import CredentialProfile
+from src.journey_models import CredentialProfile
 from src.scraper import PageScraper
 
 

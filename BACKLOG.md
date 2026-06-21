@@ -42,13 +42,13 @@ Last updated: 2026-06-21 (CI/CD consolidation shipped)
 
 ---
 
-## 🟡 AI-027 — Visual Element Enrichment (IN PROGRESS — Session 3 of 4)
+## ✅ AI-027 — Visual Element Enrichment (COMPLETE — All 4 Sessions Done)
 
 **What:** Vision-based element enrichment for improved placeholder resolution on multi-product sites.
 **Session 1 complete:** `VisionEnricher` + vision capability detection.
 **Session 2 complete:** Screenshot capture during scraping, with interactive element bounding boxes stored in memory.
 **Session 3 complete:** Vision enrichment service with element crop, mocked LLM call path, response parsing, and scraper enrichment bridge.
-**Remaining:** Journey selector propagation and enriched resolver text matching.
+**Session 4 complete:** Vision enrichment wired into orchestrator pipeline + `_vision_enriched_bonus()` in PlaceholderScorer using `product_name`, `price`, `visual_label`, `enrichment_note`, `description` fields.
 **Spec:** `docs/specs/FEATURE_SPEC_visual_element_enrichment.md`
 **Priority:** High — placeholder resolution quality on multi-product sites
 

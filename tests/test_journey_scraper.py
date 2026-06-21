@@ -14,14 +14,14 @@ from src.journey_auth_detector import (
 from src.journey_auth_detector import (
     detect_sso as _detect_sso,
 )
+from src.journey_models import CredentialProfile, JourneyResult, JourneyStep, substitute_templates
 from src.journey_scraper import (
     CartSeedingScraper,
-    CredentialProfile,
-    JourneyResult,
     JourneyScraper,
-    JourneyStep,
-    _substitute_templates,
 )
+
+# Legacy alias for test compatibility
+_substitute_templates = substitute_templates
 
 
 class TestJourneyStep:
