@@ -60,9 +60,11 @@ if str(PROJECT_ROOT) not in sys.path:
 # Site configurations
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SiteConfig:
     """Configuration for a UAT target site."""
+
     name: str
     url: str
     user_story: str
@@ -112,6 +114,7 @@ SITES: dict[str, SiteConfig] = {
 # ---------------------------------------------------------------------------
 # Result tracking
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class CheckResult:
@@ -196,6 +199,7 @@ def evidence_tracker(page: Page, request: Any) -> EvidenceTracker:
 # Pipeline runner
 # ---------------------------------------------------------------------------
 
+
 async def run_site_uat(
     site_id: str,
     config: SiteConfig,
@@ -223,9 +227,12 @@ async def run_site_uat(
 
     try:
         client = LLMClient()
-        result.checks.append(CheckResult(
-            f"LLM client ({client.provider_name} / {client.model})", True,
-        ))
+        result.checks.append(
+            CheckResult(
+                f"LLM client ({client.provider_name} / {client.model})",
+                True,
+            )
+        )
     except Exception as e:
         result.error = f"LLMClient failed: {e}"
         result.checks.append(CheckResult("LLM client", False, str(e)))
@@ -245,11 +252,13 @@ async def run_site_uat(
         result.generation_duration = time.time() - start
         result.generated_code = final_code
 
-        result.checks.append(CheckResult(
-            f"Pipeline generation ({result.generation_duration:.1f}s)",
-            len(final_code) > 100,
-            f"{len(final_code)} chars",
-        ))
+        result.checks.append(
+            CheckResult(
+                f"Pipeline generation ({result.generation_duration:.1f}s)",
+                len(final_code) > 100,
+                f"{len(final_code)} chars",
+            )
+        )
     except Exception as e:
         result.error = f"Pipeline failed: {e}"
         result.checks.append(CheckResult("Pipeline generation", False, str(e)))
@@ -257,88 +266,110 @@ async def run_site_uat(
 
     # Validation checks
     # 1. Code length
-    result.checks.append(CheckResult(
-        "Generated code substantive",
-        len(final_code) > 200,
-        f"{len(final_code)} chars",
-    ))
+    result.checks.append(
+        CheckResult(
+            "Generated code substantive",
+            len(final_code) > 200,
+            f"{len(final_code)} chars",
+        )
+    )
 
     # 2. No unresolved placeholders
     ph_tokens = re.findall(r"\{\{\{\{(\w+):", final_code)
-    result.checks.append(CheckResult(
-        "No unresolved placeholder tokens",
-        len(ph_tokens) == 0,
-        f"{len(ph_tokens)} remaining tokens" if ph_tokens else "clean",
-    ))
+    result.checks.append(
+        CheckResult(
+            "No unresolved placeholder tokens",
+            len(ph_tokens) == 0,
+            f"{len(ph_tokens)} remaining tokens" if ph_tokens else "clean",
+        )
+    )
 
     # 3. pytest.skip count
     skip_lines = [line.strip() for line in final_code.splitlines() if "pytest.skip(" in line]
-    result.checks.append(CheckResult(
-        "Minimal pytest.skip usage",
-        len(skip_lines) <= 2,  # Allow some skips for edge cases
-        f"{len(skip_lines)} skip lines" if skip_lines else "no skips",
-    ))
+    result.checks.append(
+        CheckResult(
+            "Minimal pytest.skip usage",
+            len(skip_lines) <= 2,  # Allow some skips for edge cases
+            f"{len(skip_lines)} skip lines" if skip_lines else "no skips",
+        )
+    )
 
     # 4. Evidence tracker
-    result.checks.append(CheckResult(
-        "Evidence tracker calls present",
-        "evidence_tracker." in final_code,
-        str(final_code.count("evidence_tracker.")) + " calls",
-    ))
+    result.checks.append(
+        CheckResult(
+            "Evidence tracker calls present",
+            "evidence_tracker." in final_code,
+            str(final_code.count("evidence_tracker.")) + " calls",
+        )
+    )
 
     # 5. pytest.mark.evidence
-    result.checks.append(CheckResult(
-        "@pytest.mark.evidence decorators",
-        "@pytest.mark.evidence" in final_code,
-        str(final_code.count("@pytest.mark.evidence")) + " decorators",
-    ))
+    result.checks.append(
+        CheckResult(
+            "@pytest.mark.evidence decorators",
+            "@pytest.mark.evidence" in final_code,
+            str(final_code.count("@pytest.mark.evidence")) + " decorators",
+        )
+    )
 
     # 6. Test count
     criteria_count = len(re.findall(r"^\d+\.", config.conditions, re.M))
     test_funcs = re.findall(r"^def\s+test_\w+", final_code, re.M)
-    result.checks.append(CheckResult(
-        f"Test functions generated ({len(test_funcs)})",
-        len(test_funcs) >= criteria_count - 1,  # Allow 1 missing
-        f"{len(test_funcs)} tests vs {criteria_count} criteria",
-    ))
+    result.checks.append(
+        CheckResult(
+            f"Test functions generated ({len(test_funcs)})",
+            len(test_funcs) >= criteria_count - 1,  # Allow 1 missing
+            f"{len(test_funcs)} tests vs {criteria_count} criteria",
+        )
+    )
 
     # 7. POM-specific checks
     if pom_mode:
         has_pom_class = "class " in final_code and "(page:" in final_code
-        result.checks.append(CheckResult(
-            "POM class present",
-            has_pom_class,
-            "found" if has_pom_class else "missing",
-        ))
+        result.checks.append(
+            CheckResult(
+                "POM class present",
+                has_pom_class,
+                "found" if has_pom_class else "missing",
+            )
+        )
 
         has_pom_import = "from pages." in final_code or "import pages" in final_code
-        result.checks.append(CheckResult(
-            "POM import present",
-            has_pom_import,
-            "found" if has_pom_import else "missing",
-        ))
+        result.checks.append(
+            CheckResult(
+                "POM import present",
+                has_pom_import,
+                "found" if has_pom_import else "missing",
+            )
+        )
 
     # Pipeline result metadata
     pipeline_result = orchestrator.last_result
     if pipeline_result:
-        result.checks.append(CheckResult(
-            f"Pages scraped ({len(pipeline_result.scraped_pages)})",
-            len(pipeline_result.scraped_pages) > 0,
-            ", ".join(p[-40:] for p in pipeline_result.scraped_pages.keys()),
-        ))
+        result.checks.append(
+            CheckResult(
+                f"Pages scraped ({len(pipeline_result.scraped_pages)})",
+                len(pipeline_result.scraped_pages) > 0,
+                ", ".join(p[-40:] for p in pipeline_result.scraped_pages.keys()),
+            )
+        )
 
         if pom_mode:
-            result.checks.append(CheckResult(
-                f"POM classes generated ({len(pipeline_result.generated_page_objects)})",
-                len(pipeline_result.generated_page_objects) > 0,
-                ", ".join(p.class_name for p in pipeline_result.generated_page_objects),
-            ))
+            result.checks.append(
+                CheckResult(
+                    f"POM classes generated ({len(pipeline_result.generated_page_objects)})",
+                    len(pipeline_result.generated_page_objects) > 0,
+                    ", ".join(p.class_name for p in pipeline_result.generated_page_objects),
+                )
+            )
 
-        result.checks.append(CheckResult(
-            f"Unresolved placeholders ({len(pipeline_result.unresolved_placeholders)})",
-            len(pipeline_result.unresolved_placeholders) <= 2,
-            json.dumps(pipeline_result.unresolved_placeholders[:5]),
-        ))
+        result.checks.append(
+            CheckResult(
+                f"Unresolved placeholders ({len(pipeline_result.unresolved_placeholders)})",
+                len(pipeline_result.unresolved_placeholders) <= 2,
+                json.dumps(pipeline_result.unresolved_placeholders[:5]),
+            )
+        )
 
     # Phase 2: Run tests (optional)
     if run_tests:
@@ -353,7 +384,9 @@ async def run_site_uat(
             run_start = time.time()
             proc = subprocess.run(
                 [sys.executable, "-m", "pytest", str(output_dir), "-v", "--tb=short", "--no-header"],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True,
+                text=True,
+                timeout=120,
             )
             result.run_duration = time.time() - run_start
             result.run_pass = proc.returncode == 0
@@ -371,24 +404,35 @@ async def run_site_uat(
             if skipped_match:
                 detail_parts.append(f"{skipped_match.group(1)} skipped")
 
-            result.checks.append(CheckResult(
-                f"Test execution ({result.run_duration:.1f}s)",
-                proc.returncode == 0,
-                ", ".join(detail_parts) if detail_parts else f"exit code {proc.returncode}",
-            ))
+            result.checks.append(
+                CheckResult(
+                    f"Test execution ({result.run_duration:.1f}s)",
+                    proc.returncode == 0,
+                    ", ".join(detail_parts) if detail_parts else f"exit code {proc.returncode}",
+                )
+            )
 
             # Cleanup
             import shutil
+
             shutil.rmtree(output_dir, ignore_errors=True)
 
         except subprocess.TimeoutExpired:
-            result.checks.append(CheckResult(
-                "Test execution", False, "timeout after 120s",
-            ))
+            result.checks.append(
+                CheckResult(
+                    "Test execution",
+                    False,
+                    "timeout after 120s",
+                )
+            )
         except Exception as e:
-            result.checks.append(CheckResult(
-                "Test execution", False, str(e),
-            ))
+            result.checks.append(
+                CheckResult(
+                    "Test execution",
+                    False,
+                    str(e),
+                )
+            )
 
     # Summary
     p = result.passed
@@ -405,6 +449,7 @@ async def run_site_uat(
 # ---------------------------------------------------------------------------
 # Comparison
 # ---------------------------------------------------------------------------
+
 
 def compare_results(baseline: dict[str, Any], current: dict[str, Any]) -> None:
     """Compare current results against a saved baseline."""
@@ -462,6 +507,7 @@ def compare_results(baseline: dict[str, Any], current: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

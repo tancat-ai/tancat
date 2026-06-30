@@ -39,6 +39,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Offline commands — no browser or LLM needed
 # ---------------------------------------------------------------------------
 
+
 def cmd_text_validation(argv: list[str] | None = None) -> int:
     """Validate text_matches_description against known cases."""
     from src.placeholder_resolver import PlaceholderResolver
@@ -49,7 +50,11 @@ def cmd_text_validation(argv: list[str] | None = None) -> int:
         ("Add to cart", "Add to cart button next to a product", True),
         ("Cart", "Cart link or cart icon in the page header", True),
         ("Continue Shopping", "Continue Shopping button", True),
-        ("Add to cart", "Cart link or cart icon in the page header", True),  # B-012: raw text match; action-verb guard is in orchestrator
+        (
+            "Add to cart",
+            "Cart link or cart icon in the page header",
+            True,
+        ),  # B-012: raw text match; action-verb guard is in orchestrator
         ("Subscribe", "Continue Shopping button", False),
         ("View cart", "Go to cart", True),
         ("Checkout", "Proceed to checkout", True),
@@ -121,8 +126,8 @@ def test_03_view_cart(page: Page) -> None:
     uses = parser.parse_placeholder_uses(sample)
     print(f"parse_placeholder_uses(): {len(uses)} tokens")
     for use in uses:
-        token = '{{{{' + f'({use.action}:{use.description})' + '}}}}'
-        print(f'  Line {use.line_number}: {token}')
+        token = "{{{{" + f"({use.action}:{use.description})" + "}}}}"
+        print(f"  Line {use.line_number}: {token}")
 
     # Placeholders (deduped)
     placeholders = parser.parse_placeholders(sample)
@@ -153,6 +158,7 @@ def test_03_view_cart(page: Page) -> None:
 # ---------------------------------------------------------------------------
 # Browser commands — need Playwright
 # ---------------------------------------------------------------------------
+
 
 async def _do_scrape(url: str, headed: bool = False) -> int:
     """Scrape a URL and dump elements."""
@@ -291,8 +297,10 @@ async def _do_score(url: str, description: str) -> int:
 # Full pipeline commands — need LLM + browser
 # ---------------------------------------------------------------------------
 
-async def _do_pipeline(url: str, story: str, conditions: str | None, pom_mode: bool,
-                       provider: str | None = None) -> int:
+
+async def _do_pipeline(
+    url: str, story: str, conditions: str | None, pom_mode: bool, provider: str | None = None
+) -> int:
     """Run the full skeleton-first pipeline with tracing."""
     from src.llm_client import LLMClient
     from src.orchestrator import TestOrchestrator
@@ -317,10 +325,7 @@ async def _do_pipeline(url: str, story: str, conditions: str | None, pom_mode: b
     orchestrator = TestOrchestrator(generator, pom_mode=pom_mode)
 
     default_conditions = (
-        "1. Navigate to the home page\n"
-        "2. Perform a key interaction\n"
-        "3. Verify the result\n"
-        "(Total: 3 criteria)"
+        "1. Navigate to the home page\n2. Perform a key interaction\n3. Verify the result\n(Total: 3 criteria)"
     )
     conditions_text = conditions or default_conditions
 
@@ -330,15 +335,20 @@ async def _do_pipeline(url: str, story: str, conditions: str | None, pom_mode: b
     print("[Phase 1] Generating skeleton...")
     start = time.time()
     skeleton = await generator.generate_skeleton(
-        story, conditions_text, target_urls=[url], expected_count=3,
+        story,
+        conditions_text,
+        target_urls=[url],
+        expected_count=3,
     )
     duration = time.time() - start
     skeleton = parser.normalise_placeholder_actions(skeleton)
     placeholders = parser.parse_placeholders(skeleton)
     journeys = parser.parse_test_journeys(skeleton)
 
-    print(f"  Skeleton: {len(skeleton)} chars, {len(placeholders)} placeholders, "
-          f"{len(journeys)} journeys ({duration:.1f}s)")
+    print(
+        f"  Skeleton: {len(skeleton)} chars, {len(placeholders)} placeholders, "
+        f"{len(journeys)} journeys ({duration:.1f}s)"
+    )
     print()
     print("  Skeleton preview:")
     for line in skeleton.splitlines()[:20]:
@@ -387,21 +397,15 @@ async def _do_pipeline(url: str, story: str, conditions: str | None, pom_mode: b
     test_funcs = re.findall(r"^def\s+test_\w+", final_code, re.M)
 
     checks = [
-        ("No unresolved placeholders", len(unresolved) == 0,
-         f"{len(unresolved)} pytest.skip lines"),
-        ("No placeholder artifacts", len(ph_artifacts) == 0,
-         f"{len(ph_artifacts)} tokens remaining"),
-        ("Evidence tracker calls", has_evidence,
-         "found" if has_evidence else "missing"),
-        ("@pytest.mark.evidence", has_evidence_mark,
-         "found" if has_evidence_mark else "missing"),
-        (f"Test functions ({len(test_funcs)})", len(test_funcs) >= 1,
-         str(test_funcs)),
+        ("No unresolved placeholders", len(unresolved) == 0, f"{len(unresolved)} pytest.skip lines"),
+        ("No placeholder artifacts", len(ph_artifacts) == 0, f"{len(ph_artifacts)} tokens remaining"),
+        ("Evidence tracker calls", has_evidence, "found" if has_evidence else "missing"),
+        ("@pytest.mark.evidence", has_evidence_mark, "found" if has_evidence_mark else "missing"),
+        (f"Test functions ({len(test_funcs)})", len(test_funcs) >= 1, str(test_funcs)),
     ]
     if pom_mode:
         has_pom_class = "class " in final_code and "(page:" in final_code
-        checks.append(("POM class present", has_pom_class,
-                       "found" if has_pom_class else "missing"))
+        checks.append(("POM class present", has_pom_class, "found" if has_pom_class else "missing"))
 
     for name, ok, detail in checks:
         status = "PASS" if ok else "FAIL"
@@ -422,6 +426,7 @@ async def _do_pipeline(url: str, story: str, conditions: str | None, pom_mode: b
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -468,8 +473,9 @@ Examples:
     # resolve
     p_resolve = subparsers.add_parser("resolve", help="Resolve a single placeholder")
     p_resolve.add_argument("url", help="URL to scrape")
-    p_resolve.add_argument("--action", required=True, choices=["CLICK", "FILL", "ASSERT", "GOTO"],
-                           help="Placeholder action type")
+    p_resolve.add_argument(
+        "--action", required=True, choices=["CLICK", "FILL", "ASSERT", "GOTO"], help="Placeholder action type"
+    )
     p_resolve.add_argument("--desc", required=True, help="Placeholder description")
     p_resolve.add_argument("--pom", action="store_true", help="Show POM mode hints")
 
@@ -519,11 +525,9 @@ def main() -> int:
 
     # Full pipeline
     if args.command == "pipeline":
-        return asyncio.run(_do_pipeline(args.url, args.story, args.conditions, pom_mode=False,
-                                        provider=args.provider))
+        return asyncio.run(_do_pipeline(args.url, args.story, args.conditions, pom_mode=False, provider=args.provider))
     if args.command == "pom":
-        return asyncio.run(_do_pipeline(args.url, args.story, args.conditions, pom_mode=True,
-                                        provider=args.provider))
+        return asyncio.run(_do_pipeline(args.url, args.story, args.conditions, pom_mode=True, provider=args.provider))
 
     parser.print_help()
     return 1
@@ -533,6 +537,7 @@ if __name__ == "__main__":
     # Windows UTF-8 fix
     if sys.platform == "win32":
         import io
+
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
     sys.exit(main())

@@ -64,11 +64,13 @@ def check_text_validation() -> list[Check]:
     for text, desc, expected in cases:
         result = resolver.text_matches_description(text, desc)
         ok = result == expected
-        checks.append(Check(
-            f"text_match '{text}' vs '{desc}'",
-            ok,
-            f"got {result}, expected {expected}" if not ok else "",
-        ))
+        checks.append(
+            Check(
+                f"text_match '{text}' vs '{desc}'",
+                ok,
+                f"got {result}, expected {expected}" if not ok else "",
+            )
+        )
 
     return checks
 
@@ -92,36 +94,44 @@ def test_02(page):
 
     # Placeholder uses
     uses = parser.parse_placeholder_uses(sample)
-    checks.append(Check(
-        "parse_placeholder_uses finds tokens",
-        len(uses) >= 3,
-        f"found {len(uses)} uses",
-    ))
+    checks.append(
+        Check(
+            "parse_placeholder_uses finds tokens",
+            len(uses) >= 3,
+            f"found {len(uses)} uses",
+        )
+    )
 
     # Placeholders
     placeholders = parser.parse_placeholders(sample)
-    checks.append(Check(
-        "parse_placeholders extracts unique placeholders",
-        len(placeholders) >= 3,
-        f"found {len(placeholders)} unique: {[(a, d) for a, d in placeholders]}",
-    ))
+    checks.append(
+        Check(
+            "parse_placeholders extracts unique placeholders",
+            len(placeholders) >= 3,
+            f"found {len(placeholders)} unique: {[(a, d) for a, d in placeholders]}",
+        )
+    )
 
     # Journeys
     journeys = parser.parse_test_journeys(sample)
-    checks.append(Check(
-        "parse_test_journeys groups by test function",
-        len(journeys) == 2,
-        f"found {len(journeys)} journeys",
-    ))
+    checks.append(
+        Check(
+            "parse_test_journeys groups by test function",
+            len(journeys) == 2,
+            f"found {len(journeys)} journeys",
+        )
+    )
 
     # Normalisation
     raw = 'page.locator("{{{{CLICK:button}}}}").click()'
     normalised = parser.normalise_placeholder_actions(raw)
-    checks.append(Check(
-        "normalise_placeholder_actions preserves tokens",
-        "{{{{CLICK" in normalised or "{{{" in normalised,
-        f"'{raw}' -> '{normalised}'",
-    ))
+    checks.append(
+        Check(
+            "normalise_placeholder_actions preserves tokens",
+            "{{{{CLICK" in normalised or "{{{" in normalised,
+            f"'{raw}' -> '{normalised}'",
+        )
+    )
 
     return checks
 
@@ -169,6 +179,7 @@ def check_pom_mode_smoke() -> list[Check]:
     # PageObjectBuilder imports
     try:
         from src.page_object_builder import PageObjectBuilder
+
         PageObjectBuilder()
         checks.append(Check("PageObjectBuilder instantiates", True))
     except Exception as e:
@@ -189,10 +200,10 @@ def check_orchestrator_init() -> list[Check]:
     checks: list[Check] = []
 
     try:
-
         # We can't fully init LLMClient without a provider, but we can check
         # the orchestrator data model
         from src.orchestrator import PipelineRunResult
+
         result = PipelineRunResult(pom_mode=True)
         checks.append(Check("PipelineRunResult(pom_mode=True)", result.pom_mode))
     except Exception as e:
