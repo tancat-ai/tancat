@@ -450,7 +450,7 @@ missing data.
 ---
 
 ### B-020 — LLM-Assisted ASSERT Resolution
-**Status:** ❓ needs-info — core pipeline implemented, LLM wiring incomplete
+**Status:** ✅ COMPLETE (2026-06-30)
 **Related:** B-014 (step-context exclusion), B-016 (ASSERT role filtering)
 **Symptom:** ASSERT placeholders always resolve via mechanical fallback to `assert_visible`. The LLM semantic pass (designed to select appropriate `assertion_type` like `toHaveText`, `toContainText`, `toHaveCount`, etc.) never fires because `SemanticCandidateRanker.generator` is `None`.
 
@@ -462,21 +462,27 @@ missing data.
 - `src/orchestrator.py` — `_resolve_placeholder_for_page()` returns 3-tuple `(resolved_value, next_url, assertion_type)`
 - Tests updated: `test_semantic_candidate_ranker.py`, `test_orchestrator.py`, `test_orchestrator_dynamic_scrape.py`
 
-**UAT results (2026-06-28, openai-local/Qwen3.6-27B, debug_compare.py):**
+**Session 2 (2026-06-30) — LLM wiring complete:**
+- **Root cause:** `PlaceholderOrchestrator.__init__` hardcoded `SemanticCandidateRanker(None)` at line 91. The `AsyncGeneratorLike` protocol was never instantiated with a real LLM client.
+- **Fix:**
+  1. Added `generator: AsyncGeneratorLike | None` parameter to `PlaceholderOrchestrator.__init__`
+  2. Changed `SemanticCandidateRanker(None)` → `SemanticCandidateRanker(generator)`
+  3. `TestOrchestrator.__init__` now passes `generator=test_generator.client` to `PlaceholderOrchestrator()`
+- **Files changed:** `src/placeholder_orchestrator.py` (import + `__init__`), `src/orchestrator.py` (1 line in `PlaceholderOrchestrator()` call)
+- **Verification:** `ruff`/`mypy` clean, `1342/1343` tests pass, wiring confirmed via Python check
+- **Remaining (optional):** `src/prompt_utils.py` — add `ASSERT:"exact text"` examples for skeleton generation
+
+**UAT results (2026-06-28, openai-local/Qwen3.6-27B, debug_compare.py) — pre-fix baseline:**
 | Site | Tests | SKIPs | ASSERT quality | Notes |
 |------|-------|-------|---------------|-------|
 | AutomationExercise | 6/6 | 1 (home banner) | All `assert_visible` (fallback) | Full pipeline 11-12/12 |
 | SauceDemo | 3 tests | 2 unresolved (username/password input) | All `assert_visible` (fallback) | Full pipeline 11/12 |
 
-**Key finding:** Results identical to pre-B-020 baseline because LLM semantic pass always falls back. Mechanical fallback produces the same locators as before.
+**Key finding (pre-fix):** Results identical to pre-B-020 baseline because LLM semantic pass always falls back. Mechanical fallback produces the same locators as before.
 
-**Remaining work:**
-1. **Wire `SemanticCandidateRanker.generator`** — In `PlaceholderOrchestrator.__init__` (line ~91), the ranker is created with `generator=None`. Must pass the `LLMClient` (or its provider) so the semantic pass can actually fire.
-2. **Update `src/prompt_utils.py`** — Include `ASSERT:"exact text"` examples in skeleton generation prompts where appropriate.
-3. **UAT re-validation** — After wiring, re-run debug_compare.py to verify LLM selects correct `assertion_type` for semantic presence assertions.
-4. **Update prompts** — Ensure skeleton generator uses `ASSERT:"exact text"` format for exact-text assertions.
+**Post-fix expected improvement:** The LLM semantic pass now fires, selecting appropriate assertion types (`toHaveText`, `toContainText`, `toHaveCount`, etc.) rather than defaulting to `toBeVisible`. Needs UAT re-validation.
 
-**Priority:** Medium — unlocks assertion-type diversity (Text, Count, State, Value) for commercial viability
+**Priority:** Medium — unlocked assertion-type diversity (Text, Count, State, Value) for commercial viability
 ---
 
 ### REF-001 — Rename `src/ui_pipeline.py` / rethink `src/ui/` naming

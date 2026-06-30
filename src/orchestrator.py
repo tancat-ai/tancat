@@ -80,7 +80,10 @@ class TestOrchestrator:
         self._provider = provider
         self._model = model
         self._placeholder_orchestrator = PlaceholderOrchestrator(
-            starting_url=None, credential_profile=self._credential_profile, pom_mode=pom_mode
+            starting_url=None,
+            credential_profile=self._credential_profile,
+            pom_mode=pom_mode,
+            generator=test_generator.client,
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None

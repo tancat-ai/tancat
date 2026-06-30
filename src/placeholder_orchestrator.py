@@ -15,7 +15,7 @@ from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_resolver import PlaceholderResolver
 from src.scraper import PageScraper
-from src.semantic_candidate_ranker import SemanticCandidateRanker
+from src.semantic_candidate_ranker import AsyncGeneratorLike, SemanticCandidateRanker
 from src.semantic_matcher import SemanticMatcher
 from src.stateful_scraper import StatefulPageScraper
 from src.url_inference import infer_next_page_url
@@ -73,6 +73,7 @@ class PlaceholderOrchestrator:
         starting_url: str | None = None,
         credential_profile: CredentialProfile | None = None,
         pom_mode: bool = False,
+        generator: AsyncGeneratorLike | None = None,
     ) -> None:
         """Initialise the placeholder resolution orchestrator.
 
@@ -81,6 +82,12 @@ class PlaceholderOrchestrator:
             credential_profile: Credentials for stateful scraping.
             pom_mode: When True, generate tests using evidence-aware POM classes
                 instead of flat ``evidence_tracker`` calls. Assertions remain direct.
+            generator: B-020 LLM generator for semantic candidate ranking.
+                Pass a configured ``LLMClient`` (which conforms to
+                ``AsyncGeneratorLike``) to enable LLM-assisted ASSERT resolution.
+                When ``None``, the semantic ranker's ``choose_best_candidate``
+                returns ``None`` immediately and ASSERT resolution falls back to
+                mechanical ``toBeVisible``.
         """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
@@ -88,7 +95,7 @@ class PlaceholderOrchestrator:
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.page_object_builder = PageObjectBuilder()
-        self.semantic_ranker = SemanticCandidateRanker(None)
+        self.semantic_ranker = SemanticCandidateRanker(generator)
         self.url_resolver = UrlResolver()
         self._generated_page_objects: list[GeneratedPageObject] = []
 
