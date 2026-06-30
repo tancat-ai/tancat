@@ -60,7 +60,7 @@ docs/archived/
 docs/session_*.md
 docs/test_suite_audit_*.md
 docs/private/
-markdown_docs/
+
 
 # ── Generated test output (many files, regenerated) ───────────────
 generated_tests/test_*.py

@@ -1,8 +1,9 @@
 ---
 purpose: >
-  Unified LLM client that supports multiple providers (Ollama, LM Studio, OpenAI cloud/local).
-  Auto-detects models and handles provider-specific timeouts and errors.
-lines: ~400
+  High-level LLM client that wraps multiple providers (Ollama, LM Studio, OpenAI cloud/local).
+  Handles provider selection, model auto-detection, conversation management, and code extraction.
+  Supports both sync and async generation, plus vision capabilities.
+lines: ~403
 created: "2026-05-30"
 ---
 
@@ -10,43 +11,86 @@ created: "2026-05-30"
 
 ## High-Level Purpose
 
-Provider-agnostic LLM client. Wraps Ollama, LM Studio, and OpenAI APIs behind a single `generate()` interface. Supports auto-detection of loaded models for LM Studio.
+Provider-agnostic LLM client that wraps the `src.llm_providers` module. Provides a unified `generate()` interface for creating Playwright test code. Handles provider selection (explicit, session-level, auto-detect, or environment-based), model auto-detection, conversation history, and response code extraction.
 
-## Providers
+## Class: `LLMClient`
 
-| Provider | Selection | Key Details |
-|----------|-----------|-------------|
-| Ollama | `ollama` | Uses `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT=300` |
-| LM Studio | `lm-studio` | Probes `/api/v0/models` for loaded model, auto-detects if no `LM_STUDIO_MODEL` |
-| OpenAI (cloud) | `openai` | Requires `OPENAI_API_KEY`, uses `gpt-4o` default |
-| OpenAI (local) | `openai-compatible` | No API key needed. Probes ports 8080/8000/5000. Auto-detects models |
+### `__init__(provider=None, provider_name=None, model=None, base_url=None, api_key=None)`
+- Provider selection priority:
+  1. Explicit `provider`/`provider_name` parameter
+  2. Session-level provider set via `set_session_provider()` (CLI/Streamlit UI)
+  3. Auto-detect local providers via `auto_detect_provider()`
+  4. Fallback to environment via `create_provider_from_env()`
+- Model selection priority:
+  1. Explicit `model` parameter
+  2. Session-level model set via `set_session_provider()`
+  3. Provider-specific env vars (`OLLAMA_MODEL`, `LM_STUDIO_MODEL`, `OPENAI_MODEL`)
+  4. Loaded model query (LM Studio, OpenAI local)
+  5. First available model via `list_models()`
+  6. Hardcoded fallbacks per provider
 
-## Key Methods
+### `set_session_provider(provider, base_url=None, model=None)` (classmethod)
+- Sets session-level provider selection used by all subsequent `LLMClient()` instances
+- Called by CLI/Streamlit after user selects a provider
+
+### Properties
+- `provider_name(self) -> str`: Returns the configured provider name
+- `model(self) -> str`: Returns the active model name
+- `base_url(self) -> str`: Returns the provider base URL
+
+### Key Methods
 
 | Method | Description |
 |--------|-------------|
-| `generate(prompt: str) -> str` | Send prompt, return LLM response text |
-| `set_session_provider(provider_name)` | Switch provider mid-session (for UAT scripts) |
-| `detect_loaded_model() -> str` | LM Studio: find model currently loaded in VRAM |
+| `generate(prompt, timeout=600, system_prompt=None) -> str` | Async generation — used by intelligent pipeline |
+| `generate_test(prompt, timeout=300, system_prompt=None) -> str` | Sync generation — retained for tests/utilities |
+| `generate_tests(acceptance_criteria, timeout=300) -> dict` | Generate from list of criteria, returns code + metadata |
+| `create_vision_completion(image_base64, prompt) -> str` | Vision-capable completion for image+text prompts |
+| `list_models(timeout=30) -> list[str]` | List models from current provider |
+| `reset_conversation(system_instruction=None, system_prompt=None)` | Reset conversation history |
+| `get_conversation_summary() -> dict` | Debug metadata for current conversation |
+
+### Internal Methods
+- `_get_default_model() -> str`: Multi-strategy model resolution
+- `_complete_sync(prompt, timeout, system_prompt) -> ChatCompletion`: Core sync completion
+- `_extract_code(raw_text) -> str`: Strip prose/fences from LLM output
+- `normalise_code_newlines(code) -> str`: Minimal whitespace cleanup
+- `_debug(message)`: Conditional debug logging via `PIPELINE_DEBUG=1`
+
+## Provider Support
+
+| Provider | Selection | Key Details |
+|----------|-----------|-------------|
+| Ollama | `ollama` | Native API, default model `qwen2.5:7b` |
+| LM Studio | `lm-studio` | OpenAI-compatible API, probes `/api/v0/models` for loaded model |
+| OpenAI (cloud) | `openai` | Requires `OPENAI_API_KEY`, default `gpt-4o` |
+| OpenAI (local) | `openai-local` | No API key, probes ports 8080/8000/5000, default `llama` |
 
 ## Environment Variables
 
-- `OLLAMA_BASE_URL` — default `http://localhost:11434`
-- `OLLAMA_MODEL` — default `qwen3.5:35b`
-- `OLLAMA_TIMEOUT` — must be 300 (default 60s causes timeouts)
-- `LM_STUDIO_BASE_URL` — default `http://localhost:1234`
-- `LM_STUDIO_MODEL` — optional, auto-detects if omitted
-- `OPENAI_API_KEY` — required for cloud provider only
-- `OPENAI_BASE_URL` — for custom OpenAI-compatible endpoints
+- `OLLAMA_MODEL` — override default Ollama model
+- `LM_STUDIO_MODEL` — override default LM Studio model
+- `OPENAI_MODEL` — override default OpenAI model
+- `OPENAI_API_KEY` — required for cloud OpenAI provider
+- `PIPELINE_DEBUG=1` — enable debug logging
 
 ## Dependencies
 
-- `openai` package — for OpenAI-compatible API calls
-- `requests` — for LM Studio auto-detection, port probing
-- `dotenv` — for `.env` loading
+- `src.llm_providers` — provider implementations (Ollama, LM Studio, OpenAI)
+- `asyncio` — async generation support
+- `re` — code extraction from LLM responses
 
 ## Depended On By
 
-- `src/test_generator.py` — generates skeleton code
 - `src/orchestrator.py` — pipeline orchestration
-- UAT scripts via `set_session_provider()`
+- `src/test_generator.py` — skeleton generation
+- `src/placeholder_orchestrator.py` — placeholder resolution
+- CLI/Streamlit UI — provider selection and session management
+
+## Notes
+
+- Uses `httpx` (via `llm_providers`) instead of `requests`
+- No longer uses `dotenv` — environment loading handled elsewhere
+- Session provider state is class-level, shared across all instances
+- Vision completion uses base64-encoded PNG images
+- Code extraction handles markdown fences, `<channel|>` tags, and
