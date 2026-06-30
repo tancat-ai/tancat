@@ -158,7 +158,7 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 
 - **Run end-to-end** before declaring a feature done
 - **One feature per session** — mixing creates inconsistency
-- **Never commit directly** — `ruff` → `mypy` → `pytest` → human reviews diff → commit
+- **Never commit directly** — `smoke.py` → `ruff` → `mypy` → `pytest` → human reviews diff → commit
 - **Typos cause runtime errors** — search for misspellings after AI-generated code
 - **Check class name consistency** — import name must match class name
 - **Coverage mapping**: number-based (TC-001 → `test_01_*`) before keyword fallback
@@ -167,12 +167,38 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 
 ## 12. Debugging & UAT
 
-- **Interactive**: `notebooks/debug_pipeline.ipynb` — preferred for placeholder/scraper issues
-- **CLI fallback**: `scripts/debug/debug_pipeline.py`
-- **E2E validation**: `scripts/uat/uat_automationexercise.py`
+### Pre-commit smoke test (always run)
+- **`python scripts/smoke.py`** — 35 offline checks in <1s (resolver, parser, imports, POM model)
+- ✅ Run this **before** `pytest` to catch obvious regressions early
+- `--json` flag for machine-readable output
+
+### Debug CLI
+- **`python scripts/debug.py --help`** — unified entry point
+- `text-validation` / `skeleton` — offline, no browser or LLM needed
+- `scrape <url>` — dump elements from any site
+- `resolve <url> --action CLICK --desc "..."` — single placeholder resolution
+- `score <url> --desc "..."` — cross-action scoring diagnostics
+- `pipeline <url> --story "..."` — full trace, standard mode
+- `pom <url> --story "..."` — full trace, **POM mode** (default for new work)
+
+### E2E UAT
+- **`python scripts/uat.py --all-sites`** — validates both automationexercise + saucedemo
+- POM mode is default; `--flat` for standard mode
+- `--save baseline.json` / `--compare baseline.json` for regression tracking
+- `--run` to also execute generated tests against the real site
 - **GPU VRAM**: use same LM Studio model as Cline to avoid contention
 
-Full UAT usage: see `docs/reference/agents_archive.md` §12.
+### Targeted debug scripts (`scripts/debug/`)
+- `debug_pipeline.py` — full pipeline trace with stage-by-stage output
+- `debug_saucedemo_login.py` — login + scrape inventory + resolution test
+- `debug_saucedemo_inventory.py` — scrape inventory page only
+- `debug_cli_interactive.py` — CLI interactive walkthrough debugger
+
+### Script maintenance
+- Scripts live in `scripts/` — new scripts go in root, targeted tools in `scripts/debug/`
+- One-off debug scripts → archive to `scripts/archive/debug_scripts/`
+- Update `scripts/README.md` when adding new scripts
+- CI runs `smoke.py` on every push (Gate 0) — keeps resolver/parsing checks enforced
 
 ---
 

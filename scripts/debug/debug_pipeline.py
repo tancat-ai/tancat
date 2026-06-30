@@ -204,8 +204,11 @@ async def inspect_placeholder_resolution(seed_url: str) -> None:
 
         best = best_ranked_element(resolver, action, description, elements)
         if best:
-            resolved_selector = resolver._build_robust_locator(best)
-            print(f"    [OK] Resolved to: {resolved_selector}")
+            best_sel = best.get("selector", "(none)")
+            best_id = best.get("id", "") or best.get("name", "")
+            if best_id:
+                best_sel = f"#{best_id} ({best_sel})"
+            print(f"    [OK] Resolved to: {best_sel}")
         else:
             print("    [FAIL] No match found -- will generate pytest.skip()")
 

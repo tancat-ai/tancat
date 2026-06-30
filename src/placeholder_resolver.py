@@ -200,9 +200,74 @@ class PlaceholderResolver:
         "tab",
     }
 
+    # B-016: Negation words that signal the absence or emptiness of content.
+    # Universal — not domain-specific. When the element text contains these but
+    # the description signals positive content, the match is rejected.
+    _NEGATION_WORDS: frozenset[str] = frozenset(
+        {
+            "empty",
+            "none",
+            "no items",
+            "no results",
+            "not found",
+            "nothing",
+            "no data",
+            "not available",
+            "unavailable",
+            "out of stock",
+            "sold out",
+            "deleted",
+            "removed",
+        }
+    )
+
+    # B-016: Positive-content indicators — presence signals in the description
+    # that contradict a negation word in the element text.
+    _POSITIVE_INDICATORS: frozenset[str] = frozenset(
+        {
+            "with items",
+            "selected",
+            "loaded",
+            "present",
+            "available",
+            "in cart",
+            "in basket",
+            "content",
+            "results",
+            "found",
+            "displayed",
+            "shown",
+            "visible",
+            "non-empty",
+            "has",
+            "contains",
+        }
+    )
+
+    @staticmethod
+    def _is_negated(element_text: str, action_description: str) -> bool:
+        """Return True when element text signals absence but description signals presence.
+
+        E.g. element says "Your cart is empty!" but description says "cart content with items".
+        This is a domain-agnostic heuristic — negation vs. presence contradiction.
+        """
+        has_negation = any(neg in element_text for neg in PlaceholderResolver._NEGATION_WORDS)
+        has_positive = any(pos in action_description for pos in PlaceholderResolver._POSITIVE_INDICATORS)
+        return has_negation and has_positive
+
     @staticmethod
     def text_matches_description(element_text: str, action_description: str) -> bool:
-        """Check if element's visible text plausibly matches the action description."""
+        """Check if element's visible text plausibly matches the action description.
+
+        Strategy (fast-to-slow):
+        1. Negation gate (B-016) — reject absence-vs-presence contradictions.
+        2. Direct containment — substring match after normalisation.
+        3. Word-overlap — keyword intersection minus context words.
+        4. Action-verb check — shared action verbs signal intent match.
+        5. Semantic similarity (B-016) — delegate to SemanticMatcher for
+           synonym-aware Jaccard scoring. Threshold 0.25 catches "Login"≈"Sign in"
+           without false-positive noise.
+        """
         if not action_description:
             return False
 
@@ -210,24 +275,58 @@ class PlaceholderResolver:
         norm_desc = re.sub(r"[_\s]+", " ", norm_desc).strip().lower()
         action_part = re.split(r"\s+(?:for|next\s+to|beside|on|with|by|above|below)\s+", norm_desc)[0]
 
-        if element_text:
-            norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
+        if not element_text:
+            return False
 
-            if norm_text in norm_desc or norm_desc in norm_text:
-                return True
-            if norm_text in action_part or action_part in norm_text:
+        norm_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
+
+        # B-016: Negation gate — reject when element signals absence but description
+        # signals positive content (e.g. "cart is empty" ≠ "cart with items").
+        if PlaceholderResolver._is_negated(norm_text, norm_desc):
+            return False
+
+        # --- Original matching logic (unchanged) ---
+        if norm_text in norm_desc or norm_desc in norm_text:
+            return True
+        if norm_text in action_part or action_part in norm_text:
+            return True
+
+        desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
+        text_words = set(norm_text.split())
+        if desc_words and text_words:
+            overlap = len(desc_words & text_words)
+            if overlap >= max(1, len(desc_words) // 2):
                 return True
 
-            desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
-            text_words = set(norm_text.split())
-            if desc_words and text_words:
-                overlap = len(desc_words & text_words)
-                if overlap >= max(1, len(desc_words) // 2):
+        action_words = set(action_part.split()) & PlaceholderResolver.ACTION_VERBS
+        if action_words and action_words & text_words:
+            return True
+
+        # B-016: Synonym-aware fallback — catches "Login" vs "Sign in" via
+        # SemanticMatcher.TOKEN_EXPANSIONS (the single source of synonym truth).
+        #
+        # Uses two metrics to avoid the false-positive / false-negative trade-off:
+        # 1. Recall (desc_tokens ⊆ text_tokens): if every meaningful word from
+        #    the description is covered by the element's expanded token set, match.
+        #    This handles "Create account" ⊆ expanded("Sign Up") even when Jaccard
+        #    is diluted by one-sided expansions.
+        # 2. Jaccard (intersection / union): catches symmetric overlaps like
+        #    "Login" / "Sign in" where both sides have comparable expansion sizes.
+        #    Threshold 0.25 is conservative — the containment and word-overlap gates
+        #    above already handled easy cases, so this fires only on borderline matches.
+        syn_desc_tokens = SemanticMatcher.get_words(action_part, expand_aliases=True)
+        syn_text_tokens = SemanticMatcher.get_words(norm_text, expand_aliases=True)
+        if syn_desc_tokens and syn_text_tokens:
+            # Recall: description fully covered by element tokens?
+            if syn_desc_tokens.issubset(syn_text_tokens):
+                return True
+            # Jaccard: symmetric overlap
+            syn_union = syn_desc_tokens | syn_text_tokens
+            syn_intersection = syn_desc_tokens & syn_text_tokens
+            if syn_union:
+                jaccard = len(syn_intersection) / len(syn_union)
+                if jaccard >= 0.25:
                     return True
-
-            action_words = set(action_part.split()) & PlaceholderResolver.ACTION_VERBS
-            if action_words and action_words & text_words:
-                return True
 
         return False
 

@@ -192,7 +192,7 @@ checkout pages. Verified: all 5 checkout pages now scraped correctly.
 **Priority:** Medium — superseded by B-015, resolved via same fix
 
 ### B-016 — text_matches_description() fails on synonyms
-**Status:** 🆕 new
+**Status:** 🟡 PARTIALLY FIXED — negation detection + synonym expansion (2026-06-29)
 **Symptom:** `PlaceholderResolver.text_matches_description()` produces false negatives
 on semantically equivalent text and false positives on semantically contradictory text.
 
@@ -214,11 +214,44 @@ product names, and cart state assertions. This is a 33% failure rate on text val
 
 **Priority:** High — foundational matching logic affects all resolution paths
 
-**Fix options:**
-1. Add a synonym dictionary for common QA terms (login/sign in, cart/basket, etc.)
-2. Add negation detection — if description contains positive indicators ("with items",
-   "visible", "loaded") and element contains negation ("empty", "no", "none"), reject
-3. Consider LLM-assisted semantic matching for borderline cases
+**Fix implemented (2026-06-29):**
+1. **Negation gate** — `_is_negated()` rejects matches when element text contains
+   negation words ("empty", "none", "no items", "out of stock", etc.) but the
+   description signals positive content ("with items", "selected", "visible",
+   "loaded", etc.). Domain-agnostic — works on any site.
+2. **Synonym-aware Jaccard** — After the original matching logic (containment,
+   word-overlap, action-verbs), a fallback computes Jaccard similarity on
+   *expanded* token sets from `SemanticMatcher.get_words(expand_aliases=True)`.
+   The TOKEN_EXPANSIONS map is the single source of synonym truth — no duplicate
+   dictionaries. Threshold 0.30 requires meaningful overlap.
+3. **TOKEN_EXPANSIONS additions** — Added authentication/identity group:
+   `login ↔ sign ↔ signin ↔ authenticate`, `logout ↔ sign-out ↔ signout`,
+   `signup ↔ register ↔ sign-up`, `sign-out ↔ logout`.
+
+**UAT results (2026-06-29):**
+| Element text | Description | Before | After | Method |
+|-------------|-------------|--------|-------|--------|
+| "Login" | "Sign in button" | False ❌ | True ✅ | synonym Jaccard |
+| "Your cart is empty!" | "cart content with items" | True ❌ | False ✅ | negation gate |
+| "Cart is empty" | "cart page with selected items" | True ❌ | False ✅ | negation gate |
+| "Items in your cart" | "cart content with items" | True ✅ | True ✅ | unchanged |
+| "Dress" | "product category link" | False ❌ | False ❌ | needs LLM (B-020) |
+| "Blue Top" | "a product name" | False ❌ | False ❌ | needs LLM (B-020) |
+
+**Remaining cases (2/6):** "Dress"/"product category link" and "Blue Top"/"a product name"
+are proper nouns vs. generic descriptors — zero token overlap with no synonym bridge.
+These require LLM-assisted semantic matching (B-020) and are out of scope for keyword-based
+resolution. This is by design: keyword matching handles the common cases; LLM handles
+the semantically ambiguous ones.
+
+**Files changed:**
+- `src/placeholder_resolver.py` — `_NEGATION_WORDS`, `_POSITIVE_INDICATORS`,
+  `_is_negated()`, updated `text_matches_description()` with negation gate + Jaccard
+- `src/semantic_matcher.py` — added authentication/identity TOKEN_EXPANSIONS
+
+**Tests:** `tests/test_placeholder_resolver_text_validation.py` — new B-016 test class
+
+**Follow-up:** B-020 LLM wiring will handle the remaining 2/6 cases when complete.
 
 ---
 
