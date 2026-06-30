@@ -6,6 +6,8 @@ from typing import Any, cast
 
 import streamlit as st
 
+from src.provider_config import PROVIDER_LABELS, SUPPORTED_PROVIDERS
+
 
 class SidebarConfig:
     """Renders the configuration sidebar and returns the selected values."""
@@ -19,16 +21,10 @@ class SidebarConfig:
         - pom_mode: bool — Page Object Model generation mode
         """
         st.sidebar.title("Configuration")
-        provider_labels = {
-            "ollama": "Ollama (local)",
-            "lm-studio": "LM Studio (local)",
-            "openai-local": "OpenAI-Compatible (local)",
-            "openai": "OpenAI (cloud)",
-        }
-        provider_options = ("ollama", "lm-studio", "openai-local", "openai")
+        provider_options = SUPPORTED_PROVIDERS
 
         def _format_provider(value: str) -> str:
-            return provider_labels[value]
+            return PROVIDER_LABELS[value]
 
         provider = cast(
             str,

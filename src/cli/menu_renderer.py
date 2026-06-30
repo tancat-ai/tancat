@@ -9,10 +9,17 @@ preserved from the previous implementation — only rendering changed.
 
 from __future__ import annotations
 
+import getpass
 import os
 import sys
 import time
 from pathlib import Path
+
+from src.provider_config import (
+    get_provider_defaults,
+    provider_requires_openai_api_key,
+    sync_openai_api_key_to_env,
+)
 
 from . import terminal_adapter
 from .color import green, red, yellow
@@ -314,6 +321,23 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
     return []
 
 
+def _prompt_openai_api_key() -> str:
+    """Prompt for a cloud OpenAI API key, reusing platform env when available."""
+    existing = os.environ.get("OPENAI_API_KEY", "").strip()
+    if existing:
+        print(green("  ✓ OpenAI API key available from environment (Azure/AWS/App Service)."))
+        override = read_optional("  Press Enter to keep it, or paste a replacement key:", "")
+        if override.strip():
+            return override.strip()
+        return existing
+
+    while True:
+        key = getpass.getpass("  OpenAI API Key: ")
+        if key.strip():
+            return key.strip()
+        print(yellow("  API key is required for OpenAI (cloud)."))
+
+
 def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, str, str]:
     """Let the user pick LLM provider and model. Returns (provider, base_url, model)."""
     print_header("LLM Configuration")
@@ -334,6 +358,10 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
         return provider, base_url, model_name
 
     display_name, provider_key, default_url = providers[idx]
+
+    if provider_requires_openai_api_key(provider_key):
+        api_key = _prompt_openai_api_key()
+        sync_openai_api_key_to_env(provider_key, api_key)
 
     url = read_optional("  Base URL", default_url)
 
@@ -362,13 +390,8 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
 
 
 def _default_model(provider: str) -> str:
-    if provider == "ollama":
-        return "qwen3.5:35b"
-    if provider == "lm-studio":
-        return "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
-    if provider == "openai-local":
-        return "llama"
-    return "gpt-4o"
+    _base_url, model = get_provider_defaults(provider)
+    return model
 
 
 # ── User story collection ─────────────────────────────────────────────────

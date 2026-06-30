@@ -12,25 +12,14 @@ from src.orchestrator import TestOrchestrator
 from src.pipeline_report_service import PipelineReportBundle, PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pipeline_writer import PipelineArtifactWriter
+from src.provider_config import get_provider_defaults
 from src.pytest_output_parser import RunResult
 from src.spec_analyzer import SpecAnalyzer, TestCondition
 from src.test_generator import TestGenerator
 from src.test_plan import TestPlan, build_story_ref
 
-# ---------------------------------------------------------------------------
-# Provider defaults
-# ---------------------------------------------------------------------------
-
-
-def _get_provider_defaults(provider: str) -> tuple[str, str]:
-    """Return (base_url, model) defaults for the given provider."""
-    if provider == "lm-studio":
-        return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
-    if provider == "openai-local":
-        return "http://localhost:8080", "llama"
-    if provider == "openai":
-        return "https://api.openai.com/v1", "gpt-4o"
-    return "http://localhost:11434", "qwen3.5:35b"
+# Backwards-compatible alias used by streamlit_app and tests.
+_get_provider_defaults = get_provider_defaults
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,8 @@ if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", 
 from typing import Any
 
 from src.journey_scraper import CredentialProfile, JourneyStep
+from src.llm_client import LLMClient
+from src.provider_config import resolve_openai_api_key, sync_openai_api_key_to_env
 
 from .color import green, yellow
 from .menu_renderer import (
@@ -99,6 +101,7 @@ except ImportError:
 async def interactive_session() -> None:
     """Run the full interactive CLI session."""
     session = create_session()  # type: ignore[call-arg]
+    _apply_session_llm_config(session)
 
     while True:
         print_header("AI Playwright Test Generator")
@@ -264,11 +267,19 @@ async def interactive_session() -> None:
 # ── Inline wrappers (mutate session via menu_renderer returns) ────────────
 
 
+def _apply_session_llm_config(session: Session) -> None:
+    """Propagate session LLM settings to LLMClient fallbacks and cloud auth."""
+    api_key = resolve_openai_api_key(provider=session.provider)
+    sync_openai_api_key_to_env(session.provider, api_key)
+    LLMClient.set_session_provider(session.provider, session.provider_base_url, session.model_name)
+
+
 def _configure_llm_inline(session: Session) -> None:
     provider, base_url, model = configure_llm(session.provider, session.provider_base_url, session.model_name)
     session.provider = provider
     session.provider_base_url = base_url
     session.model_name = model
+    _apply_session_llm_config(session)
 
 
 def _collect_user_story_inline(session: Session) -> None:

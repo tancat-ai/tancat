@@ -3,12 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 from src.llm_client import LLMClient
+from src.provider_config import (
+    get_provider_defaults,
+    provider_requires_openai_api_key,
+    resolve_openai_api_key,
+    sync_openai_api_key_to_env,
+)
 from src.pytest_output_parser import RunResult
 from src.test_plan import TestPlan, apply_editor_rows
 from src.ui.ui_evidence import EvidenceViewer
@@ -20,7 +34,6 @@ from src.ui.ui_saved_packages import SavedPackagePanel
 from src.ui.ui_sidebar import SidebarConfig
 from src.ui_pipeline import (
     PipelineSessionState,
-    _get_provider_defaults,
     build_test_plan,
     parse_requirements_text,
     parse_target_urls,
@@ -55,6 +68,7 @@ def _init_session_state() -> None:
         "pipeline_html_report_path": "",
         "test_plan": None,
         "plan_confirmed": False,
+        "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -80,7 +94,26 @@ config = SidebarConfig.render()
 provider = config["provider"]
 pom_mode = config.get("pom_mode", False)
 
-default_provider_url, default_model = _get_provider_defaults(provider)
+default_provider_url, default_model = get_provider_defaults(provider)
+
+user_openai_api_key: str | None = None
+if provider_requires_openai_api_key(provider):
+    user_openai_api_key = st.sidebar.text_input(
+        "OpenAI API Key",
+        type="password",
+        key="openai_api_key",
+        help=(
+            "Required for OpenAI (cloud). Stored in memory for this session only — "
+            "never written to disk. Azure/AWS deployments can inject OPENAI_API_KEY "
+            "instead."
+        ),
+    )
+    if not (user_openai_api_key or "").strip() and not os.environ.get("OPENAI_API_KEY", "").strip():
+        st.sidebar.warning("Enter your OpenAI API key to use cloud generation.")
+
+resolved_openai_api_key = resolve_openai_api_key(provider=provider, user_api_key=user_openai_api_key)
+sync_openai_api_key_to_env(provider, resolved_openai_api_key)
+
 provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
 
 # Propagate user-selected provider to ALL fallback LLMClient() instances

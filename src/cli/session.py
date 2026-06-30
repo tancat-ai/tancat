@@ -13,6 +13,7 @@ from typing import Any
 
 from src.journey_scraper import CredentialProfile, JourneyStep
 from src.pipeline_artifact_manager import PackageManifest
+from src.provider_config import get_provider_defaults
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult
 from src.spec_analyzer import TestCondition
@@ -83,20 +84,27 @@ def _env_or_default(key: str, default: str) -> str:
 
 
 def _session_defaults() -> dict[str, str]:
-    """Compute Session defaults from .env (already loaded) or hardcoded fallbacks."""
+    """Compute Session defaults from environment variables or provider fallbacks."""
     provider = _env_or_default("LLM_PROVIDER", "ollama")
+    base_url, model = get_provider_defaults(provider)
 
-    if provider == "lm-studio":
-        return {
-            "provider": "lm-studio",
-            "provider_base_url": _env_or_default("LM_STUDIO_BASE_URL", "http://localhost:1234"),
-            "model_name": _env_or_default("LM_STUDIO_MODEL", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"),
-        }
-    # Default (ollama or openai)
+    url_env_keys: dict[str, str] = {
+        "ollama": "OLLAMA_BASE_URL",
+        "lm-studio": "LM_STUDIO_BASE_URL",
+        "openai": "OPENAI_BASE_URL",
+        "openai-local": "OPENAI_BASE_URL",
+    }
+    model_env_keys: dict[str, str] = {
+        "ollama": "OLLAMA_MODEL",
+        "lm-studio": "LM_STUDIO_MODEL",
+        "openai": "OPENAI_MODEL",
+        "openai-local": "OPENAI_MODEL",
+    }
+
     return {
-        "provider": "ollama",
-        "provider_base_url": _env_or_default("OLLAMA_BASE_URL", "http://localhost:11434"),
-        "model_name": _env_or_default("OLLAMA_MODEL", "qwen3.5:35b"),
+        "provider": provider,
+        "provider_base_url": _env_or_default(url_env_keys.get(provider, ""), base_url),
+        "model_name": _env_or_default(model_env_keys.get(provider, ""), model),
     }
 
 
