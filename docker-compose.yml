@@ -1,3 +1,4 @@
+
 version: '3.8'
 
 services:
@@ -8,20 +9,29 @@ services:
     container_name: playwright-test-generator
     volumes:
       - ./generated_tests:/app/generated_tests
-      - ./screenshots:/app/screenshots
-      - ./src:/app/src
-      - .:/app
+      - ./evidence:/app/evidence
+      - ./notebooks:/app/notebooks
+      - ./scripts:/app/scripts
     environment:
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:35b}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-60}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
+      - LM_STUDIO_BASE_URL=${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234}
+      - LM_STUDIO_MODEL=${LM_STUDIO_MODEL:-lmstudio-community/Qwen2.5-7B-Instruct-GGUF}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://host.docker.internal:8080/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-llama}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OUTPUT_DIR=/app/generated_tests
     ports:
       - "8080:8080"
     networks:
       - playwright-network
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
 
+  # Ollama service (default)
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
@@ -37,6 +47,18 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+
+  # Optional: LM Studio (disabled by default)
+  # lm-studio:
+  #   # Note: LM Studio doesn't have an official Docker image; typically runs locally on host
+  #   # Use host.docker.internal to connect to LM Studio running on your host machine at port 1234
+  #   # Uncomment below if you want to run LM Studio in Docker (requires custom image)
+  #   # image: your-custom-lm-studio-image
+  #   # container_name: lm-studio
+  #   # ports:
+  #   #   - "1234:1234"
+  #   # networks:
+  #   #   - playwright-network
 
 volumes:
   ollama-data:
