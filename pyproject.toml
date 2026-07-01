@@ -21,6 +21,7 @@ dependencies = [
     "plotly>=6.7.0",
     "pandas>=2.3.3",
     "pillow>=12.1.1",
+    "pyyaml>=6.0.0",
     "setuptools<72",
 ]
 [dependency-groups]
@@ -33,6 +34,7 @@ dev = [
     "types-requests>=2.31.0",
     "pre-commit>=4.5.1",
     "pandas-stubs>=3.0.0.260204",
+    "types-PyYAML>=6.0.0",
     "jupyter>=1.1.1",
     "ipykernel>=7.2.0",
     "nest-asyncio>=1.6.0",

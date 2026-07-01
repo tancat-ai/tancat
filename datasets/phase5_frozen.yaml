@@ -1,0 +1,40 @@
+# Phase 5 Frozen Evaluation Dataset
+# This is the "ground truth" dataset used for regression testing
+# and quality gate evaluation of the AI-Playwright-Test-Generator
+
+version: "1.0"
+created_at: "2026-07-01"
+description: "Minimum viable dataset for Phase 5 automated evaluation harness"
+
+sites:
+  - id: "automationexercise"
+    name: "automationexercise.com"
+    url: "https://automationexercise.com"
+    user_stories:
+      - id: "uat_ae_001"
+        story: |
+          As a customer, I want to browse products on the website and add them
+          to my cart so that I can purchase them later.
+        conditions: |
+          1. Navigate to the automationexercise.com home page
+          2. Click the 'Products' link in the header navigation
+          3. On the products page, click 'Add to cart' next to a product
+          4. Verify a confirmation message appears
+          5. Click the 'Cart' link in the header
+          6. Verify the cart page displays the added product
+
+  - id: "saucedemo"
+    name: "saucedemo.com"
+    url: "https://www.saucedemo.com"
+    user_stories:
+      - id: "uat_sd_001"
+        story: |
+          As a user, I want to log in to the shopping site, add items to my cart,
+          proceed to checkout, and complete the checkout process.
+        conditions: |
+          1. Log in with username standard_user and password secret_sauce
+          2. Add at least one item (e.g. Sauce Labs Backpack) to the cart
+          3. Navigate to the shopping cart page
+          4. Verify the added item appears correctly in the cart
+          5. Navigate to the checkout page
+          6. Complete the checkout process and verify success
