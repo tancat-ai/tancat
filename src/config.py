@@ -51,6 +51,26 @@ class ScreenshotNaming(Enum):
     HYBRID = "hybrid"  # login_success_001_20260303.png
 
 
+class Environment(Enum):
+    """Deployment environment for target URLs."""
+
+    LOCAL = "local"
+    STAGING = "staging"
+    PRODUCTION = "production"
+    CUSTOM = "custom"
+
+    @classmethod
+    def get_default_url(cls, env: Environment) -> str | None:
+        """Return default URL for an environment (placeholder)."""
+        defaults = {
+            cls.LOCAL: "http://localhost:3000",
+            cls.STAGING: "https://staging.example.com",
+            cls.PRODUCTION: "https://example.com",
+            cls.CUSTOM: None,
+        }
+        return defaults.get(env)
+
+
 # Jira project configuration - can be overridden via environment variable
 JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "TEST")
 

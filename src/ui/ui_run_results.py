@@ -5,11 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.coverage_utils import build_coverage_analysis, build_coverage_display_rows
 from src.failure_classifier import FailureCategory, classify_failure
+from src.gantt_utils import safe_read_sidecar
 from src.locator_repair import run_codegen_session
 from src.pytest_output_parser import RunResult, TestResult
+from src.report_utils import generate_annotated_journey
 from src.ui.ui_results import _handle_run_tests
 
 
@@ -45,6 +48,9 @@ class RunResultsDisplay:
         # Repair panel (shown after user clicks repair button)
         _render_repair_panel()
 
+        # Inline evidence viewer for just-run tests
+        _render_inline_evidence(run_result)
+
         # Pytest output
         if st.session_state.get("pipeline_run_output"):
             with st.expander("Pytest Output", expanded=run_result.errors > 0):
@@ -54,6 +60,71 @@ class RunResultsDisplay:
         from src.ui.ui_downloads import RenderDownloads
 
         RenderDownloads.render()
+
+
+def _render_inline_evidence(run_result: RunResult) -> None:
+    """Render inline evidence viewer for the tests that just ran."""
+    st.divider()
+    st.subheader("📸 Test Evidence")
+
+    saved_path = st.session_state.get("pipeline_saved_path", "")
+    if not saved_path:
+        st.info("No test file path available.")
+        return
+
+    package_dir = Path(saved_path).parent
+    evidence_dir = package_dir / "evidence"
+
+    if not evidence_dir.exists():
+        st.info(f"No evidence found at {evidence_dir}. Run tests to generate evidence.")
+        return
+
+    sidecars = sorted(evidence_dir.glob("*.evidence.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not sidecars:
+        st.info("No evidence sidecars found for this test run.")
+        return
+
+    # Filter sidecars to only those for tests that just ran
+    test_names = {result.name for result in run_result.results}
+    relevant_sidecars = [s for s in sidecars if s.stem in test_names]
+
+    if not relevant_sidecars:
+        st.info("No evidence found for the tests that just ran.")
+        return
+
+    selected_sidecar = st.selectbox(
+        "Select test evidence",
+        options=relevant_sidecars,
+        format_func=lambda p: p.stem,
+    )
+
+    if selected_sidecar:
+        view_mode = st.selectbox(
+            "View mode",
+            options=["annotated", "heatmap", "clean"],
+            index=0,
+            help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
+        )
+        try:
+            html = generate_annotated_journey(
+                sidecar_path=selected_sidecar,
+                view_mode=view_mode,  # type: ignore[arg-type]
+                title=selected_sidecar.stem,
+            )
+            components.html(html, height=900, scrolling=True)
+
+            # Show sidecar details
+            sidecar_data = safe_read_sidecar(selected_sidecar)
+            if sidecar_data:
+                st.divider()
+                with st.expander("Step Details"):
+                    for step in sidecar_data.get("steps", []):
+                        status_icon = "✅" if step.get("result", {}).get("status") == "passed" else "❌"
+                        st.write(f"- {status_icon} **{step.get('type').upper()}**: {step.get('label')}")
+                        if step.get("result", {}).get("error"):
+                            st.error(step.get("result", {}).get("error"))
+        except Exception as e:
+            st.error(f"Failed to render evidence: {e}")
 
 
 def _render_results_table(results: list[TestResult]) -> None:

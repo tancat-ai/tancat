@@ -531,6 +531,7 @@ class PageScraper:
         tag: Any,
         base_url: str,
         labels: dict[str, str],
+        id_to_text: dict[str, str] | None = None,
     ) -> dict[str, Any] | None:
         """Build a scraped element dict from a BeautifulSoup tag.
 
@@ -589,10 +590,48 @@ class PageScraper:
         if not selector:
             selector = tag.name
 
+        # Try to get text content from various sources
         text_content = tag.get_text(" ", strip=True)
+
+        # B-019: For SVG elements, also check <title> and <desc> children
+        if tag.name in ("svg", "title", "desc") and not text_content:
+            title_child = tag.find("title")
+            if title_child:
+                text_content = title_child.get_text(" ", strip=True)
+            if not text_content:
+                desc_child = tag.find("desc")
+                if desc_child:
+                    text_content = desc_child.get_text(" ", strip=True)
+
+        # B-019: Check label (from <label> tag with for attribute)
         tag_id = tag.get("id")
         if not text_content and tag_id and tag_id in labels:
             text_content = labels[str(tag_id)]
+
+        # B-019: Resolve aria-labelledby and aria-describedby
+        if not text_content and id_to_text is not None:
+            aria_labelledby = tag.get("aria-labelledby")
+            if aria_labelledby:
+                # Split by spaces (aria-labelledby can reference multiple IDs)
+                labelledby_ids = str(aria_labelledby).split()
+                texts = []
+                for ref_id in labelledby_ids:
+                    if ref_id in id_to_text:
+                        texts.append(id_to_text[ref_id])
+                if texts:
+                    text_content = " ".join(texts)
+
+            # If still no text, try aria-describedby
+            if not text_content:
+                aria_describedby = tag.get("aria-describedby")
+                if aria_describedby:
+                    describedby_ids = str(aria_describedby).split()
+                    texts = []
+                    for ref_id in describedby_ids:
+                        if ref_id in id_to_text:
+                            texts.append(id_to_text[ref_id])
+                    if texts:
+                        text_content = " ".join(texts)
 
         return {
             "selector": selector,
@@ -624,9 +663,25 @@ class PageScraper:
         elements: list[dict[str, Any]] = []
         interactive_tags = ["button", "a", "input", "select", "textarea"]
 
-        # B-019: Display elements — headings, text-bearing containers, and data-test elements.
+        # B-019: Display elements — headings, text-bearing containers, data-test elements, and SVG.
         # Captured separately so ASSERT placeholders have non-interactive candidates.
-        display_tags = ["h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "div", "section", "main", "article"]
+        display_tags = [
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "p",
+            "span",
+            "div",
+            "section",
+            "main",
+            "article",
+            "svg",
+            "title",
+            "desc",
+        ]
 
         labels: dict[str, str] = {}
         for label in soup.find_all("label"):
@@ -634,12 +689,32 @@ class PageScraper:
             if for_id:
                 labels[str(for_id)] = label.get_text(" ", strip=True)
 
-        for tag in soup.find_all(interactive_tags):
-            element = self._build_element_dict(tag, base_url, labels)
-            if element is not None:
-                elements.append(element)
+        # B-019: Resolve aria-labelledby and aria-describedby references
+        # Create a map of element IDs to their text content
+        id_to_text: dict[str, str] = {}
+        for element in soup.find_all(id=True):
+            elem_id = str(element.get("id", ""))
+            if elem_id:
+                # Try to get meaningful text from the element
+                text = element.get_text(" ", strip=True)
+                if not text:
+                    # If element has no text, check for title/desc children (for SVG)
+                    title_child = element.find("title")
+                    if title_child:
+                        text = title_child.get_text(" ", strip=True)
+                    else:
+                        desc_child = element.find("desc")
+                        if desc_child:
+                            text = desc_child.get_text(" ", strip=True)
+                if text:
+                    id_to_text[elem_id] = text
 
-        # B-019: Second pass — capture display elements (headings, text containers).
+        for tag in soup.find_all(interactive_tags):
+            elem_dict = self._build_element_dict(tag, base_url, labels, id_to_text)
+            if elem_dict is not None:
+                elements.append(elem_dict)
+
+        # B-019: Second pass — capture display elements (headings, text containers, SVG).
         # These give ASSERT placeholders non-interactive candidates to match.
         # Skip elements already captured (by id + selector) to avoid duplicates.
         captured_ids: set[str] = set()
@@ -664,12 +739,29 @@ class PageScraper:
                 if len(direct_text) < 3:
                     continue
             else:
-                # Headings, spans, etc. — use full text (they're leaf elements)
+                # Headings, spans, SVG, title, desc — use full text (they're leaf elements)
                 direct_text = tag.get_text(" ", strip=True)
+                # For SVG, also check title/desc
+                if not direct_text and tag.name in ("svg", "title", "desc"):
+                    title_child = tag.find("title")
+                    if title_child:
+                        direct_text = title_child.get_text(" ", strip=True)
+                    if not direct_text:
+                        desc_child = tag.find("desc")
+                        if desc_child:
+                            direct_text = desc_child.get_text(" ", strip=True)
 
             # For all elements, use full text for the element dict
             # (needed for matching), but use direct text for filtering
             text_content = tag.get_text(" ", strip=True)
+            if not text_content and tag.name in ("svg", "title", "desc"):
+                title_child = tag.find("title")
+                if title_child:
+                    text_content = title_child.get_text(" ", strip=True)
+                if not text_content:
+                    desc_child = tag.find("desc")
+                    if desc_child:
+                        text_content = desc_child.get_text(" ", strip=True)
 
             if len(direct_text) < 3 and not data_test:
                 continue
@@ -678,9 +770,9 @@ class PageScraper:
             if len(text_content) > 300:
                 continue
 
-            element = self._build_element_dict(tag, base_url, labels)
-            if element is not None:
-                elements.append(element)
+            elem_dict = self._build_element_dict(tag, base_url, labels, id_to_text)
+            if elem_dict is not None:
+                elements.append(elem_dict)
 
         # Enrich elements with visual and contextual metadata
         elements = ElementEnricher.enrich_batch(elements)

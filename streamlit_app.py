@@ -16,6 +16,7 @@ try:
 except ImportError:
     pass
 
+from src.config import Environment
 from src.llm_client import LLMClient
 from src.provider_config import (
     get_provider_defaults,
@@ -145,11 +146,28 @@ SavedPackagePanel().render_sidebar()
 st.sidebar.divider()
 st.sidebar.title("Pages To Scrape")
 
+# AI-004: Environment selector
+if "environment" not in st.session_state:
+    st.session_state.environment = Environment.CUSTOM.value
+
+env_choice = st.sidebar.selectbox(
+    "Environment",
+    [e.value for e in Environment],
+    index=[e.value for e in Environment].index(st.session_state.environment),
+    key="environment",
+)
+selected_env = Environment(env_choice)
+
 # Migrate legacy auto-keys (label-based) into stable keys.
 if not st.session_state.get("starting_url") and st.session_state.get("Starting URL"):
     st.session_state.starting_url = st.session_state.get("Starting URL")
 if not st.session_state.get("additional_urls") and st.session_state.get("Additional URLs"):
     st.session_state.additional_urls = st.session_state.get("Additional URLs")
+
+# Set default URL based on environment if no URL set yet
+default_starting_url = Environment.get_default_url(selected_env)
+if default_starting_url and not st.session_state.get("starting_url"):
+    st.session_state.starting_url = default_starting_url
 
 base_url = st.sidebar.text_input(
     "Starting URL",

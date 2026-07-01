@@ -325,21 +325,13 @@ async def run_site_uat(
 
     # 7. POM-specific checks
     if pom_mode:
-        has_pom_class = "class " in final_code and "(page:" in final_code
+        # In POM mode the test file imports page objects — classes live in pages/ directory.
+        has_pom_usage = "from pages." in final_code or "import pages" in final_code
         result.checks.append(
             CheckResult(
-                "POM class present",
-                has_pom_class,
-                "found" if has_pom_class else "missing",
-            )
-        )
-
-        has_pom_import = "from pages." in final_code or "import pages" in final_code
-        result.checks.append(
-            CheckResult(
-                "POM import present",
-                has_pom_import,
-                "found" if has_pom_import else "missing",
+                "POM page objects used in tests",
+                has_pom_usage,
+                "found" if has_pom_usage else "missing",
             )
         )
 

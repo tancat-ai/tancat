@@ -82,6 +82,7 @@ Full directory tree: see `docs/reference/agents_archive.md` §4.
 | UI framework | Streamlit | Flask / Django / React |
 | Testable helpers | `src/` modules | `streamlit_app.py` |
 | LLM parsing | Regex first, LLM fallback | Always-LLM mode |
+| Default LLM provider | `openai-local` (llama.cpp :8080) | Never hardcode `ollama` |
 
 ---
 
@@ -97,8 +98,10 @@ bash launch_dev.sh         # UI + mock insurance site
 bash launch_cli.sh         # Interactive CLI
 
 # Tests
-pytest -n auto -x -q       # Parallel (~2min for 778 tests)
+pytest -q --tb=short       # Single-process (parallel crashes with 1300+ tests)
 pytest -v                  # Single-process with output
+# UAT
+python scripts/uat.py --all-sites --save results.json  # Needs LM Studio running on :8080
 ```
 
 Full environment detail (LM Studio, OpenAI providers): see `docs/reference/agents_archive.md` §6.

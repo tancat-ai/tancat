@@ -56,9 +56,16 @@ def store_run_report(
     saved_path: str,
 ) -> None:
     """Build and store the report bundle after a test run."""
+    from pathlib import Path
+
     import streamlit as st
 
+    from src.run_result_persistence import persist_run_result
     from src.ui_pipeline import PipelineSessionState, build_report_bundle, store_report_bundle
+
+    # Persist run result to SQLite
+    test_package = str(Path(saved_path).resolve().parent)
+    persist_run_result(run_result, test_package)
 
     session = PipelineSessionState({str(k): v for k, v in st.session_state.items()})
     bundle = build_report_bundle(
