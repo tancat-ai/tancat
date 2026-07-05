@@ -511,6 +511,10 @@ class TestOrchestrator:
                     elif action == "assert":
                         steps.append(JourneyStep(action="scrape", description=placeholder.description))
 
+            # R-003: Normalize URLs in navigate steps to handle common path variations.
+            # E.g., "category-product/1" -> "category_products/1" for automationexercise.
+            steps = self._normalize_journey_urls(steps)
+
             # Add a final scrape step if not already there
             if not steps or steps[-1].action != "scrape":
                 steps.append(JourneyStep(action="scrape", description="final page state"))
@@ -520,6 +524,36 @@ class TestOrchestrator:
 
         pages_visited = scraper.get_pages_visited()
         return all_scraped_data, pages_visited
+
+    @staticmethod
+    def _normalize_journey_urls(steps: list[JourneyStep]) -> list[JourneyStep]:
+        """Normalize URLs in navigate steps to handle common path variations.
+
+        R-003 FIX: The LLM sometimes generates URLs with hyphens instead of
+        underscores (e.g., "category-product/1" instead of "category_products/1").
+        This normalization catches common patterns so the journey scraper
+        visits the correct pages.
+        """
+        normalized_steps: list[JourneyStep] = []
+        for step in steps:
+            if step.action == "navigate" and step.url:
+                # Normalize common path variations:
+                # - category-product -> category_products
+                # - category_product -> category_products
+                # - product-details -> product_details
+                url = step.url
+                url = re.sub(r"category-product", "category_products", url)
+                url = re.sub(r"/category_product(?:\.php)?(?=/|$)", "/category_products", url)
+                url = re.sub(r"product-details", "product_details", url)
+                url = re.sub(r"product_details/(\d+)", r"product_details/\1", url)
+                # Handle .php extensions: /view_cart.php -> /view_cart
+                url = re.sub(r"\.php(?=/|$)", "", url)
+                # Normalize contact-us -> contact_us
+                url = re.sub(r"contact-us", "contact_us", url)
+                normalized_steps.append(JourneyStep(action=step.action, url=url, description=step.description))
+            else:
+                normalized_steps.append(step)
+        return normalized_steps
 
     @staticmethod
     def _build_generation_conditions(
@@ -733,7 +767,14 @@ class TestOrchestrator:
         """Inject POM import statements after existing imports.
 
         Finds the last existing import line and inserts POM imports after it.
+        Skips any import lines that are already present in the code to avoid
+        duplicate imports when the combined skeleton already contains them.
         """
+        existing_code = code
+        new_imports = [imp for imp in pom_imports if imp.strip() not in existing_code]
+        if not new_imports:
+            return code
+
         lines = code.splitlines()
         insert_index: int = 0
         for i, line in enumerate(lines):
@@ -744,7 +785,7 @@ class TestOrchestrator:
                 # First non-import, non-comment line — stop scanning
                 break
 
-        import_block = "\n".join(pom_imports)
+        import_block = "\n".join(new_imports)
         new_lines = lines[:insert_index] + [import_block, ""] + lines[insert_index:]
         return "\n".join(new_lines)
 
@@ -753,17 +794,29 @@ class TestOrchestrator:
         """Inject POM instantiation lines at the start of each test function.
 
         Finds each `def test_` line and inserts indented instantiation lines after it.
+        Skips instantiation if those lines are already present in the function body
+        to avoid duplicate instances when the skeleton already contains them.
         """
         lines = code.splitlines()
         indented_lines = [f"    {line}" for line in pom_instantiation]
         instantiation_block = "\n".join(indented_lines)
         new_lines: list[str] = []
+        i = 0
 
-        for line in lines:
+        while i < len(lines):
+            line = lines[i]
             new_lines.append(line)
             stripped = line.strip()
             if stripped.startswith("def test_") and "(" in stripped and ":":
-                new_lines.append(instantiation_block)
+                # Scan the next few lines to see if instantiations are already there
+                scan_limit = min(i + len(pom_instantiation) + 5, len(lines))
+                already_present = any(
+                    any(inst_line.strip() in lines[j].strip() for inst_line in pom_instantiation)
+                    for j in range(i + 1, scan_limit)
+                )
+                if not already_present:
+                    new_lines.append(instantiation_block)
+            i += 1
 
         return "\n".join(new_lines)
 

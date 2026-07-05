@@ -262,9 +262,11 @@ class PlaceholderResolver:
         Strategy (fast-to-slow):
         1. Negation gate (B-016) — reject absence-vs-presence contradictions.
         2. Direct containment — substring match after normalisation.
-        3. Word-overlap — keyword intersection minus context words.
-        4. Action-verb check — shared action verbs signal intent match.
-        5. Semantic similarity (B-016) — delegate to SemanticMatcher for
+        3. Key phrase extraction (R-001) — match short element text against
+           key phrases from verbose descriptions.
+        4. Word-overlap — keyword intersection minus context words.
+        5. Action-verb check — shared action verbs signal intent match.
+        6. Semantic similarity (B-016) — delegate to SemanticMatcher for
            synonym-aware Jaccard scoring. Threshold 0.25 catches "Login"≈"Sign in"
            without false-positive noise.
         """
@@ -290,6 +292,64 @@ class PlaceholderResolver:
             return True
         if norm_text in action_part or action_part in norm_text:
             return True
+
+        # R-001: Key phrase extraction for verbose descriptions.
+        # Descriptions like "Dress category link in the left sidebar" should match
+        # element text "Dress". Extract quoted substrings and noun phrases.
+        key_phrases: list[str] = []
+        quoted = re.findall(r'["\']([^"\']+)["\']', norm_desc)
+        key_phrases.extend(quoted)
+
+        # Extract noun phrase before context words
+        context_words = {
+            "link",
+            "button",
+            "in",
+            "on",
+            "at",
+            "next",
+            "to",
+            "beside",
+            "section",
+            "list",
+            "menu",
+            "header",
+            "page",
+            "sidebar",
+            "navigation",
+            "the",
+            "a",
+            "an",
+        }
+        words = norm_desc.split()
+        noun_words: list[str] = []
+        for w in words:
+            if w in context_words:
+                break
+            if len(w) > 1 and w not in PlaceholderResolver.ACTION_CONTEXT_WORDS:
+                noun_words.append(w)
+        if len(noun_words) >= 1:
+            key_phrases.append(" ".join(noun_words))
+
+        # Also try the last meaningful phrase (e.g., "Blue Top" from "Add to cart button next to Blue Top")
+        # by splitting on common prepositions
+        preposition_split = re.split(
+            r"\s+(?:next\s+to|beside|before|after|above|below|under|near|around)\s+", norm_desc
+        )
+        if len(preposition_split) > 1:
+            last_phrase = preposition_split[-1].strip()
+            if last_phrase:
+                key_phrases.append(last_phrase)
+
+        for phrase in key_phrases:
+            phrase_words = len(phrase.split())
+            text_word_count = len(norm_text.split())
+            if phrase_words > 0:
+                word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
+                # Accept if word ratio <= 3 to avoid "cart" matching "Add to cart"
+                # while still allowing "Backpack" ≈ "Sauce Labs Backpack"
+                if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
+                    return True
 
         desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
         text_words = set(norm_text.split())

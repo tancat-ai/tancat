@@ -260,7 +260,12 @@ class SubscribeGuardStrategy(IntentStrategy):
 
 
 class PageStateAssertStrategy(IntentStrategy):
-    """Reject element-level matches for page-state assertions."""
+    """Reject element-level matches for page-state assertions.
+
+    R-005 FIX: Also handles vague descriptions like
+    "checkout page is loaded and order summary section is visible"
+    by detecting page-level intent keywords.
+    """
 
     _PAGE_STATE_TERMS = (
         "home page",
@@ -274,6 +279,12 @@ class PageStateAssertStrategy(IntentStrategy):
         "thank you page",
         "success page",
         "confirmation page",
+        # R-005: Vague page-state patterns
+        "page is loaded",
+        "page loads",
+        "page is visible",
+        "page displays",
+        "page shows",
     )
 
     def match(self, action: str, description: str, element: dict[str, Any]) -> bool | None:
@@ -510,6 +521,19 @@ class GenericAssertStrategy(IntentStrategy):
         "present",
         "correct details",
         "summary",
+        # R-005: Additional vague content indicators
+        "is displayed",
+        "is visible",
+        "are visible",
+        "is shown",
+        "is present",
+        "is listed",
+        "section is visible",
+        "table is visible",
+        "list is visible",
+        "with items",
+        "with at least",
+        "contains",
     )
 
     _CONTENT_ROLES = {
@@ -644,6 +668,95 @@ class ProductNameStrategy(IntentStrategy):
         return None
 
 
+class VagueSectionAssertStrategy(IntentStrategy):
+    """Handle vague ASSERT descriptions about page sections/areas.
+
+    R-005 FIX: Descriptions like
+    - "product categories section containing category links like Dress, Jackets"
+    - "category page title 'PRODUCT CATEGORIES' is visible"
+    - "a list of dress products is displayed on the page"
+    - "cart page table is visible with at least one product row"
+
+    These are too abstract for keyword matching but target headings,
+    lists, tables, or regions. Match any content-bearing element
+    that shares at least 2 content words with the description.
+    """
+
+    _SECTION_INDICATORS = (
+        "section",
+        "containing",
+        "with",
+        "like",
+        "list of",
+        "a list",
+        "is displayed",
+        "is visible",
+        "are visible",
+        "on the page",
+        "table is",
+        "with at least",
+        "page title",
+        "header is",
+    )
+
+    def match(self, action: str, description: str, element: dict[str, Any]) -> bool | None:
+        if action != "ASSERT":
+            return None
+
+        lowered = description.replace("_", " ").lower()
+        has_section_intent = any(term in lowered for term in self._SECTION_INDICATORS)
+        if not has_section_intent:
+            return None
+
+        # Content words from description (minus stop words and section indicators)
+        stop_words = {
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "and",
+            "or",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "with",
+            "by",
+            "from",
+            "of",
+            "visible",
+            "displayed",
+            "shown",
+            "present",
+            "section",
+            "containing",
+            "like",
+            "list",
+            "page",
+            "element",
+        }
+        desc_words = {w for w in lowered.split() if w not in stop_words and len(w) > 2}
+        if len(desc_words) < 2:
+            return None
+
+        text = str(element.get("text", "")).strip().lower()
+        if not text:
+            return None
+
+        element_tokens = set(text.replace("_", " ").replace("-", " ").split())
+        overlap = desc_words & element_tokens
+
+        # Require at least 2 content word matches
+        if len(overlap) >= min(2, len(desc_words)):
+            return True
+
+        return None
+
+
 # ---------------------------------------------------------------------
 # Matcher (thin dispatcher)
 # ---------------------------------------------------------------------
@@ -679,6 +792,7 @@ class IntentMatcher:
                 SuccessAssertStrategy(),
                 ContinueShoppingStrategy(),
                 ProductNameStrategy(),
+                VagueSectionAssertStrategy(),
             ]
         else:
             self._strategies = strategies

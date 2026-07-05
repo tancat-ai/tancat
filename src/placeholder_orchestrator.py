@@ -304,17 +304,46 @@ class PlaceholderOrchestrator:
         When ``pom_mode`` is enabled, page objects are built with
         ``use_evidence_tracker=True`` so generated methods delegate to
         ``self.tracker.click()`` / ``self.tracker.fill()`` etc.
+
+        R-004 FIX: Filter out low-quality page objects that have fewer than
+        MIN_PAGE_OBJECT_ELEMENTS meaningful elements. Pages with only 2-3 elements
+        (e.g., 404 pages, empty states) produce catch-all GeneratedPage classes
+        that add noise to test imports.
         """
+        # R-004: Minimum elements for a useful page object.
+        # Pages with very few elements are usually 404s, empty states, or noise.
+        MIN_PAGE_OBJECT_ELEMENTS = 3
+
         generated_objects: list[GeneratedPageObject] = []
 
         for scraped_page in scraped_pages:
-            generated_objects.append(
-                self.page_object_builder.build_page_object(
-                    scraped_page,
-                    file_path=self.page_object_builder.get_default_file_path(scraped_page.url),
-                    use_evidence_tracker=self._pom_mode,
-                )
+            generated_obj = self.page_object_builder.build_page_object(
+                scraped_page,
+                file_path=self.page_object_builder.get_default_file_path(scraped_page.url),
+                use_evidence_tracker=self._pom_mode,
             )
+
+            # R-004: Skip low-quality page objects.
+            # Keep pages that are either:
+            # - Named (HomePage, etc.) — the builder assigned a meaningful name
+            # - Have >= MIN elements — substantial content
+            # - Have interactive elements — buttons, links, inputs (even on small pages)
+            if generated_obj.class_name == "GeneratedPage" and scraped_page.element_count < MIN_PAGE_OBJECT_ELEMENTS:
+                # Check if any element is interactive (button, link, input)
+                has_interactive = any(
+                    str(e.get("role", "")).lower() in ("button", "link", "textbox", "checkbox", "menuitem")
+                    for e in scraped_page.elements
+                )
+                if not has_interactive:
+                    logger.debug(
+                        "Skipping low-quality page object '%s' for '%s' (%d elements, no interactive elements)",
+                        generated_obj.class_name,
+                        scraped_page.url,
+                        scraped_page.element_count,
+                    )
+                    continue
+
+            generated_objects.append(generated_obj)
 
         self._generated_page_objects = generated_objects
         return generated_objects
@@ -676,6 +705,8 @@ class PlaceholderOrchestrator:
         unresolved_skip_re = re.compile(
             r"""pytest\.skip\(\s*['"]Unresolved placeholder in this step\.\s*\{\{.*?\}\}['"]\s*\)"""
         )
+        # R-002: Also match pytest.skip() with raw placeholders in the middle of the message
+        raw_placeholder_in_skip_re = re.compile(r"""pytest\.skip\(\s*['"].*?\{\{[A-Z_]+:.*?\}\}.*?['"]\s*\)""")
         result_lines: list[str] = []
 
         for line in lines:
@@ -683,6 +714,8 @@ class PlaceholderOrchestrator:
             if raw_placeholder_skip_re.match(stripped):
                 continue
             if unresolved_skip_re.match(stripped):
+                continue
+            if raw_placeholder_in_skip_re.match(stripped):
                 continue
             result_lines.append(line)
 
@@ -696,13 +729,49 @@ class PlaceholderOrchestrator:
         the consolidated skip at the test top. Removing them prevents
         code_normalizer from converting them into additional pytest.skip()
         lines later in the pipeline.
+
+        R-002 FIX: Also removes placeholder tokens embedded in comments,
+        prose lines, or any non-statement context.
         """
+        # Standalone placeholder line
         raw_placeholder_re = re.compile(r"^\s*\{\{[A-Z_]+:.*?\}\}\s*$")
+        # Placeholder token anywhere in a line (inside comments, prose, or code)
+        embedded_placeholder_re = re.compile(r"\{\{[A-Z_]+:[^}]+\}\}")
+
         result_lines: list[str] = []
 
         for line in lines:
+            # Skip standalone placeholder lines
             if raw_placeholder_re.match(line):
                 continue
+
+            stripped = line.strip()
+            # Skip comment lines that contain placeholders (e.g., "# TC01.04 Action: {{CLICK:...}}")
+            if stripped.startswith("#") and embedded_placeholder_re.search(stripped):
+                continue
+
+            # Skip prose lines that contain placeholder tokens
+            # (e.g., "TC01.04 Action: Close popup" where the placeholder was converted to prose)
+            # Only if the line is NOT a valid Python statement
+            if embedded_placeholder_re.search(stripped):
+                # Check if it looks like a comment/prose rather than a code statement
+                # Code statements: def, import, from, class, @decorator, variable assignment
+                code_patterns = [
+                    r"^\s*def\s+",
+                    r"^\s*import\s+",
+                    r"^\s*from\s+",
+                    r"^\s*class\s+",
+                    r"^\s*@",
+                    r"^\s*\w+\s*=\s*",
+                    r"^\s*evidence_tracker\.",
+                    r"^\s*page\.",
+                    r"^\s*pytest\.",
+                    r"^\s*dismiss_consent",
+                ]
+                is_code = any(re.match(p, line) for p in code_patterns)
+                if not is_code:
+                    continue
+
             result_lines.append(line)
 
         return result_lines
@@ -1270,6 +1339,12 @@ class PlaceholderOrchestrator:
         (add, remove, place, buy, etc.), require the element text to contain at
         least one of those action words. This prevents "Add to cart button" from
         matching the "View Cart" link just because both contain the word "cart".
+
+        R-001 FIX: Key phrase extraction for verbose descriptions.
+        Descriptions like "First product 'Add to cart' button" or
+        "Dress category link in the left sidebar" are broken into
+        key phrases so short element text ("Dress", "Add to cart")
+        can match even when wrapped in verbose context.
         """
         if action not in {"CLICK", "FILL"}:
             return None
@@ -1280,10 +1355,74 @@ class PlaceholderOrchestrator:
         desc_words = set(norm_description.split())
         has_action_verb = bool(desc_words & PlaceholderResolver.ACTION_VERBS)
 
+        # R-001: Extract key phrases from verbose descriptions.
+        # Strategy: find quoted substrings first, then noun phrases.
+        key_phrases: list[str] = []
+        quoted_phrases = re.findall(r'["\']([^"\']+)["\']', norm_description)
+        key_phrases.extend(quoted_phrases)
+
+        # Also extract the first meaningful noun phrase (e.g., "Dress" from "Dress category link")
+        # by finding content words before common context words.
+        context_boundary = {
+            "link",
+            "button",
+            "in",
+            "on",
+            "at",
+            "next to",
+            "beside",
+            "of",
+            "the",
+            "section",
+            "list",
+            "menu",
+            "header",
+            "page",
+            "sidebar",
+            "navigation",
+            "header navigation",
+            "left sidebar",
+        }
+        words = norm_description.split()
+        noun_phrase_words: list[str] = []
+        for w in words:
+            if w in context_boundary:
+                break
+            if len(w) > 1 and w not in PlaceholderResolver.ACTION_CONTEXT_WORDS:
+                noun_phrase_words.append(w)
+        if len(noun_phrase_words) >= 1:
+            key_phrases.append(" ".join(noun_phrase_words))
+
         for elements in pages_data.values():
             for element in elements:
                 norm_text = self._normalise_element_text(element)
-                if len(norm_text) >= 3 and norm_text in norm_description:
+                if len(norm_text) < 3:
+                    continue
+
+                matched = False
+
+                # Standard match: element text contained in description
+                if norm_text in norm_description:
+                    matched = True
+
+                # R-001: Key phrase match — element text matches a key phrase.
+                # Use word-count ratio instead of char-length ratio to be
+                # site-agnostic: "Backpack" (1 word) ≈ "Sauce Labs Backpack" (3 words)
+                # is fine, but "cart" (1 word) ≠ "Add to cart" (3 words) when
+                # "Cart" (1 word) exists as a better match.
+                if not matched and key_phrases:
+                    for phrase in key_phrases:
+                        phrase_words = len(phrase.split())
+                        text_word_count = len(norm_text.split())
+                        if phrase_words > 0:
+                            word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
+                            # Accept if word ratio <= 3 ("cart" ≈ "shopping cart" OK,
+                            # but "cart" ≠ "add to cart button next to blue top" too distant)
+                            if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
+                                matched = True
+                                break
+
+                if matched:
                     # When action verbs are present, require the element text to
                     # contain at least one action word from the description.
                     # This prevents "cart" in "View Cart" from beating "Add to cart"
@@ -1309,6 +1448,10 @@ class PlaceholderOrchestrator:
         Requires the element text to contain at least 2 of the description's content words
         to avoid false positives like "Summary" matching "cart summary" when "Cart Summary"
         exists on a different page.
+
+        R-001 FIX: Key phrase extraction for verbose ASSERT descriptions.
+        Descriptions like 'product categories section containing category links like Dress, Jackets'
+        are broken down to find matching element text.
         """
         if action != "ASSERT":
             return None
@@ -1369,6 +1512,43 @@ class PlaceholderOrchestrator:
         # If description has multiple content words, require multi-word match
         requires_multi_word = len(desc_content_words) >= 2
 
+        # R-001: Extract key phrases from verbose descriptions
+        key_phrases: list[str] = []
+        quoted_phrases = re.findall(r'["\']([^"\']+)["\']', norm_description)
+        key_phrases.extend(quoted_phrases)
+
+        # Extract content word groups (noun phrases separated by context words)
+        context_boundary = {
+            "section",
+            "containing",
+            "with",
+            "like",
+            "including",
+            "displaying",
+            "showing",
+            "that",
+            "which",
+            "are",
+            "is",
+            "be",
+            "the",
+            "a",
+            "an",
+        }
+        words = norm_description.split()
+        phrase_parts: list[str] = []
+        current_phrase: list[str] = []
+        for w in words:
+            if w in context_boundary and len(current_phrase) > 0:
+                if len(current_phrase) >= 1:
+                    phrase_parts.append(" ".join(current_phrase))
+                current_phrase = []
+            elif len(w) > 1 and w not in stop_words:
+                current_phrase.append(w)
+        if current_phrase:
+            phrase_parts.append(" ".join(current_phrase))
+        key_phrases.extend(phrase_parts)
+
         for elements in pages_data.values():
             for element in elements:
                 # B-016: check computed_role (CDP AX tree) first, then raw role, then tag
@@ -1377,7 +1557,28 @@ class PlaceholderOrchestrator:
                 if effective_role not in text_bearing_roles and tag not in text_bearing_tags:
                     continue
                 norm_text = self._normalise_element_text(element)
-                if len(norm_text) >= 3 and norm_text in norm_description:
+                if len(norm_text) < 3:
+                    continue
+
+                matched = False
+
+                # Standard match: element text contained in description
+                if norm_text in norm_description:
+                    matched = True
+
+                # R-001: Key phrase match — element text matches a key phrase from description.
+                # Use word-count ratio (not char-length) for site-agnostic matching.
+                if not matched and key_phrases:
+                    for phrase in key_phrases:
+                        phrase_words = len(phrase.split())
+                        text_word_count = len(norm_text.split())
+                        if phrase_words > 0:
+                            word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
+                            if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
+                                matched = True
+                                break
+
+                if matched:
                     if requires_multi_word:
                         # Require the element text to contain at least 2 content words from description
                         elem_words = set(norm_text.lower().replace("_", " ").split())
@@ -1633,16 +1834,25 @@ class PlaceholderOrchestrator:
             )
             return matched_element
 
-        # No LLM selection — use top candidate with text validation
-        if shortlisted:
+        # No LLM selection — use top candidate; text validation is advisory only.
+        # A high-scoring element that fails text validation is still the best match
+        # the resolver found. Returning None here causes pytest.skip(), which is
+        # worse than using a slightly-imperfect locator that the test can verify at
+        # runtime.
+        # But: if the global top score itself is very low (< 5) it means no element
+        # even remotely matched (score < 5 is role-only base with no textual signal).
+        # Return None to avoid a wrong-match.
+        MIN_SCORE_FOR_TEXT_FALLBACK = 5
+        if shortlisted and global_top_score >= MIN_SCORE_FOR_TEXT_FALLBACK:
             top_candidate = shortlisted[0]
-            if self._validate_text_match(top_candidate, description):
-                return top_candidate
-            logger.info(
-                "Top-ranked element '%s' fails text validation for '%s' — skipping (unresolved placeholder).",
-                str(top_candidate.get("text", "")).strip(),
-                description,
-            )
+            if not self._validate_text_match(top_candidate, description):
+                logger.info(
+                    "Top-ranked element '%s' fails text validation for '%s' — "
+                    "using anyway (text validation is advisory for non-LLM path).",
+                    str(top_candidate.get("text", "")).strip(),
+                    description,
+                )
+            return top_candidate
         return None
 
     async def _resolve_assert_semantically(
