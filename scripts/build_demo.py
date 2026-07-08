@@ -1,7 +1,8 @@
 """Build a self-contained phone-friendly demo HTML page with embedded screenshots."""
-import json
-import html as html_mod
+
 import base64
+import html as html_mod
+import json
 
 # Annotated evidence screenshots from a real test run
 # Each tuple: (path, slide-title, annotation-text)
@@ -27,7 +28,9 @@ SCREENSHOTS = [
 ]
 
 TEST_FILE = "generated_tests/test_20260703_142302_as_a_shopper_on_automationexercise_com_i_want_to/test_as_a_shopper_on_automationexercise_com_i_want_to.py"
-COVERAGE_FILE = "generated_tests/test_20260703_142302_as_a_shopper_on_automationexercise_com_i_want_to/coverage_summary.json"
+COVERAGE_FILE = (
+    "generated_tests/test_20260703_142302_as_a_shopper_on_automationexercise_com_i_want_to/coverage_summary.json"
+)
 
 # The user story that produced the test
 USER_STORY = """As a shopper on automationexercise.com,
@@ -79,7 +82,7 @@ def build_evidence_slides(screenshots):
             '  <div class="slide-label">{}</div>\n'
             '  <img src="{}" alt="" class="screenshot">\n'
             '  <div class="annotation">{}</div>\n'
-            '</div>'.format(shot["label"], img_src, shot["annotation"])
+            "</div>".format(shot["label"], img_src, shot["annotation"])
         )
     return "\n".join(parts)
 
@@ -253,9 +256,7 @@ def main():
     with open(COVERAGE_FILE) as f:
         coverage = json.load(f)
 
-    test_list = "\n".join(
-        "<li>{}</li>".format(html_mod.escape(t)) for t in coverage["tests"]
-    )
+    test_list = "\n".join(f"<li>{html_mod.escape(t)}</li>" for t in coverage["tests"])
 
     escaped_code = html_mod.escape(test_code)
     escaped_story = html_mod.escape(USER_STORY)
@@ -276,115 +277,125 @@ def main():
 
     js = JS.replace("TOTAL_PLACEHOLDER", str(total_slides))
 
-    page = "".join([
-        "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n",
-        "<meta charset=\"UTF-8\">\n",
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n",
-        "<title>AI Playwright Test Generator - Demo</title>\n",
-        "<style>\n", CSS, "\n</style>\n",
-        "</head>\n<body>\n\n",
-        '<div class="header">\n',
-        "  <h1>AI Playwright Test Generator</h1>\n",
-        "  <p>User stories to runnable tests, locally</p>\n",
-        "</div>\n\n",
-        '<div class="slides-wrapper" id="slidesWrapper">\n',
-        '  <div class="slides" id="slides">\n\n',
-
-        # Slide 0: Title
-        '    <div class="slide title-slide">\n',
-        "      <div class=\"emoji\">&#x1F9AA;</div>\n",
-        "      <h2>From User Stories to<br>Runnable Tests</h2>\n",
-        "      <p>Paste a plain-English user story and get back real Playwright Python tests — generated entirely by a local LLM.</p>\n",
-        '      <div class="badge">100% local, no API costs</div>\n',
-        "    </div>\n\n",
-
-        # Slide 1: The user story
-        '    <div class="slide">\n',
-        '      <div class="slide-label">Step 1 - Paste a User Story</div>\n',
-        '      <div class="story-block">\n',
-        '        <div class="label">Input</div>\n',
-        escaped_story,
-        "      </div>\n",
-        '      <div class="annotation">That is the entire input. Plain English, no special syntax.</div>\n',
-        "    </div>\n\n",
-
-        # Slide 2: Pipeline
-        '    <div class="slide">\n',
-        '      <div class="slide-label">The Pipeline</div>\n',
-        '      <div class="pipeline">\n',
-        '        <div class="pipeline-step"><span class="step-num">1</span><span class="step-text"><b>Analyze</b> — LLM extracts acceptance criteria from the story</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">2</span><span class="step-text"><b>Scrape</b> — real browser opens the target pages, captures DOM elements</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">3</span><span class="step-text"><b>Phase 1: Skeletons</b> — LLM generates test functions with placeholder actions</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">4</span><span class="step-text"><b>Phase 2: Resolve</b> — placeholders mapped to real CSS selectors from scraped DOM</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">5</span><span class="step-text"><b>Run</b> — Playwright executes the tests against the live site</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">6</span><span class="step-text"><b>Report</b> — pass/fail results, annotated screenshots, HTML/JSON export</span></div>\n',
-        "      </div>\n    </div>\n\n",
-
-        # Slides 4-6: Annotated evidence
-        evidence_slides_html, "\n\n",
-
-        # Slide 7: Generated code
-        '    <div class="slide">\n',
-        '      <div class="slide-label">Step 4 - Generated Test Code (excerpt)</div>\n',
-        '      <div class="code-block">', escaped_code, "</div>\n",
-        '      <div class="annotation">Real Python, real Playwright selectors. Ready to commit to your test suite.</div>\n',
-        "    </div>\n\n",
-
-        # Slide 8: Test results
-        '    <div class="slide">\n',
-        '      <div class="slide-label">Step 5 - All Tests Pass</div>\n',
-        '      <div class="code-block">', escaped_pytest, "</div>\n",
-        '      <div class="annotation">8 acceptance criteria, 8 tests, all green in 12 seconds.</div>\n',
-        "    </div>\n\n",
-
-        # Slide 9: Stats
-        '    <div class="slide">\n',
-        '      <div class="slide-label">Sample Run — AutomationExercise</div>\n',
-        '      <div class="stats-grid">\n',
-        '        <div class="stat-card green"><div class="number">{}</div><div class="label">Tests Passed</div></div>\n'.format(coverage["journey_count"]),
-        '        <div class="stat-card"><div class="number">{}</div><div class="label">Page Objects</div></div>\n'.format(coverage["page_object_count"]),
-        '        <div class="stat-card"><div class="number">{}</div><div class="label">Pages Scraped</div></div>\n'.format(coverage["page_count"]),
-        '        <div class="stat-card"><div class="number">{}</div><div class="label">Unresolved</div></div>\n'.format(coverage["unresolved_placeholder_count"]),
-        "      </div>\n",
-        '      <ul class="test-list">\n',
-        test_list, "\n      </ul>\n",
-        "    </div>\n\n",
-
-        # Slide 10: Exports
-        '    <div class="slide">\n',
-        '      <div class="slide-label">Step 6 - Export Options</div>\n',
-        '      <div class="pipeline">\n',
-        '        <div class="pipeline-step"><span class="step-num">&#x1F4DD;</span><span class="step-text"><b>Python (.py)</b> — generated test file, ready to commit</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">&#x1F4C4;</span><span class="step-text"><b>JSON</b> — structured coverage data for CI/CD pipelines</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">&#x1F310;</span><span class="step-text"><b>HTML Report</b> — standalone page with screenshots and results</span></div>\n',
-        '        <div class="pipeline-step"><span class="step-num">&#x270F;</span><span class="step-text"><b>Jira Markdown</b> — formatted for Jira issue comments</span></div>\n',
-        "      </div>\n",
-        '      <div class="annotation">Exports plug into whatever workflow your team uses.</div>\n',
-        "    </div>\n\n",
-
-        # Slide 11: Closing
-        '    <div class="slide footer-slide">\n',
-        "      <div class=\"emoji\">&#x1F389;</div>\n",
-        "      <h2>Want to try one?</h2>\n",
-        "      <p>Give me a user story and I'll generate the tests live. Or check out the repo:</p>\n",
-        '      <a class="link" href="https://github.com/lacattano/AI-Playwright-Test-Generator">github.com/lacattano/AI-Playwright-Test-Generator</a>\n',
-        "    </div>\n\n",
-
-        "  </div>\n</div>\n\n",
-        '<div class="swipe-hint">swipe or tap arrows</div>\n\n',
-        '<div class="nav">\n',
-        '  <button id="prevBtn" onclick="changeSlide(-1)" disabled>&larr; Back</button>\n',
-        '  <span class="page-indicator" id="pageIndicator">1 / {}</span>\n'.format(total_slides),
-        '  <button id="nextBtn" onclick="changeSlide(1)">Next &rarr;</button>\n',
-        "</div>\n\n",
-        "<script>\n", js, "\n</script>\n\n",
-        "</body>\n</html>",
-    ])
+    page = "".join(
+        [
+            '<!DOCTYPE html>\n<html lang="en">\n<head>\n',
+            '<meta charset="UTF-8">\n',
+            '<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">\n',
+            "<title>AI Playwright Test Generator - Demo</title>\n",
+            "<style>\n",
+            CSS,
+            "\n</style>\n",
+            "</head>\n<body>\n\n",
+            '<div class="header">\n',
+            "  <h1>AI Playwright Test Generator</h1>\n",
+            "  <p>User stories to runnable tests, locally</p>\n",
+            "</div>\n\n",
+            '<div class="slides-wrapper" id="slidesWrapper">\n',
+            '  <div class="slides" id="slides">\n\n',
+            # Slide 0: Title
+            '    <div class="slide title-slide">\n',
+            '      <div class="emoji">&#x1F9AA;</div>\n',
+            "      <h2>From User Stories to<br>Runnable Tests</h2>\n",
+            "      <p>Paste a plain-English user story and get back real Playwright Python tests — generated entirely by a local LLM.</p>\n",
+            '      <div class="badge">100% local, no API costs</div>\n',
+            "    </div>\n\n",
+            # Slide 1: The user story
+            '    <div class="slide">\n',
+            '      <div class="slide-label">Step 1 - Paste a User Story</div>\n',
+            '      <div class="story-block">\n',
+            '        <div class="label">Input</div>\n',
+            escaped_story,
+            "      </div>\n",
+            '      <div class="annotation">That is the entire input. Plain English, no special syntax.</div>\n',
+            "    </div>\n\n",
+            # Slide 2: Pipeline
+            '    <div class="slide">\n',
+            '      <div class="slide-label">The Pipeline</div>\n',
+            '      <div class="pipeline">\n',
+            '        <div class="pipeline-step"><span class="step-num">1</span><span class="step-text"><b>Analyze</b> — LLM extracts acceptance criteria from the story</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">2</span><span class="step-text"><b>Scrape</b> — real browser opens the target pages, captures DOM elements</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">3</span><span class="step-text"><b>Phase 1: Skeletons</b> — LLM generates test functions with placeholder actions</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">4</span><span class="step-text"><b>Phase 2: Resolve</b> — placeholders mapped to real CSS selectors from scraped DOM</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">5</span><span class="step-text"><b>Run</b> — Playwright executes the tests against the live site</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">6</span><span class="step-text"><b>Report</b> — pass/fail results, annotated screenshots, HTML/JSON export</span></div>\n',
+            "      </div>\n    </div>\n\n",
+            # Slides 4-6: Annotated evidence
+            evidence_slides_html,
+            "\n\n",
+            # Slide 7: Generated code
+            '    <div class="slide">\n',
+            '      <div class="slide-label">Step 4 - Generated Test Code (excerpt)</div>\n',
+            '      <div class="code-block">',
+            escaped_code,
+            "</div>\n",
+            '      <div class="annotation">Real Python, real Playwright selectors. Ready to commit to your test suite.</div>\n',
+            "    </div>\n\n",
+            # Slide 8: Test results
+            '    <div class="slide">\n',
+            '      <div class="slide-label">Step 5 - All Tests Pass</div>\n',
+            '      <div class="code-block">',
+            escaped_pytest,
+            "</div>\n",
+            '      <div class="annotation">8 acceptance criteria, 8 tests, all green in 12 seconds.</div>\n',
+            "    </div>\n\n",
+            # Slide 9: Stats
+            '    <div class="slide">\n',
+            '      <div class="slide-label">Sample Run — AutomationExercise</div>\n',
+            '      <div class="stats-grid">\n',
+            '        <div class="stat-card green"><div class="number">{}</div><div class="label">Tests Passed</div></div>\n'.format(
+                coverage["journey_count"]
+            ),
+            '        <div class="stat-card"><div class="number">{}</div><div class="label">Page Objects</div></div>\n'.format(
+                coverage["page_object_count"]
+            ),
+            '        <div class="stat-card"><div class="number">{}</div><div class="label">Pages Scraped</div></div>\n'.format(
+                coverage["page_count"]
+            ),
+            '        <div class="stat-card"><div class="number">{}</div><div class="label">Unresolved</div></div>\n'.format(
+                coverage["unresolved_placeholder_count"]
+            ),
+            "      </div>\n",
+            '      <ul class="test-list">\n',
+            test_list,
+            "\n      </ul>\n",
+            "    </div>\n\n",
+            # Slide 10: Exports
+            '    <div class="slide">\n',
+            '      <div class="slide-label">Step 6 - Export Options</div>\n',
+            '      <div class="pipeline">\n',
+            '        <div class="pipeline-step"><span class="step-num">&#x1F4DD;</span><span class="step-text"><b>Python (.py)</b> — generated test file, ready to commit</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">&#x1F4C4;</span><span class="step-text"><b>JSON</b> — structured coverage data for CI/CD pipelines</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">&#x1F310;</span><span class="step-text"><b>HTML Report</b> — standalone page with screenshots and results</span></div>\n',
+            '        <div class="pipeline-step"><span class="step-num">&#x270F;</span><span class="step-text"><b>Jira Markdown</b> — formatted for Jira issue comments</span></div>\n',
+            "      </div>\n",
+            '      <div class="annotation">Exports plug into whatever workflow your team uses.</div>\n',
+            "    </div>\n\n",
+            # Slide 11: Closing
+            '    <div class="slide footer-slide">\n',
+            '      <div class="emoji">&#x1F389;</div>\n',
+            "      <h2>Want to try one?</h2>\n",
+            "      <p>Give me a user story and I'll generate the tests live. Or check out the repo:</p>\n",
+            '      <a class="link" href="https://github.com/lacattano/AI-Playwright-Test-Generator">github.com/lacattano/AI-Playwright-Test-Generator</a>\n',
+            "    </div>\n\n",
+            "  </div>\n</div>\n\n",
+            '<div class="swipe-hint">swipe or tap arrows</div>\n\n',
+            '<div class="nav">\n',
+            '  <button id="prevBtn" onclick="changeSlide(-1)" disabled>&larr; Back</button>\n',
+            f'  <span class="page-indicator" id="pageIndicator">1 / {total_slides}</span>\n',
+            '  <button id="nextBtn" onclick="changeSlide(1)">Next &rarr;</button>\n',
+            "</div>\n\n",
+            "<script>\n",
+            js,
+            "\n</script>\n\n",
+            "</body>\n</html>",
+        ]
+    )
 
     with open("demo_party.html", "w") as f:
         f.write(page)
 
-    print("Written demo_party.html ({} bytes)".format(len(page)))
+    print(f"Written demo_party.html ({len(page)} bytes)")
 
 
 if __name__ == "__main__":
