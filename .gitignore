@@ -121,3 +121,4 @@ scratch/generated_tests/
 notebooks/_debug_output.py
 notebooks/.ipynb_checkpoints/
 graphify-out/
+results_*.json
