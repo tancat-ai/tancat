@@ -151,6 +151,11 @@ class TestOrchestrator:
     ) -> str:
         """Execute the full intelligent pipeline and return final code."""
         self._starting_url = (target_urls[0].strip() if target_urls else None) or None
+        # Build list of known URLs for journey resolution
+        self._starting_url_list = list(set(target_urls or []))
+        if self._starting_url:
+            self._starting_url_list.append(self._starting_url)
+        self._starting_url_list = list(set(self._starting_url_list))
         # Update the placeholder orchestrator with the starting URL
         self._placeholder_orchestrator._starting_url = self._starting_url
         self._debug("phase=generate_skeleton start")
@@ -488,7 +493,9 @@ class TestOrchestrator:
                     action = placeholder.action.lower()
                     if action == "goto":
                         # For GOTO, we try to resolve the URL from the description
-                        url = self._resolver.resolve_url(placeholder.description, {})
+                        url = self._resolver.resolve_url(
+                            placeholder.description, all_scraped_data, self._starting_url_list
+                        )
                         if url:
                             steps.append(JourneyStep(action="navigate", url=url, description=placeholder.description))
                     elif action in ("click", "fill"):

@@ -28,6 +28,15 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     """Apply small deterministic fixes to common skeleton-generation mistakes."""
     fixed_code = code
 
+    # Sanitise test function names: replace dots and other invalid characters with underscores.
+    # LLMs sometimes generate names like 'def test_TC01.02_click_dress(...)' where dots
+    # are taken from criterion IDs (TC01.02) and produce 'invalid decimal literal' syntax errors.
+    fixed_code = re.sub(
+        r"(def\s+test_)([A-Za-z_][A-Za-z0-9_.]*)",
+        lambda m: m.group(1) + m.group(2).replace(".", "_"),
+        fixed_code,
+    )
+
     # First: normalize whitespace (tabs → spaces, \r\n → \n) to ensure consistent
     # indentation before any other transforms are applied.
     fixed_code = normalize_whitespace(fixed_code)
@@ -205,6 +214,10 @@ def replace_token_in_line(
 
         # B-020: route to correct evidence_tracker method by assertion_type
         et_method = _assertion_type_to_et_method(assertion_type)
+        # Guardrail: assert_text and assert_text_contains require (selector, expected, label)
+        # but we only have (selector, label) from the resolver. Fall back to assert_visible.
+        if et_method in ("assert_text", "assert_text_contains"):
+            et_method = "assert_visible"
         if stripped == token:
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):

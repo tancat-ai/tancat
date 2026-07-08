@@ -235,15 +235,11 @@ class PrerequisiteInjector:
                     result.append(f"{body_indent}# --- Prerequisite: {tc_ref} (injected) ---")
 
                     for step in plan.prerequisites:
-                        # Skip navigation steps from the auth test — the dependent
-                        # test already has its own navigation as the first step.
-                        # We only inject the login actions (fill credentials, click login).
+                        # Skip navigation, consent dismiss, and assertion steps
+                        # (target test already handles its own navigation/consent)
                         if self._is_navigation_step(step.raw_line):
-                            # Skip the auth test's navigate step; the dependent test
-                            # already navigates to the starting URL itself.
                             continue
                         if self._is_consent_dismiss(step.raw_line):
-                            # Skip consent dismiss — the dependent test handles this.
                             continue
                         result.append(step.raw_line)
 
@@ -354,16 +350,19 @@ class PrerequisiteInjector:
         """Determine if a test needs prerequisite injection.
 
         A test needs injection when:
-        1. Its first GOTO points to the starting URL (login page), AND
+        1. Its first navigation targets the starting URL (login page), AND
         2. The criterion describes a post-authentication action
         """
-        # Check if first GOTO targets the starting page
+        # Check if first navigation targets the starting page specifically.
+        # We normalise both URLs (strip trailing slashes) to avoid false negatives
+        # from minor URL formatting differences.
         targets_starting_page = False
         if first_goto_url:
-            # The GOTO description might be a keyword like "home" or "login"
-            # that resolves to the starting URL. We check if the journey
-            # starts at the same page as the auth test.
-            targets_starting_page = True
+            norm_goto = first_goto_url.rstrip("/").lower()
+            norm_start = starting_url.rstrip("/").lower()
+            # Direct URL match OR the goto is a keyword that resolves to home/start
+            if norm_goto == norm_start or norm_goto in {"home", "start", "login", "index", "/"}:
+                targets_starting_page = True
 
         # Check for post-auth keywords in criterion text
         criterion_lower = criterion_text.lower()
@@ -398,9 +397,13 @@ class PrerequisiteInjector:
 
         for step in journey.steps:
             raw_lower = step.raw_line.lower()
-            if "evidence_tracker.fill(" in raw_lower and any(term in raw_lower for term in credential_terms):
+            # Check both flat evidence_tracker calls AND POM-mode method calls
+            is_fill = "evidence_tracker.fill(" in raw_lower or ".fill(" in raw_lower
+            is_click = "evidence_tracker.click(" in raw_lower or ".click(" in raw_lower
+
+            if is_fill and any(term in raw_lower for term in credential_terms):
                 has_credential_fill = True
-            if "evidence_tracker.click(" in raw_lower and any(term in raw_lower for term in login_terms):
+            if is_click and any(term in raw_lower for term in login_terms):
                 has_login_click = True
 
             for placeholder in step.placeholders:
@@ -433,6 +436,8 @@ class PrerequisiteInjector:
                 continue
             # Only include evidence_tracker ACTION calls (navigate, click, fill)
             # Exclude assertions - they are test-specific and meaningless when injected
+            # Note: navigation and consent dismiss filtering happens in inject_into_code,
+            # not here. This keeps the InjectionPlan faithful for diagnostics.
             if "evidence_tracker." in raw:
                 if self._is_assertion_step(raw):
                     continue

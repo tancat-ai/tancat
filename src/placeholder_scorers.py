@@ -83,6 +83,8 @@ class PlaceholderScorer:
         "order",
         "complete",
         "done",
+        "added",
+        "added to cart",
     )
 
     # Terms that signal page-level semantic assertions.

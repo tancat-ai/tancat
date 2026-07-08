@@ -24,6 +24,8 @@ ADD_TO_CART_SELECTORS: list[str] = [
     "button.btn-default.cart",
     'button[type="submit"]',
     "input[type='submit']",
+    "a.btn.add-to-cart",
+    "a.add-to-cart",
     ".add-to-cart",
     "[data-action='add-to-cart']",
     "a[href*='add-to-cart']",

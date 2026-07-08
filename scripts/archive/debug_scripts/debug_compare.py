@@ -155,7 +155,6 @@ def test_03_view_cart(page):
 
     # Test placeholder parsing
     placeholders = parser.parse_placeholders(sample)
-    expected_count = 6  # GOTO:home, CLICK:category, FILL:search, CLICK:search-btn, ASSERT:listing, CLICK:cart, ASSERT:contents
     # Actually GOTO is single-brace, so parse_placeholders catches double-brace ones
     suite.results.append(TestResult(
         category="Skeleton Inspection",
@@ -184,7 +183,7 @@ def test_03_view_cart(page):
     ))
 
     # Test placeholder action extraction
-    actions = set(a for a, _ in placeholders)
+    actions = {a for a, _ in placeholders}
     expected_actions = {"CLICK", "FILL", "ASSERT"}
     suite.results.append(TestResult(
         category="Skeleton Inspection",

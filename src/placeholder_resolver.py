@@ -455,8 +455,27 @@ class PlaceholderResolver:
         # Enforce global slice cap across all available pool items
         return ranked[:20]
 
-    def resolve_url(self, description: str, pages_data: dict[str, list[dict[str, Any]]]) -> str | None:
-        """Resolve navigation placeholders to the best matching scraped URL."""
+    def resolve_url(
+        self, description: str, pages_data: dict[str, list[dict[str, Any]]], known_urls: list[str] | None = None
+    ) -> str | None:
+        """Resolve navigation placeholders to the best matching scraped URL.
+
+        First checks if description is a URL, then checks known_urls,
+        then matches against already scraped pages.
+        """
+        # 1. Direct URL match
+        if description.startswith("http") or (description.startswith("/") and len(description) > 1):
+            return description
+
+        # 2. Match against known URLs (provided by orchestrator)
+        if known_urls:
+            desc_norm = description.lower().strip()
+            for url in known_urls:
+                parsed = urlparse(url)
+                path_norm = (parsed.path or "/").lower().replace("/", " ")
+                if desc_norm in path_norm or path_norm in desc_norm:
+                    return url
+
         if not pages_data:
             return None
 

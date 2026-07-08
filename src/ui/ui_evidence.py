@@ -68,6 +68,7 @@ class EvidenceViewer:
             "View mode",
             options=["annotated", "heatmap", "clean"],
             index=0,
+            key="main_evidence_view_mode",
             help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
         )
         html = generate_annotated_journey(
@@ -230,7 +231,7 @@ class EvidenceViewer:
                     continue
                 if str(step.get("type", "")).lower() != "navigate":
                     continue
-                val = str(step.get("value", "") or "")
+                val = str(step.get("value", "") or "").rstrip("/")
                 if val.startswith("http"):
                     url_options.add(val)
         url_list = sorted(url_options)

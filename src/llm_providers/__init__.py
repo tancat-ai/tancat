@@ -215,10 +215,15 @@ class LMStudioProvider(LLMProvider):
         return None
 
     def list_models(self, timeout: int = 30) -> list[str]:
-        response = self._client.get("/models", timeout=timeout)
-        response.raise_for_status()
+        # Use a fresh client for list_models to avoid stale connections
+        # in Streamlit's multi-threaded context (fixes OSError [Errno 22])
+        import httpx
 
-        return [m["id"] for m in response.json().get("data", [])]
+        with httpx.Client(base_url=f"{self._base_url}/v1", timeout=timeout) as client:
+            response = client.get("/models")
+            response.raise_for_status()
+
+            return [m["id"] for m in response.json().get("data", [])]
 
 
 class OpenAIProvider(LLMProvider):
@@ -346,13 +351,22 @@ class OpenAIProvider(LLMProvider):
         )
 
     def list_models(self, timeout: int = 30) -> list[str]:
-        response = self._client.get("/models", timeout=timeout)
-        # In local mode, 401 means the server is up but the dummy key is not recognized — still OK
-        if not self._is_local:
-            response.raise_for_status()
+        # Use a fresh client for list_models to avoid stale connections
+        # in Streamlit's multi-threaded context (fixes OSError [Errno 22])
+        import httpx
 
-        if response.status_code in (200, 401):
-            return [m["id"] for m in response.json().get("data", []) if not m.get("owned_by", "").startswith("system")]
+        with httpx.Client(
+            base_url=self._base_url, timeout=timeout, headers={"Authorization": f"Bearer {self._api_key}"}
+        ) as client:
+            response = client.get("/models")
+            # In local mode, 401 means the server is up but the dummy key is not recognized — still OK
+            if not self._is_local:
+                response.raise_for_status()
+
+            if response.status_code in (200, 401):
+                return [
+                    m["id"] for m in response.json().get("data", []) if not m.get("owned_by", "").startswith("system")
+                ]
         return []
 
 

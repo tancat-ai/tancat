@@ -8,6 +8,91 @@ from urllib.parse import urlparse
 from src.file_utils import slugify
 from src.pipeline_models import GeneratedPageObject, ScrapedPage
 
+# Click method injected into POM classes — allows home_page.click('Dress category link')
+# to resolve to click_dress_category_link() or fall back to self.page.locator().click().
+# Two versions: one for evidence tracker (uses self.tracker) and one for plain POMs.
+_CLICK_METHOD_SOURCE_ET = (
+    "    def click(self, description: str) -> None:\n"
+    '        """Click by semantic description — resolve to POM method or delegate to tracker."""\n'
+    "        import re\n"
+    "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
+    "        method_name = 'click_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
+    "        method_name = re.sub(r'_+', '_', method_name).strip('_')\n"
+    "        # Use dir() to avoid triggering __getattr__ which calls pytest.skip()\n"
+    "        # Search click_ methods AND navigate_ methods (e.g. navigate_to_cart)\n"
+    "        action_methods = {m for m in dir(self) if m.startswith('click_') or m.startswith('navigate_')}\n"
+    "        if method_name in action_methods:\n"
+    "            getattr(self, method_name)()\n"
+    "            return\n"
+    "        # Partial match: score action methods by keyword overlap.\n"
+    "        # Remove noise words (link, button, section, navigation, category, page, etc.)\n"
+    "        # and action prefixes (click, navigate) so that click_view_cart and\n"
+    "        # navigate_to_cart are scored equally on their semantic content.\n"
+    "        noise = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',\n"
+    "                'of', 'and', 'or', 'link', 'button', 'section', 'navigation',\n"
+    "                'category', 'page', 'header', 'popup', 'menu', 'item', 'list',\n"
+    "                'click', 'navigate'}\n"
+    "        desc_parts = [p for p in method_name.split('_') if p and p not in noise]\n"
+    "        # Build a set of navigate_ targets so we can prefer them over\n"
+    "        # click_ methods when both exist for the same action\n"
+    "        navigate_targets = {m[len('navigate_'):] for m in action_methods if m.startswith('navigate_')}\n"
+    "        best_method, best_score = None, 0\n"
+    "        # Sort so navigate_ methods come after click_ — then use >= to prefer\n"
+    "        # navigate_ on ties (they have +1 bonus).\n"
+    "        for method in sorted(action_methods, key=lambda m: not m.startswith('navigate_')):\n"
+    "            score = sum(1 for p in desc_parts if p in method)\n"
+    "            if score < 1:\n"
+    "                continue\n"
+    "            # Prefer navigate_ methods — they use a[href=...] locators which\n"
+    "            # are more reliable than click_ methods that may match headings.\n"
+    "            if method.startswith('navigate_'):\n"
+    "                score += 1\n"
+    "            if score > best_score:\n"
+    "                best_method, best_score = method, score\n"
+    "        if best_method:\n"
+    "            getattr(self, best_method)()\n"
+    "            return\n"
+    "        # Last resort: use page.locator with text matching (fast-fail).\n"
+    "        # Avoids delegating to evidence_tracker with a raw description\n"
+    "        # which Playwright tries as a CSS selector and hangs on 5s timeout.\n"
+    "        self.page.locator('text=' + description).first.click(timeout=3000)\n"
+)
+
+_CLICK_METHOD_SOURCE_PLAIN = (
+    "    def click(self, description: str) -> None:\n"
+    '        """Click by semantic description — resolve to POM method or fall back to page.locator."""\n'
+    "        import re\n"
+    "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
+    "        method_name = 'click_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
+    "        method_name = re.sub(r'_+', '_', method_name).strip('_')\n"
+    "        # Use dir() to avoid triggering __getattr__ which calls pytest.skip()\n"
+    "        action_methods = {m for m in dir(self) if m.startswith('click_') or m.startswith('navigate_')}\n"
+    "        if method_name in action_methods:\n"
+    "            getattr(self, method_name)()\n"
+    "            return\n"
+    "        # Partial match: score action methods by keyword overlap.\n"
+    "        # Remove action prefixes (click, navigate) so methods are scored on semantic content.\n"
+    "        noise = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'from',\n"
+    "                'of', 'and', 'or', 'link', 'button', 'section', 'navigation',\n"
+    "                'category', 'page', 'header', 'popup', 'menu', 'item', 'list',\n"
+    "                'click', 'navigate'}\n"
+    "        desc_parts = [p for p in method_name.split('_') if p and p not in noise]\n"
+    "        best_method, best_score = None, 0\n"
+    "        for method in sorted(action_methods, key=lambda m: not m.startswith('navigate_')):\n"
+    "            score = sum(1 for p in desc_parts if p in method)\n"
+    "            if score < 1:\n"
+    "                continue\n"
+    "            if method.startswith('navigate_'):\n"
+    "                score += 1\n"
+    "            if score > best_score:\n"
+    "                best_method, best_score = method, score\n"
+    "        if best_method:\n"
+    "            getattr(self, best_method)()\n"
+    "            return\n"
+    "        # Last resort: use page.locator with text matching\n"
+    "        self.page.locator('text=' + description).first.click(timeout=3000)\n"
+)
+
 
 class PageObjectBuilder:
     """Convert scraped pages into deterministic Playwright page object modules."""
@@ -283,6 +368,8 @@ class PageObjectBuilder:
             f'    URL = "{url}"\n\n'
             f"{init_code}"
             f"{navigate_code}"
+            + (_CLICK_METHOD_SOURCE_ET if use_evidence_tracker else _CLICK_METHOD_SOURCE_PLAIN)
+            + "\n"
             "    def __getattr__(self, name):\n"
             "        def fallback(*args, **kwargs):\n"
             "            import pytest\n"

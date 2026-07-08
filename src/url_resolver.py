@@ -64,7 +64,20 @@ class UrlResolver:
             else:
                 logger.warning("Could not resolve keyword '%s' to any scraped URL", keyword)
 
-        # 3. If concepts provided and no scraped URLs, generate common path candidates
+        # 3. Auto-map route concepts against scraped URLs.
+        # This ensures common page types (cart, checkout, products) are mapped
+        # even if PAGES_NEEDED was sparse or omitted them.
+        if concepts:
+            for concept in concepts:
+                c_lower = concept.lower()
+                if c_lower in self._keyword_to_url:
+                    continue  # Already mapped
+                resolved = self._match_keyword_to_url(c_lower, scraped_urls)
+                if resolved:
+                    self._keyword_to_url[c_lower] = resolved
+                    logger.debug("Mapped concept '%s' → %s", concept, resolved)
+
+        # 4. If concepts provided and no scraped URLs, generate common path candidates
         if not scraped_urls and concepts:
             logger.info("No scraped URLs available — generating common path candidates")
             candidates = build_common_path_candidates([seed_url], set(concepts))
@@ -90,7 +103,7 @@ class UrlResolver:
         if kw_lower in self._keyword_to_url:
             return self._keyword_to_url[kw_lower]
 
-        # Fallback: try substring matching against known keywords
+        # Fallback 1: try substring matching against known keywords
         for known_kw, url in self._keyword_to_url.items():
             if kw_lower in known_kw or known_kw in kw_lower:
                 logger.debug(
@@ -100,6 +113,27 @@ class UrlResolver:
                     url,
                 )
                 return url
+
+        # Fallback 2: multi-word decomposition against URL path segments.
+        # Handles "Dress category page" → /category_products/1
+        noise = {"the", "a", "an", "page", "link", "button", "on", "to", "and", "or"}
+        keyword_words = [w for w in kw_lower.replace("-", " ").split() if len(w) > 2 and w not in noise]
+        if len(keyword_words) > 1:
+            all_urls = list(self._keyword_to_url.values())
+            for url in all_urls:
+                path = urlparse(url).path.lower().strip("/")
+                if not path:
+                    continue
+                clean_path = path.rsplit(".", 1)[0]
+                match_count = sum(1 for w in keyword_words if w in clean_path)
+                if match_count >= 1:
+                    logger.debug(
+                        "Multi-word path match: '%s' → %s (%s)",
+                        keyword,
+                        url,
+                        clean_path,
+                    )
+                    return url
 
         return None
 
@@ -188,6 +222,21 @@ class UrlResolver:
         if candidates:
             candidates.sort(key=lambda x: x[0])
             return candidates[0][1]
+
+        # 5. Multi-word keyword decomposition: try each significant word
+        # against URL path segments. Handles "dress category page" → /category_products/1
+        noise = {"the", "a", "an", "page", "link", "button", "on", "to", "and", "or"}
+        keyword_words = [w for w in kw_lower.replace("-", " ").split() if len(w) > 2 and w not in noise]
+        if len(keyword_words) > 1:
+            for url in scraped_urls:
+                path = urlparse(url).path.lower().strip("/")
+                if not path:
+                    continue
+                clean_path = path.rsplit(".", 1)[0]
+                # Count how many keyword words appear in the path
+                match_count = sum(1 for w in keyword_words if w in clean_path)
+                if match_count >= 1:
+                    return url  # First URL with any keyword word match
 
         return None
 

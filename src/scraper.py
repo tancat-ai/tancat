@@ -273,6 +273,13 @@ class PageScraper:
                     return [], {}, f"HTTP {response.status}", page.url
 
                 final_url = page.url
+
+                # Dismiss consent overlays before scraping — otherwise we capture
+                # cookie banner elements instead of actual page content
+                from src.browser_utils import dismiss_consent_overlays
+
+                dismiss_consent_overlays(page)
+
                 html_content = page.content()
                 elements = self._extract_elements_from_html(html_content, base_url=final_url)
 
@@ -322,6 +329,12 @@ class PageScraper:
                     return ScrapeResult(url=url, elements=[], error=f"HTTP {response.status}", final_url=final_url)
 
                 final_url = page.url
+
+                # Dismiss consent overlays before scraping
+                from src.browser_utils import dismiss_consent_overlays
+
+                dismiss_consent_overlays(page)
+
                 title = page.title()
                 html_content = page.content()
                 elements = self._extract_elements_from_html(html_content, base_url=final_url)

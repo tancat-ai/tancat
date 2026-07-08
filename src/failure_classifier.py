@@ -60,7 +60,8 @@ _WAITING_FOR_RE = re.compile(
 )
 
 # Extract locator string from: locator('page.locator("#submit-btn")') or locator('get_by_role(...)')
-_LOCATOR_EXTRACT_RE = re.compile(r"locator\(\s*['\"]([^'\"]+)['\"]\s*\)")
+# Use non-greedy match to handle locators that contain quotes inside them.
+_LOCATOR_EXTRACT_RE = re.compile(r"locator\(\s*['\"](.*?)['\"]\s*\)")
 
 # Strict mode: "strict mode violation: resolved to 2 elements"
 _STRICT_VIOLATION_RE = re.compile(

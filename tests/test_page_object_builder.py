@@ -114,8 +114,10 @@ def test_evidence_aware_pom_click_delegates_to_tracker() -> None:
 
     page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
 
+    # POM methods delegate to tracker
     assert "self.tracker.click('#submit-btn', label='submit')" in page_object.module_source
-    assert "self.page.locator" not in page_object.module_source
+    # Generic click() fallback uses page.locator with text matching for fast-fail
+    assert "self.page.locator('text=' + description).first.click(timeout=3000)" in page_object.module_source
 
 
 def test_evidence_aware_pom_fill_delegates_to_tracker() -> None:

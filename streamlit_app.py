@@ -154,9 +154,9 @@ env_choice = st.sidebar.selectbox(
     "Environment",
     [e.value for e in Environment],
     index=[e.value for e in Environment].index(st.session_state.environment),
-    key="environment",
 )
 selected_env = Environment(env_choice)
+st.session_state.environment = env_choice
 
 # Migrate legacy auto-keys (label-based) into stable keys.
 if not st.session_state.get("starting_url") and st.session_state.get("Starting URL"):

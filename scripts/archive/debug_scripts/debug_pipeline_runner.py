@@ -61,12 +61,12 @@ DEFAULT_CONDITIONS = """1. Navigate to home page and verify product categories a
 
 
 def _count_test_results(stdout: str) -> dict[str, int]:
-    return dict(
-        passed=stdout.count("PASSED"),
-        failed=stdout.count("FAILED"),
-        skipped=stdout.count("SKIPPED"),
-        errors=stdout.count("ERROR"),
-    )
+    return {
+        "passed": stdout.count("PASSED"),
+        "failed": stdout.count("FAILED"),
+        "skipped": stdout.count("SKIPPED"),
+        "errors": stdout.count("ERROR"),
+    }
 
 
 async def run_pipeline(
@@ -178,7 +178,7 @@ async def run_pipeline(
     )
 
     test_pkg = None
-    test_results = dict(passed=0, failed=0, skipped=0, errors=0)
+    test_results = {"passed": 0, "failed": 0, "skipped": 0, "errors": 0}
 
     if save:
         writer = PipelineArtifactWriter(output_dir=str(OUTPUT_DIR))
@@ -202,21 +202,21 @@ async def run_pipeline(
 
     rate = 1.0 - (len(unresolved) / max(len(journeys), 1))
 
-    result: dict = dict(
-        mode=mode_label,
-        journeys=len(journeys),
-        placeholders=ph_count,
-        page_objects=len(page_objs),
-        page_object_names=[po.class_name for po in page_objs],
-        unresolved=len(unresolved),
-        resolution_rate=f"{rate:.0%}",
-        test_results=test_results,
-        code=code,
-        pkg=test_pkg,
-        pom_calls=code.count(".click(") + code.count(".fill(") if pom_mode else 0,
-        ev_calls=code.count("evidence_tracker."),
-        _scraped_data=scraped,  # shared between POM/Standard in compare mode
-    )
+    result: dict = {
+        "mode": mode_label,
+        "journeys": len(journeys),
+        "placeholders": ph_count,
+        "page_objects": len(page_objs),
+        "page_object_names": [po.class_name for po in page_objs],
+        "unresolved": len(unresolved),
+        "resolution_rate": f"{rate:.0%}",
+        "test_results": test_results,
+        "code": code,
+        "pkg": test_pkg,
+        "pom_calls": code.count(".click(") + code.count(".fill(") if pom_mode else 0,
+        "ev_calls": code.count("evidence_tracker."),
+        "_scraped_data": scraped,  # shared between POM/Standard in compare mode
+    }
     return result
 
 

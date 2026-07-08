@@ -1,5 +1,5 @@
-from playwright.sync_api import Page, expect
 from pages.home_page import HomePage
+from playwright.sync_api import Page
 
 
 @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")

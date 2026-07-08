@@ -87,11 +87,11 @@ def build_requirement_coverages(
     requirements: list[RequirementCoverage] = []
     for index, criterion in enumerate(acceptance_criteria_lines, start=1):
         req_id = f"TC-{index:03d}"
-        prefix_p, prefix_s = f"test_{index:02d}_", f"test_{index}_"
+        pattern = re.compile(rf"^test_(?:[a-zA-Z0-9]+_)?0?{index}_", re.IGNORECASE)
 
         linked = []
         for name in test_names_in_code:
-            if name.startswith(prefix_p) or name.startswith(prefix_s):
+            if pattern.match(name):
                 linked.append(name)
 
         if not linked:

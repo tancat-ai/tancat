@@ -83,7 +83,7 @@ def main() -> None:
 
     # --- Step 2: Generate tests ---
     print("\n[2/6] Generating tests with POM mode...")
-    final_code = asyncio.run(
+    asyncio.run(
         orchestrator.run_pipeline(
             user_story=spec.user_story,
             conditions=CONDITIONS,

@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-07-03T23:27:47.593381",
+  "pom_mode": true,
+  "sites": [
+    {
+      "site_id": "automationexercise",
+      "site_name": "automationexercise.com",
+      "pom_mode": true,
+      "checks": [
+        {
+          "name": "LLM client (openai-local / C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.6-27B-MTP-GGUF\\Qwen3.6-27B-UD-Q4_K_XL.gguf)",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "Pipeline generation (263.3s)",
+          "passed": true,
+          "detail": "6220 chars"
+        },
+        {
+          "name": "Generated code substantive",
+          "passed": true,
+          "detail": "6220 chars"
+        },
+        {
+          "name": "No unresolved placeholder tokens",
+          "passed": true,
+          "detail": "clean"
+        },
+        {
+          "name": "Minimal pytest.skip usage",
+          "passed": true,
+          "detail": "2 skip lines"
+        },
+        {
+          "name": "Evidence tracker calls present",
+          "passed": true,
+          "detail": "37 calls"
+        },
+        {
+          "name": "@pytest.mark.evidence decorators",
+          "passed": true,
+          "detail": "8 decorators"
+        },
+        {
+          "name": "Test functions generated (8)",
+          "passed": true,
+          "detail": "8 tests vs 8 criteria"
+        },
+        {
+          "name": "POM page objects used in tests",
+          "passed": true,
+          "detail": "found"
+        },
+        {
+          "name": "Pages scraped (4)",
+          "passed": true,
+          "detail": "https://automationexercise.com, ttps://automationexercise.com/test_cases, tomationexercise.com/category_products/1, https://automationexercise.com/view_cart"
+        },
+        {
+          "name": "POM classes generated (2)",
+          "passed": true,
+          "detail": "HomePage, TestCasesPage"
+        },
+        {
+          "name": "Unresolved placeholders (2)",
+          "passed": true,
+          "detail": "[\"pytest.skip(\\\"Skipping: unresolved placeholders for: 'Proceed to checkout button'; 'checkout page loads with order summary section visible'\\\")\", \"pytest.skip(\\\"Skipping: unresolved placeholders for: 'Proceed to checkout button'\\\")\"]"
+        },
+        {
+          "name": "Test execution (6.7s)",
+          "passed": false,
+          "detail": "exit code 1"
+        }
+      ],
+      "generation_duration_s": 263.32,
+      "run_duration_s": 6.67,
+      "run_pass": false,
+      "error": ""
+    }
+  ]
+}

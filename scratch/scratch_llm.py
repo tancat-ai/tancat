@@ -1,8 +1,10 @@
 import asyncio
+
+from dotenv import load_dotenv
+
 from src.llm_client import LLMClient
 from src.prompt_utils import get_skeleton_prompt_template, prepare_conditions_for_generation
-import os
-from dotenv import load_dotenv
+
 
 async def main():
     load_dotenv()
@@ -15,14 +17,14 @@ async def main():
 4. Verify the added item appears correctly in the cart
 5. Navigate to the checkout page
 6. Complete the checkout process and verify success (Thank You page)"""
-    
+
     prompt = get_skeleton_prompt_template(expected_count=6)
     prompt = prompt.format(
         user_story=user_story,
         conditions=prepare_conditions_for_generation(conditions),
         known_urls_block="- https://www.saucedemo.com"
     )
-    
+
     print("Sending prompt...")
     res = await client.generate(prompt)
     print("==== LLM OUTPUT ====")

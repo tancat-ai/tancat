@@ -86,7 +86,14 @@ def _render_inline_evidence(run_result: RunResult) -> None:
 
     # Filter sidecars to only those for tests that just ran
     test_names = {result.name for result in run_result.results}
-    relevant_sidecars = [s for s in sidecars if s.stem in test_names]
+
+    def extract_test_name(s: Path) -> str:
+        name = s.name
+        if name.endswith(".evidence.json"):
+            name = name[:-14]
+        return name.split("[")[0]
+
+    relevant_sidecars = [s for s in sidecars if extract_test_name(s) in test_names]
 
     if not relevant_sidecars:
         st.info("No evidence found for the tests that just ran.")

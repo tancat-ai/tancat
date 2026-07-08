@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Protocol
 
 
@@ -60,6 +61,10 @@ def build_pytest_run_command(saved_path: str, failed_nodeids: Sequence[str] | No
         "pytest",
         "-o",
         "addopts=",
+        "-o",
+        "norecursedirs=.git .venv",
+        "-o",
+        f"pythonpath={str(Path(saved_path).parent)}",
         "--browser=chromium",
         "--screenshot=only-on-failure",
         "--durations=0",

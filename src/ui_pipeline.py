@@ -311,38 +311,65 @@ def safe_read_text(path: str) -> str:
 
 
 def find_evidence_sidecars(base_dir: Path) -> list[Path]:
-    """Find all evidence sidecars under the generated_tests directory."""
+    """Find all evidence sidecars under the generated_tests directory or a specific test package."""
     sidecars: list[Path] = []
     if not base_dir.exists():
         return sidecars
-    for test_pkg in sorted(base_dir.iterdir()):
-        if test_pkg.is_dir():
-            pkg_evidence = test_pkg / "evidence"
+    if base_dir.is_file():
+        base_dir = base_dir.parent
+
+    if (base_dir / "evidence").exists() or base_dir.name.startswith("test_"):
+        pkg_evidence = base_dir / "evidence"
+        if pkg_evidence.exists():
             sidecars.extend(pkg_evidence.glob("*.evidence.json"))
+    else:
+        for test_pkg in sorted(base_dir.iterdir()):
+            if test_pkg.is_dir():
+                pkg_evidence = test_pkg / "evidence"
+                sidecars.extend(pkg_evidence.glob("*.evidence.json"))
     sidecars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return sidecars
 
 
 def find_all_evidence_dirs(base_dir: Path) -> list[Path]:
-    """Return all evidence directories under generated_tests/."""
+    """Return all evidence directories under generated_tests/ or a specific test package."""
     dirs: list[Path] = []
     if not base_dir.exists():
         return dirs
-    for test_pkg in sorted(base_dir.iterdir()):
-        if test_pkg.is_dir():
-            pkg_evidence = test_pkg / "evidence"
-            if pkg_evidence.exists():
-                dirs.append(pkg_evidence)
+    if base_dir.is_file():
+        base_dir = base_dir.parent
+
+    if (base_dir / "evidence").exists() or base_dir.name.startswith("test_"):
+        pkg_evidence = base_dir / "evidence"
+        if pkg_evidence.exists():
+            dirs.append(pkg_evidence)
+    else:
+        for test_pkg in sorted(base_dir.iterdir()):
+            if test_pkg.is_dir():
+                pkg_evidence = test_pkg / "evidence"
+                if pkg_evidence.exists():
+                    dirs.append(pkg_evidence)
     return dirs
 
 
 def find_sidecar_for_test(base_dir: Path, test_name: str) -> Path | None:
-    """Find a sidecar by test name across all test package evidence directories."""
+    """Find a sidecar by test name across all test package evidence directories or a specific test package."""
     if not base_dir.exists():
         return None
-    for test_pkg in sorted(base_dir.iterdir()):
-        if test_pkg.is_dir():
-            candidate = test_pkg / "evidence" / f"{test_name}.evidence.json"
-            if candidate.exists():
+    if base_dir.is_file():
+        base_dir = base_dir.parent
+
+    if (base_dir / "evidence").exists() or base_dir.name.startswith("test_"):
+        evidence_dir = base_dir / "evidence"
+        if evidence_dir.exists():
+            for candidate in evidence_dir.glob(f"{test_name}*.evidence.json"):
                 return candidate
+    else:
+        for test_pkg in sorted(base_dir.iterdir()):
+            if test_pkg.is_dir():
+                evidence_dir = test_pkg / "evidence"
+                if not evidence_dir.exists():
+                    continue
+                for candidate in evidence_dir.glob(f"{test_name}*.evidence.json"):
+                    return candidate
     return None

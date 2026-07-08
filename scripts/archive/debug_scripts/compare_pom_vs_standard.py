@@ -124,12 +124,12 @@ async def run_once(
         passed, failed, skipped = _count_results(result.stdout)
 
     rate = 1.0 - (len(unresolved) / max(len(journeys), 1))
-    return dict(journeys=len(journeys), objects=len(page_objs),
-                unresolved=len(unresolved), rate=rate,
-                passed=passed, failed=failed, skipped=skipped,
-                code=test_code, pkg=test_pkg,
-                ev_calls=test_code.count("evidence_tracker."),
-                pom_calls=test_code.count(".click(") + test_code.count(".fill("))
+    return {"journeys": len(journeys), "objects": len(page_objs),
+                "unresolved": len(unresolved), "rate": rate,
+                "passed": passed, "failed": failed, "skipped": skipped,
+                "code": test_code, "pkg": test_pkg,
+                "ev_calls": test_code.count("evidence_tracker."),
+                "pom_calls": test_code.count(".click(") + test_code.count(".fill(")}
 
 
 def main() -> None:

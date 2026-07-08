@@ -372,10 +372,26 @@ async def run_site_uat(
             (output_dir / "conftest.py").write_text(CONFTEST_TEMPLATE, encoding="utf-8")
             (output_dir / f"test_{site_id}.py").write_text(final_code, encoding="utf-8")
 
+            # Write POM pages/ directory so tests can import from pages.*
+            if pom_mode and pipeline_result and pipeline_result.generated_page_objects:
+                pages_dir = output_dir / "pages"
+                pages_dir.mkdir(parents=True, exist_ok=True)
+                (pages_dir / "__init__.py").write_text("", encoding="utf-8")
+                for page_obj in pipeline_result.generated_page_objects:
+                    (pages_dir / f"{page_obj.module_name}.py").write_text(page_obj.module_source, encoding="utf-8")
+
             print(f"\n  [Run] Executing tests against {config.name}...")
             run_start = time.time()
             proc = subprocess.run(
-                [sys.executable, "-m", "pytest", str(output_dir), "-v", "--tb=short", "--no-header"],
+                [
+                    sys.executable, "-m", "pytest", str(output_dir),
+                    "-o", "addopts=",
+                    "-o", "norecursedirs=.git .venv",
+                    "-o", f"pythonpath={output_dir}",
+                    "--browser=chromium",
+                    "--screenshot=only-on-failure",
+                    "-v", "--tb=short", "--no-header",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -404,10 +420,9 @@ async def run_site_uat(
                 )
             )
 
-            # Cleanup
-            import shutil
-
-            shutil.rmtree(output_dir, ignore_errors=True)
+            # Keep output dir for debugging — don't delete
+            # import shutil
+            # shutil.rmtree(output_dir, ignore_errors=True)
 
         except subprocess.TimeoutExpired:
             result.checks.append(
@@ -601,7 +616,7 @@ async def main() -> int:
             model=args.model,
             base_url=args.base_url,
         )
-        results.append(site_result)
+    results.append(site_result)
 
     # Overall summary
     total_passed = sum(r.passed for r in results)

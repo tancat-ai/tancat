@@ -1,5 +1,5 @@
-from src.skeleton_parser import SkeletonParser
 from src.llm_client import LLMClient
+from src.skeleton_parser import SkeletonParser
 
 code = open("scratch_raw_out.txt", encoding="utf-8").read()
 code = LLMClient()._extract_code(code)

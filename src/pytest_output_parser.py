@@ -169,14 +169,29 @@ def parse_pytest_output(raw: str) -> RunResult:
 
         # ── Inside FAILURES block: grab test name and error message ───────
         if in_failures_block:
-            name_match = _FAILURE_NAME_RE.match(line)
-            if name_match:
-                current_failed_name = name_match.group(1)
-                continue
-            assertion_match = _ASSERTION_RE.match(line)
-            if assertion_match and current_failed_name:
-                if current_failed_name in results_by_name:
-                    results_by_name[current_failed_name].error_message = assertion_match.group(2)
+            # Exit the failures block when we hit a separator line (=== ... ===)
+            # This ensures the final summary line is not swallowed.
+            if stripped.startswith("===") and stripped.endswith("==="):
+                in_failures_block = False
+                # Fall through so this line is processed by the summary handler below
+            else:
+                name_match = _FAILURE_NAME_RE.match(line)
+                if name_match:
+                    current_failed_name = name_match.group(1)
+                    continue
+
+                if current_failed_name and current_failed_name in results_by_name:
+                    assertion_match = _ASSERTION_RE.match(line)
+                    if assertion_match:
+                        existing = results_by_name[current_failed_name].error_message
+                        if not existing:
+                            results_by_name[current_failed_name].error_message = assertion_match.group(2)
+                    elif line.startswith("E   "):
+                        existing = results_by_name[current_failed_name].error_message
+                        if existing:
+                            results_by_name[current_failed_name].error_message = existing + "\n" + line.strip()
+                        else:
+                            results_by_name[current_failed_name].error_message = line.strip()
                 continue
 
         # ── PASSED / FAILED test lines ────────────────────────────────────
@@ -223,8 +238,9 @@ def parse_pytest_output(raw: str) -> RunResult:
         error_match = _ERROR_RE.search(line)
         if error_match:
             name, message = error_match.group(1), error_match.group(2)
-            if name in results_by_name:
-                results_by_name[name].error_message = message
+            name_base = name.split("[")[0]
+            if name_base in results_by_name and not results_by_name[name_base].error_message:
+                results_by_name[name_base].error_message = message
             continue
 
         # ── Final summary line ─────────────────────────────────────────────
