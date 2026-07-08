@@ -37,8 +37,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     "saucedemo_login": {
         "url": "https://www.saucedemo.com",
         "user_story": (
-            "As a user, I want to log in to the SauceDemo shopping site "
-            "so that I can browse and purchase products."
+            "As a user, I want to log in to the SauceDemo shopping site so that I can browse and purchase products."
         ),
         "conditions": (
             "1. Navigate to the saucedemo.com home page\n"
@@ -52,8 +51,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     "saucedemo_full": {
         "url": "https://www.saucedemo.com",
         "user_story": (
-            "As a user, I want to log in, add items to my cart, "
-            "and complete checkout on the SauceDemo site."
+            "As a user, I want to log in, add items to my cart, and complete checkout on the SauceDemo site."
         ),
         "conditions": (
             "1. Log in with username standard_user and password secret_sauce\n"
@@ -66,10 +64,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     },
     "automationexercise_browse": {
         "url": "https://automationexercise.com",
-        "user_story": (
-            "As a shopper, I want to browse products on automationexercise.com "
-            "and add items to my cart."
-        ),
+        "user_story": ("As a shopper, I want to browse products on automationexercise.com and add items to my cart."),
         "conditions": (
             "1. Navigate to the automationexercise.com home page\n"
             "2. Click the 'Products' link in the header navigation\n"
@@ -97,8 +92,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     "automationexercise_contact": {
         "url": "https://automationexercise.com",
         "user_story": (
-            "As a user, I want to use the contact form on automationexercise.com "
-            "to send a message to the site owners."
+            "As a user, I want to use the contact form on automationexercise.com to send a message to the site owners."
         ),
         "conditions": (
             "1. Navigate to the automationexercise.com home page\n"
@@ -119,6 +113,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 # Result tracking
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RunResult:
     scenario: str
@@ -138,6 +133,7 @@ class RunResult:
 # ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
+
 
 async def run_scenario(
     scenario_id: str,
@@ -196,13 +192,12 @@ async def run_scenario(
         pages_dir.mkdir(parents=True, exist_ok=True)
         (pages_dir / "__init__.py").write_text("", encoding="utf-8")
         for page_obj in pipeline_result.generated_page_objects:
-            (pages_dir / f"{page_obj.module_name}.py").write_text(
-                page_obj.module_source, encoding="utf-8"
-            )
+            (pages_dir / f"{page_obj.module_name}.py").write_text(page_obj.module_source, encoding="utf-8")
             result.generated_files.append(f"pages/{page_obj.module_name}.py")
 
     # Try to run the tests
     import subprocess
+
     confest_content = '''"""Conftest for generated tests."""
 from pathlib import Path
 from typing import Any
@@ -236,11 +231,18 @@ def evidence_tracker(page: Page, request: Any) -> EvidenceTracker:
         run_start = time.time()
         proc = subprocess.run(
             [
-                sys.executable, "-m", "pytest", str(run_dir),
-                "-o", "addopts=",
-                "-o", f"pythonpath={run_dir}",
+                sys.executable,
+                "-m",
+                "pytest",
+                str(run_dir),
+                "-o",
+                "addopts=",
+                "-o",
+                f"pythonpath={run_dir}",
                 "--browser=chromium",
-                "-v", "--tb=line", "--no-header",
+                "-v",
+                "--tb=line",
+                "--no-header",
             ],
             capture_output=True,
             text=True,
@@ -275,6 +277,7 @@ def evidence_tracker(page: Page, request: Any) -> EvidenceTracker:
 # Report
 # ---------------------------------------------------------------------------
 
+
 def print_report(results: list[RunResult]) -> None:
     """Print a summary report."""
     print(f"\n{'=' * 80}")
@@ -293,31 +296,41 @@ def print_report(results: list[RunResult]) -> None:
         passed = sum(1 for r in scenario_results if r.test_pass)
         total = len(scenario_results)
 
-        print(f"  Tests generated:    min={min(tests_gen)} max={max(tests_gen)} avg={sum(tests_gen)/len(tests_gen):.1f}")
-        print(f"  pytest.skip lines:  min={min(skips)} max={max(skips)} avg={sum(skips)/len(skips):.1f}")
-        print(f"  Unresolved ph:      min={min(unresolved)} max={max(unresolved)} avg={sum(unresolved)/len(unresolved):.1f}")
-        print(f"  Pages scraped:      min={min(pages)} max={max(pages)} avg={sum(pages)/len(pages):.1f}")
-        print(f"  Test execution:     {passed}/{total} passed ({100*passed/total:.0f}%)")
+        print(
+            f"  Tests generated:    min={min(tests_gen)} max={max(tests_gen)} avg={sum(tests_gen) / len(tests_gen):.1f}"
+        )
+        print(f"  pytest.skip lines:  min={min(skips)} max={max(skips)} avg={sum(skips) / len(skips):.1f}")
+        print(
+            f"  Unresolved ph:      min={min(unresolved)} max={max(unresolved)} avg={sum(unresolved) / len(unresolved):.1f}"
+        )
+        print(f"  Pages scraped:      min={min(pages)} max={max(pages)} avg={sum(pages) / len(pages):.1f}")
+        print(f"  Test execution:     {passed}/{total} passed ({100 * passed / total:.0f}%)")
 
         for r in scenario_results:
             status = "PASS" if r.test_pass else ("FAIL" if r.test_pass is False else "N/A")
             error_summary = "; ".join(r.errors[:2]) if r.errors else ""
-            print(f"    Run {r.run_num}: {r.test_count} tests, {r.skip_count} skips, "
-                  f"{r.pages_scraped} pages, {status:.4s} | gen={r.generation_duration:.0f}s run={r.run_duration:.0f}s")
+            print(
+                f"    Run {r.run_num}: {r.test_count} tests, {r.skip_count} skips, "
+                f"{r.pages_scraped} pages, {status:.4s} | gen={r.generation_duration:.0f}s run={r.run_duration:.0f}s"
+            )
             if error_summary:
                 print(f"      Error: {error_summary}")
 
     print(f"\n{'=' * 80}")
     overall_passed = sum(1 for r in results if r.test_pass)
     overall_total = len([r for r in results if r.test_pass is not None])
-    print(f"Overall: {overall_passed}/{overall_total} tests passed "
-          f"({100*overall_passed/overall_total:.0f}%)" if overall_total else "No tests executed")
+    print(
+        f"Overall: {overall_passed}/{overall_total} tests passed ({100 * overall_passed / overall_total:.0f}%)"
+        if overall_total
+        else "No tests executed"
+    )
     print(f"{'=' * 80}\n")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 async def main() -> None:
     load_dotenv()
