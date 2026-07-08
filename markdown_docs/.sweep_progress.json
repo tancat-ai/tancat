@@ -1,112 +1,512 @@
-﻿{
-    "status":  "in_progress",
-    "target_directory":  "src",
-    "total_files":  100,
-    "completed":  [
-                      "src/__init__.py",
-                      "src/accessibility_enricher.py",
-                      "src/analyzer.py",
-                      "src/browser_utils.py",
-                      "src/code_normalizer.py",
-                      "src/code_postprocessor.py",
-                      "src/code_validator.py",
-                      "src/config.py",
-                      "src/coverage_utils.py",
-                      "src/element_enricher.py",
-                      "src/evidence_loader.py",
-                      "src/evidence_report.py",
-                      "src/evidence_serializer.py",
-                      "src/evidence_tracker.py",
-                      "src/export_service.py",
-                      "src/failure_classifier.py",
-                      "src/failure_reporter.py",
-                      "src/file_utils.py",
-                      "src/gantt_utils.py",
-                      "src/heatmap_utils.py",
-                      "src/hover_click_utils.py",
-                      "src/journey_auth_detector.py",
-                      "src/llm_errors.py",
-                      "src/llm_providers/__init__.py",
-                      "src/locator_builder.py",
-                      "src/locator_fallback.py",
-                      "src/locator_scorer.py",
-                      "src/page_context_tracker.py",
-                      "src/pipeline_report_service.py",
-                      "src/placeholder_resolver.py",
-                      "src/prompt_utils.py",
-                      "src/pytest_output_parser.py",
-                      "src/report_builder.py",
-                      "src/report_formatters.py",
-                      "src/report_utils.py",
-                      "src/run_utils.py",
-                      "src/screenshot_capture.py",
-                      "src/semantic_candidate_ranker.py",
-                      "src/semantic_matcher.py",
-                      "src/skeleton_parser.py",
-                      "src/skeleton_validator.py",
-                      "src/spec_analyzer.py",
-                      "src/state_tracker.py",
-                      "src/test_generator.py",
-                      "src/test_plan.py",
-                      "src/url_inference.py",
-                      "src/url_resolver.py",
-                      "src/url_utils.py",
-                      "src/user_story_parser.py",
-                      "src/vision_enricher.py"
-                  ],
-    "pending":  [
-                    "src/cli/__init__.py",
-                    "src/cli/color.py",
-                    "src/cli/config.py",
-                    "src/cli/evidence_generator.py",
-                    "src/cli/input_parser.py",
-                    "src/cli/main.py",
-                    "src/cli/menu_renderer.py",
-                    "src/cli/pipeline_runner.py",
-                    "src/cli/report_generator.py",
-                    "src/cli/retro_ui.py",
-                    "src/cli/run_results_display.py",
-                    "src/cli/session.py",
-                    "src/cli/terminal_adapter.py",
-                    "src/cli/test_case_orchestrator.py",
-                    "src/cli/testing_terminal.py",
-                    "src/form_detector.py",
-                    "src/form_login_utils.py",
-                    "src/intent_matcher.py",
-                    "src/journey_executor.py",
-                    "src/journey_models.py",
-                    "src/journey_scraper.py",
-                    "src/llm_client.py",
-                    "src/llm_reasoning_filter.py",
-                    "src/locator_repair.py",
-                    "src/orchestrator.py",
-                    "src/page_object_builder.py",
-                    "src/pipeline_artifact_manager.py",
-                    "src/pipeline_models.py",
-                    "src/pipeline_run_service.py",
-                    "src/pipeline_writer.py",
-                    "src/placeholder_orchestrator.py",
-                    "src/placeholder_scorers.py",
-                    "src/prerequisite_injector.py",
-                    "src/run_history_chart.py",
-                    "src/run_history_cli.py",
-                    "src/run_result_persistence.py",
-                    "src/scraper.py",
-                    "src/sqlite_persistence.py",
-                    "src/stateful_scraper.py",
-                    "src/ui/__init__.py",
-                    "src/ui/shared.py",
-                    "src/ui/ui_downloads.py",
-                    "src/ui/ui_evidence.py",
-                    "src/ui/ui_journey.py",
-                    "src/ui/ui_requirements.py",
-                    "src/ui/ui_results.py",
-                    "src/ui/ui_run_results.py",
-                    "src/ui/ui_saved_packages.py",
-                    "src/ui/ui_sidebar.py",
-                    "src/ui_pipeline.py"
-                ],
-    "errors":  [
-
-               ]
+{
+  "total": 101,
+  "completed": 101,
+  "pending": 0,
+  "files": [
+    {
+      "source": "src\\__init__.py",
+      "doc": "markdown_docs/src\\__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\accessibility_enricher.py",
+      "doc": "markdown_docs/src\\accessibility_enricher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\analyzer.py",
+      "doc": "markdown_docs/src\\analyzer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\browser_utils.py",
+      "doc": "markdown_docs/src\\browser_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\code_normalizer.py",
+      "doc": "markdown_docs/src\\code_normalizer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\code_postprocessor.py",
+      "doc": "markdown_docs/src\\code_postprocessor.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\code_validator.py",
+      "doc": "markdown_docs/src\\code_validator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\config.py",
+      "doc": "markdown_docs/src\\config.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\coverage_utils.py",
+      "doc": "markdown_docs/src\\coverage_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\element_enricher.py",
+      "doc": "markdown_docs/src\\element_enricher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\evidence_loader.py",
+      "doc": "markdown_docs/src\\evidence_loader.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\evidence_report.py",
+      "doc": "markdown_docs/src\\evidence_report.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\evidence_serializer.py",
+      "doc": "markdown_docs/src\\evidence_serializer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\evidence_tracker.py",
+      "doc": "markdown_docs/src\\evidence_tracker.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\export_service.py",
+      "doc": "markdown_docs/src\\export_service.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\failure_classifier.py",
+      "doc": "markdown_docs/src\\failure_classifier.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\failure_reporter.py",
+      "doc": "markdown_docs/src\\failure_reporter.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\file_utils.py",
+      "doc": "markdown_docs/src\\file_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\form_detector.py",
+      "doc": "markdown_docs/src\\form_detector.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\form_login_utils.py",
+      "doc": "markdown_docs/src\\form_login_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\gantt_utils.py",
+      "doc": "markdown_docs/src\\gantt_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\heatmap_utils.py",
+      "doc": "markdown_docs/src\\heatmap_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\hover_click_utils.py",
+      "doc": "markdown_docs/src\\hover_click_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\intent_matcher.py",
+      "doc": "markdown_docs/src\\intent_matcher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\journey_auth_detector.py",
+      "doc": "markdown_docs/src\\journey_auth_detector.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\journey_executor.py",
+      "doc": "markdown_docs/src\\journey_executor.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\journey_models.py",
+      "doc": "markdown_docs/src\\journey_models.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\journey_scraper.py",
+      "doc": "markdown_docs/src\\journey_scraper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\llm_client.py",
+      "doc": "markdown_docs/src\\llm_client.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\llm_errors.py",
+      "doc": "markdown_docs/src\\llm_errors.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\llm_reasoning_filter.py",
+      "doc": "markdown_docs/src\\llm_reasoning_filter.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\locator_builder.py",
+      "doc": "markdown_docs/src\\locator_builder.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\locator_fallback.py",
+      "doc": "markdown_docs/src\\locator_fallback.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\locator_repair.py",
+      "doc": "markdown_docs/src\\locator_repair.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\locator_scorer.py",
+      "doc": "markdown_docs/src\\locator_scorer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\orchestrator.py",
+      "doc": "markdown_docs/src\\orchestrator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\page_context_tracker.py",
+      "doc": "markdown_docs/src\\page_context_tracker.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\page_object_builder.py",
+      "doc": "markdown_docs/src\\page_object_builder.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pipeline_artifact_manager.py",
+      "doc": "markdown_docs/src\\pipeline_artifact_manager.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pipeline_models.py",
+      "doc": "markdown_docs/src\\pipeline_models.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pipeline_report_service.py",
+      "doc": "markdown_docs/src\\pipeline_report_service.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pipeline_run_service.py",
+      "doc": "markdown_docs/src\\pipeline_run_service.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pipeline_writer.py",
+      "doc": "markdown_docs/src\\pipeline_writer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\placeholder_orchestrator.py",
+      "doc": "markdown_docs/src\\placeholder_orchestrator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\placeholder_resolver.py",
+      "doc": "markdown_docs/src\\placeholder_resolver.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\placeholder_scorers.py",
+      "doc": "markdown_docs/src\\placeholder_scorers.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\prerequisite_injector.py",
+      "doc": "markdown_docs/src\\prerequisite_injector.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\prompt_utils.py",
+      "doc": "markdown_docs/src\\prompt_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\provider_config.py",
+      "doc": "markdown_docs/src\\provider_config.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\pytest_output_parser.py",
+      "doc": "markdown_docs/src\\pytest_output_parser.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\report_builder.py",
+      "doc": "markdown_docs/src\\report_builder.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\report_formatters.py",
+      "doc": "markdown_docs/src\\report_formatters.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\report_utils.py",
+      "doc": "markdown_docs/src\\report_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\run_history_chart.py",
+      "doc": "markdown_docs/src\\run_history_chart.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\run_history_cli.py",
+      "doc": "markdown_docs/src\\run_history_cli.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\run_result_persistence.py",
+      "doc": "markdown_docs/src\\run_result_persistence.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\run_utils.py",
+      "doc": "markdown_docs/src\\run_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\scraper.py",
+      "doc": "markdown_docs/src\\scraper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\screenshot_capture.py",
+      "doc": "markdown_docs/src\\screenshot_capture.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\semantic_candidate_ranker.py",
+      "doc": "markdown_docs/src\\semantic_candidate_ranker.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\semantic_matcher.py",
+      "doc": "markdown_docs/src\\semantic_matcher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\skeleton_parser.py",
+      "doc": "markdown_docs/src\\skeleton_parser.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\skeleton_validator.py",
+      "doc": "markdown_docs/src\\skeleton_validator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\spec_analyzer.py",
+      "doc": "markdown_docs/src\\spec_analyzer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\sqlite_persistence.py",
+      "doc": "markdown_docs/src\\sqlite_persistence.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\state_tracker.py",
+      "doc": "markdown_docs/src\\state_tracker.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\stateful_scraper.py",
+      "doc": "markdown_docs/src\\stateful_scraper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\test_generator.py",
+      "doc": "markdown_docs/src\\test_generator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\test_plan.py",
+      "doc": "markdown_docs/src\\test_plan.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui_pipeline.py",
+      "doc": "markdown_docs/src\\ui_pipeline.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\url_inference.py",
+      "doc": "markdown_docs/src\\url_inference.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\url_resolver.py",
+      "doc": "markdown_docs/src\\url_resolver.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\url_utils.py",
+      "doc": "markdown_docs/src\\url_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\user_story_parser.py",
+      "doc": "markdown_docs/src\\user_story_parser.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\vision_enricher.py",
+      "doc": "markdown_docs/src\\vision_enricher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\__init__.py",
+      "doc": "markdown_docs/src\\cli\\__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\color.py",
+      "doc": "markdown_docs/src\\cli\\color.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\config.py",
+      "doc": "markdown_docs/src\\cli\\config.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\evidence_generator.py",
+      "doc": "markdown_docs/src\\cli\\evidence_generator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\input_parser.py",
+      "doc": "markdown_docs/src\\cli\\input_parser.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\main.py",
+      "doc": "markdown_docs/src\\cli\\main.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\menu_renderer.py",
+      "doc": "markdown_docs/src\\cli\\menu_renderer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\pipeline_runner.py",
+      "doc": "markdown_docs/src\\cli\\pipeline_runner.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\report_generator.py",
+      "doc": "markdown_docs/src\\cli\\report_generator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\retro_ui.py",
+      "doc": "markdown_docs/src\\cli\\retro_ui.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\run_results_display.py",
+      "doc": "markdown_docs/src\\cli\\run_results_display.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\session.py",
+      "doc": "markdown_docs/src\\cli\\session.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\terminal_adapter.py",
+      "doc": "markdown_docs/src\\cli\\terminal_adapter.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\test_case_orchestrator.py",
+      "doc": "markdown_docs/src\\cli\\test_case_orchestrator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\cli\\testing_terminal.py",
+      "doc": "markdown_docs/src\\cli\\testing_terminal.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\llm_providers\\__init__.py",
+      "doc": "markdown_docs/src\\llm_providers\\__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\__init__.py",
+      "doc": "markdown_docs/src\\ui\\__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\shared.py",
+      "doc": "markdown_docs/src\\ui\\shared.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_downloads.py",
+      "doc": "markdown_docs/src\\ui\\ui_downloads.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_evidence.py",
+      "doc": "markdown_docs/src\\ui\\ui_evidence.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_journey.py",
+      "doc": "markdown_docs/src\\ui\\ui_journey.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_requirements.py",
+      "doc": "markdown_docs/src\\ui\\ui_requirements.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_results.py",
+      "doc": "markdown_docs/src\\ui\\ui_results.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_run_results.py",
+      "doc": "markdown_docs/src\\ui\\ui_run_results.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_saved_packages.py",
+      "doc": "markdown_docs/src\\ui\\ui_saved_packages.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src\\ui\\ui_sidebar.py",
+      "doc": "markdown_docs/src\\ui\\ui_sidebar.py.md",
+      "status": "completed"
+    }
+  ]
 }
