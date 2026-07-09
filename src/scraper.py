@@ -249,65 +249,6 @@ class PageScraper:
 
         return elements, error, final_url
 
-    def _scrape_url_sync(self, url: str) -> tuple[list[dict[str, Any]], dict[str, Any], str | None, str]:
-        """Synchronous scraping logic, called directly in the subprocess entry point.
-
-        Returns:
-            A tuple of (elements_list, a11y_snapshot_dict, error_message_or_none, final_url).
-        """
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                # Use a real user-agent to avoid being blocked
-                context = browser.new_context(
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                page = context.new_page()
-
-                # Navigate and wait for the network to be idle (ensures JS rendering)
-                response = page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
-                if not response:
-                    return [], {}, f"No response from {url}", url
-
-                if response.status >= 400:
-                    return [], {}, f"HTTP {response.status}", page.url
-
-                final_url = page.url
-
-                # Dismiss consent overlays before scraping — otherwise we capture
-                # cookie banner elements instead of actual page content
-                from src.browser_utils import dismiss_consent_overlays
-
-                dismiss_consent_overlays(page)
-
-                html_content = page.content()
-                elements = self._extract_elements_from_html(html_content, base_url=final_url)
-
-                # Capture visibility for each element using Playwright runtime checks
-                elements = self._capture_element_visibility(page, elements)
-
-                # Capture accessibility snapshot via CDP before browser closes (AI-024)
-                # page.accessibility.snapshot() is NOT available in Python Playwright bindings.
-                # Use Chrome DevTools Protocol instead.
-                a11y_snapshot: dict[str, Any] = {}
-                try:
-                    cdp = context.new_cdp_session(page)
-                    ax_result = cdp.send("Accessibility.getFullAXTree")
-                    a11y_snapshot = AccessibilityEnricher._transform_cdp_ax_tree(ax_result.get("nodes", []))
-                    # CDP session is cleaned up when browser context closes
-                    if a11y_snapshot:
-                        self._debug(f"CDP accessibility tree captured: {len(ax_result.get('nodes', []))} nodes")
-                    else:
-                        self._debug("CDP accessibility tree returned no nodes")
-                except Exception as e:
-                    self._debug(f"CDP accessibility tree failed: {e} — skipping a11y enrichment")
-
-                browser.close()
-                return elements, a11y_snapshot, None, final_url
-
-        except Exception as e:
-            return [], {}, str(e), url
-
     def _scrape_url_sync_result(self, url: str) -> ScrapeResult:
         """Synchronous scrape result including screenshot bytes and element boxes."""
         try:
@@ -427,59 +368,6 @@ class PageScraper:
         class_value = tag.get_attribute("class")
         return class_value.strip() if class_value else ""
 
-    def _build_selector(self, tag: Any, href: str) -> str:
-        """Return the best available CSS selector for a tag.
-
-        Priority order:
-        1. id (most specific)
-        2. data-testid/data-test/data-qa (test-oriented attributes)
-        3. data-product-id etc. with tag+class context
-        4. href for links
-        5. name attribute
-        6. class names
-        7. tag name (least specific)
-        """
-        # 1. ID is the most specific single-attribute selector
-        tag_id = tag.get_attribute("id")
-        if tag_id:
-            return f"#{tag_id}"
-
-        # 2. Test-oriented data attributes (standalone, these are meant to be unique)
-        for attribute in ("data-testid", "data-test", "data-qa"):
-            val = tag.get_attribute(attribute)
-            if val:
-                return f'[{attribute}="{val}"]'
-
-        # 3. Other data attributes — combine with tag name + classes for specificity
-        for attribute in ("data-product-id",):
-            val = tag.get_attribute(attribute)
-            if val:
-                tag_name = tag.evaluate("node => node.tagName").lower()
-                classes = self._join_classes(tag)
-                if classes:
-                    class_part = "." + ".".join(part for part in classes.split() if part)
-                    return f'{tag_name}{class_part}[{attribute}="{val}"]'
-                return f'{tag_name}[{attribute}="{val}"]'
-
-        # 4. href for links (before generic name check)
-        tag_name = tag.evaluate("node => node.tagName").lower()
-        if tag_name == "a" and href:
-            href_path = urlparse(href).path or href
-            return f'a[href="{href_path}"]'
-
-        # 5. Name attribute
-        name_attr = tag.get_attribute("name")
-        if name_attr:
-            return f'{tag_name}[name="{name_attr}"]'
-
-        # 6. Class names
-        classes = self._join_classes(tag)
-        if classes:
-            return "." + ".".join(part for part in classes.split() if part)
-
-        # 7. Tag name (least specific fallback)
-        return tag_name
-
     @staticmethod
     def _remove_consent_overlays(html: str) -> str:
         """Remove common consent/cookie overlay elements from HTML before extraction.
@@ -550,7 +438,6 @@ class PageScraper:
 
         Shared between the interactive and display (B-019) extraction passes.
         """
-        from urllib.parse import urlparse
 
         href = PageScraper._normalise_href(base_url, str(tag.get("href", "")))
 

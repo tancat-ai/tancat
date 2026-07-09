@@ -6,7 +6,7 @@ import io
 
 import pytest
 
-from cli import menu_renderer, terminal_adapter
+from src.cli import menu_renderer, terminal_adapter
 
 
 class _StringIOAdapter(terminal_adapter.TerminalAdapter):

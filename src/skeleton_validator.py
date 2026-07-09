@@ -27,33 +27,6 @@ class SkeletonValidator:
         """Check if the text contains a URL context (https://, http://)."""
         return "://" in text
 
-    def _extract_string_args(self, line: str) -> list[str]:
-        """Extract string arguments from a line of Python code."""
-        strings: list[str] = []
-        current = ""
-        in_quote = None
-        i = 0
-        while i < len(line):
-            ch = line[i]
-            if in_quote is None:
-                if ch in ('"', "'"):
-                    in_quote = ch
-                elif ch == " ":
-                    if current.strip():
-                        strings.append(current.strip())
-                    current = ""
-            else:
-                if ch == in_quote and (i == 0 or line[i - 1] != "\\"):
-                    strings.append(current)
-                    current = ""
-                    in_quote = None
-                else:
-                    current += ch
-            i += 1
-        if current.strip():
-            strings.append(current.strip())
-        return strings
-
     def validate(self, skeleton_code: str) -> SkeletonValidationResult:
         """Validate skeleton code for forbidden locator patterns.
 

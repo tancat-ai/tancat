@@ -1,6 +1,5 @@
 """Helper functions for file operations in the Playwright test generator."""
 
-import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -106,40 +105,3 @@ def normalise_code_newlines(code: str) -> str:
     # but the primary goal is to catch the 'merged' boundary.
     code = re.sub(r"([a-zA-Z0-9_)'\"\]\}])(?=import |from )", r"\1\n", code)
     return code
-
-
-def rename_test_file(old_path: str, new_name: str) -> str:
-    """
-    Rename a test file on disk.
-
-    Args:
-        old_path: Current file path
-        new_name: Desired new name (extension and test_ prefix optional)
-
-    Returns:
-        New absolute path
-
-    Raises:
-        FileNotFoundError: If old_path doesn't exist
-    """
-    old_path_obj = Path(old_path)
-    if not old_path_obj.exists():
-        raise FileNotFoundError(f"File not found: {old_path}")
-
-    # Sanitise
-    new_name = new_name.removesuffix(".py")
-    new_name = slugify(new_name)
-
-    # Enforce test_ prefix
-    if not new_name.startswith("test_"):
-        new_name = f"test_{new_name}"
-
-    new_path = old_path_obj.parent / f"{new_name}.py"
-
-    # Handle collision — append timestamp
-    if new_path.exists() and new_path != old_path_obj:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_path = old_path_obj.parent / f"{new_name}_{ts}.py"
-
-    os.rename(old_path, new_path)
-    return str(new_path.absolute())

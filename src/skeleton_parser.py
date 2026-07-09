@@ -301,10 +301,6 @@ class SkeletonParser:
 
         return page_object_names
 
-    def get_test_class_names(self, code: str) -> list[str]:
-        """Return class names declared in the skeleton."""
-        return re.findall(r"class\s+(\w+):", code)
-
     def find_malformed_placeholders(self, code: str) -> list[str]:
         """Return placeholders that incorrectly use single braces."""
         return [

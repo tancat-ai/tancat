@@ -1,4 +1,4 @@
-from cli import menu_renderer
+from src.cli import menu_renderer
 
 
 class DummyTerminal:
@@ -22,6 +22,6 @@ def test_set_terminal_adapter_injection() -> None:
         assert menu_renderer._running_in_git_bash() is True
     finally:
         # restore canonical terminal adapter so other tests see real environment
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)  # type: ignore[arg-type]

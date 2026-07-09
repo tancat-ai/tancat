@@ -745,16 +745,3 @@ def list_evidence_from_packages(package_dirs: list[Path]) -> list[TestPackageEvi
     contains evidence sidecars.  Directories with no evidence are skipped.
     """
     return [result for package_dir in package_dirs if (result := list_evidence_from_package(package_dir)) is not None]
-
-
-def list_evidence_from_test_dir(test_dir: Path) -> list[TestPackageEvidence]:
-    """Scan *test_dir* for subdirectories that contain evidence.
-
-    This is the common case where each generated test lives in its own
-    subdirectory under ``generated_tests/``.
-    """
-    if not test_dir.exists():
-        return []
-
-    package_dirs = [d for d in test_dir.iterdir() if d.is_dir() and (d / "evidence").exists()]
-    return list_evidence_from_packages(package_dirs)

@@ -92,37 +92,6 @@ class PlaceholderResolver:
         return re.sub(r"[_-]+", " ", raw_haystack)
 
     @staticmethod
-    def _is_fillable_element(element: dict[str, Any]) -> bool:
-        """Return True when the scraped element supports text entry."""
-        role = str(element.get("role", "")).strip().lower()
-        selector = str(element.get("selector", "")).strip().lower()
-        name = str(element.get("name", "")).strip().lower()
-        element_id = str(element.get("id", "")).strip().lower()
-
-        if role == "hidden":
-            return False
-        if any(term in name or term in element_id or term in selector for term in ("csrf", "token", "authenticity")):
-            return False
-
-        if role in {
-            "input",
-            "textarea",
-            "select",
-            "textbox",
-            "searchbox",
-            "combobox",
-            "email",
-            "password",
-            "text",
-            "tel",
-            "number",
-        }:
-            return True
-        if selector.startswith(("input", "textarea", "select")):
-            return True
-        return bool(element.get("name") or element.get("placeholder"))
-
-    @staticmethod
     def _is_assertion_candidate(element: dict[str, Any]) -> bool:
         """Return True when the scraped element is plausible for visibility assertions."""
         role = str(element.get("role", "")).strip().lower()

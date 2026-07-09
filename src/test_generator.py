@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
-from src.code_validator import validate_generated_locator_quality, validate_python_syntax
-from src.file_utils import save_generated_test, slugify
 from src.llm_client import LLMClient
-from src.prompt_utils import build_page_context_prompt_block, get_skeleton_prompt_template
+from src.prompt_utils import get_skeleton_prompt_template
 
 
 class TestGenerator:
@@ -68,40 +65,3 @@ class TestGenerator:
             + count_note
         )
         return await self.client.generate(prompt)
-
-    async def generate_resolved_test(self, skeleton_code: str, pages_to_scrape: list[str]) -> str:
-        """Return the resolved code artifact for the intelligent pipeline.
-
-        The resolver currently performs the replacement work itself, so this method
-        acts as a compatibility seam for future polishing.
-        """
-        _ = pages_to_scrape
-        return skeleton_code
-
-    def generate_and_save(self, request_text: str, page_context_or_base_url: Any = "") -> str:
-        """Generate code directly and save it to disk."""
-        base_url = page_context_or_base_url if isinstance(page_context_or_base_url, str) else ""
-        prompt = request_text
-        if page_context_or_base_url and not isinstance(page_context_or_base_url, str):
-            prompt = f"{request_text}\n\n{build_page_context_prompt_block(page_context_or_base_url)}"
-
-        code = self.client.generate_test(prompt)
-        if not code or not code.strip():
-            raise ValueError("Generated code was empty")
-
-        syntax_error = validate_python_syntax(code)
-        if syntax_error:
-            raise ValueError(f"Generated code failed syntax validation: {syntax_error}")
-
-        quality_error = validate_generated_locator_quality(code)
-        if quality_error:
-            raise ValueError(f"Generated code failed locator quality validation: {quality_error}")
-
-        saved_path = save_generated_test(
-            test_code=code,
-            story_text=slugify(request_text[:50]),
-            base_url=base_url,
-            output_dir=self.output_dir,
-        )
-        self.generated_files.append(saved_path)
-        return saved_path

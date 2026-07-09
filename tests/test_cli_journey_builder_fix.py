@@ -5,7 +5,7 @@ so the CLI stays in the main loop instead of raising ValueError.
 See: docs/plans/CLI_JOURNEY_BUILDER_FIX.md
 """
 
-from cli import menu_renderer
+from src.cli import menu_renderer
 from src.cli.testing_terminal import QueueTerminal
 
 
@@ -17,7 +17,7 @@ def test_journey_builder_quit_returns_negative() -> None:
         idx = menu_renderer.print_menu(["Criterion 1", "Criterion 2"])
         assert idx == -1
     finally:
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)
 
@@ -30,7 +30,7 @@ def test_journey_builder_valid_number_selection() -> None:
         idx = menu_renderer.print_menu(["Criterion 1", "Criterion 2"])
         assert idx == 0
     finally:
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)
 
@@ -44,7 +44,7 @@ def test_journey_builder_multi_digit_selection() -> None:
         idx = menu_renderer.print_menu(options)
         assert idx == 14
     finally:
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)
 
@@ -57,7 +57,7 @@ def test_journey_builder_arrow_then_enter() -> None:
         idx = menu_renderer.print_menu(["First", "Second", "Third"])
         assert idx == 1
     finally:
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)
 
@@ -70,6 +70,6 @@ def test_journey_builder_quit_then_normal_selection() -> None:
         idx = menu_renderer.print_menu(["A", "B"])
         assert idx == 0
     finally:
-        from cli import terminal_adapter
+        from src.cli import terminal_adapter
 
         menu_renderer.set_terminal_adapter(terminal_adapter.terminal)
