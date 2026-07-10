@@ -533,6 +533,20 @@ class PageScraper:
                     if texts:
                         text_content = " ".join(texts)
 
+        # B-021: Check if element is inside a modal overlay
+        in_modal = False
+        parent = tag.parent
+        while parent:
+            parent_classes = parent.get("class")
+            parent_id = parent.get("id", "")
+            if isinstance(parent_classes, list) and any("modal" in cls for cls in parent_classes):
+                in_modal = True
+                break
+            if isinstance(parent_id, str) and "modal" in parent_id.lower():
+                in_modal = True
+                break
+            parent = parent.parent
+
         return {
             "selector": selector,
             "text": text_content,
@@ -547,6 +561,7 @@ class PageScraper:
             "value": str(tag.get("value", "")).strip(),
             "placeholder": str(tag.get("placeholder", "")).strip(),
             "is_visible": True,
+            "in_modal": in_modal,
         }
 
     def _extract_elements_from_html(self, html: str, base_url: str = "") -> list[dict[str, Any]]:

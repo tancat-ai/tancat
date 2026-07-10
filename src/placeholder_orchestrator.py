@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 from src.code_postprocessor import replace_token_in_line
+from src.intent_matcher import SemanticFillStrategy
 from src.journey_models import CredentialProfile
 from src.journey_scraper import CartSeedingScraper
 from src.locator_builder import build_robust_locator
@@ -1620,6 +1621,13 @@ class PlaceholderOrchestrator:
                         return element
                     normalized_field = raw.lower().replace("_", " ").replace("-", " ")
                     if normalized_field in description.lower():
+                        return element
+                    # Reverse: description contained in field (e.g. "zip code" in "zip postal code")
+                    desc_normalized = description.lower().replace("_", " ").replace("-", " ")
+                    if desc_normalized in normalized_field:
+                        return element
+                    # Semantic form-field match (e.g. "zip code" ↔ "postal-code")
+                    if action == "FILL" and SemanticFillStrategy().match(action, description, element):
                         return element
 
         return None

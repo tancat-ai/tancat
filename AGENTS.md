@@ -159,6 +159,7 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 
 ## 11. General Discipline
 
+- **Run `verify_production.py`** before declaring a feature done — unit tests passing ≠ product working
 - **Run end-to-end** before declaring a feature done
 - **One feature per session** — mixing creates inconsistency
 - **Never commit directly** — `smoke.py` → `ruff` → `mypy` → `pytest` → human reviews diff → commit
@@ -170,10 +171,17 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 
 ## 12. Debugging & UAT
 
-### Pre-commit smoke test (always run)
-- **`python scripts/smoke.py`** — 35 offline checks in <1s (resolver, parser, imports, POM model)
-- ✅ Run this **before** `pytest` to catch obvious regressions early
-- `--json` flag for machine-readable output
+### Verification layers (run in order)
+
+| Layer | Command | What it tests | Cost |
+|-------|---------|---------------|------|
+| Smoke | `python scripts/smoke.py` | Offline: resolver, parser, imports | <1s |
+| Unit | `pytest -q --tb=short` | Internal modules with mocks | ~10s |
+| **Production** | `python scripts/verify_production.py` | **Full pipeline → execute → validate evidence** | ~60s |
+
+- ✅ Run smoke → pytest → **verify_production** before declaring a feature done
+- ✅ `verify_production.py` is the single source of truth: "does the product work?"
+- ✅ It generates real tests, runs them against live sites, and validates evidence output
 
 ### Debug CLI
 - **`python scripts/debug.py --help`** — unified entry point

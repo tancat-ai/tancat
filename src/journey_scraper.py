@@ -528,18 +528,39 @@ class JourneyScraper:
                 match_threshold=0,  # Accept all in discovery phase; pick highest
             )
 
+            # B-021: Modal intercept penalty — if the page has a modal overlay,
+            # heavily penalize elements OUTSIDE the modal for CLICK actions.
+            # Modals like #cartModal block pointer events to underlying elements.
+            in_modal = element.get("in_modal", False)
+            page_has_modal = any(e.get("in_modal", False) for e in elements)
+
             # B-019: Penalize display elements for interactive actions.
             # FILL requires <input>/<textarea>/<select>. CLICK prefers
             # <button>/<a>/<input>. Display divs/spans can match by text
             # but fail at runtime — apply a penalty to prevent them winning.
             if score is not None:
+                if action == "click" and page_has_modal and not in_modal:
+                    score -= 30  # Penalize non-modal elements when modal is open
                 role = str(element.get("role", "")).lower()
-                if action == "fill" and role not in ("text", "password", "searchbox", "textbox", "combobox"):
+                if action == "fill" and role not in (
+                    "text",
+                    "password",
+                    "searchbox",
+                    "textbox",
+                    "combobox",
+                    "email",
+                    "tel",
+                    "number",
+                    "select",
+                    "textarea",
+                    "url",
+                ):
                     score -= 50  # Hard penalty — display elements can't be filled
                 elif action == "click" and role not in (
                     "button",
                     "submit",
                     "link",
+                    "a",  # scraper provides tag name 'a', not ARIA role 'link'
                     "menuitem",
                     "tab",
                     "checkbox",
@@ -634,6 +655,8 @@ class JourneyScraper:
             self._debug(f"Click exception: {e}")
             raise
         page.wait_for_timeout(500)  # Brief wait for page transition
+        # Dismiss any modals/popups that appeared after the click
+        self._dismiss_consent_overlays(page)
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
         """Fill an input element by selector."""
