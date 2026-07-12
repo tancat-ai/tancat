@@ -225,6 +225,7 @@ class SavedPackagePanel:
                 self._store_run_report()
         except Exception as exc:
             st.session_state.pipeline_error = f"Failed to run saved suite: {exc}"
+            st.rerun()
 
     def _handle_rerun_failed_only(self, package_root: str, previous_run: Any | None) -> None:
         from src.pipeline_run_service import PipelineRunService
@@ -248,6 +249,7 @@ class SavedPackagePanel:
                 self._store_run_report()
         except Exception as exc:
             st.session_state.pipeline_error = f"Failed to rerun failed tests: {exc}"
+            st.rerun()
 
     def _load_previous_run(self, package_root: str) -> Any | None:
         from src.run_result_persistence import load_all_run_results

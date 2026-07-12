@@ -80,6 +80,7 @@ def _handle_run_tests() -> None:
         st.rerun()
     except Exception as exc:
         st.session_state.pipeline_error = f"Failed to run generated tests: {exc}"
+        st.rerun()
 
 
 def _handle_rerun_failed() -> None:
@@ -102,6 +103,7 @@ def _handle_rerun_failed() -> None:
         st.rerun()
     except Exception as exc:
         st.session_state.pipeline_error = f"Failed to rerun generated tests: {exc}"
+        st.rerun()
 
 
 def _store_run_report() -> None:

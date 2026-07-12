@@ -26,6 +26,7 @@ class UrlResolver:
 
     def __init__(self) -> None:
         self._keyword_to_url: dict[str, str] = {}
+        self._scraped_urls: list[str] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -46,6 +47,8 @@ class UrlResolver:
             seed_url: The user-provided homepage URL.
             concepts: Optional route concepts extracted from the user story.
         """
+        # Store scraped URLs for resolve-time fallback
+        self._scraped_urls = list(scraped_urls)
         # 1. Always map seed URL to home/login keywords
         self._keyword_to_url["home"] = seed_url
         self._keyword_to_url["login"] = seed_url
@@ -116,10 +119,18 @@ class UrlResolver:
 
         # Fallback 2: multi-word decomposition against URL path segments.
         # Handles "Dress category page" → /category_products/1
+        # Check ALL scraped URLs, not just pre-mapped keywords.
+        # This catches GOTO descriptions that reference pages visited by journey
+        # discovery but never declared in PAGES_NEEDED.
         noise = {"the", "a", "an", "page", "link", "button", "on", "to", "and", "or"}
         keyword_words = [w for w in kw_lower.replace("-", " ").split() if len(w) > 2 and w not in noise]
-        if len(keyword_words) > 1:
+        if keyword_words:
+            # Check mapped URLs first, then fall back to all scraped URLs
             all_urls = list(self._keyword_to_url.values())
+            # Add scraped URLs that aren't already in the mapping
+            for url in self._scraped_urls:
+                if url not in all_urls:
+                    all_urls.append(url)
             for url in all_urls:
                 path = urlparse(url).path.lower().strip("/")
                 if not path:

@@ -44,6 +44,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import os
+
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -194,7 +196,11 @@ async def verify_site(
 
     # --- Gate 1: LLM client ---
     try:
-        client = LLMClient()
+        # Use the provider configured in .env rather than auto-detect.
+        # Auto-detect probes LM Studio (port 1234) first and can pick the
+        # wrong provider when Cline has LM Studio running concurrently.
+        provider = os.environ.get("LLM_PROVIDER", "") or None
+        client = LLMClient(provider=provider)
         result.gates.append(Gate(f"LLM connected ({client.provider_name}/{client.model})", True))
         print(f"  [OK] LLM: {client.provider_name}/{client.model}")
     except Exception as e:

@@ -261,6 +261,7 @@ if raw_requirements.strip():
                 st.session_state.pipeline_error = ""
             except Exception as exc:
                 st.session_state.pipeline_error = f"Failed to build living test plan: {exc}"
+                st.rerun()
 
     with plan_state_col:
         current_plan = st.session_state.test_plan

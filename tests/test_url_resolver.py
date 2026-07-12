@@ -246,3 +246,37 @@ def test_prefix_match_returns_first_candidate() -> None:
     )
     # Both are prefix matches; first URL in scraped list wins
     assert resolver.resolve("product") == "https://www.example.com/products"
+
+
+def test_resolve_multi_word_falls_back_to_all_scraped_urls() -> None:
+    """Multi-word GOTO descriptions should match against ALL scraped URLs, not just mapped keywords.
+
+    This catches cases like 'Dress category page' where journey discovery visited
+    /category_products/1 but no PAGES_NEEDED keyword referenced that URL.
+    """
+    resolver = UrlResolver()
+    resolver.build_mapping(
+        keywords=["home", "cart"],  # Only home and cart mapped
+        scraped_urls=[
+            "https://automationexercise.com/",
+            "https://automationexercise.com/category_products/1",
+            "https://automationexercise.com/view_cart",
+        ],
+        seed_url="https://automationexercise.com/",
+    )
+    # 'dress category page' isn't in PAGES_NEEDED but 'category' matches /category_products/1
+    assert resolver.resolve("Dress category page") == "https://automationexercise.com/category_products/1"
+
+
+def test_resolve_scraped_url_fallback_no_false_positives() -> None:
+    """Unmatched keywords still return None even with scraped URL fallback."""
+    resolver = UrlResolver()
+    resolver.build_mapping(
+        keywords=["cart"],
+        scraped_urls=[
+            "https://example.com/cart",
+            "https://example.com/products",
+        ],
+        seed_url="https://example.com/",
+    )
+    assert resolver.resolve("nonexistent-gibberish") is None
