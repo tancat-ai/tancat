@@ -541,6 +541,19 @@ if st.session_state.pipeline_results:
     if isinstance(run_result, RunResult):
         RunResultsDisplay.render(run_result)
 
+    # Bug report display
+    if st.session_state.get("pipeline_bug_report"):
+        st.divider()
+        st.subheader("Bug Report")
+        st.code(st.session_state.pipeline_bug_report, language="text")
+        if st.session_state.get("pipeline_bug_report_path"):
+            st.download_button(
+                label="Download Bug Report",
+                data=st.session_state.pipeline_bug_report,
+                file_name="bug_report.txt",
+                mime="text/plain",
+            )
+
 # ---------------------------------------------------------------------------
 # AI-026: Saved package main panel (rendered when a package is loaded)
 # ---------------------------------------------------------------------------

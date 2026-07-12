@@ -51,7 +51,9 @@ from .menu_renderer import (
 from .pipeline_runner import (
     build_test_plan,
     export_clean_package,
+    generate_bug_report,
     generate_reports,
+    repair_locator_cli,
     run_generated_tests,
     run_pipeline,
     show_scrape_summary,
@@ -150,6 +152,8 @@ async def interactive_session() -> None:
                     "Generate Reports",
                     "View Reports",
                     "View Failure Diagnostics",
+                    "Generate Bug Report",
+                    "Repair Locator",
                     "Export Clean Package",
                 ]
             )
@@ -243,6 +247,10 @@ async def interactive_session() -> None:
             view_reports(session)
         elif menu_items[idx] == "View Failure Diagnostics":
             view_failure_diagnostics(session)
+        elif menu_items[idx] == "Generate Bug Report":
+            generate_bug_report(session)
+        elif menu_items[idx] == "Repair Locator":
+            repair_locator_cli(session)
         elif menu_items[idx] == "Export Clean Package":
             export_clean_package(session)
         # AI-026: persisted-package commands

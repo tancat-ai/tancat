@@ -16,6 +16,7 @@ from src.evidence_loader import (
     load_evidence_for_package,
 )
 from src.export_service import export_clean_suite
+from src.failure_classifier import FailureCategory, classify_failure
 from src.pipeline_artifact_manager import find_existing_packages
 from src.pipeline_models import ExportMode
 from src.pipeline_report_service import PipelineReportService
@@ -470,6 +471,138 @@ def view_failure_diagnostics(session: Any) -> None:
     else:
         print()
         print(yellow(f"  Total failed tests: {failed_count}"))
+
+
+# ── Bug report ────────────────────────────────────────────────────────────
+
+
+def generate_bug_report(session: Any) -> None:
+    """Generate a bug report from the last test run's failures."""
+    from src.cli.evidence_generator import BugEvidenceGenerator
+
+    run_result = session.pipeline_run_result
+    if not isinstance(run_result, RunResult) or not run_result.results:
+        print(yellow("  No test results to generate a bug report for. Run tests first."))
+        return
+
+    failed = [r for r in run_result.results if r.status in ("failed", "error")]
+    if not failed:
+        print(green("  No failures — nothing to report."))
+        return
+
+    print(cyan(f"  Generating bug report for {len(failed)} failure(s)..."))
+
+    generator = BugEvidenceGenerator()
+    generator.process_run_result(run_result)
+
+    output_dir = Path("generated_tests")
+    output_dir.mkdir(exist_ok=True)
+    output_path = str(output_dir / "bug_report.txt")
+
+    report_path = generator.generate_bug_report(output_path)
+    session.pipeline_bug_report = Path(report_path).read_text(encoding="utf-8")
+    session.pipeline_bug_report_path = report_path
+
+    print(green(f"  Bug report saved to: {report_path}"))
+    print(session.pipeline_bug_report)
+
+
+# ── Locator repair (CLI) ─────────────────────────────────────────────────
+
+
+def repair_locator_cli(session: Any) -> None:
+    """Interactive locator repair from the CLI.
+
+    Lists failed tests classified as locator failures and lets the user
+    pick one to repair via headed Playwright codegen.
+    """
+    from src.locator_repair import LocatorPatch, apply_patch_to_file, run_codegen_session
+
+    run_result = session.pipeline_run_result
+    if not isinstance(run_result, RunResult) or not run_result.results:
+        print(yellow("  No test results available. Run tests first."))
+        return
+
+    # Find locator-classified failures
+    locator_failures: list[tuple[Any, Any]] = []
+    for result in run_result.results:
+        if result.status in ("failed", "error") and result.error_message:
+            detail = classify_failure(result.error_message)
+            if detail.category in (
+                FailureCategory.LOCATOR_TIMEOUT,
+                FailureCategory.STRICT_VIOLATION,
+            ):
+                locator_failures.append((result, detail))
+
+    if not locator_failures:
+        print(green("  No locator failures found — nothing to repair."))
+        print(yellow("  Tip: run 'Generate Bug Report' for a full breakdown."))
+        return
+
+    print(cyan(f"  Found {len(locator_failures)} locator failure(s):"))
+    print()
+
+    for idx, (result, detail) in enumerate(locator_failures, 1):
+        loc_str = detail.raw_locator or "(unknown)"
+        url_str = detail.failure_url or "(no URL)"
+        print(f"    [{idx}] {result.name}")
+        print(f"        Locator: {loc_str}")
+        print(f"        URL:     {url_str}")
+        print(f"        File:    {result.file_path}")
+        print()
+
+    print("    [Q] Cancel")
+    choice = input("  Which failure to repair? ").strip().lower()
+
+    if choice == "q":
+        print(yellow("  Cancelled."))
+        return
+
+    try:
+        idx = int(choice) - 1
+        if idx < 0 or idx >= len(locator_failures):
+            print(yellow("  Invalid selection."))
+            return
+    except ValueError:
+        print(yellow("  Invalid input."))
+        return
+
+    result, detail = locator_failures[idx]
+
+    # Determine the URL to open
+    failure_url = detail.failure_url
+    if not failure_url:
+        failure_url = session.starting_url
+    if not failure_url:
+        print(red("  No URL available — cannot open browser."))
+        return
+
+    print()
+    print(cyan(f"  Opening browser at {failure_url}"))
+    print(yellow("  Click the element you want to use as the locator."))
+    print(yellow("  Press Ctrl+C to cancel."))
+    print()
+
+    replacement = run_codegen_session(failure_url, timeout_seconds=120)
+    if not replacement:
+        print(yellow("  No locator captured — session timed out or was cancelled."))
+        return
+
+    # Apply the patch
+    test_file = result.file_path
+    patch = LocatorPatch(
+        original_locator=detail.raw_locator or "",
+        repaired_locator=replacement,
+        line_number=detail.line_number or 1,
+        test_file=test_file,
+    )
+
+    try:
+        apply_patch_to_file(patch)
+        print(green(f"  Patched `{replacement}` into {test_file}"))
+        print(yellow("  Run 'Run Generated Tests' to verify the fix."))
+    except Exception as exc:
+        print(red(f"  Patch failed: {exc}"))
 
 
 # ── Skeleton viewer ───────────────────────────────────────────────────────

@@ -48,6 +48,10 @@ class Session:
     pipeline_jira_report_path: str = ""
     pipeline_html_report_path: str = ""
 
+    # Bug report
+    pipeline_bug_report: str = ""
+    pipeline_bug_report_path: str = ""
+
     # Test plan
     test_plan: TestPlan | None = None
     plan_confirmed: bool = False

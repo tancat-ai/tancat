@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 
@@ -51,7 +53,7 @@ class ResultsPanel:
         """Render the 'Run Generated Tests' buttons."""
         st.divider()
         st.subheader("Run Generated Tests")
-        run_col, rerun_col = st.columns(2)
+        run_col, rerun_col, bug_report_col = st.columns(3)
         saved_path = st.session_state.get("pipeline_saved_path", "")
 
         with run_col:
@@ -63,6 +65,56 @@ class ResultsPanel:
             rerun_disabled = not bool(saved_path) or previous_run_result is None
             if st.button("Re-run Failed Only", disabled=rerun_disabled):
                 _handle_rerun_failed()
+
+        with bug_report_col:
+            from src.pytest_output_parser import RunResult
+
+            run_result = st.session_state.get("pipeline_run_result")
+            has_failures = isinstance(run_result, RunResult) and any(
+                r.status in ("failed", "error") for r in run_result.results
+            )
+            if st.button("Generate Bug Report", disabled=not has_failures):
+                _handle_generate_bug_report()
+
+
+def _handle_generate_bug_report() -> None:
+    """Handle the 'Generate Bug Report' button click."""
+    from src.cli.evidence_generator import BugEvidenceGenerator
+    from src.pytest_output_parser import RunResult
+
+    run_result = st.session_state.get("pipeline_run_result")
+    if not isinstance(run_result, RunResult):
+        st.error("No test results available. Run tests first.")
+        return
+
+    failed = [r for r in run_result.results if r.status in ("failed", "error")]
+    if not failed:
+        st.success("No failures — nothing to report.")
+        return
+
+    try:
+        generator = BugEvidenceGenerator()
+        generator.process_run_result(run_result)
+
+        output_dir = Path("generated_tests")
+        output_dir.mkdir(exist_ok=True)
+        output_path = str(output_dir / "bug_report.txt")
+        report_path = generator.generate_bug_report(output_path)
+
+        st.session_state.pipeline_bug_report = Path(report_path).read_text(encoding="utf-8")
+        st.session_state.pipeline_bug_report_path = report_path
+
+        st.success(f"Bug report generated for {len(failed)} failure(s)")
+        st.code(st.session_state.pipeline_bug_report, language="text")
+        st.download_button(
+            label="Download Bug Report",
+            data=st.session_state.pipeline_bug_report,
+            file_name="bug_report.txt",
+            mime="text/plain",
+        )
+        st.rerun()
+    except Exception as exc:
+        st.error(f"Bug report generation failed: {exc}")
 
 
 def _handle_run_tests() -> None:

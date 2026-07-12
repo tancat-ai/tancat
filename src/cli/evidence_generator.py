@@ -24,6 +24,8 @@ from src.config import (
     STORAGE_MODE,
     ScreenshotNaming,
 )
+from src.failure_classifier import FailureCategory, classify_failure
+from src.pytest_output_parser import RunResult, TestResult
 
 try:
     from PIL import Image
@@ -403,13 +405,27 @@ class BugEvidenceGenerator:
             lines.extend(
                 [
                     f"--- Bug #{i} ---",
-                    f"Description: {bug['description']}",
-                    f"Timestamp: {bug['timestamp']}",
-                    f"URL at time of bug: {bug['url']}",
-                    f"Screenshot: {bug['screenshot'] or 'N/A'}",
-                    "",
+                    f"Description:    {bug['description']}",
+                    f"Timestamp:      {bug['timestamp']}",
+                    f"URL:            {bug['url']}",
+                    f"Screenshot:     {bug['screenshot'] or 'N/A'}",
                 ]
             )
+            # Classification
+            if bug.get("failure_category"):
+                lines.append(f"Category:       [{bug['failure_category']}]")
+            if bug.get("raw_locator"):
+                lines.append(f"Failed locator: `{bug['raw_locator']}`")
+            if bug.get("file_path"):
+                lines.append(f"File:           {bug['file_path']}")
+            if bug.get("error_message"):
+                error_text = bug["error_message"]
+                if len(error_text) > 500:
+                    error_text = error_text[:497] + "..."
+                lines.append(f"Error:          {error_text}")
+            if bug.get("repair_suggestion"):
+                lines.append(f"Suggestion:     {bug['repair_suggestion']}")
+            lines.append("")
 
         lines.append("=" * 60)
 
@@ -417,6 +433,78 @@ class BugEvidenceGenerator:
             f.write("\n".join(lines))
 
         return output_path
+
+    def add_test_failure(
+        self,
+        test_result: TestResult,
+        page_url: str = "N/A",
+    ) -> dict:
+        """Add a test failure as bug evidence (no live page required).
+
+        Classifies the failure and records category, locator, and repair
+        suggestion alongside the raw error data.
+        """
+        detail = classify_failure(test_result.error_message)
+
+        # Build category label
+        category_label = {
+            FailureCategory.LOCATOR_TIMEOUT: "LOCATOR_TIMEOUT",
+            FailureCategory.STRICT_VIOLATION: "STRICT_VIOLATION",
+            FailureCategory.ASSERTION_FAILURE: "ASSERTION_FAILURE",
+            FailureCategory.NAVIGATION_ERROR: "NAVIGATION_ERROR",
+            FailureCategory.OTHER: "OTHER",
+        }.get(detail.category, "OTHER")
+
+        # Build repair suggestion
+        repair_suggestion = ""
+        if detail.category in (
+            FailureCategory.LOCATOR_TIMEOUT,
+            FailureCategory.STRICT_VIOLATION,
+        ):
+            loc = detail.raw_locator or "unknown"
+            repair_suggestion = (
+                f"  → Run locator repair: click 'Fix locator' in the UI "
+                f"to open a headed browser and capture a replacement "
+                f"for `{loc}`"
+            )
+        elif detail.category == FailureCategory.ASSERTION_FAILURE:
+            repair_suggestion = (
+                "  → Element was found but content was unexpected. Review the assertion or update the expected value."
+            )
+        elif detail.category == FailureCategory.NAVIGATION_ERROR:
+            repair_suggestion = "  → Check the target URL and network connectivity."
+
+        evidence: dict = {
+            "description": test_result.name,
+            "timestamp": datetime.now().isoformat(),
+            "screenshot": None,
+            "url": detail.failure_url or page_url,
+            "console_logs": [],
+            "network_errors": [],
+            "error_message": test_result.error_message,
+            "file_path": test_result.file_path,
+            # Classification data
+            "failure_category": category_label,
+            "raw_locator": detail.raw_locator,
+            "repair_suggestion": repair_suggestion,
+        }
+        self.bug_evidence.append(evidence)
+        return evidence
+
+    def process_run_result(
+        self,
+        run_result: RunResult,
+    ) -> list[dict]:
+        """Process a RunResult and record all failed tests as bug evidence.
+
+        Returns the list of evidence dicts created.
+        """
+        new_evidence: list[dict] = []
+        for result in run_result.results:
+            if result.status in ("failed", "error"):
+                evidence = self.add_test_failure(result)
+                new_evidence.append(evidence)
+        return new_evidence
 
 
 def capture_screenshot(page: Any, test_case: AnalyzedTestCase, capture_stage: str = "step") -> str | None:
