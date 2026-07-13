@@ -4,7 +4,7 @@
 Automates project cleanup:
 1. Auto-move misplaced test files into /tests/
 2. Purge junk files (.log, temporary .txt)
-3. Audit documentation links against links.csv
+3. Validate knowledge graph freshness against HEAD
 4. CI-ready: non-zero exit code if issues found
 
 Usage:
@@ -18,8 +18,8 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import csv
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,7 +29,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 TESTS_DIR = PROJECT_ROOT / "tests"
-LINKS_CSV = PROJECT_ROOT / "docs" / "links.csv"
+GRAPH_JSON = PROJECT_ROOT / "graphify-out" / "graph.json"
 
 # Files/directories to skip during scan
 SKIP_DIRS: set[str] = {
@@ -92,26 +92,35 @@ def is_skip_dir(name: str) -> bool:
     return name in SKIP_DIRS or name.startswith(".")
 
 
-def load_links_csv() -> tuple[set[str], set[str]]:
-    """Load links.csv and return (sources, targets) as sets of basenames."""
-    sources: set[str] = set()
-    targets: set[str] = set()
-    if not LINKS_CSV.exists():
-        print(f"[WARN] links.csv not found at {LINKS_CSV}")
-        return sources, targets
+def get_graph_commit() -> str | None:
+    """Read built_at_commit from graphify-out/graph.json."""
+    if not GRAPH_JSON.exists():
+        return None
     try:
-        with open(LINKS_CSV, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                src = row.get("source", "").strip()
-                tgt = row.get("target", "").strip()
-                if src:
-                    sources.add(src)
-                if tgt:
-                    targets.add(tgt)
+        import json
+
+        with open(GRAPH_JSON, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("built_at_commit")
     except Exception as e:
-        print(f"[ERROR] Failed to read links.csv: {e}")
-    return sources, targets
+        print(f"[ERROR] Failed to read graph.json: {e}")
+        return None
+
+
+def get_git_head() -> str | None:
+    """Read current git HEAD commit hash."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
 
 
 def find_files_in_dir(pattern: str, root: Path) -> list[Path]:
@@ -237,48 +246,37 @@ def purge_junk() -> list[Path]:
 
 
 # ────────────────────────────────────────────
-# Feature 3: Audit Links
+# Feature 3: Knowledge Graph Freshness
 # ────────────────────────────────────────────
 
 
-def audit_links() -> list[str]:
-    """Compare .md files against links.csv for orphans.
+def audit_graph_freshness() -> list[str]:
+    """Validate that graphify-out/graph.json is built from current HEAD.
 
-    Normalizes paths to handle ./ prefix variations between
-    links.csv and actual file paths.
+    Replaces the old links.csv orphan audit which was checking against
+    a stale 3-month-old snapshot. Graphify now tracks all 479+ files
+    and graph-freshness CI gate handles the warning in GitHub Actions.
     """
-    sources, targets = load_links_csv()
+    issues: list[str] = []
+    graph_commit = get_graph_commit()
+    head_commit = get_git_head()
 
-    if not sources and not targets:
-        print("[WARN] Could not load links.csv for audit.")
-        return []
+    if graph_commit is None:
+        print("[WARN] No graphify-out/graph.json found — knowledge graph not generated.")
+        issues.append("graph-missing")
+        return issues
 
-    # Normalize all references: strip ./ prefix for consistent comparison
-    all_refs: set[str] = set()
-    for ref in sources | targets:
-        # Strip ./ prefix and normalize path separators
-        normalized = ref.lstrip("./").replace("\\", "/")
-        all_refs.add(normalized)
-        # Also keep original for partial matching
-        all_refs.add(ref.lstrip("./"))
+    if head_commit is None:
+        print("[WARN] Could not read git HEAD — not a git repo?")
+        return issues
 
-    # Find all .md files in the project
-    orphan_md: list[str] = []
-    for md_file in find_all_files_matching_pattern("*.md", PROJECT_ROOT, SKIP_DIRS):
-        rel = str(md_file.relative_to(PROJECT_ROOT)).replace("\\", "/")
-        # Normalize: strip ./ prefix
-        rel_clean = rel.lstrip("./")
-        if rel_clean not in all_refs:
-            orphan_md.append(rel)
-
-    if orphan_md:
-        print(f"\n[WARN] Found {len(orphan_md)} orphan .md file(s) (not referenced in links.csv):")
-        for f in orphan_md:
-            print(f"  - {f}")
+    if graph_commit != head_commit:
+        print(f"[WARN] Knowledge graph is stale (graph: {graph_commit[:8]}, head: {head_commit[:8]})")
+        print("       Run 'graphify update .' locally to refresh, or push to trigger CI gate.")
+        issues.append("graph-stale")
     else:
-        print("[OK] No orphan .md files found.")
-
-    return orphan_md
+        print("[OK] Knowledge graph is up to date.")
+    return issues
 
 
 # ────────────────────────────────────────────
@@ -348,10 +346,10 @@ def main(argv: list[str] | None = None) -> int:
         has_junk_files = True
         issues_found = True
 
-    # Step 3: Audit links
-    print("\n--- Step 3: Audit Links ---")
-    orphans = audit_links()
-    if orphans:
+    # Step 3: Validate knowledge graph freshness
+    print("\n--- Step 3: Knowledge Graph Freshness ---")
+    graph_issues = audit_graph_freshness()
+    if graph_issues:
         issues_found = True
 
     # Summary
@@ -359,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     print("Summary:")
     print(f"  Misplaced tests found: {len(misplaced)}")
     print(f"  Junk files found: {len(purged)}")
-    print(f"  Orphan .md files: {len(orphans)}")
+    print(f"  Graph issues: {len(graph_issues)}")
     print("=" * 60)
 
     # CI-critical: only misplaced tests and junk files cause failure

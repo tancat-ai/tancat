@@ -16,6 +16,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - README.md: linked interactive call-flow diagram (`graphify-out/callflow.html`)
 - README.md: added "Self-Documenting" feature bullet
 - CONTRIBUTING.md: added Security section linking to SECURITY.md
+- `scripts/maintenance/project_sanitizer.py`: replaced dead `links.csv` orphan audit with knowledge graph freshness check (reads `graphify-out/graph.json` `built_at_commit` vs `git HEAD`)
 - `normalize_whitespace()` in `src/code_normalizer.py` — converts tabs to spaces and normalizes line endings (\r\n → \n) before other normalization transforms, preventing SyntaxError when LLMs emit tab-indented code
 - `tests/test_code_normalizer.py` — 9 unit tests for `normalize_whitespace`, pipeline integration, and `ensure_test_navigation`
 - AI-027 Session 2 screenshot capture during scraping: `ScrapeResult`, in-memory screenshot bytes, and interactive element bounding boxes for later vision enrichment.
