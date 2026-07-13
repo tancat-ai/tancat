@@ -9,6 +9,7 @@ Thank you for your interest in contributing! This document explains how to get i
 - [Code of Conduct](#code-of-conduct)
 - [How to Report a Bug](#how-to-report-a-bug)
 - [How to Request a Feature](#how-to-request-a-feature)
+- [Security](#security)
 - [Development Setup](#development-setup)
 - [Making a Pull Request](#making-a-pull-request)
 - [Coding Standards](#coding-standards)
@@ -41,6 +42,12 @@ By participating you agree to abide by its terms. Please be respectful and const
 1. Open a [Feature Request issue](https://github.com/lacattano/AI-Playwright-Test-Generator/issues/new?template=feature_request.md).
 2. Describe the problem you are trying to solve, not just the solution you have in mind.
 3. If you plan to implement it yourself, say so — we will prioritise reviewing it.
+
+---
+
+## Security
+
+If you discover a security vulnerability, please do **not** open a public issue. See [SECURITY.md](SECURITY.md) for responsible disclosure guidelines.
 
 ---
 

@@ -42,7 +42,7 @@ jobs:
       - name: Run smoke test
         run: uv run python scripts/smoke.py --json
 
-  # ── Gate 1: Project integrity (fastest, fails first) ──────────────────
+  # ── Gate 1: Project integrity (parallel with smoke) ──────────────────
   sanitizer:
     name: Project Sanitizer
     runs-on: ubuntu-latest
@@ -69,12 +69,66 @@ jobs:
       - name: Run Project Sanitizer (check-only)
         run: uv run python scripts/maintenance/project_sanitizer.py --check-only
 
-  # ── Gate 2: Lint & format ────────────────────────────────────────────
+  # ── Gate 1b: Graph freshness (warning-only, non-blocking) ─────────────
+  graph-freshness:
+    name: Graph Freshness Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check knowledge graph freshness
+        run: |
+          if [ ! -f graphify-out/graph.json ]; then
+            echo "::warning::No graphify-out/graph.json found — knowledge graph not generated"
+            exit 0
+          fi
+          GRAPH_COMMIT=$(python -c "import json,sys; d=json.load(open('graphify-out/graph.json')); print(d.get('built_at_commit',''))" 2>/dev/null || echo "")
+          HEAD=$(git rev-parse HEAD)
+          if [ -z "$GRAPH_COMMIT" ]; then
+            echo "::warning::Could not read gitCommit from graph.json"
+          elif [ "$GRAPH_COMMIT" != "$HEAD" ]; then
+            echo "::warning::Knowledge graph is stale (graph: $GRAPH_COMMIT, head: $HEAD)"
+            echo "Run 'graphify update .' locally to refresh"
+          else
+            echo "✅ Knowledge graph is up to date"
+          fi
+
+  # ── Gate 1c: Documentation coverage (warning-only, non-blocking) ──────
+  docs-coverage:
+    name: Documentation Coverage Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check markdown_docs coverage
+        run: |
+          if [ ! -f markdown_docs/.sweep_progress.json ]; then
+            echo "::warning::No markdown_docs/.sweep_progress.json found"
+            exit 0
+          fi
+          python -c "
+          import json, sys
+          d = json.load(open('markdown_docs/.sweep_progress.json'))
+          pending = d.get('pending', 0)
+          if pending > 0:
+              print(f'::warning::{pending} file(s) pending documentation')
+              sys.exit(0)  # non-blocking warning
+          else:
+              print(f'✅ All {d.get(\"total\", 0)} files documented')
+          "
+
+  # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
     name: Ruff Lint & Format
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: sanitizer
+    needs: smoke
 
     steps:
       - name: Checkout repository
@@ -100,12 +154,11 @@ jobs:
       - name: Run ruff format --check
         run: uv run ruff format --check .
 
-  # ── Gate 3: Static type checking ─────────────────────────────────────
   type-check:
     name: MyPy Type Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: lint
+    needs: smoke
 
     steps:
       - name: Checkout repository
@@ -128,12 +181,12 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/ cli/
 
-  # ── Gate 4: Test execution (heaviest, last) ──────────────────────────
+  # ── Gate 3: Test execution (needs lint + type-check green) ────────────
   test:
     name: PyTest + Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: type-check
+    needs: [lint, type-check]
 
     steps:
       - name: Checkout repository

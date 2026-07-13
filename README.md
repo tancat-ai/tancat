@@ -36,6 +36,7 @@ Executable pytest file (sync format, ready to run)
 - **CLI** — Command-line mode for CI/CD integration
 - **Evidence Tracking** — Annotated screenshots, Gantt timelines, heat maps
 - **Multi-Format Reports** — Markdown, Jira, or standalone HTML
+- **Self-Documenting** — Knowledge graph of the codebase for architecture exploration
 
 ## Quick Start
 
@@ -128,6 +129,7 @@ Phase 3: PERSISTENCE + REPORTING
 ```
 
 For a full module map and dependency graph, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- [Interactive call-flow diagram](graphify-out/callflow.html) — generated from live code, 10 700+ nodes
 
 ## Documentation
 
