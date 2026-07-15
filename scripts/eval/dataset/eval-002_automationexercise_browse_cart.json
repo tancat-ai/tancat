@@ -1,0 +1,106 @@
+{
+  "id": "eval-002",
+  "site": "automationexercise",
+  "base_url": "https://automationexercise.com",
+  "title": "Browse products and add to cart",
+  "user_story": "As a customer, I want to browse products on the website and add them to my cart so that I can purchase them later.",
+  "conditions": [
+    "1. Navigate to the automationexercise.com home page",
+    "2. Click the Products link in the header navigation to go to the products page",
+    "3. On the products page, click the Add to cart button next to a product (e.g. Blue Top)",
+    "4. Verify a confirmation message appears indicating the product was added to cart",
+    "5. Click the Cart link in the header navigation to go to the cart page",
+    "6. Verify the cart page displays the product that was added with its name and price"
+  ],
+  "golden_resolutions": [
+    {
+      "criterion_index": 0,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "home page loaded",
+          "expected_locator": "h2:has-text(\"Featured Products\")",
+          "tolerance_selectors": [".main", "#slider"],
+          "expected_page": "https://automationexercise.com"
+        }
+      ]
+    },
+    {
+      "criterion_index": 1,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products link",
+          "expected_locator": "a[href=\"/products\"]",
+          "tolerance_selectors": ["a.products_link"],
+          "expected_page": "https://automationexercise.com"
+        },
+        {
+          "action": "ASSERT",
+          "description": "products page title",
+          "expected_locator": "h2:has-text(\"Your Products\")",
+          "tolerance_selectors": ["h2"],
+          "expected_page": "https://automationexercise.com/products"
+        }
+      ]
+    },
+    {
+      "criterion_index": 2,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart",
+          "expected_locator": ".add-to-cart.btn",
+          "tolerance_selectors": [".add-to-cart.btn[data-product-id=\"1\"]"],
+          "expected_page": "https://automationexercise.com/products"
+        }
+      ]
+    },
+    {
+      "criterion_index": 3,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "add to cart confirmation",
+          "expected_locator": ".modal-body",
+          "tolerance_selectors": [".modal-header"],
+          "expected_page": "https://automationexercise.com/products"
+        }
+      ]
+    },
+    {
+      "criterion_index": 4,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Cart link",
+          "expected_locator": "a[href=\"/view_cart\"]",
+          "tolerance_selectors": [".cart"],
+          "expected_page": "https://automationexercise.com/products"
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_locator": "h2:has-text(\"Your Cart\")",
+          "tolerance_selectors": ["#cart_item"],
+          "expected_page": "https://automationexercise.com/view_cart"
+        }
+      ]
+    },
+    {
+      "criterion_index": 5,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_locator": "#cart_item",
+          "tolerance_selectors": [".cart_table"],
+          "expected_page": "https://automationexercise.com/view_cart"
+        }
+      ]
+    }
+  ],
+  "expected_test_count": 6,
+  "validated_by": "pipeline_capture_2026-07-14",
+  "validated_at": "2026-07-14"
+}

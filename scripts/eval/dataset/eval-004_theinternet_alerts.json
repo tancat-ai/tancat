@@ -1,0 +1,93 @@
+{
+  "id": "eval-004",
+  "site": "theinternet",
+  "base_url": "https://the-internet.herokuapp.com",
+  "title": "JavaScript alerts interaction",
+  "user_story": "As a user, I want to interact with the dynamic content features on the-internet.herokuapp.com, including triggering a JavaScript alert and verifying its message.",
+  "conditions": [
+    "1. Navigate to the the-internet.herokuapp.com main page",
+    "2. Click the JavaScript Alerts link",
+    "3. Click the Click for JS Alert button",
+    "4. Accept the JavaScript alert popup",
+    "5. Verify the result message displays on the page"
+  ],
+  "golden_resolutions": [
+    {
+      "criterion_index": 0,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "all elements listing",
+          "expected_locator": ".heading",
+          "tolerance_selectors": ["h3:has-text(\"All Elements\")"],
+          "expected_page": "https://the-internet.herokuapp.com"
+        }
+      ]
+    },
+    {
+      "criterion_index": 1,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "JavaScript Alerts",
+          "expected_locator": "a[href=\"/javascript_alerts\"]",
+          "tolerance_selectors": [],
+          "expected_page": "https://the-internet.herokuapp.com"
+        },
+        {
+          "action": "ASSERT",
+          "description": "alert demonstration header",
+          "expected_locator": "h3:has-text(\"JavaScript Alerts\")",
+          "tolerance_selectors": ["h3"],
+          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+        }
+      ]
+    },
+    {
+      "criterion_index": 2,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+        }
+      ]
+    },
+    {
+      "criterion_index": 3,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+        }
+      ]
+    },
+    {
+      "criterion_index": 4,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+        },
+        {
+          "action": "ASSERT",
+          "description": "result message text",
+          "expected_locator": "#result",
+          "tolerance_selectors": ["h4:has-text(\"Result\")"],
+          "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
+        }
+      ]
+    }
+  ],
+  "expected_test_count": 5,
+  "validated_by": "pipeline_capture_2026-07-14",
+  "validated_at": "2026-07-14"
+}

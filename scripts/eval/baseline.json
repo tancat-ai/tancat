@@ -1,0 +1,449 @@
+{
+  "stories": [
+    {
+      "story_id": "eval-001",
+      "site": "saucedemo",
+      "total_criteria": 6,
+      "criteria_with_skeletons": 6,
+      "resolutions": [
+        {
+          "action": "FILL",
+          "description": "username",
+          "expected_locator": "#user-name",
+          "tolerance_selectors": [
+            "input[name=\"user-name\"]"
+          ],
+          "generated_locator": "#user-name",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "password",
+          "expected_locator": "#password",
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "generated_locator": "#password",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "login button",
+          "expected_locator": "#login-button",
+          "tolerance_selectors": [
+            "[data-test=\"submit\"]"
+          ],
+          "generated_locator": "#login-button",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "product list",
+          "expected_locator": "[data-test=\"inventory-item\"]",
+          "tolerance_selectors": [
+            "[data-test=\"inventory-item-description\"]"
+          ],
+          "generated_locator": "[data-test=\"inventory-item-description\"]",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "username",
+          "expected_locator": "#user-name",
+          "tolerance_selectors": [
+            "input[name=\"user-name\"]"
+          ],
+          "generated_locator": "#user-name",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "password",
+          "expected_locator": "#password",
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "generated_locator": "#password",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "login button",
+          "expected_locator": "#login-button",
+          "tolerance_selectors": [
+            "[data-test=\"submit\"]"
+          ],
+          "generated_locator": "#login-button",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart (Backpack)",
+          "expected_locator": "#add-to-cart-sauce-labs-backpack",
+          "tolerance_selectors": [],
+          "generated_locator": "#add-to-cart-sauce-labs-backpack",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart badge updated",
+          "expected_locator": "[data-test=\"shopping-cart-badge\"]",
+          "tolerance_selectors": [
+            ".shopping_cart_link[data-test=\"shopping-cart-link\"]"
+          ],
+          "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Cart icon",
+          "expected_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
+          "tolerance_selectors": [
+            "a.shopping_cart_link"
+          ],
+          "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "Cart Summary",
+          "expected_locator": "#cart_contents_container",
+          "tolerance_selectors": [],
+          "generated_locator": "#cart_contents_container",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "backpack item in cart",
+          "expected_locator": "[data-test=\"cart-list-container\"]",
+          "tolerance_selectors": [
+            ".cart_list[data-test=\"cart-list\"]"
+          ],
+          "generated_locator": ".cart_list[data-test=\"cart-list\"]",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Checkout",
+          "expected_locator": "#checkout",
+          "tolerance_selectors": [],
+          "generated_locator": "#checkout",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "Checkout Info form",
+          "expected_locator": "#checkout_info_container",
+          "tolerance_selectors": [],
+          "generated_locator": "#checkout_info_container",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "First Name",
+          "expected_locator": "#first-name",
+          "tolerance_selectors": [
+            "input[name=\"firstName\"]"
+          ],
+          "generated_locator": "#first-name",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "Last Name",
+          "expected_locator": "#last-name",
+          "tolerance_selectors": [
+            "input[name=\"lastName\"]"
+          ],
+          "generated_locator": "#postal-code",
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "Zip/Postal Code",
+          "expected_locator": "#postal-code",
+          "tolerance_selectors": [
+            "input[name=\"postalCode\"]"
+          ],
+          "generated_locator": "#postal-code",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Continue",
+          "expected_locator": "#continue",
+          "tolerance_selectors": [],
+          "generated_locator": "#continue",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Finish",
+          "expected_locator": "#finish",
+          "tolerance_selectors": [],
+          "generated_locator": "#finish",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "Thank You page",
+          "expected_locator": "[data-test=\"title\"]",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-002",
+      "site": "automationexercise",
+      "total_criteria": 6,
+      "criteria_with_skeletons": 6,
+      "resolutions": [
+        {
+          "action": "ASSERT",
+          "description": "home page loaded",
+          "expected_locator": "h2:has-text(\"Featured Products\")",
+          "tolerance_selectors": [
+            ".main",
+            "#slider"
+          ],
+          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Products link",
+          "expected_locator": "a[href=\"/products\"]",
+          "tolerance_selectors": [
+            "a.products_link"
+          ],
+          "generated_locator": "a[href=\"/products\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "products page title",
+          "expected_locator": "h2:has-text(\"Your Products\")",
+          "tolerance_selectors": [
+            "h2"
+          ],
+          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart",
+          "expected_locator": ".add-to-cart.btn",
+          "tolerance_selectors": [
+            ".add-to-cart.btn[data-product-id=\"1\"]"
+          ],
+          "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "add to cart confirmation",
+          "expected_locator": ".modal-body",
+          "tolerance_selectors": [
+            ".modal-header"
+          ],
+          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Cart link",
+          "expected_locator": "a[href=\"/view_cart\"]",
+          "tolerance_selectors": [
+            ".cart"
+          ],
+          "generated_locator": "a[href=\"/view_cart\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_locator": "h2:has-text(\"Your Cart\")",
+          "tolerance_selectors": [
+            "#cart_item"
+          ],
+          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "matched": false
+        },
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_locator": "#cart_item",
+          "tolerance_selectors": [
+            ".cart_table"
+          ],
+          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "matched": false
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-003",
+      "site": "demoqa",
+      "total_criteria": 6,
+      "criteria_with_skeletons": 6,
+      "resolutions": [
+        {
+          "action": "ASSERT",
+          "description": "practice form page title",
+          "expected_locator": "h5:has-text(\"Student Registration Form\")",
+          "tolerance_selectors": [
+            "h5"
+          ],
+          "generated_locator": "h5:has-text(\"Student Registration Form\")",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "First Name",
+          "expected_locator": "#firstName",
+          "tolerance_selectors": [],
+          "generated_locator": "#firstName",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "Last Name",
+          "expected_locator": "#lastName",
+          "tolerance_selectors": [],
+          "generated_locator": "#userEmail",
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "Email",
+          "expected_locator": "#userEmail",
+          "tolerance_selectors": [],
+          "generated_locator": "#userEmail",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Male radio",
+          "expected_locator": "#gender-radio-1",
+          "tolerance_selectors": [],
+          "generated_locator": "#gender-radio-1",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "Male radio selected",
+          "expected_locator": "#gender-radio-1",
+          "tolerance_selectors": [],
+          "generated_locator": "#gender-radio-1",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Submit",
+          "expected_locator": "#submit",
+          "tolerance_selectors": [],
+          "generated_locator": "#submit",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "submission success message",
+          "expected_locator": ".group-header",
+          "tolerance_selectors": [
+            "table"
+          ],
+          "generated_locator": ".group-header",
+          "matched": true
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-004",
+      "site": "theinternet",
+      "total_criteria": 5,
+      "criteria_with_skeletons": 5,
+      "resolutions": [
+        {
+          "action": "ASSERT",
+          "description": "all elements listing",
+          "expected_locator": ".heading",
+          "tolerance_selectors": [
+            "h3:has-text(\"All Elements\")"
+          ],
+          "generated_locator": ".heading",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "JavaScript Alerts",
+          "expected_locator": "a[href=\"/javascript_alerts\"]",
+          "tolerance_selectors": [],
+          "generated_locator": "a[href=\"/javascript_alerts\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "alert demonstration header",
+          "expected_locator": "h3:has-text(\"JavaScript Alerts\")",
+          "tolerance_selectors": [
+            "h3"
+          ],
+          "generated_locator": "h3:has-text(\"JavaScript Alerts\")",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "generated_locator": "button:has-text(\"Click for JS Alert\")",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "generated_locator": "button:has-text(\"Click for JS Alert\")",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Click for JS Alert",
+          "expected_locator": "button:has-text(\"Click for JS Alert\")",
+          "tolerance_selectors": [],
+          "generated_locator": "button:has-text(\"Click for JS Alert\")",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "result message text",
+          "expected_locator": "#result",
+          "tolerance_selectors": [
+            "h4:has-text(\"Result\")"
+          ],
+          "generated_locator": "h4:has-text(\"Result:\")",
+          "matched": false
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    }
+  ]
+}

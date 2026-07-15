@@ -178,10 +178,34 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 | Smoke | `python scripts/smoke.py` | Offline: resolver, parser, imports | <1s |
 | Unit | `pytest -q --tb=short` | Internal modules with mocks | ~10s |
 | **Production** | `python scripts/verify_production.py` | **Full pipeline → execute → validate evidence** | ~60s |
+| **Eval harness** | `python scripts/eval/eval_harness.py run --mode static` | **Resolution accuracy vs. golden keys (79.1% baseline)** | <1s |
 
 - ✅ Run smoke → pytest → **verify_production** before declaring a feature done
 - ✅ `verify_production.py` is the single source of truth: "does the product work?"
 - ✅ It generates real tests, runs them against live sites, and validates evidence output
+- ✅ Run **eval harness** before shipping changes to pipeline/resolver/prompt files — catches regression
+- ✅ Eval harness is a *pre-commit quality gate*, not part of ship-it skill
+- ✅ Eval harness tracks: resolution accuracy, test pass rate, false positive rate, skeleton completeness
+
+### When to run the eval harness
+
+**Run it when touching these files:**
+- `src/orchestrator.py`, `src/placeholder_scorers.py`, `src/intent_matcher.py`
+- `src/test_generator.py`, `src/llm_client.py`
+- Any prompt templates or generation logic
+
+**Don't run it for:** UI changes, CLI changes, Docker, unrelated features
+
+**Commands:**
+```bash
+python scripts/eval/eval_harness.py run --mode static        # Fast, offline
+python scripts/eval/eval_harness.py run --min-accuracy 79     # Quality gate (exit code 2 if below)
+python scripts/eval/eval_harness.py baseline --save            # Update baseline after verified improvement
+python scripts/eval/eval_harness.py compare                    # Current vs. saved baseline
+python scripts/eval/eval_harness.py dataset --validate         # Validate golden keys
+```
+
+**Maintenance:** Golden keys decay — re-validate locators against live sites every 3-6 months.
 
 ### Debug CLI
 - **`python scripts/debug.py --help`** — unified entry point

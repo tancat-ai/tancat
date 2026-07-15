@@ -1,0 +1,106 @@
+{
+  "id": "eval-003",
+  "site": "demoqa",
+  "base_url": "https://demoqa.com/automation-practice-form",
+  "title": "Fill out the practice form",
+  "user_story": "As a user, I want to fill out the practice form on demoqa.com with text inputs, checkboxes, radio buttons, and a dropdown selection.",
+  "conditions": [
+    "1. Navigate to the demoqa.com practice form page",
+    "2. Fill in the first name field with a value",
+    "3. Fill in the last name field with a value",
+    "4. Fill in the email address field with a value",
+    "5. Select a radio button option (e.g. Male)",
+    "6. Click the Submit button at the bottom of the form"
+  ],
+  "golden_resolutions": [
+    {
+      "criterion_index": 0,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "practice form page title",
+          "expected_locator": "h5:has-text(\"Student Registration Form\")",
+          "tolerance_selectors": ["h5"],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    },
+    {
+      "criterion_index": 1,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "First Name",
+          "expected_locator": "#firstName",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    },
+    {
+      "criterion_index": 2,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "Last Name",
+          "expected_locator": "#lastName",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    },
+    {
+      "criterion_index": 3,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "Email",
+          "expected_locator": "#userEmail",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    },
+    {
+      "criterion_index": 4,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Male radio",
+          "expected_locator": "#gender-radio-1",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        },
+        {
+          "action": "ASSERT",
+          "description": "Male radio selected",
+          "expected_locator": "#gender-radio-1",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    },
+    {
+      "criterion_index": 5,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Submit",
+          "expected_locator": "#submit",
+          "tolerance_selectors": [],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        },
+        {
+          "action": "ASSERT",
+          "description": "submission success message",
+          "expected_locator": ".group-header",
+          "tolerance_selectors": ["table"],
+          "expected_page": "https://demoqa.com/automation-practice-form"
+        }
+      ]
+    }
+  ],
+  "expected_test_count": 6,
+  "validated_by": "pipeline_capture_2026-07-14",
+  "validated_at": "2026-07-14"
+}

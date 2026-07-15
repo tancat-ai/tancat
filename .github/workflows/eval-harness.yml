@@ -1,0 +1,86 @@
+name: Evaluation Harness
+
+# Manual trigger only — gate (warn), not break
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Evaluation mode"
+        required: true
+        default: "static"
+        type: choice
+        options:
+          - static
+          - full
+      min_accuracy:
+        description: "Minimum resolution accuracy (%)"
+        required: false
+        default: "70"
+        type: number
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: Eval Harness (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run eval harness
+        run: |
+          uv run python scripts/eval/eval_harness.py run \
+            --mode ${{ inputs.mode }} \
+            --min-accuracy ${{ inputs.min_accuracy }} \
+            --no-persist
+        continue-on-error: true
+
+      - name: Generate markdown summary
+        run: |
+          uv run python scripts/eval/ci_summary.py \
+            --mode ${{ inputs.mode }} \
+            --min-accuracy ${{ inputs.min_accuracy }}
+
+      - name: Post summary as PR comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('.eval_summary.md', 'utf8');
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: Upload eval summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-harness-summary
+          path: .eval_summary.md
+          retention-days: 30

@@ -12,6 +12,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
+| `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |
 | `3d map/*.py` | 3D documentation map generation | Nothing |
 
 ---
@@ -120,6 +121,32 @@ python scripts/verify_production.py --flat       # flat mode (non-POM)
 
 ---
 
+## eval/ — Automated Evaluation Harness
+
+Regression detection for the test generation pipeline. Measures placeholder
+resolution accuracy, test pass rate, and false positive rate against frozen
+golden answer keys.
+
+**Baseline:** 79.1% resolution accuracy (34/43 placeholders correct)
+
+```bash
+python scripts/eval/eval_harness.py run --mode static        # Fast, offline (<1s)
+python scripts/eval/eval_harness.py run --mode full           # Resolution + test execution
+python scripts/eval/eval_harness.py run --min-accuracy 79     # Quality gate (exit 2 if below)
+python scripts/eval/eval_harness.py baseline --save            # Save reference baseline
+python scripts/eval/eval_harness.py compare                    # Current vs. baseline
+python scripts/eval/eval_harness.py dataset --validate         # Validate golden keys
+```
+
+**When to run:** Before shipping changes to pipeline/resolver/prompt files.
+**Not part of ship-it** — it's a pre-commit quality gate for pipeline changes.
+
+**Maintenance:** Golden keys decay — re-validate locators every 3-6 months.
+
+Full usage guide: `scripts/eval/README.md`
+
+---
+
 ## debug/ — Targeted Debug Scripts
 
 These remain as specialized tools for specific scenarios:
@@ -159,4 +186,4 @@ Archived scripts from previous debugging sessions. Not executed, kept for refere
 
 ---
 
-*Last updated: 2026-06-29*
+*Last updated: 2026-07-15*
