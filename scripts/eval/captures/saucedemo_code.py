@@ -2,10 +2,11 @@ import pytest
 from playwright.sync_api import Page
 
 from src.browser_utils import dismiss_consent_overlays
+from src.evidence_tracker import EvidenceTracker
 
 
 @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
-def test_01_login(page: Page, evidence_tracker):
+def test_01_login(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
     evidence_tracker.fill("#user-name", "standard_user", label="username")
@@ -15,7 +16,7 @@ def test_01_login(page: Page, evidence_tracker):
 
 
 @pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
-def test_02_add_item_to_cart(page: Page, evidence_tracker):
+def test_02_add_item_to_cart(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
     evidence_tracker.fill("#user-name", "standard_user", label="username")
@@ -26,7 +27,7 @@ def test_02_add_item_to_cart(page: Page, evidence_tracker):
 
 
 @pytest.mark.evidence(condition_ref="TC-03", story_ref="S01")
-def test_03_navigate_to_cart(page: Page, evidence_tracker):
+def test_03_navigate_to_cart(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
     evidence_tracker.fill("#user-name", "standard_user", label="username")
@@ -38,7 +39,7 @@ def test_03_navigate_to_cart(page: Page, evidence_tracker):
 
 
 @pytest.mark.evidence(condition_ref="TC-04", story_ref="S01")
-def test_04_verify_cart_contents(page: Page, evidence_tracker):
+def test_04_verify_cart_contents(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
     evidence_tracker.fill("#user-name", "standard_user", label="username")
@@ -50,7 +51,7 @@ def test_04_verify_cart_contents(page: Page, evidence_tracker):
 
 
 @pytest.mark.evidence(condition_ref="TC-05", story_ref="S01")
-def test_05_navigate_to_checkout(page: Page, evidence_tracker):
+def test_05_navigate_to_checkout(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
     evidence_tracker.fill("#user-name", "standard_user", label="username")
@@ -63,7 +64,7 @@ def test_05_navigate_to_checkout(page: Page, evidence_tracker):
 
 
 @pytest.mark.evidence(condition_ref="TC-06", story_ref="S01")
-def test_06_complete_checkout(page: Page, evidence_tracker):
+def test_06_complete_checkout(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://www.saucedemo.com")
     pytest.skip("Skipping: unresolved placeholders for: 'Thank You page'")
     dismiss_consent_overlays(page)
