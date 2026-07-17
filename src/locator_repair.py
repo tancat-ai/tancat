@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -147,25 +148,32 @@ def run_codegen_session(url: str, timeout_seconds: int = 120) -> str | None:
         The locator string captured from the clicked element, or None.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"/tmp/repair_locator_{timestamp}.py"
+    tmp_dir = tempfile.gettempdir()
+    output_file = str(Path(tmp_dir) / f"repair_locator_{timestamp}.py")
 
+    # Use DEVNULL to avoid pipe deadlocks with headed browser GUI process on Windows.
+    # The browser writes to output_file directly, we don't need its stdout/stderr.
     proc = subprocess.Popen(
         ["playwright", "codegen", "--output", output_file, url],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     try:
         proc.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
         proc.kill()
+        proc.wait(timeout=5)
         return None
 
     if not Path(output_file).exists():
         return None
 
     content = Path(output_file).read_text(encoding="utf-8")
-    Path(output_file).unlink(missing_ok=True)
+    try:
+        Path(output_file).unlink(missing_ok=True)
+    except OSError:
+        pass
 
     locator_pattern = re.compile(
         r'\.(?:locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder)\(\s*["\']([^"\']+)["\']',

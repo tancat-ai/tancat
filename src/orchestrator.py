@@ -388,6 +388,15 @@ class TestOrchestrator:
         )
         self._debug("phase=resolve_placeholders done")
 
+        # Inject @pytest.mark.evidence decorators so condition_ref is populated
+        if generation_conditions:
+            self._debug("phase=evidence_markers start")
+            final_code = self._inject_evidence_markers(
+                final_code,
+                generation_conditions,
+            )
+            self._debug("phase=evidence_markers done")
+
         # Inject POM imports and instantiations when POM mode is enabled
         if self._pom_mode and generated_page_objects:
             self._debug("phase=pom_injection start")
@@ -823,6 +832,52 @@ class TestOrchestrator:
                 )
                 if not already_present:
                     new_lines.append(instantiation_block)
+            i += 1
+
+        return "\n".join(new_lines)
+
+    @staticmethod
+    def _inject_evidence_markers(
+        code: str,
+        conditions: list[TestCondition],
+    ) -> str:
+        """Inject @pytest.mark.evidence(condition_ref=..., story_ref=...) before each test function.
+
+        Maps condition IDs to test functions by order — the Nth condition maps to the Nth test.
+        If a test already has the decorator it is left untouched.
+        """
+        lines = code.splitlines()
+        new_lines: list[str] = []
+        test_match_re = re.compile(r"^def\s+test_")
+        has_decorator_re = re.compile(r"^@pytest\.mark\.evidence")
+        condition_idx = 0
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+
+            # Check if this is a test function definition
+            if test_match_re.match(stripped):
+                # Check if the previous line already has the decorator
+                if new_lines and has_decorator_re.match(new_lines[-1].strip()):
+                    # Already decorated — skip injection
+                    condition_idx += 1
+                elif condition_idx < len(conditions):
+                    # Inject the decorator
+                    condition = conditions[condition_idx]
+                    decorator = (
+                        f'@pytest.mark.evidence(condition_ref="{condition.id}", story_ref="S{condition_idx + 1:02d}")'
+                    )
+                    new_lines.append(decorator)
+                    condition_idx += 1
+                else:
+                    # More tests than conditions — use a default
+                    decorator = f'@pytest.mark.evidence(condition_ref="TC{condition_idx + 1:02d}", story_ref="S{condition_idx + 1:02d}")'
+                    new_lines.append(decorator)
+                    condition_idx += 1
+
+            new_lines.append(line)
             i += 1
 
         return "\n".join(new_lines)

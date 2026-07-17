@@ -264,8 +264,11 @@ def parse_pytest_output(raw: str) -> RunResult:
     # Apply accumulated durations from the --durations section (these override
     # inline durations because they are the authoritative per-phase timings).
     for name, dur in durations_accum.items():
-        if name in results_by_name:
-            results_by_name[name].duration = dur
+        # Strip parametrize markers like [chromium] from the duration line's
+        # test name, because results_by_name keys are stored without them.
+        base_name = name.split("[")[0]
+        if base_name in results_by_name:
+            results_by_name[base_name].duration = dur
 
     run.results = list(results_by_name.values())
 

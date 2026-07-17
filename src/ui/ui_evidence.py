@@ -41,10 +41,10 @@ class EvidenceViewer:
             )
             return
 
-        evidence_tabs = st.tabs(["Annotated Screenshot", "Gantt Timeline", "Coverage Heat Map", "Run History"])
+        evidence_tabs = st.tabs(["Debug & Export", "Gantt Timeline", "Coverage Heat Map", "Run History"])
 
         with evidence_tabs[0]:
-            self._render_annotated_screenshot(sidecars)
+            self._render_debug_export(sidecars)
 
         with evidence_tabs[1]:
             self._render_gantt_timeline(evidence_dirs)
@@ -58,25 +58,85 @@ class EvidenceViewer:
         st.divider()
         self._render_suite_heatmap(sidecars, evidence_dirs)
 
+    def _render_debug_export(self, sidecars: list[Path]) -> None:
+        """Render the Debug & Export tab — focused on failure investigation."""
+        st.subheader("🔍 Debug & Export")
+
+        # Build a friendly list: test name + status + pass/fail count
+        sidecar_options: list[dict[str, Any]] = []
+        for sp in sidecars:
+            data = safe_read_sidecar(sp)
+            if data is None:
+                sidecar_options.append({"path": sp, "label": sp.stem, "status": "unknown", "has_failure": False})
+                continue
+            test_info = data.get("test", {})
+            if not isinstance(test_info, dict):
+                test_info = {}
+            status = str(test_info.get("status", "unknown"))
+            # Check if any step failed
+            has_failure = False
+            for step in data.get("steps", []):
+                if isinstance(step, dict):
+                    result = step.get("result", {})
+                    if isinstance(result, dict) and result.get("status") in ("failed", "error"):
+                        has_failure = True
+                        break
+
+            label = sp.stem
+            # Remove [chromium] suffix for readability
+            label = label.replace("[chromium]", "")
+            # Build a clean label showing order + status
+            condition_ref = str(test_info.get("condition_ref", ""))
+            if condition_ref:
+                label = f"{condition_ref} — {label}"
+
+            icon = "❌" if has_failure else "✅"
+            label = f"{icon} {label}"
+
+            sidecar_options.append({"path": sp, "label": label, "status": status, "has_failure": has_failure})
+
+        if not sidecar_options:
+            st.info("No evidence sidecars found.")
+            return
+
+        # Selector
+        selected_idx = st.selectbox(
+            "Select test evidence",
+            options=range(len(sidecar_options)),
+            format_func=lambda i: sidecar_options[i]["label"],
+            key="debug_export_selector",
+        )
+        selected = sidecar_options[selected_idx]
+
+        # Render the journey view
+        try:
+            html = generate_annotated_journey(
+                sidecar_path=selected["path"],
+                title=selected["path"].stem,
+                bug_report_mode=False,
+            )
+            components.html(html, height=1100, scrolling=True)
+
+            # Download button for plain-text bug report
+            text_report = generate_annotated_journey(
+                sidecar_path=selected["path"],
+                title=selected["path"].stem,
+                bug_report_mode=True,
+            )
+            filename = selected["path"].stem.replace("[chromium]", "").strip()
+            st.download_button(
+                label="📥 Download Bug Report (text)",
+                data=text_report,
+                file_name=f"{filename}_bug_report.txt",
+                mime="text/plain",
+                key="download_bug_report",
+            )
+        except Exception as e:
+            st.error(f"Failed to render evidence: {e}")
+
     def _render_annotated_screenshot(self, sidecars: list[Path]) -> None:
-        selected = st.selectbox(
-            "Select evidence sidecar",
-            options=sidecars,
-            format_func=lambda p: p.name,
-        )
-        view_mode = st.selectbox(
-            "View mode",
-            options=["annotated", "heatmap", "clean"],
-            index=0,
-            key="main_evidence_view_mode",
-            help="annotated = numbered steps; heatmap = density rings; clean = screenshot only.",
-        )
-        html = generate_annotated_journey(
-            sidecar_path=selected,
-            view_mode=view_mode,  # type: ignore[arg-type]
-            title=selected.stem,
-        )
-        components.html(html, height=900, scrolling=True)
+        """Legacy entry point kept for backwards compatibility — delegates to _render_debug_export."""
+        self._render_debug_export(sidecars)
 
     def _render_gantt_timeline(self, evidence_dirs: list[Path]) -> None:
         from src.ui_pipeline import find_sidecar_for_test

@@ -79,7 +79,11 @@ _CLICK_METHOD_SOURCE_ET = (
     "        # Last resort: use page.locator with text matching (fast-fail).\n"
     "        # Avoids delegating to evidence_tracker with a raw description\n"
     "        # which Playwright tries as a CSS selector and hangs on 5s timeout.\n"
-    "        self.page.locator('text=' + description).first.click(timeout=3000)\n"
+    "        try:\n"
+    "            self.tracker.click('text=' + description, label=description)\n"
+    "        except Exception:\n"
+    "            self.page.locator('text=' + description).first.click(timeout=3000)\n"
+    "            raise\n"
 )
 
 _CLICK_METHOD_SOURCE_PLAIN = (

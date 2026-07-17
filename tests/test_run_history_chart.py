@@ -67,44 +67,43 @@ def test_chart_empty_runs() -> None:
 
 
 def test_chart_single_run() -> None:
-    """Single bar renders correctly with pass rate."""
+    """Single run renders correctly with pass rate and total count."""
     run = _make_run("2026-06-11T21:00:00", passed=10, failed=2, skipped=1, errors=0)
     fig = build_run_history_chart([run])
 
-    # 5 traces: 4 bars + 1 line
-    assert len(list(fig.data)) == 5
+    # 2 traces: 1 bar (total tests) + 1 line (pass rate)
+    assert len(list(fig.data)) == 2
 
-    # Bar traces have correct counts
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    fail_y = fig.data[1].y  # type: ignore[attr-defined]
-    skip_y = fig.data[2].y  # type: ignore[attr-defined]
-    error_y = fig.data[3].y  # type: ignore[attr-defined]
+    # Trace 0 = Total Tests bar
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    assert bar_y[0] == 10 + 2 + 1 + 0  # total = 13
 
-    assert pass_y[0] == 10
-    assert fail_y[0] == 2
-    assert skip_y[0] == 1
-    assert error_y[0] == 0
-
-    # Pass rate line
-    line_y = fig.data[4].y  # type: ignore[attr-defined]
+    # Trace 1 = Pass Rate % line
+    line_y = fig.data[1].y  # type: ignore[attr-defined]
     assert line_y[0] == round(10 / 12 * 100, 1)  # 83.3
 
 
 def test_chart_multiple_runs() -> None:
-    """Stacked bars with correct counts across multiple runs."""
+    """Correct counts across multiple runs."""
     runs = [
         _make_run("2026-06-11T20:00:00", passed=14, failed=3, skipped=1, errors=0),
         _make_run("2026-06-11T21:00:00", passed=15, failed=2, skipped=1, errors=0),
     ]
     fig = build_run_history_chart(runs)
 
-    assert len(list(fig.data)) == 5
+    assert len(list(fig.data)) == 2
 
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    fail_y = fig.data[1].y  # type: ignore[attr-defined]
+    # Bar: total test count per run
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    assert list(bar_y) == [14 + 3 + 1 + 0, 15 + 2 + 1 + 0]  # [18, 18]
 
-    assert list(pass_y) == [14, 15]
-    assert list(fail_y) == [3, 2]
+    # Line: pass rate per run
+    line_y = fig.data[1].y  # type: ignore[attr-defined]
+    expected_rates = [
+        round(14 / (14 + 3) * 100, 1),
+        round(15 / (15 + 2) * 100, 1),
+    ]
+    assert list(line_y) == expected_rates
 
 
 def test_chart_pass_rate_line() -> None:
@@ -115,12 +114,12 @@ def test_chart_pass_rate_line() -> None:
     ]
     fig = build_run_history_chart(runs)
 
-    line_y = fig.data[4].y  # type: ignore[attr-defined]
+    line_y = fig.data[1].y  # type: ignore[attr-defined]
     assert list(line_y) == [100.0, 50.0]
 
 
 def test_chart_flaky_markers() -> None:
-    """❗ markers appear on bars where flaky tests occurred."""
+    """❗ markers on runs where flaky tests occurred."""
     # Test "test_a" passes in run 1, fails in run 2 → flaky
     runs = [
         _make_run(
@@ -146,7 +145,6 @@ def test_chart_flaky_markers() -> None:
 
     # Both runs contain the flaky test, so both should have annotations
     annotations_text = [getattr(a, "text", "") for a in fig.layout.annotations]
-    # Both runs have the flaky test
     assert annotations_text.count("❗") == 2
 
 
@@ -186,9 +184,9 @@ def test_chart_chronological_order() -> None:
     ]
     fig = build_run_history_chart(runs)
 
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    # After sorting: run at 20:00 (14 passed) comes first
-    assert list(pass_y) == [14, 15]
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    # After sorting: run at 20:00 comes first (total = 14 + 3 = 17)
+    assert list(bar_y) == [17, 17]
 
 
 def test_chart_single_run_no_flaky_markers() -> None:
@@ -213,8 +211,29 @@ def test_chart_zero_total_pass_rate() -> None:
     run = _make_run("2026-06-11T21:00:00", passed=0, failed=0, skipped=5, errors=0)
     fig = build_run_history_chart([run])
 
-    line_y = fig.data[4].y  # type: ignore[attr-defined]
+    line_y = fig.data[1].y  # type: ignore[attr-defined]
     assert line_y[0] == 0.0
+
+
+def test_chart_health_markers() -> None:
+    """Run markers are coloured green/amber/red based on pass rate threshold."""
+    runs = [
+        _make_run("2026-06-11T19:00:00", passed=10, failed=0, skipped=0, errors=0),  # 100% → green
+        _make_run("2026-06-11T20:00:00", passed=7, failed=3, skipped=0, errors=0),  # 70% → amber
+        _make_run("2026-06-11T21:00:00", passed=3, failed=7, skipped=0, errors=0),  # 30% → red
+    ]
+    fig = build_run_history_chart(runs)
+
+    marker_colors = fig.data[1].marker.color  # type: ignore[attr-defined]
+    assert marker_colors[0] == "#2ecc71"  # green
+    assert marker_colors[1] == "#f39c12"  # amber
+    assert marker_colors[2] == "#e74c3c"  # red
+
+    # Customdata should contain health labels
+    customdata = fig.data[1].customdata  # type: ignore[attr-defined]
+    assert customdata[0][0] == "Healthy"
+    assert customdata[1][0] == "At Risk"
+    assert customdata[2][0] == "Unhealthy"
 
 
 def test_chart_layout_has_secondary_y_axis() -> None:
@@ -225,15 +244,15 @@ def test_chart_layout_has_secondary_y_axis() -> None:
     # yaxis2 should overlay y and be on the right side
     assert fig.layout.yaxis2.overlaying == "y"  # type: ignore[attr-defined]
     assert fig.layout.yaxis2.side == "right"  # type: ignore[attr-defined]
-    assert fig.layout.yaxis2.range == (0, 100)  # type: ignore[attr-defined]
+    assert fig.layout.yaxis2.range == (0, 105)  # type: ignore[attr-defined]
 
 
-def test_chart_barmode_is_stack() -> None:
-    """Bars are stacked, not grouped."""
+def test_chart_barmode_is_overlay() -> None:
+    """Bar mode is overlay (bars behind line)."""
     run = _make_run("2026-06-11T21:00:00", passed=5, failed=1, skipped=0, errors=0)
     fig = build_run_history_chart([run])
 
-    assert fig.layout.barmode == "stack"
+    assert fig.layout.barmode == "overlay"
 
 
 # ---------------------------------------------------------------------------
@@ -295,13 +314,11 @@ def test_build_chart_from_db_single_run(_setup_db: None) -> None:
     _persist_run_to_db(passed=10, failed=2, skipped=1, errors=0)
     fig = build_chart_from_db()
 
-    # 5 traces: 4 bars + 1 line
-    assert len(list(fig.data)) == 5
+    # 2 traces: 1 bar (total tests) + 1 line (pass rate)
+    assert len(list(fig.data)) == 2
 
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    fail_y = fig.data[1].y  # type: ignore[attr-defined]
-    assert pass_y[0] == 10
-    assert fail_y[0] == 2
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    assert bar_y[0] == 10 + 2 + 1 + 0  # total = 13
 
 
 def test_build_chart_from_db_multiple_runs(_setup_db: None) -> None:
@@ -310,10 +327,8 @@ def test_build_chart_from_db_multiple_runs(_setup_db: None) -> None:
     _persist_run_to_db(passed=15, failed=2, skipped=1, errors=0)
     fig = build_chart_from_db()
 
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    fail_y = fig.data[1].y  # type: ignore[attr-defined]
-    assert list(pass_y) == [14, 15]
-    assert list(fail_y) == [3, 2]
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    assert list(bar_y) == [14 + 3 + 1 + 0, 15 + 2 + 1 + 0]  # [18, 18]
 
 
 def test_build_chart_from_db_pass_rate(_setup_db: None) -> None:
@@ -322,7 +337,7 @@ def test_build_chart_from_db_pass_rate(_setup_db: None) -> None:
     _persist_run_to_db(passed=5, failed=5, skipped=0, errors=0)
     fig = build_chart_from_db()
 
-    line_y = fig.data[4].y  # type: ignore[attr-defined]
+    line_y = fig.data[1].y  # type: ignore[attr-defined]
     assert list(line_y) == [100.0, 50.0]
 
 
@@ -333,15 +348,15 @@ def test_build_chart_from_db_date_filter(_setup_db: None) -> None:
 
     # Only include second run
     fig = build_chart_from_db(date_from=id2, date_to=id2)
-    pass_y = fig.data[0].y  # type: ignore[attr-defined]
-    assert list(pass_y) == [20]
+    bar_y = fig.data[0].y  # type: ignore[attr-defined]
+    assert list(bar_y) == [20]
 
 
 def test_build_chart_from_db_layout(_setup_db: None) -> None:
-    """Chart layout configured correctly (stacked bars, secondary axis)."""
+    """Chart layout configured correctly (barmode='overlay', secondary axis)."""
     _persist_run_to_db(passed=5, failed=1, skipped=0, errors=0)
     fig = build_chart_from_db()
 
-    assert fig.layout.barmode == "stack"
+    assert fig.layout.barmode == "overlay"
     assert fig.layout.yaxis2.overlaying == "y"  # type: ignore[attr-defined]
     assert fig.layout.yaxis2.side == "right"  # type: ignore[attr-defined]

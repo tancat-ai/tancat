@@ -81,7 +81,6 @@ def _clean_evidence_label(label: str) -> str:
     match = re.fullmatch(r"\{\{([A-Z_]+):(.+)\}\}", raw)
     if not match:
         return raw
-
     action = match.group(1).strip().lower().replace("_", " ")
     description = match.group(2).strip()
     if not description:
@@ -89,27 +88,18 @@ def _clean_evidence_label(label: str) -> str:
     return f"{action.title()}: {description}"
 
 
-def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return steps with labels normalized for UI rendering.
-
-    Also extracts failure_note and diagnosis from the result dict when present.
-    """
-    prepared: list[dict[str, Any]] = []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        cloned = dict(step)
-        cloned["label"] = _clean_evidence_label(str(step.get("label", "")))
-        # Promote failure metadata from result -> top level for easy access
-        result = step.get("result", {})
-        if isinstance(result, dict):
-            cloned["failure_note"] = result.get("failure_note")
-            cloned["diagnosis"] = result.get("diagnosis")
-            # Mark steps that had failures even if status says passed
-            if result.get("error") and not result.get("status"):
-                cloned["_had_error"] = True
-        prepared.append(cloned)
-    return prepared
+def _format_label(label: str, matched_text: str | None = None, truncate: int = 80) -> str:
+    """Format a step label with optional matched text for user display."""
+    cleaned = _clean_evidence_label(label)
+    if matched_text:
+        text = matched_text.strip()
+        # Clean up excessive whitespace / HTML noise
+        text = re.sub(r"\s+", " ", text)
+        if len(text) > truncate:
+            text = text[:truncate] + "..."
+        if text:
+            return f'{cleaned}: "{text}"'
+    return cleaned
 
 
 def generate_annotated_screenshot(
@@ -370,238 +360,373 @@ def generate_annotated_screenshot(
 """
 
 
+def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return steps with labels normalized for UI rendering.
+
+    Also extracts failure_note and diagnosis from the result dict when present.
+    """
+    prepared: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        cloned = dict(step)
+        cloned["label"] = _clean_evidence_label(str(step.get("label", "")))
+        # Promote failure metadata from result -> top level for easy access
+        result = step.get("result", {})
+        if isinstance(result, dict):
+            cloned["failure_note"] = result.get("failure_note")
+            cloned["diagnosis"] = result.get("diagnosis")
+            # Mark steps that had failures even if status says passed
+            if result.get("error") and not result.get("status"):
+                cloned["_had_error"] = True
+        prepared.append(cloned)
+    return prepared
+
+
 def generate_annotated_journey(
     *,
     sidecar_path: Path,
     view_mode: Literal["annotated", "heatmap", "clean"] = "annotated",
     title: str = "",
+    bug_report_mode: bool = False,
 ) -> str:
-    """Annotated evidence viewer that supports multi-page journeys.
+    """Generate a focused evidence viewer for debugging.
 
-    A single test may navigate across multiple URLs; this viewer lets you switch the
-    background screenshot and overlay/timeline per URL segment.
+    For passed tests → shows the screenshot cleanly (no overlays) + status summary.
+    For failed tests → shows screenshot + failure panel with diagnosis + suggested locators.
+
+    The ``bug_report_mode`` flag strips interactive elements for plain-text export.
+
+    Args:
+        sidecar_path: Path to the .evidence.json sidecar file.
+        view_mode: Unused (kept for backwards compatibility).
+        title: Optional display title.
+        bug_report_mode: If True, returns a plain-text summary instead of HTML.
+
+    Returns:
+        HTML string (or plain-text when bug_report_mode=True).
     """
     sidecar = _safe_read_json(sidecar_path)
     if sidecar is None:
-        escaped = escape_html(str(sidecar_path))
-        return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Missing sidecar: <code>{escaped}</code></div>"
+        return _empty_result(f"Missing sidecar: {sidecar_path}", bug_report_mode)
 
     steps = sidecar.get("steps", [])
+    test_info = sidecar.get("test", {})
+    if not isinstance(test_info, dict):
+        test_info = {}
+    status = str(test_info.get("status", "unknown"))
+
     if not isinstance(steps, list) or not steps:
-        return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No steps recorded in sidecar.</div>"
-    prepared_steps = _prepare_steps_for_display(steps)
+        return _empty_result("No steps recorded in sidecar.", bug_report_mode)
 
-    # Build segments keyed by normalised URL.
-    segments: list[dict[str, Any]] = []
-    current_url = ""
-    current_norm = ""
-    current_steps: list[dict[str, Any]] = []
-    seg_screens: list[str] = []
-    seg_assert_screens: list[str] = []
+    # Determine overall pass/fail status
+    has_failure = False
+    failed_step: dict[str, Any] | None = None
+    for step in steps:
+        if isinstance(step, dict) and _is_failed_step(step):
+            has_failure = True
+            failed_step = step
+            break
 
-    def flush() -> None:
-        nonlocal current_url, current_norm, current_steps, seg_screens, seg_assert_screens
-        if not current_norm:
-            return
-        screenshot_rel = seg_assert_screens[-1] if seg_assert_screens else (seg_screens[-1] if seg_screens else "")
-        segments.append(
-            {
-                "url": current_url,
-                "url_norm": current_norm,
-                "screenshot": screenshot_rel,
-                "steps": current_steps,
-            }
+    # Find screenshots
+    screenshot_rel = _find_best_screenshot(steps)
+    image_data_uri = ""
+    if screenshot_rel:
+        image_path = (
+            (sidecar_path.parent.parent / screenshot_rel).resolve()
+            if screenshot_rel.startswith("evidence/")
+            else (sidecar_path.parent / screenshot_rel).resolve()
         )
+        image_data_uri = _safe_embed_image_data_uri(image_path) or ""
 
-    for step in prepared_steps:
+    safe_title = escape_html(title or test_info.get("name", "") or "Evidence")
+    safe_condition = escape_html(str(test_info.get("condition_ref", "")))
+    safe_story = escape_html(str(test_info.get("story_ref", "")))
+
+    # ── Plain-text bug report mode ─────────────────────────────────────
+    if bug_report_mode:
+        return _build_bug_report_text(sidecar_path, sidecar, image_data_uri)
+
+    # ── HTML rendering ─────────────────────────────────────────────────
+    steps_html = ""
+    for step in steps:
         if not isinstance(step, dict):
             continue
-        step_type = str(step.get("type", "")).lower()
-        if "navigate" in step_type:
-            flush()
-            current_url = str(step.get("value", "") or "")
-            current_norm = _normalise_url(current_url)
-            current_steps = []
-            seg_screens = []
-            seg_assert_screens = []
-            shot = step.get("screenshot")
-            if shot:
-                seg_screens.append(str(shot))
-            continue
+        s = _build_step_html(step)
+        steps_html += s
 
-        if not current_norm:
-            continue
+    if has_failure and failed_step:
+        failure_html = _build_failure_panel_html(failed_step)
+    else:
+        failure_html = ""
 
+    return f"""<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;max-width:1100px;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+    <span style="font-size:24px;">{"❌" if has_failure else "✅"}</span>
+    <div>
+      <div style="font-weight:600;font-size:16px;color:#222;">{safe_title}</div>
+      <div style="font-size:12px;color:#6b7280;">
+        Condition: {safe_condition} · Story: {safe_story} · Status: <strong>{status}</strong>
+      </div>
+    </div>
+  </div>
+
+  {'<div style="margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:13px;font-weight:500;">✅ All steps passed — the screenshot below is your evidence.</div>' if not has_failure else ""}
+
+  <div style="position:relative;width:100%;">
+    <img src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" {"onerror=\"this.style.display='none'\"" if not image_data_uri else ""} />
+  </div>
+
+  {failure_html}
+
+  {steps_html if has_failure else ""}
+
+  {_build_export_button_html(sidecar_path, title or safe_title, has_failure)}
+</div>"""
+
+
+# ── helpers ─────────────────────────────────────────────────────────────
+
+
+def _empty_result(msg: str, bug_report_mode: bool) -> str:
+    if bug_report_mode:
+        return msg
+    escaped = escape_html(msg)
+    return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>{escaped}</div>"
+
+
+def _find_best_screenshot(steps: list[dict[str, Any]]) -> str:
+    """Find the most informative screenshot from steps (prefer failure or last assertion)."""
+    screenshots: list[str] = []
+    failure_screenshots: list[str] = []
+    assertion_screenshots: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
         shot = step.get("screenshot")
-        if shot:
-            seg_screens.append(str(shot))
-            if "assert" in step_type:
-                seg_assert_screens.append(str(shot))
-        current_steps.append(step)
-
-    flush()
-    if not segments:
-        return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No navigations recorded in sidecar steps.</div>"
-
-    # Resolve screenshot data URIs per segment (best-effort).
-    for seg in segments:
-        rel = str(seg.get("screenshot") or "")
-        if not rel:
-            seg["image_data_uri"] = ""
+        if not shot:
             continue
-        image_path = (
-            (sidecar_path.parent.parent / rel).resolve()
-            if rel.startswith("evidence/")
-            else (sidecar_path.parent / rel).resolve()
-        )
-        seg["image_data_uri"] = _safe_embed_image_data_uri(image_path) or ""
+        shot_str = str(shot)
+        screenshots.append(shot_str)
+        if _is_failed_step(step):
+            failure_screenshots.append(shot_str)
+        step_type = str(step.get("type", "")).lower()
+        if "assert" in step_type:
+            assertion_screenshots.append(shot_str)
+    if failure_screenshots:
+        return failure_screenshots[0]
+    if assertion_screenshots:
+        return assertion_screenshots[-1]
+    if screenshots:
+        return screenshots[-1]
+    return ""
 
-    payload = {
-        "title": title or str(sidecar.get("test", {}).get("name", "Evidence")),
-        "segments": segments,
-        "colors": _EVIDENCE_STEP_COLORS,
-        "mode": view_mode,
-    }
-    payload_json = json.dumps(payload)
 
-    safe_title = escape_html(str(payload["title"]))
-    safe_mode = escape_html(str(view_mode))
+def _is_failed_step(step: dict[str, Any]) -> bool:
+    """Check if a step resulted in a failure."""
+    result = step.get("result", {})
+    if not isinstance(result, dict):
+        return False
+    return result.get("status") in ("failed", "error") or bool(result.get("error"))
+
+
+def _build_step_html(step: dict[str, Any]) -> str:
+    """Render a single step as an HTML row (only shown for failed tests)."""
+    step_type = str(step.get("type", "unknown")).upper()
+    label = _clean_evidence_label(str(step.get("label", "")))
+    locator = str(step.get("locator", "")) if step.get("locator") else ""
+    # value not used in this function
+    result = step.get("result", {})
+    if not isinstance(result, dict):
+        result = {}
+    status = str(result.get("status", ""))
+    error = str(result.get("error", "")) if result.get("error") else ""
+    matched = str(result.get("matched_text", "")) if result.get("matched_text") else ""
+    failure_note = str(result.get("failure_note", "")) if result.get("failure_note") else ""
+
+    is_failure = _is_failed_step(step)
+    border_color = "#fecaca" if is_failure else "#e5e7eb"
+    bg_color = "#fef2f2" if is_failure else "#ffffff"
+
+    error_html = ""
+    if error:
+        error_html = f'<div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:12px;color:#991b1b;white-space:pre-wrap;overflow-x:auto;"><strong>Error:</strong> {escape_html(error)}</div>'
+    if failure_note and not error_html:
+        error_html = f'<div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:150px;overflow-y:auto;white-space:pre-wrap;"><strong>Diagnosis:</strong> {escape_html(failure_note)}</div>'
+
+    details = f"type={step_type.lower()}"
+    if status:
+        details += f" · status={status}"
+    if locator:
+        details += f" · locator=`{escape_html(locator)}`"
+    if matched:
+        text = re.sub(r"\s+", " ", matched).strip()
+        if len(text) > 80:
+            text = text[:80] + "..."
+        details += f' · found="{escape_html(text)}"'
+
     return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
-  <div style="font-weight:600;margin-bottom:10px;">{safe_title}</div>
-  <div style="display:flex;gap:10px;align-items:center;margin:-6px 0 12px 0;">
-    <label style="font-size:12px;color:#6b7280;">Segment</label>
-    <select id="seg-select" style="flex:1;padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;"></select>
-    <span style="font-size:12px;color:#6b7280;">Mode: {safe_mode}</span>
+<div style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid {border_color};border-radius:8px;margin-bottom:8px;background:{bg_color};">
+  <div style="min-width:28px;height:28px;border-radius:999px;background:{"#dc2626" if is_failure else "#6b7280"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">!</div>
+  <div style="flex:1;">
+    <div style="font-weight:600;color:#222;font-size:13px;">{escape_html(label)}</div>
+    <div style="font-size:11px;color:#6b7280;font-family:monospace;">{details}</div>
+    {error_html}
   </div>
-  <div id="seg-url" style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;"></div>
-  <div id="seg-wrap" style="position:relative;width:100%;max-width:1100px;">
-    <img id="seg-img" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" />
-    <svg id="seg-svg" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
+</div>"""
+
+
+def _build_failure_panel_html(failed_step: dict[str, Any]) -> str:
+    """Build the failure diagnosis panel shown below the screenshot for failed tests."""
+    result = failed_step.get("result", {})
+    if not isinstance(result, dict):
+        return ""
+    failure_note = str(result.get("failure_note", ""))
+    diagnosis_raw = result.get("diagnosis", {})
+    if isinstance(diagnosis_raw, dict):
+        suggested_locators = diagnosis_raw.get("suggested_locators", [])
+    else:
+        suggested_locators = []
+
+    step_type = str(failed_step.get("type", "unknown")).upper()
+    label = _clean_evidence_label(str(failed_step.get("label", "")))
+    locator = str(failed_step.get("locator", "")) if failed_step.get("locator") else "N/A"
+    error = str(result.get("error", "")) if result.get("error") else "Unknown error"
+
+    # Build suggested locators section
+    suggestions_html = ""
+    if suggested_locators:
+        rows = ""
+        for s in suggested_locators[:5]:
+            loc = s.get("locator", "")
+            score = s.get("score", "")
+            confidence = s.get("confidence", "")
+            rows += f"""<tr>
+              <td style="padding:4px 8px;font-family:monospace;font-size:12px;border-bottom:1px solid #f0f0f0;"><code>{escape_html(loc)}</code></td>
+              <td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #f0f0f0;">{escape_html(str(score))}</td>
+              <td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #f0f0f0;">{escape_html(confidence)}</td>
+            </tr>"""
+        if rows:
+            suggestions_html = f"""
+<div style="margin:12px 0 0 0;padding:10px;background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;">
+  <div style="font-weight:600;font-size:13px;color:#222;margin-bottom:6px;">Suggested Alternative Locators</div>
+  <table style="width:100%;border-collapse:collapse;">
+    <thead><tr>
+      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Locator</th>
+      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Score</th>
+      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Confidence</th>
+    </tr></thead>
+    <tbody>{rows}</tbody>
+  </table>
+</div>"""
+
+    # Build failure note / diagnosis text
+    diagnosis_html = ""
+    if failure_note:
+        diagnosis_html = f"""<div style="margin:12px 0 0 0;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
+  <div style="font-weight:600;font-size:13px;color:#991b1b;margin-bottom:4px;">Failure Diagnosis</div>
+  <pre style="margin:0;font-size:11px;color:#991b1b;white-space:pre-wrap;max-height:200px;overflow-y:auto;">{escape_html(failure_note)}</pre>
+</div>"""
+
+    return f"""
+<div style="margin-top:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <span style="font-size:18px;">❌</span>
+    <span style="font-weight:600;font-size:15px;color:#dc2626;">Step Failed: {escape_html(label)}</span>
   </div>
-  <div id="seg-timeline" style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px;"></div>
+
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <tr><td style="padding:6px 8px;color:#6b7280;width:100px;">Step Type</td><td style="padding:6px 8px;font-weight:500;"><code>{escape_html(step_type)}</code></td></tr>
+    <tr><td style="padding:6px 8px;color:#6b7280;">Locator</td><td style="padding:6px 8px;font-weight:500;font-family:monospace;font-size:12px;word-break:break-all;">{escape_html(locator)}</td></tr>
+    <tr><td style="padding:6px 8px;color:#6b7280;">Error</td><td style="padding:6px 8px;color:#dc2626;font-size:12px;white-space:pre-wrap;">{escape_html(error)}</td></tr>
+  </table>
+
+  {diagnosis_html}
+  {suggestions_html}
+</div>"""
+
+
+def _build_export_button_html(sidecar_path: Path, title: str, has_failure: bool) -> str:
+    """Build an inline export section for the bug report."""
+    report_label = "Bug Report" if has_failure else "Evidence Summary"
+    return f"""
+<div style="margin-top:14px;padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
+  <div style="font-size:13px;color:#374151;">
+    <strong>{report_label}</strong> — Content is ready for copy-paste.
+    Click below to select all and copy into your issue tracker.
+  </div>
+  <button onclick="(function(){{var t=document.getElementById('ev-bug-text');t.style.display=t.style.display==='none'?'block':'none';t.select();navigator.clipboard.writeText(t.value);}})()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;">📋 Copy Bug Report</button>
 </div>
+<textarea id="ev-bug-text" style="display:none;width:100%;margin-top:8px;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-family:monospace;font-size:11px;height:200px;white-space:pre-wrap;" readonly>
+{escape_html(_build_bug_report_text(sidecar_path, _safe_read_json(sidecar_path) or {}, "", title))}
+</textarea>"""
 
-<script>
-(() => {{
-  const data = {payload_json};
-  const select = document.getElementById("seg-select");
-  const urlEl = document.getElementById("seg-url");
-  const img = document.getElementById("seg-img");
-  const svg = document.getElementById("seg-svg");
-  const wrap = document.getElementById("seg-wrap");
-  const timeline = document.getElementById("seg-timeline");
 
-  const MODE = String(data.mode || "annotated");
-  const COLORS = data.colors || {{}};
-  const segments = data.segments || [];
+def _build_bug_report_text(
+    sidecar_path: Path,
+    sidecar: dict[str, Any],
+    image_data_uri: str = "",
+    title: str = "",
+) -> str:
+    """Build a plain-text bug report from the evidence sidecar."""
+    test_info = sidecar.get("test", {})
+    if not isinstance(test_info, dict):
+        test_info = {}
+    steps = sidecar.get("steps", [])
+    if not isinstance(steps, list):
+        steps = []
 
-  function baseRadius(runCount) {{
-    const rc = Number(runCount || 1);
-    return 14 + Math.min(rc * 0.7, 20);
-  }}
+    status = str(test_info.get("status", "unknown"))
+    name = title or str(test_info.get("name", "unknown"))
+    condition_ref = str(test_info.get("condition_ref", "N/A"))
+    story_ref = str(test_info.get("story_ref", "N/A"))
 
-  function stepType(step) {{
-    const t = String(step.type || "").toLowerCase();
-    if (t.includes("navigate")) return "navigate";
-    if (t.includes("fill")) return "fill";
-    if (t.includes("click")) return "click";
-    if (t.includes("assert")) return "assertion";
-    return "click";
-  }}
+    lines = [
+        "=" * 72,
+        f"  {'BUG REPORT' if status in ('failed', 'error') else 'EVIDENCE SUMMARY'}",
+        "=" * 72,
+        "",
+        f"  Test:          {name}",
+        f"  Condition:     {condition_ref}",
+        f"  Story:         {story_ref}",
+        f"  Status:        {status}",
+        f"  Sidecar:       {sidecar_path}",
+        "",
+    ]
 
-  function getPct(step) {{
-    const el = step.element || {{}};
-    const pct = el.viewport_pct || null;
-    if (!pct) return null;
-    const x = Number(pct.x);
-    const y = Number(pct.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return {{ x, y }};
-  }}
+    for i, step in enumerate(steps, 1):
+        if not isinstance(step, dict):
+            continue
+        step_type = str(step.get("type", "unknown")).upper()
+        label = _clean_evidence_label(str(step.get("label", "")))
+        locator = str(step.get("locator", "")) if step.get("locator") else ""
+        result = step.get("result", {})
+        if not isinstance(result, dict):
+            result = {}
+        step_status = str(result.get("status", ""))
+        error = str(result.get("error", "")) if result.get("error") else ""
 
-  function render(seg) {{
-    urlEl.textContent = seg.url || "";
-    img.src = seg.image_data_uri || "";
+        lines.append(f"  Step {i}: [{step_type}] {label}")
+        if locator:
+            lines.append(f"    Locator:     {locator}")
+        lines.append(f"    Status:      {step_status}")
+        if _is_failed_step(step):
+            lines.append(f"    Error:       {error}")
+            failure_note = str(result.get("failure_note", ""))
+            if failure_note:
+                # Compact the diagnosis
+                for note_line in failure_note.splitlines():
+                    lines.append(f"    {note_line}")
 
-    // Timeline
-    timeline.innerHTML = "";
-    (seg.steps || []).forEach((s, idx) => {{
-      const t = stepType(s);
-      const label = String(s.label || t);
-      const status = String((s.result && s.result.status) || "");
-      const runCount = s.result && s.result.run_count ? s.result.run_count : 1;
-      const row = document.createElement("div");
-      row.style.display = "flex";
-      row.style.gap = "10px";
-      row.style.alignItems = "center";
-      row.style.padding = "8px 10px";
-      row.style.border = "1px solid #f0f0f0";
-      row.style.borderRadius = "8px";
-      row.style.marginBottom = "8px";
-      row.innerHTML = `
-        <div style="min-width:30px;height:30px;border-radius:999px;background:${{COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;color:#222;">${{label}}</div>
-          <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
-        </div>
-      `;
-      timeline.appendChild(row);
-    }});
+    lines.append("")
+    lines.append("=" * 72)
+    lines.append("  END OF REPORT")
+    lines.append("=" * 72)
 
-    function overlay() {{
-      const r = img.getBoundingClientRect();
-      const w = r.width || wrap.getBoundingClientRect().width;
-      const h = r.height || wrap.getBoundingClientRect().height;
-      svg.setAttribute("width", String(w));
-      svg.setAttribute("height", String(h));
-      svg.setAttribute("viewBox", `0 0 ${{w}} ${{h}}`);
+    return "\n".join(lines)
 
-      const out = [];
-      (seg.steps || []).forEach((s, idx) => {{
-        const pct = getPct(s);
-        if (!pct) return;
-        const t = stepType(s);
-        const color = COLORS[t] || "#999";
-        const runCount = (s.result && s.result.run_count) ? s.result.run_count : 1;
-        const rr = baseRadius(runCount);
-        const cx = (pct.x / 100) * w;
-        const cy = (pct.y / 100) * h;
-        if (MODE === "clean") return;
-        if (MODE === "heatmap") {{
-          const opacity = Math.min(0.15 + (Number(runCount || 1) * 0.05), 0.6);
-          out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{rr}}" fill="none" stroke="${{color}}" stroke-width="6" opacity="${{opacity}}" />`);
-          out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{Math.max(6, rr - 10)}}" fill="none" stroke="${{color}}" stroke-width="2" opacity="${{opacity}}" />`);
-          return;
-        }}
-        out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{rr}}" fill="${{color}}" opacity="0.85" stroke="rgba(0,0,0,0.35)" stroke-width="2" />`);
-        out.push(`<text x="${{cx}}" y="${{cy + 5}}" text-anchor="middle" font-size="16" font-weight="700" fill="#ffffff">${{idx + 1}}</text>`);
-      }});
-      svg.innerHTML = out.join("");
-    }}
 
-    const ro = new ResizeObserver(() => overlay());
-    ro.observe(wrap);
-    img.addEventListener("load", () => overlay());
-    overlay();
-  }}
-
-  segments.forEach((seg, idx) => {{
-    const opt = document.createElement("option");
-    opt.value = String(idx);
-    opt.textContent = seg.url || `segment ${{idx + 1}}`;
-    select.appendChild(opt);
-  }});
-
-  select.addEventListener("change", () => {{
-    const idx = Number(select.value);
-    render(segments[idx] || segments[0]);
-  }});
-
-  render(segments[0]);
-}})();
-</script>
-"""
+# ── Evidence listing ────────────────────────────────────────────────────
 
 
 @dataclass

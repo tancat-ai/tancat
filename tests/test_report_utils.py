@@ -339,8 +339,12 @@ def test_generate_annotated_journey_cleans_placeholder_labels(tmp_path: Path) ->
     )
 
     html = generate_annotated_journey(sidecar_path=sidecar, view_mode="annotated", title="demo")
-    assert "Click: view cart link" in html
-    assert "{{CLICK:view cart link}}" not in html
+    # New simplified viewer: for passing tests, show success message + screenshot (no step-by-step)
+    assert "✅ All steps passed" in html
+    # The placeholder labels are cleaned in bug_report_mode (text mode)
+    text_report = generate_annotated_journey(sidecar_path=sidecar, view_mode="annotated", bug_report_mode=True)
+    assert "Click: view cart link" in text_report
+    assert "{{CLICK:view cart link}}" not in text_report
 
 
 def test_generate_suite_heatmap_counts_navigation_arrivals_as_page_evidence(tmp_path: Path) -> None:

@@ -1,9 +1,12 @@
-"""Run History Chart — Plotly Figure factory for persisted test-run trends.
+"""Run History Chart — Clean Plotly Figure factory for test-suite health trends.
 
-Pure Plotly figure builder with no Streamlit or CLI dependencies.
 Consumes :class:`PersistedRunResult` objects from
-:mod:`src.run_result_persistence` and produces stacked bar charts with
-pass-rate line overlay and flaky-test markers.
+:mod:`src.run_result_persistence` and produces a clean dual-axis chart
+that tells one clear story: **how healthy is my test suite over time**.
+
+Primary visual  → Pass Rate % line (color-coded by health threshold).
+Secondary axis → Total Test Count bars (subtle, for volume context).
+Hover tooltips → Full breakdown (passed/failed/skipped/errors).
 
 Also provides ``build_chart_from_db()`` for direct SQLite-backed chart
 building using SQL aggregation queries.
@@ -19,14 +22,23 @@ import plotly.graph_objects as go
 from src.run_result_persistence import PersistedRunResult, _get_db
 
 # ---------------------------------------------------------------------------
-# Colour palette
+# Colour palette — clean, minimal, green/amber/red for health
 # ---------------------------------------------------------------------------
 
-COLOR_PASS = "#2ecc71"
-COLOR_FAIL = "#e74c3c"
-COLOR_SKIP = "#f1c40f"
-COLOR_ERROR = "#95a5a6"
-COLOR_LINE = "#2c3e50"
+COLOR_PASS_GREEN = "#2ecc71"
+COLOR_AMBER = "#f39c12"
+COLOR_FAIL_RED = "#e74c3c"
+COLOR_BAR_FILL = "#5b6abf"  # subtle slate-blue for total-test bars
+COLOR_BAR_LINE = "#3f4a8a"
+COLOR_LINE = COLOR_BAR_FILL  # pass-rate line matches the bar accent
+COLOR_RANGE_100 = "rgba(39, 174, 96, 0.2)"  # transparent green for area fill
+COLOR_GRID = "#eaeef2"
+COLOR_TEXT = "#2c3e50"
+
+# Health thresholds
+THRESHOLD_GREEN = 90.0  # >= 90% → green markers
+THRESHOLD_AMBER = 70.0  # >= 70% → amber markers
+# below 70% → red markers
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,11 +46,7 @@ COLOR_LINE = "#2c3e50"
 
 
 def _parse_run_id(run_id: str) -> datetime:
-    """Best-effort parse of an ISO-8601 run_id into a datetime.
-
-    Falls back to epoch if parsing fails (should not happen with well-formed
-    data from :func:`persist_run_result`).
-    """
+    """Best-effort parse of an ISO-8601 run_id into a datetime."""
     try:
         return datetime.fromisoformat(run_id)
     except ValueError, TypeError:
@@ -47,7 +55,25 @@ def _parse_run_id(run_id: str) -> datetime:
 
 def _format_timestamp(dt: datetime) -> str:
     """Human-friendly timestamp for x-axis labels."""
-    return dt.strftime("%Y-%m-%d %H:%M")
+    return dt.strftime("%Y-%m-%d\n%H:%M")
+
+
+def _health_color(pass_rate: float) -> str:
+    """Return marker colour based on pass-rate threshold."""
+    if pass_rate >= THRESHOLD_GREEN:
+        return COLOR_PASS_GREEN
+    if pass_rate >= THRESHOLD_AMBER:
+        return COLOR_AMBER
+    return COLOR_FAIL_RED
+
+
+def _health_label(pass_rate: float) -> str:
+    """Short text description of health level."""
+    if pass_rate >= THRESHOLD_GREEN:
+        return "Healthy"
+    if pass_rate >= THRESHOLD_AMBER:
+        return "At Risk"
+    return "Unhealthy"
 
 
 # ---------------------------------------------------------------------------
@@ -59,11 +85,11 @@ def build_run_history_chart(
     runs: list[PersistedRunResult],
     include_flaky_markers: bool = True,
 ) -> go.Figure:
-    """Build a stacked bar chart with pass-rate line overlay.
+    """Build a clean pass-rate trend chart with test-count volume bars.
 
     X-axis: run timestamp (chronological, oldest-first).
-    Primary Y-axis: test count (stacked bars: pass/fail/skip/error).
-    Secondary Y-axis: pass rate percentage (line).
+    Left Y-axis: Pass Rate % (line with health-coloured markers).
+    Right Y-axis: Total Test Count (subtle bars for volume context).
 
     Args:
         runs: Sorted list of run results (oldest first).
@@ -88,7 +114,7 @@ def build_run_history_chart(
             xanchor="center",
             yanchor="middle",
         )
-        fig.update_layout(title="Run History", height=300)
+        fig.update_layout(title="Test Suite Health Trend", height=300)
         return fig
 
     # --- Sort chronologically (defensive) ----------------------------------
@@ -107,100 +133,156 @@ def build_run_history_chart(
             if has_pass and has_fail:
                 flaky_test_names.add(name)
 
-    # --- Determine which runs have flaky tests -----------------------------
-    run_has_flaky: list[bool] = []
-    for run in sorted_runs:
-        if include_flaky_markers:
-            run_has_flaky.append(any(t.name in flaky_test_names for t in run.results))
-        else:
-            run_has_flaky.append(False)
-
     # --- Build data arrays -------------------------------------------------
     labels = [_format_timestamp(_parse_run_id(r.run_id)) for r in sorted_runs]
-    pass_counts = [r.passed for r in sorted_runs]
-    fail_counts = [r.failed for r in sorted_runs]
-    skip_counts = [r.skipped for r in sorted_runs]
-    error_counts = [r.errors for r in sorted_runs]
+    total_counts = [r.passed + r.failed + r.skipped + r.errors for r in sorted_runs]
 
     pass_rates: list[float] = []
+    pass_details: list[str] = []
     for r in sorted_runs:
         total = r.passed + r.failed + r.errors
         if total > 0:
-            pass_rates.append(round(r.passed / total * 100, 1))
+            rate = round(r.passed / total * 100, 1)
         else:
-            pass_rates.append(0.0)
+            rate = 0.0
+        pass_rates.append(rate)
+        pass_details.append(
+            f"✅ Passed: {r.passed}  ❌ Failed: {r.failed}  ⏭️ Skipped: {r.skipped}  ⚠️ Errors: {r.errors}"
+        )
+
+    # Marker colours per run
+    marker_colors = [_health_color(pr) for pr in pass_rates]
+    health_labels = [_health_label(pr) for pr in pass_rates]
 
     # --- Build figure ------------------------------------------------------
     fig = go.Figure()
 
+    # -- Total Test Count bars (right axis) --
     fig.add_trace(
         go.Bar(
-            name="Passed",
+            name="Total Tests",
             x=labels,
-            y=pass_counts,
-            marker_color=COLOR_PASS,
-            hovertemplate="Run: %{x}<br>Passed: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Failed",
-            x=labels,
-            y=fail_counts,
-            marker_color=COLOR_FAIL,
-            hovertemplate="Run: %{x}<br>Failed: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Skipped",
-            x=labels,
-            y=skip_counts,
-            marker_color=COLOR_SKIP,
-            hovertemplate="Run: %{x}<br>Skipped: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Error",
-            x=labels,
-            y=error_counts,
-            marker_color=COLOR_ERROR,
-            hovertemplate="Run: %{x}<br>Error: %{y}<extra></extra>",
+            y=total_counts,
+            marker_color=COLOR_BAR_FILL,
+            marker_line_color=COLOR_BAR_LINE,
+            marker_line_width=1,
+            opacity=0.40,
+            yaxis="y",
+            hovertemplate=("<b>%{x}</b><br>Total Tests: %{y}<br><extra></extra>"),
         )
     )
 
+    # -- Pass Rate % line (left axis) --
     fig.add_trace(
         go.Scatter(
             name="Pass Rate %",
             x=labels,
             y=pass_rates,
             mode="lines+markers",
-            line={"color": COLOR_LINE, "width": 2},
-            marker={"color": COLOR_LINE, "size": 8},
+            line={"color": COLOR_LINE, "width": 3},
+            marker={
+                "color": marker_colors,
+                "size": 14,
+                "line": {"color": "#ffffff", "width": 2},
+                "symbol": "circle",
+            },
+            fill="tozeroy",
+            fillcolor=COLOR_RANGE_100,
             yaxis="y2",
-            hovertemplate="Run: %{x}<br>Pass Rate: %{y}%<extra></extra>",
+            hovertemplate=(
+                "<b>%{x}</b><br>Pass Rate: <b>%{y}%</b> (%{customdata[0]})<br>%{customdata[1]}<br><extra></extra>"
+            ),
+            customdata=list(zip(health_labels, pass_details, strict=False)),
         )
     )
 
-    # Flaky-test markers
-    if include_flaky_markers:
-        max_bar_height = max((r.passed + r.failed + r.skipped + r.errors for r in sorted_runs), default=0)
-        for i, has_flaky in enumerate(run_has_flaky):
-            if has_flaky:
+    # -- 100% reference line --
+    fig.add_hline(
+        y=100,
+        line={"color": COLOR_PASS_GREEN, "width": 1, "dash": "dot"},
+        yref="y2",
+        opacity=0.5,
+    )
+
+    # -- Health threshold zone fills (behind bars) --
+    # Add a light red zone for unhealthy (0-70) and amber zone (70-90)
+    # Done via shapes rather than traces to keep legend clean
+    for y0, y1, color, label in [
+        (0, THRESHOLD_AMBER, "rgba(231,76,60,0.05)", "Unhealthy zone"),
+        (THRESHOLD_AMBER, THRESHOLD_GREEN, "rgba(243,156,18,0.04)", "At-risk zone"),
+    ]:
+        fig.add_hrect(
+            y0=y0,
+            y1=y1,
+            line_width=0,
+            fillcolor=color,
+            yref="y2",
+            layer="below",
+            name=label,
+            showlegend=False,
+        )
+
+    # -- Flaky-test markers (subtle) --
+    if include_flaky_markers and flaky_test_names:
+        for i, run in enumerate(sorted_runs):
+            run_flaky = any(t.name in flaky_test_names for t in run.results)
+            if run_flaky:
                 fig.add_annotation(
-                    text="❗", x=labels[i], y=max_bar_height + 1, yshift=8, showarrow=False, font={"size": 14}
+                    text="❗",
+                    x=labels[i],
+                    y=pass_rates[i],
+                    yshift=14,
+                    showarrow=False,
+                    font={"size": 11, "color": "#e67e22"},
+                    yref="y2",
                 )
 
+    # --- Layout ---
     fig.update_layout(
-        title="Run History — Pass/Fail/Skip/Error Trends",
-        barmode="stack",
-        xaxis_title="Run Timestamp",
-        yaxis={"title": "Test Count"},
-        yaxis2={"title": "Pass Rate (%)", "overlaying": "y", "side": "right", "range": [0, 100]},
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        title={
+            "text": "Test Suite Health Trend",
+            "font": {"size": 18, "color": COLOR_TEXT},
+        },
+        xaxis={
+            "title": "Run Timestamp",
+            "title_font": {"size": 12},
+            "tickfont": {"size": 10},
+            "gridcolor": COLOR_GRID,
+            "showgrid": True,
+        },
+        yaxis={
+            "title": "Total Test Count",
+            "title_font": {"size": 12},
+            "tickfont": {"size": 10},
+            "gridcolor": COLOR_GRID,
+            "showgrid": True,
+            "side": "left",
+        },
+        yaxis2={
+            "title": "Pass Rate (%)",
+            "title_font": {"size": 12, "color": COLOR_LINE},
+            "tickfont": {"size": 10, "color": COLOR_LINE},
+            "overlaying": "y",
+            "side": "right",
+            "range": [0, 105],
+            "gridcolor": COLOR_GRID,
+            "showgrid": False,
+        },
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+            "font": {"size": 11},
+        },
         hovermode="x unified",
+        hoverlabel={"font": {"size": 12}},
         height=max(400, 250 + len(sorted_runs) * 20),
+        margin={"t": 60, "b": 40, "l": 60, "r": 60},
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        barmode="overlay",  # bars sit behind the line
     )
 
     return fig
@@ -249,31 +331,32 @@ def build_chart_from_db(
             xanchor="center",
             yanchor="middle",
         )
-        fig.update_layout(title="Run History", height=300)
+        fig.update_layout(title="Test Suite Health Trend", height=300)
         return fig
 
     # Build data arrays from SQL results
     labels: list[str] = []
-    pass_counts: list[int] = []
-    fail_counts: list[int] = []
-    skip_counts: list[int] = []
-    error_counts: list[int] = []
+    total_counts: list[int] = []
     pass_rates: list[float] = []
+    pass_details: list[str] = []
 
     for row in stats_rows:
         labels.append(_format_timestamp(_parse_run_id(row["run_id"])))
-        pass_counts.append(row["passed"])
-        fail_counts.append(row["failed"])
-        skip_counts.append(row["skipped"])
-        error_counts.append(row["errors"])
+        total_counts.append(row["passed"] + row["failed"] + row["skipped"] + row["errors"])
         pass_rates.append(row["pass_rate"])
+        pass_details.append(
+            f"✅ Passed: {row['passed']}  ❌ Failed: {row['failed']}  "
+            f"⏭️ Skipped: {row['skipped']}  ⚠️ Errors: {row['errors']}"
+        )
+
+    marker_colors = [_health_color(pr) for pr in pass_rates]
+    health_labels = [_health_label(pr) for pr in pass_rates]
 
     # Flaky test detection from SQL
     run_has_flaky: list[bool] = [False] * len(stats_rows)
     if include_flaky_markers and len(stats_rows) >= 2:
         flaky = db.get_flaky_tests(min_runs=2)
         flaky_test_names = {name for name, _ in flaky}
-
         if flaky_test_names:
             flaky_rows = db.query_test_history(
                 test_name_pattern="%",
@@ -282,47 +365,22 @@ def build_chart_from_db(
                 include_flaky=True,
             )
             flaky_run_ids = {row["run_id"] for row in flaky_rows}
-            run_has_flaky = [
-                True if stats_rows[i]["run_id"] in flaky_run_ids else False for i in range(len(stats_rows))
-            ]
+            run_has_flaky = [stats_rows[i]["run_id"] in flaky_run_ids for i in range(len(stats_rows))]
 
     # --- Build figure ------------------------------------------------------
     fig = go.Figure()
 
     fig.add_trace(
         go.Bar(
-            name="Passed",
+            name="Total Tests",
             x=labels,
-            y=pass_counts,
-            marker_color=COLOR_PASS,
-            hovertemplate="Run: %{x}<br>Passed: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Failed",
-            x=labels,
-            y=fail_counts,
-            marker_color=COLOR_FAIL,
-            hovertemplate="Run: %{x}<br>Failed: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Skipped",
-            x=labels,
-            y=skip_counts,
-            marker_color=COLOR_SKIP,
-            hovertemplate="Run: %{x}<br>Skipped: %{y}<extra></extra>",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            name="Error",
-            x=labels,
-            y=error_counts,
-            marker_color=COLOR_ERROR,
-            hovertemplate="Run: %{x}<br>Error: %{y}<extra></extra>",
+            y=total_counts,
+            marker_color=COLOR_BAR_FILL,
+            marker_line_color=COLOR_BAR_LINE,
+            marker_line_width=1,
+            opacity=0.40,
+            yaxis="y",
+            hovertemplate=("<b>%{x}</b><br>Total Tests: %{y}<br><extra></extra>"),
         )
     )
 
@@ -332,37 +390,105 @@ def build_chart_from_db(
             x=labels,
             y=pass_rates,
             mode="lines+markers",
-            line={"color": COLOR_LINE, "width": 2},
-            marker={"color": COLOR_LINE, "size": 8},
+            line={"color": COLOR_LINE, "width": 3},
+            marker={
+                "color": marker_colors,
+                "size": 14,
+                "line": {"color": "#ffffff", "width": 2},
+                "symbol": "circle",
+            },
+            fill="tozeroy",
+            fillcolor=COLOR_RANGE_100,
             yaxis="y2",
-            hovertemplate="Run: %{x}<br>Pass Rate: %{y}%<extra></extra>",
+            hovertemplate=(
+                "<b>%{x}</b><br>Pass Rate: <b>%{y}%</b> (%{customdata[0]})<br>%{customdata[1]}<br><extra></extra>"
+            ),
+            customdata=list(zip(health_labels, pass_details, strict=False)),
         )
     )
 
+    # -- 100% reference line --
+    fig.add_hline(
+        y=100,
+        line={"color": COLOR_PASS_GREEN, "width": 1, "dash": "dot"},
+        yref="y2",
+        opacity=0.5,
+    )
+
+    # -- Health threshold zones --
+    for y0, y1, color in [
+        (0, THRESHOLD_AMBER, "rgba(231,76,60,0.05)"),
+        (THRESHOLD_AMBER, THRESHOLD_GREEN, "rgba(243,156,18,0.04)"),
+    ]:
+        fig.add_hrect(
+            y0=y0,
+            y1=y1,
+            line_width=0,
+            fillcolor=color,
+            yref="y2",
+            layer="below",
+            showlegend=False,
+        )
+
     # Flaky-test markers
     if include_flaky_markers:
-        max_bar_height = max(
-            (
-                pc + fc + sc + ec
-                for pc, fc, sc, ec in zip(pass_counts, fail_counts, skip_counts, error_counts, strict=True)
-            ),
-            default=0,
-        )
         for i, has_flaky in enumerate(run_has_flaky):
             if has_flaky:
                 fig.add_annotation(
-                    text="❗", x=labels[i], y=max_bar_height + 1, yshift=8, showarrow=False, font={"size": 14}
+                    text="❗",
+                    x=labels[i],
+                    y=pass_rates[i],
+                    yshift=14,
+                    showarrow=False,
+                    font={"size": 11, "color": "#e67e22"},
+                    yref="y2",
                 )
 
     fig.update_layout(
-        title="Run History — Pass/Fail/Skip/Error Trends",
-        barmode="stack",
-        xaxis_title="Run Timestamp",
-        yaxis={"title": "Test Count"},
-        yaxis2={"title": "Pass Rate (%)", "overlaying": "y", "side": "right", "range": [0, 100]},
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+        title={
+            "text": "Test Suite Health Trend",
+            "font": {"size": 18, "color": COLOR_TEXT},
+        },
+        xaxis={
+            "title": "Run Timestamp",
+            "title_font": {"size": 12},
+            "tickfont": {"size": 10},
+            "gridcolor": COLOR_GRID,
+            "showgrid": True,
+        },
+        yaxis={
+            "title": "Total Test Count",
+            "title_font": {"size": 12},
+            "tickfont": {"size": 10},
+            "gridcolor": COLOR_GRID,
+            "showgrid": True,
+            "side": "left",
+        },
+        yaxis2={
+            "title": "Pass Rate (%)",
+            "title_font": {"size": 12, "color": COLOR_LINE},
+            "tickfont": {"size": 10, "color": COLOR_LINE},
+            "overlaying": "y",
+            "side": "right",
+            "range": [0, 105],
+            "gridcolor": COLOR_GRID,
+            "showgrid": False,
+        },
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "right",
+            "x": 1,
+            "font": {"size": 11},
+        },
         hovermode="x unified",
+        hoverlabel={"font": {"size": 12}},
         height=max(400, 250 + len(stats_rows) * 20),
+        margin={"t": 60, "b": 40, "l": 60, "r": 60},
+        plot_bgcolor="#ffffff",
+        paper_bgcolor="#ffffff",
+        barmode="overlay",
     )
 
     return fig

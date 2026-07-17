@@ -318,14 +318,16 @@ def find_evidence_sidecars(base_dir: Path) -> list[Path]:
     if base_dir.is_file():
         base_dir = base_dir.parent
 
-    if (base_dir / "evidence").exists() or base_dir.name.startswith("test_"):
+    # Check for evidence in the base_dir itself (when viewing a single test package)
+    if base_dir.name.startswith("test_"):
         pkg_evidence = base_dir / "evidence"
         if pkg_evidence.exists():
             sidecars.extend(pkg_evidence.glob("*.evidence.json"))
-    else:
-        for test_pkg in sorted(base_dir.iterdir()):
-            if test_pkg.is_dir():
-                pkg_evidence = test_pkg / "evidence"
+    # Always search sub-packages — evidence lives inside each test_*/evidence/
+    for test_pkg in sorted(base_dir.iterdir()):
+        if test_pkg.is_dir():
+            pkg_evidence = test_pkg / "evidence"
+            if pkg_evidence.exists():
                 sidecars.extend(pkg_evidence.glob("*.evidence.json"))
     sidecars.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return sidecars
@@ -339,16 +341,17 @@ def find_all_evidence_dirs(base_dir: Path) -> list[Path]:
     if base_dir.is_file():
         base_dir = base_dir.parent
 
-    if (base_dir / "evidence").exists() or base_dir.name.startswith("test_"):
+    # Check for evidence in the base_dir itself (when viewing a single test package)
+    if base_dir.name.startswith("test_"):
         pkg_evidence = base_dir / "evidence"
         if pkg_evidence.exists():
             dirs.append(pkg_evidence)
-    else:
-        for test_pkg in sorted(base_dir.iterdir()):
-            if test_pkg.is_dir():
-                pkg_evidence = test_pkg / "evidence"
-                if pkg_evidence.exists():
-                    dirs.append(pkg_evidence)
+    # Always search sub-packages
+    for test_pkg in sorted(base_dir.iterdir()):
+        if test_pkg.is_dir():
+            pkg_evidence = test_pkg / "evidence"
+            if pkg_evidence.exists():
+                dirs.append(pkg_evidence)
     return dirs
 
 
