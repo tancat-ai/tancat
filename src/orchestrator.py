@@ -180,20 +180,22 @@ class TestOrchestrator:
             skeleton_error = self.parser.validate_skeleton(skeleton_code)
             if skeleton_error:
                 raise ValueError(skeleton_error)
-            # Validate that the skeleton uses placeholders, not real CSS selectors
             validator = SkeletonValidator()
             validation_result = validator.validate(skeleton_code)
-            if not validation_result.is_valid:
-                self._debug(f"skeleton validation violations: {validation_result.violations}")
-                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
-            # Phase 3: Detect zero-placeholder skeletons and retry once
             placeholders_found = self.parser.parse_placeholders(skeleton_code)
-            if not placeholders_found and expected_test_count > 0:
-                logger.warning(
-                    "Zero placeholders found in skeleton (expected %d tests). "
-                    "LLM likely wrote real selectors. Retrying with stricter prompt.",
-                    expected_test_count,
-                )
+
+            # Phase 3: Detect zero-placeholder skeletons or hallucinated selectors and retry once
+            if (not validation_result.is_valid or not placeholders_found) and expected_test_count > 0:
+                if not validation_result.is_valid:
+                    self._debug(f"skeleton validation violations: {validation_result.violations}")
+                    logger.warning("Hallucinated CSS selectors found in skeleton. Retrying with stricter prompt.")
+                else:
+                    logger.warning(
+                        "Zero placeholders found in skeleton (expected %d tests). "
+                        "LLM likely wrote real selectors. Retrying with stricter prompt.",
+                        expected_test_count,
+                    )
+
                 retry_conditions = build_retry_conditions(prepared_conditions, expected_test_count)
                 skeleton_code = await self.test_generator.generate_skeleton(
                     user_story,
@@ -203,6 +205,18 @@ class TestOrchestrator:
                     expected_count=expected_test_count,
                 )
                 skeleton_code = self.parser.normalise_placeholder_actions(skeleton_code)
+
+                # Re-validate
+                validation_result = validator.validate(skeleton_code)
+                if not validation_result.is_valid:
+                    self._debug(f"skeleton validation violations: {validation_result.violations}")
+                    raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
+
+            elif not validation_result.is_valid:
+                # If expected_test_count is 0 but it still failed validation (rare)
+                self._debug(f"skeleton validation violations: {validation_result.violations}")
+                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
+
             self._debug("phase=generate_skeleton done")
 
         placeholders = self.parser.parse_placeholders(skeleton_code)
@@ -543,30 +557,19 @@ class TestOrchestrator:
 
     @staticmethod
     def _normalize_journey_urls(steps: list[JourneyStep]) -> list[JourneyStep]:
-        """Normalize URLs in navigate steps to handle common path variations.
+        """Normalize URLs in navigate steps to handle common path variations."""
+        from src.url_utils import normalize_url_path
 
-        R-003 FIX: The LLM sometimes generates URLs with hyphens instead of
-        underscores (e.g., "category-product/1" instead of "category_products/1").
-        This normalization catches common patterns so the journey scraper
-        visits the correct pages.
-        """
         normalized_steps: list[JourneyStep] = []
         for step in steps:
             if step.action == "navigate" and step.url:
-                # Normalize common path variations:
-                # - category-product -> category_products
-                # - category_product -> category_products
-                # - product-details -> product_details
-                url = step.url
-                url = re.sub(r"category-product", "category_products", url)
-                url = re.sub(r"/category_product(?:\.php)?(?=/|$)", "/category_products", url)
-                url = re.sub(r"product-details", "product_details", url)
-                url = re.sub(r"product_details/(\d+)", r"product_details/\1", url)
-                # Handle .php extensions: /view_cart.php -> /view_cart
-                url = re.sub(r"\.php(?=/|$)", "", url)
-                # Normalize contact-us -> contact_us
-                url = re.sub(r"contact-us", "contact_us", url)
-                normalized_steps.append(JourneyStep(action=step.action, url=url, description=step.description))
+                normalized_steps.append(
+                    JourneyStep(
+                        action=step.action,
+                        url=normalize_url_path(step.url),
+                        description=step.description,
+                    )
+                )
             else:
                 normalized_steps.append(step)
         return normalized_steps
@@ -681,12 +684,26 @@ class TestOrchestrator:
         skeleton_error = self.parser.validate_skeleton(fragment)
         if skeleton_error:
             raise ValueError(skeleton_error)
-        # Validate that the skeleton uses placeholders, not real CSS selectors
         validator = SkeletonValidator()
         validation_result = validator.validate(fragment)
+
         if not validation_result.is_valid:
             self._debug(f"skeleton validation violations: {validation_result.violations}")
-            raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
+            logger.warning("Hallucinated CSS selectors found in fragment. Retrying with stricter prompt.")
+            correction = (
+                prompt
+                + "\n\nCRITICAL CORRECTION: Your previous answer contained real CSS selectors or XPath. "
+                + "You MUST use ONLY placeholders like {{CLICK:description}} or {{FILL:description}}. "
+                + "DO NOT write evidence_tracker.xxx() calls or real Playwright locators."
+            )
+            fragment = await self.test_generator.client.generate(correction)
+            fragment = self.parser.normalise_placeholder_actions(fragment)
+
+            validation_result = validator.validate(fragment)
+            if not validation_result.is_valid:
+                self._debug(f"skeleton validation violations after retry: {validation_result.violations}")
+                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
+
         return fragment
 
     def _combine_condition_fragments(self, fragments: list[str]) -> str:

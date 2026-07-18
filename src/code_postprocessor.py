@@ -659,9 +659,21 @@ def rewrite_page_references_in_class_methods(code: str) -> str:
 
 
 def _inject_consent_helper(code: str) -> str:
-    """Inject the dismiss_consent_overlays import and calls into the code."""
+    """Inject the dismiss_consent_overlays import and calls into the code.
+
+    NOTE: evidence_tracker.navigate() already calls dismiss_consent_overlays()
+    internally, so we only inject after bare page.goto() calls to avoid
+    double-dismissal (which doubles the time spent on every test navigation).
+    """
     helper_name = "dismiss_consent_overlays"
     import_line = "from src.browser_utils import dismiss_consent_overlays"
+
+    # Only inject if there are any bare page.goto() calls that need it
+    has_bare_goto = "page.goto(" in code
+
+    if not has_bare_goto:
+        # No bare gotos — no injection needed. But keep the import if already present.
+        return code
 
     if import_line not in code:
         insert_after = "from playwright.sync_api import Page, expect"
@@ -680,7 +692,10 @@ def _inject_consent_helper(code: str) -> str:
         if f"{helper_name}(" in stripped:
             continue
 
-        if stripped.startswith("page.goto(") or stripped.startswith("evidence_tracker.navigate("):
+        # Only inject after bare page.goto() — NOT after evidence_tracker.navigate()
+        # because evidence_tracker.navigate() already calls dismiss_consent_overlays()
+        # internally, so injecting there would double the consent-dismissal work.
+        if stripped.startswith("page.goto("):
             updated_lines.append(f"{indent}{helper_name}(page)")
 
     return "\n".join(updated_lines)

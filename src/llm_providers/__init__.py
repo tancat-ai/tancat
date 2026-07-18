@@ -388,8 +388,9 @@ def auto_detect_provider() -> LLMProvider:
     """Probe local ports to find an active LLM provider.
 
     Checks:
-    1. LM Studio (http://localhost:1234/v1)
-    2. Ollama (http://localhost:11434)
+    1. OpenAI-compatible local servers (llama.cpp :8080, vLLM :8000, text-gen-webui :5000)
+    2. LM Studio (http://localhost:1234/v1)
+    3. Ollama (http://localhost:11434)
 
     Returns:
         The first active LLMProvider found.
@@ -399,33 +400,33 @@ def auto_detect_provider() -> LLMProvider:
     """
     import httpx
 
-    # 1. Try LM Studio
+    # 1. Try OpenAI-compatible local servers first (most common default)
+    for port in OpenAIProvider.LOCAL_DEFAULT_PORTS:
+        try:
+            probe_url = f"http://localhost:{port}/v1/models"
+            resp = httpx.get(probe_url, timeout=1.0)
+            if resp.status_code in (200, 401):
+                return OpenAIProvider(is_local=True, base_url=f"http://localhost:{port}/v1")
+        except httpx.ConnectError, httpx.TimeoutException:
+            continue
+
+    # 2. Try LM Studio
     try:
         lm_url = "http://localhost:1234/v1/models"
-        resp = httpx.get(lm_url, timeout=2.0)
+        resp = httpx.get(lm_url, timeout=1.0)
         if resp.status_code == 200:
             return LMStudioProvider()
     except httpx.ConnectError, httpx.TimeoutException:
         pass
 
-    # 2. Try Ollama
+    # 3. Try Ollama
     try:
         ollama_url = "http://localhost:11434/api/tags"
-        resp = httpx.get(ollama_url, timeout=2.0)
+        resp = httpx.get(ollama_url, timeout=1.0)
         if resp.status_code == 200:
             return OllamaProvider()
     except httpx.ConnectError, httpx.TimeoutException:
         pass
-
-    # 3. Try OpenAI-compatible local servers (llama.cpp:8080, vLLM:8000, text-gen-webui:5000)
-    for port in OpenAIProvider.LOCAL_DEFAULT_PORTS:
-        try:
-            probe_url = f"http://localhost:{port}/v1/models"
-            resp = httpx.get(probe_url, timeout=2.0)
-            if resp.status_code in (200, 401):
-                return OpenAIProvider(is_local=True, base_url=f"http://localhost:{port}/v1")
-        except httpx.ConnectError, httpx.TimeoutException:
-            continue
 
     raise ConnectionError("No local LLM providers (LM Studio, Ollama, or OpenAI-compatible) are currently active.")
 

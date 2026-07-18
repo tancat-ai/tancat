@@ -35,6 +35,115 @@ class LocatorPatch:
 
 
 @dataclass
+class SetupScriptResult:
+    """Result of running prerequisite steps before a codegen session."""
+
+    state_file: str | None
+    page_url: str | None
+
+
+def translate_setup_step_to_python(step: str) -> list[str]:
+    """Translate a generated test step line into Playwright setup script lines."""
+    stripped = step.strip()
+    lines: list[str] = []
+
+    pom_click = re.match(
+        r"(?:home_page|category_product_page|cart_page|products_page|generated_page)\.click\(['\"]([^'\"]+)['\"]\)",
+        stripped,
+    )
+    if pom_click:
+        text = pom_click.group(1).replace("'", "\\'")
+        lines.extend(
+            [
+                "        try:",
+                f"            link = page.get_by_role('link', name='{text}').first",
+                "            href = link.get_attribute('href')",
+                "            if href:",
+                "                from urllib.parse import urljoin",
+                "                page.goto(urljoin(page.url, href))",
+                "            else:",
+                "                link.click(timeout=5000)",
+                "        except Exception:",
+                "            try:",
+                f"                page.get_by_role('button', name='{text}').click(timeout=5000)",
+                "            except Exception:",
+                f"                hidden = page.locator('a').filter(has_text='{text}').first",
+                "                href = hidden.get_attribute('href')",
+                "                if href:",
+                "                    from urllib.parse import urljoin",
+                "                    page.goto(urljoin(page.url, href))",
+                "                else:",
+                f"                    page.locator('text={text}').first.click(force=True, timeout=5000)",
+            ]
+        )
+        return lines
+
+    pom_fill = re.match(
+        r"(?:home_page|category_product_page|cart_page|products_page|generated_page)"
+        r"\.fill\(['\"]([^'\"]+)['\"],\s*['\"]([^'\"]+)['\"]\)",
+        stripped,
+    )
+    if pom_fill:
+        field = pom_fill.group(1).replace("'", "\\'")
+        value = pom_fill.group(2).replace("'", "\\'")
+        lines.extend(
+            [
+                "        try:",
+                f"            page.get_by_label('{field}').fill('{value}', timeout=5000)",
+                "        except Exception:",
+                f"            page.get_by_placeholder('{field}').fill('{value}', timeout=5000)",
+            ]
+        )
+        return lines
+
+    # Handle evidence_tracker.navigate('url') — translate to page.goto
+    navigate_match = re.match(
+        r"(?:evidence_tracker\.navigate|page\.goto)\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+        stripped,
+    )
+    if navigate_match:
+        url = navigate_match.group(1).replace("'", "\\'")
+        lines.append(f"        page.goto('{url}')")
+        return lines
+
+    label_match = re.search(r"label=['\"]([^'\"]+)['\"]", stripped)
+    if label_match and "evidence_tracker" in stripped:
+        label = label_match.group(1).replace("'", "\\'")
+        lines.append(f"        try: page.get_by_text('{label}').click(timeout=5000)")
+        lines.append("        except Exception as e: print('Label click failed:', e)")
+        return lines
+
+    role_match = re.search(
+        r"\.get_by_role\(\s*['\"]([^'\"]+)['\"].*?name=\s*['\"]([^'\"]+)['\"]",
+        stripped,
+    )
+    if role_match:
+        role = role_match.group(1)
+        name = role_match.group(2).replace("'", "\\'")
+        if ".fill(" in stripped:
+            val_match = re.search(r"\.fill\(['\"]([^'\"]+)['\"]", stripped)
+            val = val_match.group(1).replace("'", "\\'") if val_match else "test"
+            lines.append(f"        page.get_by_role('{role}', name='{name}').fill('{val}', timeout=5000)")
+        else:
+            lines.append(f"        page.get_by_role('{role}', name='{name}').click(timeout=5000)")
+        return lines
+
+    loc_match = re.search(r"locator\(['\"]([^'\"]+)['\"]", stripped)
+    if loc_match:
+        val = loc_match.group(1).replace("'", "\\'")
+        if ".fill(" in stripped:
+            fill_val_match = re.search(r"\.fill\(['\"]([^'\"]+)['\"]", stripped)
+            fill_val = fill_val_match.group(1).replace("'", "\\'") if fill_val_match else "test"
+            lines.append(f"        try: page.locator('{val}').fill('{fill_val}', timeout=5000)")
+        else:
+            lines.append(f"        try: page.locator('{val}').click(timeout=5000)")
+        lines.append("        except Exception as e: print('Locator action failed:', e)")
+        return lines
+
+    return lines
+
+
+@dataclass
 class LocatorRepairError(Exception):
     """Raised when the target locator could not be found on the expected line."""
 
@@ -137,12 +246,13 @@ def apply_patch_to_file(patch: LocatorPatch) -> None:
     test_path.write_text(patched_source, encoding="utf-8")
 
 
-def run_codegen_session(url: str, timeout_seconds: int = 120) -> str | None:
+def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None:
     """Launch headed Playwright codegen and capture the first locator from the recorded script.
 
     Args:
         url: URL to navigate to.
         timeout_seconds: Maximum time to wait for a click.
+        state_file: Optional path to a storage state JSON file to load.
 
     Returns:
         The locator string captured from the clicked element, or None.
@@ -151,10 +261,15 @@ def run_codegen_session(url: str, timeout_seconds: int = 120) -> str | None:
     tmp_dir = tempfile.gettempdir()
     output_file = str(Path(tmp_dir) / f"repair_locator_{timestamp}.py")
 
+    cmd = ["playwright", "codegen", "--output", output_file]
+    if state_file:
+        cmd.extend(["--load-storage", state_file])
+    cmd.append(url)
+
     # Use DEVNULL to avoid pipe deadlocks with headed browser GUI process on Windows.
     # The browser writes to output_file directly, we don't need its stdout/stderr.
     proc = subprocess.Popen(
-        ["playwright", "codegen", "--output", output_file, url],
+        cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

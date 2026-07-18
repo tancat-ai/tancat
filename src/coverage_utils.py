@@ -90,6 +90,27 @@ def _get_base_test_name(name: str) -> str:
     return name.split("[")[0].split("(")[0].strip()
 
 
+def _extract_criterion_number(test_name: str) -> int | None:
+    """Extract the criterion number from a test function name.
+
+    Test names follow the convention::
+
+        test_<prefix><criterion_number>_<description>
+
+    where ``<prefix>`` is optional letters+digits (e.g. ``TC01_``, ``tc01_``, ``tc01``)
+    and ``<criterion_number>`` is a 1-2 digit number followed by ``_``.
+
+    The criterion number is the LAST ``<1-2 digit number>_`` segment in the test name.
+    This handles both ``test_tc01_02_...`` (separator before criterion number)
+    and ``test_tc0108_...`` (no separator before criterion number, leading zero
+    is stripped so ``08`` → ``8``).
+    """
+    matches = list(re.finditer(r"(\d{1,2})_", test_name))
+    if not matches:
+        return None
+    return int(matches[-1].group(1))
+
+
 def build_requirement_coverages(
     acceptance_criteria_lines: list[str],
     generated_code: str,
@@ -100,11 +121,11 @@ def build_requirement_coverages(
     requirements: list[RequirementCoverage] = []
     for index, criterion in enumerate(acceptance_criteria_lines, start=1):
         req_id = f"TC-{index:03d}"
-        pattern = re.compile(rf"^test_(?:[a-zA-Z0-9]+_)?0?{index}_", re.IGNORECASE)
 
         linked = []
         for name in test_names_in_code:
-            if pattern.match(name):
+            criterion_num = _extract_criterion_number(name)
+            if criterion_num is not None and criterion_num == index:
                 linked.append(name)
 
         if not linked:

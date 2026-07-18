@@ -129,9 +129,10 @@ def classify_failure(error_message: str) -> FailureDetail:
 
     # Assertion failure
     if _ASSERTION_RE.search(error_message):
+        raw_locator = _extract_locator(error_message)
         return FailureDetail(
             category=FailureCategory.ASSERTION_FAILURE,
-            raw_locator=None,
+            raw_locator=raw_locator,
             failure_url=None,
             line_number=None,
             error_message=error_message,

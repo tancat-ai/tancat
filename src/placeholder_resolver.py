@@ -432,9 +432,16 @@ class PlaceholderResolver:
         First checks if description is a URL, then checks known_urls,
         then matches against already scraped pages.
         """
-        # 1. Direct URL match
+        # 1. Direct URL match - but validate it exists in scraped data
         if description.startswith("http") or (description.startswith("/") and len(description) > 1):
-            return description
+            # Validate the URL exists in scraped data before returning it
+            if pages_data and description in pages_data:
+                return description
+            # URL not in scraped data - fall through to keyword matching
+            logger.debug(
+                "URL '%s' not found in scraped data, falling back to keyword matching",
+                description,
+            )
 
         # 2. Match against known URLs (provided by orchestrator)
         if known_urls:

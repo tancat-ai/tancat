@@ -290,15 +290,16 @@ def dismiss_consent_overlays(page: Page) -> None:
     assert "\ndef test_01_ok" in fixed
 
 
-def test_normalise_generated_code_injects_playwright_import_when_page_annotations_exist() -> None:
+def test_normalise_generated_code_converts_page_goto_to_evidence_tracker() -> None:
+    """page.goto() is normalised to evidence_tracker.navigate() which handles consent internally."""
     broken = """
 def test_01_ok(page: Page, evidence_tracker) -> None:
-    evidence_tracker.navigate("https://example.com/")
+    page.goto("https://example.com/")
 """
     fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
     assert "from playwright.sync_api import Page, expect" in fixed
-    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
-    assert "dismiss_consent_overlays(page)" in fixed
+    assert "evidence_tracker.navigate(" in fixed
+    assert "page.goto(" not in fixed
 
 
 def test_run_pipeline_normalises_payable_type_to_page() -> None:
@@ -515,7 +516,7 @@ def test_checkout(page: Page, evidence_tracker) -> None:
     ast.parse(fixed)
 
 
-def test_normalise_generated_code_preserves_nested_helper_blocks_in_auto_dismiss_mode() -> None:
+def test_normalise_generated_code_normalises_malformed_indent_in_auto_dismiss_mode() -> None:
     broken = """from playwright.sync_api import Page, expect
 
 def test_checkout(page: Page, evidence_tracker) -> None:
@@ -525,6 +526,8 @@ def test_checkout(page: Page, evidence_tracker) -> None:
 
     fixed = normalise_generated_code(broken, consent_mode="auto-dismiss")
 
-    assert "from src.browser_utils import dismiss_consent_overlays" in fixed
-    assert "dismiss_consent_overlays(page)" in fixed
+    # page.goto is converted to evidence_tracker.navigate
+    assert "evidence_tracker.navigate(" in fixed
+    assert "page.goto(" not in fixed
+    # Malformed indent is fixed
     ast.parse(fixed)

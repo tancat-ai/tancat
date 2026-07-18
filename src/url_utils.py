@@ -3,9 +3,29 @@
 from __future__ import annotations
 
 import logging
+import re
 from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_url_path(url: str) -> str:
+    """Normalize common LLM-generated URL path variations to real site routes.
+
+    Handles patterns like ``category-product``, ``categoryproduct``, and
+    ``category_product`` mapping to ``category_products``.
+    """
+    if not url:
+        return url
+
+    normalized = url
+    normalized = re.sub(r"category-product", "category_products", normalized)
+    normalized = re.sub(r"/categoryproduct(?=/|$)", "/category_products", normalized)
+    normalized = re.sub(r"/category_product(?:\.php)?(?=/|$)", "/category_products", normalized)
+    normalized = re.sub(r"product-details", "product_details", normalized)
+    normalized = re.sub(r"\.php(?=/|$)", "", normalized)
+    normalized = re.sub(r"contact-us", "contact_us", normalized)
+    return normalized
 
 
 def extract_seed_domain(seed_urls: list[str]) -> set[str]:

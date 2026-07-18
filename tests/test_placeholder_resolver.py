@@ -859,3 +859,60 @@ def test_find_best_element_invisible_assert_returns_none_if_no_confidence() -> N
     result = best_ranked_element(resolver, "ASSERT", "order placed success message visible", elements)
     # Hidden element gets -40 penalty, reducing confidence below threshold → None
     assert result is None or result.get("selector") == "#hidden_success"  # May still return if only candidate
+
+
+# --------------------------------------------------------------------------
+# URL validation tests (July 2026) — validate URLs exist in scraped data
+# --------------------------------------------------------------------------
+
+
+def test_resolve_url_validates_against_scraped_data() -> None:
+    """Test that resolve_url validates URLs exist in scraped data before returning them.
+
+    This prevents the LLM from generating non-existent URLs that cause 404 errors.
+    """
+    resolver = PlaceholderResolver()
+
+    # Simulate scraped data - only the home page was scraped
+    scraped_data = {
+        "https://automationexercise.com/": [
+            {"selector": "a[href='/']", "text": "Home", "role": "link"},
+        ],
+        "https://automationexercise.com/products": [
+            {"selector": "a[href='/products']", "text": "Products", "role": "link"},
+        ],
+    }
+
+    # URL that exists in scraped data should be returned
+    result = resolver.resolve_url("https://automationexercise.com/", scraped_data)
+    assert result == "https://automationexercise.com/", f"Expected home URL, got {result}"
+
+    # URL that does NOT exist in scraped data should NOT be returned directly
+    # This is the bug fix - the LLM generated a URL that doesn't exist
+    result = resolver.resolve_url(
+        "https://automationexercise.com/category_product.php?id=3",
+        scraped_data,
+    )
+    # Should NOT return the non-existent URL
+    assert result != "https://automationexercise.com/category_product.php?id=3", (
+        f"URL validation failed: returned non-existent URL {result}"
+    )
+    # Should fall back to a known URL
+    assert result in scraped_data, f"Expected fallback to known URL, got {result}"
+
+
+def test_resolve_url_validates_relative_urls_against_scraped_data() -> None:
+    """Test that relative URLs are also validated against scraped data."""
+    resolver = PlaceholderResolver()
+
+    scraped_data = {
+        "https://example.com/": [
+            {"selector": "#home", "text": "Home", "role": "link"},
+        ],
+    }
+
+    # Relative URL that doesn't exist should not be returned
+    result = resolver.resolve_url("/nonexistent-page", scraped_data)
+    assert result != "/nonexistent-page", f"URL validation failed: returned non-existent URL {result}"
+    # Should fall back to a known URL
+    assert result in scraped_data, f"Expected fallback to known URL, got {result}"

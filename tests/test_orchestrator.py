@@ -806,9 +806,11 @@ def test_checkout(page: Page):
         )
     )
 
-    assert "from src.browser_utils import dismiss_consent_overlays" in final_code
+    # page.goto is normalised to evidence_tracker.navigate
+    # evidence_tracker.navigate() calls dismiss_consent_overlays internally,
+    # so no explicit injection is needed in auto-dismiss mode
     assert 'evidence_tracker.navigate("https://example.com/")' in final_code
-    assert "dismiss_consent_overlays(page)" in final_code
+    assert "page.goto(" not in final_code
 
 
 def test_run_pipeline_advances_after_login_to_resolve_saucedemo_inventory_steps() -> None:
