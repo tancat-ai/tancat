@@ -282,6 +282,13 @@ def _render_skipped_tests_info(results: list[TestResult]) -> None:
                     if code_context:
                         st.write("**Test code before the skip point (for reference):**")
                         st.code("\n".join(code_context), language="python")
+                # Show the unresolved step explicitly so the user knows what to record
+                if "unresolved placeholders for:" in reason:
+                    unresolved_match = re.search(r"unresolved placeholders for: (.+)", reason)
+                    if unresolved_match:
+                        unresolved_text = unresolved_match.group(1)
+                        st.write("**🔴 Unresolved step — record this action:**")
+                        st.markdown(unresolved_text)
                 if all_previous_steps:
                     st.caption("Prior test steps will be replayed automatically to set up page state.")
                 if st.button("🖱️ Capture Locator", key=f"fix_skip_{test.name}", type="primary"):
@@ -441,12 +448,18 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
     import subprocess
     import sys
     import tempfile
+    from urllib.parse import urljoin, urlparse
 
     normalized_base = normalize_url_path(base_url)
     normalized_target = normalize_url_path(target_url)
 
     state_file = os.path.join(tempfile.gettempdir(), f"repair_state_{os.urandom(4).hex()}.json")
     page_url_file = f"{state_file}.url"
+
+    # Detect if we need cart seeding — when we navigate to a cart/checkout page
+    # but no prior steps add items, the cart will be empty.
+    _target_path = urlparse(normalized_target).path.rstrip("/")
+    _needs_cart_seeding = _target_path in ("/view_cart", "/checkout")
 
     script_lines = [
         "from playwright.sync_api import sync_playwright",
@@ -458,6 +471,35 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
         "        page = context.new_page()",
         f"        page.goto({normalized_base!r})",
     ]
+
+    # Cart-seeding: add an item to the cart before navigating to a cart/checkout page.
+    # Without this, the cart page will be empty and "Proceed to checkout" etc. won't exist.
+    if _needs_cart_seeding:
+        _products_url = urljoin(normalized_base, "/products")
+        script_lines.extend(
+            [
+                f"        page.goto({_products_url!r})",
+                "        page.wait_for_timeout(1500)",
+                # Click the first product link on the products page
+                "        product_link = page.locator(\"a[href*='/product_details/']\").first",
+                "        if product_link.count() > 0:",
+                "            product_link.click()",
+                "            page.wait_for_timeout(1500)",
+                # Click "Add to cart" on the product detail page
+                "            add_btn = page.locator('button:has-text(\"Add to cart\")').first",
+                "            if add_btn.count() > 0:",
+                "                add_btn.click()",
+                "                page.wait_for_timeout(1500)",
+                # Dismiss the confirmation modal
+                "            continue_btn = page.locator('button:has-text(\"Continue Shopping\")').first",
+                "            if continue_btn.count() > 0:",
+                "                continue_btn.click()",
+                "                page.wait_for_timeout(1000)",
+                "        # Navigate back to base URL so the setup steps start from a known state",
+                f"        page.goto({normalized_base!r})",
+                "        page.wait_for_timeout(1000)",
+            ]
+        )
 
     for step in steps:
         translated = translate_setup_step_to_python(step)
@@ -562,15 +604,48 @@ class RunResultsDisplay:
         metric_cols[3].metric("Skipped", run_result.skipped)
         metric_cols[4].metric("Errors", run_result.errors)
 
-        # Coverage table with runtime and evidence columns
+        # ── Coverage traceability table (requirement → tests mapping) ──
         criteria_lines = [line.strip() for line in st.session_state.pipeline_criteria.splitlines() if line.strip()]
-        # Prefer the actual saved test file(s) over session state —
-        # pipeline_results may be stale (e.g., loaded from a different package).
         generated_code = _get_generated_code_for_coverage()
         coverage_analysis = build_coverage_analysis(criteria_lines, generated_code)
         coverage_rows = build_coverage_display_rows(coverage_analysis["requirements"], run_result.results)
         if coverage_rows:
-            st.dataframe([row.to_dict() for row in coverage_rows], width="stretch", hide_index=True)
+            st.subheader("📋 Coverage Traceability")
+            coverage_dicts: list[dict[str, str]] = []
+            for row in coverage_rows:
+                coverage_dicts.append(
+                    {
+                        "ID": row.id_cell,
+                        "Requirement": row.requirement,
+                        "Coverage": row.status,
+                        "Tests": row.tests,
+                    }
+                )
+            st.dataframe(coverage_dicts, width="stretch", hide_index=True)
+
+        # ── Test run results table (one row per test) ──
+        if run_result.results:
+            st.subheader("🧪 Test Results")
+            test_rows: list[dict[str, str]] = []
+            for tr in run_result.results:
+                if tr.status == "passed":
+                    icon = "✅"
+                elif tr.status == "failed":
+                    icon = "❌"
+                elif tr.status == "skipped":
+                    icon = "⏭️"
+                else:
+                    icon = "⏳"
+                runtime = f"{tr.duration:.2f}s" if tr.duration > 0 else ""
+                test_rows.append(
+                    {
+                        "": icon,
+                        "Test": tr.name,
+                        "Runtime": runtime,
+                        "Evidence": "📸",
+                    }
+                )
+            st.dataframe(test_rows, width="stretch", hide_index=True)
 
         # Failed tests repair section
         _render_failed_tests_repair(run_result.results)

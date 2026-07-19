@@ -247,3 +247,86 @@ def test_build_coverage_display_rows_truncates_linked_tests() -> None:
     ]
     rows = build_coverage_display_rows(requirements)
     assert rows[0].tests == "test_1; test_2; test_3..."
+
+
+def test_build_coverage_display_rows_aggregates_multi_test_results() -> None:
+    """Result column should show a single aggregated icon, not comma-separated icons."""
+
+    @dataclass
+    class _RunResult:
+        name: str
+        status: str
+        duration: float = 0.1
+
+    requirements = [
+        RequirementCoverage(
+            id="TC-001",
+            description="desc",
+            status="covered",
+            linked_tests=["test_tc01_01", "test_tc01_03", "test_tc01_04", "test_tc01_07"],
+        ),
+    ]
+    # Mixed: some passed, one skipped — should show ⏭️ (worst-case: skipped, no failure)
+    run_results = [
+        _RunResult(name="test_tc01_01", status="passed"),
+        _RunResult(name="test_tc01_03", status="passed"),
+        _RunResult(name="test_tc01_04", status="passed"),
+        _RunResult(name="test_tc01_07", status="skipped"),
+    ]
+    rows = build_coverage_display_rows(requirements, run_results=run_results)
+    assert len(rows) == 1
+    assert rows[0].result == "⏭️"
+
+
+def test_build_coverage_display_rows_aggregates_with_failure_takes_priority() -> None:
+    """When any linked test fails, the aggregated result should be ❌ regardless of others."""
+
+    @dataclass
+    class _RunResult:
+        name: str
+        status: str
+        duration: float = 0.1
+
+    requirements = [
+        RequirementCoverage(
+            id="TC-001",
+            description="desc",
+            status="covered",
+            linked_tests=["test_tc01_01", "test_tc01_02", "test_tc01_03"],
+        ),
+    ]
+    # Mixed: two passed, one failed — should show ❌
+    run_results = [
+        _RunResult(name="test_tc01_01", status="passed"),
+        _RunResult(name="test_tc01_02", status="failed"),
+        _RunResult(name="test_tc01_03", status="skipped"),
+    ]
+    rows = build_coverage_display_rows(requirements, run_results=run_results)
+    assert len(rows) == 1
+    assert rows[0].result == "❌"
+
+
+def test_build_coverage_display_rows_aggregates_all_passed() -> None:
+    """When all linked tests pass, the aggregated result should be ✅."""
+
+    @dataclass
+    class _RunResult:
+        name: str
+        status: str
+        duration: float = 0.1
+
+    requirements = [
+        RequirementCoverage(
+            id="TC-001",
+            description="desc",
+            status="covered",
+            linked_tests=["test_tc01_01", "test_tc01_02"],
+        ),
+    ]
+    run_results = [
+        _RunResult(name="test_tc01_01", status="passed"),
+        _RunResult(name="test_tc01_02", status="passed"),
+    ]
+    rows = build_coverage_display_rows(requirements, run_results=run_results)
+    assert len(rows) == 1
+    assert rows[0].result == "✅"

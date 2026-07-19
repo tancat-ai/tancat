@@ -214,7 +214,17 @@ def build_coverage_display_rows(
                         durations.append(duration_map[base])
                 else:
                     icons.append(_result_icon("not_run"))
-            result_cell = ", ".join(icons)
+            # Aggregate into a single status icon (worst-case semantics):
+            # any failure → ❌, any skip and no failure → ⏭️, all passed → ✅
+            if icons:
+                if any(icon == "❌" for icon in icons):
+                    result_cell = "❌"
+                elif any(icon == "⏭️" for icon in icons):
+                    result_cell = "⏭️"
+                elif all(icon == "✅" for icon in icons):
+                    result_cell = "✅"
+                else:
+                    result_cell = "⏳"
             if durations:
                 avg_duration = sum(durations) / len(durations)
                 runtime_cell = f"{avg_duration:.2f}s"
