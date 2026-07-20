@@ -429,6 +429,9 @@ The index is persisted in SQLite, so it survives app restarts. The refresh butto
 3. **Should we include screenshots in the export package (e.g. zip with PNGs)?**  
    → Defer. CSV/NDJSON/JUnit export the metadata. A full evidence bundle (sidecars + PNGs) is a separate concern already partially handled by the existing export service.
 
+4. **Should Gantt (AI-021), run pass rate (AI-011), and heat map (AI-022) use `evidence_index` as their data source?**  
+   → Follow-up session after AI-028 ships. Currently each feature scans `.evidence.json` sidecars independently. Retrofitting them to query `evidence_index` would: make Gantt filterable by story/date, enable pass rate JOINs between `test_results` and `evidence_index`, and replace heat map's full-file-scan with a single SQL aggregation. The index makes this cheap — the retrofits are wiring, not new infrastructure.
+
 ---
 
 *Created: 2026-07-19*

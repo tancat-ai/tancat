@@ -60,6 +60,28 @@ _SCHEMA_SQL: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_test_results_name ON test_results(name)",
     "CREATE INDEX IF NOT EXISTS idx_test_results_status ON test_results(status)",
     "CREATE INDEX IF NOT EXISTS idx_test_results_name_status ON test_results(name, status)",
+    # ── AI-028: evidence index for search, filter & export ──────────────
+    """
+    CREATE TABLE IF NOT EXISTS evidence_index (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sidecar_path    TEXT    NOT NULL UNIQUE,
+        test_name       TEXT    NOT NULL,
+        condition_ref   TEXT,
+        story_ref       TEXT,
+        status          TEXT    NOT NULL,
+        page_url        TEXT,
+        step_labels     TEXT,
+        step_types      TEXT,
+        test_package    TEXT    NOT NULL,
+        file_mtime      REAL    NOT NULL,
+        indexed_at      TEXT    NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_evidence_status ON evidence_index(status)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_condition_ref ON evidence_index(condition_ref)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_story_ref ON evidence_index(story_ref)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_page_url ON evidence_index(page_url)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_test_name ON evidence_index(test_name)",
 ]
 
 

@@ -8,6 +8,8 @@ from typing import Any
 
 import streamlit as st
 
+from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+from src.evidence_index import EvidenceIndex
 from src.gantt_utils import (
     build_gantt_chart,
     build_gantt_summary_sentences,
@@ -59,71 +61,158 @@ class EvidenceViewer:
         self._render_suite_heatmap(sidecars, evidence_dirs)
 
     def _render_debug_export(self, sidecars: list[Path]) -> None:
-        """Render the Debug & Export tab — focused on failure investigation."""
+        """Render the Debug & Export tab with search, filters, and export."""
         st.subheader("🔍 Debug & Export")
 
-        # Build a friendly list: test name + status + pass/fail count
-        sidecar_options: list[dict[str, Any]] = []
-        for sp in sidecars:
-            data = safe_read_sidecar(sp)
-            if data is None:
-                sidecar_options.append({"path": sp, "label": sp.stem, "status": "unknown", "has_failure": False})
-                continue
-            test_info = data.get("test", {})
-            if not isinstance(test_info, dict):
-                test_info = {}
-            status = str(test_info.get("status", "unknown"))
-            # Check if any step failed
-            has_failure = False
-            for step in data.get("steps", []):
-                if isinstance(step, dict):
-                    result = step.get("result", {})
-                    if isinstance(result, dict) and result.get("status") in ("failed", "error"):
-                        has_failure = True
-                        break
+        # ── Evidence index (cached per session) ──────────────────────────
+        index = self._get_evidence_index()
+        filter_opts = index.get_filter_options()
 
-            label = sp.stem
-            # Remove [chromium] suffix for readability
-            label = label.replace("[chromium]", "")
-            # Build a clean label showing order + status
-            condition_ref = str(test_info.get("condition_ref", ""))
-            if condition_ref:
-                label = f"{condition_ref} — {label}"
+        # ── Search bar + refresh ─────────────────────────────────────────
+        col_search, col_refresh = st.columns([5, 1])
+        with col_search:
+            query = st.text_input(
+                "Search evidence…",
+                key="evidence_search_query",
+                placeholder="test name, step label, URL, condition ref…",
+            )
+        with col_refresh:
+            if st.button("🔄 Refresh", key="evidence_refresh", use_container_width=True):
+                index.build_or_refresh(force=True)
+                st.rerun()
 
-            icon = "❌" if has_failure else "✅"
-            label = f"{icon} {label}"
+        # ── Filter row ───────────────────────────────────────────────────
+        col_status, col_domain, col_prefix = st.columns(3)
+        with col_status:
+            status_filter = st.selectbox(
+                "Status",
+                ["All"] + filter_opts.statuses,
+                key="evidence_filter_status",
+            )
+        with col_domain:
+            domain_filter = st.selectbox(
+                "Domain",
+                ["All"] + filter_opts.domains,
+                key="evidence_filter_domain",
+            )
+        with col_prefix:
+            prefix_filter = st.selectbox(
+                "Condition",
+                ["All"] + filter_opts.condition_prefixes,
+                key="evidence_filter_prefix",
+            )
 
-            sidecar_options.append({"path": sp, "label": label, "status": status, "has_failure": has_failure})
+        # ── Execute search ───────────────────────────────────────────────
+        results = index.search(
+            query=query,
+            status=status_filter if status_filter != "All" else None,
+            url_domain=domain_filter if domain_filter != "All" else None,
+            condition_prefix=prefix_filter if prefix_filter != "All" else None,
+            limit=200,
+        )
 
-        if not sidecar_options:
-            st.info("No evidence sidecars found.")
+        # ── Export buttons ───────────────────────────────────────────────
+        if results:
+            col_csv, col_ndjson, col_junit = st.columns(3)
+            with col_csv:
+                csv_data = export_csv(
+                    index,
+                    query=query,
+                    status=status_filter if status_filter != "All" else None,
+                    url_domain=domain_filter if domain_filter != "All" else None,
+                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
+                )
+                st.download_button(
+                    "📥 CSV",
+                    data=csv_data,
+                    file_name="evidence_export.csv",
+                    mime="text/csv",
+                    key="export_csv",
+                    use_container_width=True,
+                )
+            with col_ndjson:
+                ndjson_data = export_ndjson(
+                    index,
+                    query=query,
+                    status=status_filter if status_filter != "All" else None,
+                    url_domain=domain_filter if domain_filter != "All" else None,
+                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
+                )
+                st.download_button(
+                    "📥 NDJSON",
+                    data=ndjson_data,
+                    file_name="evidence_export.ndjson",
+                    mime="application/x-ndjson",
+                    key="export_ndjson",
+                    use_container_width=True,
+                )
+            with col_junit:
+                junit_data = export_junit_xml(
+                    index,
+                    query=query,
+                    status=status_filter if status_filter != "All" else None,
+                    url_domain=domain_filter if domain_filter != "All" else None,
+                    condition_prefix=prefix_filter if prefix_filter != "All" else None,
+                )
+                st.download_button(
+                    "📥 JUnit XML",
+                    data=junit_data,
+                    file_name="evidence_junit.xml",
+                    mime="application/xml",
+                    key="export_junit",
+                    use_container_width=True,
+                )
+
+        # ── Results list ─────────────────────────────────────────────────
+        st.caption(
+            f"{len(results)} of {filter_opts.total_indexed} sidecars" + (f' matching "{query}"' if query else "")
+        )
+
+        if not results:
+            st.info("No evidence matches your search.")
             return
 
-        # Selector
-        selected_idx = st.selectbox(
-            "Select test evidence",
-            options=range(len(sidecar_options)),
-            format_func=lambda i: sidecar_options[i]["label"],
-            key="debug_export_selector",
-        )
-        selected = sidecar_options[selected_idx]
+        # Build selection list
+        result_labels = [
+            f"{'❌' if r.status == 'failed' else '✅' if r.status == 'passed' else '⏭️'} "
+            f"{r.condition_ref} — {r.test_name.replace('[chromium]', '')}"
+            for r in results
+        ]
 
-        # Render the journey view
+        selected_idx = st.radio(
+            "Select test evidence",
+            options=range(len(results)),
+            format_func=lambda i: result_labels[i],
+            key="evidence_result_radio",
+        )
+
+        selected = results[selected_idx]
+        sidecar_path = index.get_test_package_path(selected.sidecar_path)
+
+        # ── Selected metadata ────────────────────────────────────────────
+        st.caption(
+            f"**URL:** {selected.page_url}  |  **Story:** {selected.story_ref}  |  **Package:** {selected.test_package}"
+        )
+
+        # ── Annotated journey ────────────────────────────────────────────
+        if not sidecar_path.exists():
+            st.warning(f"Sidecar file not found: {selected.sidecar_path}")
+            return
+
         try:
             html = generate_annotated_journey(
-                sidecar_path=selected["path"],
-                title=selected["path"].stem,
+                sidecar_path=sidecar_path,
+                title=sidecar_path.stem,
                 bug_report_mode=False,
             )
             st.html(html)
 
-            # Download button for plain-text bug report
             text_report = generate_annotated_journey(
-                sidecar_path=selected["path"],
-                title=selected["path"].stem,
+                sidecar_path=sidecar_path,
+                title=sidecar_path.stem,
                 bug_report_mode=True,
             )
-            filename = selected["path"].stem.replace("[chromium]", "").strip()
+            filename = sidecar_path.stem.replace("[chromium]", "").strip()
             st.download_button(
                 label="📥 Download Bug Report (text)",
                 data=text_report,
@@ -133,6 +222,14 @@ class EvidenceViewer:
             )
         except Exception as e:
             st.error(f"Failed to render evidence: {e}")
+
+    @staticmethod
+    @st.cache_resource
+    def _get_evidence_index() -> EvidenceIndex:
+        """Return a cached EvidenceIndex, refreshed incrementally."""
+        index = EvidenceIndex()
+        index.build_or_refresh()
+        return index
 
     def _render_annotated_screenshot(self, sidecars: list[Path]) -> None:
         """Legacy entry point kept for backwards compatibility — delegates to _render_debug_export."""
