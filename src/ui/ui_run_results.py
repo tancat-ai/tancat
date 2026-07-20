@@ -11,6 +11,7 @@ from src.coverage_utils import build_coverage_analysis, build_coverage_display_r
 from src.failure_classifier import classify_failure
 from src.locator_repair import SetupScriptResult, run_codegen_session, translate_setup_step_to_python
 from src.pytest_output_parser import RunResult, TestResult
+from src.self_healing import HealingReport, SelfHealingRunner
 from src.ui.ui_results import _handle_run_tests
 from src.url_utils import normalize_url_path
 
@@ -1047,6 +1048,40 @@ def _render_inline_evidence(run_result: RunResult) -> None:
         st.error(f"Failed to render evidence: {e}")
 
 
+def _render_self_healing_results(report: HealingReport) -> None:
+    """Render the self-healing report — what was fixed and what remains."""
+    st.divider()
+    st.subheader("🩹 Self-Healing Results")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Failures", report.total_failures)
+    col2.metric("Fixed", report.fixed, delta=f"+{report.fixed}" if report.fixed > 0 else None)
+    col3.metric(
+        "Remaining",
+        report.remaining,
+        delta=f"-{report.remaining}" if report.remaining > 0 else "0",
+        delta_color="inverse",
+    )
+    col4.metric("Iterations", report.iterations)
+
+    if report.unfixable > 0:
+        st.caption(f"{report.unfixable} failure(s) could not be automatically fixed.")
+
+    if report.patches:
+        st.write("**Applied patches:**")
+        for p in report.patches:
+            with st.expander(f"🔧 {p.test_name} — {p.strategy}"):
+                st.caption(f"**Diagnosis:** {p.diagnosis}")
+                st.code(f"- {p.old_text}\n+ {p.new_text}", language="diff")
+
+    if report.all_fixed:
+        st.success("🎉 All failures fixed! Re-run tests to verify.")
+    elif report.remaining > 0:
+        st.warning(
+            f"{report.remaining} test(s) still failing. Review the remaining failures manually or increase max iterations."
+        )
+
+
 def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult | None = None) -> None:
     """Render repair buttons for failed tests with locator issues.
 
@@ -1063,6 +1098,26 @@ def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult
 
     # Parse test source for step extraction
     saved_path = st.session_state.get("pipeline_saved_path", "")
+
+    # Self-healing button — runs automated repair on all failed tests
+    if saved_path and st.button(
+        "🩹 Self-Heal Failed Tests", type="secondary", help="Automatically analyze and fix failures using AI"
+    ):
+        with st.spinner("Analyzing failures and applying fixes..."):
+            try:
+                runner = SelfHealingRunner(max_iterations=3)
+                report = runner.heal(saved_path)
+                st.session_state.self_healing_report = report
+            except Exception as e:
+                st.error(f"Self-healing failed: {e}")
+                st.session_state.self_healing_report = None
+        st.rerun()
+
+    # Show healing results if available
+    healing_report: HealingReport | None = st.session_state.get("self_healing_report")
+    if healing_report is not None and healing_report.total_failures > 0:
+        _render_self_healing_results(healing_report)
+
     test_source = ""
     if saved_path:
         try:
