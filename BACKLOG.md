@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-06-30 (B-020 + B-016 validated via UAT; openai-local set as default provider)
+Last updated: 2026-07-20 (B-021 URL assertions + B-022 state-dependent scraping)
 
 ---
 
@@ -492,6 +492,100 @@ missing data.
 **Result:** Pre-fix all ASSERTs defaulted to `assert_visible` (fallback). Post-fix the LLM selects `toHaveText` and `toContainText` where appropriate — 3 unique assertion types vs 1 before.
 
 **Priority:** Medium — unlocked assertion-type diversity (Text, Count, State, Value) for commercial viability
+---
+
+### B-021 — Page-state assertions fail to resolve (e.g., "home page visible")
+**Status:** ✅ FIXED (2026-07-20)
+**Spec:** `docs/specs/FEATURE_SPEC_URL_ASSERT.md`
+**Roadmap ref:** Tier 2 — URL-Based Assertions for Page-State Verification
+**Symptom:** Page-level ASSERT placeholders like "home page visible" and "dress products page visible"
+can never resolve to any DOM element, producing `pytest.skip()` with:
+```
+Skipping: unresolved placeholders for: 'home page visible'; 'dress products page'
+```
+
+**Root cause:** `PageStateAssertStrategy` in `src/intent_matcher.py` correctly detects these as
+page-state descriptions but returns `False` for all elements. The resolver has no URL-based
+assertion path — `ASSERT` always maps to DOM elements. A heading like "AutomationExercise"
+appears on multiple pages, so DOM-element assertions are not reliable page-identity checks.
+
+**Proposed fix:** Extend the resolver to detect page-state ASSERT descriptions and resolve them
+to URL assertions (`expect(page).to_have_url(...)`) via the existing `resolve_url()` method.
+No new placeholder action needed — the description already carries sufficient signal.
+
+**Why not a DOM element:** On automationexercise.com, the heading "AutomationExercise" appears
+on both `/` and `/products`. The only reliable page-identity check is the URL itself.
+
+**Priority:** Medium — skipped tests degrade user trust; URL assertions are more precise than
+element-level proxies for page identity.
+---
+
+### B-023 — Cart modal intercepts clicks during journey discovery
+**Status:** ✅ FIXED (2026-07-20)
+**Symptom:** After adding a product to cart on automationexercise.com, the "Added to cart"
+confirmation modal (`#cartModal`) blocks pointer events on the "Cart" header link.
+The journey scraper retries clicking `a[href="/view_cart"]` but the modal intercepts:
+```
+<div id="cartModal" class="modal show">…</div> from <section>…</section> subtree intercepts pointer events
+```
+The journey eventually scrapes the cart page anyway (it navigates directly after retries),
+but the retry loop adds noise and delay (~10s per affected test).
+
+**Root cause:** The journey scraper's click step doesn't dismiss overlays before clicking
+target elements. `dismiss_consent_overlays()` handles cookie banners but not confirmation
+modals that appear after interactions.
+
+**Proposed fix:** Before each click step in journey discovery, check for and dismiss any
+visible confirmation/modals/popups. The `CartSeedingScraper` already has a "Continue Shopping"
+dismiss step — this same logic should run before clicking cart/checkout navigation links.
+
+**Priority:** Low — tests pass despite the retry noise. Fixing reduces UAT runtime by ~20s.
+---
+
+### B-022 — Scraper visits state-dependent pages with no prior session state
+**Status:** ✅ FIXED (2026-07-20)
+**Spec:** `docs/specs/FEATURE_SPEC_URL_ASSERT.md` (B-021 — related, same user story)
+**Symptom:** Tests that navigate to state-dependent pages (e.g., `/view_cart`) resolve
+placeholders to elements from an empty-state page. "Proceed to checkout" can't resolve
+because the scraper visited `/view_cart` in a fresh browser context with no items added.
+Even tests WITH prerequisite add-to-cart steps (TC01.05) resolve cart assertions to
+`#empty_cart` — the scraper's data is from an empty cart.
+
+**Concrete failure (automationexercise.com, 2026-07-20):**
+```python
+def test_tc01_07(page: Page, evidence_tracker):
+    evidence_tracker.navigate('https://automationexercise.com/view_cart')
+    pytest.skip("Skipping: unresolved placeholders for: 'Proceed to checkout'")
+    evidence_tracker.assert_visible('#empty_cart', label='order summary')
+```
+The test jumps straight to `/view_cart`. The scraper visited that URL in a fresh session,
+found an empty cart, and only `#empty_cart` elements were captured. "Proceed to checkout"
+never existed in the scraped DOM → placeholder can't resolve → test skipped.
+
+**Secondary symptom — POM duplication:** Every test in the generated file has duplicate
+POM instantiations:
+```python
+home_page = HomePage(page, evidence_tracker)
+home_page = HomePage(page, evidence_tracker)        # duplicate!
+generated_page = GeneratedPage(page, evidence_tracker)
+generated_page = GeneratedPage(page, evidence_tracker)  # duplicate!
+```
+
+**Root cause:** `PageScraper` opens a fresh browser context per URL. State-dependent pages
+(view_cart, checkout, order confirmation) show different DOM depending on session state.
+Elements only present with items in cart ("Proceed to checkout", cart table rows, quantity
+columns) are absent from the scraped data.
+
+**Proposed fix:**
+1. When the pipeline detects placeholder descriptions referencing state-dependent pages
+   ("Proceed to checkout", "cart table", "order summary"), trigger a **stateful journey scrape**
+   that replays prerequisite steps (add to cart → view cart) before scraping
+2. Or: the orchestrator should detect that TC01.07's first step is a direct navigation to
+   `/view_cart` and inject add-to-cart prerequisites from TC01.03/TC01.04 before scraping
+3. Fix POM duplication: investigate `src/page_object_builder.py` instantiation logic
+
+**Priority:** High — this silently corrupts all cart/checkout/order assertions. Tests either
+skip (worst case) or resolve to empty-cart selectors (false green).
 ---
 
 ### REF-001 — Rename `src/ui_pipeline.py` / rethink `src/ui/` naming

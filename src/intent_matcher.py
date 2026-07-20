@@ -35,8 +35,8 @@ class IntentStrategy(ABC):
         action: str,
         description: str,
         element: dict[str, Any],
-    ) -> bool | None:
-        """Return ``True`` / ``False`` / ``None`` (indifferent)."""
+    ) -> bool | str | None:
+        """Return ``True`` / ``False`` / ``None`` (indifferent), or ``"url"`` for URL assertions."""
 
 
 # ---------------------------------------------------------------------
@@ -265,7 +265,14 @@ class PageStateAssertStrategy(IntentStrategy):
     R-005 FIX: Also handles vague descriptions like
     "checkout page is loaded and order summary section is visible"
     by detecting page-level intent keywords.
+
+    B-021: Returns "url" signal for page-state descriptions so the
+    orchestrator can resolve them as URL assertions instead of
+    element assertions (e.g., "home page visible" → expect(page).to_have_url(...)).
     """
+
+    # Special signal returned instead of False to indicate URL-based resolution
+    URL_SIGNAL = "url"
 
     _PAGE_STATE_TERMS = (
         "home page",
@@ -287,12 +294,15 @@ class PageStateAssertStrategy(IntentStrategy):
         "page shows",
     )
 
-    def match(self, action: str, description: str, element: dict[str, Any]) -> bool | None:
+    def match(self, action: str, description: str, element: dict[str, Any]) -> bool | str | None:
         if action != "ASSERT":
             return None
         lowered = description.replace("_", " ").lower()
         if any(term in lowered for term in self._PAGE_STATE_TERMS):
-            return False
+            # B-021: Return "url" signal — this placeholder should be resolved
+            # as a URL assertion (expect(page).to_have_url(...)) instead of
+            # an element assertion. The orchestrator handles the signal.
+            return self.URL_SIGNAL
         return None
 
 
@@ -806,8 +816,8 @@ class IntentMatcher:
         action: str,
         description: str,
         element: dict[str, Any],
-    ) -> bool:
-        """Return ``True`` when *element* fits the likely intent for *action* + *description*."""
+    ) -> bool | str:
+        """Return ``True`` / ``False`` for elements, or ``"url"`` for URL assertions."""
         # Use default registry for static callers (backwards compatibility).
         instance = IntentMatcher()
         return instance.match(action, description, element)
@@ -817,8 +827,12 @@ class IntentMatcher:
         action: str,
         description: str,
         element: dict[str, Any],
-    ) -> bool:
-        """Iterate strategies until one returns a definitive answer."""
+    ) -> bool | str:
+        """Iterate strategies until one returns a definitive answer.
+
+        Returns True/False for element-level decisions, or "url" when
+        the placeholder should be resolved as a URL assertion (B-021).
+        """
         for strategy in self._strategies:
             result = strategy.match(action, description, element)
             if result is not None:

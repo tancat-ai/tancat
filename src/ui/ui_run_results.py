@@ -15,6 +15,103 @@ from src.ui.ui_results import _handle_run_tests
 from src.url_utils import normalize_url_path
 
 
+def _parse_condition_refs_from_source(source: str) -> dict[str, str]:
+    """Extract condition_ref mappings from @pytest.mark.evidence decorators.
+
+    Returns a dict mapping test function name → condition_ref (e.g. 'TC01.05').
+    """
+    mapping: dict[str, str] = {}
+    pattern = re.compile(
+        r"@pytest\.mark\.evidence\(condition_ref=[\"']([^\"']+)[\"'].*?\)\s*\n\s*def (test_\w+)",
+        re.MULTILINE,
+    )
+    for match in pattern.finditer(source):
+        condition_ref = match.group(1)
+        test_name = match.group(2)
+        mapping[test_name] = condition_ref
+    return mapping
+
+
+def _extract_error_from_raw_output(raw_output: str, test_name: str) -> str:
+    """Extract the error message for a specific test from raw pytest output.
+
+    Searches the FAILURES block for the test's error details when the
+    TestResult.error_message is empty (common for timeout/locator failures).
+    """
+    if not raw_output or not test_name:
+        return ""
+    failures_start = raw_output.find("FAILURES")
+    if failures_start == -1:
+        short_pattern = re.compile(rf"FAILED\s+\S+::{re.escape(test_name)}\s*-\s*(.+)")
+        short_match = short_pattern.search(raw_output)
+        return short_match.group(1).strip() if short_match else ""
+    failures_section = raw_output[failures_start:]
+    name_pattern = re.compile(rf"_+\s*{re.escape(test_name)}\s*_+")
+    name_match = name_pattern.search(failures_section)
+    if not name_match:
+        short_pattern = re.compile(rf"FAILED\s+\S+::{re.escape(test_name)}\s*-\s*(.+)")
+        short_match = short_pattern.search(raw_output)
+        return short_match.group(1).strip() if short_match else ""
+    pos = name_match.end()
+    next_boundary = re.search(r"_+\s+test_\w+\s*_+|^=+", failures_section[pos:], re.MULTILINE)
+    if next_boundary:
+        error_block = failures_section[pos : pos + next_boundary.start()]
+    else:
+        error_block = failures_section[pos:]
+    lines = error_block.strip().split("\n")
+    meaningful: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("E   ") or "Error" in stripped:
+            meaningful.append(stripped)
+        elif meaningful:
+            meaningful.append(stripped)
+    return "\n".join(meaningful) if meaningful else error_block.strip()
+
+
+def _extract_last_steps_before_failure(source: str, test_name: str) -> list[str]:
+    """Extract the last completed action steps before a test failure.
+
+    Parses the test source to find evidence_tracker / page object method calls
+    showing what completed before the failure point.
+    """
+    if not source or not test_name:
+        return []
+    escaped = re.escape(test_name)
+    func_pattern = re.compile(rf"def {escaped}\(.*?\):\s*\n", re.MULTILINE)
+    func_match = func_pattern.search(source)
+    if not func_match:
+        return []
+    body_start = func_match.end()
+    next_def = re.search(r"^def \w+", source[body_start:], re.MULTILINE)
+    body_end = body_start + next_def.start() if next_def else len(source)
+    body = source[body_start:body_end]
+    step_pattern = re.compile(
+        r"(?:evidence_tracker|\w+_page|\w+Page)\.(\w+)\((.+?)\)",
+        re.MULTILINE,
+    )
+    steps: list[str] = []
+    for sm in step_pattern.finditer(body):
+        method = sm.group(1)
+        args_raw = sm.group(2).strip()
+        first_arg = args_raw.split(",")[0].strip().strip("'\"")
+        if len(first_arg) > 50:
+            first_arg = first_arg[:47] + "..."
+        if method in ("navigate", "goto"):
+            steps.append(f"Navigate to {first_arg}")
+        elif method == "click":
+            steps.append(f"Click '{first_arg}'")
+        elif method in ("fill", "type"):
+            steps.append(f"Fill '{first_arg}'")
+        elif method in ("assert_visible", "assert_text", "assert_text_contains"):
+            steps.append(f"Assert '{first_arg}'")
+        elif method == "select_option":
+            steps.append(f"Select '{first_arg}'")
+    return steps[-6:]
+
+
 def _get_generated_code_for_coverage() -> str:
     """Get generated test code for coverage analysis.
 
@@ -776,6 +873,17 @@ class RunResultsDisplay:
         # ── Test run results table (one row per test) ──
         if run_result.results:
             st.subheader("🧪 Test Results")
+
+            # Parse condition_ref mapping from generated test source
+            saved_path = st.session_state.get("pipeline_saved_path", "")
+            condition_refs: dict[str, str] = {}
+            if saved_path:
+                try:
+                    source = _read_test_code_from_path(saved_path)
+                    condition_refs = _parse_condition_refs_from_source(source)
+                except Exception:
+                    pass
+
             test_rows: list[dict[str, str]] = []
             for tr in run_result.results:
                 if tr.status == "passed":
@@ -787,9 +895,11 @@ class RunResultsDisplay:
                 else:
                     icon = "⏳"
                 runtime = f"{tr.duration:.2f}s" if tr.duration > 0 else ""
+                ref = condition_refs.get(tr.name, "")
                 test_rows.append(
                     {
                         "": icon,
+                        "Ref": ref,
                         "Test": tr.name,
                         "Runtime": runtime,
                         "Evidence": "📸",
@@ -798,7 +908,7 @@ class RunResultsDisplay:
             st.dataframe(test_rows, width="stretch", hide_index=True)
 
         # Failed tests repair section
-        _render_failed_tests_repair(run_result.results)
+        _render_failed_tests_repair(run_result.results, run_result)
 
         # Skipped tests info section
         _render_skipped_tests_info(run_result.results)
@@ -811,7 +921,7 @@ class RunResultsDisplay:
 
         # Pytest output
         if st.session_state.get("pipeline_run_output"):
-            with st.expander("Pytest Output", expanded=run_result.errors > 0):
+            with st.expander("Pytest Output", expanded=run_result.errors > 0 or run_result.failed > 0):
                 st.code(st.session_state.pipeline_run_output, language="text")
 
         # Download buttons
@@ -937,35 +1047,88 @@ def _render_inline_evidence(run_result: RunResult) -> None:
         st.error(f"Failed to render evidence: {e}")
 
 
-def _render_failed_tests_repair(results: list[TestResult]) -> None:
-    """Render repair buttons for failed tests with locator issues."""
-    failed_with_repair = []
-    for result in results:
-        if result.status == "failed" and result.error_message:
-            detail = classify_failure(result.error_message)
-            if detail.raw_locator:
-                failed_with_repair.append((result, detail))
+def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult | None = None) -> None:
+    """Render repair buttons for failed tests with locator issues.
 
-    if not failed_with_repair:
+    Also shows failure details for tests that failed for non-locator reasons
+    (assertion failures, timeouts, etc.) so the user can see what went wrong.
+    Shows the last completed step before failure to help pinpoint the failure point.
+    """
+    failed = [r for r in results if r.status == "failed"]
+    if not failed:
         return
 
     st.divider()
-    st.subheader("🔧 Locator Repairs")
+    st.subheader("❌ Failed Tests")
 
-    for result, detail in failed_with_repair:
-        locator_label = detail.raw_locator if detail.raw_locator else "unknown locator"
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.write(f"**{result.name}** — `{locator_label}`")
-            if result.error_message:
-                st.caption(result.error_message[:200] + ("..." if len(result.error_message) > 200 else ""))
-        with col2:
-            if st.button("Fix Locator", key=f"repair_{result.name}", type="primary"):
-                st.session_state.repair_target = detail
-                st.session_state.repair_status = "waiting"
-                st.session_state.repair_test_name = result.name
-                st.session_state.repair_test_file = result.file_path
-                st.rerun()
+    # Parse test source for step extraction
+    saved_path = st.session_state.get("pipeline_saved_path", "")
+    test_source = ""
+    if saved_path:
+        try:
+            test_source = _read_test_code_from_path(saved_path)
+        except Exception:
+            pass
+
+    for result in failed:
+        detail = classify_failure(result.error_message) if result.error_message else None
+        has_locator_repair = detail is not None and detail.raw_locator
+
+        # Extract error from multiple sources
+        error_preview = ""
+        full_error = result.error_message or ""
+        if not full_error and run_result:
+            full_error = _extract_error_from_raw_output(run_result.raw_output, result.name)
+
+        if full_error:
+            lines = full_error.strip().split("\n")
+            for line in lines:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("File ") and not stripped.startswith("E   "):
+                    error_preview = stripped[:300]
+                    break
+            if not error_preview and lines:
+                error_preview = lines[-1].strip()[:300]
+
+        # Extract the last completed step before the failure
+        last_steps = _extract_last_steps_before_failure(test_source, result.name)
+
+        with st.expander(f"❌ {result.name}", expanded=True):
+            runtime = f"{result.duration:.2f}s" if result.duration > 0 else "unknown"
+            st.caption(f"Runtime: {runtime}")
+
+            if error_preview:
+                st.error(error_preview)
+            else:
+                st.warning("No error details captured. Check Pytest Output expander below for the full traceback.")
+
+            # Show completed steps before failure
+            if last_steps:
+                st.write("**Steps completed before failure:**")
+                for step in last_steps:
+                    st.write(f"  ✅ {step}")
+                st.info(
+                    "The test failed AFTER completing these steps. "
+                    "Investigate the next expected action — common causes include: "
+                    "element not found (wrong page state after navigation), "
+                    "timeout waiting for element, or assertion on incorrect element."
+                )
+
+            if full_error:
+                with st.expander("Full error output"):
+                    st.code(full_error, language="text")
+
+            if has_locator_repair and detail is not None:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**Locator:** `{detail.raw_locator}`")
+                with col2:
+                    if st.button("🔧 Fix Locator", key=f"repair_{result.name}", type="primary"):
+                        st.session_state.repair_target = detail
+                        st.session_state.repair_status = "waiting"
+                        st.session_state.repair_test_name = result.name
+                        st.session_state.repair_test_file = result.file_path
+                        st.rerun()
 
 
 def _render_repair_panel() -> None:

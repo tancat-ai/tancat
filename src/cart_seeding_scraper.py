@@ -33,7 +33,7 @@ class CartSeedingScraper(JourneyScraper):
     "scrape cart with items" use case.
     """
 
-    # Class-level selector constants (re-exported from form_detector for compatibility)
+    # Class-level selector constants (kept for test compatibility)
     PRODUCT_SELECTORS: list[str] = PRODUCT_SELECTORS
     ADD_TO_CART_SELECTORS: list[str] = ADD_TO_CART_SELECTORS
     CONTINUE_SHOPPING_SELECTORS: list[str] = CONTINUE_SHOPPING_SELECTORS
@@ -69,10 +69,10 @@ class CartSeedingScraper(JourneyScraper):
     ) -> dict[str, list[dict[str, Any]]]:
         """Scrape cart/checkout pages with items already in the cart.
 
-        This method:
-        1. Seeds the cart by adding an item (via the products page)
-        2. Captures the confirmation popup state (for resolver to find)
-        3. Then scrapes each target URL (cart, checkout, etc.)
+        Uses dynamic element discovery (no fixed selectors) so it works
+        across different e-commerce sites without site-specific selectors.
+        The journey scraper's _discover_selector() method scrapes the current
+        page and finds the best-matching element for each description.
 
         Args:
             cart_urls: URLs to scrape (e.g., [/view_cart, /checkout]).
@@ -91,26 +91,23 @@ class CartSeedingScraper(JourneyScraper):
             )
         )
 
-        # Step 2: Click on a product
+        # Step 2: Click on a product (dynamic discovery — no fixed selector)
         steps.append(
             JourneyStep(
                 action="click",
-                selector=PRODUCT_SELECTORS[0],  # Use first matching selector
-                description="select a product",
+                description="click on a product to view it",
             )
         )
 
-        # Step 3: Click "Add to cart"
+        # Step 3: Click "Add to cart" (dynamic discovery)
         steps.append(
             JourneyStep(
                 action="click",
-                selector=ADD_TO_CART_SELECTORS[0],
                 description="add product to cart",
             )
         )
 
         # Step 3b: CAPTURE confirmation popup state BEFORE dismissing it.
-        # This allows the resolver to find elements like "Added confirmation popup"
         steps.append(
             JourneyStep(
                 action="capture",
@@ -118,12 +115,11 @@ class CartSeedingScraper(JourneyScraper):
             )
         )
 
-        # Step 4: Dismiss confirmation modal
+        # Step 4: Dismiss confirmation modal (dynamic discovery)
         steps.append(
             JourneyStep(
                 action="click",
-                selector=CONTINUE_SHOPPING_SELECTORS[0],
-                description="dismiss confirmation modal",
+                description="dismiss confirmation modal or continue shopping",
             )
         )
 

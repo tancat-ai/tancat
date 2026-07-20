@@ -37,6 +37,11 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
         fixed_code,
     )
 
+    # Normalise test function names to include their condition_ref number.
+    # LLMs generate inconsistent names: 'test_view_cart_link_shows_cart_table' vs 'test_tc01_05'.
+    # This ensures every test function name starts with the numbered ref from its decorator.
+    fixed_code = _normalize_test_function_names(fixed_code)
+
     # First: normalize whitespace (tabs → spaces, \r\n → \n) to ensure consistent
     # indentation before any other transforms are applied.
     fixed_code = normalize_whitespace(fixed_code)
@@ -150,6 +155,60 @@ _ASSERTION_TO_ET_METHOD: dict[str, str] = {
 }
 
 
+def _normalize_test_function_names(code: str) -> str:
+    """Rename test functions to include their condition_ref number.
+
+    The LLM generates inconsistent test names: some are numbered
+    ('test_tc01_01'), others are purely descriptive
+    ('test_view_cart_link_shows_cart_table'). This ensures every test
+    function name is prefixed with the numbered ref from its decorator,
+    preserving any descriptive suffix the LLM added.
+
+    Example:
+        @pytest.mark.evidence(condition_ref="TC01.05", ...)
+        def test_view_cart_link_shows_cart_table(...):
+
+    Becomes:
+        @pytest.mark.evidence(condition_ref="TC01.05", ...)
+        def test_tc01_05_view_cart_link_shows_cart_table(...):
+    """
+    # Match: @pytest.mark.evidence(condition_ref="TC01.05", ...) ... def test_some_name(
+    pattern = re.compile(
+        r"@pytest\.mark\.evidence\(condition_ref=[\"']([^\"']+)[\"'].*?\)"
+        r"[\s\S]*?"
+        r"def (test_\w+)\(",
+        re.MULTILINE,
+    )
+
+    def _replacer(match: re.Match[str]) -> str:
+        condition_ref = match.group(1).lower().replace(".", "_").replace("-", "_")
+        original_name = match.group(2)
+
+        # If the test name already starts with the condition_ref, preserve it as-is
+        expected_prefix = f"test_{condition_ref}"
+        if original_name == expected_prefix or original_name.startswith(expected_prefix + "_"):
+            return match.group(0)  # Already correct — no change
+
+        # If the test name already has a number (test_01_*, test_02_*, test_tc01_05_* etc.),
+        # it's already numbered — keep the LLM's numbering to avoid breaking existing tests.
+        # Only rename purely descriptive names like 'test_view_cart_link_shows_cart_table'.
+        name_after_test = original_name[len("test_") :]
+        has_number_prefix = bool(
+            re.match(r"\d+", name_after_test.split("_")[0] if "_" in name_after_test else name_after_test)
+        )
+        has_tc_prefix = name_after_test.lower().startswith("tc")
+        if has_number_prefix or has_tc_prefix:
+            return match.group(0)  # Already numbered — leave as-is
+
+        # Purely descriptive name — prepend the condition_ref
+        pass_name = f"{expected_prefix}_{name_after_test}"
+
+        # Reconstruct the full matched text with the new name
+        return match.group(0).replace(original_name, pass_name)
+
+    return pattern.sub(_replacer, code)
+
+
 def _assertion_type_to_et_method(assertion_type: str) -> str:
     """Map a Playwright assertion type to the corresponding evidence_tracker method."""
     return _ASSERTION_TO_ET_METHOD.get(assertion_type, "assert_visible")
@@ -176,6 +235,11 @@ def replace_token_in_line(
     indent = line[: len(line) - len(line.lstrip())]
 
     if "pytest.skip" in resolved_value:
+        return f"{indent}{resolved_value}"
+
+    # B-021: URL assertions are already complete Playwright expressions
+    # (e.g., 'expect(page).to_have_url("...")') — return as-is.
+    if resolved_value.strip().startswith("expect("):
         return f"{indent}{resolved_value}"
 
     step_label = description if description else token

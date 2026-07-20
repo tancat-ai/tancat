@@ -223,6 +223,7 @@ class JourneyScraper:
                     self._debug(f"Navigating to starting URL: {self.starting_url}")
                     page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
+                    self._dismiss_modals(page)
                     # Scrape the starting page so elements are available for placeholder resolution.
                     elements = self._scrape_current_page(page, current_url, context)
                     output[current_url] = elements
@@ -238,6 +239,7 @@ class JourneyScraper:
 
                             elif step.action == "click":
                                 self._dismiss_consent_overlays(page)
+                                self._dismiss_modals(page)
 
                                 selector = step.selector
                                 if not selector and step.description:
@@ -538,6 +540,7 @@ class JourneyScraper:
                 pass
             page.wait_for_timeout(1000)
             self._dismiss_consent_overlays(page)
+            self._dismiss_modals(page)
             return page.url
         return full_url
 
@@ -562,6 +565,7 @@ class JourneyScraper:
             raise
         page.wait_for_timeout(500)
         self._dismiss_consent_overlays(page)
+        self._dismiss_modals(page)
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
         """Fill an input element by selector."""
@@ -600,6 +604,38 @@ class JourneyScraper:
         from src.browser_utils import dismiss_consent_overlays
 
         dismiss_consent_overlays(page)  # type: ignore[arg-type]
+
+    @staticmethod
+    def _dismiss_modals(page: Any) -> None:
+        """Dismiss confirmation modals/popups that block pointer events.
+
+        B-023: On sites like automationexercise.com, the "Added to cart"
+        confirmation modal (#cartModal) intercepts clicks on navigation links.
+        This dismisses common modal patterns before click steps so the journey
+        scraper doesn't waste time retrying blocked clicks.
+
+        Non-destructive: if no modal is visible, these selectors won't match
+        and the dismissal is a no-op.
+        """
+        dismiss_selectors = [
+            'button:has-text("Continue Shopping")',
+            "button.btn-success.close-modal",
+            ".continue-shopping",
+            ".modal .close",
+            ".modal-close",
+            ".close-btn",
+            '[data-dismiss="modal"]',
+            ".modal-footer .btn",
+        ]
+        for selector in dismiss_selectors:
+            try:
+                locator = page.locator(selector).first
+                if locator.is_visible(timeout=200):
+                    locator.click(timeout=1000)
+                    page.wait_for_timeout(300)  # Allow modal animation to complete
+                    return  # Only dismiss one modal
+            except Exception:
+                continue
 
 
 # ─── Subprocess entry (delegates to journey_subprocess.py) ───

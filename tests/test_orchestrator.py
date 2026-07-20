@@ -910,11 +910,9 @@ def test_02_add_item(page):
 
     assert "def test_01_login(page: Page, evidence_tracker):" in final_code
     assert "def test_02_add_item(page: Page, evidence_tracker):" in final_code
-    # "products page loaded" is an abstract assertion description that cannot map to a
-    # specific element. The correct behavior is to leave it unresolved (pytest.skip)
-    # rather than returning a random element. Verify the skip is present.
-    assert "pytest.skip" in final_code
-    assert "products page loaded" in final_code
+    # B-021: "products page loaded" is a page-state assertion — now resolved
+    # as a URL assertion (expect(page).to_have_url(...)) instead of pytest.skip.
+    assert "to_have_url" in final_code
     # Concrete placeholders SHOULD resolve correctly using stateful scraping data
     assert (
         "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack')"

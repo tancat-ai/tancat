@@ -152,7 +152,19 @@ class PlaceholderOrchestrator:
                 else:
                     absolute_targets.append(urljoin(self._starting_url, url))
 
-            cart_scraper = CartSeedingScraper(self._starting_url)
+            # Try to find a product page URL that has actual product elements
+            # (not just category links). Fall back to /products if none found.
+            products_url: str | None = None
+            for url, _elements in scraped_data.items():
+                parsed = urlparse(url)
+                path = parsed.path.rstrip("/")
+                if any(term in path for term in ("/category_products", "/category/", "/products/", "/inventory")):
+                    products_url = url
+                    break
+            if not products_url:
+                products_url = urljoin(self._starting_url, "/products")
+
+            cart_scraper = CartSeedingScraper(self._starting_url, products_url=products_url)
             cart_map = await cart_scraper.scrape_cart_pages(absolute_targets)
 
             for captured_url, candidate in cart_map.items():
@@ -181,14 +193,27 @@ class PlaceholderOrchestrator:
                     candidate_parsed = urlparse(captured_url)
                     candidate_path = candidate_parsed.path.rstrip("/")
                     if candidate_path in {"/view_cart", "/checkout"}:
-                        if candidate and len(candidate) > len(existing):
-                            upgraded[matched_url] = candidate
-                            logger.info(
-                                "Cart-seeded scrape replaced '%s': %d → %d elements",
-                                matched_url,
-                                len(existing),
-                                len(candidate),
-                            )
+                        # For cart/checkout pages, ALWAYS prefer cart-seeded data.
+                        # An empty cart page may have more elements (promotional content)
+                        # than a cart with items, but the seeded data has the correct state
+                        # (checkout button, cart table, quantity columns).
+                        # Merge: cart-seeded elements take priority; keep unique elements
+                        # from the static scrape that don't exist in the seeded data.
+                        existing_selectors = {e.get("selector", "") for e in existing}
+                        candidate_selectors = {e.get("selector", "") for e in candidate}
+                        merged = list(candidate)  # cart-seeded data first
+                        for elem in existing:
+                            sel = elem.get("selector", "")
+                            if sel and sel not in candidate_selectors:
+                                merged.append(elem)
+                        upgraded[matched_url] = merged
+                        logger.info(
+                            "Cart-seeded scrape upgraded '%s': %d existing + %d seeded → %d merged",
+                            matched_url,
+                            len(existing),
+                            len(candidate),
+                            len(merged),
+                        )
                     elif len(candidate) < len(existing):
                         existing_selectors = {e.get("selector", "") for e in existing}
                         merged = list(existing)
@@ -542,6 +567,15 @@ class PlaceholderOrchestrator:
 
         pages_to_search = scoped_pages if scoped_pages else scraped_data
 
+        # B-021: For ASSERT placeholders describing page state ("home page visible",
+        # "dress products page"), resolve as URL assertions instead of element matches.
+        if action == "ASSERT" and self._is_page_state_assertion(description):
+            resolved_url = self.resolver.resolve_url(description, pages_to_search, known_urls=list(scraped_data.keys()))
+            if resolved_url:
+                logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
+                return f'expect(page).to_have_url("{resolved_url}")', None, "url"
+            logger.debug("URL assertion failed for '%s' — falling through to element resolution", description)
+
         excluded = self._build_excluded_selectors(
             action, description, previous_selector, previous_description, pages_to_search
         )
@@ -572,8 +606,38 @@ class PlaceholderOrchestrator:
         print(f"[DEBUG] Failed to find '{description}'. Available scraped URLs: {list(scraped_data.keys())}")
         return f'pytest.skip("{error_msg}")', None, None
 
-    @staticmethod
+    def _is_page_state_assertion(self, description: str) -> bool:
+        """Check if an ASSERT description refers to a page state rather than an element.
+
+        B-021: Returns True for descriptions like "home page visible",
+        "dress products page", "cart page loaded" — these should be resolved
+        as URL assertions (expect(page).to_have_url(...)).
+        """
+        lowered = description.replace("_", " ").lower()
+        page_state_terms = (
+            "home page",
+            "landing page",
+            "start page",
+            "checkout page",
+            "products page",
+            "product page",
+            "cart page",
+            "shopping cart page",
+            "thank you page",
+            "success page",
+            "confirmation page",
+            "dress products page",
+            "page is loaded",
+            "page loads",
+            "page is visible",
+            "page displays",
+            "page shows",
+            "returned to",
+        )
+        return any(term in lowered for term in page_state_terms)
+
     def _build_scoped_pages(
+        self,
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, list[dict[str, str]]]:
