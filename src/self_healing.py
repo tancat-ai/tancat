@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -130,17 +131,24 @@ class SelfHealingRunner:
         test_file: str | Path,
         *,
         test_names: list[str] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> HealingReport:
         """Run the self-healing loop on a test file.
 
         Args:
             test_file: Path to the generated test file.
             test_names: Optional list of specific test names to heal.
-                        If None, runs all tests and heals any failures.
+            on_progress: Optional callback for progress messages (e.g., Streamlit status).
 
         Returns:
             HealingReport with fix counts, patches applied, and final results.
         """
+
+        def _progress(msg: str) -> None:
+            logger.info(msg)
+            if on_progress:
+                on_progress(msg)
+
         test_path = Path(test_file)
         if not test_path.exists():
             raise FileNotFoundError(f"Test file not found: {test_file}")
@@ -149,14 +157,14 @@ class SelfHealingRunner:
         current_test_names = test_names  # None means "all tests"
 
         for iteration in range(1, self.max_iterations + 1):
-            logger.info("Healing iteration %d/%d", iteration, self.max_iterations)
+            _progress(f"Healing iteration {iteration}/{self.max_iterations} — running tests...")
 
             # 1. Run tests
             run_result = self._run_pytest(test_path, current_test_names)
             failed = [r for r in run_result.results if r.status == "failed"]
 
             if not failed:
-                logger.info("All tests pass — healing complete")
+                _progress("All tests pass — healing complete!")
                 report.total_failures = report.total_failures or 0
                 report.iterations = iteration
                 report.final_results = run_result.results
@@ -165,6 +173,7 @@ class SelfHealingRunner:
             # Track initial failure count on first iteration
             if iteration == 1:
                 report.total_failures = len(failed)
+                _progress(f"Found {len(failed)} failed test(s). Analyzing with LLM reviewer...")
 
             # 2. Read test source once
             test_source = test_path.read_text(encoding="utf-8")
@@ -172,6 +181,7 @@ class SelfHealingRunner:
             # 3. Process each failure
             fixed_this_iteration = 0
             for result in failed:
+                _progress(f"Reviewing: {result.name}...")
                 detail = classify_failure(result.error_message)
                 patch = self._review_and_suggest(result, detail, test_source)
 

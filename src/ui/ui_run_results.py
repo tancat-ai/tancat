@@ -1074,7 +1074,12 @@ def _render_self_healing_results(report: HealingReport) -> None:
                 st.caption(f"**Diagnosis:** {p.diagnosis}")
                 st.code(f"- {p.old_text}\n+ {p.new_text}", language="diff")
 
-    if report.all_fixed:
+    if report.total_failures == 0:
+        st.success("✅ All tests pass — no failures to heal.")
+        if st.button("🧹 Clear", key="heal_clear_zero"):
+            st.session_state.self_healing_report = None
+            st.rerun()
+    elif report.all_fixed:
         st.success("🎉 All failures fixed! Re-run tests to verify.")
         if st.button("🔄 Re-run Tests Now", key="heal_rerun"):
             _handle_run_tests()
@@ -1117,11 +1122,22 @@ def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult
     if saved_path and st.button(
         "🩹 Self-Heal Failed Tests", type="secondary", help="Automatically analyze and fix failures using AI"
     ):
-        with st.spinner("Analyzing failures and applying fixes..."):
+        with st.spinner("Running tests to identify failures..."):
             try:
+                status_container = st.empty()
+
+                def _update_status(msg: str) -> None:
+                    status_container.caption(f"🩹 {msg}")
+
                 runner = SelfHealingRunner(max_iterations=3)
-                report = runner.heal(saved_path)
+                report = runner.heal(saved_path, on_progress=_update_status)
                 st.session_state.self_healing_report = report
+                if report.total_failures == 0:
+                    st.toast("✅ All tests already pass — nothing to heal!", icon="✅")
+                elif report.fixed > 0:
+                    st.toast(f"🩹 Fixed {report.fixed}/{report.total_failures} failures!", icon="🩹")
+                else:
+                    st.toast(f"⚠️ Could not auto-fix {report.total_failures} failure(s)", icon="⚠️")
             except Exception as e:
                 st.error(f"Self-healing failed: {e}")
                 st.session_state.self_healing_report = None
@@ -1129,7 +1145,7 @@ def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult
 
     # Show healing results if available
     healing_report: HealingReport | None = st.session_state.get("self_healing_report")
-    if healing_report is not None and healing_report.total_failures > 0:
+    if healing_report is not None:
         _render_self_healing_results(healing_report)
 
     test_source = ""
