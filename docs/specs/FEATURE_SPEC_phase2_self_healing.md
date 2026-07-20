@@ -1,7 +1,7 @@
 # Feature Spec — Phase 2 Self-Healing Reflection Loops
 
 **Created:** 2026-07-20
-**Status:** In Progress
+**Status:** Complete — Core loop + Streamlit + CLI shipped 2026-07-20
 **Priority:** Medium (portfolio) — "Self-healing AI automation" marketing message
 **Depends on:** `src/failure_classifier.py`, `src/pytest_output_parser.py`, `src/llm_client.py`
 **Roadmap ref:** Phase 2, Tier 4
@@ -94,9 +94,10 @@ class SelfHealingRunner:
 6. Loop until no fixable failures or max iterations
 
 **Integration:**
-- `streamlit_app.py`: "🩹 Self-Heal Failed Tests" button
-- `src/ui/ui_run_results.py`: show healing results after repair
-- `scripts/verify_production.py`: `--self-heal` flag
+- `streamlit_app.py`: "🩹 Self-Heal Failed Tests" button in test results
+- `src/ui/ui_run_results.py`: `_render_self_healing_results()` — metrics + diff display
+- `src/cli/pipeline_runner.py`: `self_heal_cli()` — menu-driven CLI integration
+- `src/cli/main.py`: "Self-Heal Failed Tests" menu item
 
 **Tests:** `tests/test_self_healing.py` — 15+ unit tests for classification, prompt building, patch application
 

@@ -54,6 +54,7 @@ from .pipeline_runner import (
     repair_locator_cli,
     run_generated_tests,
     run_pipeline,
+    self_heal_cli,
     show_scrape_summary,
     show_skeleton,
     view_failure_diagnostics,
@@ -152,6 +153,7 @@ async def interactive_session() -> None:
                     "View Failure Diagnostics",
                     "Generate Bug Report",
                     "Repair Locator",
+                    "Self-Heal Failed Tests",
                     "Export Clean Package",
                     "Bundle Evidence (Zip)",
                     "Generate Evidence HTML",
@@ -251,6 +253,8 @@ async def interactive_session() -> None:
             generate_bug_report(session)
         elif menu_items[idx] == "Repair Locator":
             repair_locator_cli(session)
+        elif menu_items[idx] == "Self-Heal Failed Tests":
+            self_heal_cli(session)
         elif menu_items[idx] == "Export Clean Package":
             export_clean_package(session)
         elif menu_items[idx] == "Bundle Evidence (Zip)":

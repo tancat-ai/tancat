@@ -735,6 +735,61 @@ def repair_locator_cli(session: Any) -> None:
         print(red(f"  Patch failed: {exc}"))
 
 
+def self_heal_cli(session: Any) -> None:
+    """Automated self-healing — runs the LLM-driven repair loop on failed tests."""
+    from src.self_healing import SelfHealingRunner
+
+    saved_path = getattr(session, "pipeline_saved_path", "")
+    if not saved_path:
+        print(yellow("  No test file saved. Run the pipeline first."))
+        return
+
+    run_result = getattr(session, "pipeline_run_result", None)
+    if isinstance(run_result, RunResult):
+        failed_count = sum(1 for r in run_result.results if r.status == "failed")
+        if failed_count == 0:
+            print(green("  All tests pass — nothing to heal."))
+            return
+        print(cyan(f"  Found {failed_count} failed test(s). Starting self-healing..."))
+    else:
+        print(yellow("  No test results available. Running self-healing on all tests..."))
+
+    print()
+    runner = SelfHealingRunner(max_iterations=3)
+
+    print(yellow("  This may take a minute — the LLM is analyzing each failure..."))
+    print()
+
+    try:
+        report = runner.heal(saved_path)
+    except Exception as exc:
+        print(red(f"  Self-healing failed: {exc}"))
+        return
+
+    # Display results
+    print_header("Self-Healing Results")
+    print(f"  Failures found : {report.total_failures}")
+    print(f"  Fixed          : {green(str(report.fixed))}")
+    print(f"  Remaining      : {red(str(report.remaining)) if report.remaining > 0 else green('0')}")
+    print(f"  Unfixable      : {yellow(str(report.unfixable)) if report.unfixable > 0 else '0'}")
+    print(f"  Iterations     : {report.iterations}")
+    print()
+
+    if report.patches:
+        print(cyan("  Patches applied:"))
+        for p in report.patches:
+            print(f"    [{p.strategy}] {p.test_name}")
+            print(f"      {p.diagnosis[:100]}")
+            print(f"      - {p.old_text[:80]}")
+            print(f"      + {p.new_text[:80]}")
+            print()
+
+    if report.all_fixed:
+        print(green("  All failures fixed! Run 'Run Generated Tests' to verify."))
+    elif report.remaining > 0:
+        print(yellow(f"  {report.remaining} test(s) still failing. Run 'Run Generated Tests' to see current state."))
+
+
 # ── Skeleton viewer ───────────────────────────────────────────────────────
 
 
