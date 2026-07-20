@@ -14,6 +14,7 @@ Covers two mechanisms:
 
 from __future__ import annotations
 
+from src.element_matcher import _is_excluded
 from src.intent_matcher import SuccessAssertStrategy
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_scorers import PlaceholderScorer
@@ -142,7 +143,7 @@ class TestBuildExcludedSelectors:
 
 class TestIsExcluded:
     def test_excluded_by_raw_selector(self) -> None:
-        assert PlaceholderOrchestrator._is_excluded({"selector": "#login-button"}, {"#login-button"}) is True
+        assert _is_excluded({"selector": "#login-button"}, {"#login-button"}) is True
 
     def test_excluded_by_robust_locator(self) -> None:
         element = {
@@ -151,13 +152,13 @@ class TestIsExcluded:
             "tag": "input",
             "text": "",
         }
-        assert PlaceholderOrchestrator._is_excluded(element, {"#login-button"}) is True
+        assert _is_excluded(element, {"#login-button"}) is True
 
     def test_not_excluded_when_different(self) -> None:
-        assert PlaceholderOrchestrator._is_excluded({"selector": "#other"}, {"#login-button"}) is False
+        assert _is_excluded({"selector": "#other"}, {"#login-button"}) is False
 
     def test_not_excluded_when_empty_set(self) -> None:
-        assert PlaceholderOrchestrator._is_excluded({"selector": "#login-button"}, set()) is False
+        assert _is_excluded({"selector": "#login-button"}, set()) is False
 
 
 class TestSaucedemoStepContextScenarios:

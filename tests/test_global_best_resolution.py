@@ -56,7 +56,7 @@ def test_global_best_across_pages() -> None:
 
     orchestrator = PlaceholderOrchestrator()
     result = asyncio.run(
-        orchestrator._find_best_element_for_current_page(
+        orchestrator._element_matcher.find_best_element_for_current_page(  # type: ignore[attr-defined]
             action="FILL",
             description="username input",
             current_url=None,
@@ -89,7 +89,7 @@ def test_global_best_password() -> None:
 
     orchestrator = PlaceholderOrchestrator()
     result = asyncio.run(
-        orchestrator._find_best_element_for_current_page(
+        orchestrator._element_matcher.find_best_element_for_current_page(  # type: ignore[attr-defined]
             action="FILL",
             description="password input",
             current_url=None,
@@ -120,7 +120,7 @@ def test_global_best_login_button() -> None:
 
     orchestrator = PlaceholderOrchestrator()
     result = asyncio.run(
-        orchestrator._find_best_element_for_current_page(
+        orchestrator._element_matcher.find_best_element_for_current_page(  # type: ignore[attr-defined]
             action="CLICK",
             description="login button",
             current_url=None,
@@ -152,7 +152,7 @@ def test_global_best_checkout_button() -> None:
 
     orchestrator = PlaceholderOrchestrator()
     result = asyncio.run(
-        orchestrator._find_best_element_for_current_page(
+        orchestrator._element_matcher.find_best_element_for_current_page(  # type: ignore[attr-defined]
             action="CLICK",
             description="checkout button",
             current_url=None,
@@ -180,7 +180,7 @@ def test_no_match_returns_none() -> None:
 
     orchestrator = PlaceholderOrchestrator()
     result = asyncio.run(
-        orchestrator._find_best_element_for_current_page(
+        orchestrator._element_matcher.find_best_element_for_current_page(  # type: ignore[attr-defined]
             action="CLICK",
             description="nonexistent element that does not exist anywhere",
             current_url=None,

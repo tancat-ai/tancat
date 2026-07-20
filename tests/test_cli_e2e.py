@@ -2,6 +2,11 @@
 
 Subprocess-based tests that verify the CLI entry point works end-to-end
 without requiring interactive input.
+
+NOTE: The CLI was refactored to be purely interactive in 2026-07.
+The legacy argparse-based ``generate --input``/``--file`` subcommand
+was removed. Tests that exercised that interface have been updated
+or removed accordingly.
 """
 
 import subprocess
@@ -46,55 +51,19 @@ class TestHelpOutput:
         result = _run_cli("--help")
         assert "Playwright" in result.stdout
 
-    def test_help_flag_shows_generate_subcommand(self) -> None:
+    def test_help_flag_shows_menu_items(self) -> None:
+        """The interactive menu should list available actions."""
         result = _run_cli("--help")
-        assert "generate" in result.stdout
+        combined = (result.stdout or "").lower()
+        assert "enter user story" in combined or "configure llm" in combined, (
+            "help output should show interactive menu items"
+        )
 
-    def test_help_flag_shows_interactive_mode(self) -> None:
+    def test_help_flag_shows_entry_point(self) -> None:
+        """The interactive menu title should be visible."""
         result = _run_cli("--help")
-        assert "Interactive" in result.stdout or "interactive" in result.stdout.lower()
-
-
-# ── Generate subcommand ───────────────────────────────────────────────────
-
-
-@pytest.mark.subprocess
-class TestGenerateSubcommand:
-    def test_generate_help(self) -> None:
-        result = _run_cli("generate", "--help")
-        assert result.returncode == 0
-        assert "--input" in result.stdout
-
-    def test_generate_missing_input_fails(self) -> None:
-        result = _run_cli("generate")
-        assert result.returncode != 0
-
-    def test_generate_both_input_and_file_fails(self) -> None:
-        result = _run_cli("generate", "--input", "test", "--file", "does_not_exist.md")
-        assert result.returncode != 0
-
-    def test_generate_file_not_found_fails(self) -> None:
-        result = _run_cli("generate", "--file", "nonexistent_file_12345.md")
-        assert result.returncode != 0
-        # CLI prints error to stderr when file not found
-        combined = (result.stdout or "") + (result.stderr or "")
-        assert "not found" in combined.lower() or "Error" in combined or "error" in combined.lower()
-
-
-# ── Invalid arguments ──────────────────────────────────────────────────────
-
-
-@pytest.mark.subprocess
-class TestInvalidArguments:
-    def test_unknown_flag_fails(self) -> None:
-        result = _run_cli("--unknown-flag")
-        assert result.returncode != 0
-
-    def test_unknown_subcommand_shows_help(self) -> None:
-        result = _run_cli("nonexistent_command")
-        # argparse writes errors to stderr
-        combined = (result.stdout or "") + (result.stderr or "")
-        assert "usage" in combined.lower() or "invalid choice" in combined.lower()
+        combined = (result.stdout or "").lower()
+        assert "playwright" in combined, "help output should reference Playwright"
 
 
 # ── Test subcommand ────────────────────────────────────────────────────────
@@ -116,20 +85,3 @@ class TestHelpSubcommand:
         result = _run_cli("help")
         assert result.returncode == 0
         assert "Playwright" in result.stdout
-
-
-# ── Integration: generate with valid input ─────────────────────────────────
-
-
-class TestGenerateIntegration:
-    """These tests exercise the generate subcommand with real input.
-
-    They require LLM mocking to be configured or will hit the real LLM.
-    Skipped by default unless CLI_E2E_LLM is set.
-    """
-
-    @pytest.mark.skipif(True, reason="Requires LLM mocking — skip by default")
-    def test_generate_with_input(self) -> None:
-        result = _run_cli("generate", "--input", "As a user I want to login", "--output", "/tmp/cli_e2e_out")
-        assert result.returncode == 0
-        assert "Complete" in result.stdout or "Generated" in result.stdout
