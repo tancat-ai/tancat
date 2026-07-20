@@ -9,6 +9,7 @@ from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
+from src.storage import get_storage
 
 
 class EvidenceTracker:
@@ -50,8 +51,8 @@ class EvidenceTracker:
         elif evidence_root is not None:
             self.evidence_dir = evidence_root / "evidence"
         else:
-            # Fallback to legacy behaviour (repo root)
-            self.evidence_dir = Path(__file__).resolve().parents[1] / "evidence"
+            # Fallback to workspace evidence directory
+            self.evidence_dir = get_storage().evidence_dir()
 
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.sidecar_path = self.evidence_dir / f"{self.test_name}.evidence.json"

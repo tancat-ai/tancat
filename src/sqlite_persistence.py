@@ -16,12 +16,13 @@ from typing import Any
 
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult, PersistedTestResult, RunHistory
+from src.storage import get_storage
 
 # ---------------------------------------------------------------------------
 # Default database location
 # ---------------------------------------------------------------------------
 
-_DEFAULT_DB_DIR = Path("evidence")
+_DEFAULT_DB_DIR = get_storage().evidence_dir()
 _DEFAULT_DB_FILE = _DEFAULT_DB_DIR / "run_results.sqlite"
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,7 @@ from src.provider_config import (
     sync_openai_api_key_to_env,
 )
 from src.pytest_output_parser import RunResult
+from src.storage import get_storage, init_storage
 from src.test_plan import TestPlan, apply_editor_rows
 from src.ui.ui_evidence import EvidenceViewer
 from src.ui.ui_journey import render_credential_profiles, render_journey_builder
@@ -45,6 +46,9 @@ st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.
 
 
 def _init_session_state() -> None:
+    # Workspace isolation — set via WORKSPACE env var (default: "default")
+    init_storage(workspace=os.environ.get("WORKSPACE", "default"))
+
     defaults: dict[str, Any] = {
         "pipeline_results": None,
         "pipeline_skeleton": "",
@@ -545,5 +549,5 @@ SavedPackagePanel().render_main_panel()
 # Evidence viewer
 # ---------------------------------------------------------------------------
 st.divider()
-base_dir = Path(__file__).resolve().parent / "generated_tests"
+base_dir = get_storage().generated_tests_dir()
 EvidenceViewer(base_dir).render()

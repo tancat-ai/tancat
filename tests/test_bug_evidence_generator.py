@@ -139,8 +139,8 @@ def test_generate_bug_report_creates_file(tmp_path: Path) -> None:
     assert "TimeoutError: element not found" in content
 
 
-def test_generate_bug_report_includes_file_path() -> None:
-    output = str(Path("generated_tests") / "bug_report_test.txt")
+def test_generate_bug_report_includes_file_path(tmp_path: Path) -> None:
+    output = str(tmp_path / "bug_report_test.txt")
     try:
         gen = BugEvidenceGenerator()
         gen.add_test_failure(_make_test_result(name="test_checkout", file_path="generated_tests/test_checkout.py"))
@@ -153,8 +153,8 @@ def test_generate_bug_report_includes_file_path() -> None:
             os.remove(output)
 
 
-def test_generate_bug_report_truncates_long_errors() -> None:
-    output = str(Path("generated_tests") / "bug_report_truncate.txt")
+def test_generate_bug_report_truncates_long_errors(tmp_path: Path) -> None:
+    output = str(tmp_path / "bug_report_truncate.txt")
     try:
         gen = BugEvidenceGenerator()
         long_error = "X" * 600
@@ -170,8 +170,8 @@ def test_generate_bug_report_truncates_long_errors() -> None:
             os.remove(output)
 
 
-def test_generate_bug_report_empty_evidence() -> None:
-    output = str(Path("generated_tests") / "bug_report_empty.txt")
+def test_generate_bug_report_empty_evidence(tmp_path: Path) -> None:
+    output = str(tmp_path / "bug_report_empty.txt")
     try:
         gen = BugEvidenceGenerator()
         gen.generate_bug_report(output)

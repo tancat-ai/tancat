@@ -16,6 +16,7 @@ from src.gantt_utils import (
 )
 from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
 from src.report_utils import generate_annotated_journey, generate_suite_heatmap
+from src.storage import get_storage
 
 
 class EvidenceViewer:
@@ -317,7 +318,7 @@ class EvidenceViewer:
 
         st.subheader("Run History")
 
-        generated_tests_dir = Path("generated_tests")
+        generated_tests_dir = get_storage().generated_tests_dir()
         runs = load_all_run_results(generated_tests_dir)
         if not runs:
             st.info("No run history available. Run tests first to see trends here.")

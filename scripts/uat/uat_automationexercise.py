@@ -41,6 +41,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.llm_client import LLMClient  # noqa: E402
 from src.orchestrator import TestOrchestrator  # noqa: E402
+from src.storage import get_storage  # noqa: E402
 from src.test_generator import TestGenerator  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -358,7 +359,7 @@ async def run_uat() -> None:
         # --- Save / Run ---
         if args.save or args.run:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("generated_tests") / f"uat_{args.site}_{timestamp}"
+            output_dir = get_storage().generated_tests_dir() / f"uat_{args.site}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
 
             # Write conftest

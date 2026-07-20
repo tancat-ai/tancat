@@ -23,6 +23,7 @@ from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import load_all_run_results
+from src.storage import get_storage
 from src.ui_pipeline import (
     PipelineSessionState,
     parse_requirements_text,
@@ -624,7 +625,7 @@ def generate_bug_report(session: Any) -> None:
     generator = BugEvidenceGenerator()
     generator.process_run_result(run_result)
 
-    output_dir = Path("generated_tests")
+    output_dir = get_storage().generated_tests_dir()
     output_dir.mkdir(exist_ok=True)
     output_path = str(output_dir / "bug_report.txt")
 
@@ -1037,7 +1038,7 @@ def load_existing_packages(session: Any) -> None:
 
     print_header("Load Existing Generated Tests")
 
-    packages_dir = Path("generated_tests")
+    packages_dir = get_storage().generated_tests_dir()
     if not packages_dir.exists():
         print(yellow("  No generated_tests/ directory found."))
         return

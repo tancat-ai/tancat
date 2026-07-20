@@ -9,6 +9,7 @@ from typing import Any
 import streamlit as st
 
 from src.pytest_output_parser import RunResult
+from src.storage import get_storage
 from src.ui.shared import store_run_report
 
 
@@ -16,7 +17,7 @@ class SavedPackagePanel:
     """Renders the 'Load Saved Package' section in the sidebar."""
 
     def __init__(self) -> None:
-        self._generated_tests_dir = Path("generated_tests")
+        self._generated_tests_dir = get_storage().generated_tests_dir()
 
     def render_sidebar(self) -> None:
         from src.pipeline_artifact_manager import find_existing_packages

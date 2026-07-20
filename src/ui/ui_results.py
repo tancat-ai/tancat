@@ -6,6 +6,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.storage import get_storage
+
 
 class ResultsPanel:
     """Renders the pipeline results section."""
@@ -96,7 +98,7 @@ def _handle_generate_bug_report() -> None:
         generator = BugEvidenceGenerator()
         generator.process_run_result(run_result)
 
-        output_dir = Path("generated_tests")
+        output_dir = get_storage().generated_tests_dir()
         output_dir.mkdir(exist_ok=True)
         output_path = str(output_dir / "bug_report.txt")
         report_path = generator.generate_bug_report(output_path)

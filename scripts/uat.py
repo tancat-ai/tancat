@@ -51,6 +51,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from src.storage import get_storage
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -367,7 +369,7 @@ async def run_site_uat(
     if run_tests:
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = Path("generated_tests") / f"uat_{site_id}_{timestamp}"
+            output_dir = get_storage().generated_tests_dir() / f"uat_{site_id}_{timestamp}"
             output_dir.mkdir(parents=True, exist_ok=True)
             (output_dir / "conftest.py").write_text(CONFTEST_TEMPLATE, encoding="utf-8")
             (output_dir / f"test_{site_id}.py").write_text(final_code, encoding="utf-8")

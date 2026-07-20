@@ -18,9 +18,8 @@ from datetime import datetime
 from src.analyzer import AnalysisResult, AnalyzedTestCase, KeywordAnalyzer
 from src.cli.config import AnalysisMode
 from src.cli.input_parser import ParsedInput
+from src.config import GENERATED_TESTS_DIR
 from src.user_story_parser import FeatureParser
-
-GENERATED_TESTS_DIR: str = "generated_tests"
 
 
 @dataclass

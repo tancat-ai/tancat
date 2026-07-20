@@ -20,6 +20,7 @@ from src.provider_config import (
     provider_requires_openai_api_key,
     sync_openai_api_key_to_env,
 )
+from src.storage import get_storage
 
 from . import terminal_adapter
 from .color import green, red, yellow
@@ -686,7 +687,7 @@ def list_saved_packages() -> list[dict[str, str]]:
     """
     from src.pipeline_artifact_manager import find_existing_packages
 
-    packages_dir = Path("generated_tests")
+    packages_dir = get_storage().generated_tests_dir()
     if not packages_dir.exists():
         return []
 
