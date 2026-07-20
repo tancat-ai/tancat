@@ -9,7 +9,7 @@ Powered by local LLMs — no cloud API keys needed.
 | CI/CD Pipeline | [![CI](https://github.com/lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/AI-Playwright-Test-Generator/actions) |
 | Python Version | ![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg) |
 | License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
-| Code Quality | [![ruff](https://github.com/astral-sh/ruff/assets/7957679/910fe523-3e4f-47ef-a943-6b9719f8d2f8)](https://github.com/astral-sh/ruff) |
+| Code Quality | [![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://github.com/astral-sh/ruff) |
 
 ## How It Works
 
@@ -36,7 +36,6 @@ Executable pytest file (sync format, ready to run)
 - **CLI** — Command-line mode for CI/CD integration
 - **Evidence Tracking** — Annotated screenshots, Gantt timelines, heat maps
 - **Multi-Format Reports** — Markdown, Jira, or standalone HTML
-- **Self-Documenting** — Knowledge graph of the codebase for architecture exploration
 
 ## Quick Start
 
@@ -98,18 +97,12 @@ placeholder_orchestrator.py (coordinates per-page resolution)
 journey_    stateful_    semantic_
 scraper     scraper      candidate_ranker
                             │
-   ┌────────┬───────────────┤
-   ▼        ▼               ▼
-placeholder_resolver ← semantic_matcher + intent_matcher (inline scoring)
-   │
-   └→ semantic_candidate_ranker (LLM tiebreaker)
-   └→ locator_builder (robust selector construction)
-
-Runtime (after test generation):
-   locator_fallback ← locator_scorer
-   failure_reporter ← locator_scorer
-   ▼
-code_postprocessor (syntax fixes, code normalization)
+                            ▼
+                placeholder_resolver
+                (semantic_matcher + intent_matcher)
+                            │
+                            ▼
+                locator_builder → code_postprocessor
 
 Phase 3: PERSISTENCE + REPORTING
 ─────────────────────────────────
@@ -146,7 +139,7 @@ For a full module map and dependency graph, see [ARCHITECTURE.md](docs/ARCHITECT
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
 
-Pre-commit checklist: `smoke.py` → `ruff` → `mypy` → `pytest`.
+Pre-commit checklist: `smoke.py` (offline import/resolver check) → `ruff` → `mypy` → `pytest`.
 
 ## License
 

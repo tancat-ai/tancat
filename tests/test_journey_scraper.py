@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from src.cart_seeding_scraper import CartSeedingScraper
 from src.journey_auth_detector import (
     detect_auth_redirect as _detect_auth_redirect,
 )
@@ -16,7 +17,6 @@ from src.journey_auth_detector import (
 )
 from src.journey_models import CredentialProfile, JourneyResult, JourneyStep, substitute_templates
 from src.journey_scraper import (
-    CartSeedingScraper,
     JourneyScraper,
 )
 

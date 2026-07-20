@@ -394,7 +394,7 @@ def ensure_test_navigation(code: str, target_url: str | None = None) -> str:
             return match.group(0)
 
         indent = _detect_body_indent(body)
-        nav_line = f'\n{indent}evidence_tracker.navigate("{url}")\n{indent}dismiss_consent_overlays(page)'
+        nav_line = f'\n{indent}evidence_tracker.navigate("{url}")'
         return f"{match.group(1)}{nav_line}{body}"
 
     # Match any test function that has evidence_tracker in its signature.

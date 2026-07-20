@@ -24,6 +24,7 @@ from src.journey_auth_detector import (
     detect_mfa,
     detect_sso,
 )
+from src.journey_enrichment import capture_a11y_snapshot_sync
 from src.journey_models import CredentialProfile, JourneyResult, JourneyStep, substitute_templates
 from src.scraper import PageScraper
 
@@ -181,7 +182,7 @@ def _execute_journey_sync(
                         html = page.content()
                         elements = html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
                         try:
-                            a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                            a11y_snapshot = capture_a11y_snapshot_sync(context, page)
                             if a11y_snapshot is not None:
                                 elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)  # type: ignore[arg-type]
                         except Exception:
@@ -338,26 +339,8 @@ def _fill_with_locator(page: Any, selector: str, text: str, timeout_ms: int) -> 
     locator.fill(text)
 
 
-def _capture_a11y_snapshot_sync(context: Any, page: Any) -> dict[str, Any] | None:
-    """Capture accessibility snapshot via CDP. Returns None if unavailable."""
-    try:
-        cdp_session = context.new_cdp_session(page)
-    except Exception:
-        return None
-
-    a11y_snapshot: dict[str, Any] = {"nodes": []}
-    try:
-        tree_response = cdp_session.send("Accessibility.getFullAXTree")
-        a11y_snapshot["nodes"] = tree_response.get("nodes", []) if isinstance(tree_response, dict) else []
-    except Exception:
-        pass
-
-    try:
-        cdp_session.detach()
-    except Exception:
-        pass
-
-    return a11y_snapshot
+# ─── Legacy alias (deduplicated — see journey_enrichment.py) ───
+_capture_a11y_snapshot_sync = capture_a11y_snapshot_sync  # noqa: PLW1508
 
 
 # ────────────────────────────────────────────────────────────────

@@ -107,7 +107,12 @@ def parse_requirements(raw: str) -> tuple[str, str]:
 
 
 async def build_test_plan(session: Any) -> None:
-    """Analyze requirements and build a living test plan for review."""
+    """Analyze requirements and build a living test plan for review.
+
+    After building the plan, enters an interactive editing loop where the
+    user can edit individual conditions (type, intent, text, expected, etc.)
+    before signing off.
+    """
     print_header("Living Test Plan")
 
     user_story, criteria = parse_requirements(session.raw_requirements)
@@ -129,52 +134,164 @@ async def build_test_plan(session: Any) -> None:
         print(yellow(f"  Could not build plan ({exc}). Proceeding without plan."))
         return
 
-    # Display conditions
-    print(f"\n  {'ID':<12} {'Type':<16} {'Intent':<20} {'Condition'}")
-    print("  " + "-" * 70)
-    for c in session.test_plan.conditions:
-        print(f"  {c.id:<12} {c.type:<16} {c.intent:<20} {c.text}")
+    # Interactive editing loop
+    while True:
+        _display_conditions_table(session.test_plan)
+        print()
 
-    # Sign-off
-    signoff = print_menu(["Sign off and confirm", "Skip sign-off"], "Sign off the plan?")
-    if signoff == 0:
-        tester_name = read_optional("  Tester name:", "Anonymous")
-        sign_notes = read_optional("  Sign-off notes (optional):")
-        session.test_plan = session.test_plan.sign_off(
-            tester_name=tester_name,
-            sign_off_notes=sign_notes,
+        action = print_menu(
+            ["Edit a condition", "Sign off and confirm", "Skip sign-off"],
+            "Review actions",
+            shortcuts=[("E", "Edit"), ("S", "Sign off"), ("K", "Skip")],
         )
-        session.plan_confirmed = True
-        print(green("  Plan signed off. Generation unlocked."))
-    else:
-        print(yellow("  Plan not signed off. Generation will be locked."))
 
-
-async def _prompt_sign_off(session: Any) -> None:
-    """Prompt the user to sign off the test plan."""
-    print_header("Test Plan Sign-Off Required")
-    if session.test_plan and session.test_plan.conditions:
-        print(f"\n  Plan has {len(session.test_plan.conditions)} condition(s) — not yet signed off.")
-        print()
-        print(f"  {'ID':<12} {'Type':<16} {'Intent':<20} {'Condition'}")
-        print("  " + "-" * 70)
-        for c in session.test_plan.conditions:
-            print(f"  {c.id:<12} {c.type:<16} {c.intent:<20} {c.text}")
-        print()
-
-    signoff = print_menu(["Sign off and confirm", "Cancel"], "Sign off the plan?")
-    if signoff == 0:
-        tester_name = read_optional("  Tester name:", "Anonymous")
-        sign_notes = read_optional("  Sign-off notes (optional):")
-        if session.test_plan is not None:
+        if action == 0:
+            # Edit mode
+            _edit_condition_interactive(session)
+            continue
+        elif action == 1:
+            # Sign off
+            tester_name = read_optional("  Tester name:", "Anonymous")
+            sign_notes = read_optional("  Sign-off notes (optional):")
             session.test_plan = session.test_plan.sign_off(
                 tester_name=tester_name,
                 sign_off_notes=sign_notes,
             )
-        session.plan_confirmed = True
-        print(green("  Plan signed off. Generation unlocked."))
-    else:
-        print(yellow("  Sign-off cancelled."))
+            session.plan_confirmed = True
+            print(green("  Plan signed off. Generation unlocked."))
+            return
+        else:
+            print(yellow("  Plan not signed off. Generation will be locked."))
+            return
+
+
+def _display_conditions_table(plan: Any) -> None:
+    """Print a formatted table of all conditions in the plan."""
+    if not plan or not plan.conditions:
+        print(yellow("  No conditions in plan."))
+        return
+
+    print(f"\n  {'ID':<12} {'Type':<16} {'Intent':<20} {'Text'}")
+    print("  " + "-" * 80)
+    for c in plan.conditions:
+        flagged = " ⚑" if c.flagged else ""
+        text = c.text[:50] + "..." if len(c.text) > 50 else c.text
+        print(f"  {c.id:<12} {c.type:<16} {c.intent:<20} {text}{flagged}")
+
+
+_CONDITION_FIELDS: list[tuple[str, str, list[str]]] = [
+    ("type", "Condition type", ["happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"]),
+    (
+        "intent",
+        "Intent",
+        ["element_presence", "element_behavior", "state_assertion", "journey_step", "journey_outcome"],
+    ),
+    ("text", "Condition text", []),
+    ("expected", "Expected result", []),
+    ("source", "Source reference", []),
+    ("flagged", "Flagged for review", ["true", "false"]),
+    ("src", "Source kind", ["ai", "manual", "automation"]),
+]
+
+
+def _edit_condition_interactive(session: Any) -> None:
+    """Let the user pick a condition by ID and edit its fields."""
+    plan = session.test_plan
+    if not plan or not plan.conditions:
+        return
+
+    # Build a lookup by ID
+    condition_ids = [c.id for c in plan.conditions]
+    id_index = print_menu(condition_ids, "Select condition to edit")
+    if id_index < 0:
+        return
+
+    condition_id = condition_ids[id_index]
+    condition = next(c for c in plan.conditions if c.id == condition_id)
+
+    while True:
+        print_header(f"Editing: {condition_id}")
+        print("  Current values:")
+        for field_name, field_label, _ in _CONDITION_FIELDS:
+            val = getattr(condition, field_name, "")
+            print(f"    {field_label}: {val}")
+        print()
+
+        field_labels = [f"{label} ({getattr(condition, name, '')})" for name, label, _ in _CONDITION_FIELDS]
+        field_labels.append("Done editing")
+
+        field_idx = print_menu(field_labels, "Which field to edit?")
+        if field_idx < 0 or field_idx == len(_CONDITION_FIELDS):
+            break  # Done or cancelled
+
+        name, label, options = _CONDITION_FIELDS[field_idx]
+        current = str(getattr(condition, name, ""))
+
+        if options:
+            # Dropdown-style: show options with current highlighted
+            opt_idx = print_menu(options, f"Select {label}")
+            if opt_idx >= 0:
+                new_val: Any = options[opt_idx]
+                if name == "flagged":
+                    new_val = new_val == "true"
+                setattr(condition, name, new_val)
+                print(green(f"  ✓ {label} updated to: {new_val}"))
+        else:
+            # Free-text field
+            new_val = read_optional(f"  New {label} (Enter to keep current):", current)
+            if new_val != current:
+                setattr(condition, name, new_val)
+                print(green(f"  ✓ {label} updated."))
+
+        # Apply to plan
+        session.test_plan = plan.replace_condition(condition_id, condition)
+
+        if name == "text":
+            # Re-derive intent when text changes
+            from src.spec_analyzer import infer_condition_intent
+
+            new_intent = infer_condition_intent(condition.text)
+            if new_intent != condition.intent:
+                condition.intent = new_intent
+                session.test_plan = plan.replace_condition(condition_id, condition)
+                print(green(f"  ✓ Intent re-derived: {new_intent}"))
+
+        print("  Press Enter to continue...")
+        input()
+
+
+async def _prompt_sign_off(session: Any) -> None:
+    """Prompt the user to sign off the test plan, with optional editing."""
+    print_header("Test Plan Sign-Off Required")
+
+    while True:
+        if session.test_plan and session.test_plan.conditions:
+            _display_conditions_table(session.test_plan)
+            print()
+
+        action = print_menu(
+            ["Sign off and confirm", "Edit a condition", "Cancel"],
+            "Plan requires sign-off before generation",
+            shortcuts=[("S", "Sign off"), ("E", "Edit"), ("C", "Cancel")],
+        )
+
+        if action == 0:
+            tester_name = read_optional("  Tester name:", "Anonymous")
+            sign_notes = read_optional("  Sign-off notes (optional):")
+            if session.test_plan is not None:
+                session.test_plan = session.test_plan.sign_off(
+                    tester_name=tester_name,
+                    sign_off_notes=sign_notes,
+                )
+            session.plan_confirmed = True
+            print(green("  Plan signed off. Generation unlocked."))
+            return
+        elif action == 1:
+            _edit_condition_interactive(session)
+            continue
+        else:
+            print(yellow("  Sign-off cancelled."))
+            return
 
 
 # ── Pipeline execution ────────────────────────────────────────────────────
@@ -254,6 +371,18 @@ async def run_pipeline(session: Any) -> None:
         print(yellow(f"  ⚠ {len(session.pipeline_unresolved)} unresolved placeholder(s) — converted to skips."))
     else:
         print(green("  ✓ All placeholders resolved."))
+
+    # Surface scraper warnings and errors
+    scraper_warnings = ui_session.get("pipeline_scraper_warnings") or []
+    scraper_errors = ui_session.get("pipeline_scraper_errors") or []
+    for w in scraper_warnings:
+        print(yellow(f"  ⚠ Scraper: {w}"))
+    for e in scraper_errors:
+        print(red(f"  ✗ Scraper: {e}"))
+
+    journey_count = ui_session.get("pipeline_journey_captured_count")
+    if journey_count:
+        print(green(f"  ✓ Captured context from {journey_count} pages"))
 
 
 # ── URL parsing ───────────────────────────────────────────────────────────
@@ -795,6 +924,109 @@ def run_saved_test_from_package(
     except Exception as exc:
         session.pipeline_error = f"Failed to run saved package: {exc}"
         print(red(f"  ✗ {session.pipeline_error}"))
+
+
+# ── Evidence HTML reports ────────────────────────────────────────────────
+
+
+def generate_evidence_html(session: Any) -> None:
+    """Generate static Gantt & heatmap HTML reports from evidence data."""
+    from pathlib import Path
+
+    from src.gantt_utils import build_gantt_chart, load_gantt_entries
+    from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
+
+    print_header("Generate Evidence HTML Reports")
+
+    if not session.pipeline_saved_path:
+        print(yellow("  No generated test package found. Run the pipeline first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    pkg_dir = Path(str(session.pipeline_saved_path))
+    evidence_dir = pkg_dir / "evidence"
+    if not evidence_dir.exists():
+        print(yellow("  No evidence directory found. Run generated tests first to produce evidence."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    generated: list[str] = []
+
+    # 1. Gantt chart
+    try:
+        entries = load_gantt_entries(evidence_dir)
+        if entries:
+            fig = build_gantt_chart(entries, grouping_mode="condition_type")
+            gantt_path = str(evidence_dir / "gantt.html")
+            fig.write_html(gantt_path, full_html=True, include_plotlyjs="cdn")
+            generated.append(f"Gantt chart: {gantt_path}")
+        else:
+            print(yellow("  No Gantt entries — skipping Gantt chart."))
+    except Exception as exc:
+        print(yellow(f"  Gantt chart generation failed: {exc}"))
+
+    # 2. Confidence heatmap
+    try:
+        stories = build_story_confidence(evidence_dir)
+        if stories:
+            fig = build_confidence_heatmap(stories)
+            heatmap_path = str(evidence_dir / "heatmap.html")
+            fig.write_html(heatmap_path, full_html=True, include_plotlyjs="cdn")
+            generated.append(f"Confidence heatmap: {heatmap_path}")
+        else:
+            print(yellow("  No confidence data — skipping heatmap."))
+    except Exception as exc:
+        print(yellow(f"  Heatmap generation failed: {exc}"))
+
+    if generated:
+        print(green("  ✓ Generated evidence reports:"))
+        for line in generated:
+            print(f"    {line}")
+    else:
+        print(yellow("  No evidence reports could be generated."))
+
+    print("  Press Enter to continue...")
+    input()
+
+
+# ── Evidence bundle ─────────────────────────────────────────────────────
+
+
+def bundle_evidence_zip(session: Any) -> None:
+    """Create a zip archive of all evidence files for the current session."""
+    from pathlib import Path
+
+    from src.cli.evidence_generator import EvidenceGenerator
+
+    print_header("Bundle Evidence (Zip)")
+
+    if not session.pipeline_saved_path:
+        print(yellow("  No generated test package found. Run the pipeline first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    pkg_dir = Path(session.pipeline_saved_path)
+    evidence_dir = pkg_dir / "evidence"
+    if not evidence_dir.exists():
+        print(yellow("  No evidence directory found. Run generated tests first to produce evidence."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    output_path = str(pkg_dir / f"{pkg_dir.name}_evidence.zip")
+
+    try:
+        gen = EvidenceGenerator()
+        zip_path = gen.create_evidence_zip(output_path)
+        print(green(f"  ✓ Evidence bundle created: {zip_path}"))
+    except Exception as exc:
+        print(red(f"  Failed to create evidence zip: {exc}"))
+
+    print("  Press Enter to continue...")
+    input()
 
 
 # ── AI-026: load existing packages ────────────────────────────────────────

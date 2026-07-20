@@ -19,7 +19,8 @@ def test_translate_pom_click_uses_text_matching_not_css_selector() -> None:
     joined = "\n".join(lines)
     assert "get_by_role('link', name='Dress')" in joined
     assert "locator('Dress')" not in joined
-    assert "text=Dress" in joined
+    # Fallback uses get_by_text() (modern API) instead of deprecated text=Dress CSS selector
+    assert "get_by_text('Dress'" in joined
 
 
 def test_translate_pom_fill_uses_label_or_placeholder() -> None:

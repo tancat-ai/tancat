@@ -167,7 +167,7 @@ def generate_annotated_screenshot(
     steps_json = json.dumps(_prepare_steps_for_display(steps))
 
     # Minimal, self-contained interactive HTML with ResizeObserver driven overlay sizing.
-    # NOTE: Streamlit's st.components.v1.html can render this safely.
+    # NOTE: Streamlit's st.html can render this safely.
     return f"""
 <div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">{safe_title}</div>

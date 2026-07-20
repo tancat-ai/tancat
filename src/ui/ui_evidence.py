@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from src.gantt_utils import (
     build_gantt_chart,
@@ -115,7 +114,7 @@ class EvidenceViewer:
                 title=selected["path"].stem,
                 bug_report_mode=False,
             )
-            components.html(html, height=1100, scrolling=True)
+            st.html(html)
 
             # Download button for plain-text bug report
             text_report = generate_annotated_journey(
@@ -175,7 +174,7 @@ class EvidenceViewer:
                 grouping_mode=group_mode,  # type: ignore[arg-type]
                 condition_meta=condition_meta,
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         st.divider()
         st.subheader("Test Execution Details")
@@ -254,7 +253,7 @@ class EvidenceViewer:
         m4.metric("Unreviewed", unreviewed)
 
         fig = build_confidence_heatmap(stories)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.divider()
         st.subheader("Story Confidence Details")
@@ -305,7 +304,7 @@ class EvidenceViewer:
             evidence_dir=evidence_dirs[0] if evidence_dirs else Path("."),
             page_url=selected_url,
         )
-        components.html(suite_html, height=850, scrolling=True)
+        st.html(suite_html)
 
     def _render_run_history(self) -> None:
         from src.run_history_chart import build_run_history_chart
@@ -348,7 +347,7 @@ class EvidenceViewer:
 
         show_flaky = st.checkbox("Show Flaky Test Markers", value=True, key="run_history_show_flaky")
         chart = build_run_history_chart(filtered_runs, include_flaky_markers=show_flaky)
-        st.plotly_chart(chart, use_container_width=True)
+        st.plotly_chart(chart, width="stretch")
 
         flaky = get_flaky_tests(filtered_runs)
         flaky_count = len(flaky)

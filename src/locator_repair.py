@@ -43,12 +43,20 @@ class SetupScriptResult:
 
 
 def translate_setup_step_to_python(step: str) -> list[str]:
-    """Translate a generated test step line into Playwright setup script lines."""
+    """Translate a generated test step line into Playwright setup script lines.
+
+    Handles POM method calls, evidence_tracker actions, and raw Playwright locators.
+    Each translation is wrapped in try/except but logs failures so silent breakage
+    is visible in the terminal output.
+    """
     stripped = step.strip()
     lines: list[str] = []
 
+    # ── POM click: home_page.click('Label') ──────────────────────
     pom_click = re.match(
-        r"(?:home_page|category_product_page|cart_page|products_page|generated_page)\.click\(['\"]([^'\"]+)['\"]\)",
+        r"(?:home_page|category_product_page|cart_page|products_page|generated_page|"
+        r"checkout_page|login_page|account_page|contact_page|"
+        r"[a-z_]+_page)\.click\(['\"]([^'\"]+)['\"]\)",
         stripped,
     )
     if pom_click:
@@ -56,30 +64,39 @@ def translate_setup_step_to_python(step: str) -> list[str]:
         lines.extend(
             [
                 "        try:",
-                f"            link = page.get_by_role('link', name='{text}').first",
-                "            href = link.get_attribute('href')",
-                "            if href:",
-                "                from urllib.parse import urljoin",
-                "                page.goto(urljoin(page.url, href))",
-                "            else:",
-                "                link.click(timeout=5000)",
-                "        except Exception:",
-                "            try:",
-                f"                page.get_by_role('button', name='{text}').click(timeout=5000)",
-                "            except Exception:",
-                f"                hidden = page.locator('a').filter(has_text='{text}').first",
-                "                href = hidden.get_attribute('href')",
+                "            # Try link first, then button, then any clickable",
+                f"            el = page.get_by_role('link', name='{text}').first",
+                "            if el.count() > 0 and el.is_visible(timeout=1000):",
+                "                href = el.get_attribute('href')",
                 "                if href:",
-                "                    from urllib.parse import urljoin",
                 "                    page.goto(urljoin(page.url, href))",
                 "                else:",
-                f"                    page.locator('text={text}').first.click(force=True, timeout=5000)",
+                "                    el.click(timeout=5000)",
+                "            else:",
+                f"                page.get_by_role('button', name='{text}').first.click(timeout=5000)",
+                "        except Exception:",
+                "            try:",
+                f"                page.get_by_text('{text}', exact=False).first.click(timeout=5000)",
+                "            except Exception:",
+                "                try:",
+                f"                    el = page.locator('a, button, [role=\"button\"], [role=\"link\"]').filter(has_text='{text}').first",
+                "                    if el.count() > 0:",
+                "                        href = el.get_attribute('href')",
+                "                        if href:",
+                "                            page.goto(urljoin(page.url, href))",
+                "                        else:",
+                "                            el.click(force=True, timeout=5000)",
+                "                except Exception as _e:",
+                f"                    print(f'[setup] WARNING: click(\"{text}\") failed: {{_e}}')",
             ]
         )
         return lines
 
+    # ── POM fill: home_page.fill('Field', 'value') ───────────────
     pom_fill = re.match(
-        r"(?:home_page|category_product_page|cart_page|products_page|generated_page)"
+        r"(?:home_page|category_product_page|cart_page|products_page|generated_page|"
+        r"checkout_page|login_page|account_page|contact_page|"
+        r"[a-z_]+_page)"
         r"\.fill\(['\"]([^'\"]+)['\"],\s*['\"]([^'\"]+)['\"]\)",
         stripped,
     )
@@ -91,12 +108,97 @@ def translate_setup_step_to_python(step: str) -> list[str]:
                 "        try:",
                 f"            page.get_by_label('{field}').fill('{value}', timeout=5000)",
                 "        except Exception:",
-                f"            page.get_by_placeholder('{field}').fill('{value}', timeout=5000)",
+                "            try:",
+                f"                page.get_by_placeholder('{field}').fill('{value}', timeout=5000)",
+                "            except Exception:",
+                "                try:",
+                f"                    page.get_by_role('textbox', name='{field}').first.fill('{value}', timeout=5000)",
+                "                except Exception as _e:",
+                f"                    print(f'[setup] WARNING: fill(\"{field}\") failed: {{_e}}')",
             ]
         )
         return lines
 
-    # Handle evidence_tracker.navigate('url') — translate to page.goto
+    # ── POM select / check / uncheck ────────────────────────────
+    pom_select = re.match(
+        r"(?:[a-z_]+_page)\.select_option\(['\"]([^'\"]+)['\"],\s*['\"]([^'\"]+)['\"]\)",
+        stripped,
+    )
+    if pom_select:
+        field = pom_select.group(1).replace("'", "\\'")
+        value = pom_select.group(2).replace("'", "\\'")
+        lines.extend(
+            [
+                "        try:",
+                f"            page.get_by_label('{field}').select_option('{value}', timeout=5000)",
+                "        except Exception as _e:",
+                f"            print(f'[setup] WARNING: select_option(\"{field}\") failed: {{_e}}')",
+            ]
+        )
+        return lines
+
+    pom_check = re.match(
+        r"(?:[a-z_]+_page)\.(check|uncheck)\(['\"]([^'\"]+)['\"]\)",
+        stripped,
+    )
+    if pom_check:
+        action = pom_check.group(1)
+        label = pom_check.group(2).replace("'", "\\'")
+        lines.extend(
+            [
+                "        try:",
+                f"            cb = page.get_by_label('{label}')",
+                f"            if cb.count() > 0: cb.{action}(timeout=5000)",
+                "        except Exception as _e:",
+                f"            print(f'[setup] WARNING: {action}(\"{label}\") failed: {{_e}}')",
+            ]
+        )
+        return lines
+
+    # ── evidence_tracker.click(label='...') ─────────────────────
+    ev_click = re.match(
+        r"evidence_tracker\.click\(['\"]([^'\"]+)['\"](?:,\s*label=\s*['\"]([^'\"]+)['\"])?\)",
+        stripped,
+    )
+    if ev_click:
+        selector = ev_click.group(1).replace("'", "\\'")
+        label = ev_click.group(2)
+        if label:
+            text = label.replace("'", "\\'")
+        else:
+            text = selector
+        lines.extend(
+            [
+                "        try:",
+                f"            page.get_by_text('{text}').first.click(timeout=5000)",
+                "        except Exception as _e:",
+                f"            print(f'[setup] WARNING: evidence_tracker.click(\"{text}\") failed: {{_e}}')",
+            ]
+        )
+        return lines
+
+    # ── evidence_tracker.fill(selector, 'value', label='...') ───
+    ev_fill = re.match(
+        r"evidence_tracker\.fill\(['\"]([^'\"]+)['\"],\s*['\"]([^'\"]+)['\"](?:,\s*label=\s*['\"]([^'\"]+)['\"])?\)",
+        stripped,
+    )
+    if ev_fill:
+        field = (ev_fill.group(3) or ev_fill.group(1)).replace("'", "\\'")
+        value = ev_fill.group(2).replace("'", "\\'")
+        lines.extend(
+            [
+                "        try:",
+                f"            page.get_by_label('{field}').fill('{value}', timeout=5000)",
+                "        except Exception:",
+                "            try:",
+                f"                page.get_by_placeholder('{field}').fill('{value}', timeout=5000)",
+                "            except Exception as _e:",
+                f"                print(f'[setup] WARNING: evidence_tracker.fill(\"{field}\") failed: {{_e}}')",
+            ]
+        )
+        return lines
+
+    # ── evidence_tracker.navigate('url') or page.goto('url') ─────
     navigate_match = re.match(
         r"(?:evidence_tracker\.navigate|page\.goto)\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
         stripped,
@@ -104,15 +206,42 @@ def translate_setup_step_to_python(step: str) -> list[str]:
     if navigate_match:
         url = navigate_match.group(1).replace("'", "\\'")
         lines.append(f"        page.goto('{url}')")
+        lines.append("        page.wait_for_load_state('networkidle')")
+        lines.append("        page.wait_for_timeout(500)")
         return lines
 
+    # ── evidence_tracker.assert_visible(...) — no-op, just wait ──
+    if "evidence_tracker.assert_" in stripped:
+        lines.append("        page.wait_for_timeout(300)")
+        return lines
+
+    # ── dismiss_consent_overlays(page) — call our banner dismiss ─
+    if "dismiss_consent_overlays" in stripped or "dismiss_banners" in stripped:
+        lines.append("        _dismiss_banners(page)")
+        return lines
+
+    # ── Raw locator calls: page.locator('...').click() / fill() ──
+    loc_match = re.search(r"locator\(['\"]([^'\"]+)['\"]", stripped)
+    if loc_match:
+        val = loc_match.group(1).replace("'", "\\'")
+        if ".fill(" in stripped:
+            fill_val_match = re.search(r"\.fill\(['\"]([^'\"]+)['\"]", stripped)
+            fill_val = fill_val_match.group(1).replace("'", "\\'") if fill_val_match else "test"
+            lines.append(f"        try: page.locator('{val}').fill('{fill_val}', timeout=5000)")
+        else:
+            lines.append(f"        try: page.locator('{val}').click(timeout=5000)")
+        lines.append("        except Exception as _e: print(f'[setup] WARNING: locator action failed: {_e}')")
+        return lines
+
+    # ── Fallback: label-based ────────────────────────────────────
     label_match = re.search(r"label=['\"]([^'\"]+)['\"]", stripped)
     if label_match and "evidence_tracker" in stripped:
-        label = label_match.group(1).replace("'", "\\'")
-        lines.append(f"        try: page.get_by_text('{label}').click(timeout=5000)")
-        lines.append("        except Exception as e: print('Label click failed:', e)")
+        lbl = label_match.group(1).replace("'", "\\'")
+        lines.append(f"        try: page.get_by_text('{lbl}').click(timeout=5000)")
+        lines.append("        except Exception as _e: print(f'[setup] WARNING: label click failed: {_e}')")
         return lines
 
+    # ── Fallback: get_by_role ────────────────────────────────────
     role_match = re.search(
         r"\.get_by_role\(\s*['\"]([^'\"]+)['\"].*?name=\s*['\"]([^'\"]+)['\"]",
         stripped,
@@ -126,18 +255,6 @@ def translate_setup_step_to_python(step: str) -> list[str]:
             lines.append(f"        page.get_by_role('{role}', name='{name}').fill('{val}', timeout=5000)")
         else:
             lines.append(f"        page.get_by_role('{role}', name='{name}').click(timeout=5000)")
-        return lines
-
-    loc_match = re.search(r"locator\(['\"]([^'\"]+)['\"]", stripped)
-    if loc_match:
-        val = loc_match.group(1).replace("'", "\\'")
-        if ".fill(" in stripped:
-            fill_val_match = re.search(r"\.fill\(['\"]([^'\"]+)['\"]", stripped)
-            fill_val = fill_val_match.group(1).replace("'", "\\'") if fill_val_match else "test"
-            lines.append(f"        try: page.locator('{val}').fill('{fill_val}', timeout=5000)")
-        else:
-            lines.append(f"        try: page.locator('{val}').click(timeout=5000)")
-        lines.append("        except Exception as e: print('Locator action failed:', e)")
         return lines
 
     return lines
@@ -249,6 +366,9 @@ def apply_patch_to_file(patch: LocatorPatch) -> None:
 def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None:
     """Launch headed Playwright codegen and capture the first locator from the recorded script.
 
+    When a state_file is provided, the codegen session loads saved cookies/localStorage
+    so that cart contents, consent preferences, and login state are preserved.
+
     Args:
         url: URL to navigate to.
         timeout_seconds: Maximum time to wait for a click.
@@ -257,14 +377,27 @@ def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | 
     Returns:
         The locator string captured from the clicked element, or None.
     """
+    import logging
+
+    _log = logging.getLogger(__name__)
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     tmp_dir = tempfile.gettempdir()
     output_file = str(Path(tmp_dir) / f"repair_locator_{timestamp}.py")
+
+    # Verify state file exists before passing to codegen
+    if state_file and not Path(state_file).exists():
+        _log.warning("State file %s does not exist — codegen will open without saved state", state_file)
+        state_file = None
+    elif state_file:
+        _log.info("Loading saved state from %s (%d bytes)", state_file, Path(state_file).stat().st_size)
 
     cmd = ["playwright", "codegen", "--output", output_file]
     if state_file:
         cmd.extend(["--load-storage", state_file])
     cmd.append(url)
+
+    _log.info("Launching codegen: %s", " ".join(cmd))
 
     # Use DEVNULL to avoid pipe deadlocks with headed browser GUI process on Windows.
     # The browser writes to output_file directly, we don't need its stdout/stderr.

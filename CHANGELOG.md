@@ -9,6 +9,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Changed
+- **Refactor 2026-07-11 — Journey scraper split:** `journey_scraper.py` (896→617 lines) split into 3 focused modules:
+  - `src/journey_enrichment.py` — `capture_element_visibility_sync`, `capture_a11y_snapshot_sync` (deduplicated from `journey_executor.py`)
+  - `src/cart_seeding_scraper.py` — `CartSeedingScraper` class (resolved circular import with `journey_scraper.py`)
+  - `src/journey_subprocess.py` — `run_journey_subprocess_entry` subprocess entry point
+- **Refactor 2026-07-11 — Placeholder orchestrator split:** `placeholder_orchestrator.py` (2,047→862 lines) split into 4 focused modules:
+  - `src/role_mapper.py` — `DISPLAY_ROLES`, `_TAG_TO_ROLE`, `is_display_role`, `normalise_element_text`
+  - `src/element_matcher.py` — Pass 0–3 matching engine, `ElementMatcher` class, B-020 semantic ASSERT resolution
+  - `src/skip_manager.py` — consolidated skip insertion, placeholder line removal
+  - `src/pom_helpers.py` — POM artifact generation, imports, instantiation, method calls
+
 ### Added
 - CI/CD: parallelised quality gates — lint, type-check, sanitizer, and graph-freshness now run concurrently instead of sequentially (~15s saved per push)
 - CI/CD: `graph-freshness` gate — warns when `graphify-out/graph.json` commit hash diverges from `HEAD`

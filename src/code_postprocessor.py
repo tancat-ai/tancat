@@ -668,11 +668,13 @@ def _inject_consent_helper(code: str) -> str:
     helper_name = "dismiss_consent_overlays"
     import_line = "from src.browser_utils import dismiss_consent_overlays"
 
-    # Only inject if there are any bare page.goto() calls that need it
+    # Inject import if dismiss_consent_overlays is used anywhere in the code.
+    # (code_normalizer may inject the call alongside evidence_tracker.navigate(),
+    #  so we need the import even without bare page.goto().)
+    has_helper_call = f"{helper_name}(" in code
     has_bare_goto = "page.goto(" in code
 
-    if not has_bare_goto:
-        # No bare gotos — no injection needed. But keep the import if already present.
+    if not has_helper_call and not has_bare_goto:
         return code
 
     if import_line not in code:

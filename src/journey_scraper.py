@@ -11,6 +11,8 @@ Key difference from static scraping:
 Data models (JourneyStep, ScrapedStep, CredentialProfile, JourneyResult) have been
 moved to ``src/journey_models.py``. The authenticated journey executor
 (``execute_journey``) has been moved to ``src/journey_executor.py``.
+CartSeedingScraper has been moved to ``src/cart_seeding_scraper.py``.
+Enrichment helpers to ``src/journey_enrichment.py``.
 Re-exports are provided below for backward compatibility.
 """
 
@@ -30,14 +32,10 @@ from typing import Any
 from playwright.sync_api import sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
-from src.form_detector import (
-    ADD_TO_CART_SELECTORS,
-    CONTINUE_SHOPPING_SELECTORS,
-    PRODUCT_SELECTORS,
+from src.journey_enrichment import (
+    capture_a11y_snapshot_sync,
+    capture_element_visibility_sync,
 )
-
-# ─── Backward-compat re-exports ────────────────────────────────
-# Importers that used ``from src.journey_scraper import ...`` continue to work.
 from src.journey_executor import execute_journey  # noqa: F401
 from src.journey_models import (
     CredentialProfile,
@@ -55,7 +53,6 @@ from src.scraper import PageScraper
 _substitute_templates = substitute_templates  # noqa: PLW1508
 
 __all__ = [
-    "CartSeedingScraper",
     "CredentialProfile",
     "JourneyResult",
     "JourneyScraper",
@@ -64,53 +61,9 @@ __all__ = [
     "execute_journey",
 ]
 
-# ────────────────────────────────────────────────────────────────
-# B-0XX: Enrichment helpers for consistent scrape quality
-# Reused across JourneyScraper._scrape_current_page and
-# JourneyScraper._discover_selector to match PageScraper enrichment pipeline.
-# ────────────────────────────────────────────────────────────────
-
-
-def _capture_element_visibility_sync(
-    page: Any,
-    elements: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Check runtime visibility of each scraped element using Playwright is_visible()."""
-    for elem in elements:
-        selector = elem.get("selector")
-        if not selector:
-            continue
-        try:
-            loc = page.locator(selector).first
-            elem["is_visible"] = loc.is_visible()
-        except Exception:
-            pass  # Keep default is_visible value on lookup failure
-    return elements
-
-
-def _capture_a11y_snapshot_sync(
-    context: Any,
-    page: Any,
-) -> dict[str, Any] | None:
-    """Capture accessibility snapshot via CDP. Returns None if unavailable."""
-    try:
-        cdp_session = context.new_cdp_session(page)
-    except Exception:
-        return None
-
-    a11y_snapshot: dict[str, Any] = {"nodes": []}
-    try:
-        tree_response = cdp_session.send("Accessibility.getFullAXTree")
-        a11y_snapshot["nodes"] = tree_response.get("nodes", []) if isinstance(tree_response, dict) else []
-    except Exception:
-        pass  # Return empty nodes list on CDP failure
-
-    try:
-        cdp_session.detach()
-    except Exception:
-        pass
-
-    return a11y_snapshot
+# ─── Legacy private aliases (internal callers may reference the old names) ───
+_capture_element_visibility_sync = capture_element_visibility_sync  # noqa: PLW1508
+_capture_a11y_snapshot_sync = capture_a11y_snapshot_sync  # noqa: PLW1508
 
 
 class JourneyScraper:
@@ -271,9 +224,7 @@ class JourneyScraper:
                     page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
                     # Scrape the starting page so elements are available for placeholder resolution.
-                    # Without this, pages like login forms are never captured since auto-scrape
-                    # only triggers after explicit navigate steps (line 244), not initial load.
-                    elements = self._scrape_current_page(page, current_url, context)  # B-0XX: pass context
+                    elements = self._scrape_current_page(page, current_url, context)
                     output[current_url] = elements
 
                 for step_index, step in enumerate(steps):
@@ -286,15 +237,12 @@ class JourneyScraper:
                                 current_url = self._navigate_to(page, step.url, step.timeout_ms)
 
                             elif step.action == "click":
-                                # Dismiss transient overlays (ads, consent) before every click
-                                # to prevent pointer-event interception from dynamically loaded ads.
                                 self._dismiss_consent_overlays(page)
 
                                 selector = step.selector
                                 if not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
                                     if selector is None:
-                                        # Retry with relaxed criteria
                                         selector = self._discover_selector_relaxed(page, step.action, step.description)
                                         if selector is not None:
                                             self._context_log.append(
@@ -325,7 +273,6 @@ class JourneyScraper:
                                 if not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
                                     if selector is None:
-                                        # Retry with relaxed criteria
                                         selector = self._discover_selector_relaxed(page, step.action, step.description)
                                         if selector is not None:
                                             self._context_log.append(
@@ -360,18 +307,14 @@ class JourneyScraper:
                                 page.wait_for_timeout(int(wait_time * 1000))
 
                             elif step.action == "scrape" and current_url:
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, current_url, context
-                                )
+                                elements = self._scrape_current_page(page, current_url, context)
                                 output[current_url] = elements
 
                             elif step.action == "capture" and current_url:
-                                # Transient capture — skip visibility enrichment so that
-                                # popups/modals that auto-dismiss are not penalized.
                                 html = page.content()
                                 elements = self._html_scraper._extract_elements_from_html(html, base_url=current_url)  # noqa: SLF001
                                 try:
-                                    a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                                    a11y_snapshot = capture_a11y_snapshot_sync(context, page)
                                     if a11y_snapshot is not None:
                                         elements = AccessibilityEnricher.enrich(elements, a11y_snapshot)  # type: ignore[arg-type]
                                 except Exception:
@@ -380,19 +323,14 @@ class JourneyScraper:
 
                             # Auto-scrape after navigation if no explicit scrape step
                             if step.action == "navigate" and current_url:
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, current_url, context
-                                )
+                                elements = self._scrape_current_page(page, current_url, context)
                                 output[current_url] = elements
 
-                            # Detect URL changes after click actions (clicks that cause navigation)
-                            # and auto-scrape the new page so elements are available for resolution.
+                            # Detect URL changes after click actions
                             new_url = page.url
                             if step.action == "click" and new_url != current_url and current_url:
                                 self._debug(f"Click caused navigation: {current_url} -> {new_url}")
-                                elements = self._scrape_current_page(  # B-0XX: pass context
-                                    page, new_url, context
-                                )
+                                elements = self._scrape_current_page(page, new_url, context)
                                 output[new_url] = elements
 
                             current_url = new_url
@@ -417,13 +355,7 @@ class JourneyScraper:
         return output
 
     def get_pages_visited(self) -> list[str]:
-        """Return unique URLs visited during the journey.
-
-        Extracts page URLs from the captured output dictionary keys.
-        This is the authoritative list of pages discovered organically
-        by the journey scraper, replacing the need for PAGES_NEEDED
-        pre-declaration.
-        """
+        """Return unique URLs visited during the journey."""
         return (
             list(dict.fromkeys(url for url in self._captured_pages if url)) if hasattr(self, "_captured_pages") else []
         )
@@ -454,11 +386,7 @@ class JourneyScraper:
         return elements
 
     def _discover_selector_relaxed(self, page: Any, action: str, description: str) -> str | None:
-        """Find a selector using relaxed matching criteria.
-
-        Used as a fallback when strict _discover_selector returns None.
-        Relaxes: exact/contains match -> substring match, requires high confidence -> any match.
-        """
+        """Find a selector using relaxed matching criteria."""
         try:
             page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
@@ -471,13 +399,11 @@ class JourneyScraper:
         if not norm_desc:
             return None
 
-        # Substring match: any element whose text contains *any* keyword from the description
         for element in elements:
             raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
             norm_text = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
             if len(norm_text) < 2:
                 continue
-            # Match if at least one keyword appears in the element text
             if any(kw in norm_text for kw in norm_desc if len(kw) >= 2):
                 robust = build_robust_locator(element)
                 if robust:
@@ -491,13 +417,8 @@ class JourneyScraper:
     def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
         """Find the best selector for a description on the current live page.
 
-        Uses PlaceholderScorer.compute_element_score() (same engine as
-        PlaceholderOrchestrator) to rank candidates. Falls back to LLM-based
-        SemanticCandidateRanker when no element passes scoring.
-
         B-015: Unified ranking pipeline — discovery and resolution share scoring logic.
         """
-        # Ensure the page is stable and rendered
         try:
             page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
@@ -506,15 +427,13 @@ class JourneyScraper:
         html = page.content()
         elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
 
-        # B-0XX: Apply enrichment for better candidate quality in selector discovery
         try:
-            elements = _capture_element_visibility_sync(page, elements)
+            elements = capture_element_visibility_sync(page, elements)
         except Exception:
-            pass  # Additive — continue with unenriched on failure
+            pass
 
         self._debug(f"Scraped {len(elements)} elements for discovery of '{description}'")
 
-        # Stage 1: Score all candidates with PlaceholderScorer (unified scoring)
         best_element: dict[str, Any] | None = None
         best_score: float = -1
 
@@ -525,22 +444,15 @@ class JourneyScraper:
                 description=description,
                 element=element,
                 selector=selector,
-                match_threshold=0,  # Accept all in discovery phase; pick highest
+                match_threshold=1,
             )
 
-            # B-021: Modal intercept penalty — if the page has a modal overlay,
-            # heavily penalize elements OUTSIDE the modal for CLICK actions.
-            # Modals like #cartModal block pointer events to underlying elements.
             in_modal = element.get("in_modal", False)
             page_has_modal = any(e.get("in_modal", False) for e in elements)
 
-            # B-019: Penalize display elements for interactive actions.
-            # FILL requires <input>/<textarea>/<select>. CLICK prefers
-            # <button>/<a>/<input>. Display divs/spans can match by text
-            # but fail at runtime — apply a penalty to prevent them winning.
             if score is not None:
                 if action == "click" and page_has_modal and not in_modal:
-                    score -= 30  # Penalize non-modal elements when modal is open
+                    score -= 30
                 role = str(element.get("role", "")).lower()
                 if action == "fill" and role not in (
                     "text",
@@ -555,18 +467,18 @@ class JourneyScraper:
                     "textarea",
                     "url",
                 ):
-                    score -= 50  # Hard penalty — display elements can't be filled
+                    score -= 50
                 elif action == "click" and role not in (
                     "button",
                     "submit",
                     "link",
-                    "a",  # scraper provides tag name 'a', not ARIA role 'link'
+                    "a",
                     "menuitem",
                     "tab",
                     "checkbox",
                     "radio",
                 ):
-                    score -= 20  # Softer penalty — clicks on non-interactive elements sometimes work
+                    score -= 20
 
             if score is not None and score > best_score:
                 best_score = score
@@ -580,7 +492,6 @@ class JourneyScraper:
                 )
                 return robust or best_element.get("selector")
 
-        # Stage 2: LLM-based fallback via PlaceholderResolver.rank_candidates
         ranked = self._resolver.rank_candidates(action, description, elements)
         if not ranked:
             self._context_log.append(
@@ -595,7 +506,6 @@ class JourneyScraper:
             )
             return None
 
-        # Pick top candidate and build a robust locator
         _score, element = ranked[0]
         robust = build_robust_locator(element)
         if robust is None and not element.get("selector"):
@@ -613,13 +523,9 @@ class JourneyScraper:
         return robust or element.get("selector")
 
     def _navigate_to(self, page: Any, url: str, timeout_ms: int) -> str:
-        """Navigate to a URL and return the final URL.
-
-        Handles relative URLs by joining with the current origin.
-        """
+        """Navigate to a URL and return the final URL."""
         full_url = url
         if url.startswith("/"):
-            # Relative URL — join with current origin
             from urllib.parse import urljoin
 
             full_url = urljoin(page.url, url)
@@ -630,7 +536,7 @@ class JourneyScraper:
                 page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
                 pass
-            page.wait_for_timeout(1000)  # Extra wait for stable DOM
+            page.wait_for_timeout(1000)
             self._dismiss_consent_overlays(page)
             return page.url
         return full_url
@@ -654,8 +560,7 @@ class JourneyScraper:
         except Exception as e:
             self._debug(f"Click exception: {e}")
             raise
-        page.wait_for_timeout(500)  # Brief wait for page transition
-        # Dismiss any modals/popups that appeared after the click
+        page.wait_for_timeout(500)
         self._dismiss_consent_overlays(page)
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
@@ -673,26 +578,18 @@ class JourneyScraper:
             raise
 
     def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
-        """Scrape elements from the current page state.
-
-        Args:
-            page: Live Playwright page object.
-            url: Current page URL for base_url in extraction.
-            context: Optional browser context for CDP a11y snapshot (B-0XX).
-        """
+        """Scrape elements from the current page state."""
         html = page.content()
         elements = self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
 
-        # B-0XX: Apply visibility + a11y enrichment for consistent scrape quality
         try:
-            enriched = _capture_element_visibility_sync(page, elements)
+            enriched = capture_element_visibility_sync(page, elements)
             if context is not None:
-                a11y_snapshot = _capture_a11y_snapshot_sync(context, page)
+                a11y_snapshot = capture_a11y_snapshot_sync(context, page)
                 if a11y_snapshot is not None:
                     enriched = AccessibilityEnricher.enrich(enriched, a11y_snapshot)  # type: ignore[arg-type]
             return enriched
         except Exception:
-            # Enrichment is additive — fall back to unenriched elements on failure
             pass
 
         return elements
@@ -705,192 +602,10 @@ class JourneyScraper:
         dismiss_consent_overlays(page)  # type: ignore[arg-type]
 
 
-class CartSeedingScraper(JourneyScraper):
-    """Journey scraper specialized for cart-dependent pages.
-
-    This scraper follows a specific journey to ensure the cart has items
-    before scraping cart/checkout pages:
-    1. Navigate to products page
-    2. Select a product
-    3. Add to cart
-    4. Dismiss confirmation modal
-    5. Navigate to cart page (now has checkout button)
-
-    This is a convenience wrapper around JourneyScraper for the common
-    "scrape cart with items" use case.
-    """
-
-    # Class-level selector constants (re-exported from form_detector for compatibility)
-    PRODUCT_SELECTORS: list[str] = PRODUCT_SELECTORS
-    ADD_TO_CART_SELECTORS: list[str] = ADD_TO_CART_SELECTORS
-    CONTINUE_SHOPPING_SELECTORS: list[str] = CONTINUE_SHOPPING_SELECTORS
-
-    def __init__(
-        self,
-        starting_url: str,
-        products_url: str | None = None,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize the cart seeding scraper.
-
-        Args:
-            starting_url: The home page URL (used to establish session).
-            products_url: Optional explicit products page URL. If not provided,
-                          derived from starting_url by appending "/products".
-            **kwargs: Additional arguments passed to JourneyScraper.
-        """
-        super().__init__(starting_url, **kwargs)
-        self.products_url = products_url or self._derive_products_url(starting_url)
-
-    @staticmethod
-    def _derive_products_url(home_url: str) -> str:
-        """Derive the products page URL from the home page URL.
-
-        Example: https://automationexercise.com/ → https://automationexercise.com/products
-        """
-        from urllib.parse import urljoin
-
-        return urljoin(home_url, "/products")
-
-    async def scrape_cart_pages(
-        self,
-        cart_urls: list[str],
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Scrape cart/checkout pages with items already in the cart.
-
-        This method:
-        1. Seeds the cart by adding an item (via the products page)
-        2. Captures the confirmation popup state (for resolver to find)
-        3. Then scrapes each target URL (cart, checkout, etc.)
-
-        Args:
-            cart_urls: URLs to scrape (e.g., [/view_cart, /checkout]).
-
-        Returns:
-            Dictionary mapping URL → list of scraped elements.
-        """
-        steps: list[JourneyStep] = []
-
-        # Step 1: Navigate to products page
-        steps.append(
-            JourneyStep(
-                action="navigate",
-                url=self.products_url,
-                description="navigate to products page",
-            )
-        )
-
-        # Step 2: Click on a product
-        steps.append(
-            JourneyStep(
-                action="click",
-                selector=PRODUCT_SELECTORS[0],  # Use first matching selector
-                description="select a product",
-            )
-        )
-
-        # Step 3: Click "Add to cart"
-        steps.append(
-            JourneyStep(
-                action="click",
-                selector=ADD_TO_CART_SELECTORS[0],
-                description="add product to cart",
-            )
-        )
-
-        # Step 3b: CAPTURE confirmation popup state BEFORE dismissing it.
-        # This allows the resolver to find elements like "Added confirmation popup"
-        steps.append(
-            JourneyStep(
-                action="capture",
-                description="capture confirmation popup state",
-            )
-        )
-
-        # Step 4: Dismiss confirmation modal
-        steps.append(
-            JourneyStep(
-                action="click",
-                selector=CONTINUE_SHOPPING_SELECTORS[0],
-                description="dismiss confirmation modal",
-            )
-        )
-
-        # Step 5: Wait for modal to disappear
-        steps.append(
-            JourneyStep(
-                action="wait",
-                description="1.0",
-            )
-        )
-
-        # Step 6+: Navigate to and scrape each target URL
-        for cart_url in cart_urls:
-            full_url = self._ensure_full_url(cart_url)
-            steps.append(
-                JourneyStep(
-                    action="navigate",
-                    url=full_url,
-                    description=f"navigate to {full_url}",
-                )
-            )
-
-        return await self.scrape_journey(steps)
-
-    @staticmethod
-    def _ensure_full_url(url: str) -> str:
-        """Ensure the URL is absolute.
-
-        If the URL is relative, it will be made absolute during navigation
-        by the JourneyScraper.
-        """
-        if url.startswith(("http://", "https://")):
-            return url
-        return url  # Relative URLs are handled by _navigate_to
-
-
-def _run_subprocess_entry() -> int:
-    """Entry point for the subprocess-backed journey scrape."""
-    payload = json.loads(sys.stdin.read() or "{}")
-    if not isinstance(payload, dict):
-        print("{}")
-        return 1
-
-    starting_url = str(payload.get("starting_url", "")).strip()
-    timeout_ms = int(payload.get("timeout_ms", 30_000))
-    max_retries = int(payload.get("max_retries", 2))
-    base_backoff_ms = int(payload.get("base_backoff_ms", 1000))
-    headless = payload.get("headless", True)
-    steps_data = payload.get("steps", [])
-
-    # Reconstruct JourneyStep objects from JSON
-    steps: list[JourneyStep] = []
-    for s in steps_data:
-        if not isinstance(s, dict):
-            continue
-        steps.append(
-            JourneyStep(
-                action=str(s.get("action", "")),
-                url=str(s["url"]) if s.get("url") else None,
-                selector=str(s["selector"]) if s.get("selector") else None,
-                text=str(s["text"]) if s.get("text") else None,
-                description=str(s.get("description", "")),
-                timeout_ms=int(s.get("timeout_ms", 30_000)),
-            )
-        )
-
-    scraper = JourneyScraper(
-        starting_url=starting_url,
-        timeout_ms=timeout_ms,
-        max_retries=max_retries,
-        base_backoff_ms=base_backoff_ms,
-        headless=bool(headless),
-    )
-    output = scraper._scrape_journey_sync(steps)
-    print(json.dumps(output))
-    return 0
-
+# ─── Subprocess entry (delegates to journey_subprocess.py) ───
 
 if __name__ == "__main__":
+    from src.journey_subprocess import run_journey_subprocess_entry
+
     if "--journey-scrape" in sys.argv:
-        raise SystemExit(_run_subprocess_entry())
+        raise SystemExit(run_journey_subprocess_entry())

@@ -52,7 +52,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | Module | Role |
 |--------|------|
 | `src/orchestrator.py` (`TestOrchestrator`) | The "brain" of the system. Manages sequential execution of the entire pipeline via `run_pipeline()`: analysis → skeleton generation → scraping → placeholder resolution → prerequisite injection → post-processing. |
-| `src/placeholder_orchestrator.py` (`PlaceholderOrchestrator`) | Resolution coordinator. Owns scraper, resolver, ranker, and `PageContextTracker` instances. Handles stateful scraping upgrades, sequential placeholder replacement with journey-aware page tracking, and calls `SemanticCandidateRanker` as LLM tiebreaker. |
+| `src/placeholder_orchestrator.py` (`PlaceholderOrchestrator`) | Resolution coordinator. Owns scraper, resolver, `ElementMatcher`, and stateful scraping logic. Handles sequential placeholder replacement with journey-aware page tracking. Delegates element matching to `element_matcher.py`, POM code gen to `pom_helpers.py`, skip insertion to `skip_manager.py`, and role logic to `role_mapper.py`. |
 | `src/page_context_tracker.py` | Tracks which page the resolver should operate on as it processes journey steps. Uses URL inference from element hrefs and action-based heuristics (e.g., "checkout" implies navigation). Extracted from inline tracking in `PlaceholderOrchestrator`. |
 | `src/prerequisite_injector.py` | Detects dependency chains in resolved code and injects prerequisite steps. Solves the problem where independent test functions (e.g., "add to cart") need prior state (e.g., login). Operates on `TestJourney` data using keyword-based intent detection. |
 
@@ -78,7 +78,10 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 |--------|------|
 | `src/scraper.py` (`PageScraper`) | Stateless browser scraper. Extracts DOM metadata, captures visibility, screenshot bytes, and element bounding boxes for placeholder resolution and visual enrichment. `scrape_with_enrichment()` applies vision metadata enrichment to captured results. Locators are NEVER injected into LLM prompts. |
 | `src/stateful_scraper.py` (`StatefulPageScraper`) | Session-aware browser automation for pages requiring authentication state (cart, checkout). Falls back to PageScraper if session scrape produces no elements. Uses `form_login_utils.py` for login form detection. |
-| `src/journey_scraper.py` (`CartSeedingScraper`) | Journey-aware scraper — seeds the cart with items, then scrapes cart/checkout pages that require session state. |
+| `src/journey_scraper.py` (`JourneyScraper`) | Journey-aware scraper — follows user interaction paths (navigate → interact → scrape) in a subprocess-backed Playwright session. Core scraping engine; `CartSeedingScraper` moved to `cart_seeding_scraper.py`. |
+| `src/cart_seeding_scraper.py` (`CartSeedingScraper`) | Cart-seeding scraper — seeds the cart with items, then scrapes cart/checkout pages that require session state. Extracted from `journey_scraper.py`. |
+| `src/journey_enrichment.py` | DOM enrichment helpers for journey scraping: `capture_element_visibility_sync`, `capture_a11y_snapshot_sync`. Deduplicated — shared by `JourneyScraper` and `journey_executor`. |
+| `src/journey_subprocess.py` | Subprocess entry point for journey scraping — `run_journey_subprocess_entry`. Avoids Windows asyncio nested-loop issues. Extracted from `journey_scraper.py`. |
 | `src/journey_executor.py` | Subprocess-backed authenticated journey execution. Distinct from `JourneyScraper` — focuses on user interaction with auth guards (SSO/MFA/CAPTCHA detection via `journey_auth_detector.py`). Uses `journey_models.py` dataclasses. |
 | `src/journey_models.py` | Pure dataclasses for journey scraping: `JourneyStep`, `JourneyResult`, `CredentialProfile`, `substitute_templates()`. Lightweight — no Playwright imports. |
 | `src/journey_auth_detector.py` | Authentication detection helpers: `detect_auth_redirect()`, `detect_sso()`, `detect_mfa()`, `detect_captcha()`. Extracted from `journey_scraper.py`. |
@@ -119,6 +122,15 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/locator_scorer.py` (`LocatorScorer`) | Scores locators by reliability: `data-testid > id > name > aria-label > css-class > text > xpath`. Applies +10 bonus when element text matches action description. **NOT** part of design-time resolution — used by `locator_fallback.py` (runtime fallback) and `failure_reporter.py` (diagnostics). |
 | `src/locator_fallback.py` | Runtime locator fallback — tries alternative locators when primary fails during test execution. |
 | `src/locator_repair.py` (`run_codegen_session()`) | Automated locator repair — regenerates locators for failing tests using a codegen LLM session. Triggered from UI run results panel. |
+
+#### Placeholder Resolution Sub-modules
+
+| Module | Role |
+|--------|------|
+| `src/element_matcher.py` (`ElementMatcher`) | Multi-pass element matching engine (Pass 0–3) for placeholder resolution. Includes B-020 semantic ASSERT resolution via LLM. Extracted from `placeholder_orchestrator.py`. |
+| `src/role_mapper.py` | ARIA role mapping and display-role filtering. `DISPLAY_ROLES`, `_TAG_TO_ROLE`, `is_display_role()`, `normalise_element_text()`, `get_effective_role()`. Extracted from `placeholder_orchestrator.py`. |
+| `src/pom_helpers.py` | POM-mode code generation helpers: `build_page_object_artifacts()`, `build_pom_url_map()`, `build_pom_imports()`, `build_pom_instantiation()`, `get_pom_instance_name()`, `get_pom_method_call()`. Extracted from `placeholder_orchestrator.py`. |
+| `src/skip_manager.py` | Consolidated `pytest.skip()` insertion and placeholder line cleanup: `insert_consolidated_skips()`, `remove_raw_placeholder_lines()`, `remove_old_placeholder_skips()`. Extracted from `placeholder_orchestrator.py`. |
 
 #### URL Resolution
 
@@ -192,7 +204,7 @@ Pages are scraped statelessly first. Then cart/checkout pages are upgraded with 
 - `ElementEnricher` — visual metadata (icon fonts, bounding boxes, parent context)
 
 ### Phase 4: Placeholder Resolution
-`placeholder_orchestrator.py` → `placeholder_resolver.py` → `semantic_candidate_ranker.py` (LLM tiebreaker, called from orchestrator)
+`placeholder_orchestrator.py` → `element_matcher.py` (passes 0-3) → `role_mapper.py` (display-role filter) → `placeholder_resolver.py` → `semantic_candidate_ranker.py` (LLM tiebreaker)
 
 For each journey step, placeholders are resolved sequentially while `PageContextTracker` maintains the active page. The resolver scopes to the current journey URL first, then falls back to all scraped pages. Scoring uses:
 - `semantic_matcher.py` — word tokenization
@@ -282,6 +294,9 @@ graph TD
         Scrape[src/scraper.py]
         Stateful[src/stateful_scraper.py]
         Journey[src/journey_scraper.py]
+        JEnrich[src/journey_enrichment.py]
+        JSubprocess[src/journey_subprocess.py]
+        CartSeed[src/cart_seeding_scraper.py]
         JExec[src/journey_executor.py]
         JModels[src/journey_models.py]
         JAuthDetect[src/journey_auth_detector.py]
@@ -305,6 +320,10 @@ graph TD
         SemMatch[src/semantic_matcher.py]
         IntentMatch[src/intent_matcher.py]
         Scoring[src/placeholder_scorers.py]
+        ElemMatch[src/element_matcher.py]
+        RoleMap[src/role_mapper.py]
+        POMHelp[src/pom_helpers.py]
+        SkipMgr[src/skip_manager.py]
         POM[src/page_object_builder.py]
         PostProc[src/code_postprocessor.py]
         CodeNorm[src/code_normalizer.py]
@@ -410,9 +429,13 @@ graph TD
     POrc --> Scrape
     POrc --> Stateful
     POrc --> Journey
+    POrc --> CartSeed
     POrc --> Res
     POrc --> POM
     POrc --> Rank
+    POrc --> ElemMatch
+    POrc --> POMHelp
+    POrc --> SkipMgr
     POrc --> PageCtx
     POrc --> URLInfer
     Rank --> LLM
@@ -420,6 +443,10 @@ graph TD
     Journey --> JAuthDetect
     Journey --> FormDetect
     Journey --> StateTrack
+    Journey --> JEnrich
+    Journey --> JSubprocess
+    CartSeed --> Journey
+    CartSeed --> FormDetect
     Stateful --> FormLogin
     JExec --> JModels
     JExec --> JAuthDetect
@@ -563,9 +590,9 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 | Pipeline Core | [orchestrator](../markdown_docs/src/orchestrator.py.md), [pipeline_models](../markdown_docs/src/pipeline_models.py.md), [pipeline_writer](../markdown_docs/src/pipeline_writer.py.md), [pipeline_run_service](../markdown_docs/src/pipeline_run_service.py.md), [pipeline_report_service](../markdown_docs/src/pipeline_report_service.py.md), [pipeline_artifact_manager](../markdown_docs/src/pipeline_artifact_manager.py.md), [prerequisite_injector](../markdown_docs/src/prerequisite_injector.py.md), [page_context_tracker](../markdown_docs/src/page_context_tracker.py.md) |
 | UI Layer | [ui_pipeline](../markdown_docs/src/ui_pipeline.py.md), [ui/shared](../markdown_docs/src/ui/shared.py.md), [ui/ui_requirements](../markdown_docs/src/ui/ui_requirements.py.md), [ui/ui_journey](../markdown_docs/src/ui/ui_journey.py.md), [ui/ui_results](../markdown_docs/src/ui/ui_results.py.md), [ui/ui_evidence](../markdown_docs/src/ui/ui_evidence.py.md), [ui/ui_run_results](../markdown_docs/src/ui/ui_run_results.py.md), [ui/ui_downloads](../markdown_docs/src/ui/ui_downloads.py.md), [ui/ui_saved_packages](../markdown_docs/src/ui/ui_saved_packages.py.md), [ui/ui_sidebar](../markdown_docs/src/ui/ui_sidebar.py.md) |
 | CLI Layer | [cli/main](../markdown_docs/src/cli/main.py.md), [cli/pipeline_runner](../markdown_docs/src/cli/pipeline_runner.py.md), [cli/retro_ui](../markdown_docs/src/cli/retro_ui.py.md), [cli/terminal_adapter](../markdown_docs/src/cli/terminal_adapter.py.md), [cli/testing_terminal](../markdown_docs/src/cli/testing_terminal.py.md), [cli/run_results_display](../markdown_docs/src/cli/run_results_display.py.md) |
-| Scraper Chain | [scraper](../markdown_docs/src/scraper.py.md), [journey_scraper](../markdown_docs/src/journey_scraper.py.md), [journey_executor](../markdown_docs/src/journey_executor.py.md), [journey_models](../markdown_docs/src/journey_models.py.md), [journey_auth_detector](../markdown_docs/src/journey_auth_detector.py.md), [stateful_scraper](../markdown_docs/src/stateful_scraper.py.md), [state_tracker](../markdown_docs/src/state_tracker.py.md), [form_detector](../markdown_docs/src/form_detector.py.md), [form_login_utils](../markdown_docs/src/form_login_utils.py.md) |
+| Scraper Chain | [scraper](../markdown_docs/src/scraper.py.md), [journey_scraper](../markdown_docs/src/journey_scraper.py.md), [cart_seeding_scraper](../markdown_docs/src/cart_seeding_scraper.py.md), [journey_enrichment](../markdown_docs/src/journey_enrichment.py.md), [journey_subprocess](../markdown_docs/src/journey_subprocess.py.md), [journey_executor](../markdown_docs/src/journey_executor.py.md), [journey_models](../markdown_docs/src/journey_models.py.md), [journey_auth_detector](../markdown_docs/src/journey_auth_detector.py.md), [stateful_scraper](../markdown_docs/src/stateful_scraper.py.md), [state_tracker](../markdown_docs/src/state_tracker.py.md), [form_detector](../markdown_docs/src/form_detector.py.md), [form_login_utils](../markdown_docs/src/form_login_utils.py.md) |
 | Enrichment | [accessibility_enricher](../markdown_docs/src/accessibility_enricher.py.md), [vision_enricher](../markdown_docs/src/vision_enricher.py.md), [element_enricher](../markdown_docs/src/element_enricher.py.md) |
-| Placeholder System | [placeholder_orchestrator](../markdown_docs/src/placeholder_orchestrator.py.md), [placeholder_resolver](../markdown_docs/src/placeholder_resolver.py.md), [placeholder_scorers](../markdown_docs/src/placeholder_scorers.py.md), [intent_matcher](../markdown_docs/src/intent_matcher.py.md), [semantic_candidate_ranker](../markdown_docs/src/semantic_candidate_ranker.py.md), [semantic_matcher](../markdown_docs/src/semantic_matcher.py.md) |
+| Placeholder System | [placeholder_orchestrator](../markdown_docs/src/placeholder_orchestrator.py.md), [element_matcher](../markdown_docs/src/element_matcher.py.md), [role_mapper](../markdown_docs/src/role_mapper.py.md), [pom_helpers](../markdown_docs/src/pom_helpers.py.md), [skip_manager](../markdown_docs/src/skip_manager.py.md), [placeholder_resolver](../markdown_docs/src/placeholder_resolver.py.md), [placeholder_scorers](../markdown_docs/src/placeholder_scorers.py.md), [intent_matcher](../markdown_docs/src/intent_matcher.py.md), [semantic_candidate_ranker](../markdown_docs/src/semantic_candidate_ranker.py.md), [semantic_matcher](../markdown_docs/src/semantic_matcher.py.md) |
 | Code Pipeline | [test_generator](../markdown_docs/src/test_generator.py.md), [skeleton_parser](../markdown_docs/src/skeleton_parser.py.md), [skeleton_validator](../markdown_docs/src/skeleton_validator.py.md), [code_normalizer](../markdown_docs/src/code_normalizer.py.md), [code_postprocessor](../markdown_docs/src/code_postprocessor.py.md), [code_validator](../markdown_docs/src/code_validator.py.md), [export_service](../markdown_docs/src/export_service.py.md) |
 | Locator System | [locator_builder](../markdown_docs/src/locator_builder.py.md), [locator_fallback](../markdown_docs/src/locator_fallback.py.md), [locator_repair](../markdown_docs/src/locator_repair.py.md), [locator_scorer](../markdown_docs/src/locator_scorer.py.md) |
 | Evidence / Reports | [evidence_tracker](../markdown_docs/src/evidence_tracker.py.md), [evidence_loader](../markdown_docs/src/evidence_loader.py.md), [evidence_serializer](../markdown_docs/src/evidence_serializer.py.md), [evidence_report](../markdown_docs/src/evidence_report.py.md), [report_builder](../markdown_docs/src/report_builder.py.md), [report_formatters](../markdown_docs/src/report_formatters.py.md), [failure_reporter](../markdown_docs/src/failure_reporter.py.md), [failure_classifier](../markdown_docs/src/failure_classifier.py.md), [screenshot_capture](../markdown_docs/src/screenshot_capture.py.md) |
@@ -579,4 +606,4 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 
 ---
 
- *Last updated: 2026-07-08*
+ *Last updated: 2026-07-11*

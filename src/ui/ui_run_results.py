@@ -377,6 +377,7 @@ def _render_skip_repair_capture() -> None:
 
     state_file = None
     codegen_url = target_url
+    setup_warnings: list[str] = []
     if steps_before:
         base_url = st.session_state.get("starting_url", "") or st.session_state.get("last_starting_url", "")
         with st.spinner("⏳ Running prerequisite steps to set up page state..."):
@@ -384,9 +385,30 @@ def _render_skip_repair_capture() -> None:
         state_file = setup_result.state_file
         if setup_result.page_url:
             codegen_url = setup_result.page_url
+        if not state_file:
+            setup_warnings.append(
+                "⚠️ Could not save browser state — the cart may be empty. "
+                "You may need to manually add an item to the cart before capturing the locator."
+            )
+        elif state_file and Path(state_file).exists():
+            import os
 
-    with st.spinner(f"⏳ Browser is opening at `{codegen_url}` — click the element you want to use..."):
-        replacement = run_codegen_session(codegen_url, timeout_seconds=120, state_file=state_file)
+            state_size = os.path.getsize(state_file)
+            if state_size < 100:
+                setup_warnings.append(
+                    f"⚠️ Saved state file is very small ({state_size} bytes) — cart state may not have been captured."
+                )
+
+    if setup_warnings:
+        for warning in setup_warnings:
+            st.warning(warning)
+
+    spinner_text = (
+        f"⏳ Browser is opening at `{codegen_url}` — "
+        "close the browser window after clicking the element you want to use..."
+    )
+    with st.spinner(spinner_text):
+        replacement = run_codegen_session(codegen_url, timeout_seconds=180, state_file=state_file)
 
     if replacement:
         try:
@@ -463,6 +485,37 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
 
     script_lines = [
         "from playwright.sync_api import sync_playwright",
+        "import re as _re",
+        "from urllib.parse import urljoin",
+        "",
+        "def _dismiss_banners(page, timeout=2000):",
+        "    '''Best-effort dismissal of cookie/consent banners.'''",
+        "    try: page.keyboard.press('Escape'); page.wait_for_timeout(300)",
+        "    except Exception: pass",
+        "    # Common consent button patterns",
+        "    _btn_texts = [",
+        "        'Consent', 'Accept', 'Accept All', 'OK', 'Got it',",
+        "        'Got It', 'I Agree', 'Agree', 'Allow', 'Allow All',",
+        "    ]",
+        "    for btn_text in _btn_texts:",
+        "        try:",
+        "            btn = page.locator(f'button:has-text(\"{btn_text}\")').first",
+        "            if btn.count() > 0 and btn.is_visible(timeout=500):",
+        "                btn.click(timeout=2000)",
+        "                page.wait_for_timeout(500)",
+        "                break",
+        "        except Exception: continue",
+        "    # Remove Google Consent TVM via JS",
+        "    try:",
+        "        page.evaluate('''",
+        "            () => {",
+        "                const el = document.querySelector('.fc-consent-root');",
+        "                if (el) el.remove();",
+        "                const overlay = document.querySelector('.fc-dialog-overlay');",
+        "                if (overlay) overlay.remove();",
+        "            }''');",
+        "        page.wait_for_timeout(300)",
+        "    except Exception: pass",
         "",
         "try:",
         "    with sync_playwright() as p:",
@@ -470,6 +523,8 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
         "        context = browser.new_context()",
         "        page = context.new_page()",
         f"        page.goto({normalized_base!r})",
+        "        page.wait_for_timeout(1500)",
+        "        _dismiss_banners(page)",
     ]
 
     # Cart-seeding: add an item to the cart before navigating to a cart/checkout page.
@@ -478,30 +533,93 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
         _products_url = urljoin(normalized_base, "/products")
         script_lines.extend(
             [
+                f"        print('[setup] Cart seeding: navigating to {_products_url}')",
                 f"        page.goto({_products_url!r})",
-                "        page.wait_for_timeout(1500)",
-                # Click the first product link on the products page
-                "        product_link = page.locator(\"a[href*='/product_details/']\").first",
-                "        if product_link.count() > 0:",
-                "            product_link.click()",
-                "            page.wait_for_timeout(1500)",
-                # Click "Add to cart" on the product detail page
-                "            add_btn = page.locator('button:has-text(\"Add to cart\")').first",
-                "            if add_btn.count() > 0:",
-                "                add_btn.click()",
-                "                page.wait_for_timeout(1500)",
-                # Dismiss the confirmation modal
-                "            continue_btn = page.locator('button:has-text(\"Continue Shopping\")').first",
-                "            if continue_btn.count() > 0:",
+                "        page.wait_for_load_state('networkidle')",
+                "        page.wait_for_timeout(1000)",
+                "        _dismiss_banners(page)",
+                "        page.wait_for_timeout(500)",
+                # Try two strategies: (A) hover to reveal overlay Add-to-cart, (B) click into product detail
+                "        added_to_cart = False",
+                "        # Strategy A: hover over a product card to reveal the overlay Add to cart button",
+                "        _card_sel = '.product-image-wrapper, .single-products, .productinfo, .product-overlay'",
+                "        product_cards = page.locator(_card_sel)",
+                "        print(f'[setup] Found {product_cards.count()} product cards')",
+                "        for i in range(min(product_cards.count(), 4)):",
+                "            try:",
+                "                card = product_cards.nth(i)",
+                "                if not card.is_visible(timeout=500):",
+                "                    continue",
+                "                card.hover()",
+                "                page.wait_for_timeout(800)",
+                "                # Try multiple selector patterns for Add to cart",
+                '                _add_sel = \'a:has-text("Add to cart"), button:has-text("Add to cart"), a.add-to-cart, .overlay-content a\'',
+                "                add_btn = card.locator(_add_sel).first",
+                "                if add_btn.count() > 0 and add_btn.is_visible(timeout=500):",
+                "                    print(f'[setup] Clicking Add to cart via hover on card {i}')",
+                "                    add_btn.click(force=True)",
+                "                    page.wait_for_timeout(1500)",
+                "                    added_to_cart = True",
+                "                    break",
+                "            except Exception as e:",
+                "                print(f'[setup] Strategy A card {i} failed: {{e}}')",
+                "                continue",
+                "        # Strategy B: fallback — click first product link, then Add to cart on detail page",
+                "        if not added_to_cart:",
+                "            print('[setup] Strategy A failed, trying Strategy B')",
+                "            product_link = page.locator(\"a[href*='/product_details/']\").first",
+                "            if product_link.count() > 0:",
+                "                product_link.click()",
+                "                page.wait_for_load_state('networkidle')",
+                "                page.wait_for_timeout(1000)",
+                "                _dismiss_banners(page)",
+                "                page.wait_for_timeout(500)",
+                '                add_btn = page.locator(\'button:has-text("Add to cart"), a:has-text("Add to cart")\').first',
+                "                if add_btn.count() > 0 and add_btn.is_visible(timeout=1000):",
+                "                    print('[setup] Clicking Add to cart on product detail page')",
+                "                    add_btn.click()",
+                "                    page.wait_for_timeout(1500)",
+                "                    added_to_cart = True",
+                "        # Dismiss the confirmation modal / added-to-cart popup",
+                "        if added_to_cart:",
+                "            print('[setup] Product added to cart, dismissing modal')",
+                "            # Wait for confirmation modal",
+                "            page.wait_for_timeout(1000)",
+                "            continue_btn = page.locator('button:has-text(\"Continue Shopping\"), .close-modal, .modal-footer button').first",
+                "            if continue_btn.count() > 0 and continue_btn.is_visible(timeout=2000):",
                 "                continue_btn.click()",
                 "                page.wait_for_timeout(1000)",
-                "        # Navigate back to base URL so the setup steps start from a known state",
+                "            else:",
+                "                # Modal might have auto-dismissed or used a different pattern",
+                "                page.wait_for_timeout(1500)",
+                "        else:",
+                "            print('[setup] WARNING: Could not add any product to cart!')",
+                "        # Navigate to the TARGET page (view_cart/checkout) to verify cart has items",
+                "        # and to establish the correct page context for codegen.",
+                f'        print("[setup] Navigating to target: {normalized_target!r}")',
+                f"        page.goto({normalized_target!r})",
+                "        page.wait_for_load_state('networkidle')",
+                "        page.wait_for_timeout(1500)",
+                "        _dismiss_banners(page)",
+                "        page.wait_for_timeout(500)",
+                "        # Verify cart is not empty — log a warning if it appears empty",
+                "        _empty_cart_el = page.locator('#empty_cart, .cart_empty, [id*=\"empty\"]').first",
+                "        if _empty_cart_el.count() > 0 and _empty_cart_el.is_visible(timeout=1000):",
+                "            print('[setup] WARNING: Cart appears to be empty — Proceed to checkout may not be visible')",
+                "        else:",
+                "            print('[setup] Cart has items — ready for checkout')",
+                "        # Now navigate BACK to base URL so replay steps have a clean starting point",
+                f'        print("[setup] Returning to base URL for step replay: {normalized_base!r}")',
                 f"        page.goto({normalized_base!r})",
                 "        page.wait_for_timeout(1000)",
+                "        _dismiss_banners(page)",
+                "        page.wait_for_timeout(500)",
             ]
         )
 
     for step in steps:
+        # Short wait between replay steps for page stability
+        script_lines.append("        page.wait_for_timeout(300)")
         translated = translate_setup_step_to_python(step)
         if translated:
             script_lines.extend(translated)
@@ -510,20 +628,47 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
         label_match = re.search(r"label=['\"]([^'\"]+)['\"]", step)
         if label_match:
             label = label_match.group(1).replace("'", "\\'")
-            script_lines.append(f"        try: page.get_by_text('{label}').click(timeout=3000)")
-            script_lines.append("        except Exception as e: print('Label click failed:', e)")
+            script_lines.append(f"        try: page.get_by_text('{label}').first.click(timeout=3000)")
+            script_lines.append(
+                f"        except Exception as _e: print(f'[setup] WARNING: label click \"{label}\" failed: {{_e}}')"
+            )
+            continue
+
+        # Unrecognised step patterns — log and skip rather than silently ignoring
+        if step and not step.startswith(("def ", "import ", "from ", "@", "#", "class ")):
+            script_lines.append(f"        print(f'[setup] WARNING: skipping unrecognised step: {step[:120]}')")
 
     if not steps and normalized_target and normalized_target != normalized_base:
         script_lines.append(f"        page.goto({normalized_target!r})")
+        script_lines.append("        page.wait_for_timeout(1000)")
+
+    # Ensure we end on the target URL by navigating to it after all replay steps.
+    # This guarantees the codegen session opens on the correct page with state intact.
+    if steps:
+        script_lines.extend(
+            [
+                f'        print("[setup] All steps replayed. Navigating to target: {normalized_target!r}")',
+                f"        page.goto({normalized_target!r})",
+                "        page.wait_for_load_state('networkidle')",
+                "        page.wait_for_timeout(1500)",
+                "        _dismiss_banners(page)",
+                "        page.wait_for_timeout(500)",
+            ]
+        )
 
     script_lines.extend(
         [
             "        page.wait_for_timeout(1000)",
+            "        print(f'[setup] Saving page URL: {page.url}')",
             f"        open(r'{page_url_file}', 'w', encoding='utf-8').write(page.url)",
+            f"        print('[setup] Saving storage state to: {state_file}')",
             f"        context.storage_state(path=r'{state_file}')",
+            "        print('[setup] Storage state saved, closing browser')",
             "        browser.close()",
             "except Exception as e:",
-            "    print(f'Error: {e}')",
+            "    import traceback",
+            "    print(f'[setup] ERROR: {e}')",
+            "    traceback.print_exc()",
         ]
     )
 
@@ -534,12 +679,17 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
         temp_path = f.name
 
     try:
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, temp_path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
             timeout=60,
         )
+        if result.returncode != 0 or result.stderr.strip():
+            import logging
+
+            _log = logging.getLogger(__name__)
+            _log.warning("Setup script errors: rc=%s stderr=%s", result.returncode, result.stderr.strip()[:500])
         page_url = None
         if os.path.exists(page_url_file):
             page_url = Path(page_url_file).read_text(encoding="utf-8").strip()
@@ -767,9 +917,7 @@ def _render_inline_evidence(run_result: RunResult) -> None:
             title=selected.stem,
             bug_report_mode=False,
         )
-        import streamlit.components.v1 as components
-
-        components.html(html, height=1100, scrolling=True)
+        st.html(html)
 
         # Download button for plain-text bug report
         text_report = generate_annotated_journey(

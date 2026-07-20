@@ -5,11 +5,8 @@ instead of display elements. Fixed by adding role filtering to Pass 1 ASSERT,
 Pass 2 structural, and Pass 3 scoring.
 """
 
-from src.placeholder_orchestrator import (
-    DISPLAY_ROLES,
-    ROLE_FALLBACK_GAP,
-    PlaceholderOrchestrator,
-)
+from src.placeholder_orchestrator import PlaceholderOrchestrator
+from src.role_mapper import DISPLAY_ROLES, ROLE_FALLBACK_GAP, get_effective_role, is_display_role
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -63,24 +60,24 @@ class TestGetEffectiveRole:
 
     def test_prefers_computed_role(self) -> None:
         element = {"computed_role": "heading", "role": "h1"}
-        assert self._make_orchestrator()._get_effective_role(element) == "heading"
+        assert get_effective_role(element) == "heading"
 
     def test_falls_back_to_raw_role(self) -> None:
         element = {"role": "button"}
-        assert self._make_orchestrator()._get_effective_role(element) == "button"
+        assert get_effective_role(element) == "button"
 
     def test_empty_when_missing(self) -> None:
         element: dict[str, str] = {}
-        assert self._make_orchestrator()._get_effective_role(element) == ""
+        assert get_effective_role(element) == ""
 
     def test_handles_whitespace(self) -> None:
         element = {"computed_role": "  STATUS  "}
-        assert self._make_orchestrator()._get_effective_role(element) == "status"
+        assert get_effective_role(element) == "status"
 
     def test_computed_role_overrides_tag_fallback(self) -> None:
         """computed_role='text' should win over role='div' (tag-name fallback)."""
         element = {"computed_role": "text", "role": "div"}
-        assert self._make_orchestrator()._get_effective_role(element) == "text"
+        assert get_effective_role(element) == "text"
 
 
 # ---------------------------------------------------------------------------
@@ -97,98 +94,98 @@ class TestIsDisplayRole:
     # -- computed_role path --
 
     def test_computed_heading_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "heading"})
+        assert is_display_role({"computed_role": "heading"})
 
     def test_computed_paragraph_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "paragraph"})
+        assert is_display_role({"computed_role": "paragraph"})
 
     def test_computed_text_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "text"})
+        assert is_display_role({"computed_role": "text"})
 
     def test_computed_status_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "status"})
+        assert is_display_role({"computed_role": "status"})
 
     def test_computed_alert_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "alert"})
+        assert is_display_role({"computed_role": "alert"})
 
     def test_computed_listitem_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "listitem"})
+        assert is_display_role({"computed_role": "listitem"})
 
     def test_computed_cell_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "cell"})
+        assert is_display_role({"computed_role": "cell"})
 
     def test_computed_image_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "image"})
+        assert is_display_role({"computed_role": "image"})
 
     def test_computed_caption_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"computed_role": "caption"})
+        assert is_display_role({"computed_role": "caption"})
 
     def test_computed_button_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "button"})
+        assert not is_display_role({"computed_role": "button"})
 
     def test_computed_link_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "link"})
+        assert not is_display_role({"computed_role": "link"})
 
     def test_computed_textbox_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "textbox"})
+        assert not is_display_role({"computed_role": "textbox"})
 
     def test_computed_checkbox_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "checkbox"})
+        assert not is_display_role({"computed_role": "checkbox"})
 
     def test_computed_combo_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "combobox"})
+        assert not is_display_role({"computed_role": "combobox"})
 
     def test_computed_menuitem_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"computed_role": "menuitem"})
+        assert not is_display_role({"computed_role": "menuitem"})
 
     # -- tag fallback path (no computed_role) --
 
     def test_tag_h1_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "h1"})
+        assert is_display_role({"tag": "h1"})
 
     def test_tag_h2_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "h2"})
+        assert is_display_role({"tag": "h2"})
 
     def test_tag_p_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "p"})
+        assert is_display_role({"tag": "p"})
 
     def test_tag_span_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "span"})
+        assert is_display_role({"tag": "span"})
 
     def test_tag_li_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "li"})
+        assert is_display_role({"tag": "li"})
 
     def test_tag_td_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "td"})
+        assert is_display_role({"tag": "td"})
 
     def test_tag_th_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "th"})
+        assert is_display_role({"tag": "th"})
 
     def test_tag_label_is_display(self) -> None:
-        assert self._make_orchestrator()._is_display_role({"tag": "label"})
+        assert is_display_role({"tag": "label"})
 
     def test_tag_button_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"tag": "button"})
+        assert not is_display_role({"tag": "button"})
 
     def test_tag_a_is_not_display(self) -> None:
         """<a> without computed_role='link' is not a display role via tag."""
-        assert not self._make_orchestrator()._is_display_role({"tag": "a"})
+        assert not is_display_role({"tag": "a"})
 
     def test_tag_input_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({"tag": "input"})
+        assert not is_display_role({"tag": "input"})
 
     def test_tag_div_without_role_is_display_as_generic(self) -> None:
         """Plain <div> without computed_role maps to 'generic' which is in DISPLAY_ROLES."""
-        assert self._make_orchestrator()._is_display_role({"tag": "div"})
+        assert is_display_role({"tag": "div"})
 
     def test_empty_element_is_not_display(self) -> None:
-        assert not self._make_orchestrator()._is_display_role({})
+        assert not is_display_role({})
 
     # -- computed_role overrides tag fallback --
 
     def test_computed_role_overrides_div_tag(self) -> None:
         """A <div> with computed_role='text' is a display element."""
-        assert self._make_orchestrator()._is_display_role(
+        assert is_display_role(
             {
                 "computed_role": "text",
                 "tag": "div",
@@ -198,7 +195,7 @@ class TestIsDisplayRole:
     def test_computed_role_overrides_span_tag(self) -> None:
         """A <span> with computed_role='button' is NOT a display element
         even though span->generic is in DISPLAY_ROLES."""
-        assert not self._make_orchestrator()._is_display_role(
+        assert not is_display_role(
             {
                 "computed_role": "button",
                 "tag": "span",
@@ -207,12 +204,12 @@ class TestIsDisplayRole:
 
     def test_span_via_generic_is_display(self) -> None:
         """Plain <span> (no computed_role) maps to generic, which is display."""
-        assert self._make_orchestrator()._is_display_role({"tag": "span"})
+        assert is_display_role({"tag": "span"})
 
     def test_div_via_generic_is_display(self) -> None:
         """Plain <div> (no computed_role) maps to generic, which is display."""
-        assert self._make_orchestrator()._is_display_role({"tag": "div"})
-        assert self._make_orchestrator()._is_display_role({"role": "div"})
+        assert is_display_role({"tag": "div"})
+        assert is_display_role({"role": "div"})
 
 
 # ---------------------------------------------------------------------------

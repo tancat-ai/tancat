@@ -322,7 +322,11 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
 
 
 def _prompt_openai_api_key() -> str:
-    """Prompt for a cloud OpenAI API key, reusing platform env when available."""
+    """Prompt for a cloud OpenAI API key, reusing platform env or encrypted
+    local storage when available."""
+    from src.secure_config import load_key, save_key
+
+    # 1. Check platform-provided key (env var / cloud injection)
     existing = os.environ.get("OPENAI_API_KEY", "").strip()
     if existing:
         print(green("  ✓ OpenAI API key available from environment (Azure/AWS/App Service)."))
@@ -331,9 +335,40 @@ def _prompt_openai_api_key() -> str:
             return override.strip()
         return existing
 
+    # 2. Check encrypted local storage
+    stored = load_key("openai")
+    if stored:
+        masked = stored[:4] + "****" + stored[-4:] if len(stored) > 8 else "****"
+        print(green(f"  ✓ Found saved API key ({masked})."))
+        use_saved = print_menu(
+            ["Use saved key", "Enter a new key", "Remove saved key"],
+            "Saved key found",
+        )
+        if use_saved == 0:
+            return stored
+        elif use_saved == 2:
+            from src.secure_config import delete_key
+
+            delete_key("openai")
+            print(green("  ✓ Saved key removed."))
+            # Fall through to prompt for new key
+        # use_saved == 1: fall through to prompt
+
+    # 3. Prompt for new key
     while True:
         key = getpass.getpass("  OpenAI API Key: ")
         if key.strip():
+            save_for_future = print_menu(
+                ["Yes, save encrypted", "No, keep in memory only"],
+                "Save this key for future sessions?",
+            )
+            if save_for_future == 0:
+                try:
+                    save_key("openai", key.strip())
+                    print(green("  ✓ Key saved (encrypted) to ~/.ai-test-gen/config.enc"))
+                except ImportError:
+                    print(yellow("  ⚠ cryptography package not installed — key not saved."))
+                    print(yellow("    Install with: uv add cryptography"))
             return key.strip()
         print(yellow("  API key is required for OpenAI (cloud)."))
 
