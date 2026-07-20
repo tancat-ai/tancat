@@ -94,3 +94,9 @@ Runs tests from a loaded saved package. Updates manifest's `last_run_at` after e
 ### `load_existing_packages(session) -> None`
 
 Discovers and loads an existing package. Populates session with manifest, run results, and package path.
+
+### `self_heal_cli(session) -> None` (added 2026-07-20)
+
+Automated self-healing via CLI. Runs `SelfHealingRunner.heal()` on the saved test file, displays fix counts and per-patch diffs. If failures remain after healing, offers to re-run tests or try interactive locator repair (`repair_locator_cli`).
+
+Phase 2 of the ML Engineering roadmap — see `src/self_healing.py`.

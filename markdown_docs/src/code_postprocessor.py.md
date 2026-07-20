@@ -239,3 +239,8 @@ Key behavior:
 - No classes or stored configuration.
 - No direct file, network, subprocess, or test-run side effects.
 - All transformations are deterministic for a given input string and argument set.
+
+## B-021 + B-022 Changes (2026-07-20)
+
+- `_normalize_test_function_names(code)` — renames purely descriptive test names to include condition_ref number (e.g., `test_view_cart` → `test_tc01_05_view_cart`). Tests already numbered are left unchanged.
+- `replace_token_in_line()` — passes through `expect(...)` expressions as-is (URL assertions from B-021) instead of wrapping in `evidence_tracker.*()` calls.

@@ -627,3 +627,11 @@ Public diagnostic accessors expose skipped steps and locator warnings.
 7. Element lists are optionally enriched with visibility and accessibility data.
 8. JSON output is returned to the parent process.
 9. Parent process stores the captured URL-to-elements mapping and returns it to the caller.
+
+## B-023 Changes (2026-07-20)
+
+- Added `_dismiss_modals(page)` static method — dismisses confirmation modals/popups before click steps
+- Tries 8 common modal-dismiss selectors ("Continue Shopping", close buttons, modal footers)
+- Non-destructive: if no modal is visible, selectors won't match → no-op
+- Called alongside `_dismiss_consent_overlays()` before every click step and after navigation
+- Eliminates "intercepts pointer events" errors when cart modals block navigation link clicks

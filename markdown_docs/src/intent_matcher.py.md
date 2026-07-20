@@ -429,3 +429,10 @@ The dispatcher preserves older call shapes through `IntentMatcher.matches(...)`,
 ### Ordered Specificity
 
 The default strategy list starts with exact and fill-specific matches, then applies domain-specific login, subscribe, cart, checkout, assertion, popup, success, continue, and product-name fallbacks. Because the first definitive result wins, ordering is part of the matching contract.
+
+## B-021 Changes (2026-07-20)
+
+- `IntentStrategy.match()` return type extended: `bool | str | None` (was `bool | None`)
+- `PageStateAssertStrategy.URL_SIGNAL = "url"` — returned instead of `False` for page-state descriptions
+- `IntentMatcher.match()` and `matches()` return types extended to `bool | str`
+- When `"url"` is returned, the orchestrator routes to `resolve_url()` for `expect(page).to_have_url(...)` assertions

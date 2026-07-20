@@ -20,6 +20,12 @@ Full run results display:
 8. **Pytest output**: Expandable raw output (auto-expanded on errors)
 9. **Downloads**: Report download buttons via `RenderDownloads.render()`
 
+**Added 2026-07-20:**
+- Self-healing integration: "🩹 Self-Heal Failed Tests" button + healing results
+- Failed test expanders with error preview, completed steps, full traceback
+- Test results table includes Ref column (condition_ref from @pytest.mark.evidence)
+- Pytest Output expander opens on any failure (was: only collection errors)
+
 ## Functions
 
 ### `_render_inline_evidence(run_result) -> None`
@@ -70,3 +76,32 @@ Shows success/error message with:
 - Updated test file viewer (expanded)
 - "Run Generated Tests" button (enabled only if patched)
 - "Done" button to reset repair state
+
+### `_render_self_healing_results(report: HealingReport) -> None` (added 2026-07-20)
+
+Renders self-healing report after automated repair:
+- Metrics: Failures, Fixed, Remaining, Iterations (4 columns)
+- Per-patch expanders with diagnosis and diff display
+- "🎉 All failures fixed" success or warning for remaining failures
+- "🔄 Re-run Tests" and "🧹 Clear Healing Results" buttons
+
+### `_render_failed_tests_repair(results, run_result=None) -> None` (updated 2026-07-20)
+
+Shows expanders for every failed test with:
+- Error preview extracted from pytest output or raw output
+- **Steps completed before failure** — parsed from test source
+- Full error output in collapsible sub-expander
+- "🔧 Fix Locator" button for locator-classified failures
+- Self-healing button at top of section when failures exist
+
+### `_parse_condition_refs_from_source(source: str) -> dict[str, str]` (added 2026-07-20)
+
+Parses `@pytest.mark.evidence(condition_ref="TC01.05", ...)` decorators to map test function names to their condition references. Used to populate the Ref column in the test results table.
+
+### `_extract_error_from_raw_output(raw_output, test_name) -> str` (added 2026-07-20)
+
+Extracts error details from raw pytest output when `TestResult.error_message` is empty (common for timeouts). Searches the FAILURES block for the test's error.
+
+### `_extract_last_steps_before_failure(source, test_name) -> list[str]` (added 2026-07-20)
+
+Parses test source to find the last completed action steps (Navigate, Click, Fill, Assert) before the failure point. Returns up to 6 steps for context.

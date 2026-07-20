@@ -109,4 +109,7 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - Supports both legacy flat mode and modern POM mode
 - Handles complex stateful scraping scenarios (cart, checkout, authentication)
 - B-014/B-016/B-020 improvements for ASSERT resolution quality
+- **B-021 (2026-07-20):** `_is_page_state_assertion()` + URL assertion routing → `expect(page).to_have_url(...)`
+- **B-022 (2026-07-20):** Cart-seeding upgrade now always prefers seeded data for `/view_cart` and `/checkout`; product URL detection from scraped data
+- **B-023 (2026-07-20):** Modal dismissal integrated via `JourneyScraper._dismiss_modals()`
 - Consolidated skip logic reduces noise in generated tests
