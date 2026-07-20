@@ -1076,10 +1076,24 @@ def _render_self_healing_results(report: HealingReport) -> None:
 
     if report.all_fixed:
         st.success("🎉 All failures fixed! Re-run tests to verify.")
+        if st.button("🔄 Re-run Tests Now", key="heal_rerun"):
+            _handle_run_tests()
+            st.rerun()
     elif report.remaining > 0:
         st.warning(
-            f"{report.remaining} test(s) still failing. Review the remaining failures manually or increase max iterations."
+            f"{report.remaining} test(s) still failing. "
+            "Re-run tests to see current state, then use '🔧 Fix Locator' "
+            "for any remaining locator failures."
         )
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Re-run Tests", key="heal_rerun_remaining", type="primary"):
+                _handle_run_tests()
+                st.rerun()
+        with col2:
+            if st.button("🧹 Clear Healing Results", key="heal_clear"):
+                st.session_state.self_healing_report = None
+                st.rerun()
 
 
 def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult | None = None) -> None:

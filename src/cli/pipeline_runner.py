@@ -786,8 +786,22 @@ def self_heal_cli(session: Any) -> None:
 
     if report.all_fixed:
         print(green("  All failures fixed! Run 'Run Generated Tests' to verify."))
+        print()
+        choice = input("  Run tests now? [Y/n] ").strip().lower()
+        if choice != "n":
+            run_generated_tests(session, rerun_failed=False)
     elif report.remaining > 0:
-        print(yellow(f"  {report.remaining} test(s) still failing. Run 'Run Generated Tests' to see current state."))
+        print(yellow(f"  {report.remaining} test(s) still failing."))
+        print()
+        print("  Options:")
+        print("    [1] Re-run tests to see current state")
+        print("    [2] Try interactive locator repair for remaining failures")
+        print("    [Enter] Return to menu")
+        choice = input("  Choice: ").strip()
+        if choice == "1":
+            run_generated_tests(session, rerun_failed=False)
+        elif choice == "2":
+            repair_locator_cli(session)
 
 
 # ── Skeleton viewer ───────────────────────────────────────────────────────
