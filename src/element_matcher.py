@@ -377,6 +377,7 @@ class ElementMatcher:
         pages_data: dict[str, list[dict[str, str]]],
         excluded_selectors: set[str] | None = None,
         resolved_steps: list[str] | None = None,
+        golden_patterns: list | None = None,
     ) -> dict[str, str] | None:
         """Return the best element match across the supplied page mapping.
 
@@ -387,6 +388,7 @@ class ElementMatcher:
         Args:
             excluded_selectors: Selectors to exclude from consideration (B-014).
             resolved_steps: B-020 list of compressed prior step descriptions.
+            golden_patterns: Optional RAG RetrievedPattern list for scoring bonus.
         """
         # Pass 0 — exact text match for ASSERT:"exact text"
         pass0_result = self.pass0_exact_text_match(action, description, pages_data)
@@ -427,7 +429,12 @@ class ElementMatcher:
 
         all_ranked: list[tuple[float, dict[str, str]]] = []
         for url, elements in pages_data.items():
-            ranked_candidates = self._resolver.rank_candidates(action, description, elements)
+            ranked_candidates = self._resolver.rank_candidates(
+                action,
+                description,
+                elements,
+                golden_patterns=golden_patterns,
+            )
             all_ranked.extend(ranked_candidates)
             logger.debug(
                 "  PAGE %s: %d candidates, top_score=%s",

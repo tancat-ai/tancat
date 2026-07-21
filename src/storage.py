@@ -45,6 +45,7 @@ class StorageBackend(Protocol):
     def generated_tests_dir(self) -> Path: ...
     def evidence_dir(self) -> Path: ...
     def db_path(self) -> Path: ...
+    def rag_path(self) -> Path: ...
     def ensure_dirs(self) -> None: ...
 
 
@@ -125,6 +126,10 @@ class LocalStorageBackend:
     def db_path(self) -> Path:
         """``<root>/<workspace>/evidence/run_results.sqlite``."""
         return self.evidence_dir() / "run_results.sqlite"
+
+    def rag_path(self) -> Path:
+        """``<root>/<workspace>/evidence/rag_store.db``."""
+        return self.evidence_dir() / "rag_store.db"
 
     # -- lifecycle -----------------------------------------------------------
 

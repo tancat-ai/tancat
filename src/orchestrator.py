@@ -79,17 +79,39 @@ class TestOrchestrator:
         self._pom_mode = pom_mode
         self._provider = provider
         self._model = model
+        # RAG: optionally wire retrieval-augmented scoring
+        rag_retriever = self._build_rag_retriever()
         self._placeholder_orchestrator = PlaceholderOrchestrator(
             starting_url=None,
             credential_profile=self._credential_profile,
             pom_mode=pom_mode,
             generator=test_generator.client,
+            rag_retriever=rag_retriever,
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None
         self._debug_enabled = os.getenv("PIPELINE_DEBUG", "").strip() == "1"
         # Diagnostics for journey execution
         self._pipeline_diagnostics: dict[str, Any] = {}
+
+    @staticmethod
+    def _build_rag_retriever() -> Any | None:
+        """Build a RAGRetriever when RAG_ENABLED=1, else return None."""
+        rag_enabled = os.getenv("RAG_ENABLED", "").strip() == "1"
+        if not rag_enabled:
+            return None
+        try:
+            from src.rag_retriever import RAGRetriever
+            from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
+            from src.storage import get_storage
+
+            embedder = SentenceTransformerEmbedder()
+            backend = MilvusLiteBackend(str(get_storage().rag_path()), embedder.dimension)
+            store = RAGStore(backend, embedder)
+            return RAGRetriever(store)
+        except Exception:
+            logger.warning("RAG enabled but failed to initialise — disabling", exc_info=True)
+            return None
 
     # Backwards-compatible attributes: these let existing test code assign/mock
     # attributes like ``orchestrator.scraper``, ``orchestrator.resolver``, etc.

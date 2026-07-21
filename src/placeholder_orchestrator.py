@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin, urlparse
+
+if TYPE_CHECKING:
+    from src.rag_retriever import RAGRetriever
 
 from src.cart_seeding_scraper import CartSeedingScraper
 from src.code_postprocessor import replace_token_in_line
@@ -67,6 +71,7 @@ class PlaceholderOrchestrator:
         credential_profile: CredentialProfile | None = None,
         pom_mode: bool = False,
         generator: AsyncGeneratorLike | None = None,
+        rag_retriever: RAGRetriever | None = None,
     ) -> None:
         """Initialise the placeholder resolution orchestrator.
 
@@ -76,6 +81,8 @@ class PlaceholderOrchestrator:
             pom_mode: When True, generate tests using evidence-aware POM classes
                 instead of flat ``evidence_tracker`` calls. Assertions remain direct.
             generator: B-020 LLM generator for semantic candidate ranking.
+            rag_retriever: Optional RAG retriever for golden-pattern scoring.
+                When ``None``, RAG is disabled (zero overhead).
         """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
@@ -87,6 +94,7 @@ class PlaceholderOrchestrator:
         self._generated_page_objects: list[GeneratedPageObject] = []
         self.page_object_builder = PageObjectBuilder()
         self.semantic_ranker = SemanticCandidateRanker(generator)
+        self._rag_retriever = rag_retriever
 
     @property
     def pom_mode(self) -> bool:
@@ -580,6 +588,9 @@ class PlaceholderOrchestrator:
             action, description, previous_selector, previous_description, pages_to_search
         )
 
+        # RAG retrieval: fetch golden patterns for scoring bonus
+        golden_patterns = self._retrieve_golden_patterns(action, description)
+
         matched_element = await self._element_matcher.find_best_element_for_current_page(
             action,
             description,
@@ -587,6 +598,7 @@ class PlaceholderOrchestrator:
             pages_to_search,
             excluded_selectors=excluded or None,
             resolved_steps=resolved_steps,
+            golden_patterns=golden_patterns or None,
         )
 
         if matched_element is not None:
@@ -605,6 +617,20 @@ class PlaceholderOrchestrator:
         error_msg = f"Locator for '{description}' not found on scraped pages."
         print(f"[DEBUG] Failed to find '{description}'. Available scraped URLs: {list(scraped_data.keys())}")
         return f'pytest.skip("{error_msg}")', None, None
+
+    def _retrieve_golden_patterns(
+        self,
+        action: str,
+        description: str,
+    ) -> list | None:
+        """Retrieve golden patterns from the RAG store for this placeholder.
+
+        Returns ``None`` when RAG is disabled or no patterns match.
+        """
+        if self._rag_retriever is None:
+            return None
+        patterns = self._rag_retriever.retrieve(description, action_type=action)
+        return patterns if patterns else None
 
     def _is_page_state_assertion(self, description: str) -> bool:
         """Check if an ASSERT description refers to a page state rather than an element.

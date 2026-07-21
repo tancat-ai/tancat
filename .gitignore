@@ -123,3 +123,5 @@ notebooks/.ipynb_checkpoints/
 graphify-out/
 results_*.json
 .pi/
+evidence/rag_store.db
+*.db

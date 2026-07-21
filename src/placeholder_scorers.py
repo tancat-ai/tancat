@@ -17,6 +17,11 @@ from src.semantic_matcher import SemanticMatcher
 class PlaceholderScorer:
     """Stateless scoring utilities for placeholder candidate ranking."""
 
+    # Bonus applied when an element's selector matches a golden pattern
+    # retrieved from the RAG vector store.  Sits at the same tier as
+    # _vision_enriched_bonus (+20).
+    GOLDEN_PATTERN_BONUS: int = 20
+
     # Words that describe the action itself, not the target element.
     # Stripped before text-content overlap calculations.
     ACTION_CONTEXT_WORDS: set[str] = {
@@ -113,11 +118,17 @@ class PlaceholderScorer:
         element: dict[str, Any],
         selector: str,
         match_threshold: float,
+        golden_patterns: list | None = None,
     ) -> int | None:
         """Compute a composite score for one candidate element.
 
         Returns the score when the element passes the threshold, or ``None``
         when it should be excluded from the ranked list.
+
+        Args:
+            golden_patterns: Optional list of RetrievedPattern from the RAG
+                retriever.  When non-empty, GOLDEN_PATTERN_BONUS is added
+                for elements matching a golden pattern selector.
         """
         lowered = description.replace("_", " ").lower()
         icon_classes = str(element.get("icon_classes", "")).lower()
@@ -176,6 +187,10 @@ class PlaceholderScorer:
         score += PlaceholderScorer._text_content_bonus(description, element)
         score += PlaceholderScorer._page_level_assert_bonus(action, description, element)
         score += PlaceholderScorer._vision_enriched_bonus(action, description, element)
+
+        # RAG golden pattern bonus
+        if golden_patterns:
+            score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns)
 
         return score if score >= match_threshold else None
 
@@ -482,6 +497,32 @@ class PlaceholderScorer:
                 bonus += overlap * 2
 
         return bonus
+
+    @staticmethod
+    def _golden_pattern_bonus(
+        element: dict[str, Any],
+        golden_patterns: list,
+    ) -> int:
+        """Apply a bonus when the element's selector matches a golden pattern.
+
+        Full selector match → +GOLDEN_PATTERN_BONUS (20).
+        Substring/tolerance match → scaled to 10.
+        """
+        if not golden_patterns:
+            return 0
+        element_selector = str(element.get("selector", "")).strip()
+        if not element_selector:
+            return 0
+        for pattern in golden_patterns:
+            if not hasattr(pattern, "selector") or not pattern.selector:
+                continue
+            if not hasattr(pattern, "source") or pattern.source != "golden":
+                continue
+            if pattern.selector == element_selector:
+                return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * pattern.confidence)
+            if element_selector in pattern.selector or pattern.selector in element_selector:
+                return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.5 * pattern.confidence)
+        return 0
 
     # ------------------------------------------------------------------
     # B-014: ASSERT intent-aware scoring

@@ -364,8 +364,13 @@ class PlaceholderResolver:
         action: str,
         description: str,
         page_elements: list[dict[str, Any]],
+        golden_patterns: list | None = None,
     ) -> list[tuple[int, dict[str, Any]]]:
-        """Return scored candidate elements in descending match order."""
+        """Return scored candidate elements in descending match order.
+
+        Args:
+            golden_patterns: Optional list of RetrievedPattern from RAG
+                retriever for golden-pattern scoring bonus."""
         desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
             return []
@@ -406,7 +411,12 @@ class PlaceholderResolver:
 
             # Delegate scoring to PlaceholderScorer
             score = PlaceholderScorer.compute_element_score(
-                action, description, element, selector, self.match_threshold
+                action,
+                description,
+                element,
+                selector,
+                self.match_threshold,
+                golden_patterns=golden_patterns,
             )
             if score is not None:
                 ranked.append((score, element))
