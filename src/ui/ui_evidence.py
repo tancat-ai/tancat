@@ -21,6 +21,32 @@ from src.report_utils import generate_annotated_journey, generate_suite_heatmap
 from src.storage import get_storage
 
 
+def _format_indexed_at(iso_string: str) -> str:
+    """Format an ISO-8601 timestamp to a compact human-readable form.
+
+    Returns ``"–"`` when the string is empty or unparseable.
+    """
+    if not iso_string:
+        return "–"
+    try:
+        from datetime import UTC, datetime
+
+        dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
+        now = datetime.now(UTC)
+        delta = now - dt
+
+        if delta.days == 0:
+            return dt.strftime("%H:%M")
+        elif delta.days == 1:
+            return f"Yesterday {dt.strftime('%H:%M')}"
+        elif delta.days < 7:
+            return dt.strftime("%a %H:%M")
+        else:
+            return dt.strftime("%b %d %H:%M")
+    except ValueError, TypeError:
+        return iso_string[:16] if len(iso_string) >= 16 else iso_string
+
+
 class EvidenceViewer:
     """Renders the evidence viewer section."""
 
@@ -172,10 +198,11 @@ class EvidenceViewer:
             st.info("No evidence matches your search.")
             return
 
-        # Build selection list
+        # Build selection list with timestamps so repeated runs are distinguishable
         result_labels = [
             f"{'❌' if r.status == 'failed' else '✅' if r.status == 'passed' else '⏭️'} "
-            f"{r.condition_ref} — {r.test_name.replace('[chromium]', '')}"
+            f"{r.condition_ref} — {r.test_name.replace('[chromium]', '')} "
+            f"({_format_indexed_at(r.indexed_at)})"
             for r in results
         ]
 
