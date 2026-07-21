@@ -1,12 +1,14 @@
 # pre-commit configuration for ruff
-# - ruff: lintting and auto-fixes
+# - ruff: linting and auto-fixes
 # - ruff-format: code formatting
+# - mypy: type checking
+# - eval-accuracy: resolution accuracy gate
 #
 # To run: pre-commit run
 # To install: pre-commit install
 #
 # Note: generated_tests/, scripts/, and scratch/ are excluded from checks
-exclude: ^(generated_tests/|scripts/|scratch/|notebooks/)
+exclude: ^(generated_tests/|scratch/|notebooks/)
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -22,3 +24,15 @@ repos:
         args: [--ignore-missing-imports]
         additional_dependencies:
           - types-requests
+
+  # Local hooks — run in the project environment
+  - repo: local
+    hooks:
+      - id: eval-accuracy
+        name: Eval Accuracy Gate
+        description: Blocks commits that drop placeholder resolution accuracy below baseline
+        entry: uv run python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
