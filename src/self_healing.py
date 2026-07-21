@@ -383,8 +383,12 @@ Analyze this failure and suggest a fix."""
         if not old_line or not new_line:
             return None
 
-        # Verify old_line exists in the test function
-        if old_line.strip() not in test_func:
+        # Verify old_line exists in the test function.
+        # Normalise quotes: LLMs often return single-quoted strings while
+        # Python source uses double quotes (or vice versa).
+        old_normalised = old_line.strip().replace('"', "'").replace("'", "'")
+        func_normalised = test_func.replace('"', "'").replace("'", "'")
+        if old_normalised not in func_normalised:
             logger.warning("old_line not found in test function '%s'", test_name)
             return None
 
@@ -412,7 +416,10 @@ Analyze this failure and suggest a fix."""
     ) -> bool:
         """Apply a single patch to the test file. Returns True on success."""
         try:
-            if patch.old_text not in test_source:
+            # Normalise quotes for matching (LLM returns single quotes, source may use double)
+            old_norm = patch.old_text.replace('"', "'")
+            src_norm = test_source.replace('"', "'")
+            if old_norm not in src_norm:
                 logger.warning(
                     "Patch old_text not found in source for '%s': %s",
                     patch.test_name,
@@ -420,7 +427,16 @@ Analyze this failure and suggest a fix."""
                 )
                 return False
 
-            new_source = test_source.replace(patch.old_text, patch.new_text, 1)
+            # Find the actual line in source to replace (preserving original quotes)
+            old_lines = patch.old_text.split("\n")
+            src_lines = test_source.split("\n")
+            actual_old = patch.old_text  # fallback
+            for i, line in enumerate(src_lines):
+                if line.strip().replace('"', "'") == old_norm.split("\n")[0].strip():
+                    actual_old = "\n".join(src_lines[i : i + len(old_lines)])
+                    break
+
+            new_source = test_source.replace(actual_old, patch.new_text, 1)
             test_path.write_text(new_source, encoding="utf-8")
             logger.info(
                 "Applied patch for '%s' (%s): %s",

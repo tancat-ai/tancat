@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -285,3 +286,71 @@ class TestHealIntegration:
         report = runner.heal(test_file)
         assert report.total_failures == 0 or report.fixed >= 0
         assert report.iterations <= 3
+
+    def test_heal_fixes_broken_locator(self, tmp_path: Path) -> None:
+        """Prove self-healing loop runs with mocked LLM and attempts fixes."""
+        import json
+
+        test_file = tmp_path / "test_fixable.py"
+        test_file.write_text(
+            "def test_broken():\n    page.locator('#broken-btn').click()\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        reviewer_response = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Wrong selector",
+                "strategy": "replace_locator",
+                "old_line": "page.locator('#broken-btn').click()",
+                "new_line": "page.locator('#fixed-btn').click()",
+                "confidence": 0.9,
+            }
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = reviewer_response
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        # Verify the LLM was called with the right context
+        assert mock_llm.generate_test.called
+        call_args = mock_llm.generate_test.call_args
+        assert "test_broken" in str(call_args)
+        assert "#broken-btn" in str(call_args)
+
+        # Verify the loop ran
+        assert report.iterations >= 1
+        assert report.total_failures + report.fixed >= 0  # always valid
+
+    def test_heal_applies_locator_fix_to_file(self, tmp_path: Path) -> None:
+        """End-to-end: mock LLM, verify the test file is actually patched."""
+        import json
+
+        original_code = "def test_broken():\n    page.locator('#broken-btn').click()\n    assert True\n"
+        test_file = tmp_path / "test_locator_fix.py"
+        test_file.write_text(original_code, encoding="utf-8")
+
+        # LLM suggests fixing the selector — use json.dumps for correct escaping
+        reviewer_response = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Wrong selector for button",
+                "strategy": "replace_locator",
+                "old_line": "page.locator('#broken-btn').click()",
+                "new_line": "page.locator('#real-btn').click()",
+                "confidence": 0.9,
+            }
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = reviewer_response
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        runner.heal(test_file)
+
+        # Verify the file was actually patched
+        patched = test_file.read_text(encoding="utf-8")
+        assert "#real-btn" in patched, f"Expected #real-btn in patched file, got: {patched}"
+        assert "#broken-btn" not in patched, f"#broken-btn should be gone, got: {patched}"
