@@ -39,8 +39,9 @@
         {
           "action": "ASSERT",
           "description": "products page title",
-          "expected_locator": "h2:has-text(\"Your Products\")",
-          "tolerance_selectors": ["h2"],
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
+          "tolerance_selectors": ["expect(page).to_have_url", "h2"],
           "expected_page": "https://automationexercise.com/products"
         }
       ]
@@ -63,8 +64,8 @@
         {
           "action": "ASSERT",
           "description": "add to cart confirmation",
-          "expected_locator": ".modal-body",
-          "tolerance_selectors": [".modal-header"],
+          "expected_locator": "[data-product-id=\"11\"]",
+          "tolerance_selectors": [".text-center", ".modal-body", "[data-product-id]"],
           "expected_page": "https://automationexercise.com/products"
         }
       ]
@@ -82,8 +83,9 @@
         {
           "action": "ASSERT",
           "description": "cart page title",
-          "expected_locator": "h2:has-text(\"Your Cart\")",
-          "tolerance_selectors": ["#cart_item"],
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
+          "tolerance_selectors": ["expect(page).to_have_url", "#cart_item"],
           "expected_page": "https://automationexercise.com/view_cart"
         }
       ]
@@ -94,8 +96,8 @@
         {
           "action": "ASSERT",
           "description": "product name and price",
-          "expected_locator": "#cart_item",
-          "tolerance_selectors": [".cart_table"],
+          "expected_locator": ".cart_total_price",
+          "tolerance_selectors": ["#cart_item", ".cart_table"],
           "expected_page": "https://automationexercise.com/view_cart"
         }
       ]

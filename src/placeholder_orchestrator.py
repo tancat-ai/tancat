@@ -570,7 +570,7 @@ class PlaceholderOrchestrator:
         # B-021: For ASSERT placeholders describing page state ("home page visible",
         # "dress products page"), resolve as URL assertions instead of element matches.
         if action == "ASSERT" and self._is_page_state_assertion(description):
-            resolved_url = self.resolver.resolve_url(description, pages_to_search, known_urls=list(scraped_data.keys()))
+            resolved_url = self.resolver.resolve_url(description, scraped_data, known_urls=list(scraped_data.keys()))
             if resolved_url:
                 logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
                 return f'expect(page).to_have_url("{resolved_url}")', None, "url"
@@ -612,8 +612,44 @@ class PlaceholderOrchestrator:
         B-021: Returns True for descriptions like "home page visible",
         "dress products page", "cart page loaded" — these should be resolved
         as URL assertions (expect(page).to_have_url(...)).
+
+        Only triggers when the description is PURELY about page state — if it
+        mentions specific elements (title, heading, button, link, text, list,
+        table, item, name, price, quantity, confirmation), it's an element
+        assertion, not a page-state assertion.
         """
         lowered = description.replace("_", " ").lower()
+
+        # Element-level keywords — if present, this is an element assertion,
+        # not a page-state assertion, even if page names are also mentioned.
+        element_keywords = (
+            "title",
+            "heading",
+            "button",
+            "link",
+            "text",
+            "list",
+            "table",
+            "item",
+            "name",
+            "price",
+            "quantity",
+            "confirmation",
+            "popup",
+            "message",
+            "badge",
+            "icon",
+            "field",
+            "input",
+            "label",
+            "image",
+            "banner",
+            "logo",
+            "product card",
+        )
+        if any(kw in lowered for kw in element_keywords):
+            return False
+
         page_state_terms = (
             "home page",
             "landing page",
