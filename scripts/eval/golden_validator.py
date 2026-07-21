@@ -48,6 +48,11 @@ _SKIP_RE = re.compile(
     r"""pytest\.skip\s*\(\s*['"]Skipping: unresolved placeholders for:\s*['"]([^'"]*?)['"]""",
 )
 
+# B-021: URL assertions — expect(page).to_have_url("...")
+_TO_HAVE_URL_RE = re.compile(
+    r"""expect\(page\)\.to_have_url\(\s*['"]([^'"]*)['"]\s*\)""",
+)
+
 _TEST_FUNC_RE = re.compile(r"^def\s+test_\d+_\w+", re.MULTILINE)
 
 
@@ -79,6 +84,17 @@ def extract_locators_from_code(code: str) -> list[dict[str, str]]:
                 "method": method,
                 "action": _action_from_method(method),
                 "locator": locator,
+            }
+        )
+    # B-021: Also extract URL assertions (expect(page).to_have_url(...))
+    for match in _TO_HAVE_URL_RE.finditer(code):
+        url = match.group(1)
+        full_expr = f'expect(page).to_have_url("{url}")'
+        results.append(
+            {
+                "method": "to_have_url",
+                "action": "ASSERT",
+                "locator": full_expr,
             }
         )
     return results

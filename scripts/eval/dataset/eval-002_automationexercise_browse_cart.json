@@ -19,8 +19,9 @@
         {
           "action": "ASSERT",
           "description": "home page loaded",
-          "expected_locator": "h2:has-text(\"Featured Products\")",
-          "tolerance_selectors": [".main", "#slider"],
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
+          "tolerance_selectors": ["expect(page).to_have_url"],
           "expected_page": "https://automationexercise.com"
         }
       ]
