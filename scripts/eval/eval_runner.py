@@ -178,7 +178,7 @@ def run_full_validation(
     for story in results:
         test_file = test_files.get(story.story_id)
         if test_file is None or not test_file.exists():
-            logger.warning("No test file for %s, skipping execution", story.story_id)
+            logger.info("No test file for %s — static validation only (no execution)", story.story_id)
             continue
 
         logger.info("Executing tests for %s: %s", story.story_id, test_file)
