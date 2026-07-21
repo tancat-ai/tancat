@@ -229,12 +229,14 @@ class SelfHealingRunner:
             sys.executable,
             "-m",
             "pytest",
-            str(test_path),
+            str(test_path.absolute()),
             "-v",
             "--tb=short",
             "--no-header",
             "-p",
             "no:cacheprovider",
+            "-o",
+            "addopts=",  # Override pytest.ini addopts (disables xdist parallel mode outside uv)
         ]
         if test_names:
             for name in test_names:
