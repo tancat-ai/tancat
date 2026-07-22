@@ -1,18 +1,37 @@
 #!/usr/bin/env python
 """eval_harness.py — CLI entry point for the Automated Evaluation Harness.
 
-Standalone CLI. Subcommands:
-    run       Execute evaluation against golden keys
-    baseline  Save current results as the reference baseline
-    compare   Compare current results against the baseline
-    dataset   Validate golden key files
+Three evaluation modes, three purposes:
+
+    static     CI gate — validates captured code against golden keys.
+               Deterministic. No LLM, no browser. Use for pre-commit.
+    resolver   Resolution-only — tests resolver accuracy against golden keys
+               using pre-scraped page data. Supports RAG on/off comparison.
+    full       Full validation — captured code validation + pytest execution
+               against live sites (requires running servers).
+
+Also: --regenerate runs the full pipeline from scratch (LLM → scrape → resolve).
+Nondeterministic due to LLM variability. Use for E2E pipeline regressions.
+
+Subcommands:
+    run         Execute evaluation (mode: static, resolver, full)
+    baseline    Save current results as the reference baseline
+    compare     Compare current results against the baseline
+    dataset     Validate golden key files
 
 Usage:
-    python scripts/eval/eval_harness.py run --static
-    python scripts/eval/eval_harness.py run --full
-    python scripts/eval/eval_harness.py baseline --save
-    python scripts/eval/eval_harness.py compare
-    python scripts/eval/eval_harness.py dataset --validate
+    # CI gate — what pre-commit runs
+    python scripts/eval/eval_harness.py run --mode static
+
+    # Resolver benchmark — compare RAG on/off
+    python scripts/eval/eval_harness.py run --mode resolver
+    RAG_ENABLED=1 python scripts/eval/eval_harness.py run --mode resolver
+
+    # Full E2E
+    python scripts/eval/eval_harness.py run --mode full
+
+    # Pipeline regeneration (nondeterministic)
+    python scripts/eval/eval_harness.py run --regenerate
 """
 
 from __future__ import annotations
@@ -48,6 +67,14 @@ def _setup_logging(verbose: bool = False) -> None:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute the evaluation harness."""
+    # resolver mode delegates to the resolver-only evaluator
+    if args.mode == "resolver":
+        import asyncio
+
+        from eval_resolver import _cmd_static as resolver_static
+
+        return asyncio.run(resolver_static())
+
     from eval_runner import EvalRunner
 
     dataset_dir = _DATASET_DIR if args.dataset is None else Path(args.dataset)
@@ -243,9 +270,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     run_parser.add_argument(
         "--mode",
-        choices=["static", "full"],
+        choices=["static", "resolver", "full"],
         default="static",
-        help="Evaluation mode (default: static)",
+        help="Evaluation mode: static (CI gate, default), resolver (resolution-only), full (static + pytest)",
     )
 
     # --- baseline ---

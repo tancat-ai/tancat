@@ -125,3 +125,4 @@ results_*.json
 .pi/
 evidence/rag_store.db
 *.db
+scripts/eval/scraped_pages/

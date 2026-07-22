@@ -1,16 +1,31 @@
 # Evaluation Harness — Usage Guide
 
-## Overview
+## Three evaluation modes, three purposes
 
-Automated evaluation of test generation quality. Measures placeholder resolution accuracy, test pass rate, and false positive rate against golden answer keys.
+The eval harness has **three distinct modes** — use the right one for your question:
+
+| Mode | Command | Tests | Deterministic? |
+|------|---------|-------|----------------|
+| **static** | `--mode static` | Captured code vs golden keys — **code regression gate** | ✅ Yes |
+| **resolver** | `--mode resolver` | Resolution accuracy in isolation — **RAG on/off benchmark** | ✅ Yes |
+| **full** | `--mode full` | Static validation + pytest execution — **end-to-end** | ❌ Live sites |
+
+> ⚠️ **`--regenerate`** runs the full pipeline from scratch (LLM → scrape → resolve).
+> Results vary run-to-run due to LLM nondeterminism. Use only for E2E pipeline debugging.
+
+---
 
 ## Quick Start
 
 ```bash
-# Static mode — resolution accuracy only (fast, no browser)
-python scripts/eval/eval_harness.py run --mode static
+# CI gate — what pre-commit runs (fast, offline, deterministic)
+python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
 
-# Full mode — resolution + test execution (needs browser)
+# Resolver benchmark — compare RAG on/off
+python scripts/eval/eval_resolver.py --mode static
+RAG_ENABLED=1 python scripts/eval/eval_resolver.py --mode static
+
+# Full E2E — needs running servers
 python scripts/eval/eval_harness.py run --mode full
 
 # Save baseline
@@ -23,50 +38,83 @@ python scripts/eval/eval_harness.py compare
 python scripts/eval/eval_harness.py dataset --validate
 ```
 
-## Commands
+---
 
-### `run`
+## Mode: `static` — CI Regression Gate
 
-Execute evaluation against golden keys.
+**Purpose:** Catch code changes that break parsing, extraction, or captured output format.
+**Runs:** Fast (<1s). No browser, no LLM, no scraping.
 
-| Flag | Description |
-|------|-------------|
-| `--mode static` | Resolution accuracy only (default, no browser needed) |
-| `--mode full` | Resolution + test execution against live sites |
-| `--min-accuracy N` | Exit code 2 if accuracy < N% (CI quality gate) |
-| `--no-persist` | Skip saving results to SQLite |
-| `--pytest-timeout S` | Timeout per pytest run (default: 120s) |
+Validates pre-captured pipeline outputs (`scripts/eval/captures/*_code.py`) against golden
+answer keys. If your code change breaks locator extraction, skeleton parsing, or evidence
+tracker format, this catches it immediately.
 
-### `baseline`
+```bash
+python scripts/eval/eval_harness.py run --mode static --min-accuracy 79
+```
 
-Manage the reference baseline.
+**When to run:** Every commit (pre-commit hook). Never skip this.
 
-| Flag | Description |
-|------|-------------|
-| `--save` | Run evaluation and save results to `baseline.json` |
-| (no flags) | Display current baseline |
+---
 
-### `compare`
+## Mode: `resolver` — Resolution Accuracy (RAG Benchmark)
 
-Compare current evaluation against saved baseline. Shows per-metric deltas (accuracy, pass rate, etc.).
+**Purpose:** Measure how accurately the resolver picks locators from scraped elements.
+Isolates resolution from LLM skeleton generation.
 
-### `dataset`
+Uses pre-scraped page data (`scripts/eval/scraped_pages/*.json`) and golden key
+placeholder descriptions. Supports RAG on/off comparison:
 
-Validate golden key JSON files.
+```bash
+# Baseline (RAG off)
+python scripts/eval/eval_resolver.py --mode static
 
-| Flag | Description |
-|------|-------------|
-| `--validate` | Deep-validate all placeholder fields |
+# With RAG
+RAG_ENABLED=1 python scripts/eval/eval_resolver.py --mode static
+
+# Refresh scraped page data (run on first use or when sites change)
+python scripts/eval/eval_resolver.py --mode live
+```
+
+**When to run:**
+- Testing RAG effectiveness
+- Changing resolver/scorer logic
+- Validating new golden keys against actual resolver behavior
+
+---
+
+## Mode: `full` — Full E2E Validation
+
+**Purpose:** Validate resolution accuracy AND execute generated tests against live sites.
+
+```bash
+python scripts/eval/eval_harness.py run --mode full
+```
+
+**When to run:** Before releases, after major pipeline changes. Requires live demo sites.
+
+---
 
 ## Architecture
 
 ```
-eval_harness.py (CLI)
-  └── eval_runner.py (orchestration)
-        ├── golden_validator.py (parse code, match locators)
-        ├── eval_metrics.py (compute metrics, render reports)
-        └── SQLite eval_runs table (persistence)
+eval_harness.py (CLI entry point)
+├── mode: static → eval_runner.py (load captured code → validate_dataset)
+├── mode: resolver → eval_resolver.py (golden descriptions + scraped data → scorer)
+└── mode: full → eval_runner.py (static validation + pytest execution)
+
+eval_resolver.py (resolution-only, for RAG comparison)
+  ├── Loads golden key placeholders (dataset/)
+  ├── Loads pre-scraped page data (scraped_pages/)
+  └── Calls ElementMatcher + PlaceholderScorer directly
+
+eval_runner.py (orchestration)
+  ├── golden_validator.py (parse code, match locators)
+  ├── eval_metrics.py (compute metrics, render reports)
+  └── SQLite eval_runs table (persistence)
 ```
+
+---
 
 ## Golden Answer Keys
 
@@ -80,6 +128,9 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 3. Hand-validate each locator against the live site
 4. Write golden key JSON in `scripts/eval/dataset/`
 5. Run `python scripts/eval/eval_harness.py dataset --validate`
+6. Scrape pages: `python scripts/eval/eval_resolver.py --mode live`
+
+---
 
 ## Metrics
 
@@ -90,20 +141,24 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 | False positive rate | wrong_locator_passes / tests_executed × 100 |
 | Skeleton completeness | criteria_with_skeletons / total_criteria × 100 |
 
+---
+
 ## CI Integration
 
-The workflow `.github/workflows/eval-harness.yml` runs on `workflow_dispatch` (manual trigger only).
+- **Pre-commit hook:** `eval-accuracy` runs `--mode static --min-accuracy 79 --no-persist`
+- **GitHub Actions:** `eval-harness.yml` runs on `workflow_dispatch` (manual trigger)
 
-- **Gate, not break** — warns on low accuracy but doesn't fail the pipeline
-- **Inputs**: mode (`static` or `full`), min_accuracy threshold
-- **Outputs**: markdown summary as artifact, PR comment on pull requests
+---
 
 ## Current Baseline
 
 | Metric | Value |
 |--------|-------|
 | Stories | 4 |
-| Resolution accuracy | 79.1% |
+| Placeholders | 43 |
+| Resolution accuracy (static) | 81.4% |
+| Resolution accuracy (resolver, RAG off) | 30.2% |
+| Resolution accuracy (resolver, RAG on) | 34.9% |
 | Skeleton completeness | 100.0% |
 
 Baseline file: `scripts/eval/baseline.json`

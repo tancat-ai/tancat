@@ -213,12 +213,12 @@ def rebuild_store(
     embedder = SentenceTransformerEmbedder()
     store_path = str(get_storage().rag_path())
 
-    # Delete existing store if present
-    import os
+    # Delete existing store if present (Milvus Lite creates a directory)
+    import shutil
 
     try:
-        os.remove(store_path)
-    except FileNotFoundError:
+        shutil.rmtree(store_path)
+    except FileNotFoundError, PermissionError, OSError:
         pass
 
     backend = MilvusLiteBackend(store_path, embedder.dimension)
