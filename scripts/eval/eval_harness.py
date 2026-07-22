@@ -241,6 +241,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Skip persisting results to SQLite",
     )
+    run_parser.add_argument(
+        "--mode",
+        choices=["static", "full"],
+        default="static",
+        help="Evaluation mode (default: static)",
+    )
 
     # --- baseline ---
     baseline_parser = subparsers.add_parser("baseline", help="Manage baseline")
