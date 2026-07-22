@@ -1,7 +1,21 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-20 (B-021 URL assertions + B-022 state-dependent scraping)
+Last updated: 2026-07-22 (LV Insurance mock site + Ingestion Agent foundation)
+
+---
+
+## 🆕 AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22)
+
+**Status:** 🟡 ready-for-agent  
+**What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent.
+
+**Done:**
+- `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
+- `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
+- `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
+
+**Next:** Wire PDF parsing into `rag_ingest.py`; measure RAG improvement on LV Insurance eval.
 
 ---
 

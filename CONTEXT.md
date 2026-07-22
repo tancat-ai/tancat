@@ -36,6 +36,28 @@ _Avoid_: previous step, last action, context
 A filtering strategy that applies a preference (e.g., display-only elements for ASSERT) but falls back to all elements if no preferred candidates score above threshold. Logged as low-confidence but never produces a skip solely due to filtering.
 _Avoid_: best-effort filtering, graceful degradation
 
+### Insurance Domain (LV Mock Site)
+
+**Underwriting Guide**:
+A document containing the business rules, rating factors, and decline criteria that determine policy pricing and eligibility. The Ingestion Agent parses these to provide domain context to the resolver.
+_Avoid_: rate book, risk manual, pricing guide
+
+**Quote Flow**:
+The multi-step user journey through an insurance quotation system: Account → Product → Policy → Drivers → Vehicles → Extras → Quote & Payment. Each step has distinct page elements and validation rules.
+_Avoid_: application flow, purchase journey, wizard
+
+**Compulsory Excess**:
+The minimum amount a policyholder must pay towards any claim, set by the insurer based on risk factors (driver age, penalty points, vehicle engine size). Displayed as informational text, not an interactive field.
+_Avoid_: mandatory excess, minimum excess
+
+**Voluntary Excess**:
+An additional excess amount chosen by the policyholder. Higher voluntary excess reduces the premium. Represented as a range slider in the quote flow.
+_Avoid_: optional excess, chosen excess
+
+**Decline Rule**:
+A business rule that prevents a quote from being offered. Examples: commercial use, 12+ penalty points, vehicle value over £100K. The system displays a decline banner instead of a premium.
+_Avoid_: rejection rule, exclusion, hard stop
+
 ## Decisions
 
 ### ASSERT role filtering uses DISPLAY_ROLES, not INTERACTIVE_ROLES (2026-06-25)

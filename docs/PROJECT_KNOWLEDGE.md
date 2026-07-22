@@ -208,10 +208,9 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
 
 | ID | Feature | Notes |
 |----|---------|-------|
-| AI-010 | POM generation toggle | Stage B — tests still use evidence_tracker inline |
-| AI-011 | Run history chart | Root `run_history.json` — not started |
-| AI-023 | Locator repair loop | Spec only |
-| AI-026 | CLI reload saved suites | Partial — `PipelineArtifactWriter` exists |
+| Phase 1 | Multi-Agent Architecture (LangGraph) | 3 agents: Synthesizer (dense), Resolver (MoE), Ingester (PDF parsing). LV Insurance mock site built as test domain. |
+| Phase 2b | Self-Healing Interactive Repair Merge | Fall back to codegen locator repair when automated healing fails. |
+| AI-030 | PDF Parsing for Ingestion Agent | Wire Docling/PyMuPDF into `rag_ingest.py`; measure RAG improvement on LV Insurance eval. |
 
 ## Version History
 
@@ -229,8 +228,11 @@ See `docs/ARCHITECTURE.md` §2 for complete module responsibility map.
   `tests/example_test.py`, `tests/uat_pipeline_test.py`, `tests/coverage.xml`.
   Deleted deprecated `src/page_context_scraper.py`. 299 tests passing.
 - **2026-05-16:** Resolver audit — live call graph traced and documented, four dead methods confirmed in `placeholder_resolver.py`, resolver restructure plan created (`RESTRUCTURE_PLAN.md`), vulture findings documented.
+- **2026-07-20:** AI-028 Evidence Search & Export shipped (73 tests). AI-029 Workspace & Storage shipped (30 tests). Self-healing core loop shipped (28 tests). State-dependent scraping (B-022) and cart modal fix (B-023) shipped.
+- **2026-07-21:** Phase 3 RAG complete — Milvus Lite store, resolver integration, ingestion CLI, measurement (40/40 self-consistency, +11.6pp accuracy). 1625 tests pass.
+- **2026-07-22:** LV Insurance mock site built (7-step quote flow, 60KB HTML). 7-document rag_corpus assembled (real LV PDFs + redacted personal + synthetic guide). eval-005 dataset created (10 criteria, 33 placeholders). Phase 1 agent split designed: Synthesizer (dense/Gemma 31B) + Resolver (MoE/Gemma 26B) + Ingester (PDF/Docling).
 
 ---
 
-*Last Updated: 2026-05-17*
-*Project Status: CI green — Resolver Phases 0–2 partial (Pass 1–2 + logging live). Dead resolver methods deleted. UrlResolver page scoping wired.*
+*Last Updated: 2026-07-22*
+*Project Status: CI green — 1625 tests. RAG shipped (+11.6pp). Phase 1 Multi-Agent + Ingestion Agent design in progress.*

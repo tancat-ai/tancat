@@ -233,6 +233,14 @@ Final code normalization via `CodeNormalizer`: consent mode injection, newline f
 
 Generated test files are written to `generated_tests/` with `scrape_manifest.json` and `package_manifest.json`. After pytest execution, evidence is loaded and reports are generated in 3 formats. Run results persist to JSON or SQLite (`sqlite_persistence.py`). `ExportService` produces clean output for production use.
 
+### Phase 8: RAG & Document Ingestion (Phase 3 + Phase 1 Foundation)
+
+`rag_store.py` → `rag_retriever.py` → `scripts/rag_ingest.py`
+
+The RAG pipeline augments placeholder resolution with retrieval from a vector store (Milvus Lite). Documents are ingested from `docs/rag_corpus/`, chunked, embedded (SentenceTransformer), and stored. At resolution time, `RAGRetriever` queries the store for golden patterns and doc chunks matching the placeholder description, feeding scoring bonuses to `PlaceholderScorer`. RAG improves resolver accuracy by +11.6pp (41.9% → 53.5%).
+
+The **Ingestion Agent** (Phase 1) extends this with PDF parsing (Docling/PyMuPDF) for real-world insurance documents. The LV Insurance mock site (`generated_tests/mock_insurance_site.html`) and companion documents provide an end-to-end test domain: 7-step quote flow with underwriting rules validated against ingested product documents.
+
 ---
 
 ## 4. Dependency Graph
