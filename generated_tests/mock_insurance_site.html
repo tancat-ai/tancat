@@ -1,492 +1,1251 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Insurance Policy Management</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-        }
-        .nav-links {
-            margin-bottom: 20px;
-        }
-        .nav-links a {
-            color: #007bff;
-            text-decoration: none;
-            margin-right: 15px;
-        }
-        .nav-links a:hover {
-            text-decoration: underline;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        input, textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        input:focus, textarea:focus {
-            outline: none;
-            border-color: #007bff;
-            box-shadow: 0 0 5px rgba(0,123,255,0.3);
-        }
-        button {
-            background-color: #007bff;
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        button:disabled {
-            background-color: #aaa;
-            cursor: not-allowed;
-        }
-        .btn-secondary {
-            background-color: #6c757d;
-            margin-right: 10px;
-        }
-        .btn-secondary:hover {
-            background-color: #545b62;
-        }
-        .alert {
-            padding: 12px;
-            border-radius: 4px;
-            margin-top: 15px;
-            display: none;
-        }
-        .alert-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .vehicle-details-loaded {
-            display: none;
-            padding: 15px;
-            background-color: #e7f3ff;
-            border-radius: 4px;
-            margin-top: 10px;
-        }
-        .vehicle-details-loaded.visible {
-            display: block;
-        }
-        .vehicle-info {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .fieldset {
-            border: 1px solid #ddd;
-            padding: 15px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-        }
-        .fieldset legend {
-            padding: 0 10px;
-            font-weight: bold;
-            color: #333;
-        }
-        .action-buttons {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-        }
-        #lookupStatus {
-            margin-top: 10px;
-            font-style: italic;
-            color: #666;
-        }
-        /* Driver list styles */
-        [aria-label="Assigned Drivers"] {
-            list-style: none;
-            padding: 0;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            min-height: 48px;
-        }
-        [aria-label="Assigned Drivers"] li {
-            padding: 8px 12px;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        [aria-label="Assigned Drivers"] li:last-child {
-            border-bottom: none;
-        }
-        .driver-tag {
-            background: #e7f3ff;
-            border-radius: 4px;
-            padding: 4px 10px;
-            font-size: 14px;
-            color: #0056b3;
-        }
-        .submitting-indicator {
-            display: none;
-            font-style: italic;
-            color: #888;
-            margin-top: 8px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LV Insurance — Get a Quote</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background: #f0f2f5; color: #333; }
+.container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+h1 { color: #005eb8; border-bottom: 3px solid #005eb8; padding-bottom: 10px; margin-bottom: 25px; }
+h2 { color: #333; margin-top: 0; }
+.step-indicator { display: flex; margin-bottom: 25px; }
+.step { flex: 1; text-align: center; padding: 8px; background: #e8e8e8; color: #888; font-size: 13px; border-radius: 4px; margin: 0 3px; }
+.step.active { background: #005eb8; color: white; font-weight: bold; }
+.step.done { background: #28a745; color: white; }
+.form-group { margin-bottom: 18px; }
+label { display: block; margin-bottom: 5px; font-weight: bold; color: #444; font-size: 14px; }
+label .required { color: #d32f2f; }
+input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #005eb8; box-shadow: 0 0 0 2px rgba(0,94,184,0.2); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+button { background: #005eb8; color: white; padding: 12px 28px; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; font-weight: bold; }
+button:hover { background: #004a94; }
+button:disabled { background: #aaa; cursor: not-allowed; }
+.btn-secondary { background: #6c757d; }
+.btn-secondary:hover { background: #545b62; }
+.btn-danger { background: #dc3545; }
+.btn-danger:hover { background: #b02a37; }
+.btn-small { padding: 6px 14px; font-size: 13px; }
+.btn-outline { background: white; color: #005eb8; border: 1px solid #005eb8; }
+.btn-outline:hover { background: #e7f0fa; }
+.action-bar { margin-top: 25px; padding-top: 20px; border-top: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; }
+.page { display: none; }
+.page.active { display: block; }
+.alert { padding: 12px; border-radius: 4px; margin: 15px 0; display: none; }
+.alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.alert-warning { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+.alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+.vehicle-details { background: #e7f3ff; padding: 15px; border-radius: 4px; margin-top: 10px; display: none; }
+.vehicle-details.visible { display: block; }
+.vehicle-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 14px; }
+.fieldset { border: 1px solid #ddd; padding: 18px; border-radius: 4px; margin-bottom: 18px; }
+.fieldset legend { padding: 0 10px; font-weight: bold; color: #005eb8; font-size: 15px; }
+.driver-list, .vehicle-list { list-style: none; padding: 0; margin: 10px 0; }
+.driver-list li, .vehicle-list li { padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
+.driver-tag, .vehicle-tag { background: #e7f3ff; border-radius: 4px; padding: 4px 10px; font-size: 13px; color: #0056b3; }
+.remove-btn { background: none; border: none; color: #dc3545; font-size: 18px; cursor: pointer; padding: 2px 8px; }
+.remove-btn:hover { background: #f8d7da; border-radius: 4px; }
+.price-display { background: #e8f5e9; padding: 15px 20px; border-radius: 4px; font-size: 18px; text-align: center; margin: 15px 0; }
+.price-value { font-size: 28px; font-weight: bold; color: #005eb8; }
+.summary-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+.summary-label { color: #666; }
+.summary-value { font-weight: bold; }
+.declined-banner { background: #f8d7da; color: #721c24; padding: 20px; border-radius: 4px; text-align: center; font-size: 18px; font-weight: bold; border: 2px solid #dc3545; margin: 20px 0; }
+#lookupStatus { margin-top: 8px; font-size: 13px; color: #666; font-style: italic; }
+.radio-group { display: flex; gap: 20px; }
+.radio-group label { display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; }
+.radio-group input[type="radio"] { width: auto; }
+.card-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card-option { border: 2px solid #ddd; border-radius: 6px; padding: 15px; cursor: pointer; text-align: center; }
+.card-option:hover { border-color: #005eb8; }
+.card-option.selected { border-color: #005eb8; background: #e7f0fa; }
+.card-option h4 { margin: 0 0 5px 0; }
+.card-option p { margin: 0; color: #666; font-size: 13px; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>Insurance Policy Management</h1>
-        
-        <div class="nav-links">
-            <a href="#" id="updatePolicyLink">Update Policy Details</a>
-            <a href="#">View Policy</a>
-            <a href="#">Claims</a>
-            <a href="#">Documents</a>
+
+<div class="container">
+  <h1>LV Insurance — Get a Quote</h1>
+
+  <!-- Step indicator -->
+  <div class="step-indicator" id="steps">
+    <div class="step active" data-step="1">1. Account</div>
+    <div class="step" data-step="2">2. Product</div>
+    <div class="step" data-step="3">3. Policy Details</div>
+    <div class="step" data-step="4">4. Drivers</div>
+    <div class="step" data-step="5">5. Vehicles</div>
+    <div class="step" data-step="6">6. Extras</div>
+    <div class="step" data-step="7">7. Quote & Pay</div>
+  </div>
+
+  <!-- =============================================================== -->
+  <!-- Page 1: ACCOUNT CREATION                                         -->
+  <!-- =============================================================== -->
+  <div class="page active" id="page-account">
+    <h2>Create Your Account</h2>
+
+    <div class="form-group">
+      <label for="email">Email Address <span class="required">*</span></label>
+      <input type="email" id="email" placeholder="your@email.com">
+    </div>
+    <div class="form-group">
+      <label for="password">Password <span class="required">*</span></label>
+      <input type="password" id="password" placeholder="Min 8 characters">
+    </div>
+    <fieldset class="fieldset">
+      <legend>Account Holder</legend>
+      <div class="form-group">
+        <label for="title">Title <span class="required">*</span></label>
+        <select id="title"><option value="">Select...</option><option>Mr</option><option>Mrs</option><option>Ms</option><option>Miss</option><option>Dr</option></select>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="firstName">First Name <span class="required">*</span></label>
+          <input type="text" id="firstName" placeholder="First name">
         </div>
-
-        <!-- Main Policy Page (initially shown) -->
-        <div id="mainPolicyPage">
-            <div class="fieldset">
-                <legend>Policy Overview</legend>
-                <p><strong>Policy Number:</strong> POL-12345</p>
-                <p><strong>Status:</strong> Active</p>
-                <p><strong>Current Vehicle:</strong> 2020 Honda CR-V</p>
-            </div>
-
-            <div class="action-buttons">
-                <button id="addOrChangeVehicleBtn">Add or Change Vehicle</button>
-                <button class="btn-secondary" id="addDriverBtn">Add Driver</button>
-                <button class="btn-secondary">View Coverage</button>
-            </div>
+        <div class="form-group">
+          <label for="lastName">Last Name <span class="required">*</span></label>
+          <input type="text" id="lastName" placeholder="Last name">
         </div>
+      </div>
+      <div class="form-group">
+        <label for="dob">Date of Birth <span class="required">*</span></label>
+        <input type="date" id="dob">
+      </div>
+    </fieldset>
+    <fieldset class="fieldset">
+      <legend>Address</legend>
+      <div class="form-group">
+        <label for="postcode">Postcode <span class="required">*</span></label>
+        <input type="text" id="postcode" placeholder="e.g. SW1A 1AA">
+      </div>
+      <div class="form-group">
+        <label for="addressLine1">Address Line 1 <span class="required">*</span></label>
+        <input type="text" id="addressLine1" placeholder="House number and street">
+      </div>
+      <div class="form-group">
+        <label for="addressLine2">Address Line 2</label>
+        <input type="text" id="addressLine2" placeholder="Town or city">
+      </div>
+    </fieldset>
+    <div class="alert alert-error" id="accountError">Please fill all required fields</div>
+    <div class="action-bar">
+      <span></span>
+      <button id="accountNext">Next →</button>
+    </div>
+  </div>
 
-        <!-- Vehicle Update Form (hidden initially) -->
-        <div id="vehicleUpdateForm" style="display: none;">
-            <h2>Change Vehicle Details</h2>
-            
-            <div class="form-group">
-                <label for="registration">Registration Number</label>
-                <input type="text" id="registration" placeholder="e.g. AB12 CDE">
-                <div id="lookupStatus"></div>
-                <div class="vehicle-details-loaded" id="vehicleDetails">
-                    <h4>Vehicle Details Loaded</h4>
-                    <div class="vehicle-info">
-                        <div><strong>Make:</strong> <span id="vehicleMake">Honda</span></div>
-                        <div><strong>Model:</strong> <span id="vehicleModel">CR-V</span></div>
-                        <div><strong>Year:</strong> <span id="vehicleYear">2020</span></div>
-                        <div><strong>Color:</strong> <span id="vehicleColor">Silver</span></div>
-                    </div>
-                </div>
-            </div>
+  <!-- =============================================================== -->
+  <!-- Page 2: PRODUCT SELECTION                                        -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-product">
+    <h2>Select a Product</h2>
+    <div class="card-options">
+      <div class="card-option" id="productCar" data-product="car">
+        <h4>🚗 Car Insurance</h4>
+        <p>Comprehensive cover for your vehicle</p>
+      </div>
+      <div class="card-option" id="productHome" data-product="home">
+        <h4>🏠 Home Insurance</h4>
+        <p>Buildings & contents cover</p>
+      </div>
+    </div>
+    <div class="alert alert-error" id="productError">Please select a product</div>
+    <div class="action-bar">
+      <button class="btn-secondary" id="productBack">← Back</button>
+      <button id="productNext" disabled>Next →</button>
+    </div>
+  </div>
 
-            <div class="form-group">
-                <label for="ownerName">Policy Owner Name</label>
-                <input type="text" id="ownerName" placeholder="Enter owner full name">
-            </div>
+  <!-- =============================================================== -->
+  <!-- Page 3: POLICY DETAILS (Car)                                     -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-policy">
+    <h2>Policy Details</h2>
+    <div class="form-group">
+      <label for="startDate">Cover Start Date <span class="required">*</span></label>
+      <input type="date" id="startDate">
+    </div>
+    <div class="form-group">
+      <label for="scheme">Scheme <span class="required">*</span></label>
+      <select id="scheme">
+        <option value="">Select scheme...</option>
+        <option value="standard">Standard</option>
+        <option value="premier">Premier</option>
+        <option value="classic">Classic Car</option>
+      </select>
+      <div id="schemeDesc" style="font-size:12px;color:#666;margin-top:4px;"></div>
+    </div>
+    <div class="alert alert-info">
+      <strong>Scheme info:</strong> Standard includes basic roadside assistance. Premier adds European cover, courtesy car, and motor legal protection. Classic covers vehicles over 20 years old.
+    </div>
+    <div class="alert alert-error" id="policyError">Please fill all required fields</div>
+    <div class="action-bar">
+      <button class="btn-secondary" id="policyBack">← Back</button>
+      <button id="policyNext">Next →</button>
+    </div>
+  </div>
 
-            <div class="form-group">
-                <label for="keeperName">Registered Keeper Name</label>
-                <input type="text" id="keeperName" placeholder="Enter keeper full name">
-            </div>
+  <!-- =============================================================== -->
+  <!-- Page 4: DRIVERS                                                  -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-drivers">
+    <h2>Drivers</h2>
+    <p style="color:#666;margin-bottom:20px;">Please enter details for all drivers including the account holder.</p>
 
-            <div class="form-group">
-                <label for="driverName">Main Driver Name</label>
-                <input type="text" id="driverName" placeholder="Enter main driver full name">
-            </div>
-
-            <div class="form-group">
-                <label for="vehicleAge">Vehicle Age (Years)</label>
-                <input type="number" id="vehicleAge" placeholder="e.g. 5" min="0" max="50">
-            </div>
-
-            <div class="form-group">
-                <label for="vehicleSpec">Vehicle Specification</label>
-                <textarea id="vehicleSpec" rows="3" placeholder="Describe any changes (e.g., Full Leather, Sunroof, 2.0L Diesel)">Factory Default</textarea>
-            </div>
-
-            <div class="action-buttons">
-                <button id="updateVehicleBtn">Update Vehicle</button>
-                <button class="btn-secondary" id="cancelBtn">Cancel</button>
-            </div>
-
-            <div class="alert alert-error" id="errorMessage" role="alert"></div>
-            <div class="alert alert-success" id="successMessage">Policy updated successfully</div>
+    <!-- Account holder driver (auto-filled) -->
+    <fieldset class="fieldset">
+      <legend>Account Holder (Main Policyholder)</legend>
+      <div class="row">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="mainDriverName" readonly style="background:#f5f5f5;">
         </div>
-
-        <!-- ── Add Driver Form (hidden initially) ── -->
-        <div id="addDriverForm" style="display: none;">
-            <h2>Add Drivers to Vehicle</h2>
-
-            <div class="form-group">
-                <label for="driverNameInput">Driver Name</label>
-                <input type="text" id="driverNameInput" aria-label="Driver Name" placeholder="Enter full name">
-            </div>
-
-            <div class="form-group">
-                <label for="licenseInput">License Number</label>
-                <input type="text" id="licenseInput" aria-label="License Number" placeholder="Enter licence number">
-            </div>
-
-            <div class="action-buttons">
-                <button id="addDriverToListBtn" aria-label="Add Driver">Add Driver</button>
-                <button class="btn-secondary" id="cancelDriverBtn">Cancel</button>
-            </div>
-
-            <div class="form-group" style="margin-top: 20px;">
-                <label>Assigned Drivers</label>
-                <ul aria-label="Assigned Drivers" id="driverList"></ul>
-            </div>
-
-            <div class="action-buttons">
-                <button id="saveVehicleBtn" aria-label="Save Vehicle" disabled>Save Vehicle</button>
-                <span class="submitting-indicator" aria-label="Submitting" id="submittingIndicator">Saving…</span>
-            </div>
-
-            <div class="alert alert-error" id="driverErrorMessage" role="alert">Please fill all required fields</div>
-            <div class="alert alert-success" id="driverSuccessMessage">Drivers added successfully</div>
+        <div class="form-group">
+          <label>Date of Birth</label>
+          <input type="text" id="mainDriverDob" readonly style="background:#f5f5f5;">
         </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="mainLicenseNumber">Driving License Number <span class="required">*</span></label>
+          <input type="text" id="mainLicenseNumber" placeholder="e.g. MORGA753116SM9IJ">
+        </div>
+        <div class="form-group">
+          <label for="mainLicenseYears">Years Licensed <span class="required">*</span></label>
+          <input type="number" id="mainLicenseYears" min="0" max="60" placeholder="e.g. 10">
+        </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="mainPenaltyPoints">Penalty Points <span class="required">*</span></label>
+          <select id="mainPenaltyPoints"><option value="0">0</option><option value="3">3</option><option value="6">6</option><option value="9">9</option><option value="12">12</option></select>
+        </div>
+        <div class="form-group">
+          <label for="mainAccidents">Accidents (last 5 years) <span class="required">*</span></label>
+          <select id="mainAccidents"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3+</option></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="mainClaims">Claims (last 5 years) <span class="required">*</span></label>
+          <select id="mainClaims"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3+</option></select>
+        </div>
+        <div class="form-group">
+          <label for="mainOccupation">Occupation <span class="required">*</span></label>
+          <select id="mainOccupation">
+            <option value="">Select...</option>
+            <option>Accountant</option><option>Administrator</option><option>Builder</option>
+            <option>Civil Servant</option><option>Dentist</option><option>Doctor</option>
+            <option>Driver</option><option>Electrician</option><option>Engineer</option>
+            <option>IT Consultant</option><option>Journalist</option><option>Lawyer</option>
+            <option>Manager</option><option>Mechanic</option><option>Nurse</option>
+            <option>Plumber</option><option>Police Officer</option><option>Retired</option>
+            <option>Salesperson</option><option>Student</option><option>Teacher</option>
+            <option>Unemployed</option>
+          </select>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Additional Drivers -->
+    <fieldset class="fieldset">
+      <legend>Additional Drivers</legend>
+      <ul class="driver-list" id="additionalDriversList"></ul>
+      <div id="addDriverFields" style="margin-top:15px;">
+        <div class="row">
+          <div class="form-group">
+            <label for="addDriverName">Full Name</label>
+            <input type="text" id="addDriverName" placeholder="Full name">
+          </div>
+          <div class="form-group">
+            <label for="addDriverDob">Date of Birth</label>
+            <input type="date" id="addDriverDob">
+          </div>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label for="addDriverLicense">Driving License Number</label>
+            <input type="text" id="addDriverLicense" placeholder="License number">
+          </div>
+          <div class="form-group">
+            <label for="addDriverRelation">Relationship to Policyholder</label>
+            <select id="addDriverRelation">
+              <option value="">Select...</option>
+              <option>Spouse/Partner</option><option>Son</option><option>Daughter</option>
+              <option>Parent</option><option>Sibling</option><option>Friend</option>
+              <option>Colleague</option><option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label for="addDriverLicenseYears">Years Licensed</label>
+            <input type="number" id="addDriverLicenseYears" min="0" max="60" placeholder="Years">
+          </div>
+          <div class="form-group">
+            <label for="addDriverPoints">Penalty Points</label>
+            <select id="addDriverPoints"><option value="0">0</option><option value="3">3</option><option value="6">6</option><option value="9">9</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label for="addDriverAccidents">Accidents (last 5 years)</label>
+            <select id="addDriverAccidents"><option value="0">0</option><option value="1">1</option><option value="2">2</option></select>
+          </div>
+          <div class="form-group">
+            <label for="addDriverClaims">Claims (last 5 years)</label>
+            <select id="addDriverClaims"><option value="0">0</option><option value="1">1</option><option value="2">2</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="form-group">
+            <label for="addDriverOccupation">Occupation</label>
+            <select id="addDriverOccupation">
+              <option value="">Select...</option>
+              <option>Accountant</option><option>Driver</option><option>Engineer</option>
+              <option>IT Consultant</option><option>Mechanic</option><option>Nurse</option>
+              <option>Retired</option><option>Salesperson</option><option>Student</option>
+              <option>Teacher</option><option>Unemployed</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-outline btn-small" id="addDriverBtnPage4">+ Add Driver</button>
+      </div>
+    </fieldset>
+
+    <div class="alert alert-error" id="driverError">Please fill all required driver fields</div>
+    <div class="action-bar">
+      <button class="btn-secondary" id="driversBack">← Back</button>
+      <button id="driversNext">Next →</button>
+    </div>
+  </div>
+
+  <!-- =============================================================== -->
+  <!-- Page 5: VEHICLES                                                 -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-vehicles">
+    <h2>Vehicles</h2>
+
+    <fieldset class="fieldset">
+      <legend>Add Vehicle</legend>
+      <div class="form-group">
+        <label for="vehicleReg">Registration Number <span class="required">*</span></label>
+        <div class="row" style="grid-template-columns: 1fr auto;">
+          <input type="text" id="vehicleReg" placeholder="e.g. AB12 CDE">
+          <button class="btn-outline" id="lookupRegBtn" style="white-space:nowrap;">Look Up</button>
+        </div>
+        <div id="lookupStatus"></div>
+      </div>
+      <div class="vehicle-details" id="vehicleDetails">
+        <h4 style="margin-top:0;">Vehicle Details</h4>
+        <div class="vehicle-info">
+          <div><strong>Make:</strong> <span id="vMake">—</span></div>
+          <div><strong>Model:</strong> <span id="vModel">—</span></div>
+          <div><strong>Year:</strong> <span id="vYear">—</span></div>
+          <div><strong>Engine:</strong> <span id="vEngine">—</span></div>
+          <div><strong>Fuel:</strong> <span id="vFuel">—</span></div>
+          <div><strong>Value:</strong> <span id="vValue">—</span></div>
+        </div>
+        <p style="font-size:12px;color:#666;margin-top:10px;">Or enter details manually below:</p>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="vehicleMake">Make</label>
+          <input type="text" id="vehicleMake" placeholder="e.g. Ford">
+        </div>
+        <div class="form-group">
+          <label for="vehicleModel">Model</label>
+          <input type="text" id="vehicleModel" placeholder="e.g. Focus">
+        </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="vehicleYear">Year</label>
+          <input type="number" id="vehicleYear" min="1980" max="2026" placeholder="e.g. 2020">
+        </div>
+        <div class="form-group">
+          <label for="vehicleEngine">Engine Size (CC)</label>
+          <input type="number" id="vehicleEngine" placeholder="e.g. 1600">
+        </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="vehicleFuel">Fuel Type</label>
+          <select id="vehicleFuel">
+            <option value="">Select...</option><option>Petrol</option><option>Diesel</option>
+            <option>Hybrid</option><option>Electric</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="vehicleValue">Estimated Value (£)</label>
+          <input type="number" id="vehicleValue" placeholder="e.g. 15000">
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Named drivers for this vehicle -->
+    <fieldset class="fieldset">
+      <legend>Named Drivers on This Vehicle</legend>
+      <p style="font-size:13px;color:#666;">Select which drivers will be named on this vehicle.</p>
+      <div id="vehicleDriverCheckboxes" style="margin-bottom:12px;"></div>
+      <div class="form-group">
+        <label for="mainDriverSelect">Main Driver of This Vehicle <span class="required">*</span></label>
+        <select id="mainDriverSelect"><option value="">Select main driver...</option></select>
+      </div>
+    </fieldset>
+
+    <!-- Vehicle usage -->
+    <fieldset class="fieldset">
+      <legend>Vehicle Usage</legend>
+      <div class="form-group">
+        <label>Usage Type <span class="required">*</span></label>
+        <div class="radio-group">
+          <label><input type="radio" name="usageType" value="SDP"> Social, Domestic & Pleasure</label>
+          <label><input type="radio" name="usageType" value="business"> Business Use</label>
+          <label><input type="radio" name="usageType" value="commercial"> Commercial Use</label>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- NCD & Ownership -->
+    <fieldset class="fieldset">
+      <legend>No Claims Discount & Ownership</legend>
+      <div class="row">
+        <div class="form-group">
+          <label for="ncdYears">No Claims Discount (Years) <span class="required">*</span></label>
+          <input type="number" id="ncdYears" min="0" max="30" placeholder="e.g. 5" value="0">
+        </div>
+        <div class="form-group">
+          <label for="ncdHolder">NCD Holder <span class="required">*</span></label>
+          <select id="ncdHolder"><option value="">Select...</option></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="form-group">
+          <label for="vehicleOwner">Vehicle Owner <span class="required">*</span></label>
+          <select id="vehicleOwner"><option value="">Select...</option></select>
+        </div>
+        <div class="form-group">
+          <label for="registeredKeeper">Registered Keeper <span class="required">*</span></label>
+          <select id="registeredKeeper"><option value="">Select...</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="overnightLocation">Where is the vehicle kept overnight? <span class="required">*</span></label>
+        <select id="overnightLocation">
+          <option value="">Select...</option>
+          <option>Private Garage</option><option>Private Driveway</option>
+          <option>Street Outside Home</option><option>Public Car Park</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <!-- Added vehicles list -->
+    <fieldset class="fieldset">
+      <legend>Vehicles on Policy</legend>
+      <ul class="vehicle-list" id="vehicleList"></ul>
+      <button class="btn-outline btn-small" id="addVehicleBtn">+ Add Another Vehicle</button>
+    </fieldset>
+
+    <div class="alert alert-error" id="vehicleError">Please complete all vehicle details</div>
+    <div class="action-bar">
+      <button class="btn-secondary" id="vehiclesBack">← Back</button>
+      <button id="vehiclesNext">Next →</button>
+    </div>
+  </div>
+
+  <!-- =============================================================== -->
+  <!-- Page 6: OPTIONAL EXTRAS                                         -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-extras">
+    <h2>Optional Extras</h2>
+
+    <fieldset class="fieldset">
+      <legend>Add-Ons</legend>
+      <div class="form-group">
+        <label><input type="checkbox" id="ncdGuarantee" checked> No Claims Discount Guarantee</label>
+        <p style="font-size:12px;color:#666;margin:4px 0 0 22px;">Protect your NCD — make one claim without losing your discount. <strong>+£45/year</strong></p>
+      </div>
+      <div class="form-group">
+        <label>Breakdown Cover</label>
+        <div class="radio-group">
+          <label><input type="radio" name="breakdown" value="none" checked> None</label>
+          <label><input type="radio" name="breakdown" value="roadside"> Roadside (+£35)</label>
+          <label><input type="radio" name="breakdown" value="full"> Full UK Recovery (+£75)</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Courtesy Car</label>
+        <div class="radio-group">
+          <label><input type="radio" name="courtesyCar" value="none" checked> None</label>
+          <label><input type="radio" name="courtesyCar" value="small"> Small Car (+£50)</label>
+          <label><input type="radio" name="courtesyCar" value="similar"> Similar Size Car (+£90)</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label><input type="checkbox" id="motorLegal"> Motor Legal Protection</label>
+        <p style="font-size:12px;color:#666;margin:4px 0 0 22px;">Up to £100,000 legal expenses cover. <strong>+£28/year</strong></p>
+      </div>
+    </fieldset>
+
+    <fieldset class="fieldset">
+      <legend>Excess & Premium</legend>
+      <div id="excessInfo" style="font-size:14px;margin-bottom:15px;"></div>
+      <div class="form-group">
+        <label for="voluntaryExcess">Voluntary Excess</label>
+        <input type="range" id="voluntaryExcess" min="0" max="500" step="50" value="250">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#666;">
+          <span>£0</span><span>£500</span>
+        </div>
+        <p style="font-size:13px;color:#666;margin-top:4px;">Selected: <strong>£<span id="excessValue">250</span></strong> (higher excess = lower premium)</p>
+      </div>
+      <div class="price-display">
+        Estimated Annual Premium:
+        <div class="price-value" id="premiumPrice">£—</div>
+        <div style="font-size:12px;color:#666;">Includes Insurance Premium Tax</div>
+      </div>
+    </fieldset>
+
+    <div class="action-bar">
+      <button class="btn-secondary" id="extrasBack">← Back</button>
+      <button id="extrasNext">Next →</button>
+    </div>
+  </div>
+
+  <!-- =============================================================== -->
+  <!-- Page 7: QUOTE & PAYMENT                                         -->
+  <!-- =============================================================== -->
+  <div class="page" id="page-quote">
+    <div id="quoteNormal">
+      <h2>Your Quote</h2>
+
+      <div class="price-display" style="margin-bottom:25px;">
+        Your Annual Premium:
+        <div class="price-value" id="finalPrice">£—</div>
+      </div>
+
+      <fieldset class="fieldset">
+        <legend>Quote Summary</legend>
+        <div id="quoteSummary"></div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend>Document Preferences</legend>
+        <div class="form-group">
+          <label>How would you like to receive documents? <span class="required">*</span></label>
+          <div class="radio-group">
+            <label><input type="radio" name="docPref" value="email" checked> Email Only</label>
+            <label><input type="radio" name="docPref" value="post"> Post Only</label>
+            <label><input type="radio" name="docPref" value="both"> Both Email & Post</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Accessible Formats</label>
+          <label style="font-weight:normal;"><input type="checkbox" id="braille"> Braille documents</label>
+          <label style="font-weight:normal;"><input type="checkbox" id="largePrint"> Large print documents</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <legend>Payment</legend>
+        <div class="form-group">
+          <label>Payment Method <span class="required">*</span></label>
+          <div class="card-options">
+            <div class="card-option" id="paymentFull">
+              <h4>Pay in Full</h4>
+              <p>One card payment today</p>
+            </div>
+            <div class="card-option" id="paymentDeposit">
+              <h4>Deposit + 10 Monthly Instalments</h4>
+              <p>Pay 20% deposit today, then 10 monthly payments. 19.9% APR applies.</p>
+            </div>
+            <div class="card-option" id="paymentTransfer">
+              <h4>Deposit + Bank Transfer</h4>
+              <p>20% deposit by card today, remainder by bank transfer within 14 days.</p>
+            </div>
+          </div>
+        </div>
+        <div id="paymentBreakdown" style="font-size:14px;color:#666;margin-top:10px;"></div>
+      </fieldset>
+
+      <div class="alert alert-error" id="quoteError">Please select a payment method</div>
+
+      <div class="action-bar">
+        <button class="btn-secondary" id="quoteBack">← Back</button>
+        <button id="quoteSubmit">Submit & Get Quote</button>
+      </div>
     </div>
 
-    <script>
-        // ── Existing vehicle form logic ──────────────────────────────────────
-        const updatePolicyLink = document.getElementById('updatePolicyLink');
-        const mainPolicyPage = document.getElementById('mainPolicyPage');
-        const vehicleUpdateForm = document.getElementById('vehicleUpdateForm');
-        const addOrChangeVehicleBtn = document.getElementById('addOrChangeVehicleBtn');
-        const cancelBtn = document.getElementById('cancelBtn');
-        const updateVehicleBtn = document.getElementById('updateVehicleBtn');
-        const registrationInput = document.getElementById('registration');
-        const lookupStatus = document.getElementById('lookupStatus');
-        const vehicleDetails = document.getElementById('vehicleDetails');
-        const errorMessage = document.getElementById('errorMessage');
-        const successMessage = document.getElementById('successMessage');
-        const ownerInput = document.getElementById('ownerName');
-        const keeperInput = document.getElementById('keeperName');
-        const driverInput = document.getElementById('driverName');
-        const ageInput = document.getElementById('vehicleAge');
-        const specInput = document.getElementById('vehicleSpec');
+    <!-- Success -->
+    <div id="quoteSuccess" style="display:none;text-align:center;padding:40px 0;">
+      <h2 style="color:#28a745;">✅ Quote Generated Successfully!</h2>
+      <p style="font-size:16px;">Your quote reference is: <strong id="quoteRef">LVQ-000000</strong></p>
+      <p>A confirmation email has been sent to <strong id="confirmEmail">—</strong>.</p>
+      <p style="color:#666;font-size:14px;">Your documents will be sent by <strong id="confirmDocMethod">—</strong>.</p>
+      <div class="price-display" style="margin-top:20px;">
+        Your Annual Premium:
+        <div class="price-value" id="confirmedPrice">£—</div>
+      </div>
+      <button class="btn-secondary" id="startNewQuote" style="margin-top:20px;">Start New Quote</button>
+    </div>
 
-        updatePolicyLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            showVehicleUpdateForm();
-        });
+    <!-- Declined -->
+    <div id="quoteDeclined" style="display:none;text-align:center;padding:40px 0;">
+      <div class="declined-banner">⚠️ Unable to Provide a Quote</div>
+      <p style="font-size:16px;">Unfortunately, we are unable to offer cover based on the details provided.</p>
+      <p style="color:#666;">Reason: <span id="declineReason"></span></p>
+      <button class="btn-secondary" id="startNewDeclined" style="margin-top:20px;">Start New Quote</button>
+    </div>
+  </div>
 
-        addOrChangeVehicleBtn.addEventListener('click', () => showVehicleUpdateForm());
-        cancelBtn.addEventListener('click', () => hideVehicleUpdateForm());
+</div>
 
-        function showVehicleUpdateForm() {
-            mainPolicyPage.style.display = 'none';
-            vehicleUpdateForm.style.display = 'block';
-            document.getElementById('addDriverForm').style.display = 'none';
-            resetForm();
-        }
+<script>
+// ============================================================================
+// STATE
+// ============================================================================
+const state = {
+  product: null,
+  additionalDrivers: [],
+  vehicles: [],
+  priceBase: 0,
+  priceExtras: 0,
+  declined: false,
+  declineReason: '',
+};
+let currentStep = 1;
+const totalSteps = 7;
 
-        function hideVehicleUpdateForm() {
-            vehicleUpdateForm.style.display = 'none';
-            mainPolicyPage.style.display = 'block';
-        }
+// ============================================================================
+// NAVIGATION
+// ============================================================================
+function showPage(step) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${['account','product','policy','drivers','vehicles','extras','quote'][step-1]}`).classList.add('active');
+  document.querySelectorAll('#steps .step').forEach((s, i) => {
+    s.classList.remove('active', 'done');
+    if (i + 1 < step) s.classList.add('done');
+    if (i + 1 === step) s.classList.add('active');
+  });
+  currentStep = step;
+  window.scrollTo(0, 0);
+}
 
-        function resetForm() {
-            registrationInput.value = '';
-            ownerInput.value = '';
-            keeperInput.value = '';
-            driverInput.value = '';
-            ageInput.value = '';
-            specInput.value = 'Factory Default';
-            lookupStatus.textContent = '';
-            vehicleDetails.classList.remove('visible');
-            errorMessage.style.display = 'none';
-            successMessage.style.display = 'none';
-        }
+// ============================================================================
+// PAGE 1: Account
+// ============================================================================
+document.getElementById('accountNext').addEventListener('click', () => {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const title = document.getElementById('title').value;
+  const firstName = document.getElementById('firstName').value.trim();
+  const lastName = document.getElementById('lastName').value.trim();
+  const dob = document.getElementById('dob').value;
+  const postcode = document.getElementById('postcode').value.trim();
+  const addr1 = document.getElementById('addressLine1').value.trim();
 
-        registrationInput.addEventListener('blur', function() {
-            const reg = this.value.trim().toUpperCase();
-            if (reg.length < 3) {
-                lookupStatus.textContent = 'Please enter a valid registration number';
-                return;
-            }
-            lookupStatus.textContent = 'Looking up vehicle...';
-            setTimeout(() => {
-                const mockData = {
-                    'AB12CDE': { make: 'Honda', model: 'CR-V', year: '2020', color: 'Silver' },
-                    'XYZ789':  { make: 'Ford',  model: 'Focus', year: '2019', color: 'Blue' },
-                    'DEF456':  { make: 'Toyota', model: 'Yaris', year: '2021', color: 'White' }
-                };
-                if (mockData[reg]) {
-                    const data = mockData[reg];
-                    vehicleDetails.classList.add('visible');
-                    document.getElementById('vehicleMake').textContent = data.make;
-                    document.getElementById('vehicleModel').textContent = data.model;
-                    document.getElementById('vehicleYear').textContent = data.year;
-                    document.getElementById('vehicleColor').textContent = data.color;
-                    lookupStatus.textContent = '';
-                    ageInput.value = (new Date().getFullYear() - parseInt(data.year)).toString();
-                } else {
-                    vehicleDetails.classList.remove('visible');
-                    lookupStatus.textContent = 'Registration not found. Please enter manually.';
-                }
-            }, 500);
-        });
+  if (!email || !password || !title || !firstName || !lastName || !dob || !postcode || !addr1) {
+    document.getElementById('accountError').style.display = 'block';
+    return;
+  }
+  if (password.length < 8) {
+    document.getElementById('accountError').textContent = 'Password must be at least 8 characters';
+    document.getElementById('accountError').style.display = 'block';
+    return;
+  }
+  document.getElementById('accountError').style.display = 'none';
 
-        updateVehicleBtn.addEventListener('click', () => {
-            const reg   = registrationInput.value.trim();
-            const owner = ownerInput.value.trim();
-            const keeper = keeperInput.value.trim();
-            const driver = driverInput.value.trim();
-            const age   = ageInput.value;
-            const spec  = specInput.value.trim();
+  // Populate main driver info on page 4
+  document.getElementById('mainDriverName').value = `${title} ${firstName} ${lastName}`;
+  document.getElementById('mainDriverDob').value = dob;
 
-            errorMessage.style.display = 'none';
+  showPage(2);
+});
 
-            if (!reg)                              return showError('Registration number is required');
-            if (!reg.match(/^[A-Z0-9]{3,7}$/))    return showError('Please enter a valid registration (e.g., AB12 CDE)');
-            if (!owner)                            return showError('Please enter the policy owner name');
-            if (!keeper)                           return showError('Please enter the registered keeper name');
-            if (!driver)                           return showError('Please enter the main driver name');
-            if (!age || isNaN(age) || age <= 0)    return showError('Please enter a valid vehicle age');
-            if (age < 0 || age > 100)              return showError('Age must be a positive number');
-            if (!spec)                             return showError('Please enter vehicle specifications');
+// ============================================================================
+// PAGE 2: Product Selection
+// ============================================================================
+document.querySelectorAll('.card-option').forEach(card => {
+  card.addEventListener('click', function() {
+    if (this.closest('#page-quote')) return; // skip payment page
+    document.querySelectorAll('#page-product .card-option').forEach(c => c.classList.remove('selected'));
+    this.classList.add('selected');
+    state.product = this.dataset.product;
+    document.getElementById('productNext').disabled = false;
+  });
+});
 
-            simulateUpdate();
-        });
+document.getElementById('productNext').addEventListener('click', () => {
+  if (!state.product) {
+    document.getElementById('productError').style.display = 'block';
+    return;
+  }
+  document.getElementById('productError').style.display = 'none';
+  if (state.product === 'home') {
+    alert('🏠 Home Insurance path is not yet implemented. Switching to Car for this demo.');
+    state.product = 'car';
+  }
+  showPage(3);
+});
+document.getElementById('productBack').addEventListener('click', () => showPage(1));
 
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.style.display = 'block';
-            successMessage.style.display = 'none';
-        }
+// ============================================================================
+// PAGE 3: Policy Details
+// ============================================================================
+document.getElementById('scheme').addEventListener('change', function() {
+  const desc = {
+    standard: 'Standard cover with basic roadside assistance.',
+    premier: 'Premier cover: includes European travel, courtesy car, and motor legal protection.',
+    classic: 'Specialist cover for vehicles over 20 years old.'
+  };
+  document.getElementById('schemeDesc').textContent = desc[this.value] || '';
+});
 
-        function simulateUpdate() {
-            updateVehicleBtn.disabled = true;
-            updateVehicleBtn.textContent = 'Updating...';
-            setTimeout(() => {
-                errorMessage.style.display = 'none';
-                successMessage.style.display = 'block';
-                updateVehicleBtn.disabled = false;
-                updateVehicleBtn.textContent = 'Update Vehicle';
-            }, 1000);
-        }
+document.getElementById('policyNext').addEventListener('click', () => {
+  const startDate = document.getElementById('startDate').value;
+  const scheme = document.getElementById('scheme').value;
+  if (!startDate || !scheme) {
+    document.getElementById('policyError').style.display = 'block';
+    return;
+  }
+  document.getElementById('policyError').style.display = 'none';
+  showPage(4);
+});
+document.getElementById('policyBack').addEventListener('click', () => showPage(2));
 
-        // ── Add Driver form logic ────────────────────────────────────────────
-        const addDriverBtn         = document.getElementById('addDriverBtn');
-        const addDriverForm        = document.getElementById('addDriverForm');
-        const addDriverToListBtn   = document.getElementById('addDriverToListBtn');
-        const cancelDriverBtn      = document.getElementById('cancelDriverBtn');
-        const saveVehicleBtn       = document.getElementById('saveVehicleBtn');
-        const driverNameInput      = document.getElementById('driverNameInput');
-        const licenseInput         = document.getElementById('licenseInput');
-        const driverList           = document.getElementById('driverList');
-        const driverErrorMessage   = document.getElementById('driverErrorMessage');
-        const driverSuccessMessage = document.getElementById('driverSuccessMessage');
-        const submittingIndicator  = document.getElementById('submittingIndicator');
+// ============================================================================
+// PAGE 4: Drivers
+// ============================================================================
+document.getElementById('addDriverBtnPage4').addEventListener('click', () => {
+  const name = document.getElementById('addDriverName').value.trim();
+  const dob = document.getElementById('addDriverDob').value;
+  const license = document.getElementById('addDriverLicense').value.trim();
+  const relation = document.getElementById('addDriverRelation').value;
+  const years = document.getElementById('addDriverLicenseYears').value;
+  const points = document.getElementById('addDriverPoints').value;
+  const accidents = document.getElementById('addDriverAccidents').value;
+  const claims = document.getElementById('addDriverClaims').value;
+  const occupation = document.getElementById('addDriverOccupation').value;
 
-        addDriverBtn.addEventListener('click', () => {
-            mainPolicyPage.style.display = 'none';
-            vehicleUpdateForm.style.display = 'none';
-            addDriverForm.style.display = 'block';
-            resetDriverForm();
-        });
+  if (!name || !dob || !license || !relation) {
+    document.getElementById('driverError').style.display = 'block';
+    return;
+  }
+  document.getElementById('driverError').style.display = 'none';
 
-        cancelDriverBtn.addEventListener('click', () => {
-            addDriverForm.style.display = 'none';
-            mainPolicyPage.style.display = 'block';
-        });
+  const driver = { name, dob, license, relation, years: years || '0', points: points || '0', accidents: accidents || '0', claims: claims || '0', occupation };
+  state.additionalDrivers.push(driver);
 
-        addDriverToListBtn.addEventListener('click', () => {
-            const name    = driverNameInput.value.trim();
-            const license = licenseInput.value.trim();
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="driver-tag">${name} — ${relation} (License: ${license})</span><button class="remove-btn" data-driver="${name}">×</button>`;
+  document.getElementById('additionalDriversList').appendChild(li);
 
-            driverErrorMessage.style.display = 'none';
+  // Clear fields
+  ['addDriverName','addDriverDob','addDriverLicense','addDriverRelation','addDriverLicenseYears','addDriverPoints','addDriverAccidents','addDriverClaims','addDriverOccupation'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  });
 
-            if (!name || !license) {
-                driverErrorMessage.style.display = 'block';
-                return;
-            }
+  // Refresh vehicle driver lists
+  refreshDriverOptions();
+});
 
-            // Validate: name must not be purely numeric
-            if (/^\d/.test(name)) {
-                driverErrorMessage.style.display = 'block';
-                driverErrorMessage.textContent = 'Please fill all required fields';
-                return;
-            }
+// Remove driver
+document.getElementById('additionalDriversList').addEventListener('click', function(e) {
+  if (e.target.classList.contains('remove-btn')) {
+    const driverName = e.target.dataset.driver;
+    state.additionalDrivers = state.additionalDrivers.filter(d => d.name !== driverName);
+    e.target.parentElement.remove();
+    refreshDriverOptions();
+  }
+});
 
-            // Add to list
-            const li = document.createElement('li');
-            li.innerHTML = `<span class="driver-tag">${name} (${license})</span>`;
-            driverList.appendChild(li);
+document.getElementById('driversNext').addEventListener('click', () => {
+  const licenseNum = document.getElementById('mainLicenseNumber').value.trim();
+  const licenseYears = document.getElementById('mainLicenseYears').value;
+  const occupation = document.getElementById('mainOccupation').value;
+  if (!licenseNum || !licenseYears || !occupation) {
+    document.getElementById('driverError').textContent = 'Please fill all required fields for the Account Holder driver';
+    document.getElementById('driverError').style.display = 'block';
+    return;
+  }
 
-            // Enable save and clear fields
-            saveVehicleBtn.disabled = false;
-            driverNameInput.value = '';
-            licenseInput.value = '';
-        });
+  // Store main driver info
+  state.mainDriver = {
+    name: document.getElementById('mainDriverName').value,
+    dob: document.getElementById('mainDriverDob').value,
+    licenseNumber: licenseNum,
+    licenseYears: parseInt(licenseYears),
+    penaltyPoints: parseInt(document.getElementById('mainPenaltyPoints').value),
+    accidents: parseInt(document.getElementById('mainAccidents').value),
+    claims: parseInt(document.getElementById('mainClaims').value),
+    occupation,
+  };
 
-        saveVehicleBtn.addEventListener('click', () => {
-            if (driverList.children.length === 0) {
-                driverErrorMessage.style.display = 'block';
-                return;
-            }
+  document.getElementById('driverError').style.display = 'none';
+  refreshDriverOptions();
+  showPage(5);
+});
+document.getElementById('driversBack').addEventListener('click', () => showPage(3));
 
-            // Show submitting state
-            saveVehicleBtn.disabled = true;
-            submittingIndicator.style.display = 'inline';
-            driverErrorMessage.style.display = 'none';
+// ============================================================================
+// Driver options refresher (used across pages)
+// ============================================================================
+function refreshDriverOptions() {
+  const allDrivers = [state.mainDriver, ...state.additionalDrivers].filter(Boolean);
+  const selectElements = ['mainDriverSelect', 'ncdHolder', 'vehicleOwner', 'registeredKeeper'];
+  selectElements.forEach(selId => {
+    const sel = document.getElementById(selId);
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">Select...</option>';
+    allDrivers.forEach(d => {
+      const label = d.name + (d.relation ? ` (${d.relation})` : '');
+      sel.innerHTML += `<option value="${d.name}">${label}</option>`;
+    });
+    if (currentVal) sel.value = currentVal;
+  });
 
-            // Simulate API call to /api/vehicles
-            fetch('/api/vehicles', { method: 'POST', body: '{}' })
-                .catch(() => {})  // mock site — network call will fail, handle below
-                .finally(() => {
-                    setTimeout(() => {
-                        submittingIndicator.style.display = 'none';
-                        saveVehicleBtn.disabled = false;
-                        driverSuccessMessage.style.display = 'block';
-                    }, 800);
-                });
-        });
+  // Also update checkboxes for vehicle page
+  const cbContainer = document.getElementById('vehicleDriverCheckboxes');
+  cbContainer.innerHTML = '';
+  allDrivers.forEach((d, i) => {
+    const label = d.name + (d.relation ? ` (${d.relation})` : '');
+    cbContainer.innerHTML += `<label style="display:inline-block;margin-right:15px;font-weight:normal;">
+      <input type="checkbox" class="driver-cb" value="${d.name}" ${i===0?'checked':''}> ${label}
+    </label>`;
+  });
+}
 
-        function resetDriverForm() {
-            driverNameInput.value = '';
-            licenseInput.value = '';
-            driverList.innerHTML = '';
-            saveVehicleBtn.disabled = true;
-            driverErrorMessage.style.display = 'none';
-            driverSuccessMessage.style.display = 'none';
-            submittingIndicator.style.display = 'none';
-        }
+// Driver relation options for ownership dropdowns
+function getRelationOptions() {
+  const allDrivers = [state.mainDriver, ...state.additionalDrivers].filter(Boolean);
+  return ['NCD Holder', 'Spouse/Partner', 'Parent', 'Son/Daughter', 'Sibling', 'Other'];
+}
 
-        console.log('Available test registrations: AB12CDE, XYZ789, DEF456');
-    </script>
+// ============================================================================
+// PAGE 5: Vehicles — Registration Lookup
+// ============================================================================
+const regDatabase = {
+  'AB12CDE': { make: 'Honda', model: 'CR-V', year: 2020, engine: 1600, fuel: 'Petrol', value: 18000 },
+  'XY23ABC': { make: 'Ford', model: 'Focus', year: 2019, engine: 1500, fuel: 'Diesel', value: 12000 },
+  'DE56FGH': { make: 'Toyota', model: 'Yaris', year: 2021, engine: 1300, fuel: 'Hybrid', value: 14500 },
+  'LM19JKL': { make: 'BMW', model: '320d', year: 2018, engine: 2000, fuel: 'Diesel', value: 16500 },
+  'NP05MNO': { make: 'Vauxhall', model: 'Corsa', year: 2015, engine: 1200, fuel: 'Petrol', value: 5000 },
+  'QR17PQR': { make: 'Audi', model: 'A3', year: 2022, engine: 2000, fuel: 'Petrol', value: 22000 },
+  'ST64STU': { make: 'Volkswagen', model: 'Golf', year: 2024, engine: 1500, fuel: 'Petrol', value: 25000 },
+  'VW10VWX': { make: 'Mercedes', model: 'C-Class', year: 2020, engine: 2200, fuel: 'Diesel', value: 20000 },
+};
+
+document.getElementById('lookupRegBtn').addEventListener('click', () => {
+  const reg = document.getElementById('vehicleReg').value.trim().toUpperCase().replace(/\s/g, '');
+  const status = document.getElementById('lookupStatus');
+  const details = document.getElementById('vehicleDetails');
+
+  if (reg.length < 3) { status.textContent = 'Please enter a valid registration'; return; }
+
+  status.textContent = 'Looking up vehicle...';
+  setTimeout(() => {
+    if (regDatabase[reg]) {
+      const d = regDatabase[reg];
+      document.getElementById('vMake').textContent = d.make;
+      document.getElementById('vModel').textContent = d.model;
+      document.getElementById('vYear').textContent = d.year;
+      document.getElementById('vEngine').textContent = d.engine + 'cc';
+      document.getElementById('vFuel').textContent = d.fuel;
+      document.getElementById('vValue').textContent = '£' + d.value.toLocaleString();
+      details.classList.add('visible');
+      document.getElementById('vehicleMake').value = d.make;
+      document.getElementById('vehicleModel').value = d.model;
+      document.getElementById('vehicleYear').value = d.year;
+      document.getElementById('vehicleEngine').value = d.engine;
+      document.getElementById('vehicleFuel').value = d.fuel;
+      document.getElementById('vehicleValue').value = d.value;
+      status.textContent = 'Vehicle found ✓';
+      status.style.color = '#28a745';
+    } else {
+      details.classList.remove('visible');
+      status.textContent = 'Registration not found — please enter details manually';
+      status.style.color = '#d32f2f';
+    }
+  }, 500);
+});
+
+// Add vehicle to list
+document.getElementById('addVehicleBtn').addEventListener('click', () => {
+  const reg = document.getElementById('vehicleReg').value.trim().toUpperCase().replace(/\s/g, '');
+  const make = document.getElementById('vehicleMake').value.trim();
+  const model = document.getElementById('vehicleModel').value.trim();
+  const year = document.getElementById('vehicleYear').value;
+  const engine = document.getElementById('vehicleEngine').value;
+  const fuel = document.getElementById('vehicleFuel').value;
+  const value = document.getElementById('vehicleValue').value;
+  const usage = document.querySelector('input[name="usageType"]:checked')?.value;
+  const mainDriver = document.getElementById('mainDriverSelect').value;
+  const ncdYears = document.getElementById('ncdYears').value;
+  const ncdHolder = document.getElementById('ncdHolder').value;
+  const owner = document.getElementById('vehicleOwner').value;
+  const keeper = document.getElementById('registeredKeeper').value;
+  const overnight = document.getElementById('overnightLocation').value;
+
+  if (!make || !model || !year || !value || !usage || !mainDriver || !ncdHolder || !owner || !keeper || !overnight) {
+    document.getElementById('vehicleError').style.display = 'block';
+    return;
+  }
+  document.getElementById('vehicleError').style.display = 'none';
+
+  // Named drivers from checkboxes
+  const namedDrivers = Array.from(document.querySelectorAll('.driver-cb:checked')).map(cb => cb.value);
+
+  const vehicle = { reg, make, model, year, engine, fuel, value: parseInt(value), usage, mainDriver, namedDrivers, ncdYears: parseInt(ncdYears), ncdHolder, owner, keeper, overnight };
+  state.vehicles.push(vehicle);
+
+  // Display in list
+  const li = document.createElement('li');
+  li.innerHTML = `<span class="vehicle-tag">${make} ${model} (${year}) — ${reg || 'Manual Entry'} — Main: ${mainDriver}</span><button class="remove-btn" data-vehicle="${state.vehicles.length - 1}">×</button>`;
+  document.getElementById('vehicleList').appendChild(li);
+
+  // Clear vehicle form fields
+  ['vehicleReg','vehicleMake','vehicleModel','vehicleYear','vehicleEngine','vehicleFuel','vehicleValue','ncdYears'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  ['vehicleFuel','mainDriverSelect','ncdHolder','vehicleOwner','registeredKeeper','overnightLocation'].forEach(id => {
+    document.getElementById(id).selectedIndex = 0;
+  });
+  const usageRadios = document.querySelectorAll('input[name="usageType"]');
+  usageRadios.forEach(r => r.checked = false);
+  document.getElementById('vehicleDetails').classList.remove('visible');
+  document.getElementById('lookupStatus').textContent = '';
+  document.getElementById('lookupStatus').style.color = '';
+});
+
+// Remove vehicle
+document.getElementById('vehicleList').addEventListener('click', function(e) {
+  if (e.target.classList.contains('remove-btn')) {
+    const idx = parseInt(e.target.dataset.vehicle);
+    state.vehicles.splice(idx, 1);
+    // Rebuild list
+    const list = document.getElementById('vehicleList');
+    list.innerHTML = '';
+    state.vehicles.forEach((v, i) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="vehicle-tag">${v.make} ${v.model} (${v.year}) — ${v.reg || 'Manual Entry'} — Main: ${v.mainDriver}</span><button class="remove-btn" data-vehicle="${i}">×</button>`;
+      list.appendChild(li);
+    });
+  }
+});
+
+document.getElementById('vehiclesNext').addEventListener('click', () => {
+  if (state.vehicles.length === 0) {
+    document.getElementById('vehicleError').textContent = 'Please add at least one vehicle';
+    document.getElementById('vehicleError').style.display = 'block';
+    return;
+  }
+
+  // Check for commercial use → decline
+  const hasCommercial = state.vehicles.some(v => v.usage === 'commercial');
+  if (hasCommercial) {
+    state.declined = true;
+    state.declineReason = 'Commercial use is not covered under this policy. Our products only cover Social, Domestic & Pleasure, and Business use.';
+  }
+
+  calculatePremium();
+  showPage(6);
+});
+document.getElementById('vehiclesBack').addEventListener('click', () => showPage(4));
+
+// ============================================================================
+// PREMIUM CALCULATION (business rules — matches underwriter guide)
+// ============================================================================
+function calculatePremium() {
+  if (state.vehicles.length === 0) return;
+
+  const v = state.vehicles[0]; // primary vehicle
+  let base = 450; // base premium
+
+  // Vehicle value factor: 3% of value
+  base += v.value * 0.03;
+
+  // Engine size surcharge
+  if (v.engine >= 2000) base += 120;
+  else if (v.engine >= 1600) base += 60;
+
+  // Age of vehicle: newer = higher premium (higher repair cost), older = lower
+  const currentYear = new Date().getFullYear();
+  const vehicleAge = currentYear - v.year;
+  if (vehicleAge <= 2) base += 80;
+  else if (vehicleAge >= 10) base -= 50;
+
+  // Main driver risk
+  const md = state.mainDriver;
+  if (md) {
+    // Age factor
+    const mdAge = calculateAge(md.dob);
+    if (mdAge < 25) base += 200;
+    else if (mdAge < 30) base += 100;
+    else if (mdAge >= 50) base -= 50;
+
+    // License years
+    if (md.licenseYears < 3) base += 150;
+    else if (md.licenseYears < 5) base += 80;
+
+    // Penalty points
+    if (md.penaltyPoints >= 9) base += 180;
+    else if (md.penaltyPoints >= 6) base += 120;
+    else if (md.penaltyPoints >= 3) base += 50;
+
+    // Accidents
+    if (md.accidents >= 2) base += 200;
+    else if (md.accidents >= 1) base += 100;
+
+    // Claims
+    if (md.claims >= 2) base += 150;
+    else if (md.claims >= 1) base += 80;
+
+    // Occupation risk
+    const highRisk = ['Builder', 'Driver', 'Mechanic', 'Plumber'];
+    if (highRisk.includes(md.occupation)) base += 60;
+  }
+
+  // Additional drivers risk
+  state.additionalDrivers.forEach(ad => {
+    const adAge = calculateAge(ad.dob);
+    if (adAge < 25) base += 150;
+    else if (adAge < 30) base += 70;
+    if (parseInt(ad.points) >= 6) base += 80;
+    if (parseInt(ad.accidents) >= 1) base += 60;
+  });
+
+  // NCD discount: 5% per year, max 40%
+  const ncdPct = Math.min(v.ncdYears * 5, 40);
+  base -= base * (ncdPct / 100);
+
+  // Overnight location
+  if (v.overnight === 'Private Garage') base -= 30;
+  else if (v.overnight === 'Street Outside Home') base += 40;
+  else if (v.overnight === 'Public Car Park') base += 70;
+
+  // Postcode risk (from account page)
+  const postcode = document.getElementById('postcode').value.trim().toUpperCase();
+  const highRiskPostcodes = ['B', 'M', 'L', 'N', 'E', 'NW', 'SE'];
+  if (highRiskPostcodes.some(p => postcode.startsWith(p))) base += 80;
+
+  // Scheme
+  const scheme = document.getElementById('scheme').value;
+  if (scheme === 'premier') base += 100;
+  else if (scheme === 'classic') base -= 50;
+
+  state.priceBase = Math.round(base);
+  if (state.priceBase < 200) state.priceBase = 200; // minimum premium
+
+  updateExtrasPage();
+}
+
+function calculateAge(dobStr) {
+  if (!dobStr) return 30;
+  const dob = new Date(dobStr);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+// ============================================================================
+// PAGE 6: Extras — price display
+// ============================================================================
+function updateExtrasPage() {
+  const v = state.vehicles[0];
+  if (!v) return;
+
+  // Compulsory excess based on driver risk
+  const md = state.mainDriver;
+  let compulsoryExcess = 250;
+  if (md && md.penaltyPoints >= 6) compulsoryExcess += 150;
+  if (md && calculateAge(md.dob) < 25) compulsoryExcess += 200;
+  if (v && v.engine >= 2000) compulsoryExcess += 100;
+  if (v && (new Date().getFullYear() - v.year) <= 2) compulsoryExcess += 50;
+
+  document.getElementById('excessInfo').innerHTML = `
+    <strong>Compulsory Excess:</strong> £${compulsoryExcess}<br>
+    <span style="font-size:12px;color:#666;">This is the minimum amount you must pay towards any claim.</span>
+  `;
+
+  // Save for quote page
+  state.compulsoryExcess = compulsoryExcess;
+
+  // Price display
+  const volExcess = parseInt(document.getElementById('voluntaryExcess').value);
+  const excessDiscount = volExcess * 0.3; // each £50 voluntary = £15 off
+
+  let extras = 0;
+  if (document.getElementById('ncdGuarantee').checked) extras += 45;
+  const breakdown = document.querySelector('input[name="breakdown"]:checked')?.value;
+  if (breakdown === 'roadside') extras += 35;
+  else if (breakdown === 'full') extras += 75;
+  const courtesy = document.querySelector('input[name="courtesyCar"]:checked')?.value;
+  if (courtesy === 'small') extras += 50;
+  else if (courtesy === 'similar') extras += 90;
+  if (document.getElementById('motorLegal').checked) extras += 28;
+
+  state.priceExtras = extras;
+  const total = state.priceBase + extras - excessDiscount;
+  document.getElementById('premiumPrice').textContent = '£' + Math.round(total).toLocaleString();
+  state.finalPrice = Math.round(total);
+}
+
+document.getElementById('voluntaryExcess').addEventListener('input', function() {
+  document.getElementById('excessValue').textContent = this.value;
+  updateExtrasPage();
+});
+
+// Recalculate on checkbox/radio change
+document.querySelectorAll('#page-extras input').forEach(el => {
+  el.addEventListener('change', updateExtrasPage);
+});
+
+document.getElementById('extrasNext').addEventListener('click', () => {
+  if (state.declined) {
+    showDeclined();
+    return;
+  }
+
+  // Populate quote page
+  document.getElementById('finalPrice').textContent = '£' + state.finalPrice.toLocaleString();
+  document.getElementById('confirmedPrice').textContent = '£' + state.finalPrice.toLocaleString();
+
+  // Build summary
+  const v = state.vehicles[0];
+  const md = state.mainDriver;
+  let summary = '';
+  summary += `<div class="summary-row"><span class="summary-label">Product</span><span class="summary-value">Car Insurance (${document.getElementById('scheme').value})</span></div>`;
+  summary += `<div class="summary-row"><span class="summary-label">Account Holder</span><span class="summary-value">${md?.name || '—'}</span></div>`;
+  if (v) {
+    summary += `<div class="summary-row"><span class="summary-label">Vehicle</span><span class="summary-value">${v.make} ${v.model} (${v.year})</span></div>`;
+    summary += `<div class="summary-row"><span class="summary-label">Main Driver</span><span class="summary-value">${v.mainDriver}</span></div>`;
+    summary += `<div class="summary-row"><span class="summary-label">NCD</span><span class="summary-value">${v.ncdYears} years</span></div>`;
+    summary += `<div class="summary-row"><span class="summary-label">Overnight</span><span class="summary-value">${v.overnight}</span></div>`;
+  }
+  summary += `<div class="summary-row"><span class="summary-label">Additional Drivers</span><span class="summary-value">${state.additionalDrivers.length}</span></div>`;
+  summary += `<div class="summary-row"><span class="summary-label">Base Premium</span><span class="summary-value">£${state.priceBase.toLocaleString()}</span></div>`;
+  summary += `<div class="summary-row"><span class="summary-label">Extras</span><span class="summary-value">£${state.priceExtras.toLocaleString()}</span></div>`;
+  summary += `<div class="summary-row"><span class="summary-label">Voluntary Excess Discount</span><span class="summary-value">-£${Math.round(parseInt(document.getElementById('voluntaryExcess').value) * 0.3).toLocaleString()}</span></div>`;
+  summary += `<div class="summary-row" style="font-weight:bold;font-size:16px;"><span class="summary-label">Total Annual Premium</span><span class="summary-value" style="color:#005eb8;">£${state.finalPrice.toLocaleString()}</span></div>`;
+  document.getElementById('quoteSummary').innerHTML = summary;
+  document.getElementById('confirmEmail').textContent = document.getElementById('email').value;
+
+  showPage(7);
+});
+document.getElementById('extrasBack').addEventListener('click', () => showPage(5));
+
+// ============================================================================
+// PAGE 7: Quote & Payment
+// ============================================================================
+// Payment card selection
+document.getElementById('paymentFull').addEventListener('click', function() {
+  document.querySelectorAll('#page-quote .card-option').forEach(c => c.classList.remove('selected'));
+  this.classList.add('selected');
+  state.paymentMethod = 'full';
+  updatePaymentBreakdown();
+});
+document.getElementById('paymentDeposit').addEventListener('click', function() {
+  document.querySelectorAll('#page-quote .card-option').forEach(c => c.classList.remove('selected'));
+  this.classList.add('selected');
+  state.paymentMethod = 'deposit';
+  updatePaymentBreakdown();
+});
+document.getElementById('paymentTransfer').addEventListener('click', function() {
+  document.querySelectorAll('#page-quote .card-option').forEach(c => c.classList.remove('selected'));
+  this.classList.add('selected');
+  state.paymentMethod = 'transfer';
+  updatePaymentBreakdown();
+});
+
+function updatePaymentBreakdown() {
+  const div = document.getElementById('paymentBreakdown');
+  if (!state.paymentMethod || !state.finalPrice) { div.textContent = ''; return; }
+  if (state.paymentMethod === 'full') {
+    div.innerHTML = `<strong>Pay in full:</strong> £${state.finalPrice.toLocaleString()} today by card.`;
+  } else if (state.paymentMethod === 'deposit') {
+    const deposit = Math.round(state.finalPrice * 0.2);
+    const remainder = state.finalPrice - deposit;
+    const monthly = Math.round((remainder * 1.199) / 10); // 19.9% APR
+    div.innerHTML = `<strong>Deposit:</strong> £${deposit.toLocaleString()} today<br><strong>10 monthly payments:</strong> £${monthly.toLocaleString()}/month<br><span style="font-size:12px;">19.9% APR representative. Total payable: £${(deposit + monthly * 10).toLocaleString()}.</span>`;
+  } else if (state.paymentMethod === 'transfer') {
+    const deposit = Math.round(state.finalPrice * 0.2);
+    const remainder = state.finalPrice - deposit;
+    div.innerHTML = `<strong>Deposit:</strong> £${deposit.toLocaleString()} by card today<br><strong>Remainder:</strong> £${remainder.toLocaleString()} by bank transfer within 14 days.`;
+  }
+}
+
+document.getElementById('quoteSubmit').addEventListener('click', () => {
+  if (!state.paymentMethod) {
+    document.getElementById('quoteError').style.display = 'block';
+    return;
+  }
+  document.getElementById('quoteError').style.display = 'none';
+
+  // Show success
+  document.getElementById('quoteNormal').style.display = 'none';
+  document.getElementById('quoteSuccess').style.display = 'block';
+
+  // Set confirmation
+  const ref = 'LVQ-' + Math.floor(Math.random() * 900000 + 100000);
+  document.getElementById('quoteRef').textContent = ref;
+  const docPref = document.querySelector('input[name="docPref"]:checked')?.value || 'email';
+  const formats = [];
+  if (document.getElementById('braille').checked) formats.push('Braille');
+  if (document.getElementById('largePrint').checked) formats.push('Large Print');
+  document.getElementById('confirmDocMethod').textContent = docPref + (formats.length ? ' (' + formats.join(', ') + ')' : '');
+});
+document.getElementById('quoteBack').addEventListener('click', () => showPage(6));
+
+function showDeclined() {
+  document.getElementById('quoteNormal').style.display = 'none';
+  document.getElementById('quoteSuccess').style.display = 'none';
+  document.getElementById('quoteDeclined').style.display = 'block';
+  document.getElementById('declineReason').textContent = state.declineReason;
+}
+
+document.getElementById('startNewQuote').addEventListener('click', resetAll);
+document.getElementById('startNewDeclined').addEventListener('click', resetAll);
+
+function resetAll() {
+  state.product = null;
+  state.additionalDrivers = [];
+  state.vehicles = [];
+  state.priceBase = 0;
+  state.priceExtras = 0;
+  state.declined = false;
+  state.declineReason = '';
+  state.paymentMethod = null;
+  state.finalPrice = 0;
+
+  // Reset all page visibility
+  document.getElementById('quoteNormal').style.display = 'block';
+  document.getElementById('quoteSuccess').style.display = 'none';
+  document.getElementById('quoteDeclined').style.display = 'none';
+  document.getElementById('vehicleList').innerHTML = '';
+  document.getElementById('additionalDriversList').innerHTML = '';
+  document.getElementById('vehicleDriverCheckboxes').innerHTML = '';
+  document.getElementById('paymentBreakdown').textContent = '';
+  document.querySelectorAll('#page-quote .card-option').forEach(c => c.classList.remove('selected'));
+
+  showPage(1);
+}
+
+// ============================================================================
+// INIT
+// ============================================================================
+refreshDriverOptions();
+console.log('LV Insurance Mock — Available regs: AB12CDE, XY23ABC, DE56FGH, LM19JKL, NP05MNO, QR17PQR, ST64STU, VW10VWX');
+console.log('Try commercial use on vehicle page to see decline flow.');
+</script>
 </body>
 </html>
