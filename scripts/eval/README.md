@@ -150,15 +150,27 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 
 ---
 
-## Current Baseline
+## Current Baseline (stateful scraped data)
 
 | Metric | Value |
 |--------|-------|
 | Stories | 4 |
 | Placeholders | 43 |
-| Resolution accuracy (static) | 81.4% |
-| Resolution accuracy (resolver, RAG off) | 30.2% |
-| Resolution accuracy (resolver, RAG on) | 34.9% |
+| Resolution accuracy (CI gate, captured code) | 81.4% |
+| Resolution accuracy (resolver, RAG off) | 41.9% |
+| Resolution accuracy (resolver, RAG on) | **53.5%** |
+| RAG improvement | **+11.6pp** |
 | Skeleton completeness | 100.0% |
 
+### Per-site breakdown (resolver, RAG on vs off)
+
+| Site | RAG off | RAG on | Δ |
+|------|---------|--------|---|
+| saucedemo | 45.0% | 55.0% | +10.0pp |
+| automationexercise | 25.0% | 37.5% | +12.5pp |
+| demoqa | 62.5% | 75.0% | +12.5pp |
+| theinternet | 28.6% | 42.9% | +14.3pp |
+
 Baseline file: `scripts/eval/baseline.json`
+
+To refresh scraped data: `python scripts/eval/eval_resolver.py --mode pipeline`

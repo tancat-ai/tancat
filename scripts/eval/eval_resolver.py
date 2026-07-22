@@ -363,8 +363,12 @@ async def _cmd_static() -> int:
 
 
 async def _cmd_live() -> int:
-    """Scrape live sites then run resolver eval."""
-    print("Scraping live pages (this requires running servers) ...")
+    """Scrape live sites using static scraper (no auth). Fast but limited.
+
+    For stateful pages (saucedemo cart/checkout, automationexercise cart),
+    use ``--mode pipeline`` instead.
+    """
+    print("Scraping live pages (static — no auth, no cart seeding) ...")
     pages = await scrape_and_save_pages()
     if not pages:
         print("ERROR: No pages scraped.", file=sys.stderr)
@@ -375,15 +379,109 @@ async def _cmd_live() -> int:
     return 0
 
 
+async def _cmd_pipeline() -> int:
+    """Scrape pages using StatefulPageScraper — matches the real pipeline.
+
+    Uses credentials and cart seeding so pages like saucedemo.com/cart.html
+    and automationexercise.com/view_cart are scraped in their populated state
+    (not empty / not 404).  Credentials are loaded from environment:
+
+        SAUCEDEMO_USERNAME=standard_user
+        SAUCEDEMO_PASSWORD=secret_sauce
+    """
+    from src.journey_models import CredentialProfile
+    from src.stateful_scraper import StatefulPageScraper
+
+    placeholders = _load_golden_placeholders()
+
+    # Group pages by site to determine scraping strategy
+    sites: dict[str, dict[str, Any]] = {}
+    for ph in placeholders:
+        site = ph["site"]
+        url = ph["expected_page"]
+        if site not in sites:
+            sites[site] = {"urls": set(), "base_url": ""}
+        sites[site]["urls"].add(url)
+        # Use the first non-internal URL as the base
+        if not sites[site]["base_url"] and not any(
+            url.endswith(p) for p in ["/cart.html", "/checkout", "/view_cart", "/products"]
+        ):
+            sites[site]["base_url"] = url
+
+    _SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
+    total_pages = 0
+
+    for site, info in sorted(sites.items()):
+        urls = sorted(info["urls"])
+        base_url = info["base_url"] or urls[0]
+
+        # Choose scraping strategy per site
+        if site == "saucedemo":
+            username = os.getenv("SAUCEDEMO_USERNAME", "standard_user")
+            password = os.getenv("SAUCEDEMO_PASSWORD", "secret_sauce")
+            creds = CredentialProfile(
+                label="saucedemo",
+                username=username,
+                password=password,
+            )
+            scraper = StatefulPageScraper(base_url, credential_profile=creds)
+            logger.info("%s: StatefulPageScraper with credentials (%d page(s))", site, len(urls))
+
+        elif site == "automationexercise":
+            # No login needed, but cart seeding helps for /view_cart state
+            scraper = StatefulPageScraper(base_url)
+            logger.info("%s: StatefulPageScraper (cart seeding, %d page(s))", site, len(urls))
+
+        else:
+            # Static sites — use simple PageScraper
+            from src.scraper import PageScraper
+
+            static = PageScraper()
+            for url in urls:
+                logger.info("  %s: scraping %s (static) ...", site, url)
+                elements, error, _final_url = await static.scrape_url(url)
+                if error:
+                    logger.warning("    Error: %s", error)
+                if elements:
+                    safe_name = url.replace("://", "_").replace("/", "_").replace(":", "_")[:120]
+                    out_path = _SCRAPED_DIR / f"{safe_name}.json"
+                    out_path.write_text(
+                        json.dumps({"url": url, "elements": elements}, indent=2),
+                        encoding="utf-8",
+                    )
+                    logger.info("    Saved %d elements to %s", len(elements), out_path.name)
+                    total_pages += 1
+            continue
+
+        # Stateful scrape: all URLs in one session
+        scraped = await scraper.scrape_urls(urls)
+        for url, elements in scraped.items():
+            if elements:
+                safe_name = url.replace("://", "_").replace("/", "_").replace(":", "_")[:120]
+                out_path = _SCRAPED_DIR / f"{safe_name}.json"
+                out_path.write_text(
+                    json.dumps({"url": url, "elements": elements}, indent=2),
+                    encoding="utf-8",
+                )
+                logger.info("    Saved %d elements to %s", len(elements), out_path.name)
+                total_pages += 1
+            else:
+                logger.warning("    No elements for %s", url)
+
+    print(f"\nScraped {total_pages} page(s) across {len(sites)} site(s). Saved to {_SCRAPED_DIR}/")
+    print("Now run: python scripts/eval/eval_resolver.py --mode static")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Resolver-only evaluation — tests resolution accuracy in isolation",
     )
     parser.add_argument(
         "--mode",
-        choices=["static", "live"],
+        choices=["static", "live", "pipeline"],
         default="static",
-        help="static: use pre-saved scraped data | live: scrape sites first (default: static)",
+        help="static: frozen scraped data | live: static scrape | pipeline: stateful scrape (matches real pipeline)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
 
@@ -394,6 +492,8 @@ def main() -> int:
         datefmt="%H:%M:%S",
     )
 
+    if args.mode == "pipeline":
+        return asyncio.run(_cmd_pipeline())
     if args.mode == "live":
         return asyncio.run(_cmd_live())
     return asyncio.run(_cmd_static())
