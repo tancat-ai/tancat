@@ -1,6 +1,6 @@
 {
-  "total": 100,
-  "completed": 100,
+  "total": 105,
+  "completed": 105,
   "pending": 0,
   "files": [
     {
@@ -502,7 +502,32 @@
       "source": "src/vision_enricher.py",
       "doc": "markdown_docs/src/vision_enricher.py.md",
       "status": "completed"
+    },
+    {
+      "source": "scripts/eval/eval_harness.py",
+      "doc": "markdown_docs/scripts/eval_harness.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/eval/eval_runner.py",
+      "doc": "markdown_docs/scripts/eval_runner.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_retriever.py",
+      "doc": "markdown_docs/src/rag_retriever.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_store.py",
+      "doc": "markdown_docs/src/rag_store.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/storage.py",
+      "doc": "markdown_docs/src/storage.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-07-20"
+  "last_updated": "2026-07-21"
 }

@@ -38,7 +38,7 @@ The existing `scripts/uat/uat_automationexercise.py` validates two stories again
 ## 3. Non-Goals (MVP)
 
 - Dual-tier (free/paid) support — added when Phase 1 multi-agent exists (Track B)
-- RAG integration — deferred to Phase 3
+- RAG integration — implemented via `--regenerate` flag in Eval Harness to measure resolution accuracy gains against baseline
 - Real-time dashboards — CLI + console output only
 - Local mock site evaluation — deferred, future task
 

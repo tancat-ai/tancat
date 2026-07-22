@@ -67,6 +67,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         code_dir=captures_dir,
         db_path=db_path,
         test_output_dir=test_output if args.mode == "full" else None,
+        regenerate=args.regenerate,
     )
 
     report = runner.run(
@@ -215,10 +216,9 @@ def main(argv: list[str] | None = None) -> int:
     # --- run ---
     run_parser = subparsers.add_parser("run", help="Execute evaluation")
     run_parser.add_argument(
-        "--mode",
-        choices=["static", "full"],
-        default="static",
-        help="Evaluation mode (default: static)",
+        "--regenerate",
+        action="store_true",
+        help="Regenerate code via the actual pipeline before validating",
     )
     run_parser.add_argument("--dataset", help="Path to dataset directory")
     run_parser.add_argument("--captures", help="Path to captures directory")

@@ -323,11 +323,13 @@ class EvalRunner:
         code_dir: Path,
         db_path: Path,
         test_output_dir: Path | None = None,
+        regenerate: bool = False,
     ) -> None:
         self.dataset_dir = dataset_dir
         self.code_dir = code_dir
         self.db_path = db_path
         self.test_output_dir = test_output_dir
+        self.regenerate = regenerate
 
     def _load_code_map(self) -> dict[str, str]:
         """Load all captured code files into a map keyed by story_id."""
@@ -390,21 +392,69 @@ class EvalRunner:
         Returns:
             HarnessReport with all metrics computed.
         """
-        code_map = self._load_code_map()
+        if self.regenerate:
+            code_map, durations = self._regenerate_code()
+        else:
+            code_map = self._load_code_map()
+            durations = {}
 
         if mode == "full":
             test_files = self._load_test_files()
             results = run_full_validation(
                 self.dataset_dir,
                 code_map,
+                durations=durations,
                 test_files=test_files,
                 pytest_timeout=pytest_timeout,
             )
         else:
-            results = run_static_validation(self.dataset_dir, code_map)
+            results = run_static_validation(self.dataset_dir, code_map, durations)
 
         if persist:
             run_ids = persist_results(self.db_path, results, mode)
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
         return HarnessReport(stories=results)
+
+    def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
+        """Regenerate code for all stories in the dataset using the live pipeline."""
+        import asyncio
+
+        from src.llm_client import LLMClient
+        from src.orchestrator import TestOrchestrator
+        from src.test_generator import TestGenerator
+
+        code_map: dict[str, str] = {}
+        durations: dict[str, float] = {}
+
+        client = LLMClient()
+        generator = TestGenerator(client=client)
+        # Default to POM mode for regeneration
+        orchestrator = TestOrchestrator(generator, pom_mode=True)
+
+        logger.info("Regenerating code for %d stories...", len(list(self.dataset_dir.glob("*.json"))))
+
+        async def process_story(golden_file: Path):
+            golden = load_golden_key(golden_file)
+            story_id = golden["id"]
+
+            try:
+                start = datetime.now(UTC).timestamp()
+                code = await orchestrator.run_pipeline(
+                    user_story=golden["user_story"],
+                    conditions="\n".join(golden["conditions"]),
+                    target_urls=[golden["base_url"]],
+                )
+                durations[story_id] = datetime.now(UTC).timestamp() - start
+                code_map[story_id] = code
+                logger.info("Regenerated %s", story_id)
+            except Exception as e:
+                logger.error("Failed to regenerate %s: %s", story_id, e)
+                code_map[story_id] = ""
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        tasks = [process_story(f) for f in sorted(self.dataset_dir.glob("*.json"))]
+        loop.run_until_complete(asyncio.gather(*tasks))
+
+        return code_map, durations

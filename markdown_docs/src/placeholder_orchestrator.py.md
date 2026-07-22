@@ -16,14 +16,16 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 
 ## Class: `PlaceholderOrchestrator`
 
-### `__init__(starting_url=None, credential_profile=None, pom_mode=False, generator=None)`
+### `__init__(starting_url=None, credential_profile=None, pom_mode=False, generator=None, rag_retriever=None)`
 - `starting_url`: Base URL for session-aware scraping
 - `credential_profile`: Credentials for stateful scraping (authenticated flows)
 - `pom_mode`: When True, generate tests using evidence-aware POM classes instead of flat `evidence_tracker` calls
 - `generator`: LLM generator for semantic candidate ranking (B-020). When None, ASSERT resolution falls back to mechanical `toBeVisible`
+- `rag_retriever`: Optional `RAGRetriever` for golden-pattern scoring (Phase 3 RAG, 2026-07-21). When None, RAG is disabled — zero behaviour change.
 
 ### Properties
 - `pom_mode(self) -> bool`: Whether POM-mode output is enabled
+- `rag_retriever` → stored as `self._rag_retriever`; accessed via `_retrieve_golden_patterns()`
 
 ### Key Methods
 
@@ -39,6 +41,9 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - `_build_pom_instantiation(page_objects, use_evidence_tracker=True) -> list[str]`: Generate POM instance instantiation lines
 - `_get_pom_instance_name(url, page_objects) -> str | None`: Get POM instance variable name for URL
 - `_get_pom_method_call(action, description, resolved_selector, pom_instance_name, fill_value="") -> str | None`: Generate POM method call (CLICK/FILL only; ASSERT/GOTO remain direct)
+
+#### RAG Retrieval (Phase 3, 2026-07-21)
+- `_retrieve_golden_patterns(action, description) -> list | None`: Queries `RAGRetriever` for golden patterns matching the placeholder. Returns None when RAG is disabled or no patterns found above confidence threshold. Called before `find_best_element_for_current_page()` — results are forwarded as `golden_patterns` kwarg.
 
 #### Placeholder Resolution
 - `_replace_placeholders_sequentially(skeleton_code, journeys, page_requirements, seed_urls, scraped_data, scraped_errors=None) -> str`: Main resolution method — resolves placeholders step-by-step while tracking active page
@@ -112,4 +117,5 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - **B-021 (2026-07-20):** `_is_page_state_assertion()` + URL assertion routing → `expect(page).to_have_url(...)`
 - **B-022 (2026-07-20):** Cart-seeding upgrade now always prefers seeded data for `/view_cart` and `/checkout`; product URL detection from scraped data
 - **B-023 (2026-07-20):** Modal dismissal integrated via `JourneyScraper._dismiss_modals()`
+- **Phase 3 RAG (2026-07-21):** `rag_retriever` kwarg + `_retrieve_golden_patterns()` → golden patterns flow into `ElementMatcher.find_best_element_for_current_page()` → `PlaceholderScorer.compute_element_score()` for +GOLDEN_PATTERN_BONUS
 - Consolidated skip logic reduces noise in generated tests

@@ -57,6 +57,7 @@ Captured metadata for the most recent pipeline run.
 - Stores provider/model for vision enrichment
 - Debug mode via `PIPELINE_DEBUG=1` environment variable
 - Maintains pipeline diagnostics dict
+- **RAG (2026-07-21):** `_build_rag_retriever()` constructs `RAGRetriever` when `RAG_ENABLED=1` env var is set; passed to `PlaceholderOrchestrator` via `rag_retriever` kwarg
 
 ### Backwards-Compatible Properties
 - `resolver` → delegates to `PlaceholderOrchestrator.resolver`
@@ -103,6 +104,7 @@ These allow existing test code to mock directly on orchestrator instance without
 **Phase 5: Resolve Placeholders**
 - Delegates to `PlaceholderOrchestrator` for placeholder resolution
 - Combines static and journey-scraped data
+- **RAG (2026-07-21):** When `RAG_ENABLED=1`, `_build_rag_retriever()` creates a `RAGRetriever` wired to `MilvusLiteBackend` + `SentenceTransformerEmbedder`; passed to `PlaceholderOrchestrator` for golden-pattern retrieval during resolution
 
 **Phase 6: Post-Process and Save**
 - Post-process code via `normalise_generated_code()`
@@ -129,6 +131,12 @@ These allow existing test code to mock directly on orchestrator instance without
 ### `_build_candidate_urls(seed_urls, page_requirements, journeys, user_story, conditions) -> list[str]`
 - Returns deduplicated seed URLs
 - URL guessing via common path patterns using `url_utils`
+
+### `_build_rag_retriever() -> RAGRetriever | None` (static, 2026-07-21)
+- Checks `RAG_ENABLED` env var — returns `None` when not set or `"0"`
+- Constructs `MilvusLiteBackend` at `get_storage().rag_path()` + `SentenceTransformerEmbedder` + `RAGStore`
+- Returns `RAGRetriever(store)` when store is non-empty, `None` otherwise
+- Graceful degradation: any import/init error logs a warning and returns `None`
 
 ### `_debug(message)`
 - Conditional debug logging via `PIPELINE_DEBUG=1`
@@ -173,3 +181,4 @@ With optional:
 - Journey execution (Phase B) enables authenticated scraping for login-required flows
 - POM mode generates Page Object Models instead of direct Playwright code
 - Debug output controlled by `PIPELINE_DEBUG=1` environment variable
+- **RAG (2026-07-21):** Controlled by `RAG_ENABLED=1` env var. When enabled, golden-pattern retrieval runs during placeholder resolution, feeding `GOLDEN_PATTERN_BONUS` (+20) to element scoring. RAG store must be pre-built via `python scripts/rag_ingest.py --golden --docs`.
