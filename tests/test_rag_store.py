@@ -30,12 +30,13 @@ from src.rag_store import (
 
 
 def _safe_unlink(path: str) -> None:
-    """Best-effort file deletion — ignores PermissionError on Windows."""
+    """Best-effort deletion — Milvus Lite creates directories, not files."""
     import os
+    import shutil
 
     try:
         if os.path.exists(path):
-            os.unlink(path)
+            shutil.rmtree(path)
     except PermissionError, OSError:
         pass  # milvus-lite holds file locks briefly
 

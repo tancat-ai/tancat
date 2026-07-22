@@ -295,19 +295,20 @@ class MilvusLiteBackend:
         """Delete all entries (for testing / rebuild).
 
         Closes the underlying Milvus client and attempts to delete
-        the database file.  On Windows, milvus-lite may not release
-        the file lock immediately — the file is left for the caller
-        or OS to clean up.
+        the database.  Milvus Lite stores the database as a directory
+        (multiple files), so we use ``shutil.rmtree``.  On Windows,
+        milvus-lite may not release its file locks immediately — the
+        directory is left for the caller or OS to clean up.
         """
         if self._client is not None:
             self._client.close()
             self._client = None
-        import os
+        import shutil
 
         try:
-            os.remove(self._db_path)
-        except FileNotFoundError, PermissionError:
-            pass  # Windows: milvus-lite may not release the lock
+            shutil.rmtree(self._db_path)
+        except FileNotFoundError, PermissionError, OSError:
+            pass  # milvus-lite may hold file locks
 
 
 # ---------------------------------------------------------------------------
