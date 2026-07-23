@@ -21,12 +21,24 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-
-import fitz  # PyMuPDF # type: ignore[import-untyped]
+from typing import TYPE_CHECKING
 
 from src.rag_store import DocChunk
 
+if TYPE_CHECKING:
+    import fitz  # PyMuPDF
+
 logger = logging.getLogger(__name__)
+
+
+def _import_fitz() -> type[fitz]:
+    """Lazy-import PyMuPDF.  Raises ImportError with install instructions if absent."""
+    try:
+        import fitz as _fitz  # type: ignore[import-untyped]
+    except ImportError:
+        raise ImportError("PyMuPDF (fitz) is required for PDF ingestion. Install with: pip install PyMuPDF") from None
+    return _fitz  # type: ignore[return-value]
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -298,7 +310,7 @@ def ingest_pdf(filepath: Path) -> list[DocChunk]:
     source = filepath.name
 
     try:
-        doc = fitz.open(str(filepath))
+        doc = _import_fitz().open(str(filepath))
     except Exception:
         logger.error("Failed to open PDF: %s", filepath)
         return []

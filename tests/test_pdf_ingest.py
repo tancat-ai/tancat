@@ -16,6 +16,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytest.importorskip("fitz", reason="PyMuPDF (fitz) not installed — skipping PDF tests")
+
+import pytest
+
 from src.pdf_ingest import (
     CHUNK_OVERLAP_CHARS,
     CHUNK_TARGET_CHARS,
