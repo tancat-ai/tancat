@@ -29,6 +29,11 @@ dependencies = [
     "sentence-transformers>=5.6.0",
     "milvus-lite>=3.1.0",
 ]
+
+[project.optional-dependencies]
+langgraph = [
+    "langgraph>=1.2.9",
+]
 [dependency-groups]
 dev = [
     "ruff>=0.9.0",
@@ -93,4 +98,12 @@ disable_error_code = ["assignment", "arg-type", "no-untyped-def"]
 
 [[tool.mypy.overrides]]
 module = "pymilvus.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "fitz"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "langgraph.*"
 ignore_missing_imports = true

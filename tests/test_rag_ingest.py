@@ -203,7 +203,7 @@ class TestMain:
     def test_no_args_prints_help(self) -> None:
         """No args returns early with a zero-count dict (help printed to stdout)."""
         result = main([])
-        assert result == {"golden": 0, "docs": 0}
+        assert result == {"golden": 0, "docs": 0, "pdfs": 0}
 
     @pytest.mark.slow
     def test_both_flags_accepted(self) -> None:

@@ -45,7 +45,24 @@ class TestGenerator:
         target_urls: list[str] | None = None,
         expected_count: int | None = None,
     ) -> str:
-        """Generate placeholder-based skeleton code for the intelligent pipeline."""
+        """Generate placeholder-based skeleton code for the intelligent pipeline.
+
+        When ``LANGGRAPH_ENABLED=1``, delegates to the multi-agent LangGraph
+        workflow (Planner → Generator → Validator).  Otherwise uses the
+        original single-call pipeline.
+        """
+        if os.environ.get("LANGGRAPH_ENABLED", "").strip() == "1":
+            return await self._generate_skeleton_langgraph(user_story, conditions, target_urls, expected_count)
+        return await self._generate_skeleton_single_call(user_story, conditions, target_urls, expected_count)
+
+    async def _generate_skeleton_single_call(
+        self,
+        user_story: str,
+        conditions: str,
+        target_urls: list[str] | None = None,
+        expected_count: int | None = None,
+    ) -> str:
+        """Single-call skeleton generation (original pipeline)."""
         urls = target_urls or []
         known_urls_block = "\n".join(f"- {url}" for url in urls) if urls else "- No URLs were supplied."
         count_note = (
@@ -53,7 +70,6 @@ class TestGenerator:
             if expected_count
             else ""
         )
-        # Compute count_label_upper for the template's {count_label_upper} placeholder
         count_label_upper = str(expected_count).upper() if expected_count is not None else "N"
         prompt = (
             get_skeleton_prompt_template(expected_count=expected_count).format(
@@ -65,3 +81,34 @@ class TestGenerator:
             + count_note
         )
         return await self.client.generate(prompt)
+
+    async def _generate_skeleton_langgraph(
+        self,
+        user_story: str,
+        conditions: str,
+        target_urls: list[str] | None = None,
+        expected_count: int | None = None,
+    ) -> str:
+        """Multi-agent LangGraph skeleton generation (Phase 1c)."""
+        try:
+            from src.agents.graph import SkeletonGraph  # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "langgraph package is not installed. "
+                "Install with: uv sync --group langgraph  "
+                "or set LANGGRAPH_ENABLED=0 for single-call mode."
+            ) from exc
+
+        count = expected_count or 0
+        graph = SkeletonGraph(self.client)
+        result = await graph.run(
+            user_story=user_story,
+            conditions=conditions,
+            target_urls=target_urls,
+            expected_test_count=count,
+        )
+        if result["validation_errors"] and not result["skeleton_code"]:
+            raise RuntimeError(
+                f"LangGraph skeleton generation failed after retries: {'; '.join(result['validation_errors'])}"
+            )
+        return result["skeleton_code"]

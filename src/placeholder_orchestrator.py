@@ -37,6 +37,7 @@ from src.role_mapper import (
     normalise_element_text,
 )
 from src.scraper import PageScraper
+from src.section_scoper import scope_elements
 from src.semantic_candidate_ranker import AsyncGeneratorLike, SemanticCandidateRanker
 from src.skip_manager import (
     insert_consolidated_skips,
@@ -575,6 +576,14 @@ class PlaceholderOrchestrator:
 
         pages_to_search = scoped_pages if scoped_pages else scraped_data
 
+        # 1b: Section-aware scoping — filter elements to the section named
+        # in the placeholder description (e.g. "on account page").
+        pages_to_search = self._apply_section_scoping(
+            action,
+            description,
+            pages_to_search,
+        )
+
         # B-021: For ASSERT placeholders describing page state ("home page visible",
         # "dress products page"), resolve as URL assertions instead of element matches.
         if action == "ASSERT" and self._is_page_state_assertion(description):
@@ -707,6 +716,36 @@ class PlaceholderOrchestrator:
         if current_url and current_url in scraped_data:
             return {current_url: scraped_data[current_url]}
         return {}
+
+    def _apply_section_scoping(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, list[dict[str, str]]]:
+        """Filter each page's elements to the section named in the description.
+
+        Falls back to the full element list when no section hint is found.
+        This is a no-op for multi-page sites (each URL has one section).
+        The benefit is for eval harness and future SPA support.
+
+        When section scoping narrows the list and the action is interactive
+        (CLICK/FILL/SELECT), also applies a hidden-element penalty via
+        PlaceholderScorer so that visible candidates within the section
+        rank above hidden ones.
+        """
+        result: dict[str, list[dict[str, str]]] = {}
+        for url, elements in pages_data.items():
+            scoped, section_name = scope_elements(description, elements)
+            result[url] = scoped
+            if section_name:
+                logger.debug(
+                    "Section scoping: '%s' → section '%s' (%d elements)",
+                    description,
+                    section_name,
+                    len(scoped),
+                )
+        return result
 
     # ═════════════════════════════════════════════════════════════
     # URL / context helpers

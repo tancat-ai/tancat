@@ -22,6 +22,14 @@ class PlaceholderScorer:
     # _vision_enriched_bonus (+20).
     GOLDEN_PATTERN_BONUS: int = 20
 
+    # Penalty applied to hidden elements for non-ASSERT actions when
+    # section scoping is active.  In the real pipeline, pages are scraped
+    # per-URL so hidden sections aren't in the haystack.  This penalty
+    # only applies when all sections are scraped at once (eval / SPA).
+    # Applied via the scorer's compute_element_score when the caller
+    # passes section_scoped=True.  Default: no penalty (safe default).
+    HIDDEN_ELEMENT_PENALTY: int = -30
+
     # Words that describe the action itself, not the target element.
     # Stripped before text-content overlap calculations.
     ACTION_CONTEXT_WORDS: set[str] = {
@@ -359,6 +367,22 @@ class PlaceholderScorer:
     def _assert_visibility_penalty(action: str, element: dict[str, Any]) -> int:
         if action == "ASSERT" and element.get("is_visible") is False:
             return -40
+        return 0
+
+    @staticmethod
+    def _hidden_element_penalty(action: str, element: dict[str, Any]) -> int:
+        """Penalise hidden elements for interactive actions (non-ASSERT).
+
+        In the real pipeline, pages are scraped per-URL so hidden sections
+        aren't in the haystack.  This penalty only applies to eval scenarios
+        (single-page scrape of all sections) and future SPA support.
+
+        -30 is significant but not exclusionary: a hidden element with a
+        perfect ID match (+80 structural bonus) still scores above a visible
+        element with only text overlap (~25).
+        """
+        if action in {"CLICK", "FILL", "SELECT"} and element.get("is_visible") is False:
+            return PlaceholderScorer.HIDDEN_ELEMENT_PENALTY
         return 0
 
     @staticmethod

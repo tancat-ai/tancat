@@ -2,16 +2,18 @@
 
 Usage::
 
+    python scripts/rag_ingest.py --golden --docs --pdfs
     python scripts/rag_ingest.py --golden --docs
-    python scripts/rag_ingest.py --golden
-    python scripts/rag_ingest.py --docs
+    python scripts/rag_ingest.py --pdfs
 
-Ingests two knowledge sources into the RAG vector store:
+Ingests knowledge sources into the RAG vector store:
 
 1. **Golden patterns** from ``scripts/eval/dataset/`` — verified
    placeholder → selector mappings (4 sites, 43 placeholders).
 2. **Playwright documentation** from ``docs/rag_corpus/playwright/`` —
    curated markdown files chunked by heading.
+3. **PDF domain docs** from ``docs/rag_corpus/lv_docs/`` — insurance
+   policy PDFs parsed with PyMuPDF and chunked by heading.
 
 The store file is written to ``<workspace>/evidence/rag_store.db``
 (via ``get_storage().rag_path()``).
@@ -28,6 +30,7 @@ import logging
 import re
 from pathlib import Path
 
+from src.pdf_ingest import ingest_pdf_directory
 from src.rag_store import (
     DocChunk,
     GoldenPattern,
@@ -203,6 +206,7 @@ def load_docs(docs_dir: Path) -> list[DocChunk]:
 def rebuild_store(
     patterns: list[GoldenPattern],
     docs: list[DocChunk],
+    pdfs: list[DocChunk] | None = None,
 ) -> dict[str, int]:
     """(Re)build the vector store from patterns and docs.
 
@@ -224,7 +228,7 @@ def rebuild_store(
     backend = MilvusLiteBackend(store_path, embedder.dimension)
     store = RAGStore(backend, embedder)
 
-    result: dict[str, int] = {"golden": 0, "docs": 0}
+    result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0}
 
     if patterns:
         result["golden"] = store.add_patterns(patterns)
@@ -233,6 +237,10 @@ def rebuild_store(
     if docs:
         result["docs"] = store.add_docs(docs)
         logger.info("Ingested %d doc chunks", result["docs"])
+
+    if pdfs:
+        result["pdfs"] = store.add_docs(pdfs)
+        logger.info("Ingested %d pdf chunks", result["pdfs"])
 
     logger.info("Store rebuilt at %s (total entries: %d)", store_path, backend.count())
     return result
@@ -262,22 +270,29 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
         action="store_true",
         help="Ingest Playwright docs from docs/rag_corpus/playwright/",
     )
+    parser.add_argument(
+        "--pdfs",
+        action="store_true",
+        help="Ingest PDF domain docs from docs/rag_corpus/lv_docs/",
+    )
 
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    if not args.golden and not args.docs:
+    if not args.golden and not args.docs and not args.pdfs:
         parser.print_help()
-        return {"golden": 0, "docs": 0}
+        return {"golden": 0, "docs": 0, "pdfs": 0}
 
     # Resolve paths relative to the repo root (where pyproject.toml lives)
     repo_root = Path(__file__).resolve().parent.parent
     dataset_dir = repo_root / "scripts" / "eval" / "dataset"
     docs_dir = repo_root / "docs" / "rag_corpus" / "playwright"
+    pdfs_dir = repo_root / "docs" / "rag_corpus" / "lv_docs"
 
     patterns: list[GoldenPattern] = []
     docs_chunks: list[DocChunk] = []
+    pdf_chunks: list[DocChunk] = []
 
     if args.golden:
         patterns = load_golden_patterns(dataset_dir)
@@ -285,7 +300,10 @@ def main(argv: list[str] | None = None) -> dict[str, int]:
     if args.docs:
         docs_chunks = load_docs(docs_dir)
 
-    return rebuild_store(patterns, docs_chunks)
+    if args.pdfs:
+        pdf_chunks = ingest_pdf_directory(pdfs_dir)
+
+    return rebuild_store(patterns, docs_chunks, pdf_chunks)
 
 
 if __name__ == "__main__":

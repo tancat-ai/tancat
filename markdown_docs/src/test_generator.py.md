@@ -2,53 +2,52 @@
 
 ## High-Level Purpose
 
-Test generation helpers for both direct generation and skeleton-first pipeline flows. Orchestrates LLM calls for skeleton generation and direct code generation, validates output, and persists generated tests to disk.
+Generates placeholder-based pytest skeleton code for the intelligent pipeline. Supports two modes:
 
-## Module Metadata
-
-- **Lines:** 107
-- **Imports:** `os`, `pathlib.Path`, `typing.Any`, `src.code_validator`, `src.file_utils`, `src.llm_client.LLMClient`, `src.prompt_utils`
+- **Single-call** (`LANGGRAPH_ENABLED=0`, default): One LLM call with full user story + conditions.
+- **LangGraph** (`LANGGRAPH_ENABLED=1`): Multi-agent Planner → Generator → Validator workflow with retry loop.
 
 ## Class: `TestGenerator`
 
 ### `__init__(client=None, *, output_dir="generated_tests", model_name=None, provider_name=None, base_url=None, api_key=None)`
+
 - Wraps `LLMClient` (or creates one from env/config)
 - Ensures `output_dir` exists on disk
 - Tracks `generated_files` list
-- Default model: `qwen2.5:7b` (from `OLLAMA_MODEL` env var or hardcoded fallback)
+- Default model: `qwen3.5:35b` (from `OLLAMA_MODEL` env var)
 
 ### `generate_skeleton(user_story, conditions, target_urls=None, expected_count=None) -> str`
-- Phase 1 of skeleton-first pipeline: generates placeholder-based skeleton code
-- Builds prompt using `get_skeleton_prompt_template()` with user story, conditions, known URLs
-- Appends explicit count instruction when `expected_count` is set
-- Returns LLM response with `{{ACTION:description}}` placeholder tokens
 
-### `generate_resolved_test(skeleton_code, pages_to_scrape) -> str`
-- Compatibility seam for post-resolution polishing
-- Currently returns skeleton code as-is (resolver does replacement work)
+- Dispatches to LangGraph or single-call path based on `LANGGRAPH_ENABLED` env var
+- Returns skeleton code with `{{ACTION:description}}` placeholder tokens
 
-### `generate_and_save(request_text, page_context_or_base_url="") -> str`
-- Direct (non-skeleton) generation: generates code, validates, and saves to disk
-- Validates Python syntax via `validate_python_syntax()`
-- Validates locator quality via `validate_generated_locator_quality()`
-- Saves via `save_generated_test()` with slugified filename
-- Returns path to saved test file
+### `_generate_skeleton_single_call(...)` — Private
+
+- Original single-call pipeline: builds prompt via `get_skeleton_prompt_template()`, calls LLM
+- Returns raw skeleton code
+
+### `_generate_skeleton_langgraph(...)` — Private
+
+- Creates `SkeletonGraph` with the configured `LLMClient`
+- Runs the full Planner → Generator → Validator workflow
+- Imports `langgraph` lazily; raises helpful `ImportError` if not installed
+- Raises `RuntimeError` if all retries exhausted with no skeleton code
 
 ## Dependencies
 
-- `src.code_validator.validate_generated_locator_quality`, `validate_python_syntax`
-- `src.file_utils.save_generated_test`, `slugify`
 - `src.llm_client.LLMClient`
-- `src.prompt_utils.build_page_context_prompt_block`, `get_skeleton_prompt_template`
+- `src.prompt_utils.get_skeleton_prompt_template`
+- `src.agents.graph.SkeletonGraph` (lazy import, only when `LANGGRAPH_ENABLED=1`)
 
 ## Depended On By
 
 - `src/orchestrator.py` — core pipeline orchestration
 - `src/ui_pipeline.py` — Streamlit UI pipeline execution
-- Generated test pipeline (both skeleton-first and direct modes)
+- `src/cli/test_case_orchestrator.py` — CLI orchestration
 
-## Notes
+## Design Notes
 
-- Default model updated to `qwen2.5:7b` (was `qwen3.5:35b`)
-- Supports both legacy direct generation and modern skeleton-first pipeline
-- Validates generated code before saving to disk
+- **Safe default:** `LANGGRAPH_ENABLED=0` — zero risk, existing behaviour preserved
+- **Optional dependency:** `langgraph` is not required for normal operation
+- **Import guard:** Lazy import with helpful error message if langgraph missing
+- **Shared client:** Both paths use the same `LLMClient` instance — consistent provider/model across all LLM calls

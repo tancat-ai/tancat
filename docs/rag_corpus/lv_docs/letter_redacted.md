@@ -42,11 +42,11 @@ Selwyn Fernandes
 Managing Director
 Liverpool Victoria Insurance Company Limited
 Call us to add:
-É
+Ã‰
 motor legal expenses
-É
+Ã‰
 breakdown cover
-É
+Ã‰
 foreign use
 Lines are open 8am-8pm Mon to Fri, 9am-5pm Sat and bank holidays and 10am-4pm Sun. Pet: 8am-8pm Mon-Fri, 9am-5pm Sat. For Text Phone: first dial 18001. Calls may be recorded.
 .

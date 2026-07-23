@@ -27,60 +27,60 @@ About the car
 About you - Mr Policyholder Name
 2004 BMW 320 CD SPORT COUPE AUTO (1995cc),
 XX00 XXX
-…
+√â
 Is the legal owner of the car
-…
+√â
 Is the registered keeper of the car
-…
+√â
 Has 3 cars in your household
-…
+√â
 Has been a resident in the UK for three or more years
-…
+√â
 Is not a home owner
-…
+√â
 Is single
-…
+√â
 Tel no. mobile (07917) 678110
-…
+√â
 Email address lacattano@gmail.com
-…
+√â
 Purchased in 2007
-…
+√â
 Estimated yearly mileage of 4,000
-…
+√â
 Has not been changed from the manufacturer's
 standard specification
-…
+√â
 Is parked overnight in the garage at XX00 0XX
-…
+√â
 The main user is Mr Policyholder Name
-…
+√â
 The main user is the person who drives the vehicle the
 majority of the time.
 Your Insurance includes
 You've chosen to add
-…
+√â
 Comprehensive car insurance
-…
+√â
 75.8% no claim discount for 7 year(s)
-…
+√â
 $10,000 personal accident cover
-…
+√â
 Windscreen cover
-…
+√â
 Your multi product discount
-…
+√â
 Guaranteed courtesy car
-…
+√â
 No claim discount guarantee
 You've chosen not to add
-…
+√â
 Motor legal expenses
-…
+√â
 Foreign use
-…
+√â
 $100,000 personal accident cover
-…
+√â
 Breakdown cover
 The only permitted driver(s) are
 Policyholder Name
@@ -92,11 +92,11 @@ no business visits are made on the way.
 You can only drive the car shown on this policy.
 Claims or accidents in last 5 years
 (including any information only accidents):
-…
+√â
 None
 Motoring convictions and/or fixed penalty
 endorsements in last 5 years:
-…
+√â
 None
 What you'll need to pay if you claim (excesses that apply)
 Total accidental damage:
@@ -156,4 +156,4 @@ Lines are open 8am-8pm Mon to Fri, 9am-5pm Sat and bank holidays and 10am-4pm Su
 18001. To help continually improve customer service, calls may be recorded.
 000000906817378090
 0681737809
-∆∆ ch∆«h b∆ ch∆ h bh  h«∆∆ch  ∆bc∆h b«∆ch«∆
+√Ü√Ü√äch√Ü√áh√äb√Ü√äch√Ü√äh√äbh√ä√äh√á√Ü√Üch√ä√ä√Übc√Üh√äb√á√Üch√á√Ü

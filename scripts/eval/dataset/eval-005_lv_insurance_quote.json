@@ -1,7 +1,7 @@
 {
   "id": "eval-005",
   "site": "lv_insurance",
-  "base_url": "http://localhost:8767/mock_insurance_site.html",
+  "base_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
   "title": "Get a car insurance quote for a Honda CR-V",
   "user_story": "As a new customer, I want to get a car insurance quote for my Honda CR-V so that I can insure my vehicle with LV.",
   "conditions": [

@@ -52,6 +52,7 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 | **LLM** | `llm_client.py`, `llm_providers/`, `provider_config.py`, `llm_errors.py`, `llm_reasoning_filter.py` | LLM interaction, provider abstraction, error handling |
 | **Prompts** | `prompt_utils.py`, `test_generator.py` | Prompt construction and test generation |
 | **Scaffolding** | `skeleton_validator.py`, `code_normalizer.py`, `code_postprocessor.py`, `code_validator.py` | Code quality assurance |
+| **Agents (Phase 1c)** | `src/agents/state.py`, `src/agents/planner.py`, `src/agents/generator.py`, `src/agents/validator.py`, `src/agents/graph.py` | LangGraph multi-agent skeleton generation |
 | **DOM Scraping** | `scraper.py`, `stateful_scraper.py`, `journey_scraper.py`, `journey_models.py`, `journey_executor.py`, `journey_auth_detector.py`, `page_context_tracker.py` | Page scraping and context capture |
 | **Placeholder Resolution** | `placeholder_resolver.py`, `placeholder_orchestrator.py`, `placeholder_scorers.py`, `semantic_matcher.py`, `semantic_candidate_ranker.py`, `intent_matcher.py`, `element_matcher.py`, `element_enricher.py`, `accessibility_enricher.py`, `vision_enricher.py`, `hover_click_utils.py` | Resolving `{{ACTION:description}}` placeholders using scraped DOM |
 | **Locators** | `locator_builder.py`, `locator_fallback.py`, `locator_repair.py`, `locator_scorer.py`, `url_resolver.py`, `url_inference.py`, `url_utils.py` | Locator generation, repair, and scoring |
@@ -86,11 +87,12 @@ Test packages produced by the tool. Each package contains:
 | Directory | Files | Status |
 |-----------|-------|--------|
 | `src/` (root) | 61 | ✅ Complete |
+| `src/agents/` | 5 | ✅ Complete |
 | `src/cli/` | 15 | ✅ Complete |
 | `src/ui/` | 10 | ✅ Complete |
 | `src/llm_providers/` | 1 | ✅ Complete |
 | `scripts/` | 1 | ✅ Complete |
-| `src/` (all) | **104** | **✅ Complete** |
+| `src/` (all) | **109** | **✅ Complete** |
 
 ## Sweep Progress
 
@@ -99,4 +101,4 @@ See `markdown_docs/.sweep_progress.json` for per-file completion status.
 ---
 
 *Generated: 2026-07-08*  
-*Updated: 2026-07-21 — Phase 3 RAG (rag_store, rag_retriever, rag_ingest), storage.py, element_matcher.py*
+*Updated: 2026-07-23 — Phase 1c LangGraph agents (state, planner, generator, validator, graph)*

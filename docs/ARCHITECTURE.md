@@ -64,7 +64,12 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/analyzer.py` | Lightweight user story analyzer (replaces `story_analyzer.py`). |
 | `src/user_story_parser.py` | Breaks down raw user stories into structured components. |
 | `src/test_plan.py` | Data model for test planning and coverage tracking. |
-| `src/test_generator.py` (`TestGenerator`) | Core engine that generates skeleton Playwright tests with `{{ACTION:description}}` placeholders using the LLM. |
+| `src/test_generator.py` (`TestGenerator`) | Core engine that generates skeleton Playwright tests with `{{ACTION:description}}` placeholders using the LLM. Supports two modes: single-call (default, `LANGGRAPH_ENABLED=0`) and multi-agent (LangGraph Planner → Generator → Validator, `LANGGRAPH_ENABLED=1`). |
+| `src/agents/state.py` | Pydantic `WorkflowState` — serialisable state schema for the LangGraph multi-agent pipeline. |
+| `src/agents/planner.py` | LangGraph node — parses user story + conditions into structured test plan Markdown. |
+| `src/agents/generator.py` | LangGraph node — consumes test plan and generates placeholder-based skeleton code. |
+| `src/agents/validator.py` | LangGraph node — validates skeleton for hallucinated selectors, placeholder count, journey count. |
+| `src/agents/graph.py` | LangGraph `StateGraph` wiring — Planner → Generator → Validator with retry loop (max 2). |
 | `src/llm_client.py` (`LLMClient`) | Unified interface for interacting with LLM providers. |
 | `src/llm_providers/__init__.py` | Provider registry — maps provider names to implementations. |
 | `src/llm_errors.py` | LLM error types and retry logic helpers. |
@@ -193,6 +198,8 @@ Raw user story text is parsed by the LLM into structured acceptance criteria (`T
 
 The LLM generates pytest test skeletons using `{{ACTION:description}}` placeholder syntax. The LLM never sees real locators, eliminating hallucination. `SkeletonValidator` confirms no real selectors leaked into skeletons. If journey count doesn't match expected criteria count, the orchestrator retries once with a stricter prompt.
 
+**LangGraph mode** (`LANGGRAPH_ENABLED=1`): Replaces the single large call with a three-agent workflow — Planner (story → test plan), Generator (plan → skeleton), Validator (check + retry routing). Reduces hallucination on complex stories (10+ criteria) by splitting the cognitive task. Safe default: `LANGGRAPH_ENABLED=0` preserves existing behaviour.
+
 ### Phase 3: Context Extraction
 `placeholder_orchestrator.py` → `scraper.py` (stateless) → `journey_scraper.py` / `stateful_scraper.py` (stateful upgrade)
 
@@ -294,6 +301,7 @@ graph TD
         Prompt[src/prompt_utils.py]
         SParse[src/skeleton_parser.py]
         SVal[src/skeleton_validator.py]
+        Agents[src/agents/]:::intelligence
         ProvCfg[src/provider_config.py]
         LLMFilter[src/llm_reasoning_filter.py]
     end
@@ -431,6 +439,7 @@ graph TD
     Gen --> Prompt
     Gen --> SParse
     Gen --> SVal
+    Gen --> Agents
     LLM --> Providers
 
     %% Resolution flow
@@ -602,6 +611,7 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 | Enrichment | [accessibility_enricher](../markdown_docs/src/accessibility_enricher.py.md), [vision_enricher](../markdown_docs/src/vision_enricher.py.md), [element_enricher](../markdown_docs/src/element_enricher.py.md) |
 | Placeholder System | [placeholder_orchestrator](../markdown_docs/src/placeholder_orchestrator.py.md), [element_matcher](../markdown_docs/src/element_matcher.py.md), [role_mapper](../markdown_docs/src/role_mapper.py.md), [pom_helpers](../markdown_docs/src/pom_helpers.py.md), [skip_manager](../markdown_docs/src/skip_manager.py.md), [placeholder_resolver](../markdown_docs/src/placeholder_resolver.py.md), [placeholder_scorers](../markdown_docs/src/placeholder_scorers.py.md), [intent_matcher](../markdown_docs/src/intent_matcher.py.md), [semantic_candidate_ranker](../markdown_docs/src/semantic_candidate_ranker.py.md), [semantic_matcher](../markdown_docs/src/semantic_matcher.py.md) |
 | Code Pipeline | [test_generator](../markdown_docs/src/test_generator.py.md), [skeleton_parser](../markdown_docs/src/skeleton_parser.py.md), [skeleton_validator](../markdown_docs/src/skeleton_validator.py.md), [code_normalizer](../markdown_docs/src/code_normalizer.py.md), [code_postprocessor](../markdown_docs/src/code_postprocessor.py.md), [code_validator](../markdown_docs/src/code_validator.py.md), [export_service](../markdown_docs/src/export_service.py.md) |
+| Agents (Phase 1c) | [agents/__init__](../markdown_docs/src/agents/__init__.py.md), [agents/state](../markdown_docs/src/agents/state.py.md), [agents/planner](../markdown_docs/src/agents/planner.py.md), [agents/generator](../markdown_docs/src/agents/generator.py.md), [agents/validator](../markdown_docs/src/agents/validator.py.md), [agents/graph](../markdown_docs/src/agents/graph.py.md) |
 | Locator System | [locator_builder](../markdown_docs/src/locator_builder.py.md), [locator_fallback](../markdown_docs/src/locator_fallback.py.md), [locator_repair](../markdown_docs/src/locator_repair.py.md), [locator_scorer](../markdown_docs/src/locator_scorer.py.md) |
 | Evidence / Reports | [evidence_tracker](../markdown_docs/src/evidence_tracker.py.md), [evidence_loader](../markdown_docs/src/evidence_loader.py.md), [evidence_serializer](../markdown_docs/src/evidence_serializer.py.md), [evidence_report](../markdown_docs/src/evidence_report.py.md), [report_builder](../markdown_docs/src/report_builder.py.md), [report_formatters](../markdown_docs/src/report_formatters.py.md), [failure_reporter](../markdown_docs/src/failure_reporter.py.md), [failure_classifier](../markdown_docs/src/failure_classifier.py.md), [screenshot_capture](../markdown_docs/src/screenshot_capture.py.md) |
 | Persistence | [run_result_persistence](../markdown_docs/src/run_result_persistence.py.md), [sqlite_persistence](../markdown_docs/src/sqlite_persistence.py.md), [run_history_chart](../markdown_docs/src/run_history_chart.py.md), [run_history_cli](../markdown_docs/src/run_history_cli.py.md) |
@@ -614,4 +624,4 @@ Detailed per-module documentation is available in [`markdown_docs/src/`](../mark
 
 ---
 
- *Last updated: 2026-07-11*
+ *Last updated: 2026-07-23*
