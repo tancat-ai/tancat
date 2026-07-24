@@ -198,14 +198,21 @@ class ElementMatcher:
                             # guard prevents 1-word matches on long texts
                             # but shouldn't block genuine substrings.
                             phrase_in_text = phrase in norm_text or norm_text in phrase
-                            if phrase_in_text and phrase_words <= 2:
-                                # Short phrase found as substring — trust it
+                            if phrase_in_text and phrase_words == 2:
+                                # Two-word phrase found as substring — trust it
                                 matched = True
                                 break
-                            word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                            if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
-                                matched = True
-                                break
+                            if phrase_in_text and phrase_words == 1:
+                                # Single-word key phrase: require exact text match,
+                                # not substring inside a longer phrase. "cart" should
+                                # match "Cart" exactly, not "Add to cart".
+                                if norm_text == phrase or text_word_count == 1:
+                                    matched = True
+                            if not matched:
+                                word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
+                                if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
+                                    matched = True
+                                    break
 
                 # B-024e: Targeted word match against element id/name
                 # when substring matching fails for FILL actions.
@@ -371,14 +378,20 @@ class ElementMatcher:
                             # guard prevents 1-word matches on long texts
                             # but shouldn't block genuine substrings.
                             phrase_in_text = phrase in norm_text or norm_text in phrase
-                            if phrase_in_text and phrase_words <= 2:
-                                # Short phrase found as substring — trust it
+                            if phrase_in_text and phrase_words == 2:
+                                # Two-word phrase found as substring — trust it
                                 matched = True
                                 break
-                            word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                            if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
-                                matched = True
-                                break
+                            if phrase_in_text and phrase_words == 1:
+                                # Single-word key phrase: require exact text match,
+                                # not substring inside a longer phrase.
+                                if norm_text == phrase or text_word_count == 1:
+                                    matched = True
+                            if not matched:
+                                word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
+                                if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
+                                    matched = True
+                                    break
 
                 if matched:
                     if requires_multi_word:
@@ -607,13 +620,37 @@ class ElementMatcher:
 
         if shortlisted and global_top_score >= MIN_SCORE_FOR_TEXT_FALLBACK:
             top_candidate = shortlisted[0]
-            if not _validate_text_match(top_candidate, description, self._resolver):
-                logger.info(
-                    "Top-ranked element '%s' fails text validation for '%s' — "
-                    "using anyway (text validation is advisory for non-LLM path).",
+            validated = _validate_text_match(top_candidate, description, self._resolver)
+            if validated is not None:
+                return validated
+            # Text validation failed: check if there's at least some word overlap
+            # before returning a fallback match. Zero overlap means the score came
+            # entirely from structural bonuses (e.g. button role for CLICK) with
+            # no semantic relationship to the description.
+            desc_words_check = SemanticMatcher.get_words(description)
+            candidate_haystack = str(
+                top_candidate.get("text", "")
+                + " "
+                + top_candidate.get("aria_label", "")
+                + " "
+                + top_candidate.get("id", "")
+                + " "
+                + top_candidate.get("name", "")
+            ).lower()
+            candidate_words = SemanticMatcher.get_words(candidate_haystack, expand_aliases=False)
+            if not desc_words_check.intersection(candidate_words):
+                logger.debug(
+                    "Top-ranked element '%s' has zero word overlap with '%s' — returning None",
                     str(top_candidate.get("text", "")).strip(),
                     description,
                 )
+                return None
+            logger.info(
+                "Top-ranked element '%s' fails text validation for '%s' — "
+                "using anyway (text validation is advisory for non-LLM path).",
+                str(top_candidate.get("text", "")).strip(),
+                description,
+            )
             return top_candidate
         return None
 
