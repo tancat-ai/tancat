@@ -1,6 +1,6 @@
 {
-  "total": 110,
-  "completed": 110,
+  "total": 112,
+  "completed": 112,
   "pending": 0,
   "files": [
     {
@@ -556,6 +556,11 @@
     {
       "source": "src/storage.py",
       "doc": "markdown_docs/src/storage.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/aria_parser.py",
+      "doc": "markdown_docs/src/aria_parser.py.md",
       "status": "completed"
     }
   ],

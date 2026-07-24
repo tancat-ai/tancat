@@ -4,9 +4,10 @@
 Composite scoring engine for placeholder resolution — provides individual testable scoring functions that evaluate candidate elements against placeholder descriptions.
 
 ## Module Metadata
-- **Lines:** ~520
+- **Lines:** ~570
 - **Imports:** `re`, `math`, `dataclasses`, `typing`, `src.semantic_matcher`
 - **RAG updates:** 2026-07-21 — `GOLDEN_PATTERN_BONUS` constant, `_golden_pattern_bonus()` method, optional `golden_patterns` parameter on `compute_element_score()`
+- **B-025 updates:** 2026-07-23 — Heading penalty (-20) in `_click_role_bonus()` for CLICK on elements with heading role and no ID. Container bonus (+10) for generic/group/region elements with an ID.
 
 ## Classes
 

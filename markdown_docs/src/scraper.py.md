@@ -2,13 +2,19 @@
 
 ## High-Level Purpose
 
-Playwright-based DOM scraper that discovers real element selectors from live web pages. Uses a headless Chromium browser to render JavaScript, extract interactive elements, capture accessibility trees via CDP, and record screenshots with bounding boxes. Runs scraping in a subprocess to avoid asyncio event loop conflicts on Windows.
+Three-layer hybrid DOM scraper (B-032) that combines BS4 HTML parsing, CDP accessibility tree enrichment, and Playwright's `aria_snapshot(boxes=True)` to capture elements with complete semantic metadata. Default: all three layers active; set `SCRAPER_BACKEND=bs4` for BS4-only.
+
+**Layer 1 — BS4**: CSS selectors, `id`, `data-test`, `classes`, `href` from static HTML.
+**Layer 2 — CDP `getFullAXTree`**: Computed `accessible_name`, `computed_role` from the full accessibility tree (including hidden elements).
+**Layer 3 — ARIA snapshot**: `placeholder`, `value`, bounding boxes, container groups from the visible rendered state.
+
+Uses a headless Chromium browser to render JavaScript, extract elements, capture accessibility trees, and record screenshots with bounding boxes. Runs scraping in a subprocess to avoid asyncio event loop conflicts on Windows.
 
 ## Module Metadata
 
-- **Lines:** 657
+- **Lines:** 800+
 - **Key imports:** `base64`, `json`, `os`, `subprocess`, `sys`, `dataclasses.dataclass`, `pathlib.Path`, `typing`, `urllib.parse`, `playwright.sync_api`
-- **Project imports:** `src.accessibility_enricher.AccessibilityEnricher`, `src.element_enricher.ElementEnricher`, `src.vision_enricher.VisionEnricher`
+- **Project imports:** `src.accessibility_enricher.AccessibilityEnricher`, `src.element_enricher.ElementEnricher`, `src.aria_parser.parse_aria_snapshot`, `src.vision_enricher.VisionEnricher`
 
 ## Dataclass: `ScrapeResult`
 

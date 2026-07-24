@@ -4,9 +4,15 @@
 
 Multi-pass element matching engine for placeholder resolution. Extracted from `placeholder_orchestrator.py`. Implements a 4-pass resolution pipeline (Pass 0–3) for matching placeholder descriptions to scraped DOM elements, plus LLM-based semantic ASSERT resolution (B-020).
 
+**Recent accuracy improvements (B-024/B-025, 2026-07-23):**
+- Pass1 word-ratio relax: Short descriptions like "scheme" now match long element text like "Select scheme..."
+- Pass1 heading skip: For CLICK actions, heading elements (h1-h6) are skipped — headings are display elements, not click targets
+- Pass1 id/name prefix: For FILL actions, description words that prefix element id/name are matched (e.g. "overnight" → id="overnightLocation")
+- Pass1 word-boundary: Single-word containment now checks word boundaries (prevents "year" ⊆ "(years)" false positives)
+
 ## Module Metadata
 
-- **Lines:** ~700
+- **Lines:** ~780
 - **Imports:** `re`, `logging`, `typing`, `src.intent_matcher`, `src.locator_builder`, `src.placeholder_resolver`, `src.role_mapper`, `src.semantic_candidate_ranker`, `src.semantic_matcher`
 - **Extracted from:** `placeholder_orchestrator.py`
 
