@@ -1,0 +1,43 @@
+- heading "LV Insurance — Get a Quote" [level=1] [box=240,-358,800,50]
+- text: 1. Account 2. Product 3. Policy Details 4. Drivers 5. Vehicles 6. Extras 7. Quote & Pay
+- heading "Create Your Account" [level=2] [box=240,-212,800,28]
+- text: Email Address *
+- textbox "Email Address *" [box=240,-143,800,38]:
+  - /placeholder: your@email.com
+  - text: test@test.com
+- text: Password *
+- textbox "Password *" [box=240,-66,800,38]:
+  - /placeholder: Min 8 characters
+  - text: Test1234
+- group "Account Holder" [box=242,-10,796,290]:
+  - text: Account Holder Title *
+  - combobox "Title *" [box=261,46,758,40]:
+    - option "Select..." [selected] [box=0,0,0,0]
+    - option "Mr" [box=0,0,0,0]
+    - option "Mrs" [box=0,0,0,0]
+    - option "Ms" [box=0,0,0,0]
+    - option "Miss" [box=0,0,0,0]
+    - option "Dr" [box=0,0,0,0]
+  - text: First Name *
+  - textbox "First Name *" [box=261,125,372,38]:
+    - /placeholder: First name
+    - text: John
+  - text: Last Name *
+  - textbox "Last Name *" [box=648,125,372,38]:
+    - /placeholder: Last name
+    - text: Doe
+  - text: Date of Birth *
+  - textbox "Date of Birth *" [box=261,202,758,41]
+- group "Address" [box=242,298,796,285]:
+  - text: Address Postcode *
+  - textbox "Postcode *" [box=261,354,758,38]:
+    - /placeholder: e.g. SW1A 1AA
+    - text: SW1A1AA
+  - text: Address Line 1 *
+  - textbox "Address Line 1 *" [box=261,431,758,38]:
+    - /placeholder: House number and street
+  - text: Address Line 2
+  - textbox "Address Line 2" [box=261,508,758,38]:
+    - /placeholder: Town or city
+- text: Please fill all required fields
+- button "Next →" [box=932,691,108,41]

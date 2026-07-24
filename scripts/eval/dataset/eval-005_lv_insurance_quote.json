@@ -20,75 +20,75 @@
     {
       "criterion_index": 0,
       "placeholders": [
-        { "action": "FILL", "description": "email address", "expected_locator": "#email", "tolerance_selectors": ["input[type='email']"], "expected_page": "" },
-        { "action": "FILL", "description": "password", "expected_locator": "#password", "tolerance_selectors": ["input[type='password']"], "expected_page": "" },
-        { "action": "FILL", "description": "first name", "expected_locator": "#firstName", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "FILL", "description": "last name", "expected_locator": "#lastName", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "FILL", "description": "postcode", "expected_locator": "#postcode", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "CLICK", "description": "Next button on account page", "expected_locator": "#accountNext", "tolerance_selectors": ["button:has-text('Next')"], "expected_page": "" }
+        { "action": "FILL", "description": "email address", "expected_locator": "#email", "tolerance_selectors": ["input[type='email']"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "password", "expected_locator": "#password", "tolerance_selectors": ["input[type='password']"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "first name", "expected_locator": "#firstName", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "last name", "expected_locator": "#lastName", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "postcode", "expected_locator": "#postcode", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "CLICK", "description": "Next button on account page", "expected_locator": "#accountNext", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 1,
       "placeholders": [
-        { "action": "CLICK", "description": "Car Insurance product card", "expected_locator": "#productCar", "tolerance_selectors": [".card-option[data-product='car']"], "expected_page": "" }
+        { "action": "CLICK", "description": "Car Insurance product card", "expected_locator": "#productCar", "tolerance_selectors": ["h4:has-text('Car Insurance')"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 2,
       "placeholders": [
-        { "action": "FILL", "description": "cover start date", "expected_locator": "#startDate", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "SELECT", "description": "Standard scheme", "expected_locator": "#scheme", "tolerance_selectors": [], "expected_page": "" }
+        { "action": "FILL", "description": "cover start date", "expected_locator": "#startDate", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "scheme", "expected_locator": "#scheme", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 3,
       "placeholders": [
-        { "action": "FILL", "description": "driving license number", "expected_locator": "#mainLicenseNumber", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "FILL", "description": "years licensed", "expected_locator": "#mainLicenseYears", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "SELECT", "description": "occupation", "expected_locator": "#mainOccupation", "tolerance_selectors": [], "expected_page": "" }
+        { "action": "FILL", "description": "driving license number", "expected_locator": "#mainLicenseNumber", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "years licensed", "expected_locator": "#mainLicenseYears", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "occupation select", "expected_locator": "#mainOccupation", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 4,
       "placeholders": [
-        { "action": "FILL", "description": "vehicle registration number", "expected_locator": "#vehicleReg", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "CLICK", "description": "Look Up registration button", "expected_locator": "#lookupRegBtn", "tolerance_selectors": ["button:has-text('Look Up')"], "expected_page": "" }
+        { "action": "FILL", "description": "vehicle registration number", "expected_locator": "#vehicleReg", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "CLICK", "description": "Look Up registration button", "expected_locator": "#lookupRegBtn", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 5,
       "placeholders": [
-        { "action": "CLICK", "description": "SDP usage type radio", "expected_locator": "input[name='usageType'][value='SDP']", "tolerance_selectors": [], "expected_page": "" }
+        { "action": "CLICK", "description": "usage type", "expected_locator": "input[name='usageType'][value='SDP']", "tolerance_selectors": ["input[name='usageType']"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 6,
       "placeholders": [
-        { "action": "FILL", "description": "no claims discount years", "expected_locator": "#ncdYears", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "SELECT", "description": "overnight parking location", "expected_locator": "#overnightLocation", "tolerance_selectors": [], "expected_page": "" },
-        { "action": "CLICK", "description": "Add Vehicle button", "expected_locator": "#addVehicleBtn", "tolerance_selectors": ["button:has-text('Add Another Vehicle')"], "expected_page": "" }
+        { "action": "FILL", "description": "No Claims Discount (Years)", "expected_locator": "#ncdYears", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "overnight location", "expected_locator": "#overnightLocation", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "CLICK", "description": "Add Vehicle button", "expected_locator": "#addVehicleBtn", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 7,
       "placeholders": [
-        { "action": "ASSERT", "description": "estimated annual premium displayed", "expected_locator": "#premiumPrice", "tolerance_selectors": [".price-value"], "expected_page": "" },
-        { "action": "ASSERT", "description": "compulsory excess information", "expected_locator": "#excessInfo", "tolerance_selectors": [], "expected_page": "" }
+        { "action": "ASSERT", "description": "estimated annual premium displayed", "expected_locator": "#premiumPrice", "tolerance_selectors": [".price-value", ".price-display"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "ASSERT", "description": "compulsory excess information", "expected_locator": "#excessInfo", "tolerance_selectors": ["#excessValue"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 8,
       "placeholders": [
-        { "action": "CLICK", "description": "Pay in Full payment option", "expected_locator": "#paymentFull", "tolerance_selectors": [".card-option:has-text('Pay in Full')"], "expected_page": "" },
-        { "action": "CLICK", "description": "Submit and Get Quote button", "expected_locator": "#quoteSubmit", "tolerance_selectors": ["button:has-text('Submit')"], "expected_page": "" }
+        { "action": "CLICK", "description": "Pay in Full payment option", "expected_locator": "#paymentFull", "tolerance_selectors": ["h4:has-text('Pay in Full')"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "CLICK", "description": "Submit and Get Quote button", "expected_locator": "#quoteSubmit", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     },
     {
       "criterion_index": 9,
       "placeholders": [
-        { "action": "ASSERT", "description": "quote generated successfully message", "expected_locator": "#quoteSuccess", "tolerance_selectors": ["h2:has-text('Quote Generated')"], "expected_page": "" },
-        { "action": "ASSERT", "description": "quote reference number", "expected_locator": "#quoteRef", "tolerance_selectors": [], "expected_page": "" }
+        { "action": "ASSERT", "description": "quote generated successfully message", "expected_locator": "#quoteSuccess", "tolerance_selectors": ["h2:has-text('Quote Generated')"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "ASSERT", "description": "quote reference number", "expected_locator": "#quoteRef", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
     }
   ]

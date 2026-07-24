@@ -2,6 +2,21 @@
 
 A tool that generates Playwright Python test scripts from user stories using a local LLM. Takes acceptance criteria, scrapes target pages, resolves placeholders against scraped DOM data, and outputs runnable pytest tests.
 
+## Architecture
+
+**Scraping**: Three-layer hybrid extraction (B-032):
+1. **BeautifulSoup** — HTML structure, CSS selectors, `id`, `data-test`, `classes`
+2. **CDP `getFullAXTree`** — computed `accessible_name`, `computed_role` (full accessibility tree)
+3. **`page.aria_snapshot(boxes=True)`** — `placeholder`, `value`, bounding boxes, container groups (visible rendered state)
+
+Default: all three layers active. Set `SCRAPER_BACKEND=bs4` to use BeautifulSoup-only.
+
+**Resolver**: Multi-pass element matching (Pass 0–3) with semantic scoring:
+- Pass 0: Exact text match (ASSERT only)
+- Pass 1: Fast text match with word-ratio, heading skip, id/name prefix
+- Pass 2: Structural attribute match (id, data-test, aria)
+- Pass 3: Scoring + LLM semantic ranking
+
 ## Language
 
 **Placeholder**:

@@ -1,0 +1,496 @@
+- banner [box=0,0,1280,133]:
+  - link "Website for automation practice" [box=70,57,263,17]:
+    - /url: /
+    - img "Website for automation practice" [box=70,20,263,92]
+  - list [box=465,20,745,60]:
+    - listitem [box=465,20,87,30]:
+      - link " Home" [box=480,30,57,20]:
+        - /url: /
+    - listitem [box=552,20,109,32]:
+      - link " Products" [box=567,30,79,22]:
+        - /url: /products
+    - listitem [box=661,20,76,30]:
+      - link " Cart" [box=676,30,46,20]:
+        - /url: /view_cart
+    - listitem [box=737,20,136,30]:
+      - link " Signup / Login" [box=752,30,106,20]:
+        - /url: /login
+    - listitem [box=872,20,119,30]:
+      - link " Test Cases" [box=887,30,89,20]:
+        - /url: /test_cases
+    - listitem [box=991,20,121,30]:
+      - link " API Testing" [box=1006,30,91,20]:
+        - /url: /api_list
+    - listitem [box=661,50,144,30]:
+      - link " Video Tutorials" [box=676,60,114,20]:
+        - /url: https://www.youtube.com/c/AutomationExercise
+    - listitem [box=804,50,103,30]:
+      - link " Contact us" [box=819,60,88,20]:
+        - /url: /contact_us
+- list [box=298,524,684,20]:
+  - listitem [box=619,526,12,12]
+  - listitem [box=635,527,10,10]
+  - listitem [box=650,527,10,10]
+- heading "AutomationExercise" [level=1] [box=185,248,490,53]
+- heading "Full-Fledged practice website for Automation Engineers" [level=2] [box=185,311,490,62]
+- paragraph [box=185,394,490,69]: All QA engineers can use this website for automation practice and API testing either they are at beginner or advance level. This is for everybody to help them brush up their automation skills.
+- link "Test Cases" [box=185,481,95,17]:
+  - /url: /test_cases
+  - button "Test Cases" [box=185,473,95,34]
+- link "APIs list for practice" [box=283,481,152,17]:
+  - /url: /api_list
+  - button "APIs list for practice" [box=283,473,152,34]
+- img "demo website for practice" [box=705,133,484,441]
+- link "" [box=70,354,21,86]:
+  - /url: "#slider-carousel"
+- link "" [box=1189,354,21,86]:
+  - /url: "#slider-carousel"
+- heading "Category" [level=2] [box=70,619,263,20]
+- heading " Women" [level=4] [box=91,690,221,18]:
+  - link " Women" [box=91,691,52,17]:
+    - /url: "#Women"
+- heading " Men" [level=4] [box=91,722,221,18]:
+  - link " Men" [box=91,723,30,17]:
+    - /url: "#Men"
+- heading " Kids" [level=4] [box=91,755,221,18]:
+  - link " Kids" [box=91,756,30,17]:
+    - /url: "#Kids"
+- heading "Brands" [level=2] [box=70,834,263,20]
+- list [box=71,899,261,254]:
+  - listitem [box=71,899,261,30]:
+    - link "(6) Polo" [box=71,899,261,30]:
+      - /url: /brand_products/Polo
+  - listitem [box=71,931,261,30]:
+    - link "(5) H&M" [box=71,931,261,30]:
+      - /url: /brand_products/H&M
+  - listitem [box=71,963,261,30]:
+    - link "(5) Madame" [box=71,963,261,30]:
+      - /url: /brand_products/Madame
+  - listitem [box=71,995,261,30]:
+    - link "(3) Mast & Harbour" [box=71,995,261,30]:
+      - /url: /brand_products/Mast & Harbour
+  - listitem [box=71,1027,261,30]:
+    - link "(4) Babyhug" [box=71,1027,261,30]:
+      - /url: /brand_products/Babyhug
+  - listitem [box=71,1059,261,30]:
+    - link "(3) Allen Solly Junior" [box=71,1059,261,30]:
+      - /url: /brand_products/Allen Solly Junior
+  - listitem [box=71,1091,261,30]:
+    - link "(3) Kookie Kids" [box=71,1091,261,30]:
+      - /url: /brand_products/Kookie Kids
+  - listitem [box=71,1123,261,30]:
+    - link "(5) Biba" [box=71,1123,261,30]:
+      - /url: /brand_products/Biba
+- heading "Features Items" [level=2] [box=378,619,833,20]
+- img "ecommerce website products" [box=383,674,247,230]
+- heading "Rs. 500" [level=2] [box=383,924,247,26]
+- paragraph [box=383,960,247,20]: Blue Top
+- text:  Add to cart
+- heading "Rs. 500" [level=2] [box=383,549,247,26]
+- paragraph [box=383,585,247,20]: Blue Top
+- text:  Add to cart
+- list [box=383,1050,247,39]:
+  - listitem [box=383,1050,247,39]:
+    - link " View Product" [box=383,1050,247,39]:
+      - /url: /product_details/1
+- img "ecommerce website products" [box=670,674,247,230]
+- heading "Rs. 400" [level=2] [box=670,924,247,26]
+- paragraph [box=670,960,247,20]: Men Tshirt
+- text:  Add to cart
+- heading "Rs. 400" [level=2] [box=670,549,247,26]
+- paragraph [box=670,585,247,20]: Men Tshirt
+- text:  Add to cart
+- list [box=670,1050,247,39]:
+  - listitem [box=670,1050,247,39]:
+    - link " View Product" [box=670,1050,247,39]:
+      - /url: /product_details/2
+- img "ecommerce website products" [box=957,674,247,230]
+- heading "Rs. 1000" [level=2] [box=957,924,247,26]
+- paragraph [box=957,960,247,20]: Sleeveless Dress
+- text:  Add to cart
+- heading "Rs. 1000" [level=2] [box=957,549,247,26]
+- paragraph [box=957,585,247,20]: Sleeveless Dress
+- text:  Add to cart
+- list [box=957,1050,247,39]:
+  - listitem [box=957,1050,247,39]:
+    - link " View Product" [box=957,1050,247,39]:
+      - /url: /product_details/3
+- img "ecommerce website products" [box=383,1128,247,230]
+- heading "Rs. 1500" [level=2] [box=383,1378,247,26]
+- paragraph [box=383,1414,247,20]: Stylish Dress
+- text:  Add to cart
+- heading "Rs. 1500" [level=2] [box=383,1003,247,26]
+- paragraph [box=383,1040,247,20]: Stylish Dress
+- text:  Add to cart
+- list [box=383,1504,247,39]:
+  - listitem [box=383,1504,247,39]:
+    - link " View Product" [box=383,1504,247,39]:
+      - /url: /product_details/4
+- img "ecommerce website products" [box=670,1128,247,230]
+- heading "Rs. 600" [level=2] [box=670,1378,247,26]
+- paragraph [box=670,1414,247,20]: Winter Top
+- text:  Add to cart
+- heading "Rs. 600" [level=2] [box=670,1003,247,26]
+- paragraph [box=670,1040,247,20]: Winter Top
+- text:  Add to cart
+- list [box=670,1504,247,39]:
+  - listitem [box=670,1504,247,39]:
+    - link " View Product" [box=670,1504,247,39]:
+      - /url: /product_details/5
+- img "ecommerce website products" [box=957,1128,247,230]
+- heading "Rs. 400" [level=2] [box=957,1378,247,26]
+- paragraph [box=957,1414,247,20]: Summer White Top
+- text:  Add to cart
+- heading "Rs. 400" [level=2] [box=957,1003,247,26]
+- paragraph [box=957,1040,247,20]: Summer White Top
+- text:  Add to cart
+- list [box=957,1504,247,39]:
+  - listitem [box=957,1504,247,39]:
+    - link " View Product" [box=957,1504,247,39]:
+      - /url: /product_details/6
+- img "ecommerce website products" [box=383,1582,247,371]
+- heading "Rs. 1000" [level=2] [box=383,1973,247,26]
+- paragraph [box=383,2010,247,20]: Madame Top For Women
+- text:  Add to cart
+- heading "Rs. 1000" [level=2] [box=383,1458,247,26]
+- paragraph [box=383,1494,247,20]: Madame Top For Women
+- text:  Add to cart
+- list [box=383,2099,247,39]:
+  - listitem [box=383,2099,247,39]:
+    - link " View Product" [box=383,2099,247,39]:
+      - /url: /product_details/7
+- img "ecommerce website products" [box=670,1582,247,247]
+- heading "Rs. 700" [level=2] [box=670,1850,247,26]
+- paragraph [box=670,1886,247,20]: Fancy Green Top
+- text:  Add to cart
+- heading "Rs. 700" [level=2] [box=670,1458,247,26]
+- paragraph [box=670,1494,247,20]: Fancy Green Top
+- text:  Add to cart
+- list [box=670,1976,247,39]:
+  - listitem [box=670,1976,247,39]:
+    - link " View Product" [box=670,1976,247,39]:
+      - /url: /product_details/8
+- img "ecommerce website products" [box=957,1582,247,300]
+- heading "Rs. 499" [level=2] [box=957,1902,247,26]
+- paragraph [box=957,1939,247,20]: Sleeves Printed Top - White
+- text:  Add to cart
+- heading "Rs. 499" [level=2] [box=957,1458,247,26]
+- paragraph [box=957,1494,247,20]: Sleeves Printed Top - White
+- text:  Add to cart
+- list [box=957,2028,247,39]:
+  - listitem [box=957,2028,247,39]:
+    - link " View Product" [box=957,2028,247,39]:
+      - /url: /product_details/11
+- img "ecommerce website products" [box=670,2107,247,300]
+- heading "Rs. 359" [level=2] [box=670,2427,247,26]
+- paragraph [box=670,2463,247,20]: Half Sleeves Top Schiffli Detailing - Pink
+- text:  Add to cart
+- heading "Rs. 359" [level=2] [box=670,1982,247,26]
+- paragraph [box=670,2018,247,20]: Half Sleeves Top Schiffli Detailing - Pink
+- text:  Add to cart
+- list [box=670,2553,247,39]:
+  - listitem [box=670,2553,247,39]:
+    - link " View Product" [box=670,2553,247,39]:
+      - /url: /product_details/12
+- img "ecommerce website products" [box=957,2107,247,327]
+- heading "Rs. 278" [level=2] [box=957,2453,247,26]
+- paragraph [box=957,2490,247,20]: Frozen Tops For Kids
+- text:  Add to cart
+- heading "Rs. 278" [level=2] [box=957,1982,247,26]
+- paragraph [box=957,2018,247,20]: Frozen Tops For Kids
+- text:  Add to cart
+- list [box=957,2579,247,39]:
+  - listitem [box=957,2579,247,39]:
+    - link " View Product" [box=957,2579,247,39]:
+      - /url: /product_details/13
+- img "ecommerce website products" [box=383,2658,247,300]
+- heading "Rs. 679" [level=2] [box=383,2978,247,26]
+- paragraph [box=383,3014,247,20]: Full Sleeves Top Cherry - Pink
+- text:  Add to cart
+- heading "Rs. 679" [level=2] [box=383,2533,247,26]
+- paragraph [box=383,2569,247,20]: Full Sleeves Top Cherry - Pink
+- text:  Add to cart
+- list [box=383,3104,247,39]:
+  - listitem [box=383,3104,247,39]:
+    - link " View Product" [box=383,3104,247,39]:
+      - /url: /product_details/14
+- img "ecommerce website products" [box=670,2658,247,300]
+- heading "Rs. 315" [level=2] [box=670,2978,247,26]
+- paragraph [box=670,3014,247,20]: Printed Off Shoulder Top - White
+- text:  Add to cart
+- heading "Rs. 315" [level=2] [box=670,2533,247,26]
+- paragraph [box=670,2569,247,20]: Printed Off Shoulder Top - White
+- text:  Add to cart
+- list [box=670,3104,247,39]:
+  - listitem [box=670,3104,247,39]:
+    - link " View Product" [box=670,3104,247,39]:
+      - /url: /product_details/15
+- img "ecommerce website products" [box=957,2658,247,300]
+- heading "Rs. 478" [level=2] [box=957,2978,247,26]
+- paragraph [box=957,3014,247,20]: Sleeves Top and Short - Blue & Pink
+- text:  Add to cart
+- heading "Rs. 478" [level=2] [box=957,2533,247,26]
+- paragraph [box=957,2569,247,20]: Sleeves Top and Short - Blue & Pink
+- text:  Add to cart
+- list [box=957,3104,247,39]:
+  - listitem [box=957,3104,247,39]:
+    - link " View Product" [box=957,3104,247,39]:
+      - /url: /product_details/16
+- img "ecommerce website products" [box=383,3182,247,280]
+- heading "Rs. 1200" [level=2] [box=383,3482,247,26]
+- paragraph [box=383,3518,247,20]: Little Girls Mr. Panda Shirt
+- text:  Add to cart
+- heading "Rs. 1200" [level=2] [box=383,3057,247,26]
+- paragraph [box=383,3094,247,20]: Little Girls Mr. Panda Shirt
+- text:  Add to cart
+- list [box=383,3608,247,39]:
+  - listitem [box=383,3608,247,39]:
+    - link " View Product" [box=383,3608,247,39]:
+      - /url: /product_details/18
+- img "ecommerce website products" [box=670,3182,247,300]
+- heading "Rs. 1050" [level=2] [box=670,3502,247,26]
+- paragraph [box=670,3539,247,20]: Sleeveless Unicorn Patch Gown - Pink
+- text:  Add to cart
+- heading "Rs. 1050" [level=2] [box=670,3057,247,26]
+- paragraph [box=670,3094,247,20]: Sleeveless Unicorn Patch Gown - Pink
+- text:  Add to cart
+- list [box=670,3628,247,39]:
+  - listitem [box=670,3628,247,39]:
+    - link " View Product" [box=670,3628,247,39]:
+      - /url: /product_details/19
+- img "ecommerce website products" [box=957,3182,247,314]
+- heading "Rs. 1190" [level=2] [box=957,3517,247,26]
+- paragraph [box=957,3553,247,20]: Cotton Mull Embroidered Dress
+- text:  Add to cart
+- heading "Rs. 1190" [level=2] [box=957,3057,247,26]
+- paragraph [box=957,3094,247,20]: Cotton Mull Embroidered Dress
+- text:  Add to cart
+- list [box=957,3642,247,39]:
+  - listitem [box=957,3642,247,39]:
+    - link " View Product" [box=957,3642,247,39]:
+      - /url: /product_details/20
+- img "ecommerce website products" [box=383,3721,247,371]
+- heading "Rs. 1530" [level=2] [box=383,4112,247,26]
+- paragraph [box=383,4149,247,20]: Blue Cotton Indie Mickey Dress
+- text:  Add to cart
+- heading "Rs. 1530" [level=2] [box=383,3596,247,26]
+- paragraph [box=383,3632,247,20]: Blue Cotton Indie Mickey Dress
+- text:  Add to cart
+- list [box=383,4238,247,39]:
+  - listitem [box=383,4238,247,39]:
+    - link " View Product" [box=383,4238,247,39]:
+      - /url: /product_details/21
+- img "ecommerce website products" [box=670,3721,247,247]
+- heading "Rs. 1600" [level=2] [box=670,3988,247,26]
+- paragraph [box=670,4025,247,40]: Long Maxi Tulle Fancy Dress Up Outfits -Pink
+- text:  Add to cart
+- heading "Rs. 1600" [level=2] [box=670,3576,247,26]
+- paragraph [box=670,3612,247,40]: Long Maxi Tulle Fancy Dress Up Outfits -Pink
+- text:  Add to cart
+- list [box=670,4134,247,39]:
+  - listitem [box=670,4134,247,39]:
+    - link " View Product" [box=670,4134,247,39]:
+      - /url: /product_details/22
+- img "ecommerce website products" [box=957,3721,247,300]
+- heading "Rs. 1100" [level=2] [box=957,4041,247,26]
+- paragraph [box=957,4077,247,40]: Sleeveless Unicorn Print Fit & Flare Net Dress - Multi
+- text:  Add to cart
+- heading "Rs. 1100" [level=2] [box=957,3576,247,26]
+- paragraph [box=957,3612,247,40]: Sleeveless Unicorn Print Fit & Flare Net Dress - Multi
+- text:  Add to cart
+- list [box=957,4187,247,39]:
+  - listitem [box=957,4187,247,39]:
+    - link " View Product" [box=957,4187,247,39]:
+      - /url: /product_details/23
+- img "ecommerce website products" [box=670,4265,247,247]
+- heading "Rs. 849" [level=2] [box=670,4533,247,26]
+- paragraph [box=670,4569,247,20]: Colour Blocked Shirt – Sky Blue
+- text:  Add to cart
+- heading "Rs. 849" [level=2] [box=670,4140,247,26]
+- paragraph [box=670,4177,247,20]: Colour Blocked Shirt – Sky Blue
+- text:  Add to cart
+- list [box=670,4659,247,39]:
+  - listitem [box=670,4659,247,39]:
+    - link " View Product" [box=670,4659,247,39]:
+      - /url: /product_details/24
+- img "ecommerce website products" [box=957,4265,247,322]
+- heading "Rs. 1299" [level=2] [box=957,4607,247,26]
+- paragraph [box=957,4644,247,20]: Pure Cotton V-Neck T-Shirt
+- text:  Add to cart
+- heading "Rs. 1299" [level=2] [box=957,4140,247,26]
+- paragraph [box=957,4177,247,20]: Pure Cotton V-Neck T-Shirt
+- text:  Add to cart
+- list [box=957,4733,247,39]:
+  - listitem [box=957,4733,247,39]:
+    - link " View Product" [box=957,4733,247,39]:
+      - /url: /product_details/28
+- img "ecommerce website products" [box=383,4812,247,330]
+- heading "Rs. 1000" [level=2] [box=383,5162,247,26]
+- paragraph [box=383,5198,247,20]: Green Side Placket Detail T-Shirt
+- text:  Add to cart
+- heading "Rs. 1000" [level=2] [box=383,4687,247,26]
+- paragraph [box=383,4723,247,20]: Green Side Placket Detail T-Shirt
+- text:  Add to cart
+- list [box=383,5287,247,39]:
+  - listitem [box=383,5287,247,39]:
+    - link " View Product" [box=383,5287,247,39]:
+      - /url: /product_details/29
+- img "ecommerce website products" [box=670,4812,247,247]
+- heading "Rs. 1500" [level=2] [box=670,5079,247,26]
+- paragraph [box=670,5115,247,20]: Premium Polo T-Shirts
+- text:  Add to cart
+- heading "Rs. 1500" [level=2] [box=670,4687,247,26]
+- paragraph [box=670,4723,247,20]: Premium Polo T-Shirts
+- text:  Add to cart
+- list [box=670,5205,247,39]:
+  - listitem [box=670,5205,247,39]:
+    - link " View Product" [box=670,5205,247,39]:
+      - /url: /product_details/30
+- img "ecommerce website products" [box=957,4812,247,330]
+- heading "Rs. 850" [level=2] [box=957,5162,247,26]
+- paragraph [box=957,5198,247,20]: Pure Cotton Neon Green Tshirt
+- text:  Add to cart
+- heading "Rs. 850" [level=2] [box=957,4687,247,26]
+- paragraph [box=957,4723,247,20]: Pure Cotton Neon Green Tshirt
+- text:  Add to cart
+- list [box=957,5287,247,39]:
+  - listitem [box=957,5287,247,39]:
+    - link " View Product" [box=957,5287,247,39]:
+      - /url: /product_details/31
+- img "ecommerce website products" [box=383,5366,247,309]
+- heading "Rs. 799" [level=2] [box=383,5695,247,26]
+- paragraph [box=383,5731,247,20]: Soft Stretch Jeans
+- text:  Add to cart
+- heading "Rs. 799" [level=2] [box=383,5241,247,26]
+- paragraph [box=383,5278,247,20]: Soft Stretch Jeans
+- text:  Add to cart
+- list [box=383,5821,247,39]:
+  - listitem [box=383,5821,247,39]:
+    - link " View Product" [box=383,5821,247,39]:
+      - /url: /product_details/33
+- img "ecommerce website products" [box=670,5366,247,247]
+- heading "Rs. 1200" [level=2] [box=670,5633,247,26]
+- paragraph [box=670,5670,247,20]: Regular Fit Straight Jeans
+- text:  Add to cart
+- heading "Rs. 1200" [level=2] [box=670,5241,247,26]
+- paragraph [box=670,5278,247,20]: Regular Fit Straight Jeans
+- text:  Add to cart
+- list [box=670,5759,247,39]:
+  - listitem [box=670,5759,247,39]:
+    - link " View Product" [box=670,5759,247,39]:
+      - /url: /product_details/35
+- img "ecommerce website products" [box=957,5366,247,330]
+- heading "Rs. 1400" [level=2] [box=957,5716,247,26]
+- paragraph [box=957,5752,247,20]: Grunt Blue Slim Fit Jeans
+- text:  Add to cart
+- heading "Rs. 1400" [level=2] [box=957,5241,247,26]
+- paragraph [box=957,5278,247,20]: Grunt Blue Slim Fit Jeans
+- text:  Add to cart
+- list [box=957,5842,247,39]:
+  - listitem [box=957,5842,247,39]:
+    - link " View Product" [box=957,5842,247,39]:
+      - /url: /product_details/37
+- img "ecommerce website products" [box=383,5920,247,353]
+- heading "Rs. 2300" [level=2] [box=383,6294,247,26]
+- paragraph [box=383,6330,247,20]: Rose Pink Embroidered Maxi Dress
+- text:  Add to cart
+- heading "Rs. 2300" [level=2] [box=383,5795,247,26]
+- paragraph [box=383,5832,247,20]: Rose Pink Embroidered Maxi Dress
+- text:  Add to cart
+- list [box=383,6419,247,39]:
+  - listitem [box=383,6419,247,39]:
+    - link " View Product" [box=383,6419,247,39]:
+      - /url: /product_details/38
+- img "ecommerce website products" [box=670,5920,247,314]
+- heading "Rs. 3000" [level=2] [box=670,6255,247,26]
+- paragraph [box=670,6291,247,20]: Cotton Silk Hand Block Print Saree
+- text:  Add to cart
+- heading "Rs. 3000" [level=2] [box=670,5795,247,26]
+- paragraph [box=670,5832,247,20]: Cotton Silk Hand Block Print Saree
+- text:  Add to cart
+- list [box=670,6380,247,39]:
+  - listitem [box=670,6380,247,39]:
+    - link " View Product" [box=670,6380,247,39]:
+      - /url: /product_details/39
+- img "ecommerce website products" [box=957,5920,247,339]
+- heading "Rs. 3500" [level=2] [box=957,6280,247,26]
+- paragraph [box=957,6316,247,20]: Rust Red Linen Saree
+- text:  Add to cart
+- heading "Rs. 3500" [level=2] [box=957,5795,247,26]
+- paragraph [box=957,5832,247,20]: Rust Red Linen Saree
+- text:  Add to cart
+- list [box=957,6405,247,39]:
+  - listitem [box=957,6405,247,39]:
+    - link " View Product" [box=957,6405,247,39]:
+      - /url: /product_details/40
+- img "ecommerce website products" [box=670,6484,247,371]
+- heading "Rs. 5000" [level=2] [box=670,6875,247,26]
+- paragraph [box=670,6912,247,40]: Beautiful Peacock Blue Cotton Linen Saree
+- text:  Add to cart
+- heading "Rs. 5000" [level=2] [box=670,6339,247,26]
+- paragraph [box=670,6375,247,40]: Beautiful Peacock Blue Cotton Linen Saree
+- text:  Add to cart
+- list [box=670,7021,247,39]:
+  - listitem [box=670,7021,247,39]:
+    - link " View Product" [box=670,7021,247,39]:
+      - /url: /product_details/41
+- img "ecommerce website products" [box=957,6484,247,330]
+- heading "Rs. 1400" [level=2] [box=957,6834,247,26]
+- paragraph [box=957,6870,247,20]: Lace Top For Women
+- text:  Add to cart
+- heading "Rs. 1400" [level=2] [box=957,6359,247,26]
+- paragraph [box=957,6395,247,20]: Lace Top For Women
+- text:  Add to cart
+- list [box=957,6960,247,39]:
+  - listitem [box=957,6960,247,39]:
+    - link " View Product" [box=957,6960,247,39]:
+      - /url: /product_details/42
+- img "ecommerce website products" [box=957,7038,247,307]
+- heading "Rs. 1389" [level=2] [box=957,7365,247,26]
+- paragraph [box=957,7401,247,20]: GRAPHIC DESIGN MEN T SHIRT - BLUE
+- text:  Add to cart
+- heading "Rs. 1389" [level=2] [box=957,6913,247,26]
+- paragraph [box=957,6950,247,20]: GRAPHIC DESIGN MEN T SHIRT - BLUE
+- text:  Add to cart
+- list [box=957,7491,247,39]:
+  - listitem [box=957,7491,247,39]:
+    - link " View Product" [box=957,7491,247,39]:
+      - /url: /product_details/43
+- heading "recommended items" [level=2] [box=378,7564,833,20]
+- img "ecommerce website products" [box=383,7619,247,230]
+- heading "Rs. 1500" [level=2] [box=383,7859,247,26]
+- paragraph [box=383,7907,247,20]: Stylish Dress
+- text:  Add to cart
+- img "ecommerce website products" [box=670,7619,247,230]
+- heading "Rs. 600" [level=2] [box=670,7859,247,26]
+- paragraph [box=670,7907,247,20]: Winter Top
+- text:  Add to cart
+- img "ecommerce website products" [box=957,7619,247,230]
+- heading "Rs. 400" [level=2] [box=957,7859,247,26]
+- paragraph [box=957,7907,247,20]: Summer White Top
+- text:  Add to cart
+- link "" [box=363,7785,27,28]:
+  - /url: "#recommended-item-carousel"
+- link "" [box=1198,7785,27,28]:
+  - /url: "#recommended-item-carousel"
+- contentinfo [box=0,8031,1280,295]:
+  - heading "Subscription" [level=2] [box=168,8067,263,18]
+  - textbox "Your email address" [box=168,8106,212,36]
+  - button "" [box=378,8105,51,37]
+  - paragraph [box=168,8167,263,40]: Get the most recent updates from our site and be updated your self...
+  - paragraph [box=70,8295,225,20]: Copyright © 2021 All rights reserved
+- dialog "This site asks for consent to use your data" [box=384,123,512,474]:
+  - paragraph [box=432,148,416,19]: Welcome
+  - heading "This site asks for consent to use your data" [level=1] [box=432,179,416,24]
+  - list [box=432,223,416,97]:
+    - listitem [box=432,223,416,53]: Personalised advertising and content, advertising and content measurement, audience research and services development
+    - listitem [box=432,276,416,44]: Store and/or access information on a device
+  - button "Learn more" [box=432,320,416,28]
+  - paragraph [box=432,360,416,64]:
+    - text: Your personal data will be processed and information from your device (cookies, unique identifiers, and other device data) may be stored by, accessed by and shared with 210 partners, or used specifically by this site. We and our partners may use precise geolocation data.
+    - button "List of partners." [box=744,407,88,17]
+  - paragraph [box=432,436,416,64]: Some vendors may process your personal data on the basis of legitimate interest, which you can object to by managing your options below. Look for a link at the bottom of this page or in the site menu to manage or withdraw consent in privacy and cookie settings.
+  - button "Consent" [box=652,536,196,38]:
+    - paragraph [box=652,545,196,20]: Consent
+  - button "Manage options" [box=432,536,196,38]:
+    - paragraph [box=432,545,196,20]: Manage options

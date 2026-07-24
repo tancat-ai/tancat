@@ -29,6 +29,7 @@ Executable pytest file (sync format, ready to run)
 
 - **AI-Powered Generation** — Natural language stories → pytest sync tests
 - **Local LLMs** — Runs entirely offline via llama.cpp, Ollama, or LM Studio
+- **Semantic Scraper** — Three-layer extraction (BS4 + CDP accessibility tree + ARIA snapshot) captures computed accessible names, placeholder text, and container elements that CSS-only scrapers miss
 - **Real Selectors** — Scrapes actual DOM; no selector hallucination
 - **Skeleton-First Pipeline** — Two-phase generation eliminates bad selectors
 - **Page Object Models** — Optional POM output for scalable test suites

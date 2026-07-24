@@ -177,19 +177,65 @@ class ElementMatcher:
                 matched = False
 
                 if norm_text in norm_description:
-                    matched = True
+                    # B-024f: Single-word text requires word-boundary
+                    # match. "year" ⊆ "(years)" is a substring
+                    # coincidence, not a real match.
+                    if " " not in norm_text and len(norm_text) >= 4:
+                        desc_words_check = set(norm_description.replace("(", " ").replace(")", " ").split())
+                        if norm_text in desc_words_check:
+                            matched = True
+                    else:
+                        matched = True
 
                 if not matched and key_phrases:
                     for phrase in key_phrases:
                         phrase_words = len(phrase.split())
                         text_word_count = len(norm_text.split())
                         if phrase_words > 0:
+                            # B-024: Relax word-ratio guard when phrase is
+                            # a literal substring of element text (e.g.
+                            # "scheme" in "Select scheme..."). The ratio
+                            # guard prevents 1-word matches on long texts
+                            # but shouldn't block genuine substrings.
+                            phrase_in_text = phrase in norm_text or norm_text in phrase
+                            if phrase_in_text and phrase_words <= 2:
+                                # Short phrase found as substring — trust it
+                                matched = True
+                                break
                             word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                            if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
+                            if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
                                 matched = True
                                 break
 
+                # B-024e: Targeted word match against element id/name
+                # when substring matching fails for FILL actions.
+                # If a description word prefixes the element's id or
+                # name, that's a strong signal (e.g. "overnight" →
+                # id="overnightLocation", "usage" → name="usageType").
+                # Only for FILL — CLICK targets need structural matching.
+                if not matched and action == "FILL" and key_phrases:
+                    elem_id = str(element.get("id", "")).lower()
+                    elem_name = str(element.get("name", "")).lower()
+                    for phrase in key_phrases:
+                        for word in phrase.split():
+                            if len(word) >= 4:
+                                if (elem_id and elem_id.startswith(word)) or (elem_name and elem_name.startswith(word)):
+                                    matched = True
+                                    break
+                        if matched:
+                            break
+
                 if matched:
+                    # B-025: For CLICK actions, skip heading elements
+                    # (h1-h6). Headings are display elements inside click
+                    # containers — they should not be selected as click
+                    # targets. Pass 3 scoring handles the container bonus.
+                    _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
+                    if action == "CLICK":
+                        role = str(element.get("role", "")).strip().lower()
+                        computed = str(element.get("computed_role", "")).strip().lower()
+                        if role in _heading_roles or computed in _heading_roles:
+                            continue  # Skip this heading, try next element
                     if has_action_verb:
                         text_words = set(norm_text.split())
                         action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
@@ -304,15 +350,33 @@ class ElementMatcher:
                 matched = False
 
                 if norm_text in norm_description:
-                    matched = True
+                    # B-024f: Single-word text requires word-boundary
+                    # match. "year" ⊆ "(years)" is a substring
+                    # coincidence, not a real match.
+                    if " " not in norm_text and len(norm_text) >= 4:
+                        desc_words_check = set(norm_description.replace("(", " ").replace(")", " ").split())
+                        if norm_text in desc_words_check:
+                            matched = True
+                    else:
+                        matched = True
 
                 if not matched and key_phrases:
                     for phrase in key_phrases:
                         phrase_words = len(phrase.split())
                         text_word_count = len(norm_text.split())
                         if phrase_words > 0:
+                            # B-024: Relax word-ratio guard when phrase is
+                            # a literal substring of element text (e.g.
+                            # "scheme" in "Select scheme..."). The ratio
+                            # guard prevents 1-word matches on long texts
+                            # but shouldn't block genuine substrings.
+                            phrase_in_text = phrase in norm_text or norm_text in phrase
+                            if phrase_in_text and phrase_words <= 2:
+                                # Short phrase found as substring — trust it
+                                matched = True
+                                break
                             word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                            if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
+                            if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
                                 matched = True
                                 break
 

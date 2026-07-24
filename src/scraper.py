@@ -15,6 +15,7 @@ from urllib.parse import urljoin, urlparse
 from playwright.sync_api import Page, sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
+from src.aria_parser import parse_aria_snapshot
 from src.element_enricher import ElementEnricher
 
 
@@ -164,6 +165,97 @@ def scrape_with_enrichment(
     return enriched_results
 
 
+# ── B-032: Hybrid ARIA+BS4 merge helpers ────────────────────────
+
+# Role equivalence for matching BS4 elements to ARIA elements.
+_ROLE_MAP: dict[str, set[str]] = {
+    "select": {"combobox", "listbox", "select"},
+    "a": {"link"},
+    "button": {"button"},
+    "input": {"textbox", "searchbox", "spinbutton", "radio", "checkbox"},
+    "textarea": {"textbox"},
+    "h1": {"heading"},
+    "h2": {"heading"},
+    "h3": {"heading"},
+    "h4": {"heading"},
+    "h5": {"heading"},
+    "h6": {"heading"},
+    "number": {"spinbutton"},
+    "email": {"textbox"},
+    "password": {"textbox"},
+    "date": {"textbox"},
+}
+
+
+def _norm_match_key(text: str) -> str:
+    """Normalize text for fuzzy matching between BS4 and ARIA elements."""
+    return text.strip().lower()[:60]
+
+
+def _find_aria_match(
+    bs4_text: str,
+    bs4_role: str,
+    aria_by_text: dict[str, list[tuple[int, dict[str, Any]]]],
+    used: set[int],
+) -> tuple[int, dict[str, Any]] | None:
+    """Find the best ARIA element matching a BS4 element."""
+    if not bs4_text:
+        return None
+
+    compatible_roles = _ROLE_MAP.get(bs4_role, {bs4_role})
+
+    # Pass 1: exact text match + compatible role
+    for idx, ae in aria_by_text.get(bs4_text, []):
+        if idx in used:
+            continue
+        if ae.get("role", "") in compatible_roles:
+            return (idx, ae)
+
+    # Pass 2: containment match (one text contains the other)
+    for key, aelist in aria_by_text.items():
+        for idx, ae in aelist:
+            if idx in used:
+                continue
+            if ae.get("role", "") not in compatible_roles:
+                continue
+            if bs4_text in key or key in bs4_text:
+                return (idx, ae)
+
+    # Pass 3: text-only match (relaxed role requirement)
+    for idx, ae in aria_by_text.get(bs4_text, []):
+        if idx not in used:
+            return (idx, ae)
+
+    return None
+
+
+def _merge_aria_into_bs4(bs4: dict[str, Any], aria: dict[str, Any]) -> None:
+    """Copy ARIA semantics into a BS4 element (never overwrite existing)."""
+    # accessible_name: SKIP — CDP AX tree enrichment provides this
+    # more accurately (full tree, not just visible elements).
+    # ARIA is only used for placeholder and value which CDP doesn't give.
+
+    # computed_role: skip for now — changes Pass 3 scoring behavior
+    # aria_role = aria.get("computed_role", "") or aria.get("role", "")
+    # if aria_role:
+    #     bs4["computed_role"] = aria_role
+
+    # placeholder: only if BS4 doesn't have one
+    aria_ph = aria.get("placeholder", "")
+    if aria_ph and not bs4.get("placeholder"):
+        bs4["placeholder"] = aria_ph
+
+    # value: only if BS4 doesn't have one
+    aria_val = aria.get("value", "")
+    if aria_val and not bs4.get("value"):
+        bs4["value"] = aria_val
+
+    # bounding box from ARIA (more accurate — reflects rendered position)
+    aria_bbox = aria.get("_bbox")
+    if aria_bbox:
+        bs4["_bbox"] = aria_bbox
+
+
 class PageScraper:
     """Scrape pages using a real browser to ensure JavaScript rendering and correct redirects."""
 
@@ -278,7 +370,18 @@ class PageScraper:
 
                 title = page.title()
                 html_content = page.content()
-                elements = self._extract_elements_from_html(html_content, base_url=final_url)
+
+                # B-032: ARIA-based semantic scraping (enabled by default).
+                # Set SCRAPER_BACKEND=bs4 to use BeautifulSoup-only mode.
+                use_aria = os.environ.get("SCRAPER_BACKEND", "").strip().lower() != "bs4"
+
+                if use_aria:
+                    # Hybrid: BS4 for attributes, CDP for accessible_name,
+                    # ARIA for placeholder/value/bbox/groups
+                    bs4_elements = self._extract_elements_from_html(html_content, base_url=final_url)
+                    elements = self._extract_elements_from_aria(page, bs4_elements)
+                else:
+                    elements = self._extract_elements_from_html(html_content, base_url=final_url)
                 elements = self._capture_element_visibility(page, elements)
 
                 a11y_snapshot: dict[str, Any] = {}
@@ -547,6 +650,15 @@ class PageScraper:
                 break
             parent = parent.parent
 
+        # B-024: For <select> elements, prefer the <label for="..."> text
+        # as accessible_name. Select elements often have generic placeholder
+        # option text ("Select...") while the label carries the real name
+        # ("Scheme", "Occupation"). The accessibility enricher won't overwrite
+        # if this is already set.
+        accessible_name = ""
+        if tag.name == "select" and tag.get("id") and str(tag.get("id")) in labels:
+            accessible_name = labels[str(tag.get("id"))]
+
         return {
             "selector": selector,
             "text": text_content,
@@ -560,6 +672,7 @@ class PageScraper:
             "classes": " ".join(_class_attr) if isinstance(_class_attr := tag.get("class"), list) else "",
             "value": str(tag.get("value", "")).strip(),
             "placeholder": str(tag.get("placeholder", "")).strip(),
+            "accessible_name": accessible_name,
             "is_visible": True,
             "in_modal": in_modal,
         }
@@ -693,6 +806,84 @@ class PageScraper:
         elements = ElementEnricher.enrich_batch(elements)
 
         return elements
+
+    def _extract_elements_from_aria(self, page: Page, bs4_elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Hybrid extraction: merge ARIA semantics into BS4 elements.
+
+        BS4 provides CSS selectors, IDs, data-test, classes — the
+        structural attributes the resolver needs.  ARIA provides
+        computed accessible_name, role, placeholder, value — the
+        semantics BS4 misses.  This method merges both:
+
+        1. Run ARIA snapshot → get semantic elements
+        2. For each BS4 element, find best ARIA match by text
+        3. Copy accessible_name, computed_role, placeholder, value
+        4. Append ARIA-only elements (visible to AX tree but no BS4 match)
+
+        Args:
+            page: Playwright Page for aria_snapshot().
+            bs4_elements: Elements from _extract_elements_from_html().
+
+        Returns:
+            BS4 elements enriched with ARIA semantics.
+        """
+        try:
+            yaml_text = page.aria_snapshot(boxes=True)
+            aria_elements = parse_aria_snapshot(yaml_text)
+        except Exception as e:
+            self._debug(f"ARIA snapshot failed: {e} — keeping BS4 only")
+            return bs4_elements
+
+        if not aria_elements:
+            return bs4_elements
+
+        # Index ARIA elements by normalized text for O(1) lookup
+        aria_by_text: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+        for i, ae in enumerate(aria_elements):
+            key = _norm_match_key(ae.get("text", "") or ae.get("accessible_name", ""))
+            if key:
+                aria_by_text.setdefault(key, []).append((i, ae))
+
+        used_aria: set[int] = set()
+
+        # Pass 1: Enrich BS4 elements with ARIA semantics
+        for be in bs4_elements:
+            bs4_text = _norm_match_key(be.get("text", ""))
+            bs4_role = be.get("role", "")
+
+            # Find best ARIA match
+            match = _find_aria_match(bs4_text, bs4_role, aria_by_text, used_aria)
+            if match is not None:
+                idx, ae = match
+                # Copy semantics from ARIA → BS4 (never overwrite existing)
+                _merge_aria_into_bs4(be, ae)
+                used_aria.add(idx)
+
+        # Pass 2: Append ARIA-only container elements that BS4 misses.
+        # Only append group/generic/region containers with accessible names —
+        # these are clickable card divs, form sections, etc. that BS4 skips
+        # because they lack interactive HTML tags or ARIA roles in the source.
+        # Appended at end so BS4 elements (with CSS selectors) are tried first.
+        _appendable_roles = {"group", "generic", "region"}
+        for i, ae in enumerate(aria_elements):
+            if i in used_aria:
+                continue
+            role = ae.get("role", "")
+            if role not in _appendable_roles:
+                continue
+            name = ae.get("accessible_name", "")
+            if not name or len(name) < 3:
+                continue
+            # Add a synthetic id from the accessible name (snake_case)
+            synthetic_id = name.lower().replace(" ", "_")[:40]
+            ae["id"] = synthetic_id
+            ae["selector"] = f"#{synthetic_id}"
+            bs4_elements.append(ae)
+        # Note: bs4_elements are already enriched by _extract_elements_from_html.
+        # ARIA-only appended elements get their bbox from the ARIA tree directly.
+        # No need to call ElementEnricher.enrich_batch() again.
+
+        return bs4_elements
 
     async def scrape_all(self, urls: list[str]) -> dict[str, tuple[list[dict[str, Any]], str | None, str]]:
         """Scrape multiple URLs using the Playwright browser."""

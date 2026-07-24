@@ -1,0 +1,8 @@
+- text: Swag Labs
+- textbox "Username" [box=494,154,292,37]
+- textbox "Password" [box=494,206,292,37]
+- button "Login" [box=494,298,292,46]
+- heading "Accepted usernames are:" [level=4] [box=250,427,390,20]
+- text: standard_user locked_out_user problem_user performance_glitch_user error_user visual_user
+- heading "Password for all users:" [level=4] [box=640,427,390,20]
+- text: secret_sauce

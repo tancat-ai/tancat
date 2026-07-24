@@ -345,9 +345,11 @@ class PlaceholderScorer:
         if action != "CLICK":
             return 0
         role = str(element.get("role", "")).strip().lower()
+        computed_role = str(element.get("computed_role", "")).strip().lower()
         href = str(element.get("href", "")).strip()
         text = str(element.get("text", "")).strip()
         selector = str(element.get("selector", "")).strip().lower()
+        element_id = str(element.get("id", "")).strip()
         bonus = 0
         if role in {"button", "link", "a", "submit"}:
             bonus += 3
@@ -355,6 +357,27 @@ class PlaceholderScorer:
             bonus += 2
         if not text and not href and "data-" in selector:
             bonus -= 4
+        # B-025: Headings are display elements, not click targets.
+        # When a div.container has an h4 child with matching text,
+        # the heading wins scoring because it has the text. Penalise
+        # headings for CLICK so that click target containers (divs
+        # with ids) get priority.
+        _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
+        is_heading = role in _heading_roles or computed_role in _heading_roles
+        if is_heading and not element_id:
+            # Heading without ID — almost certainly a child of a clickable parent
+            bonus -= 20
+        elif is_heading and element_id:
+            # Heading with ID — unusual, but still penalise mildly
+            bonus -= 8
+        # B-025: Bonus for clickable containers — divs/generic elements with
+        # an ID that contain interactive children. These are the intended
+        # click targets when the heading child matches text.
+        _container_roles = {"generic", "group", "region", "article", ""}
+        is_container = role in _container_roles or computed_role in _container_roles
+        if is_container and element_id:
+            # Container with ID — likely the right click target
+            bonus += 10
         return bonus
 
     @staticmethod

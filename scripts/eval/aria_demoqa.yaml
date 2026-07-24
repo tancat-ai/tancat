@@ -1,0 +1,66 @@
+- banner [box=0,0,1280,100]:
+  - link [box=467,0,347,100]:
+    - /url: https://demoqa.com
+    - img [box=467,0,347,100]
+- img [box=63,181,19,19]
+- text: Elements
+- img [box=174,182,19,19]
+- img [box=63,269,19,19]
+- text: Forms
+- img [box=158,270,19,19]
+- list [box=47,317,139,64]:
+  - listitem [box=47,317,139,64]:
+    - link "Practice Form" [box=60,323,113,52]:
+      - /url: /automation-practice-form
+      - img [box=60,329,16,16]
+      - text: Practice Form
+- img [box=63,429,19,19]
+- text: Alerts, Frame & Windows
+- img [box=176,430,19,19]
+- img [box=63,517,19,19]
+- text: Widgets
+- img [box=168,518,19,19]
+- img [box=63,605,19,19]
+- text: Interactions
+- img [box=197,606,19,19]
+- img [box=63,693,19,19]
+- text: Book Store Application
+- img [box=194,694,19,19]
+- heading "Practice Form" [level=1] [box=234,124,708,74]
+- heading "Student Registration Form" [level=5] [box=234,223,708,24]
+- text: Name
+- textbox "First Name" [box=417,255,220,38]
+- textbox "Last Name" [box=722,255,220,38]
+- text: Email
+- textbox "name@example.com" [box=417,301,525,38]
+- text: Gender
+- radio "Male" [box=417,351,16,16]
+- text: Male
+- radio "Female" [box=492,351,16,16]
+- text: Female
+- radio "Other" [box=582,351,16,16]
+- text: Other Mobile(10 Digits)
+- textbox "Mobile Number" [box=417,381,525,38]
+- text: Date of Birth
+- textbox [box=417,427,207,38]: 24 Jul 2026
+- text: Subjects
+- log [box=417,473,1,1]
+- combobox [box=428,480,4,24]
+- text: Hobbies
+- checkbox "Sports" [box=417,526,16,16]
+- text: Sports
+- checkbox "Reading" [box=502,526,16,16]
+- text: Reading
+- checkbox "Music" [box=599,526,16,16]
+- text: Music Picture
+- button "Choose File" [box=417,558,525,38]
+- text: Current Address
+- textbox "Current Address" [box=417,604,525,134]
+- text: State and City
+- log [box=417,746,1,1]
+- text: Select State
+- combobox [box=428,753,4,24]
+- log [box=661,746,1,1]
+- text: Select City
+- button "Submit" [box=844,808,76,38]
+- contentinfo [box=0,660,1280,60]: © 2013-2026 TOOLSQA.COM | ALL RIGHTS RESERVED.

@@ -148,6 +148,53 @@ def _build_golden_lookup(golden: dict[str, Any]) -> list[dict[str, Any]]:
     return flat
 
 
+def _normalize_locator(locator: str) -> str:
+    """Normalize a locator string for comparison.
+
+    Handles equivalent CSS selector forms:
+    - ``#foo`` and ``[id="foo"]`` normalize to ``[id="foo"]``
+    - ``.class[data-test="bar"]`` and ``[data-test="bar"]`` normalize to the bare attribute
+    - ``input[name="x"]`` and ``[name="x"]`` normalize to ``[name="x"]``
+
+    Returns the normalized form, or the original if no normalization applies.
+    """
+    if not locator:
+        return locator
+
+    # Canonicalize ID: #foo → [id="foo"]
+    id_match = re.match(r"^#([\w-]+)$", locator)
+    if id_match:
+        return f'[id="{id_match.group(1)}"]'
+
+    # Extract attribute selectors: [attr="val"]
+    attr_matches = re.findall(r'\[([\w-]+)="([^"]+)"\]', locator)
+    if attr_matches:
+        # Rebuild from just the attributes (strip tag/class prefix)
+        parts = []
+        for attr, val in attr_matches:
+            parts.append(f'[{attr}="{val}"]')
+        return "".join(parts)
+
+    return locator
+
+
+def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
+    """Check if resolved locator matches expected, with normalization.
+
+    Uses exact match first, then tolerance list, then normalized comparison
+    that handles equivalent CSS selector forms.
+    """
+    if resolved == expected or resolved in tolerances:
+        return True
+    # B-026: Normalize both locators to handle equivalent forms
+    if _normalize_locator(resolved) == _normalize_locator(expected):
+        return True
+    for t in tolerances:
+        if _normalize_locator(resolved) == _normalize_locator(t):
+            return True
+    return False
+
+
 def _match_generated_to_golden(
     generated_locators: list[dict[str, str]],
     golden_placeholders: list[dict[str, Any]],
@@ -173,7 +220,7 @@ def _match_generated_to_golden(
             expected = gp["expected_locator"]
             tolerances = gp.get("tolerance_selectors", [])
 
-            matched = locator == expected or locator in tolerances
+            matched = _locators_match(locator, expected, tolerances)
 
             candidate = ResolutionResult(
                 action=gp["action"],

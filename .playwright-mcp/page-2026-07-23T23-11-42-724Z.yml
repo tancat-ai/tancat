@@ -1,0 +1,1445 @@
+- generic [ref=e2]:
+  - region "Skip to main content":
+    - link "Skip to main content" [ref=e3] [cursor=pointer]:
+      - /url: "#__docusaurus_skipToContent_fallback"
+  - navigation "Main" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "Playwright logo Playwright" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - img "Playwright logo" [ref=e9]
+          - generic [ref=e10]: Playwright
+        - link "Docs" [ref=e11] [cursor=pointer]:
+          - /url: /docs/intro
+        - link "MCP" [ref=e12] [cursor=pointer]:
+          - /url: /mcp/introduction
+        - link "CLI" [ref=e13] [cursor=pointer]:
+          - /url: /agent-cli/introduction
+        - link "API" [ref=e14] [cursor=pointer]:
+          - /url: /docs/api/class-playwright
+        - button "Node.js" [ref=e16] [cursor=pointer]
+      - generic [ref=e17]:
+        - link "GitHub repository" [ref=e18] [cursor=pointer]:
+          - /url: https://github.com/microsoft/playwright
+        - link "Discord server" [ref=e19] [cursor=pointer]:
+          - /url: https://aka.ms/playwright/discord
+        - button "Switch between dark and light mode (currently system mode)" [disabled] [ref=e21]
+        - button "Search (Meta+k)" [ref=e25] [cursor=pointer]:
+          - generic [ref=e26]: Search
+  - generic [ref=e33]:
+    - complementary [ref=e34]:
+      - navigation "Docs sidebar" [ref=e37]:
+        - list [ref=e38]:
+          - listitem [ref=e39]:
+            - button "API reference" [expanded] [ref=e41] [cursor=pointer]
+            - list [ref=e43]:
+              - listitem [ref=e44]:
+                - link "Playwright Test" [ref=e45] [cursor=pointer]:
+                  - /url: /docs/api/class-test
+              - listitem [ref=e47]:
+                - link "Playwright Library" [ref=e48] [cursor=pointer]:
+                  - /url: /docs/api/class-playwright
+              - listitem [ref=e50]:
+                - button "Classes" [expanded] [ref=e52] [cursor=pointer]
+                - list [ref=e54]:
+                  - listitem [ref=e55]:
+                    - link "APIRequest" [ref=e56] [cursor=pointer]:
+                      - /url: /docs/api/class-apirequest
+                  - listitem [ref=e58]:
+                    - link "APIRequestContext" [ref=e59] [cursor=pointer]:
+                      - /url: /docs/api/class-apirequestcontext
+                  - listitem [ref=e61]:
+                    - link "APIResponse" [ref=e62] [cursor=pointer]:
+                      - /url: /docs/api/class-apiresponse
+                  - listitem [ref=e64]:
+                    - link "Browser" [ref=e65] [cursor=pointer]:
+                      - /url: /docs/api/class-browser
+                  - listitem [ref=e67]:
+                    - link "BrowserContext" [ref=e68] [cursor=pointer]:
+                      - /url: /docs/api/class-browsercontext
+                  - listitem [ref=e70]:
+                    - link "BrowserServer" [ref=e71] [cursor=pointer]:
+                      - /url: /docs/api/class-browserserver
+                  - listitem [ref=e73]:
+                    - link "BrowserType" [ref=e74] [cursor=pointer]:
+                      - /url: /docs/api/class-browsertype
+                  - listitem [ref=e76]:
+                    - link "CDPSession" [ref=e77] [cursor=pointer]:
+                      - /url: /docs/api/class-cdpsession
+                  - listitem [ref=e79]:
+                    - link "Clock" [ref=e80] [cursor=pointer]:
+                      - /url: /docs/api/class-clock
+                  - listitem [ref=e82]:
+                    - link "ConsoleMessage" [ref=e83] [cursor=pointer]:
+                      - /url: /docs/api/class-consolemessage
+                  - listitem [ref=e85]:
+                    - link "Coverage" [ref=e86] [cursor=pointer]:
+                      - /url: /docs/api/class-coverage
+                  - listitem [ref=e88]:
+                    - link "Credentials" [ref=e89] [cursor=pointer]:
+                      - /url: /docs/api/class-credentials
+                  - listitem [ref=e91]:
+                    - link "Debugger" [ref=e92] [cursor=pointer]:
+                      - /url: /docs/api/class-debugger
+                  - listitem [ref=e94]:
+                    - link "Dialog" [ref=e95] [cursor=pointer]:
+                      - /url: /docs/api/class-dialog
+                  - listitem [ref=e97]:
+                    - link "Download" [ref=e98] [cursor=pointer]:
+                      - /url: /docs/api/class-download
+                  - listitem [ref=e100]:
+                    - link "ElementHandle" [ref=e101] [cursor=pointer]:
+                      - /url: /docs/api/class-elementhandle
+                  - listitem [ref=e103]:
+                    - link "FileChooser" [ref=e104] [cursor=pointer]:
+                      - /url: /docs/api/class-filechooser
+                  - listitem [ref=e106]:
+                    - link "Frame" [ref=e107] [cursor=pointer]:
+                      - /url: /docs/api/class-frame
+                  - listitem [ref=e109]:
+                    - link "FrameLocator" [ref=e110] [cursor=pointer]:
+                      - /url: /docs/api/class-framelocator
+                  - listitem [ref=e112]:
+                    - link "JSHandle" [ref=e113] [cursor=pointer]:
+                      - /url: /docs/api/class-jshandle
+                  - listitem [ref=e115]:
+                    - link "Keyboard" [ref=e116] [cursor=pointer]:
+                      - /url: /docs/api/class-keyboard
+                  - listitem [ref=e118]:
+                    - link "Locator" [ref=e119] [cursor=pointer]:
+                      - /url: /docs/api/class-locator
+                  - listitem [ref=e121]:
+                    - link "Logger" [ref=e122] [cursor=pointer]:
+                      - /url: /docs/api/class-logger
+                  - listitem [ref=e124]:
+                    - link "Mouse" [ref=e125] [cursor=pointer]:
+                      - /url: /docs/api/class-mouse
+                  - listitem [ref=e127]:
+                    - link "Page" [ref=e128] [cursor=pointer]:
+                      - /url: /docs/api/class-page
+                  - listitem [ref=e130]:
+                    - link "Request" [ref=e131] [cursor=pointer]:
+                      - /url: /docs/api/class-request
+                  - listitem [ref=e133]:
+                    - link "Response" [ref=e134] [cursor=pointer]:
+                      - /url: /docs/api/class-response
+                  - listitem [ref=e136]:
+                    - link "Route" [ref=e137] [cursor=pointer]:
+                      - /url: /docs/api/class-route
+                  - listitem [ref=e139]:
+                    - link "Screencast" [ref=e140] [cursor=pointer]:
+                      - /url: /docs/api/class-screencast
+                  - listitem [ref=e142]:
+                    - link "Selectors" [ref=e143] [cursor=pointer]:
+                      - /url: /docs/api/class-selectors
+                  - listitem [ref=e145]:
+                    - link "TimeoutError" [ref=e146] [cursor=pointer]:
+                      - /url: /docs/api/class-timeouterror
+                  - listitem [ref=e148]:
+                    - link "Touchscreen" [ref=e149] [cursor=pointer]:
+                      - /url: /docs/api/class-touchscreen
+                  - listitem [ref=e151]:
+                    - link "Tracing" [ref=e152] [cursor=pointer]:
+                      - /url: /docs/api/class-tracing
+                  - listitem [ref=e154]:
+                    - link "Video" [ref=e155] [cursor=pointer]:
+                      - /url: /docs/api/class-video
+                  - listitem [ref=e157]:
+                    - link "WebError" [ref=e158] [cursor=pointer]:
+                      - /url: /docs/api/class-weberror
+                  - listitem [ref=e160]:
+                    - link "WebSocket" [ref=e161] [cursor=pointer]:
+                      - /url: /docs/api/class-websocket
+                  - listitem [ref=e163]:
+                    - link "WebSocketRoute" [ref=e164] [cursor=pointer]:
+                      - /url: /docs/api/class-websocketroute
+                  - listitem [ref=e166]:
+                    - link "WebStorage" [ref=e167] [cursor=pointer]:
+                      - /url: /docs/api/class-webstorage
+                  - listitem [ref=e169]:
+                    - link "Worker" [ref=e170] [cursor=pointer]:
+                      - /url: /docs/api/class-worker
+              - listitem [ref=e172]:
+                - button "Assertions" [expanded] [ref=e174] [cursor=pointer]
+                - list [ref=e176]:
+                  - listitem [ref=e177]:
+                    - link "APIResponseAssertions" [ref=e178] [cursor=pointer]:
+                      - /url: /docs/api/class-apiresponseassertions
+                  - listitem [ref=e180]:
+                    - link "GenericAssertions" [ref=e181] [cursor=pointer]:
+                      - /url: /docs/api/class-genericassertions
+                  - listitem [ref=e183]:
+                    - link "LocatorAssertions" [ref=e184] [cursor=pointer]:
+                      - /url: /docs/api/class-locatorassertions
+                  - listitem [ref=e186]:
+                    - link "PageAssertions" [ref=e187] [cursor=pointer]:
+                      - /url: /docs/api/class-pageassertions
+                  - listitem [ref=e189]:
+                    - link "SnapshotAssertions" [ref=e190] [cursor=pointer]:
+                      - /url: /docs/api/class-snapshotassertions
+              - listitem [ref=e192]:
+                - button "Test Runner" [expanded] [ref=e194] [cursor=pointer]
+                - list [ref=e196]:
+                  - listitem [ref=e197]:
+                    - link "Fixtures" [ref=e198] [cursor=pointer]:
+                      - /url: /docs/api/class-fixtures
+                  - listitem [ref=e200]:
+                    - link "FullConfig" [ref=e201] [cursor=pointer]:
+                      - /url: /docs/api/class-fullconfig
+                  - listitem [ref=e203]:
+                    - link "FullProject" [ref=e204] [cursor=pointer]:
+                      - /url: /docs/api/class-fullproject
+                  - listitem [ref=e206]:
+                    - link "Location" [ref=e207] [cursor=pointer]:
+                      - /url: /docs/api/class-location
+                  - listitem [ref=e209]:
+                    - link "Playwright Test" [ref=e210] [cursor=pointer]:
+                      - /url: /docs/api/class-test
+                  - listitem [ref=e212]:
+                    - link "TestConfig" [ref=e213] [cursor=pointer]:
+                      - /url: /docs/api/class-testconfig
+                  - listitem [ref=e215]:
+                    - link "TestInfo" [ref=e216] [cursor=pointer]:
+                      - /url: /docs/api/class-testinfo
+                  - listitem [ref=e218]:
+                    - link "TestInfoError" [ref=e219] [cursor=pointer]:
+                      - /url: /docs/api/class-testinfoerror
+                  - listitem [ref=e221]:
+                    - link "TestOptions" [ref=e222] [cursor=pointer]:
+                      - /url: /docs/api/class-testoptions
+                  - listitem [ref=e224]:
+                    - link "TestProject" [ref=e225] [cursor=pointer]:
+                      - /url: /docs/api/class-testproject
+                  - listitem [ref=e227]:
+                    - link "TestStepInfo" [ref=e228] [cursor=pointer]:
+                      - /url: /docs/api/class-teststepinfo
+                  - listitem [ref=e230]:
+                    - link "WorkerInfo" [ref=e231] [cursor=pointer]:
+                      - /url: /docs/api/class-workerinfo
+              - listitem [ref=e233]:
+                - button "Test Reporter" [expanded] [ref=e235] [cursor=pointer]
+                - list [ref=e237]:
+                  - listitem [ref=e238]:
+                    - link "Reporter" [ref=e239] [cursor=pointer]:
+                      - /url: /docs/api/class-reporter
+                  - listitem [ref=e241]:
+                    - link "Suite" [ref=e242] [cursor=pointer]:
+                      - /url: /docs/api/class-suite
+                  - listitem [ref=e244]:
+                    - link "TestCase" [ref=e245] [cursor=pointer]:
+                      - /url: /docs/api/class-testcase
+                  - listitem [ref=e247]:
+                    - link "TestError" [ref=e248] [cursor=pointer]:
+                      - /url: /docs/api/class-testerror
+                  - listitem [ref=e250]:
+                    - link "TestResult" [ref=e251] [cursor=pointer]:
+                      - /url: /docs/api/class-testresult
+                  - listitem [ref=e253]:
+                    - link "TestStep" [ref=e254] [cursor=pointer]:
+                      - /url: /docs/api/class-teststep
+              - listitem [ref=e256]:
+                - button "Experimental" [expanded] [ref=e258] [cursor=pointer]
+                - list [ref=e260]:
+                  - listitem [ref=e261]:
+                    - link "Android" [ref=e262] [cursor=pointer]:
+                      - /url: /docs/api/class-android
+                  - listitem [ref=e264]:
+                    - link "AndroidDevice" [ref=e265] [cursor=pointer]:
+                      - /url: /docs/api/class-androiddevice
+                  - listitem [ref=e267]:
+                    - link "AndroidInput" [ref=e268] [cursor=pointer]:
+                      - /url: /docs/api/class-androidinput
+                  - listitem [ref=e270]:
+                    - link "AndroidSocket" [ref=e271] [cursor=pointer]:
+                      - /url: /docs/api/class-androidsocket
+                  - listitem [ref=e273]:
+                    - link "AndroidWebView" [ref=e274] [cursor=pointer]:
+                      - /url: /docs/api/class-androidwebview
+                  - listitem [ref=e276]:
+                    - link "Electron" [ref=e277] [cursor=pointer]:
+                      - /url: /docs/api/class-electron
+                  - listitem [ref=e279]:
+                    - link "ElectronApplication" [ref=e280] [cursor=pointer]:
+                      - /url: /docs/api/class-electronapplication
+    - main [ref=e282]:
+      - generic [ref=e284]:
+        - generic [ref=e286]:
+          - article [ref=e287]:
+            - navigation "Breadcrumbs" [ref=e288]:
+              - list [ref=e289]:
+                - listitem [ref=e290]:
+                  - link "Home page" [ref=e291] [cursor=pointer]:
+                    - /url: /
+                - listitem [ref=e294]:
+                  - generic [ref=e295]: API reference
+                - listitem [ref=e296]:
+                  - generic [ref=e297]: Classes
+                - listitem [ref=e298]:
+                  - generic [ref=e299]: FrameLocator
+            - generic [ref=e300]:
+              - heading "FrameLocator" [level=1] [ref=e302]
+              - paragraph [ref=e303]:
+                - text: FrameLocator represents a view to the
+                - code [ref=e304]: iframe
+                - text: on the page. It captures the logic sufficient to retrieve the
+                - code [ref=e305]: iframe
+                - text: and locate elements in that iframe. FrameLocator can be created with either
+                - link "locator.contentFrame()" [ref=e306] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-content-frame
+                - text: ","
+                - link "page.frameLocator()" [ref=e307] [cursor=pointer]:
+                  - /url: /docs/api/class-page#page-frame-locator
+                - text: or
+                - link "locator.frameLocator()" [ref=e308] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-frame-locator
+                - text: method.
+              - code [ref=e312]:
+                - generic [ref=e313]: const locator = page.locator('#my-frame').contentFrame().getByText('Submit');
+                - generic [ref=e314]: await locator.click();
+              - paragraph [ref=e315]:
+                - strong [ref=e316]: Strictness
+              - paragraph [ref=e317]: Frame locators are strict. This means that all operations on frame locators will throw if more than one element matches a given selector.
+              - code [ref=e321]:
+                - generic [ref=e322]: "// Throws if there are several frames in DOM:"
+                - generic [ref=e323]: await page.locator('.result-frame').contentFrame().getByRole('button').click();
+                - generic [ref=e325]: "// Works because we explicitly tell locator to pick the first frame:"
+                - generic [ref=e326]: await page.locator('.result-frame').contentFrame().first().getByRole('button').click();
+              - paragraph [ref=e327]:
+                - strong [ref=e328]: Converting Locator to FrameLocator
+              - paragraph [ref=e329]:
+                - text: If you have a
+                - link "Locator" [ref=e330] [cursor=pointer]:
+                  - /url: /docs/api/class-locator
+                - text: object pointing to an
+                - code [ref=e331]: iframe
+                - text: it can be converted to
+                - link "FrameLocator" [ref=e332] [cursor=pointer]:
+                  - /url: /docs/api/class-framelocator
+                - text: using
+                - link "locator.contentFrame()" [ref=e333] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-content-frame
+                - text: .
+              - paragraph [ref=e334]:
+                - strong [ref=e335]: Converting FrameLocator to Locator
+              - paragraph [ref=e336]:
+                - text: If you have a
+                - link "FrameLocator" [ref=e337] [cursor=pointer]:
+                  - /url: /docs/api/class-framelocator
+                - text: object it can be converted to
+                - link "Locator" [ref=e338] [cursor=pointer]:
+                  - /url: /docs/api/class-locator
+                - text: pointing to the same
+                - code [ref=e339]: iframe
+                - text: using
+                - link "frameLocator.owner()" [ref=e340] [cursor=pointer]:
+                  - /url: /docs/api/class-framelocator#frame-locator-owner
+                - text: .
+              - separator [ref=e341]
+              - heading [level=2] [ref=e342]:
+                - text: Methods
+                - link "Direct link to Methods" [ref=e343] [cursor=pointer]:
+                  - /url: "#methods"
+                  - text: "#"
+              - heading [level=3] [ref=e344]:
+                - text: frameLocator
+                - link "Direct link to frameLocator" [ref=e345] [cursor=pointer]:
+                  - /url: "#frame-locator-frame-locator"
+                  - text: "#"
+              - text: "Added in: v1.17"
+              - paragraph [ref=e346]: When working with iframes, you can create a frame locator that will enter the iframe and allow selecting elements in that iframe.
+              - paragraph [ref=e347]:
+                - strong [ref=e348]: Usage
+              - code [ref=e352]:
+                - generic [ref=e353]: frameLocator.frameLocator(selector);
+              - paragraph [ref=e354]:
+                - strong [ref=e355]: Arguments
+              - list [ref=e356]:
+                - listitem [ref=e357]:
+                  - paragraph [ref=e358]:
+                    - code [ref=e359]: selector
+                    - link "string" [ref=e360] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - link "#" [ref=e361] [cursor=pointer]:
+                      - /url: "#frame-locator-frame-locator-option-selector"
+                  - paragraph [ref=e362]: A selector to use when resolving DOM element.
+              - paragraph [ref=e363]:
+                - strong [ref=e364]: Returns
+              - list [ref=e365]:
+                - listitem [ref=e366]:
+                  - link "FrameLocator" [ref=e367] [cursor=pointer]:
+                    - /url: /docs/api/class-framelocator
+                  - link "#" [ref=e368] [cursor=pointer]:
+                    - /url: "#frame-locator-frame-locator-return"
+              - separator [ref=e369]
+              - heading [level=3] [ref=e370]:
+                - text: getByAltText
+                - link "Direct link to getByAltText" [ref=e371] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-alt-text"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e372]: Allows locating elements by their alt text.
+              - paragraph [ref=e373]:
+                - strong [ref=e374]: Usage
+              - paragraph [ref=e375]: "For example, this method will find the image by alt text \"Playwright logo\":"
+              - code [ref=e379]:
+                - generic [ref=e380]: <img alt='Playwright logo'>
+              - code [ref=e384]:
+                - generic [ref=e385]: await page.getByAltText('Playwright logo').click();
+              - paragraph [ref=e386]:
+                - strong [ref=e387]: Arguments
+              - list [ref=e388]:
+                - listitem [ref=e389]:
+                  - paragraph [ref=e390]:
+                    - code [ref=e391]: text
+                    - link "string" [ref=e392] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e393] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e394] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-alt-text-option-text"
+                  - paragraph [ref=e395]: Text to locate the element for.
+                - listitem [ref=e396]:
+                  - paragraph [ref=e397]:
+                    - code [ref=e398]: options
+                    - link "Object" [ref=e399] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e400]: (optional)
+                  - list [ref=e401]:
+                    - listitem [ref=e402]:
+                      - paragraph [ref=e403]:
+                        - code [ref=e404]: exact
+                        - link "boolean" [ref=e405] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e406]: (optional)
+                        - link "#" [ref=e407] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-alt-text-option-exact"
+                      - paragraph [ref=e408]: "Whether to find an exact match: case-sensitive and whole-string. Default to false. Ignored when locating by a regular expression. Note that exact match still trims whitespace."
+              - paragraph [ref=e409]:
+                - strong [ref=e410]: Returns
+              - list [ref=e411]:
+                - listitem [ref=e412]:
+                  - link "Locator" [ref=e413] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e414] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-alt-text-return"
+              - separator [ref=e415]
+              - heading [level=3] [ref=e416]:
+                - text: getByLabel
+                - link "Direct link to getByLabel" [ref=e417] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-label"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e418]:
+                - text: Allows locating input elements by the text of the associated
+                - code [ref=e419]: <label>
+                - text: or
+                - code [ref=e420]: aria-labelledby
+                - text: element, or by the
+                - code [ref=e421]: aria-label
+                - text: attribute.
+              - paragraph [ref=e422]:
+                - strong [ref=e423]: Usage
+              - paragraph [ref=e424]: "For example, this method will find inputs by label \"Username\" and \"Password\" in the following DOM:"
+              - code [ref=e428]:
+                - generic [ref=e429]: <input aria-label="Username">
+                - generic [ref=e430]: <label for="password-input">Password:</label>
+                - generic [ref=e431]: <input id="password-input">
+              - code [ref=e435]:
+                - generic [ref=e436]: await page.getByLabel('Username').fill('john');
+                - generic [ref=e437]: await page.getByLabel('Password').fill('secret');
+              - paragraph [ref=e438]:
+                - strong [ref=e439]: Arguments
+              - list [ref=e440]:
+                - listitem [ref=e441]:
+                  - paragraph [ref=e442]:
+                    - code [ref=e443]: text
+                    - link "string" [ref=e444] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e445] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e446] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-label-option-text"
+                  - paragraph [ref=e447]: Text to locate the element for.
+                - listitem [ref=e448]:
+                  - paragraph [ref=e449]:
+                    - code [ref=e450]: options
+                    - link "Object" [ref=e451] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e452]: (optional)
+                  - list [ref=e453]:
+                    - listitem [ref=e454]:
+                      - paragraph [ref=e455]:
+                        - code [ref=e456]: exact
+                        - link "boolean" [ref=e457] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e458]: (optional)
+                        - link "#" [ref=e459] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-label-option-exact"
+                      - paragraph [ref=e460]: "Whether to find an exact match: case-sensitive and whole-string. Default to false. Ignored when locating by a regular expression. Note that exact match still trims whitespace."
+              - paragraph [ref=e461]:
+                - strong [ref=e462]: Returns
+              - list [ref=e463]:
+                - listitem [ref=e464]:
+                  - link "Locator" [ref=e465] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e466] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-label-return"
+              - separator [ref=e467]
+              - heading [level=3] [ref=e468]:
+                - text: getByPlaceholder
+                - link "Direct link to getByPlaceholder" [ref=e469] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-placeholder"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e470]: Allows locating input elements by the placeholder text.
+              - paragraph [ref=e471]:
+                - strong [ref=e472]: Usage
+              - paragraph [ref=e473]: For example, consider the following DOM structure.
+              - code [ref=e477]:
+                - generic [ref=e478]: <input type="email" placeholder="name@example.com" />
+              - paragraph [ref=e479]: "You can fill the input after locating it by the placeholder text:"
+              - code [ref=e483]:
+                - generic [ref=e484]: await page
+                - generic [ref=e485]: .getByPlaceholder('name@example.com')
+                - generic [ref=e486]: .fill('playwright@microsoft.com');
+              - paragraph [ref=e487]:
+                - strong [ref=e488]: Arguments
+              - list [ref=e489]:
+                - listitem [ref=e490]:
+                  - paragraph [ref=e491]:
+                    - code [ref=e492]: text
+                    - link "string" [ref=e493] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e494] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e495] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-placeholder-option-text"
+                  - paragraph [ref=e496]: Text to locate the element for.
+                - listitem [ref=e497]:
+                  - paragraph [ref=e498]:
+                    - code [ref=e499]: options
+                    - link "Object" [ref=e500] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e501]: (optional)
+                  - list [ref=e502]:
+                    - listitem [ref=e503]:
+                      - paragraph [ref=e504]:
+                        - code [ref=e505]: exact
+                        - link "boolean" [ref=e506] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e507]: (optional)
+                        - link "#" [ref=e508] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-placeholder-option-exact"
+                      - paragraph [ref=e509]: "Whether to find an exact match: case-sensitive and whole-string. Default to false. Ignored when locating by a regular expression. Note that exact match still trims whitespace."
+              - paragraph [ref=e510]:
+                - strong [ref=e511]: Returns
+              - list [ref=e512]:
+                - listitem [ref=e513]:
+                  - link "Locator" [ref=e514] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e515] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-placeholder-return"
+              - separator [ref=e516]
+              - heading [level=3] [ref=e517]:
+                - text: getByRole
+                - link "Direct link to getByRole" [ref=e518] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-role"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e519]:
+                - text: Allows locating elements by their
+                - link "ARIA role" [ref=e520] [cursor=pointer]:
+                  - /url: https://www.w3.org/TR/wai-aria-1.2/#roles
+                - text: ","
+                - link "ARIA attributes" [ref=e521] [cursor=pointer]:
+                  - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-attributes
+                - text: and
+                - link "accessible name" [ref=e522] [cursor=pointer]:
+                  - /url: https://w3c.github.io/accname/#dfn-accessible-name
+                - text: .
+              - paragraph [ref=e523]:
+                - strong [ref=e524]: Usage
+              - paragraph [ref=e525]: Consider the following DOM structure.
+              - code [ref=e529]:
+                - generic [ref=e530]: <h3>Sign up</h3>
+                - generic [ref=e531]: <label>
+                - generic [ref=e532]: <input type="checkbox" /> Subscribe
+                - generic [ref=e533]: </label>
+                - generic [ref=e534]: <br/>
+                - generic [ref=e535]: <button>Submit</button>
+              - paragraph [ref=e536]: "You can locate each element by its implicit role:"
+              - code [ref=e540]:
+                - generic [ref=e541]: "await expect(page.getByRole('heading', { name: 'Sign up' })).toBeVisible();"
+                - generic [ref=e543]: "await page.getByRole('checkbox', { name: 'Subscribe' }).check();"
+                - generic [ref=e545]: "await page.getByRole('button', { name: /submit/i }).click();"
+              - paragraph [ref=e546]:
+                - strong [ref=e547]: Arguments
+              - list [ref=e548]:
+                - listitem [ref=e549]:
+                  - paragraph [ref=e550]:
+                    - code [ref=e551]: role
+                    - text: "\"alert\" | \"alertdialog\" | \"application\" | \"article\" | \"banner\" | \"blockquote\" | \"button\" | \"caption\" | \"cell\" | \"checkbox\" | \"code\" | \"columnheader\" | \"combobox\" | \"complementary\" | \"contentinfo\" | \"definition\" | \"deletion\" | \"dialog\" | \"directory\" | \"document\" | \"emphasis\" | \"feed\" | \"figure\" | \"form\" | \"generic\" | \"grid\" | \"gridcell\" | \"group\" | \"heading\" | \"img\" | \"insertion\" | \"link\" | \"list\" | \"listbox\" | \"listitem\" | \"log\" | \"main\" | \"marquee\" | \"math\" | \"meter\" | \"menu\" | \"menubar\" | \"menuitem\" | \"menuitemcheckbox\" | \"menuitemradio\" | \"navigation\" | \"none\" | \"note\" | \"option\" | \"paragraph\" | \"presentation\" | \"progressbar\" | \"radio\" | \"radiogroup\" | \"region\" | \"row\" | \"rowgroup\" | \"rowheader\" | \"scrollbar\" | \"search\" | \"searchbox\" | \"separator\" | \"slider\" | \"spinbutton\" | \"status\" | \"strong\" | \"subscript\" | \"superscript\" | \"switch\" | \"tab\" | \"table\" | \"tablist\" | \"tabpanel\" | \"term\" | \"textbox\" | \"time\" | \"timer\" | \"toolbar\" | \"tooltip\" | \"tree\" | \"treegrid\" | \"treeitem\""
+                    - link "#" [ref=e552] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-role-option-role"
+                  - paragraph [ref=e553]: Required aria role.
+                - listitem [ref=e554]:
+                  - paragraph [ref=e555]:
+                    - code [ref=e556]: options
+                    - link "Object" [ref=e557] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e558]: (optional)
+                  - list [ref=e559]:
+                    - listitem [ref=e560]:
+                      - paragraph [ref=e561]:
+                        - code [ref=e562]: checked
+                        - link "boolean" [ref=e563] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e564]: (optional)
+                        - link "#" [ref=e565] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-checked"
+                      - paragraph [ref=e566]:
+                        - text: An attribute that is usually set by
+                        - code [ref=e567]: aria-checked
+                        - text: or native
+                        - code [ref=e568]: <input type=checkbox>
+                        - text: controls.
+                      - paragraph [ref=e569]:
+                        - text: Learn more about
+                        - link [ref=e570] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-checked
+                          - code [ref=e571]: aria-checked
+                        - text: .
+                    - listitem [ref=e572]:
+                      - paragraph [ref=e573]:
+                        - code [ref=e574]: description
+                        - link "string" [ref=e575] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: "|"
+                        - link "RegExp" [ref=e576] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                        - emphasis [ref=e577]: (optional)
+                        - text: "Added in: v1.60"
+                        - link "#" [ref=e578] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-description"
+                      - paragraph [ref=e579]:
+                        - text: Option to match the
+                        - link "accessible description" [ref=e580] [cursor=pointer]:
+                          - /url: https://w3c.github.io/accname/#dfn-accessible-description
+                        - text: . By default, matching is case-insensitive and searches for a substring, use
+                        - link "exact" [ref=e581] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator#frame-locator-get-by-role-option-exact
+                        - text: to control this behavior.
+                      - paragraph [ref=e582]:
+                        - text: Learn more about
+                        - link "accessible description" [ref=e583] [cursor=pointer]:
+                          - /url: https://w3c.github.io/accname/#dfn-accessible-description
+                        - text: .
+                    - listitem [ref=e584]:
+                      - paragraph [ref=e585]:
+                        - code [ref=e586]: disabled
+                        - link "boolean" [ref=e587] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e588]: (optional)
+                        - link "#" [ref=e589] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-disabled"
+                      - paragraph [ref=e590]:
+                        - text: An attribute that is usually set by
+                        - code [ref=e591]: aria-disabled
+                        - text: or
+                        - code [ref=e592]: disabled
+                        - text: .
+                      - generic [ref=e593]:
+                        - generic [ref=e594]: note
+                        - paragraph [ref=e599]:
+                          - text: Unlike most other attributes,
+                          - code [ref=e600]: disabled
+                          - text: is inherited through the DOM hierarchy. Learn more about
+                          - link [ref=e601] [cursor=pointer]:
+                            - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-disabled
+                            - code [ref=e602]: aria-disabled
+                          - text: .
+                    - listitem [ref=e603]:
+                      - paragraph [ref=e604]:
+                        - code [ref=e605]: exact
+                        - link "boolean" [ref=e606] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e607]: (optional)
+                        - text: "Added in: v1.28"
+                        - link "#" [ref=e608] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-exact"
+                      - paragraph [ref=e609]:
+                        - text: Whether
+                        - link "name" [ref=e610] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator#frame-locator-get-by-role-option-name
+                        - text: and
+                        - link "description" [ref=e611] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator#frame-locator-get-by-role-option-description
+                        - text: "are matched exactly: case-sensitive and whole-string. Defaults to false. Ignored when the value is a regular expression. Note that exact match still trims whitespace."
+                    - listitem [ref=e612]:
+                      - paragraph [ref=e613]:
+                        - code [ref=e614]: expanded
+                        - link "boolean" [ref=e615] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e616]: (optional)
+                        - link "#" [ref=e617] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-expanded"
+                      - paragraph [ref=e618]:
+                        - text: An attribute that is usually set by
+                        - code [ref=e619]: aria-expanded
+                        - text: .
+                      - paragraph [ref=e620]:
+                        - text: Learn more about
+                        - link [ref=e621] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-expanded
+                          - code [ref=e622]: aria-expanded
+                        - text: .
+                    - listitem [ref=e623]:
+                      - paragraph [ref=e624]:
+                        - code [ref=e625]: includeHidden
+                        - link "boolean" [ref=e626] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e627]: (optional)
+                        - link "#" [ref=e628] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-include-hidden"
+                      - paragraph [ref=e629]:
+                        - text: Option that controls whether hidden elements are matched. By default, only non-hidden elements, as
+                        - link "defined by ARIA" [ref=e630] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#tree_exclusion
+                        - text: ", are matched by role selector."
+                      - paragraph [ref=e631]:
+                        - text: Learn more about
+                        - link [ref=e632] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-hidden
+                          - code [ref=e633]: aria-hidden
+                        - text: .
+                    - listitem [ref=e634]:
+                      - paragraph [ref=e635]:
+                        - code [ref=e636]: level
+                        - link "number" [ref=e637] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type
+                        - emphasis [ref=e638]: (optional)
+                        - link "#" [ref=e639] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-level"
+                      - paragraph [ref=e640]:
+                        - text: A number attribute that is usually present for roles
+                        - code [ref=e641]: heading
+                        - text: ","
+                        - code [ref=e642]: listitem
+                        - text: ","
+                        - code [ref=e643]: row
+                        - text: ","
+                        - code [ref=e644]: treeitem
+                        - text: ", with default values for"
+                        - code [ref=e645]: <h1>-<h6>
+                        - text: elements.
+                      - paragraph [ref=e646]:
+                        - text: Learn more about
+                        - link [ref=e647] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-level
+                          - code [ref=e648]: aria-level
+                        - text: .
+                    - listitem [ref=e649]:
+                      - paragraph [ref=e650]:
+                        - code [ref=e651]: name
+                        - link "string" [ref=e652] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: "|"
+                        - link "RegExp" [ref=e653] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                        - emphasis [ref=e654]: (optional)
+                        - link "#" [ref=e655] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-name"
+                      - paragraph [ref=e656]:
+                        - text: Option to match the
+                        - link "accessible name" [ref=e657] [cursor=pointer]:
+                          - /url: https://w3c.github.io/accname/#dfn-accessible-name
+                        - text: . By default, matching is case-insensitive and searches for a substring, use
+                        - link "exact" [ref=e658] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator#frame-locator-get-by-role-option-exact
+                        - text: to control this behavior.
+                      - paragraph [ref=e659]:
+                        - text: Learn more about
+                        - link "accessible name" [ref=e660] [cursor=pointer]:
+                          - /url: https://w3c.github.io/accname/#dfn-accessible-name
+                        - text: .
+                    - listitem [ref=e661]:
+                      - paragraph [ref=e662]:
+                        - code [ref=e663]: pressed
+                        - link "boolean" [ref=e664] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e665]: (optional)
+                        - link "#" [ref=e666] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-pressed"
+                      - paragraph [ref=e667]:
+                        - text: An attribute that is usually set by
+                        - code [ref=e668]: aria-pressed
+                        - text: .
+                      - paragraph [ref=e669]:
+                        - text: Learn more about
+                        - link [ref=e670] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-pressed
+                          - code [ref=e671]: aria-pressed
+                        - text: .
+                    - listitem [ref=e672]:
+                      - paragraph [ref=e673]:
+                        - code [ref=e674]: selected
+                        - link "boolean" [ref=e675] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e676]: (optional)
+                        - link "#" [ref=e677] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-role-option-selected"
+                      - paragraph [ref=e678]:
+                        - text: An attribute that is usually set by
+                        - code [ref=e679]: aria-selected
+                        - text: .
+                      - paragraph [ref=e680]:
+                        - text: Learn more about
+                        - link [ref=e681] [cursor=pointer]:
+                          - /url: https://www.w3.org/TR/wai-aria-1.2/#aria-selected
+                          - code [ref=e682]: aria-selected
+                        - text: .
+              - paragraph [ref=e683]:
+                - strong [ref=e684]: Returns
+              - list [ref=e685]:
+                - listitem [ref=e686]:
+                  - link "Locator" [ref=e687] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e688] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-role-return"
+              - paragraph [ref=e689]:
+                - strong [ref=e690]: Details
+              - paragraph [ref=e691]:
+                - text: Role selector
+                - strong [ref=e692]: does not replace
+                - text: accessibility audits and conformance tests, but rather gives early feedback about the ARIA guidelines.
+              - paragraph [ref=e693]:
+                - text: Many html elements have an implicitly
+                - link "defined role" [ref=e694] [cursor=pointer]:
+                  - /url: https://w3c.github.io/html-aam/#html-element-role-mappings
+                - text: that is recognized by the role selector. You can find all the
+                - link "supported roles here" [ref=e695] [cursor=pointer]:
+                  - /url: https://www.w3.org/TR/wai-aria-1.2/#role_definitions
+                - text: . ARIA guidelines
+                - strong [ref=e696]: do not recommend
+                - text: duplicating implicit roles and attributes by setting
+                - code [ref=e697]: role
+                - text: and/or
+                - code [ref=e698]: aria-*
+                - text: attributes to default values.
+              - separator [ref=e699]
+              - heading [level=3] [ref=e700]:
+                - text: getByTestId
+                - link "Direct link to getByTestId" [ref=e701] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-test-id"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e702]: Locate element by the test id.
+              - paragraph [ref=e703]:
+                - strong [ref=e704]: Usage
+              - paragraph [ref=e705]: Consider the following DOM structure.
+              - code [ref=e709]:
+                - generic [ref=e710]: <button data-testid="directions">Itinéraire</button>
+              - paragraph [ref=e711]: "You can locate the element by its test id:"
+              - code [ref=e715]:
+                - generic [ref=e716]: await page.getByTestId('directions').click();
+              - paragraph [ref=e717]:
+                - strong [ref=e718]: Arguments
+              - list [ref=e719]:
+                - listitem [ref=e720]:
+                  - paragraph [ref=e721]:
+                    - code [ref=e722]: testId
+                    - link "string" [ref=e723] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e724] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e725] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-test-id-option-test-id"
+                  - paragraph [ref=e726]: Id to locate the element by.
+              - paragraph [ref=e727]:
+                - strong [ref=e728]: Returns
+              - list [ref=e729]:
+                - listitem [ref=e730]:
+                  - link "Locator" [ref=e731] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e732] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-test-id-return"
+              - paragraph [ref=e733]:
+                - strong [ref=e734]: Details
+              - paragraph [ref=e735]:
+                - text: By default, the
+                - code [ref=e736]: data-testid
+                - text: attribute is used as a test id. Use
+                - link "selectors.setTestIdAttribute()" [ref=e737] [cursor=pointer]:
+                  - /url: /docs/api/class-selectors#selectors-set-test-id-attribute
+                - text: to configure a different test id attribute if necessary.
+              - code [ref=e741]:
+                - generic [ref=e742]: "// Set custom test id attribute from @playwright/test config:"
+                - generic [ref=e743]: "import { defineConfig } from '@playwright/test';"
+                - generic [ref=e745]: "export default defineConfig({"
+                - generic [ref=e746]: "use: {"
+                - generic [ref=e747]: "testIdAttribute: 'data-pw'"
+                - generic [ref=e748]: "},"
+                - generic [ref=e749]: "});"
+              - separator [ref=e750]
+              - heading [level=3] [ref=e751]:
+                - text: getByText
+                - link "Direct link to getByText" [ref=e752] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-text"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e753]: Allows locating elements that contain given text.
+              - paragraph [ref=e754]:
+                - text: See also
+                - link "locator.filter()" [ref=e755] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-filter
+                - text: that allows to match by another criteria, like an accessible role, and then filter by the text content.
+              - paragraph [ref=e756]:
+                - strong [ref=e757]: Usage
+              - paragraph [ref=e758]: "Consider the following DOM structure:"
+              - code [ref=e762]:
+                - generic [ref=e763]: <div>Hello <span>world</span></div>
+                - generic [ref=e764]: <div>Hello</div>
+              - paragraph [ref=e765]: "You can locate by text substring, exact string, or a regular expression:"
+              - code [ref=e769]:
+                - generic [ref=e770]: // Matches <span>
+                - generic [ref=e771]: page.getByText('world');
+                - generic [ref=e773]: // Matches first <div>
+                - generic [ref=e774]: page.getByText('Hello world');
+                - generic [ref=e776]: // Matches second <div>
+                - generic [ref=e777]: "page.getByText('Hello', { exact: true });"
+                - generic [ref=e779]: // Matches both <div>s
+                - generic [ref=e780]: page.getByText(/Hello/);
+                - generic [ref=e782]: // Matches second <div>
+                - generic [ref=e783]: page.getByText(/^hello$/i);
+              - paragraph [ref=e784]:
+                - strong [ref=e785]: Arguments
+              - list [ref=e786]:
+                - listitem [ref=e787]:
+                  - paragraph [ref=e788]:
+                    - code [ref=e789]: text
+                    - link "string" [ref=e790] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e791] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e792] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-text-option-text"
+                  - paragraph [ref=e793]: Text to locate the element for.
+                - listitem [ref=e794]:
+                  - paragraph [ref=e795]:
+                    - code [ref=e796]: options
+                    - link "Object" [ref=e797] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e798]: (optional)
+                  - list [ref=e799]:
+                    - listitem [ref=e800]:
+                      - paragraph [ref=e801]:
+                        - code [ref=e802]: exact
+                        - link "boolean" [ref=e803] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e804]: (optional)
+                        - link "#" [ref=e805] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-text-option-exact"
+                      - paragraph [ref=e806]: "Whether to find an exact match: case-sensitive and whole-string. Default to false. Ignored when locating by a regular expression. Note that exact match still trims whitespace."
+              - paragraph [ref=e807]:
+                - strong [ref=e808]: Returns
+              - list [ref=e809]:
+                - listitem [ref=e810]:
+                  - link "Locator" [ref=e811] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e812] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-text-return"
+              - paragraph [ref=e813]:
+                - strong [ref=e814]: Details
+              - paragraph [ref=e815]: Matching by text always normalizes whitespace, even with exact match. For example, it turns multiple spaces into one, turns line breaks into spaces and ignores leading and trailing whitespace.
+              - paragraph [ref=e816]:
+                - text: Input elements of the type
+                - code [ref=e817]: button
+                - text: and
+                - code [ref=e818]: submit
+                - text: are matched by their
+                - code [ref=e819]: value
+                - text: instead of the text content. For example, locating by text
+                - code [ref=e820]: "\"Log in\""
+                - text: matches
+                - code [ref=e821]: <input type=button value="Log in">
+                - text: .
+              - separator [ref=e822]
+              - heading [level=3] [ref=e823]:
+                - text: getByTitle
+                - link "Direct link to getByTitle" [ref=e824] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-title"
+                  - text: "#"
+              - text: "Added in: v1.27"
+              - paragraph [ref=e825]: Allows locating elements by their title attribute.
+              - paragraph [ref=e826]:
+                - strong [ref=e827]: Usage
+              - paragraph [ref=e828]: Consider the following DOM structure.
+              - code [ref=e832]:
+                - generic [ref=e833]: <span title='Issues count'>25 issues</span>
+              - paragraph [ref=e834]: "You can check the issues count after locating it by the title text:"
+              - code [ref=e838]:
+                - generic [ref=e839]: await expect(page.getByTitle('Issues count')).toHaveText('25 issues');
+              - paragraph [ref=e840]:
+                - strong [ref=e841]: Arguments
+              - list [ref=e842]:
+                - listitem [ref=e843]:
+                  - paragraph [ref=e844]:
+                    - code [ref=e845]: text
+                    - link "string" [ref=e846] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "RegExp" [ref=e847] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                    - link "#" [ref=e848] [cursor=pointer]:
+                      - /url: "#frame-locator-get-by-title-option-text"
+                  - paragraph [ref=e849]: Text to locate the element for.
+                - listitem [ref=e850]:
+                  - paragraph [ref=e851]:
+                    - code [ref=e852]: options
+                    - link "Object" [ref=e853] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e854]: (optional)
+                  - list [ref=e855]:
+                    - listitem [ref=e856]:
+                      - paragraph [ref=e857]:
+                        - code [ref=e858]: exact
+                        - link "boolean" [ref=e859] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Boolean_type
+                        - emphasis [ref=e860]: (optional)
+                        - link "#" [ref=e861] [cursor=pointer]:
+                          - /url: "#frame-locator-get-by-title-option-exact"
+                      - paragraph [ref=e862]: "Whether to find an exact match: case-sensitive and whole-string. Default to false. Ignored when locating by a regular expression. Note that exact match still trims whitespace."
+              - paragraph [ref=e863]:
+                - strong [ref=e864]: Returns
+              - list [ref=e865]:
+                - listitem [ref=e866]:
+                  - link "Locator" [ref=e867] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e868] [cursor=pointer]:
+                    - /url: "#frame-locator-get-by-title-return"
+              - separator [ref=e869]
+              - heading [level=3] [ref=e870]:
+                - text: locator
+                - link "Direct link to locator" [ref=e871] [cursor=pointer]:
+                  - /url: "#frame-locator-locator"
+                  - text: "#"
+              - text: "Added in: v1.17"
+              - paragraph [ref=e872]:
+                - text: The method finds an element matching the specified selector in the locator's subtree. It also accepts filter options, similar to
+                - link "locator.filter()" [ref=e873] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-filter
+                - text: method.
+              - paragraph [ref=e874]:
+                - link "Learn more about locators" [ref=e875] [cursor=pointer]:
+                  - /url: /docs/locators
+                - text: .
+              - paragraph [ref=e876]:
+                - strong [ref=e877]: Usage
+              - code [ref=e881]:
+                - generic [ref=e882]: frameLocator.locator(selectorOrLocator);
+                - generic [ref=e883]: frameLocator.locator(selectorOrLocator, options);
+              - paragraph [ref=e884]:
+                - strong [ref=e885]: Arguments
+              - list [ref=e886]:
+                - listitem [ref=e887]:
+                  - paragraph [ref=e888]:
+                    - code [ref=e889]: selectorOrLocator
+                    - link "string" [ref=e890] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                    - text: "|"
+                    - link "Locator" [ref=e891] [cursor=pointer]:
+                      - /url: /docs/api/class-locator
+                    - link "#" [ref=e892] [cursor=pointer]:
+                      - /url: "#frame-locator-locator-option-selector-or-locator"
+                  - paragraph [ref=e893]: A selector or locator to use when resolving DOM element.
+                - listitem [ref=e894]:
+                  - paragraph [ref=e895]:
+                    - code [ref=e896]: options
+                    - link "Object" [ref=e897] [cursor=pointer]:
+                      - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
+                    - emphasis [ref=e898]: (optional)
+                  - list [ref=e899]:
+                    - listitem [ref=e900]:
+                      - paragraph [ref=e901]:
+                        - code [ref=e902]: has
+                        - link "Locator" [ref=e903] [cursor=pointer]:
+                          - /url: /docs/api/class-locator
+                        - emphasis [ref=e904]: (optional)
+                        - link "#" [ref=e905] [cursor=pointer]:
+                          - /url: "#frame-locator-locator-option-has"
+                      - paragraph [ref=e906]:
+                        - text: Narrows down the results of the method to those which contain elements matching this relative locator. For example,
+                        - code [ref=e907]: article
+                        - text: that has
+                        - code [ref=e908]: text=Playwright
+                        - text: matches
+                        - code [ref=e909]: <article><div>Playwright</div></article>
+                        - text: .
+                      - paragraph [ref=e910]:
+                        - text: Inner locator
+                        - strong [ref=e911]: must be relative
+                        - text: to the outer locator and is queried starting with the outer locator match, not the document root. For example, you can find
+                        - code [ref=e912]: content
+                        - text: that has
+                        - code [ref=e913]: div
+                        - text: in
+                        - code [ref=e914]: <article><content><div>Playwright</div></content></article>
+                        - text: . However, looking for
+                        - code [ref=e915]: content
+                        - text: that has
+                        - code [ref=e916]: article div
+                        - text: will fail, because the inner locator must be relative and should not use any elements outside the
+                        - code [ref=e917]: content
+                        - text: .
+                      - paragraph [ref=e918]:
+                        - text: Note that outer and inner locators must belong to the same frame. Inner locator must not contain
+                        - link "FrameLocator" [ref=e919] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator
+                        - text: s.
+                    - listitem [ref=e920]:
+                      - paragraph [ref=e921]:
+                        - code [ref=e922]: hasNot
+                        - link "Locator" [ref=e923] [cursor=pointer]:
+                          - /url: /docs/api/class-locator
+                        - emphasis [ref=e924]: (optional)
+                        - text: "Added in: v1.33"
+                        - link "#" [ref=e925] [cursor=pointer]:
+                          - /url: "#frame-locator-locator-option-has-not"
+                      - paragraph [ref=e926]:
+                        - text: Matches elements that do not contain an element that matches an inner locator. Inner locator is queried against the outer one. For example,
+                        - code [ref=e927]: article
+                        - text: that does not have
+                        - code [ref=e928]: div
+                        - text: matches
+                        - code [ref=e929]: <article><span>Playwright</span></article>
+                        - text: .
+                      - paragraph [ref=e930]:
+                        - text: Note that outer and inner locators must belong to the same frame. Inner locator must not contain
+                        - link "FrameLocator" [ref=e931] [cursor=pointer]:
+                          - /url: /docs/api/class-framelocator
+                        - text: s.
+                    - listitem [ref=e932]:
+                      - paragraph [ref=e933]:
+                        - code [ref=e934]: hasNotText
+                        - link "string" [ref=e935] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: "|"
+                        - link "RegExp" [ref=e936] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                        - emphasis [ref=e937]: (optional)
+                        - text: "Added in: v1.33"
+                        - link "#" [ref=e938] [cursor=pointer]:
+                          - /url: "#frame-locator-locator-option-has-not-text"
+                      - paragraph [ref=e939]:
+                        - text: Matches elements that do not contain specified text somewhere inside, possibly in a child or a descendant element. When passed a
+                        - link "string" [ref=e940] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: ", matching is case-insensitive and searches for a substring."
+                    - listitem [ref=e941]:
+                      - paragraph [ref=e942]:
+                        - code [ref=e943]: hasText
+                        - link "string" [ref=e944] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: "|"
+                        - link "RegExp" [ref=e945] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+                        - emphasis [ref=e946]: (optional)
+                        - link "#" [ref=e947] [cursor=pointer]:
+                          - /url: "#frame-locator-locator-option-has-text"
+                      - paragraph [ref=e948]:
+                        - text: Matches elements containing specified text somewhere inside, possibly in a child or a descendant element. When passed a
+                        - link "string" [ref=e949] [cursor=pointer]:
+                          - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#String_type
+                        - text: ", matching is case-insensitive and searches for a substring. For example,"
+                        - code [ref=e950]: "\"Playwright\""
+                        - text: matches
+                        - code [ref=e951]: <article><div>Playwright</div></article>
+                        - text: .
+              - paragraph [ref=e952]:
+                - strong [ref=e953]: Returns
+              - list [ref=e954]:
+                - listitem [ref=e955]:
+                  - link "Locator" [ref=e956] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e957] [cursor=pointer]:
+                    - /url: "#frame-locator-locator-return"
+              - separator [ref=e958]
+              - heading [level=3] [ref=e959]:
+                - text: owner
+                - link "Direct link to owner" [ref=e960] [cursor=pointer]:
+                  - /url: "#frame-locator-owner"
+                  - text: "#"
+              - text: "Added in: v1.43"
+              - paragraph [ref=e961]:
+                - text: Returns a
+                - link "Locator" [ref=e962] [cursor=pointer]:
+                  - /url: /docs/api/class-locator
+                - text: object pointing to the same
+                - code [ref=e963]: iframe
+                - text: as this frame locator.
+              - paragraph [ref=e964]:
+                - text: Useful when you have a
+                - link "FrameLocator" [ref=e965] [cursor=pointer]:
+                  - /url: /docs/api/class-framelocator
+                - text: object obtained somewhere, and later on would like to interact with the
+                - code [ref=e966]: iframe
+                - text: element.
+              - paragraph [ref=e967]:
+                - text: For a reverse operation, use
+                - link "locator.contentFrame()" [ref=e968] [cursor=pointer]:
+                  - /url: /docs/api/class-locator#locator-content-frame
+                - text: .
+              - paragraph [ref=e969]:
+                - strong [ref=e970]: Usage
+              - code [ref=e974]:
+                - generic [ref=e975]: const frameLocator = page.locator('iframe[name="embedded"]').contentFrame();
+                - generic [ref=e976]: // ...
+                - generic [ref=e977]: const locator = frameLocator.owner();
+                - generic [ref=e978]: await expect(locator).toBeVisible();
+              - paragraph [ref=e979]:
+                - strong [ref=e980]: Returns
+              - list [ref=e981]:
+                - listitem [ref=e982]:
+                  - link "Locator" [ref=e983] [cursor=pointer]:
+                    - /url: /docs/api/class-locator
+                  - link "#" [ref=e984] [cursor=pointer]:
+                    - /url: "#frame-locator-owner-return"
+              - separator [ref=e985]
+              - heading [level=2] [ref=e986]:
+                - text: Deprecated
+                - link "Direct link to Deprecated" [ref=e987] [cursor=pointer]:
+                  - /url: "#deprecated"
+                  - text: "#"
+              - heading [level=3] [ref=e988]:
+                - text: first
+                - link "Direct link to first" [ref=e989] [cursor=pointer]:
+                  - /url: "#frame-locator-first"
+                  - text: "#"
+              - text: "Added in: v1.17"
+              - generic [ref=e990]:
+                - generic [ref=e991]: Deprecated
+                - paragraph [ref=e996]:
+                  - text: Use
+                  - link "locator.first()" [ref=e997] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-first
+                  - text: followed by
+                  - link "locator.contentFrame()" [ref=e998] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-content-frame
+                  - text: instead.
+              - paragraph [ref=e999]: Returns locator to the first matching frame.
+              - paragraph [ref=e1000]:
+                - strong [ref=e1001]: Usage
+              - code [ref=e1005]:
+                - generic [ref=e1006]: frameLocator.first();
+              - paragraph [ref=e1007]:
+                - strong [ref=e1008]: Returns
+              - list [ref=e1009]:
+                - listitem [ref=e1010]:
+                  - link "FrameLocator" [ref=e1011] [cursor=pointer]:
+                    - /url: /docs/api/class-framelocator
+                  - link "#" [ref=e1012] [cursor=pointer]:
+                    - /url: "#frame-locator-first-return"
+              - separator [ref=e1013]
+              - heading [level=3] [ref=e1014]:
+                - text: last
+                - link "Direct link to last" [ref=e1015] [cursor=pointer]:
+                  - /url: "#frame-locator-last"
+                  - text: "#"
+              - text: "Added in: v1.17"
+              - generic [ref=e1016]:
+                - generic [ref=e1017]: Deprecated
+                - paragraph [ref=e1022]:
+                  - text: Use
+                  - link "locator.last()" [ref=e1023] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-last
+                  - text: followed by
+                  - link "locator.contentFrame()" [ref=e1024] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-content-frame
+                  - text: instead.
+              - paragraph [ref=e1025]: Returns locator to the last matching frame.
+              - paragraph [ref=e1026]:
+                - strong [ref=e1027]: Usage
+              - code [ref=e1031]:
+                - generic [ref=e1032]: frameLocator.last();
+              - paragraph [ref=e1033]:
+                - strong [ref=e1034]: Returns
+              - list [ref=e1035]:
+                - listitem [ref=e1036]:
+                  - link "FrameLocator" [ref=e1037] [cursor=pointer]:
+                    - /url: /docs/api/class-framelocator
+                  - link "#" [ref=e1038] [cursor=pointer]:
+                    - /url: "#frame-locator-last-return"
+              - separator [ref=e1039]
+              - heading [level=3] [ref=e1040]:
+                - text: nth
+                - link "Direct link to nth" [ref=e1041] [cursor=pointer]:
+                  - /url: "#frame-locator-nth"
+                  - text: "#"
+              - text: "Added in: v1.17"
+              - generic [ref=e1042]:
+                - generic [ref=e1043]: Deprecated
+                - paragraph [ref=e1048]:
+                  - text: Use
+                  - link "locator.nth()" [ref=e1049] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-nth
+                  - text: followed by
+                  - link "locator.contentFrame()" [ref=e1050] [cursor=pointer]:
+                    - /url: /docs/api/class-locator#locator-content-frame
+                  - text: instead.
+              - paragraph [ref=e1051]:
+                - text: Returns locator to the n-th matching frame. It's zero based,
+                - code [ref=e1052]: nth(0)
+                - text: selects the first frame.
+              - paragraph [ref=e1053]:
+                - strong [ref=e1054]: Usage
+              - code [ref=e1058]:
+                - generic [ref=e1059]: frameLocator.nth(index);
+              - paragraph [ref=e1060]:
+                - strong [ref=e1061]: Arguments
+              - list [ref=e1062]:
+                - listitem [ref=e1063]:
+                  - code [ref=e1064]: index
+                  - link "number" [ref=e1065] [cursor=pointer]:
+                    - /url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Data_structures#Number_type
+                  - link "#" [ref=e1066] [cursor=pointer]:
+                    - /url: "#frame-locator-nth-option-index"
+              - paragraph [ref=e1067]:
+                - strong [ref=e1068]: Returns
+              - list [ref=e1069]:
+                - listitem [ref=e1070]:
+                  - link "FrameLocator" [ref=e1071] [cursor=pointer]:
+                    - /url: /docs/api/class-framelocator
+                  - link "#" [ref=e1072] [cursor=pointer]:
+                    - /url: "#frame-locator-nth-return"
+          - navigation "Docs pages" [ref=e1073]:
+            - link "Previous « Frame" [ref=e1074] [cursor=pointer]:
+              - /url: /docs/api/class-frame
+              - generic [ref=e1075]: Previous
+              - generic [ref=e1076]: « Frame
+            - link "Next JSHandle »" [ref=e1077] [cursor=pointer]:
+              - /url: /docs/api/class-jshandle
+              - generic [ref=e1078]: Next
+              - generic [ref=e1079]: JSHandle »
+        - list [ref=e1082]:
+          - listitem [ref=e1083]:
+            - link "Methods" [ref=e1084] [cursor=pointer]:
+              - /url: "#methods"
+            - list [ref=e1085]:
+              - listitem [ref=e1086]:
+                - link "frameLocator" [ref=e1087] [cursor=pointer]:
+                  - /url: "#frame-locator-frame-locator"
+              - listitem [ref=e1088]:
+                - link "getByAltText" [ref=e1089] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-alt-text"
+              - listitem [ref=e1090]:
+                - link "getByLabel" [ref=e1091] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-label"
+              - listitem [ref=e1092]:
+                - link "getByPlaceholder" [ref=e1093] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-placeholder"
+              - listitem [ref=e1094]:
+                - link "getByRole" [ref=e1095] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-role"
+              - listitem [ref=e1096]:
+                - link "getByTestId" [ref=e1097] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-test-id"
+              - listitem [ref=e1098]:
+                - link "getByText" [ref=e1099] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-text"
+              - listitem [ref=e1100]:
+                - link "getByTitle" [ref=e1101] [cursor=pointer]:
+                  - /url: "#frame-locator-get-by-title"
+              - listitem [ref=e1102]:
+                - link "locator" [ref=e1103] [cursor=pointer]:
+                  - /url: "#frame-locator-locator"
+              - listitem [ref=e1104]:
+                - link "owner" [ref=e1105] [cursor=pointer]:
+                  - /url: "#frame-locator-owner"
+          - listitem [ref=e1106]:
+            - link "Deprecated" [ref=e1107] [cursor=pointer]:
+              - /url: "#deprecated"
+            - list [ref=e1108]:
+              - listitem [ref=e1109]:
+                - link "first" [ref=e1110] [cursor=pointer]:
+                  - /url: "#frame-locator-first"
+              - listitem [ref=e1111]:
+                - link "last" [ref=e1112] [cursor=pointer]:
+                  - /url: "#frame-locator-last"
+              - listitem [ref=e1113]:
+                - link "nth" [ref=e1114] [cursor=pointer]:
+                  - /url: "#frame-locator-nth"
+  - contentinfo [ref=e1115]:
+    - generic [ref=e1116]:
+      - generic [ref=e1117]:
+        - generic [ref=e1118]:
+          - generic [ref=e1119]: Learn
+          - list [ref=e1120]:
+            - listitem [ref=e1121]:
+              - link "Getting started" [ref=e1122] [cursor=pointer]:
+                - /url: /docs/intro
+            - listitem [ref=e1123]:
+              - link [ref=e1124] [cursor=pointer]:
+                - /url: https://learn.microsoft.com/en-us/training/modules/build-with-playwright/
+                - text: Playwright Training
+                - img "(opens in new tab)" [ref=e1125]
+            - listitem [ref=e1127]:
+              - link "Learn Videos" [ref=e1128] [cursor=pointer]:
+                - /url: /community/learn-videos
+            - listitem [ref=e1129]:
+              - link "Feature Videos" [ref=e1130] [cursor=pointer]:
+                - /url: /community/feature-videos
+        - generic [ref=e1131]:
+          - generic [ref=e1132]: Community
+          - list [ref=e1133]:
+            - listitem [ref=e1134]:
+              - link [ref=e1135] [cursor=pointer]:
+                - /url: https://stackoverflow.com/questions/tagged/playwright
+                - text: Stack Overflow
+                - img "(opens in new tab)" [ref=e1136]
+            - listitem [ref=e1138]:
+              - link [ref=e1139] [cursor=pointer]:
+                - /url: https://aka.ms/playwright/discord
+                - text: Discord
+                - img "(opens in new tab)" [ref=e1140]
+            - listitem [ref=e1142]:
+              - link [ref=e1143] [cursor=pointer]:
+                - /url: https://x.com/playwrightweb
+                - text: X
+                - img "(opens in new tab)" [ref=e1144]
+            - listitem [ref=e1146]:
+              - link [ref=e1147] [cursor=pointer]:
+                - /url: https://www.linkedin.com/company/playwrightweb
+                - text: LinkedIn
+                - img "(opens in new tab)" [ref=e1148]
+        - generic [ref=e1150]:
+          - generic [ref=e1151]: More
+          - list [ref=e1152]:
+            - listitem [ref=e1153]:
+              - link [ref=e1154] [cursor=pointer]:
+                - /url: https://github.com/microsoft/playwright
+                - text: GitHub
+                - img "(opens in new tab)" [ref=e1155]
+            - listitem [ref=e1157]:
+              - link [ref=e1158] [cursor=pointer]:
+                - /url: https://www.youtube.com/channel/UC46Zj8pDH5tDosqm1gd7WTg
+                - text: YouTube
+                - img "(opens in new tab)" [ref=e1159]
+            - listitem [ref=e1161]:
+              - link [ref=e1162] [cursor=pointer]:
+                - /url: https://dev.to/playwright
+                - text: Blog
+                - img "(opens in new tab)" [ref=e1163]
+            - listitem [ref=e1165]:
+              - link "Ambassadors" [ref=e1166] [cursor=pointer]:
+                - /url: /community/ambassadors
+            - listitem [ref=e1167]:
+              - link [ref=e1168] [cursor=pointer]:
+                - /url: https://go.microsoft.com/fwlink/?LinkId=521839
+                - text: Microsoft Privacy Statement
+                - img "(opens in new tab)" [ref=e1169]
+      - generic [ref=e1171]: Copyright © 2026 Microsoft

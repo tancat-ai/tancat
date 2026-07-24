@@ -1,11 +1,171 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-22 (LV Insurance mock site + Ingestion Agent foundation)
+Last updated: 2026-07-23 (Semantic scraper transition plan + B-024/B-025/B-026/AI-031 complete)
 
 ---
 
-## 🆕 AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22)
+## 🆕 AI-032 — Semantic Scraper Transition (2026-07-23)
+
+**Status:** 🟡 ready-for-agent  
+**Branch:** `feat/semantic-scraper`  
+**Spec:** `docs/specs/FEATURE_SPEC_semantic_scraper.md`
+
+**What:** Replace BeautifulSoup-based HTML extraction with `page.aria_snapshot(boxes=True)`.
+ARIA tree provides computed accessible names, roles, JS text, and parent-child hierarchy.
+
+**Phases:** ARIA parser → hybrid extraction → resolver alignment → cleanup.
+**Success:** eval-005 ≥ 85%, all form controls have accessible_name, no regressions.
+**Estimated sessions:** 2-3
+
+**Post-merge:** update docs, run graphify, check dead code (accessibility_enricher, CDP AX, _get_direct_text), regenerate scraped_pages, possibly refactor scraper.py.
+
+---
+
+## 🟡 B-024 — `<select>` elements use placeholder text instead of label for accessible_name (✅ FIXED 2026-07-23)
+**Related:** B-016 (synonym-aware matching), eval harness resolver accuracy
+**Impact:** 3/67 placeholders fail (4.5pp) — `scheme`, `occupation`, `overnightLocation` on LV Insurance
+**Eval context:** `eval-005_lv_insurance_quote.json` resolver mode
+
+**Symptom:** `<select>` elements are scraped with `accessible_name: "Select..."` (the default
+`<option value="">Select...</option>` placeholder) instead of the actual label text
+(e.g., "Scheme", "Occupation", "Parking Location"). The resolver's Pass 1 text match
+cannot find "scheme" or "occupation" in any element text, so these placeholders return
+`None` and the generated test emits `pytest.skip()`.
+
+**Root cause:** The scraper's `_extract_elements_from_html()` or CDP AX tree enrichment
+reads the `<select>`'s accessible name from the first `<option>` (default placeholder)
+rather than from the associated `<label for="...">` or the `<select>`'s `aria-label`
+attribute. This is a standard ARIA pattern — the label wraps or references the select,
+but the placeholder option is the visible text.
+
+**Proposed fix:**
+1. In `src/scraper.py` or `src/accessibility_enricher.py`: when extracting `<select>`
+   elements, prefer the `<label for="...">` text or `aria-label` over the first
+   `<option>` text for `accessible_name`.
+2. Fallback: if no label exists, use the `<select>`'s `id` as the accessible name
+   (e.g., `scheme` → "scheme").
+3. Update eval harness golden keys to verify the fix.
+
+**Expected improvement:** +4.5pp resolver accuracy on LV Insurance (from 54.2% → 58.7%)
+
+**Estimated sessions:** 0.5
+
+---
+
+## 🆕 B-025 — Parent div click targets lose to child heading elements in scoring
+
+**Status:** 🆕 new
+**Related:** B-014 (ASSERT scoring), B-016 (role filtering), AI-024 (a11y enrichment)
+**Impact:** 9/67 placeholders fail across LV Insurance and saucedemo (13.4pp)
+**Eval context:** `eval-005` (6 failures), `eval-001` (2 failures)
+
+**Symptom:** When a clickable `<div>` (e.g., `#productCar`, `#paymentFull`, `#quoteSuccess`)
+contains a child heading (`<h4>`, `<h2>`, `<h1>`) with the same text, the child heading
+wins the resolver's Pass 3 scoring because it has exact text match in `accessible_name`.
+The parent div (the actual click target) loses because it has no text of its own — the
+text lives in the child.
+
+**Failing examples:**
+- `CLICK "Car Insurance product card"` → resolves to `h4` (child) instead of `#productCar` (parent div)
+- `CLICK "Pay in Full payment option"` → resolves to `h4` instead of `#paymentFull`
+- `ASSERT "quote generated successfully"` → resolves to `h2` instead of `#quoteSuccess`
+- `ASSERT "quote reference number"` → resolves to `h1` instead of `#quoteRef`
+
+**Root cause:** Pass 3 scoring (`PlaceholderScorer.compute_element_score()`) rewards exact
+text match in `accessible_name` but doesn't penalize pure display elements (`h1`, `h2`,
+h4`) for CLICK actions. The scraper's CDP AX tree captures both parent and child,
+and the child's text match scores higher than the parent's ID/role bonus.
+
+**Proposed fix:**
+1. In `src/placeholder_scorers.py`: add `_click_target_bonus()` — for CLICK actions,
+   give +10 to elements with `id` attributes that are container roles (`generic`,
+   `region`, `group`) and have clickable children (divs with click handlers).
+2. Add `_display_element_penalty_for_click()` — for CLICK actions, penalise -15 for
+   pure display roles (`heading`, `text`, `paragraph`) that have a clickable parent
+   with an `id`.
+3. Use CDP AX tree `computed_role` (already captured via AI-024) to distinguish
+   containers from display elements.
+
+**Expected improvement:** +13.4pp resolver accuracy overall (from 46.3% → 59.7%)
+
+**Estimated sessions:** 1
+
+---
+
+## 🆕 B-026 — Resolver locator format mismatch — correct element, wrong selector syntax
+
+**Status:** 🆕 new
+**Impact:** 2/67 placeholders fail (3.0pp) — golden key comparison is too strict
+**Eval context:** `eval-001` (saucedemo), `eval-002` (automationexercise)
+
+**Symptom:** The resolver finds the correct DOM element but the locator string format
+differs from the golden key's expected format, causing a comparison failure.
+
+**Failing examples:**
+- `CLICK "Add to cart (Backpack)"` → resolved `#add-to-cart-sauce-labs-bike-light`
+  (wrong product — this is a genuine match failure, not format)
+- `CLICK "Cart icon"` → resolved `[data-test="shopping-cart-link"]` but expected
+  `.shopping_cart_link[data-test="shopping-cart-link"]` (same element, different format)
+
+**Root cause:** `_element_to_locator()` in `eval_resolver.py` extracts locator using
+priority: `id > data-test > name > selector`. The golden keys often contain more
+specific CSS selectors (class + attribute) while the resolver produces bare attribute
+selectors. The `golden_validator.py` comparison is exact string match.
+
+**Proposed fix:**
+1. In `scripts/eval/golden_validator.py`: add a `tolerance_locator_match()` function
+   that normalizes both resolved and expected locators before comparison.
+   - `#foo` matches `[id="foo"]`
+   - `[data-test="bar"]` matches `.class[data-test="bar"]` (subset match)
+   - `input[name="x"]` matches `[name="x"]` (attribute-only vs tag+attribute)
+2. Or: add more entries to `tolerance_selectors` in golden keys.
+
+**Expected improvement:** +1-2pp resolver accuracy
+
+**Estimated sessions:** 0.25
+
+---
+
+## 🆕 AI-031 — Eval Harness: Resolver Accuracy Improvement Sprint
+
+**Status:** 🆕 new
+**Related:** B-024, B-025, B-026, Phase 5 (eval harness), Phase 3 (RAG)
+**Impact:** Resolver accuracy ceiling at 46.3% (RAG off) / 53.7% (RAG on)
+
+**What:** Targeted sprint to improve resolver pipeline accuracy from 46.3% → 60%+
+by fixing the three highest-impact failure patterns identified by eval harness
+analysis.
+
+**Analysis summary (67 placeholders, 35 failures without RAG):**
+
+| Category | Count | % | Backlog Item | Priority |
+|----------|-------|---|-------------|----------|
+| Generic text match (wrong element) | 13 | 37% | B-014/B-016 (existing) | Medium |
+| Parent div vs child heading | 9 | 26% | **B-025** (new) | **High** |
+| Missing text on `<select>` | 3 | 9% | **B-024** (new) | **Easy** |
+| URL assertions | 3 | 9% | B-021 (shipped — verify) | Low |
+| Missing page fields | 3 | 9% | B-017/B-015 (shipped) | Done |
+| Locator format mismatch | 2 | 6% | **B-026** (new) | **Easy** |
+| Ambiguous field names | 2 | 6% | B-016 (existing) | Medium |
+
+**Implementation order:**
+1. **B-024** (0.5 sessions) — `<select>` label fix: +4.5pp, trivial change
+2. **B-026** (0.25 sessions) — locator normalization: +1-2pp, one-function fix
+3. **B-025** (1 session) — parent/child scoring: +13.4pp, requires scorer rewrite
+
+**Expected total improvement:** +18-20pp (46.3% → 65%)
+**RAG interaction:** All three fixes are structural (not RAG-dependent), so RAG's
++7.4pp bonus should stack on top, yielding ~72% combined.
+
+**Verification:** Run `eval_harness.py run --mode resolver` before and after each fix.
+Update baseline only after all three are merged and verified.
+
+**Estimated sessions:** 2 (B-024 + B-026 in one, B-025 in another)
+
+---
+
+## 🆕 AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22) — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22)
 
 **Status:** 🟡 ready-for-agent  
 **What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent.
