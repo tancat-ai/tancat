@@ -37,3 +37,11 @@ repos:
         pass_filenames: false
         always_run: true
         verbose: true
+
+      - id: kanban-freshness
+        name: Kanban Freshness Check
+        description: Blocks commits when kanban.html is stale vs BACKLOG.md
+        entry: uv run python scripts/maintenance/kanban.py --check
+        language: system
+        pass_filenames: false
+        always_run: true

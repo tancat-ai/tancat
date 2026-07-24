@@ -155,6 +155,22 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 - Use `document-manager` skill to generate/update
 - Check `markdown_docs/.sweep_progress.json` for coverage status
 
+### Kanban Board
+
+- **`BACKLOG.md` is the single source of truth** for active work (bugs, improvements, features).
+- **`kanban.html` is a generated view** — never edit it directly. It's regenerated from `BACKLOG.md`.
+- After updating `BACKLOG.md`, run `python scripts/maintenance/kanban.py` to regenerate.
+- Commit `BACKLOG.md` and `kanban.html` together.
+- Pre-commit hook and CI verify `kanban.html` is up to date.
+
+### Housekeeping (run via ship-it skill or manually before commit)
+
+- `python scripts/maintenance/kanban.py` — regenerate kanban
+- If `graphify-out/graph.json` is stale: run `graphify update .` then regenerate callflow.html
+- If new `src/` files added: run `document-manager` skill to update markdown_docs
+- If notable changes shipped: update `CHANGELOG.md` [Unreleased] section
+- If modules added/removed/renamed: update `docs/ARCHITECTURE.md`
+
 ---
 
 ## 11. General Discipline

@@ -123,6 +123,38 @@ jobs:
               print(f'✅ All {d.get(\"total\", 0)} files documented')
           "
 
+  # ── Gate 1d: Kanban freshness (warning-only, non-blocking) ──────────
+  kanban-freshness:
+    name: Kanban Freshness Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Check kanban.html is up to date
+        run: |
+          if [ ! -f kanban.html ]; then
+            echo "::warning::kanban.html not found — run scripts/maintenance/kanban.py"
+            exit 0
+          fi
+          uv run python scripts/maintenance/kanban.py --check 2>&1 || echo "::warning::kanban.html stale — run scripts/maintenance/kanban.py"
+
   # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
     name: Ruff Lint & Format
