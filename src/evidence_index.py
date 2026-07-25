@@ -75,13 +75,14 @@ class EvidenceIndex:
     initialisation — no separate migration step needed.
     """
 
-    # Fields extracted from each sidecar for search indexing
     _SEARCHABLE_FIELDS = (
         "test_name",
         "condition_ref",
         "story_ref",
         "page_url",
         "step_labels",
+        "step_locators",
+        "step_values",
     )
 
     def __init__(self, db: SQLitePersistence | None = None) -> None:
@@ -154,6 +155,7 @@ class EvidenceIndex:
         condition_prefix: str | None = None,
         story_ref: str | None = None,
         step_type: str | None = None,
+        locator: str | None = None,
         limit: int = 100,
     ) -> list[EvidenceSearchResult]:
         """Full-text search across evidence metadata.
@@ -174,6 +176,8 @@ class EvidenceIndex:
         step_type:
             Optional step type filter (``"navigate"``, ``"click"``,
             ``"fill"``, ``"assertion"``, ``"select"``).
+        locator:
+            Optional exact or partial locator filter.
         limit:
             Maximum results to return.
         """
@@ -207,6 +211,10 @@ class EvidenceIndex:
         if step_type is not None:
             where_clauses.append("step_types LIKE ?")
             params.append(f"%{step_type}%")
+
+        if locator is not None:
+            where_clauses.append("step_locators LIKE ?")
+            params.append(f"%{locator}%")
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
         sql = f"""
@@ -368,8 +376,10 @@ class EvidenceIndex:
         story_ref = test.get("story_ref", "")
         status = test.get("status", "unknown")
         page_url = page.get("url", "")
-        step_labels = "|".join(s.get("label", "") for s in steps)
-        step_types = "|".join(s.get("type", "") for s in steps)
+        step_labels = "|".join(s.get("label", "") or "" for s in steps)
+        step_types = "|".join(s.get("type", "") or "" for s in steps)
+        step_locators = "|".join(s.get("locator", "") or "" for s in steps)
+        step_values = "|".join(str(s.get("value", "") or "") for s in steps)
 
         # Derive test_package from sidecar path (parent's parent)
         test_package = Path(sidecar_path).parts[0] if sidecar_path else ""
@@ -378,9 +388,9 @@ class EvidenceIndex:
             """
             INSERT INTO evidence_index
                 (sidecar_path, test_name, condition_ref, story_ref, status,
-                 page_url, step_labels, step_types, test_package,
-                 file_mtime, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 page_url, step_labels, step_types, step_locators, step_values,
+                 test_package, file_mtime, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(sidecar_path) DO UPDATE SET
                 test_name     = excluded.test_name,
                 condition_ref = excluded.condition_ref,
@@ -389,6 +399,8 @@ class EvidenceIndex:
                 page_url      = excluded.page_url,
                 step_labels   = excluded.step_labels,
                 step_types    = excluded.step_types,
+                step_locators = excluded.step_locators,
+                step_values   = excluded.step_values,
                 test_package  = excluded.test_package,
                 file_mtime    = excluded.file_mtime,
                 indexed_at    = excluded.indexed_at
@@ -402,6 +414,8 @@ class EvidenceIndex:
                 page_url,
                 step_labels,
                 step_types,
+                step_locators,
+                step_values,
                 test_package,
                 file_mtime,
                 indexed_at,

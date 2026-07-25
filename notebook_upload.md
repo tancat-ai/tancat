@@ -300,6 +300,248 @@ CLI entry point. Parses args, loads data, calls `rebuild_store()`. Returns count
 
 
 
+# src/agents/generator.py â€” GeneratorAgent
+
+## Overview
+
+LangGraph node: consumes the Planner's structured test plan and produces pytest skeleton code with double-brace placeholders. Uses a focused system prompt that mimics a Senior SDET.
+
+## API
+
+```python
+class GeneratorAgent:
+    def __init__(self, client: LLMClient) -> None: ...
+    async def __call__(self, state: WorkflowState) -> dict[str, str | list]: ...
+```
+
+Returns `{"skeleton_code": "import pytest\\n...", "validation_errors": []}`.
+
+## Prompt Strategy
+
+- **System prompt:** ~25 lines â€” critical requirements (pytest sync format, double-brace placeholders only, no real selectors), placeholder format specification, example output.
+- **User prompt:** Template with user story, test plan (or conditions fallback), and exact test count.
+- **Fallback:** When `state.test_plan` is empty, generator uses `state.conditions` directly â€” handles single-call compatibility.
+
+## Input/Output
+
+| Input | Output |
+|-------|--------|
+| `state.user_story` | `state.skeleton_code` |
+| `state.test_plan` (or `state.conditions`) | Valid Python with `{{ACTION:desc}}` placeholders |
+| `state.expected_test_count` | Correct number of test functions |
+
+## Notes
+
+- `validation_errors` is reset to `[]` on each generation â€” the Validator re-evaluates from scratch.
+- Real `LLMClient.generate()` handles code extraction and whitespace normalisation; the agent just passes through.
+
+
+
+
+
+# src/agents/graph.py â€” SkeletonGraph
+
+## Overview
+
+LangGraph `StateGraph` wiring for the multi-agent skeleton generation pipeline.
+
+## Graph Topology
+
+```
+[Planner] â†’ [Generator] â†’ [Validator]
+                          â†–_________â†™ (retry loop, max 2)
+                              â†“ (pass)
+                         [Return skeleton]
+```
+
+## API
+
+```python
+class SkeletonGraph:
+    def __init__(self, client: LLMClient) -> None: ...
+    async def run(
+        self,
+        *,
+        user_story: str,
+        conditions: str,
+        target_urls: list[str] | None = None,
+        expected_test_count: int = 0,
+        raw_dom_snapshot: str = "",
+        max_retries: int = 2,
+    ) -> dict[str, Any]: ...
+```
+
+Returns `{"skeleton_code": str, "test_plan": str, "validation_errors": list[str], "retry_count": int}`.
+
+## Nodes
+
+| Node | Class | Type | Description |
+|------|-------|------|-------------|
+| `plan` | `PlannerAgent` | async | Story â†’ test plan Markdown |
+| `generate` | `GeneratorAgent` | async | Plan â†’ skeleton code |
+| `validate` | `ValidatorAgent` | sync | Check skeleton, report errors |
+
+## Routing
+
+`_should_retry(state)` is the conditional edge from `validate`:
+- **`"generate"`** â€” when `validation_errors` is non-empty AND `retry_count <= max_retries`
+- **`END`** â€” when no errors OR retries exhausted
+
+## Integration
+
+Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED=1`. The `LLMClient` is injected at `__init__` â€” agents share the same provider/model configuration. All LLM calls happen within `asyncio.run()` via `graph.ainvoke()`.
+
+## Dependencies
+
+- `langgraph` (StateGraph, END, CompiledStateGraph)
+- `src.agents.planner`, `src.agents.generator`, `src.agents.validator`
+- `src.agents.state.WorkflowState`
+
+
+
+
+
+# src/agents/planner.py â€” PlannerAgent
+
+## Overview
+
+LangGraph node: parses user story + acceptance criteria into a structured test plan (Markdown). This node does NOT write code â€” it outputs step descriptions tagged with action types (GOTO, CLICK, FILL, ASSERT).
+
+## API
+
+```python
+class PlannerAgent:
+    def __init__(self, client: LLMClient) -> None: ...
+    async def __call__(self, state: WorkflowState) -> dict[str, str]: ...
+```
+
+Returns `{"test_plan": "## Test Plan\\n### test_01_..."}`.
+
+## Prompt Strategy
+
+- **System prompt:** ~30 lines of structured instructions â€” output format specification, prerequisite step rules, short description discipline.
+- **User prompt:** Template with user story, prepared conditions, and exact test count.
+- **Separation of concerns:** The planner outputs Markdown, not code. This is a smaller, more focused task than generating code directly â€” reduces hallucination.
+
+## Input/Output
+
+| Input | Output |
+|-------|--------|
+| `state.user_story` | `state.test_plan` |
+| `state.conditions` | Markdown with numbered test functions |
+| `state.expected_test_count` | Each function has GOTO/CLICK/FILL/ASSERT steps |
+
+## Dependencies
+
+- `LLMClient.generate()` (async)
+- `prompt_utils.prepare_conditions_for_generation()`
+
+
+
+
+
+# src/agents/state.py â€” WorkflowState
+
+## Overview
+
+Pydantic `BaseModel` defining the serialisable workflow state passed between LangGraph agent nodes. Supports JSON serialisation for checkpoint persistence.
+
+## Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `user_story` | `str` | `""` | User story text |
+| `conditions` | `str` | `""` | Numbered acceptance criteria |
+| `target_urls` | `list[str]` | `[]` | Known target URLs |
+| `expected_test_count` | `int` | `0` | Expected number of test functions |
+| `raw_dom_snapshot` | `str` | `""` | Optional pre-scraped DOM |
+| `test_plan` | `str` | `""` | Planner output (Markdown) |
+| `skeleton_code` | `str` | `""` | Generator output |
+| `validation_errors` | `list[str]` | `[]` | Validator error messages |
+| `retry_count` | `int` | `0` | Number of retries attempted |
+| `max_retries` | `int` | `2` | Retry ceiling |
+
+## Design Notes
+
+- **Serialisable:** No non-trivial objects â€” only primitives, strings, and lists. LLMClient is injected at the graph level, not in state.
+- **Retry semantics:** `retry_count` is incremented by the Validator on failure and preserved on success (never reset). The conditional edge routes to END when `retry_count > max_retries`.
+- **Fallback fields:** `raw_dom_snapshot` reserved for future vision model input (Phase 1d synergy).
+
+
+
+
+
+# src/agents/validator.py â€” ValidatorAgent
+
+## Overview
+
+LangGraph node: inspects the Generator's skeleton output and reports violations. Synchronous (no LLM calls). Three checks:
+
+1. **Forbidden locators:** Reuses `SkeletonValidator` â€” catches CSS selectors, XPath, `page.locator()` with real selectors.
+2. **Placeholder count:** Ensures skeleton contains at least one placeholder.
+3. **Journey count match:** Parses test functions and compares count against `expected_test_count`.
+
+## API
+
+```python
+class ValidatorAgent:
+    def __init__(self, parser: SkeletonParser | None = None) -> None: ...
+    def __call__(self, state: WorkflowState) -> dict[str, list[str] | int]: ...
+```
+
+Returns:
+- On failure: `{"validation_errors": [...], "retry_count": state.retry_count + 1}`
+- On success: `{"validation_errors": [], "retry_count": state.retry_count}` (preserved, not reset)
+
+## Retry Semantics
+
+- `retry_count` is **incremented** on each failure, **preserved** on success.
+- The graph's conditional edge (`_should_retry`) routes back to Generator when `validation_errors` is non-empty and `retry_count <= max_retries`.
+- On success, `retry_count` reflects the total number of retries used â€” useful for monitoring.
+
+## Dependencies
+
+- `SkeletonValidator` from `src.skeleton_validator`
+- `SkeletonParser` from `src.skeleton_parser`
+- No LLM â€” purely deterministic pattern matching
+
+
+
+
+
+# src/agents/__init__.py â€” Package Init
+
+## Overview
+
+Package init for the LangGraph multi-agent skeleton generation system (Phase 1c). Enabled via `LANGGRAPH_ENABLED=1` environment variable.
+
+## Public API
+
+- `SkeletonGraph` â€” Compiled LangGraph workflow (Planner â†’ Generator â†’ Validator with retry loop)
+- `WorkflowState` â€” Pydantic state model for inter-node communication
+
+## Usage
+
+```python
+from src.agents import SkeletonGraph, WorkflowState
+
+graph = SkeletonGraph(llm_client)
+result = await graph.run(
+    user_story="...",
+    conditions="1. ...\\n2. ...",
+    expected_test_count=2,
+)
+```
+
+## Dependencies
+
+- `langgraph>=1.2.9` (optional dependency)
+- Falls back to single-call pipeline when not installed or `LANGGRAPH_ENABLED=0`
+
+
+
+
+
 # `src/cli/color.py` â€” ANSI Colour Helpers
 
 ## Purpose
@@ -2820,6 +3062,63 @@ Produces keys:
 
 
 
+# `src/aria_parser.py`
+
+## High-Level Purpose
+
+Parses Playwright's `page.aria_snapshot(boxes=True)` YAML output into standard element dicts for the scraping pipeline (B-032). Replaces the need for manual accessible_name enrichment â€” the ARIA tree provides computed accessible names, roles, placeholders, values, URLs, and bounding boxes directly from the browser's accessibility engine.
+
+## Module Metadata
+
+- **Lines:** 330
+- **Key imports:** `re`, `typing`
+- **Project imports:** None (self-contained)
+- **Tests:** `tests/test_aria_parser.py` (33 tests)
+
+## Public API
+
+### `parse_aria_snapshot(yaml_text: str) -> list[dict[str, Any]]`
+
+Main entry point. Parses the YAML output from `page.aria_snapshot(boxes=True)` into a flat list of element dicts in depth-first order. Each element dict matches the format produced by `PageScraper._extract_elements_from_html()` (BS4-based).
+
+**Returns**: List of element dicts with fields: `selector`, `text`, `role`, `computed_role`, `accessible_name`, `href`, `placeholder`, `value`, `is_visible`, `_bbox`, `_parent`, `_has_children`.
+
+## YAML Grammar Handled
+
+| Pattern | ARIA Role | Example |
+|---------|-----------|---------|
+| `- heading "name" [level=N] [box=x,y,w,h]` | heading | Page/section titles |
+| `- textbox "name" [box=x,y,w,h]:` | textbox | Input fields with optional children |
+| `- combobox "name" [box=x,y,w,h]:` | combobox | Select dropdowns with option children |
+| `- button "name" [box=x,y,w,h]` | button | Clickable buttons |
+| `- radio "name" [box=x,y,w,h]` | radio | Radio buttons (accessible name from label) |
+| `- checkbox "name" [box=x,y,w,h]` | checkbox | Checkboxes (accessible name from label) |
+| `- link "name" [box=x,y,w,h]:` | link | Anchor elements with `/url:` child |
+| `- group "name" [box=x,y,w,h]:` | group | Container elements with nested children |
+| `- text: content` | text | Plain text nodes |
+| `- paragraph [box=x,y,w,h]: text` | paragraph | Text blocks with content after colon |
+
+### Child Properties
+
+| Property | Target | Meaning |
+|----------|--------|---------|
+| `- /placeholder: value` | textbox | Input placeholder text |
+| `- /url: href` | link | Link destination URL |
+| `- text: value` | textbox/combobox | Current input value |
+| `- /checked:` | checkbox/radio | Checked state flag |
+| `- /selected:` | option | Selected state flag |
+
+## Architecture Notes
+
+- **Indentation-aware**: Tracks nesting depth (2 spaces per level) for parent-child relationships via `_parent` references.
+- **Self-contained**: No external dependencies beyond stdlib `re`. Used by `PageScraper._extract_elements_from_aria()`.
+- **Form control value handling**: `text:` children of textbox/combobox are applied as `value` on the parent, not as standalone elements.
+- **Selector format**: Produces role-based selectors like `heading[name="Create Account"]` â€” compatible with `page.getByRole()`.
+
+
+
+
+
 # `src/browser_utils.py`
 
 ## High-Level Purpose
@@ -4144,9 +4443,15 @@ Enriches scraped DOM elements with visual and contextual metadata (icon detectio
 
 Multi-pass element matching engine for placeholder resolution. Extracted from `placeholder_orchestrator.py`. Implements a 4-pass resolution pipeline (Pass 0â€“3) for matching placeholder descriptions to scraped DOM elements, plus LLM-based semantic ASSERT resolution (B-020).
 
+**Recent accuracy improvements (B-024/B-025, 2026-07-23):**
+- Pass1 word-ratio relax: Short descriptions like "scheme" now match long element text like "Select scheme..."
+- Pass1 heading skip: For CLICK actions, heading elements (h1-h6) are skipped â€” headings are display elements, not click targets
+- Pass1 id/name prefix: For FILL actions, description words that prefix element id/name are matched (e.g. "overnight" â†’ id="overnightLocation")
+- Pass1 word-boundary: Single-word containment now checks word boundaries (prevents "year" âŠ† "(years)" false positives)
+
 ## Module Metadata
 
-- **Lines:** ~700
+- **Lines:** ~780
 - **Imports:** `re`, `logging`, `typing`, `src.intent_matcher`, `src.locator_builder`, `src.placeholder_resolver`, `src.role_mapper`, `src.semantic_candidate_ranker`, `src.semantic_matcher`
 - **Extracted from:** `placeholder_orchestrator.py`
 
@@ -8543,9 +8848,10 @@ Regex-based extraction of `{{TOKEN:description}}` patterns.
 Composite scoring engine for placeholder resolution â€” provides individual testable scoring functions that evaluate candidate elements against placeholder descriptions.
 
 ## Module Metadata
-- **Lines:** ~520
+- **Lines:** ~570
 - **Imports:** `re`, `math`, `dataclasses`, `typing`, `src.semantic_matcher`
 - **RAG updates:** 2026-07-21 â€” `GOLDEN_PATTERN_BONUS` constant, `_golden_pattern_bonus()` method, optional `golden_patterns` parameter on `compute_element_score()`
+- **B-025 updates:** 2026-07-23 â€” Heading penalty (-20) in `_click_role_bonus()` for CLICK on elements with heading role and no ID. Container bonus (+10) for generic/group/region elements with an ID.
 
 ## Classes
 
@@ -9652,13 +9958,19 @@ Build a pytest CLI command list suitable for `subprocess.run()`. Supports parall
 
 ## High-Level Purpose
 
-Playwright-based DOM scraper that discovers real element selectors from live web pages. Uses a headless Chromium browser to render JavaScript, extract interactive elements, capture accessibility trees via CDP, and record screenshots with bounding boxes. Runs scraping in a subprocess to avoid asyncio event loop conflicts on Windows.
+Three-layer hybrid DOM scraper (B-032) that combines BS4 HTML parsing, CDP accessibility tree enrichment, and Playwright's `aria_snapshot(boxes=True)` to capture elements with complete semantic metadata. Default: all three layers active; set `SCRAPER_BACKEND=bs4` for BS4-only.
+
+**Layer 1 â€” BS4**: CSS selectors, `id`, `data-test`, `classes`, `href` from static HTML.
+**Layer 2 â€” CDP `getFullAXTree`**: Computed `accessible_name`, `computed_role` from the full accessibility tree (including hidden elements).
+**Layer 3 â€” ARIA snapshot**: `placeholder`, `value`, bounding boxes, container groups from the visible rendered state.
+
+Uses a headless Chromium browser to render JavaScript, extract elements, capture accessibility trees, and record screenshots with bounding boxes. Runs scraping in a subprocess to avoid asyncio event loop conflicts on Windows.
 
 ## Module Metadata
 
-- **Lines:** 657
+- **Lines:** 800+
 - **Key imports:** `base64`, `json`, `os`, `subprocess`, `sys`, `dataclasses.dataclass`, `pathlib.Path`, `typing`, `urllib.parse`, `playwright.sync_api`
-- **Project imports:** `src.accessibility_enricher.AccessibilityEnricher`, `src.element_enricher.ElementEnricher`, `src.vision_enricher.VisionEnricher`
+- **Project imports:** `src.accessibility_enricher.AccessibilityEnricher`, `src.element_enricher.ElementEnricher`, `src.aria_parser.parse_aria_snapshot`, `src.vision_enricher.VisionEnricher`
 
 ## Dataclass: `ScrapeResult`
 
@@ -10344,56 +10656,55 @@ Reset the singleton â€” used in test teardown for isolation.
 
 ## High-Level Purpose
 
-Test generation helpers for both direct generation and skeleton-first pipeline flows. Orchestrates LLM calls for skeleton generation and direct code generation, validates output, and persists generated tests to disk.
+Generates placeholder-based pytest skeleton code for the intelligent pipeline. Supports two modes:
 
-## Module Metadata
-
-- **Lines:** 107
-- **Imports:** `os`, `pathlib.Path`, `typing.Any`, `src.code_validator`, `src.file_utils`, `src.llm_client.LLMClient`, `src.prompt_utils`
+- **Single-call** (`LANGGRAPH_ENABLED=0`, default): One LLM call with full user story + conditions.
+- **LangGraph** (`LANGGRAPH_ENABLED=1`): Multi-agent Planner â†’ Generator â†’ Validator workflow with retry loop.
 
 ## Class: `TestGenerator`
 
 ### `__init__(client=None, *, output_dir="generated_tests", model_name=None, provider_name=None, base_url=None, api_key=None)`
+
 - Wraps `LLMClient` (or creates one from env/config)
 - Ensures `output_dir` exists on disk
 - Tracks `generated_files` list
-- Default model: `qwen2.5:7b` (from `OLLAMA_MODEL` env var or hardcoded fallback)
+- Default model: `qwen3.5:35b` (from `OLLAMA_MODEL` env var)
 
 ### `generate_skeleton(user_story, conditions, target_urls=None, expected_count=None) -> str`
-- Phase 1 of skeleton-first pipeline: generates placeholder-based skeleton code
-- Builds prompt using `get_skeleton_prompt_template()` with user story, conditions, known URLs
-- Appends explicit count instruction when `expected_count` is set
-- Returns LLM response with `{{ACTION:description}}` placeholder tokens
 
-### `generate_resolved_test(skeleton_code, pages_to_scrape) -> str`
-- Compatibility seam for post-resolution polishing
-- Currently returns skeleton code as-is (resolver does replacement work)
+- Dispatches to LangGraph or single-call path based on `LANGGRAPH_ENABLED` env var
+- Returns skeleton code with `{{ACTION:description}}` placeholder tokens
 
-### `generate_and_save(request_text, page_context_or_base_url="") -> str`
-- Direct (non-skeleton) generation: generates code, validates, and saves to disk
-- Validates Python syntax via `validate_python_syntax()`
-- Validates locator quality via `validate_generated_locator_quality()`
-- Saves via `save_generated_test()` with slugified filename
-- Returns path to saved test file
+### `_generate_skeleton_single_call(...)` â€” Private
+
+- Original single-call pipeline: builds prompt via `get_skeleton_prompt_template()`, calls LLM
+- Returns raw skeleton code
+
+### `_generate_skeleton_langgraph(...)` â€” Private
+
+- Creates `SkeletonGraph` with the configured `LLMClient`
+- Runs the full Planner â†’ Generator â†’ Validator workflow
+- Imports `langgraph` lazily; raises helpful `ImportError` if not installed
+- Raises `RuntimeError` if all retries exhausted with no skeleton code
 
 ## Dependencies
 
-- `src.code_validator.validate_generated_locator_quality`, `validate_python_syntax`
-- `src.file_utils.save_generated_test`, `slugify`
 - `src.llm_client.LLMClient`
-- `src.prompt_utils.build_page_context_prompt_block`, `get_skeleton_prompt_template`
+- `src.prompt_utils.get_skeleton_prompt_template`
+- `src.agents.graph.SkeletonGraph` (lazy import, only when `LANGGRAPH_ENABLED=1`)
 
 ## Depended On By
 
 - `src/orchestrator.py` â€” core pipeline orchestration
 - `src/ui_pipeline.py` â€” Streamlit UI pipeline execution
-- Generated test pipeline (both skeleton-first and direct modes)
+- `src/cli/test_case_orchestrator.py` â€” CLI orchestration
 
-## Notes
+## Design Notes
 
-- Default model updated to `qwen2.5:7b` (was `qwen3.5:35b`)
-- Supports both legacy direct generation and modern skeleton-first pipeline
-- Validates generated code before saving to disk
+- **Safe default:** `LANGGRAPH_ENABLED=0` â€” zero risk, existing behaviour preserved
+- **Optional dependency:** `langgraph` is not required for normal operation
+- **Import guard:** Lazy import with helpful error message if langgraph missing
+- **Shared client:** Both paths use the same `LLMClient` instance â€” consistent provider/model across all LLM calls
 
 
 
@@ -10752,6 +11063,7 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 | **LLM** | `llm_client.py`, `llm_providers/`, `provider_config.py`, `llm_errors.py`, `llm_reasoning_filter.py` | LLM interaction, provider abstraction, error handling |
 | **Prompts** | `prompt_utils.py`, `test_generator.py` | Prompt construction and test generation |
 | **Scaffolding** | `skeleton_validator.py`, `code_normalizer.py`, `code_postprocessor.py`, `code_validator.py` | Code quality assurance |
+| **Agents (Phase 1c)** | `src/agents/state.py`, `src/agents/planner.py`, `src/agents/generator.py`, `src/agents/validator.py`, `src/agents/graph.py` | LangGraph multi-agent skeleton generation |
 | **DOM Scraping** | `scraper.py`, `stateful_scraper.py`, `journey_scraper.py`, `journey_models.py`, `journey_executor.py`, `journey_auth_detector.py`, `page_context_tracker.py` | Page scraping and context capture |
 | **Placeholder Resolution** | `placeholder_resolver.py`, `placeholder_orchestrator.py`, `placeholder_scorers.py`, `semantic_matcher.py`, `semantic_candidate_ranker.py`, `intent_matcher.py`, `element_matcher.py`, `element_enricher.py`, `accessibility_enricher.py`, `vision_enricher.py`, `hover_click_utils.py` | Resolving `{{ACTION:description}}` placeholders using scraped DOM |
 | **Locators** | `locator_builder.py`, `locator_fallback.py`, `locator_repair.py`, `locator_scorer.py`, `url_resolver.py`, `url_inference.py`, `url_utils.py` | Locator generation, repair, and scoring |
@@ -10786,11 +11098,12 @@ Test packages produced by the tool. Each package contains:
 | Directory | Files | Status |
 |-----------|-------|--------|
 | `src/` (root) | 61 | âœ… Complete |
+| `src/agents/` | 5 | âœ… Complete |
 | `src/cli/` | 15 | âœ… Complete |
 | `src/ui/` | 10 | âœ… Complete |
 | `src/llm_providers/` | 1 | âœ… Complete |
 | `scripts/` | 1 | âœ… Complete |
-| `src/` (all) | **104** | **âœ… Complete** |
+| `src/` (all) | **109** | **âœ… Complete** |
 
 ## Sweep Progress
 
@@ -10799,7 +11112,7 @@ See `markdown_docs/.sweep_progress.json` for per-file completion status.
 ---
 
 *Generated: 2026-07-08*  
-*Updated: 2026-07-21 â€” Phase 3 RAG (rag_store, rag_retriever, rag_ingest), storage.py, element_matcher.py*
+*Updated: 2026-07-23 â€” Phase 1c LangGraph agents (state, planner, generator, validator, graph)*
 
 
 

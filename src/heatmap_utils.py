@@ -219,18 +219,29 @@ def build_confidence_heatmap(stories: list[StoryConfidence]) -> go.Figure:
         fig.update_layout(title="No coverage data available")
         return fig
 
-    plot_data = []
+    # Map internal level names to plain-English labels for display
+    LEVEL_LABELS: dict[str, str] = {
+        "tester_confirmed": "✅ All Tests Passing",
+        "ai_covered_unreviewed": "🟡 Covered (Not Yet Reviewed)",
+        "partial_pending": "⏳ Partially Covered",
+        "gap_open_question": "❌ Has Failures / Gaps",
+        "not_in_scope": "Out of Scope",
+    }
+
+    plot_data: list[dict[str, Any]] = []
     for s in stories:
+        label = LEVEL_LABELS.get(s.level, s.level)
+        story_label = s.story_ref if s.story_ref != "unknown" else "(No story ref — tests run outside pipeline)"
         plot_data.append(
             {
-                "Story": s.story_ref,
-                "Confidence": s.level.replace("_", " ").title(),
+                "Story": story_label,
+                "Status": label,
                 "Color": s.color,
-                "Value": 1,  # Equal sizing for now
+                "Value": 1,
                 "Passed": s.passed_conditions,
                 "Failed": s.failed_conditions,
                 "Skipped": s.skipped_conditions,
-                "Total": s.total_conditions_with_evidence,
+                "Total Tests": s.total_conditions_with_evidence,
             }
         )
 
@@ -238,12 +249,12 @@ def build_confidence_heatmap(stories: list[StoryConfidence]) -> go.Figure:
 
     fig = px.treemap(
         df,
-        path=["Confidence", "Story"],
+        path=["Status", "Story"],
         values="Value",
-        color="Confidence",
-        color_discrete_map={level.replace("_", " ").title(): color for level, color in CONFIDENCE_COLORS.items()},
-        hover_data=["Passed", "Failed", "Skipped", "Total"],
-        title="Coverage Confidence Heat Map",
+        color="Status",
+        color_discrete_map={LEVEL_LABELS.get(level, level): color for level, color in CONFIDENCE_COLORS.items()},
+        hover_data=["Passed", "Failed", "Skipped", "Total Tests"],
+        title="Story Coverage Overview",
     )
 
     fig.update_layout(
@@ -251,13 +262,16 @@ def build_confidence_heatmap(stories: list[StoryConfidence]) -> go.Figure:
         hoverlabel={"bgcolor": "white", "font_size": 14, "font_family": "Rockwell"},
     )
 
-    # Add annotation explaining the map
     fig.add_annotation(
-        text="<b>How to read:</b> Confidence is grouped by level. Larger blocks = more tests. Click to drill down.",
+        text=(
+            "<b>How to read:</b> Each coloured block = one user story. "
+            "Green = all tests passing. Red = one or more failures. "
+            "Click a block to drill into the story's tests."
+        ),
         xref="paper",
         yref="paper",
         x=0,
-        y=1.05,
+        y=1.06,
         showarrow=False,
         font={"size": 12, "color": "#666"},
         align="left",

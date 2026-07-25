@@ -72,6 +72,8 @@ _SCHEMA_SQL: list[str] = [
         page_url        TEXT,
         step_labels     TEXT,
         step_types      TEXT,
+        step_locators   TEXT,
+        step_values     TEXT,
         test_package    TEXT    NOT NULL,
         file_mtime      REAL    NOT NULL,
         indexed_at      TEXT    NOT NULL
@@ -131,6 +133,14 @@ class SQLitePersistence:
         for sql in _SCHEMA_SQL:
             self._conn.execute(sql)
         self._conn.commit()
+
+        # Schema Migration: Add step_locators and step_values if missing
+        try:
+            self._conn.execute("ALTER TABLE evidence_index ADD COLUMN step_locators TEXT")
+            self._conn.execute("ALTER TABLE evidence_index ADD COLUMN step_values TEXT")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Columns likely already exist
 
     # ------------------------------------------------------------------
     # CRUD — persist run result

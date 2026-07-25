@@ -31,6 +31,14 @@ _STATUS_COLORS: dict[str, str] = {
     "skipped": "#6B7280",  # Gray
 }
 
+# Badge colours (text, background) keyed by step type
+_BADGE_COLORS: dict[str, tuple[str, str]] = {
+    "navigate": ("#6d28d9", "#ede9fe"),
+    "fill": ("#065f46", "#d1fae5"),
+    "click": ("#1e40af", "#dbeafe"),
+    "assertion": ("#92400e", "#fef3c7"),
+}
+
 
 def _safe_read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
@@ -93,13 +101,160 @@ def _format_label(label: str, matched_text: str | None = None, truncate: int = 8
     cleaned = _clean_evidence_label(label)
     if matched_text:
         text = matched_text.strip()
-        # Clean up excessive whitespace / HTML noise
         text = re.sub(r"\s+", " ", text)
         if len(text) > truncate:
             text = text[:truncate] + "..."
         if text:
             return f'{cleaned}: "{text}"'
     return cleaned
+
+
+def _is_failed_step(step: dict[str, Any]) -> bool:
+    """Check if a step resulted in a failure."""
+    result = step.get("result", {})
+    if not isinstance(result, dict):
+        return False
+    return result.get("status") in ("failed", "error") or bool(result.get("error"))
+
+
+def _find_best_screenshot(steps: list[dict[str, Any]]) -> str:
+    """Find the most informative screenshot from steps (prefer failure or last assertion)."""
+    screenshots: list[str] = []
+    failure_screenshots: list[str] = []
+    assertion_screenshots: list[str] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        shot = step.get("screenshot")
+        if not shot:
+            continue
+        shot_str = str(shot)
+        screenshots.append(shot_str)
+        if _is_failed_step(step):
+            failure_screenshots.append(shot_str)
+        step_type = str(step.get("type", "")).lower()
+        if "assert" in step_type:
+            assertion_screenshots.append(shot_str)
+    if failure_screenshots:
+        return failure_screenshots[0]
+    if assertion_screenshots:
+        return assertion_screenshots[-1]
+    if screenshots:
+        return screenshots[-1]
+    return ""
+
+
+def _step_type_key(step: dict[str, Any]) -> str:
+    t = str(step.get("type", "")).lower()
+    if "navigate" in t:
+        return "navigate"
+    if "fill" in t:
+        return "fill"
+    if "assert" in t:
+        return "assertion"
+    return "click"
+
+
+def _build_step_row_html(step: dict[str, Any], idx: int) -> str:
+    """Render a single step as a compact timeline row."""
+    type_key = _step_type_key(step)
+    label = _clean_evidence_label(str(step.get("label", "")))
+    locator = str(step.get("locator", "")) if step.get("locator") else ""
+    result = step.get("result", {}) if isinstance(step.get("result"), dict) else {}
+    status = str(result.get("status", ""))
+    error = str(result.get("error", "")) if result.get("error") else ""
+    elapsed_ms = result.get("elapsed_ms")
+    elapsed_str = f"{elapsed_ms / 1000:.1f}s" if elapsed_ms else ""
+    matched_text = str(result.get("matched_text", "")) if result.get("matched_text") else ""
+
+    diagnosis_raw = result.get("diagnosis", {})
+    suggested_locators: list[dict[str, Any]] = (
+        diagnosis_raw.get("suggested_locators", []) if isinstance(diagnosis_raw, dict) else []
+    )
+
+    is_failure = _is_failed_step(step)
+    badge_fg, badge_bg = _BADGE_COLORS.get(type_key, ("#374151", "#f3f4f6"))
+    row_bg = "#fef2f2" if is_failure else "#ffffff"
+    row_border = "#fca5a5" if is_failure else "#f3f4f6"
+
+    # ── meta pill row ─────────────────────────────────────────────────
+    status_html = ""
+    if status:
+        status_color = "#dc2626" if status in ("failed", "error") else "#16a34a"
+        status_html = (
+            f"<span style='color:{status_color};font-weight:600;font-size:11px;'>{escape_html(status)}</span> · "
+        )
+
+    locator_html = ""
+    if locator:
+        locator_html = f"<code style='font-size:11px;background:#f3f4f6;padding:1px 4px;border-radius:3px;color:#374151;'>{escape_html(locator)}</code> · "
+
+    matched_html = ""
+    if matched_text and not is_failure:
+        short = re.sub(r"\s+", " ", matched_text).strip()[:60]
+        matched_html = f"found <em style='color:#374151;'>&ldquo;{escape_html(short)}&rdquo;</em> · "
+
+    elapsed_html = f"<span style='color:#9ca3af;font-size:11px;'>{elapsed_str}</span>" if elapsed_str else ""
+
+    meta_html = f"""
+    <div style='margin-top:3px;font-size:11px;color:#6b7280;display:flex;flex-wrap:wrap;align-items:center;gap:2px;'>
+      <code style='background:#f3f4f6;padding:1px 4px;border-radius:3px;'>{escape_html(type_key)}</code> ·
+      {status_html}{locator_html}{matched_html}{elapsed_html}
+    </div>"""
+
+    # ── failure detail ────────────────────────────────────────────────
+    failure_html = ""
+    if is_failure:
+        # Error box — truncate long messages (call logs etc.)
+        lines = error.splitlines()
+        if len(lines) > 8:
+            shown = "\n".join(lines[:8]) + f"\n… ({len(lines) - 8} more lines)"
+        else:
+            shown = error
+
+        failure_html += f"""
+        <div style='margin-top:8px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;'>
+          <div style='font-weight:600;font-size:12px;color:#991b1b;margin-bottom:4px;'>Error</div>
+          <pre style='margin:0;font-size:11px;color:#b91c1c;white-space:pre-wrap;overflow-x:auto;max-height:100px;overflow-y:auto;'>{escape_html(shown)}</pre>
+        </div>"""
+
+        # Suggested locators — copyable
+        visible_locators = [s for s in suggested_locators[:5] if s.get("locator")]
+        if visible_locators:
+            loc_rows = ""
+            for sl in visible_locators:
+                loc = sl.get("locator", "")
+                confidence = sl.get("confidence", "")
+                loc_js = loc.replace("\\", "\\\\").replace("'", "\\'")
+                loc_rows += f"""
+                <div style='display:flex;align-items:center;gap:8px;padding:5px 8px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:5px;margin-bottom:4px;'>
+                  <code style='flex:1;font-size:12px;color:#1e40af;word-break:break-all;'>{escape_html(loc)}</code>
+                  <span style='font-size:11px;color:#6b7280;background:#e5e7eb;padding:1px 7px;border-radius:10px;white-space:nowrap;'>{escape_html(str(confidence))}</span>
+                  <button onclick="navigator.clipboard.writeText('{loc_js}').then(()=>{{this.textContent='✓ Copied';setTimeout(()=>{{this.textContent='📋 Copy'}},1500)}})"
+                          style='padding:3px 10px;background:#2563eb;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;'>
+                    📋 Copy
+                  </button>
+                </div>"""
+
+            failure_html += f"""
+            <div style='margin-top:8px;'>
+              <div style='font-weight:600;font-size:12px;color:#374151;margin-bottom:6px;'>
+                💡 Suggested locators — copy one to fix your test:
+              </div>
+              {loc_rows}
+            </div>"""
+
+    return f"""
+<div style='display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid {row_border};border-radius:8px;margin-bottom:6px;background:{row_bg};'>
+  <div style='min-width:28px;height:28px;border-radius:999px;background:{badge_bg};color:{badge_fg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;'>
+    {idx + 1}
+  </div>
+  <div style='flex:1;min-width:0;'>
+    <div style='font-weight:600;color:#111;font-size:13px;word-break:break-word;'>{escape_html(label)}</div>
+    {meta_html}
+    {failure_html}
+  </div>
+</div>"""
 
 
 def generate_annotated_screenshot(
@@ -124,7 +279,6 @@ def generate_annotated_screenshot(
         return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No steps recorded in sidecar.</div>"
 
     screenshot_rel: str | None = None
-    # Prefer an assertion screenshot for context; otherwise take the last available screenshot.
     screenshots: list[str] = []
     assertion_screenshots: list[str] = []
     for step in steps:
@@ -166,8 +320,6 @@ def generate_annotated_screenshot(
     colors_json = json.dumps(_EVIDENCE_STEP_COLORS)
     steps_json = json.dumps(_prepare_steps_for_display(steps))
 
-    # Minimal, self-contained interactive HTML with ResizeObserver driven overlay sizing.
-    # NOTE: Streamlit's st.html can render this safely.
     return f"""
 <div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">{safe_title}</div>
@@ -238,7 +390,6 @@ def generate_annotated_screenshot(
       const failureNote = s.failure_note || null;
       const hasError = status === "failed" || s._had_error;
 
-      // Build row content
       let rowContent = `
         <div style="min-width:30px;height:30px;border-radius:999px;background:${{hasError ? "#dc2626" : COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
         <div style="flex:1;">
@@ -246,7 +397,6 @@ def generate_annotated_screenshot(
           <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
       `;
 
-      // Add failure note if present
       if (failureNote) {{
         rowContent += `
           <div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:120px;overflow-y:auto;white-space:pre-wrap;">
@@ -319,10 +469,10 @@ def generate_annotated_screenshot(
       const cx = (pct.x / 100) * w;
       const cy = (pct.y / 100) * h;
       const isHover = hoveredId === idx;
+      const status = String((s.result && s.result.status) || "");
+      const label = String(s.label || t);
 
-      if (MODE === "clean") {{
-        return;
-      }}
+      if (MODE === "clean") {{ return; }}
 
       if (MODE === "heatmap") {{
         const opacity = Math.min(0.15 + (Number(runCount || 1) * 0.05), 0.6);
@@ -331,9 +481,7 @@ def generate_annotated_screenshot(
         return;
       }}
 
-      // annotated
       const stroke = isHover ? "#111827" : "rgba(0,0,0,0.35)";
-      const sw = isHover ? 3 : 2;
       out.push(`
         <g class="point-group" style="cursor:help;">
           <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="${{color}}" opacity="0.4" />
@@ -360,29 +508,6 @@ def generate_annotated_screenshot(
 """
 
 
-def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return steps with labels normalized for UI rendering.
-
-    Also extracts failure_note and diagnosis from the result dict when present.
-    """
-    prepared: list[dict[str, Any]] = []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        cloned = dict(step)
-        cloned["label"] = _clean_evidence_label(str(step.get("label", "")))
-        # Promote failure metadata from result -> top level for easy access
-        result = step.get("result", {})
-        if isinstance(result, dict):
-            cloned["failure_note"] = result.get("failure_note")
-            cloned["diagnosis"] = result.get("diagnosis")
-            # Mark steps that had failures even if status says passed
-            if result.get("error") and not result.get("status"):
-                cloned["_had_error"] = True
-        prepared.append(cloned)
-    return prepared
-
-
 def generate_annotated_journey(
     *,
     sidecar_path: Path,
@@ -392,8 +517,9 @@ def generate_annotated_journey(
 ) -> str:
     """Generate a focused evidence viewer for debugging.
 
-    For passed tests → shows the screenshot cleanly (no overlays) + status summary.
-    For failed tests → shows screenshot + failure panel with diagnosis + suggested locators.
+    Shows a step-by-step journey timeline, then the most informative
+    screenshot at the bottom. For failed steps, inline error details and
+    copyable suggested locators are shown directly in the timeline row.
 
     The ``bug_report_mode`` flag strips interactive elements for plain-text export.
 
@@ -414,21 +540,18 @@ def generate_annotated_journey(
     test_info = sidecar.get("test", {})
     if not isinstance(test_info, dict):
         test_info = {}
-    status = str(test_info.get("status", "unknown"))
-
+    page_info = sidecar.get("page", {})
+    if not isinstance(page_info, dict):
+        page_info = {}
     if not isinstance(steps, list) or not steps:
         return _empty_result("No steps recorded in sidecar.", bug_report_mode)
 
-    # Determine overall pass/fail status
-    has_failure = False
-    failed_step: dict[str, Any] | None = None
-    for step in steps:
-        if isinstance(step, dict) and _is_failed_step(step):
-            has_failure = True
-            failed_step = step
-            break
+    if bug_report_mode:
+        return _build_bug_report_text(sidecar_path, sidecar, "", title)
 
-    # Find screenshots
+    has_failure = any(_is_failed_step(s) for s in steps if isinstance(s, dict))
+
+    # ── screenshot ────────────────────────────────────────────────────────
     screenshot_rel = _find_best_screenshot(steps)
     image_data_uri = ""
     if screenshot_rel:
@@ -442,50 +565,72 @@ def generate_annotated_journey(
     safe_title = escape_html(title or test_info.get("name", "") or "Evidence")
     safe_condition = escape_html(str(test_info.get("condition_ref", "")))
     safe_story = escape_html(str(test_info.get("story_ref", "")))
+    safe_url = escape_html(str(page_info.get("url", "")))
 
-    # ── Plain-text bug report mode ─────────────────────────────────────
-    if bug_report_mode:
-        return _build_bug_report_text(sidecar_path, sidecar, image_data_uri)
+    status_badge = (
+        "<span style='background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;'>FAILED</span>"
+        if has_failure
+        else "<span style='background:#d1fae5;color:#065f46;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;'>PASSED</span>"
+    )
+    icon = "❌" if has_failure else "✅"
 
-    # ── HTML rendering ─────────────────────────────────────────────────
+    # ── step timeline ─────────────────────────────────────────────────────
     steps_html = ""
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        s = _build_step_html(step)
-        steps_html += s
+    for i, step in enumerate(steps):
+        if isinstance(step, dict):
+            steps_html += _build_step_row_html(step, i)
 
-    if has_failure and failed_step:
-        failure_html = _build_failure_panel_html(failed_step)
-    else:
-        failure_html = ""
+    # ── screenshot section ────────────────────────────────────────────────
+    screenshot_html = ""
+    if image_data_uri:
+        screenshot_label = (
+            "Screenshot captured at the point of failure" if has_failure else "Final page screenshot (all steps passed)"
+        )
+        screenshot_html = f"""
+<div style="margin-top:16px;padding-top:14px;border-top:1px solid #f3f4f6;">
+  <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">{escape_html(screenshot_label)}</div>
+  <img src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #e5e7eb;" />
+</div>"""
 
-    return f"""<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;max-width:1100px;">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
-    <span style="font-size:24px;">{"❌" if has_failure else "✅"}</span>
-    <div>
-      <div style="font-weight:600;font-size:16px;color:#222;">{safe_title}</div>
-      <div style="font-size:12px;color:#6b7280;">
-        Condition: {safe_condition} · Story: {safe_story} · Status: <strong>{status}</strong>
+    success_banner = (
+        ""
+        if has_failure
+        else "<div style='margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:13px;font-weight:500;'>✅ All steps passed — the screenshot below is your evidence.</div>"
+    )
+
+    return f"""<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;border:1px solid #e5e7eb;border-radius:12px;padding:16px;background:#fff;max-width:1100px;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #f3f4f6;">
+    <span style="font-size:22px;line-height:1.2;">{icon}</span>
+    <div style="min-width:0;flex:1;">
+      <div style="font-weight:700;font-size:15px;color:#111;word-break:break-word;">{safe_title}</div>
+      <div style="margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:#6b7280;">
+        {status_badge}
+        <span>Condition: <strong>{safe_condition}</strong></span>
+        <span>·</span>
+        <span>Story: {safe_story}</span>
+        {f"<span>·</span><span>{safe_url}</span>" if safe_url else ""}
       </div>
     </div>
   </div>
 
-  {'<div style="margin-bottom:12px;padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:13px;font-weight:500;">✅ All steps passed — the screenshot below is your evidence.</div>' if not has_failure else ""}
+  {success_banner}
 
-  <div style="position:relative;width:100%;">
-    <img src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" {"onerror=\"this.style.display='none'\"" if not image_data_uri else ""} />
+  <!-- Step Timeline -->
+  <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">
+    Step Journey ({len(steps)} steps)
+  </div>
+  <div>
+    {steps_html}
   </div>
 
-  {failure_html}
-
-  {steps_html if has_failure else ""}
-
-  {_build_export_button_html(sidecar_path, title or safe_title, has_failure)}
+  <!-- Screenshot -->
+  {screenshot_html}
 </div>"""
 
 
-# ── helpers ─────────────────────────────────────────────────────────────
+# ── helpers ──────────────────────────────────────────────────────────────────
 
 
 def _empty_result(msg: str, bug_report_mode: bool) -> str:
@@ -495,171 +640,25 @@ def _empty_result(msg: str, bug_report_mode: bool) -> str:
     return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>{escaped}</div>"
 
 
-def _find_best_screenshot(steps: list[dict[str, Any]]) -> str:
-    """Find the most informative screenshot from steps (prefer failure or last assertion)."""
-    screenshots: list[str] = []
-    failure_screenshots: list[str] = []
-    assertion_screenshots: list[str] = []
+def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return steps with labels normalized for UI rendering.
+
+    Also extracts failure_note and diagnosis from the result dict when present.
+    """
+    prepared: list[dict[str, Any]] = []
     for step in steps:
         if not isinstance(step, dict):
             continue
-        shot = step.get("screenshot")
-        if not shot:
-            continue
-        shot_str = str(shot)
-        screenshots.append(shot_str)
-        if _is_failed_step(step):
-            failure_screenshots.append(shot_str)
-        step_type = str(step.get("type", "")).lower()
-        if "assert" in step_type:
-            assertion_screenshots.append(shot_str)
-    if failure_screenshots:
-        return failure_screenshots[0]
-    if assertion_screenshots:
-        return assertion_screenshots[-1]
-    if screenshots:
-        return screenshots[-1]
-    return ""
-
-
-def _is_failed_step(step: dict[str, Any]) -> bool:
-    """Check if a step resulted in a failure."""
-    result = step.get("result", {})
-    if not isinstance(result, dict):
-        return False
-    return result.get("status") in ("failed", "error") or bool(result.get("error"))
-
-
-def _build_step_html(step: dict[str, Any]) -> str:
-    """Render a single step as an HTML row (only shown for failed tests)."""
-    step_type = str(step.get("type", "unknown")).upper()
-    label = _clean_evidence_label(str(step.get("label", "")))
-    locator = str(step.get("locator", "")) if step.get("locator") else ""
-    # value not used in this function
-    result = step.get("result", {})
-    if not isinstance(result, dict):
-        result = {}
-    status = str(result.get("status", ""))
-    error = str(result.get("error", "")) if result.get("error") else ""
-    matched = str(result.get("matched_text", "")) if result.get("matched_text") else ""
-    failure_note = str(result.get("failure_note", "")) if result.get("failure_note") else ""
-
-    is_failure = _is_failed_step(step)
-    border_color = "#fecaca" if is_failure else "#e5e7eb"
-    bg_color = "#fef2f2" if is_failure else "#ffffff"
-
-    error_html = ""
-    if error:
-        error_html = f'<div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:12px;color:#991b1b;white-space:pre-wrap;overflow-x:auto;"><strong>Error:</strong> {escape_html(error)}</div>'
-    if failure_note and not error_html:
-        error_html = f'<div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:150px;overflow-y:auto;white-space:pre-wrap;"><strong>Diagnosis:</strong> {escape_html(failure_note)}</div>'
-
-    details = f"type={step_type.lower()}"
-    if status:
-        details += f" · status={status}"
-    if locator:
-        details += f" · locator=`{escape_html(locator)}`"
-    if matched:
-        text = re.sub(r"\s+", " ", matched).strip()
-        if len(text) > 80:
-            text = text[:80] + "..."
-        details += f' · found="{escape_html(text)}"'
-
-    return f"""
-<div style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid {border_color};border-radius:8px;margin-bottom:8px;background:{bg_color};">
-  <div style="min-width:28px;height:28px;border-radius:999px;background:{"#dc2626" if is_failure else "#6b7280"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;">!</div>
-  <div style="flex:1;">
-    <div style="font-weight:600;color:#222;font-size:13px;">{escape_html(label)}</div>
-    <div style="font-size:11px;color:#6b7280;font-family:monospace;">{details}</div>
-    {error_html}
-  </div>
-</div>"""
-
-
-def _build_failure_panel_html(failed_step: dict[str, Any]) -> str:
-    """Build the failure diagnosis panel shown below the screenshot for failed tests."""
-    result = failed_step.get("result", {})
-    if not isinstance(result, dict):
-        return ""
-    failure_note = str(result.get("failure_note", ""))
-    diagnosis_raw = result.get("diagnosis", {})
-    if isinstance(diagnosis_raw, dict):
-        suggested_locators = diagnosis_raw.get("suggested_locators", [])
-    else:
-        suggested_locators = []
-
-    step_type = str(failed_step.get("type", "unknown")).upper()
-    label = _clean_evidence_label(str(failed_step.get("label", "")))
-    locator = str(failed_step.get("locator", "")) if failed_step.get("locator") else "N/A"
-    error = str(result.get("error", "")) if result.get("error") else "Unknown error"
-
-    # Build suggested locators section
-    suggestions_html = ""
-    if suggested_locators:
-        rows = ""
-        for s in suggested_locators[:5]:
-            loc = s.get("locator", "")
-            score = s.get("score", "")
-            confidence = s.get("confidence", "")
-            rows += f"""<tr>
-              <td style="padding:4px 8px;font-family:monospace;font-size:12px;border-bottom:1px solid #f0f0f0;"><code>{escape_html(loc)}</code></td>
-              <td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #f0f0f0;">{escape_html(str(score))}</td>
-              <td style="padding:4px 8px;font-size:12px;border-bottom:1px solid #f0f0f0;">{escape_html(confidence)}</td>
-            </tr>"""
-        if rows:
-            suggestions_html = f"""
-<div style="margin:12px 0 0 0;padding:10px;background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;">
-  <div style="font-weight:600;font-size:13px;color:#222;margin-bottom:6px;">Suggested Alternative Locators</div>
-  <table style="width:100%;border-collapse:collapse;">
-    <thead><tr>
-      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Locator</th>
-      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Score</th>
-      <th style="padding:4px 8px;font-size:11px;color:#6b7280;text-align:left;border-bottom:2px solid #e5e7eb;">Confidence</th>
-    </tr></thead>
-    <tbody>{rows}</tbody>
-  </table>
-</div>"""
-
-    # Build failure note / diagnosis text
-    diagnosis_html = ""
-    if failure_note:
-        diagnosis_html = f"""<div style="margin:12px 0 0 0;padding:10px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;">
-  <div style="font-weight:600;font-size:13px;color:#991b1b;margin-bottom:4px;">Failure Diagnosis</div>
-  <pre style="margin:0;font-size:11px;color:#991b1b;white-space:pre-wrap;max-height:200px;overflow-y:auto;">{escape_html(failure_note)}</pre>
-</div>"""
-
-    return f"""
-<div style="margin-top:14px;padding:14px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-    <span style="font-size:18px;">❌</span>
-    <span style="font-weight:600;font-size:15px;color:#dc2626;">Step Failed: {escape_html(label)}</span>
-  </div>
-
-  <table style="width:100%;border-collapse:collapse;font-size:13px;">
-    <tr><td style="padding:6px 8px;color:#6b7280;width:100px;">Step Type</td><td style="padding:6px 8px;font-weight:500;"><code>{escape_html(step_type)}</code></td></tr>
-    <tr><td style="padding:6px 8px;color:#6b7280;">Locator</td><td style="padding:6px 8px;font-weight:500;font-family:monospace;font-size:12px;word-break:break-all;">{escape_html(locator)}</td></tr>
-    <tr><td style="padding:6px 8px;color:#6b7280;">Error</td><td style="padding:6px 8px;color:#dc2626;font-size:12px;white-space:pre-wrap;">{escape_html(error)}</td></tr>
-  </table>
-
-  {diagnosis_html}
-  {suggestions_html}
-</div>"""
-
-
-def _build_export_button_html(sidecar_path: Path, title: str, has_failure: bool) -> str:
-    """Build an inline export section for the bug report."""
-    report_label = "Bug Report" if has_failure else "Evidence Summary"
-    return f"""
-<div style="margin-top:14px;padding:12px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;display:flex;align-items:center;justify-content:space-between;">
-  <div style="font-size:13px;color:#374151;">
-    <strong>{report_label}</strong> — Content is ready for copy-paste.
-    Click below to select all and copy into your issue tracker.
-  </div>
-  <button onclick="(function(){{var t=document.getElementById('ev-bug-text');t.style.display=t.style.display==='none'?'block':'none';t.select();navigator.clipboard.writeText(t.value);}})()" style="padding:6px 14px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;">📋 Copy Bug Report</button>
-</div>
-<textarea id="ev-bug-text" style="display:none;width:100%;margin-top:8px;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-family:monospace;font-size:11px;height:200px;white-space:pre-wrap;" readonly>
-{escape_html(_build_bug_report_text(sidecar_path, _safe_read_json(sidecar_path) or {}, "", title))}
-</textarea>"""
+        cloned = dict(step)
+        cloned["label"] = _clean_evidence_label(str(step.get("label", "")))
+        result = step.get("result", {})
+        if isinstance(result, dict):
+            cloned["failure_note"] = result.get("failure_note")
+            cloned["diagnosis"] = result.get("diagnosis")
+            if result.get("error") and not result.get("status"):
+                cloned["_had_error"] = True
+        prepared.append(cloned)
+    return prepared
 
 
 def _build_bug_report_text(
@@ -714,7 +713,6 @@ def _build_bug_report_text(
             lines.append(f"    Error:       {error}")
             failure_note = str(result.get("failure_note", ""))
             if failure_note:
-                # Compact the diagnosis
                 for note_line in failure_note.splitlines():
                     lines.append(f"    {note_line}")
 
@@ -726,7 +724,7 @@ def _build_bug_report_text(
     return "\n".join(lines)
 
 
-# ── Evidence listing ────────────────────────────────────────────────────
+# ── Evidence listing ─────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -797,58 +795,45 @@ def list_evidence_from_package(package_dir: Path) -> TestPackageEvidence | None:
         if not isinstance(steps, list):
             steps = []
 
-        # Count screenshots
-        screenshot_paths: list[str] = []
-        for step in steps:
-            if isinstance(step, dict):
-                shot = step.get("screenshot")
-                if shot:
-                    screenshot_paths.append(str(shot))
+        screenshots = [str(s.get("screenshot", "")) for s in steps if isinstance(s, dict) and s.get("screenshot")]
+        has_fallback = any(str(s.get("locator", "")).startswith("{{{{") for s in steps if isinstance(s, dict))
+        has_failure = any(_is_failed_step(s) for s in steps if isinstance(s, dict))
 
-        # Check for fallback usage
-        has_fallback = False
-        for step in steps:
-            if isinstance(step, dict):
-                result = step.get("result", {})
-                if isinstance(result, dict) and result.get("fallback_used"):
-                    has_fallback = True
-                    break
-
-        # Check for failures
-        has_failure = False
-        for step in steps:
-            if isinstance(step, dict):
-                result = step.get("result", {})
-                if isinstance(result, dict) and result.get("status") == "failed":
-                    has_failure = True
-                    break
-
-        tests.append(
-            EvidenceFile(
-                test_name=str(sidecar.stem),  # Remove .evidence.json
-                sidecar_path=sidecar,
-                condition_ref=str(test_info.get("condition_ref", "unknown")),
-                story_ref=str(test_info.get("story_ref", "unknown")),
-                status=status,
-                duration_s=float(test_info.get("duration_s", 0)),
-                step_count=len(steps),
-                has_fallback=has_fallback,
-                has_failure=has_failure,
-                screenshots=screenshot_paths,
-            )
-        )
+        duration_s = 0.0
+        for s in steps:
+            if isinstance(s, dict):
+                result = s.get("result", {})
+                if isinstance(result, dict):
+                    ms = result.get("elapsed_ms")
+                    if ms:
+                        duration_s += float(ms) / 1000
 
         total_steps += len(steps)
-        total_screenshots += len(screenshot_paths)
+        total_screenshots += len(screenshots)
 
         if status == "passed":
             passed += 1
-        elif status == "failed":
+        elif status in ("failed", "error"):
             failed += 1
         elif status == "partial_pass":
             partial_pass += 1
-        elif status == "skipped":
+        else:
             skipped += 1
+
+        tests.append(
+            EvidenceFile(
+                test_name=str(test_info.get("name", sidecar.stem)),
+                sidecar_path=sidecar,
+                condition_ref=str(test_info.get("condition_ref", "")),
+                story_ref=str(test_info.get("story_ref", "")),
+                status=status,
+                duration_s=duration_s,
+                step_count=len(steps),
+                has_fallback=has_fallback,
+                has_failure=has_failure,
+                screenshots=screenshots,
+            )
+        )
 
     return TestPackageEvidence(
         package_dir=package_dir,
@@ -861,12 +846,3 @@ def list_evidence_from_package(package_dir: Path) -> TestPackageEvidence | None:
         partial_pass=partial_pass,
         skipped=skipped,
     )
-
-
-def list_evidence_from_packages(package_dirs: list[Path]) -> list[TestPackageEvidence]:
-    """Scan multiple test package directories for evidence.
-
-    Returns a list of ``TestPackageEvidence`` objects, one per directory that
-    contains evidence sidecars.  Directories with no evidence are skipped.
-    """
-    return [result for package_dir in package_dirs if (result := list_evidence_from_package(package_dir)) is not None]

@@ -1,11 +1,11 @@
-"""Evidence viewer — annotated screenshots, Gantt, heatmaps, run history."""
+"""Evidence viewer — hierarchical dashboard, search, single test view, heatmap & Gantt."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from src.evidence_export import export_csv, export_junit_xml, export_ndjson
@@ -14,49 +14,49 @@ from src.gantt_utils import (
     build_gantt_chart,
     build_gantt_summary_sentences,
     load_gantt_entries,
-    safe_read_sidecar,
 )
 from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
-from src.report_utils import generate_annotated_journey, generate_suite_heatmap
+from src.report_utils import generate_annotated_journey
 from src.storage import get_storage
 
 
 def _format_indexed_at(iso_string: str) -> str:
-    """Format an ISO-8601 timestamp to a compact human-readable form.
-
-    Returns ``"–"`` when the string is empty or unparseable.
-    """
+    """Format an ISO-8601 timestamp — always show date + time."""
     if not iso_string:
         return "–"
     try:
-        from datetime import UTC, datetime
+        from datetime import datetime
 
         dt = datetime.fromisoformat(iso_string.replace("Z", "+00:00"))
-        now = datetime.now(UTC)
-        delta = now - dt
-
-        if delta.days == 0:
-            return dt.strftime("%H:%M")
-        elif delta.days == 1:
-            return f"Yesterday {dt.strftime('%H:%M')}"
-        elif delta.days < 7:
-            return dt.strftime("%a %H:%M")
-        else:
-            return dt.strftime("%b %d %H:%M")
+        return dt.strftime("%b %d, %H:%M")
     except ValueError, TypeError:
         return iso_string[:16] if len(iso_string) >= 16 else iso_string
 
 
+def _short_package_name(raw: str) -> str:
+    """Turn a long auto-generated package dir name into something readable.
+
+    e.g. ``test_20260720_132120_as_a_shopper…`` → ``Jul 20, 13:21``
+    """
+    import re
+
+    m = re.search(r"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})", raw)
+    if m:
+        y, mo, d, h, mi = m.groups()
+        from datetime import date
+
+        month_abbr = date(int(y), int(mo), 1).strftime("%b")
+        return f"{month_abbr} {int(d)}, {h}:{mi}"
+    return raw[:30] + ("…" if len(raw) > 30 else "")
+
+
 class EvidenceViewer:
-    """Renders the evidence viewer section."""
+    """Renders the redesigned evidence viewer section."""
 
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir
 
     def render(self) -> None:
-        st.divider()
-        st.subheader("Evidence Viewer")
-
         from src.ui_pipeline import find_all_evidence_dirs, find_evidence_sidecars
 
         sidecars = find_evidence_sidecars(self.base_dir)
@@ -69,78 +69,178 @@ class EvidenceViewer:
             )
             return
 
-        evidence_tabs = st.tabs(["Debug & Export", "Gantt Timeline", "Coverage Heat Map", "Run History"])
+        top_tabs = st.tabs(["📊 Dashboard & Search", "🌡️ Coverage Heatmap", "⏱️ Gantt Timeline"])
 
-        with evidence_tabs[0]:
-            self._render_debug_export(sidecars)
+        with top_tabs[0]:
+            self._render_dashboard(evidence_dirs)
+            st.divider()
+            self._render_advanced_search(sidecars)
 
-        with evidence_tabs[1]:
-            self._render_gantt_timeline(evidence_dirs)
-
-        with evidence_tabs[2]:
+        with top_tabs[1]:
             self._render_coverage_heatmap(evidence_dirs)
 
-        with evidence_tabs[3]:
-            self._render_run_history()
+        with top_tabs[2]:
+            self._render_gantt_timeline(evidence_dirs)
 
-        st.divider()
-        self._render_suite_heatmap(sidecars, evidence_dirs)
+    # ── Level 1: Dashboard ───────────────────────────────────────────────
 
-    def _render_debug_export(self, sidecars: list[Path]) -> None:
-        """Render the Debug & Export tab with search, filters, and export."""
-        st.subheader("🔍 Debug & Export")
+    def _render_dashboard(self, evidence_dirs: list[Path]) -> None:
+        from src.run_history_chart import build_run_history_chart
+        from src.run_result_persistence import get_flaky_tests, load_all_run_results
 
-        # ── Evidence index (cached per session) ──────────────────────────
-        index = self._get_evidence_index()
+        st.subheader("📊 Test Pack Overview")
+
+        generated_tests_dir = get_storage().generated_tests_dir()
+        runs = load_all_run_results(generated_tests_dir)
+        if not runs:
+            st.info("No run history available. Run tests first to see trends here.")
+            return
+
+        packages: list[str] = list({r.test_package for r in runs if r.test_package}) or ["All"]
+        packages_sorted = sorted(packages)
+        scope_options = ["All"] + packages_sorted if packages_sorted != ["All"] else ["All"]
+        scope_labels = {p: _short_package_name(p) for p in scope_options}
+
+        col_scope, col_metrics = st.columns([1, 3])
+        with col_scope:
+            scope = st.selectbox(
+                "Test Pack",
+                options=scope_options,
+                format_func=lambda p: scope_labels.get(p, p),
+                help="Filter the dashboard to a specific generated test package.",
+                key="dashboard_scope",
+            )
+
+        filtered_runs = self._filter_runs_by_package(runs, scope)
+
+        total_runs = len(filtered_runs)
+        total_passed = sum(r.passed for r in filtered_runs)
+        total_failed = sum(r.failed for r in filtered_runs)
+        total_tests = total_passed + total_failed
+        avg_pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0.0
+
+        with col_metrics:
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Total Runs", total_runs)
+            m2.metric("Avg Pass Rate", f"{avg_pass_rate:.1f}%")
+            m3.metric("Total Passed", total_passed)
+            m4.metric("Total Failed", total_failed)
+
+        col_trend, col_coverage = st.columns([2, 1])
+        with col_trend:
+            st.markdown("**Health Trend** — pass rate across runs over time")
+            if total_runs > 1:
+                chart = build_run_history_chart(filtered_runs, include_flaky_markers=False)
+                chart.update_layout(height=280, margin={"l": 0, "r": 0, "t": 20, "b": 0})
+                st.plotly_chart(chart, use_container_width=True)
+            else:
+                st.info(
+                    "The trend chart appears once you have **2 or more** test runs recorded. "
+                    "Each time you run the test suite, a new data point is added here."
+                )
+
+        with col_coverage:
+            st.markdown("**Coverage** — story confidence at a glance")
+            stories = build_story_confidence(
+                evidence_dirs[0] if evidence_dirs else Path("."),
+                test_plan_state=self._get_test_plan_state(),
+            )
+            if stories:
+                confirmed = len([s for s in stories if s.level == "tester_confirmed"])
+                gaps = len([s for s in stories if s.level == "gap_open_question"])
+                unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
+                import plotly.graph_objects as go
+
+                pie_labels = ["Confirmed", "Gaps/Failures", "Unreviewed"]
+                pie_values = [confirmed, gaps, unreviewed]
+                pie_colors = ["#10b981", "#ef4444", "#94a3b8"]
+                fig = go.Figure(
+                    data=[
+                        go.Pie(
+                            labels=pie_labels,
+                            values=pie_values,
+                            marker_colors=pie_colors,
+                            hole=0.6,
+                            textinfo="percent",
+                        )
+                    ]
+                )
+                fig.update_layout(
+                    margin={"t": 0, "b": 0, "l": 0, "r": 0},
+                    height=280,
+                    showlegend=True,
+                    legend={"orientation": "h", "yanchor": "bottom", "y": -0.25, "xanchor": "center", "x": 0.5},
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.caption("No story coverage data yet.")
+
+        flaky = get_flaky_tests(filtered_runs)
+        if flaky:
+            with st.expander(f"⚠️ Flaky Tests ({len(flaky)})", expanded=True):
+                rows = []
+                for test_name, counts in flaky:
+                    p = counts.get("passed", 0)
+                    f = counts.get("failed", 0)
+                    t = p + f
+                    rows.append(
+                        {
+                            "Test Name": test_name.replace("[chromium]", ""),
+                            "Passed": p,
+                            "Failed": f,
+                            "Flakiness": f"{(f / t):.0%}" if t else "–",
+                        }
+                    )
+                st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    # ── Level 2: Advanced Search ─────────────────────────────────────────
+
+    def _render_advanced_search(self, sidecars: list[Path]) -> None:
+        st.subheader("🔍 Search Tests")
+
+        index = self._get_evidence_index_v2()
         filter_opts = index.get_filter_options()
 
-        # ── Search bar + refresh ─────────────────────────────────────────
-        col_search, col_refresh = st.columns([5, 1])
+        # Always-visible controls
+        col_search, col_status, col_refresh = st.columns([3, 1, 1])
         with col_search:
             query = st.text_input(
-                "Search evidence…",
-                key="evidence_search_query",
-                placeholder="test name, step label, URL, condition ref…",
+                "Search (test name, step label, condition…)",
+                key="search_query",
+                placeholder="e.g.  cart  or  TC01.05",
             )
-        with col_refresh:
-            if st.button("🔄 Refresh", key="evidence_refresh", use_container_width=True):
-                index.build_or_refresh(force=True)
-                st.rerun()
-
-        # ── Filter row ───────────────────────────────────────────────────
-        col_status, col_domain, col_prefix = st.columns(3)
         with col_status:
             status_filter = st.selectbox(
                 "Status",
                 ["All"] + filter_opts.statuses,
-                key="evidence_filter_status",
+                key="filter_status",
             )
-        with col_domain:
-            domain_filter = st.selectbox(
-                "Domain",
-                ["All"] + filter_opts.domains,
-                key="evidence_filter_domain",
-            )
-        with col_prefix:
-            prefix_filter = st.selectbox(
-                "Condition",
-                ["All"] + filter_opts.condition_prefixes,
-                key="evidence_filter_prefix",
-            )
+        with col_refresh:
+            st.markdown("<div style='padding-top:28px;'>", unsafe_allow_html=True)
+            if st.button("🔄 Refresh", use_container_width=True, help="Re-index evidence files from disk"):
+                index.build_or_refresh(force=True)
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-        # ── Execute search ───────────────────────────────────────────────
-        results = index.search(
-            query=query,
-            status=status_filter if status_filter != "All" else None,
-            url_domain=domain_filter if domain_filter != "All" else None,
-            condition_prefix=prefix_filter if prefix_filter != "All" else None,
-            limit=200,
-        )
+        # Less-used filters collapsed
+        with st.expander("More filters & export"):
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                domain_filter = st.selectbox("Domain", ["All"] + filter_opts.domains, key="filter_domain")
+            with f2:
+                prefix_filter = st.selectbox(
+                    "Condition Prefix", ["All"] + filter_opts.condition_prefixes, key="filter_prefix"
+                )
+            with f3:
+                locator = st.text_input(
+                    "Locator (e.g. .text-center, #submit)",
+                    key="search_locator",
+                    placeholder=".text-center",
+                )
 
-        # ── Export buttons ───────────────────────────────────────────────
-        if results:
-            col_csv, col_ndjson, col_junit = st.columns(3)
-            with col_csv:
+            st.markdown("**Export current results**")
+            e1, e2, e3 = st.columns(3)
+            with e1:
                 csv_data = export_csv(
                     index,
                     query=query,
@@ -149,14 +249,9 @@ class EvidenceViewer:
                     condition_prefix=prefix_filter if prefix_filter != "All" else None,
                 )
                 st.download_button(
-                    "📥 CSV",
-                    data=csv_data,
-                    file_name="evidence_export.csv",
-                    mime="text/csv",
-                    key="export_csv",
-                    use_container_width=True,
+                    "📥 CSV", data=csv_data, file_name="evidence_export.csv", mime="text/csv", use_container_width=True
                 )
-            with col_ndjson:
+            with e2:
                 ndjson_data = export_ndjson(
                     index,
                     query=query,
@@ -169,10 +264,9 @@ class EvidenceViewer:
                     data=ndjson_data,
                     file_name="evidence_export.ndjson",
                     mime="application/x-ndjson",
-                    key="export_ndjson",
                     use_container_width=True,
                 )
-            with col_junit:
+            with e3:
                 junit_data = export_junit_xml(
                     index,
                     query=query,
@@ -185,106 +279,236 @@ class EvidenceViewer:
                     data=junit_data,
                     file_name="evidence_junit.xml",
                     mime="application/xml",
-                    key="export_junit",
                     use_container_width=True,
                 )
 
-        # ── Results list ─────────────────────────────────────────────────
-        st.caption(
-            f"{len(results)} of {filter_opts.total_indexed} sidecars" + (f' matching "{query}"' if query else "")
+        results = index.search(
+            query=query,
+            status=status_filter if status_filter != "All" else None,
+            url_domain=domain_filter if domain_filter != "All" else None,
+            condition_prefix=prefix_filter if prefix_filter != "All" else None,
+            locator=locator if locator else None,
+            limit=200,
         )
 
+        st.caption(f"{len(results)} of {filter_opts.total_indexed} tests indexed.")
         if not results:
             st.info("No evidence matches your search.")
             return
 
-        # Build selection list with timestamps so repeated runs are distinguishable
-        result_labels = [
-            f"{'❌' if r.status == 'failed' else '✅' if r.status == 'passed' else '⏭️'} "
-            f"{r.condition_ref} — {r.test_name.replace('[chromium]', '')} "
-            f"({_format_indexed_at(r.indexed_at)})"
-            for r in results
-        ]
+        df_data = []
+        for i, r in enumerate(results):
+            icon = "❌" if r.status == "failed" else "✅" if r.status == "passed" else "⏭️"
+            df_data.append(
+                {
+                    "": icon,
+                    "Test Name": r.test_name.replace("[chromium]", ""),
+                    "Condition": r.condition_ref,
+                    "Last Run": _format_indexed_at(r.indexed_at),
+                    "Pack": _short_package_name(r.test_package),
+                    "_idx": i,
+                }
+            )
 
-        selected_idx = st.radio(
-            "Select test evidence",
-            options=range(len(results)),
-            format_func=lambda i: result_labels[i],
-            key="evidence_result_radio",
+        df = pd.DataFrame(df_data)
+        st.markdown(
+            "<small>👆 Click a <strong>checkbox</strong> on the left to open the detailed debug view below.</small>",
+            unsafe_allow_html=True,
+        )
+        event = st.dataframe(
+            df.drop(columns=["_idx"]),
+            use_container_width=True,
+            selection_mode="single-row",
+            on_select="rerun",
+            hide_index=True,
+            column_config={
+                "": st.column_config.TextColumn(width="small"),
+                "Condition": st.column_config.TextColumn(width="small"),
+                "Last Run": st.column_config.TextColumn(width="small"),
+                "Pack": st.column_config.TextColumn(width="medium"),
+            },
         )
 
-        selected = results[selected_idx]
-        sidecar_path = index.get_test_package_path(selected.sidecar_path)
+        selected_idx = None
+        if event and event.selection and event.selection.rows:
+            selected_idx = int(df.iloc[event.selection.rows[0]]["_idx"])
 
-        # ── Selected metadata ────────────────────────────────────────────
+        if selected_idx is not None:
+            selected = results[selected_idx]
+            self._render_single_test_view(selected, index)
+
+    # ── Level 3: Single Test View ────────────────────────────────────────
+
+    def _render_single_test_view(self, selected_result: Any, index: EvidenceIndex) -> None:
+        st.divider()
+        clean_name = selected_result.test_name.replace("[chromium]", "").strip()
+        st.subheader(f"🔎 {clean_name}")
         st.caption(
-            f"**URL:** {selected.page_url}  |  **Story:** {selected.story_ref}  |  **Package:** {selected.test_package}"
+            f"**URL:** {selected_result.page_url}  "
+            f"·  **Story:** {selected_result.story_ref}  "
+            f"·  **Pack:** {_short_package_name(selected_result.test_package)}"
         )
 
-        # ── Annotated journey ────────────────────────────────────────────
-        if not sidecar_path.exists():
-            st.warning(f"Sidecar file not found: {selected.sidecar_path}")
+        debug_tab, history_tab = st.tabs(["📋 Execution Detail", "📈 Run History"])
+
+        sidecar_path = index.get_test_package_path(selected_result.sidecar_path)
+
+        with debug_tab:
+            if not sidecar_path.exists():
+                st.warning(f"Sidecar file not found on disk: `{selected_result.sidecar_path}`")
+            else:
+                try:
+                    html = generate_annotated_journey(
+                        sidecar_path=sidecar_path,
+                        title=clean_name,
+                        bug_report_mode=False,
+                    )
+                    st.html(html)
+
+                    # Single clear export button
+                    text_report = generate_annotated_journey(
+                        sidecar_path=sidecar_path,
+                        title=clean_name,
+                        bug_report_mode=True,
+                    )
+                    filename = clean_name.replace(" ", "_")
+                    st.download_button(
+                        label="📥 Download Bug Report (.txt) — ready to paste into Jira/email",
+                        data=text_report,
+                        file_name=f"{filename}_bug_report.txt",
+                        mime="text/plain",
+                        key="btn_download_bug",
+                    )
+                except Exception as e:
+                    st.error(f"Failed to render evidence: {e}")
+
+        with history_tab:
+            self._render_test_run_history(selected_result.test_name)
+
+    def _render_test_run_history(self, test_name: str) -> None:
+        from src.run_result_persistence import load_all_run_results
+
+        runs = load_all_run_results(get_storage().generated_tests_dir())
+        history_data = []
+        for run in runs:
+            for test in run.results:
+                if test.name == test_name:
+                    history_data.append(
+                        {
+                            "Run Date": run.created_at,
+                            "Status": test.status,
+                            "Duration (s)": test.duration,
+                            "Error": test.error_message or "",
+                        }
+                    )
+
+        if not history_data:
+            st.info("No historical data found. This test appears only in the current run.")
             return
 
-        try:
-            html = generate_annotated_journey(
-                sidecar_path=sidecar_path,
-                title=sidecar_path.stem,
-                bug_report_mode=False,
-            )
-            st.html(html)
+        df = pd.DataFrame(history_data)
+        df["Run Date"] = pd.to_datetime(df["Run Date"]).dt.strftime("%Y-%m-%d %H:%M")
 
-            text_report = generate_annotated_journey(
-                sidecar_path=sidecar_path,
-                title=sidecar_path.stem,
-                bug_report_mode=True,
-            )
-            filename = sidecar_path.stem.replace("[chromium]", "").strip()
-            st.download_button(
-                label="📥 Download Bug Report (text)",
-                data=text_report,
-                file_name=f"{filename}_bug_report.txt",
-                mime="text/plain",
-                key="download_bug_report",
-            )
-        except Exception as e:
-            st.error(f"Failed to render evidence: {e}")
+        import plotly.express as px
 
-    @staticmethod
-    @st.cache_resource
-    def _get_evidence_index() -> EvidenceIndex:
-        """Return a cached EvidenceIndex, refreshed incrementally."""
-        index = EvidenceIndex()
-        index.build_or_refresh()
-        return index
+        fig = px.bar(
+            df,
+            x="Run Date",
+            y="Duration (s)",
+            color="Status",
+            color_discrete_map={
+                "passed": "#10b981",
+                "failed": "#ef4444",
+                "skipped": "#94a3b8",
+                "error": "#f97316",
+            },
+            title=f"Execution history — {test_name.replace('[chromium]', '').strip()}",
+        )
+        fig.update_layout(margin={"t": 40, "b": 0, "l": 0, "r": 0})
+        st.plotly_chart(fig, use_container_width=True)
 
-    def _render_annotated_screenshot(self, sidecars: list[Path]) -> None:
-        """Legacy entry point kept for backwards compatibility — delegates to _render_debug_export."""
-        self._render_debug_export(sidecars)
+        st.caption("Full run log:")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # ── Coverage Heatmap tab ─────────────────────────────────────────────
+
+    def _render_coverage_heatmap(self, evidence_dirs: list[Path]) -> None:
+        st.subheader("🌡️ Coverage Heatmap")
+        st.caption(
+            "Each story's confidence level is based on how many of its acceptance criteria "
+            "have been tested and whether those tests passed."
+        )
+
+        stories = build_story_confidence(
+            evidence_dirs[0] if evidence_dirs else Path("."),
+            test_plan_state=self._get_test_plan_state(),
+        )
+        if not stories:
+            st.info("No heatmap data yet. Run generated tests to produce `.evidence.json` sidecars.")
+            return
+
+        total = len(stories)
+        confirmed = len([s for s in stories if s.level == "tester_confirmed"])
+        gaps = len([s for s in stories if s.level == "gap_open_question"])
+        unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Stories", total)
+        m2.metric("✅ Confirmed", confirmed)
+        m3.metric("❌ Gaps / Failures", gaps)
+        m4.metric("🕐 Unreviewed", unreviewed)
+
+        fig = build_confidence_heatmap(stories)
+        st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("Story detail table"):
+            st.dataframe(
+                [
+                    {
+                        "Story Ref": s.story_ref,
+                        "Confidence": s.level,
+                        "Passed": s.passed_conditions,
+                        "Failed": s.failed_conditions,
+                        "Skipped": s.skipped_conditions,
+                    }
+                    for s in stories
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # ── Gantt Timeline tab ───────────────────────────────────────────────
 
     def _render_gantt_timeline(self, evidence_dirs: list[Path]) -> None:
-        from src.ui_pipeline import find_sidecar_for_test
+        st.subheader("⏱️ Gantt Timeline")
+        st.caption(
+            "Each bar represents one test condition. Width = duration. "
+            "Hover for details. Use Grouping to re-arrange by condition type, sprint, or source."
+        )
 
-        entries = load_gantt_entries(evidence_dirs[0] if evidence_dirs else Path("."))
+        if not evidence_dirs:
+            st.info("No evidence data yet.")
+            return
+
+        entries = load_gantt_entries(evidence_dirs[0])
         if not entries:
             st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
             return
 
-        col1, col2 = st.columns([1, 3])
-        with col1:
+        col_group, col_summary = st.columns([1, 3])
+        with col_group:
             group_mode = st.selectbox(
-                "Grouping Mode",
+                "Group by",
                 options=["condition_type", "sprint", "source"],
-                index=0,
                 key="gantt_group_mode",
+                help="Re-arrange the chart rows by this attribute.",
             )
             fastest, slowest, coverage = build_gantt_summary_sentences(entries)
-            st.write(f"- {fastest}")
-            st.write(f"- {slowest}")
-            st.write(f"- {coverage}")
+            st.markdown(f"- {fastest}")
+            st.markdown(f"- {slowest}")
+            st.markdown(f"- {coverage}")
 
-        with col2:
-            # Extract condition metadata from test_plan if available
+        with col_summary:
             condition_meta: dict[str, dict[str, str]] = {}
             if st.session_state.get("test_plan"):
                 for c in st.session_state.test_plan.conditions:
@@ -293,245 +517,48 @@ class EvidenceViewer:
                         "sprint": getattr(st.session_state.test_plan, "sprint", "Backlog"),
                         "source": c.src,
                     }
-
             fig = build_gantt_chart(
                 entries,
                 grouping_mode=group_mode,  # type: ignore[arg-type]
                 condition_meta=condition_meta,
             )
-            st.plotly_chart(fig, width="stretch")
+            st.plotly_chart(fig, use_container_width=True)
 
-        st.divider()
-        st.subheader("Test Execution Details")
-        selected_test = st.selectbox(
-            "Select test for details",
-            options=sorted(entries, key=lambda e: e.condition_ref),
-            format_func=lambda e: f"{e.condition_ref} ({e.status})",
-        )
-
-        if selected_test:
-            sidecar_path = find_sidecar_for_test(self.base_dir, selected_test.test_name)
-            if sidecar_path is None:
-                st.warning(f"Sidecar not found for {selected_test.test_name}")
-            else:
-                sidecar = safe_read_sidecar(sidecar_path)
-                if sidecar:
-                    self._render_sidecar_details(sidecar)
-
-        st.divider()
-        st.subheader("Raw Execution Data")
-        st.dataframe(
-            [
-                {
-                    "condition_ref": e.condition_ref,
-                    "story_ref": e.story_ref,
-                    "status": e.status,
-                    "duration_s": e.duration_s,
-                    "test_name": e.test_name,
-                }
-                for e in sorted(entries, key=lambda e: (-e.duration_s, e.condition_ref))
-            ],
-            width="stretch",
-        )
-
-    def _render_sidecar_details(self, sidecar: dict[str, Any]) -> None:
-        """Render detailed view of a single sidecar."""
-        test_info = sidecar.get("test", {})
-        col_a, colb = st.columns(2)
-        with col_a:
-            st.write(f"**Condition Ref:** {test_info.get('condition_ref')}")
-            st.write(f"**Story Ref:** {test_info.get('story_ref')}")
-            st.write(f"**Status:** {test_info.get('status')}")
-        with colb:
-            st.write(f"**Duration:** {test_info.get('duration_s')}s")
-            st.write(f"**Test Name:** {test_info.get('name')}")
-
-        st.write("**Steps:**")
-        for step in sidecar.get("steps", []):
-            status_icon = "✅" if step.get("result", {}).get("status") == "passed" else "❌"
-            st.write(f"- {status_icon} **{step.get('type').upper()}**: {step.get('label')}")
-            if step.get("result", {}).get("error"):
-                st.error(step.get("result", {}).get("error"))
-
-    def _render_coverage_heatmap(self, evidence_dirs: list[Path]) -> None:
-        test_plan_state: dict[str, list[str]] | None = None
-        if st.session_state.get("test_plan"):
-            test_plan_state = {"confirmed_ids": list(st.session_state.test_plan.reviewed_ids)}
-
-        stories = build_story_confidence(
-            evidence_dirs[0] if evidence_dirs else Path("."),
-            test_plan_state=test_plan_state,
-        )
-        if not stories:
-            st.info("No heat map data yet. Run generated tests to produce `.evidence.json` sidecars.")
-            return
-
-        total_stories = len(stories)
-        confirmed = len([s for s in stories if s.level == "tester_confirmed"])
-        gaps = len([s for s in stories if s.level == "gap_open_question"])
-        unreviewed = len([s for s in stories if s.level == "ai_covered_unreviewed"])
-
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Stories", total_stories)
-        m2.metric("Tester Confirmed", confirmed)
-        m3.metric("Gaps/Failures", gaps)
-        m4.metric("Unreviewed", unreviewed)
-
-        fig = build_confidence_heatmap(stories)
-        st.plotly_chart(fig, width="stretch")
-
-        st.divider()
-        st.subheader("Story Confidence Details")
-        st.dataframe(
-            [
-                {
-                    "story_ref": s.story_ref,
-                    "confidence": s.level,
-                    "color": s.color,
-                    "conditions_with_evidence": s.total_conditions_with_evidence,
-                    "passed": s.passed_conditions,
-                    "failed": s.failed_conditions,
-                    "skipped": s.skipped_conditions,
-                }
-                for s in stories
-            ],
-            width="stretch",
-        )
-
-    def _render_suite_heatmap(self, sidecars: list[Path], evidence_dirs: list[Path]) -> None:
-        st.subheader("Suite Heatmap (Coverage Overview)")
-
-        url_options: set[str] = set()
-        for sidecar_path in sidecars:
-            try:
-                sidecar_obj = json.loads(sidecar_path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            steps = sidecar_obj.get("steps", [])
-            if not isinstance(steps, list):
-                continue
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
-                if str(step.get("type", "")).lower() != "navigate":
-                    continue
-                val = str(step.get("value", "") or "").rstrip("/")
-                if val.startswith("http"):
-                    url_options.add(val)
-        url_list = sorted(url_options)
-
-        if not url_list:
-            st.info("No navigated URLs found in sidecars yet.")
-            return
-
-        selected_url = st.selectbox("Select page URL", options=url_list)
-        suite_html = generate_suite_heatmap(
-            evidence_dir=evidence_dirs[0] if evidence_dirs else Path("."),
-            page_url=selected_url,
-        )
-        st.html(suite_html)
-
-    def _render_run_history(self) -> None:
-        from src.run_history_chart import build_run_history_chart
-        from src.run_result_persistence import (
-            compare_latest_runs,
-            compare_runs,
-            get_flaky_tests,
-            load_all_run_results,
-        )
-
-        st.subheader("Run History")
-
-        generated_tests_dir = get_storage().generated_tests_dir()
-        runs = load_all_run_results(generated_tests_dir)
-        if not runs:
-            st.info("No run history available. Run tests first to see trends here.")
-            return
-
-        packages: list[str] = list({r.test_package for r in runs if r.test_package}) or ["All"]
-        packages_sorted = sorted(packages)
-        scope_options = ["All"] + packages_sorted if packages_sorted != ["All"] else ["All"]
-        scope = st.selectbox(
-            "Scope",
-            options=scope_options,
-            key="run_history_scope",
-        )
-        filtered_runs = self._filter_runs_by_package(runs, scope)
-
-        total_runs = len(filtered_runs)
-        total_passed = sum(r.passed for r in filtered_runs)
-        total_failed = sum(r.failed for r in filtered_runs)
-        total_tests = total_passed + total_failed
-        avg_pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0.0
-
-        s1, s2, s3, s4 = st.columns(4)
-        s1.metric("Total Runs", total_runs)
-        s2.metric("Avg Pass Rate", f"{avg_pass_rate:.1f}%")
-        s3.metric("Total Passed", total_passed)
-        s4.metric("Total Failed", total_failed)
-
-        show_flaky = st.checkbox("Show Flaky Test Markers", value=True, key="run_history_show_flaky")
-        chart = build_run_history_chart(filtered_runs, include_flaky_markers=show_flaky)
-        st.plotly_chart(chart, width="stretch")
-
-        flaky = get_flaky_tests(filtered_runs)
-        flaky_count = len(flaky)
-        with st.expander(f"Flaky Tests ({flaky_count})", expanded=flaky_count > 0):
-            if flaky:
-                flaky_rows = []
-                for test_name, counts in flaky:
-                    passed_c = counts.get("passed", 0)
-                    failed_c = counts.get("failed", 0)
-                    total_c = passed_c + failed_c
-                    flakiness = (failed_c / total_c) if total_c > 0 else 0.0
-                    flaky_rows.append(
+        with st.expander("Raw timing data"):
+            st.dataframe(
+                sorted(
+                    [
                         {
-                            "Test Name": test_name,
-                            "Passed": passed_c,
-                            "Failed": failed_c,
-                            "Flakiness Score": f"{flakiness:.2f} ",
+                            "Condition": e.condition_ref,
+                            "Status": e.status,
+                            "Duration (s)": round(e.duration_s, 2),
+                            "Test Name": e.test_name.replace("[chromium]", ""),
                         }
-                    )
-                st.dataframe(flaky_rows, width="stretch")
-            else:
-                st.success("No flaky tests detected ✅")
+                        for e in entries
+                    ],
+                    key=lambda r: -r["Duration (s)"],
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
 
-        if len(filtered_runs) >= 2:
-            comparison = compare_runs(filtered_runs[-2], filtered_runs[-1])
-            with st.expander("Last Run Comparison", expanded=True):
-                self._render_run_comparison(comparison)
-        else:
-            comparison_none = compare_latest_runs(directory=None)
-            if comparison_none:
-                with st.expander("Last Run Comparison", expanded=True):
-                    self._render_run_comparison(comparison_none)
+    # ── Shared helpers ───────────────────────────────────────────────────
+
+    @staticmethod
+    @st.cache_resource
+    def _get_evidence_index_v2() -> EvidenceIndex:
+        """Return a cached EvidenceIndex, refreshed incrementally."""
+        index = EvidenceIndex()
+        index.build_or_refresh()
+        return index
+
+    @staticmethod
+    def _get_test_plan_state() -> dict[str, list[str]] | None:
+        if st.session_state.get("test_plan"):
+            return {"confirmed_ids": list(st.session_state.test_plan.reviewed_ids)}
+        return None
 
     def _filter_runs_by_package(self, runs: list, scope: str) -> list:
         if scope == "All":
             return runs
         return [r for r in runs if r.test_package == scope]
-
-    def _render_run_comparison(self, comparison: Any) -> None:
-        improved = comparison.improved
-        if improved:
-            st.success(f"Improved ({len(improved)}):")
-            for test in improved:
-                st.write(f"- ✓ {test}")
-        else:
-            st.success("Improved: (none)")
-
-        regressed = comparison.regressed
-        if regressed:
-            st.error(f"Regressed ({len(regressed)}):")
-            for test in regressed:
-                st.write(f"- ✗ {test}")
-        else:
-            st.info("Regressed: (none)")
-
-        new_failures = comparison.new_failures
-        if new_failures:
-            st.warning(f"New Failures ({len(new_failures)}):")
-            for test in new_failures:
-                st.write(f"- ⚠ {test}")
-        else:
-            st.info("New Failures: (none)")

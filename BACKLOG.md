@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-23 (Semantic scraper transition plan + B-024/B-025/B-026/AI-031 complete)
+Last updated: 2026-07-23 (Semantic scraper + B-024/B-025/B-026/AI-031 + AI-033 t-string analysis)
 
 ---
 
@@ -776,6 +776,68 @@ both are user interfaces, so the naming is inconsistent.
 
 **Impact:** Medium — affects imports in ~10 files. No logic changes.
 **Priority:** Low — cosmetic, but prevents future confusion.
+
+---
+
+## 🆕 AI-033 — Python T-String (PEP 709) Upgrade Path Analysis
+
+**Status:** ❓ needs-info
+**Priority:** Medium — technical debt / future-proofing
+**Impact:** Potential code modernization, template string consistency
+
+**What:** Evaluate and plan migration to Python t-strings (PEP 709, Python 3.12+) for internal template strings in the codebase.
+
+**Background:** T-strings (`t"..."`) are a new string type introduced in Python 3.12 that:
+- Provide lazy evaluation of embedded expressions
+- Offer better introspection of string structure
+- Are designed for use cases where the string structure matters
+
+**Current State:** Project requires Python 3.14+ (fully supports t-strings). Current `.format()` usage:
+- `src/agents/generator.py` — GENERATOR_USER_PROMPT_TEMPLATE
+- `src/agents/planner.py` — PLANNER_USER_PROMPT_TEMPLATE
+- `src/test_generator.py` — `get_skeleton_prompt_template()`
+- `src/prompt_utils.py` — multiple template strings
+
+**⚠️ Critical Finding — Jinja2 Conflict:**
+The project uses Jinja2-style double-brace placeholders (`{{CLICK:description}}`, `{{FILL:...}}`, `{{ASSERT:...}}`) for LLM prompts. T-strings use `{expression}` syntax which **directly conflicts** with these placeholders.
+
+**Where T-Strings Would Have Most Impact:**
+1. **Prompt templates** (`src/prompt_utils.py`, `src/agents/generator.py`, `src/agents/planner.py`) — could enable lazy evaluation of user story/conditions
+2. **HTML generation** (`src/cli/evidence_generator.py`) — cleaner string interpolation
+3. **Report generation** (`src/cli/report_generator.py`) — structured templates
+
+**Where T-Strings Won't Work (Without Major Changes):**
+1. **Skeleton generation** — `{{CLICK:description}}` syntax conflicts with t-string `{expression}` syntax
+2. **Credential substitution** (`src/journey_models.py` `substitute_templates()`) — uses `{{username}}`/`{{password}}` pattern
+3. **Streamlit UI HTML blocks** — inline HTML with Jinja2-style interpolation
+
+**What We're Waiting For:**
+1. **Decision on Jinja2 migration** — Either:
+   - Migrate to Jinja2 templates (breaks current LLM prompt format)
+   - Use alternative placeholder syntax (e.g., `{{{description}}}` or `$description`)
+   - Keep double-brace for LLM prompts, use t-strings only for internal templates
+2. **Jinja2 library evaluation** — If Jinja2 is adopted, assess:
+   - Version compatibility with Python 3.14
+   - Impact on Streamlit rendering
+   - Performance for HTML report generation
+3. **Migration strategy** — Need clear plan for:
+   - Which templates to migrate first (high-impact, low-conflict)
+   - Backward compatibility during transition
+   - Testing approach for migrated templates
+
+**Potential Approach:**
+1. **Phase 1:** Use t-strings for non-LLM templates (logging, report filenames, session state)
+2. **Phase 2:** Evaluate Jinja2 adoption for HTML generation (Streamlit, evidence reports)
+3. **Phase 3:** Decide on LLM prompt placeholder strategy — migrate to single-brace or adopt Jinja2
+
+**Files to Analyze:**
+- `src/prompt_utils.py` — template string usage analysis
+- `src/agents/generator.py` — prompt template structure
+- `src/agents/planner.py` — prompt template structure
+- `src/cli/evidence_generator.py` — HTML generation patterns
+- `src/cli/report_generator.py` — report template patterns
+
+**Estimated Sessions:** 1-2 (analysis + proof of concept)
 
 ---
 
