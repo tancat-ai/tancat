@@ -28,6 +28,8 @@ _RE_CONSTRAINT_BULLET = re.compile(r"^\s*#\s*-\s+.*\b(?:inside,?|within)\b", re.
 # Sentence fragment: "CapitalizedWord," (not assignment like "Word, = value")
 _RE_SENTENCE_FRAGMENT = re.compile(r"^[A-Z][a-z]+,")
 _RE_SENTENCE_FRAGMENT_ASSIGNMENT = re.compile(r"^[A-Z][A-Za-z]*,\s*=")
+# Bare numbered prose: "1. something" / "1) something" — LLM leaked criterion list
+_RE_BARE_NUMBERED_PROSE = re.compile(r"^\d+[.)]")
 
 
 def _is_structural_reasoning_line(stripped: str) -> bool:
@@ -138,6 +140,15 @@ def _is_llm_reasoning_line(line: str) -> bool:
     # Long conversational comments (paragraph reasoning)
     if _is_long_conversational_comment(stripped, comment_content):
         return True
+
+    # Bare numbered prose ("1. something") leaked by the LLM outside comments.
+    # Not Python code — would cause SyntaxError at ast.parse time.
+    # Match "1. word" / "1) word" patterns. Exclude "1.5" (float) and similar.
+    prose_match = _RE_BARE_NUMBERED_PROSE.match(stripped)
+    if prose_match:
+        after_number = stripped[len(prose_match.group(0)) :].lstrip()
+        if after_number and after_number[0].isalpha():
+            return True
 
     return False
 

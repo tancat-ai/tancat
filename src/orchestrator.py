@@ -713,10 +713,39 @@ class TestOrchestrator:
             self._debug(f"skeleton validation violations: {validation_result.violations}")
             logger.warning("Hallucinated CSS selectors found in fragment. Retrying with stricter prompt.")
             correction = (
-                prompt
-                + "\n\nCRITICAL CORRECTION: Your previous answer contained real CSS selectors or XPath. "
-                + "You MUST use ONLY placeholders like {{CLICK:description}} or {{FILL:description}}. "
-                + "DO NOT write evidence_tracker.xxx() calls or real Playwright locators."
+                "You are a Playwright Python test engineer.\n"
+                "\n"
+                "Generate EXACTLY ONE pytest test function.\n"
+                "\n"
+                "=== CRITICAL RULE ===\n"
+                "You MUST use ONLY placeholder tokens. NEVER write real Playwright locators.\n"
+                "- WRONG: page.get_by_role('button', name='Login').click()\n"
+                "- WRONG: page.locator('#email').fill('test@example.com')\n"
+                "- WRONG: page.get_by_text('Add to cart').click()\n"
+                "- CORRECT: {{CLICK:Login}}\n"
+                "- CORRECT: {{FILL:email:test@example.com}}\n"
+                "- CORRECT: {{CLICK:Add to cart}}\n"
+                "\n"
+                "=== ALLOWED PLACEHOLDERS ===\n"
+                "{{GOTO:page description}}\n"
+                "{{CLICK:button or link text}}\n"
+                "{{FILL:field description:value to type}}\n"
+                "{{ASSERT:what should be visible}}\n"
+                "\n"
+                "=== EXAMPLE ===\n"
+                "def test_example(page, evidence_tracker):\n"
+                "    {{GOTO:home}}\n"
+                "    {{FILL:username:admin}}\n"
+                "    {{FILL:password:secret}}\n"
+                "    {{CLICK:Login}}\n"
+                "    {{ASSERT:dashboard}}\n"
+                "\n"
+                "=== TARGET CONDITION ===\n"
+                f"ID: {condition.id}\n"
+                f"Description: {condition.text}\n"
+                f"Expected: {condition.expected}\n"
+                "\n"
+                "Generate the test function now using ONLY placeholders."
             )
             fragment = await self.test_generator.client.generate(correction)
             fragment = self.parser.normalise_placeholder_actions(fragment)
@@ -724,7 +753,26 @@ class TestOrchestrator:
             validation_result = validator.validate(fragment)
             if not validation_result.is_valid:
                 self._debug(f"skeleton validation violations after retry: {validation_result.violations}")
-                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
+                logger.warning(
+                    "Second retry failed for fragment %s. Attempting third retry with minimal prompt.", condition.id
+                )
+                minimal_prompt = (
+                    f"Generate one pytest test function for: {condition.text}\n"
+                    f"Expected: {condition.expected}\n"
+                    "Output ONLY this format (replace placeholders, do NOT write real locators):\n\n"
+                    "def test_xxx(page, evidence_tracker):\n"
+                    "    {{GOTO:page}}\n"
+                    "    {{CLICK:button text}}\n"
+                    "    {{FILL:field:value}}\n"
+                    "    {{ASSERT:what to see}}\n\n"
+                    "Every body line MUST be a {{ACTION:description}} placeholder. No real code."
+                )
+                fragment = await self.test_generator.client.generate(minimal_prompt)
+                fragment = self.parser.normalise_placeholder_actions(fragment)
+                validation_result = validator.validate(fragment)
+                if not validation_result.is_valid:
+                    self._debug(f"skeleton validation violations after second retry: {validation_result.violations}")
+                    raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
 
         return fragment
 
