@@ -163,6 +163,11 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 - Commit `BACKLOG.md` and `kanban.html` together.
 - Pre-commit hook and CI verify `kanban.html` is up to date.
 
+### Backlog & Roadmap Sync
+- ✅ Status updates (`BACKLOG.md`, `ROADMAP_ROADTO_PRODUCTION.md`) happen ONLY during ship-it — never mid-session
+- ❌ NEVER mark an item `✅ Complete` before it's committed, pushed, and CI green
+- See ship-it skill §3 for the full housekeeping checklist
+
 ### Housekeeping (run via ship-it skill or manually before commit)
 
 - `python scripts/maintenance/kanban.py` — regenerate kanban

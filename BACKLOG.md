@@ -148,17 +148,21 @@ Update baseline only after all three are merged and verified.
 
 ---
 
-## 🆕 AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22) — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22)
+## ✅ AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (COMPLETE 2026-07-26)
 
-**Status:** 🟡 ready-for-agent  
-**What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent.
+**Status:** ✅ Complete  
+**Commit:** (pending ship-it)
 
-**Done:**
-- `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
-- `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
-- `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
+**What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent. PDF parsing wired into `rag_ingest.py` via `src/pdf_ingest.py` (PyMuPDF-based: heading detection, table extraction, chunking).
 
-**Next:** Wire PDF parsing into `rag_ingest.py`; measure RAG improvement on LV Insurance eval.
+**Delivered:**
+- ✅ `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
+- ✅ `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
+- ✅ `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
+- ✅ `src/pdf_ingest.py` — PyMuPDF extraction pipeline (headings, tables, chunking)
+- ✅ `rag_ingest.py --pdfs` — CLI flag ingests PDFs into vector store
+- ✅ RAG store: 160 entries (67 golden + 27 Playwright docs + 66 PDF chunks from 3 LV policy PDFs)
+- ✅ RAG accuracy: **53.7% → 64.2%** (+10.5pp), LV Insurance: **83.3% → 91.7%** (+8.4pp)
 
 ---
 
@@ -824,10 +828,11 @@ The project uses Jinja2-style double-brace placeholders (`{{CLICK:description}}`
 
 ---
 
-## 🆕 B-027 — Requirements with distinct concerns generate single test case instead of multiple
+## ✅ B-027 — Requirements with distinct concerns generate single test case instead of multiple (FIXED 2026-07-24)
 
-**Status:** 🆕 new  
-**Priority:** Medium — affects test plan quality  
+**Status:** ✅ Fixed  
+**Priority:** Medium  
+**Commits:** `db77c46`, `26bb827`  
 **Impact:** Unstructured requirements with multiple distinct concerns (e.g. "max items, max quantity, filters") produce only one happy-path test case instead of focused boundary/functional tests
 
 **Symptom:**
