@@ -9,7 +9,34 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Added
+- **AI-030 Ingestion Agent**: `src/pdf_ingest.py` — PyMuPDF-based PDF extraction (heading detection, table extraction, chunking). `rag_ingest.py --pdfs` ingests domain PDFs into the RAG vector store. 3 real LV Insurance policy PDFs ingested → 66 chunks. RAG accuracy 53.7 → 64.2% (+10.5pp).
+- **Phase 2b Self-Healing**: Rule-based pre-screening (`_pre_screen_failure()`) skips LLM call for assertion/navigation/other failures (cost optimization). Interactive repair fallback via `interactive_repair_candidates` in `HealingReport`.
+- **Semantic scraper (B-032)**: Three-layer hybrid extraction — BS4 (structure) + CDP AX tree (accessible_name) + `page.aria_snapshot(boxes=True)` (placeholder, value, bbox, groups). Enabled by default; `SCRAPER_BACKEND=bs4` to disable.
+- `src/aria_parser.py` — Parse Playwright's `aria_snapshot()` YAML output into standard element dicts (33 tests, all ARIA roles).
+- `src/element_matcher.py` — Resolver accuracy improvements (B-024/B-025):
+  - Pass1 word-ratio relax for short descriptions matching long element text
+  - Pass1 heading skip for CLICK actions (headings are display elements, not click targets)
+  - Pass1 id/name prefix match for FILL actions (e.g. "overnight" → `id="overnightLocation"`)
+  - Pass1 word-boundary check for single-word containment (prevents "year" ⊆ "(years)" false positives)
+- `src/placeholder_scorers.py` — Heading penalty (-20) for CLICK on elements without ID + container bonus (+10) for generic/div elements with ID (B-025)
+- `scripts/eval/golden_validator.py` — Locator normalization: `#foo` ≡ `[id="foo"]`, `[data-test="bar"]` ≡ `.class[data-test="bar"]` (B-026)
+- `docs/specs/FEATURE_SPEC_semantic_scraper.md` — Full design document for the semantic scraper transition
+- `CONTEXT.md` — Updated architecture section with three-layer scraping + resolver pipeline
+- `README.md` — Added "Semantic Scraper" feature bullet
+- `docs/ARCHITECTURE.md` — Updated `PageScraper` description + added `aria_parser.py`
+
 ### Changed
+- **Resolver accuracy improved**: 53.7% → 58.2% (+4.5pp, RAG off). LV Insurance: 83.3% → 95.8% (+12.5pp).
+  - `_build_haystack`: added `id`, `accessible_name` + camelCase splitting
+  - `_structural_bonus`: single-word ID match bonus (+15), `ref`→`reference` expansion, fixed camelCase ordering
+  - `_split_camel_case()`: splits `quoteRef`→"quote Ref", `usageType`→"usage Type"
+- **B-004, B-019 closed**: both fixed by architecture evolution (skeleton-first pipeline + semantic scraper)
+- Self-healing: `HealingReport` gains `interactive_repair_candidates` field for Phase 2b fallback
+- Roadmap hygiene: AI-028/AI-029/Phase 3 RAG/B-021 sub-checkboxes ticked, Phase 5 dataset expansion marked done, dual-tier eval marked `[R]` removed
+- lv_insurance eval-005: **54.2% → 79.2%** (+25.0pp)
+- Static eval harness: **79.1% → 88.1%** (+9.0pp vs baseline)
+- `SCRAPER_BACKEND` env var now defaults to ARIA-hybrid; set to `bs4` for old behavior
 - **Refactor 2026-07-11 — Journey scraper split:** `journey_scraper.py` (896→617 lines) split into 3 focused modules:
   - `src/journey_enrichment.py` — `capture_element_visibility_sync`, `capture_a11y_snapshot_sync` (deduplicated from `journey_executor.py`)
   - `src/cart_seeding_scraper.py` — `CartSeedingScraper` class (resolved circular import with `journey_scraper.py`)

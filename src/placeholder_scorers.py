@@ -208,13 +208,23 @@ class PlaceholderScorer:
 
     @staticmethod
     def _build_haystack(element: dict[str, Any]) -> str:
-        """Build the haystack string for an element (mirrors PlaceholderResolver logic)."""
+        """Build the haystack string for an element.
+
+        Includes text attributes, element id, and CDP-accessible name.
+        Splits camelCase tokens so ``quoteRef`` matches ``quote reference``.
+        """
         parts: list[str] = []
-        for key in ("text", "name", "label", "placeholder", "title", "aria_label", "value"):
+        for key in ("text", "name", "label", "placeholder", "title", "aria_label", "value", "accessible_name"):
             val = str(element.get(key, "")).strip()
             if val:
                 parts.append(val)
-        return " ".join(parts)
+        # Include element id as searchable text (camelCase-split)
+        element_id = str(element.get("id", "")).strip()
+        if element_id:
+            parts.append(element_id)
+        raw = " ".join(parts)
+        # Split camelCase so "usageType" in name → "usage Type" in haystack
+        return SemanticMatcher._split_camel_case(raw)
 
     @staticmethod
     def _is_fillable(element: dict[str, Any]) -> bool:
@@ -261,8 +271,35 @@ class PlaceholderScorer:
         """Structural match bonus when data-test or id contains description keywords."""
         desc_words = SemanticMatcher.get_words(description)
         desc_content_words = desc_words - {"click", "tap", "press"} if action == "CLICK" else desc_words
-        data_test_words = set(str(element.get("data_test", "")).lower().replace("-", " ").replace("_", " ").split())
-        id_words = set(str(element.get("id", "")).lower().replace("-", " ").replace("_", " ").split())
+        raw_id = str(element.get("id", ""))
+        raw_dt = str(element.get("data_test", ""))
+        # Split camelCase BEFORE lowercasing, then normalise delimiters
+        id_words = set(SemanticMatcher._split_camel_case(raw_id).replace("_", " ").replace("-", " ").lower().split())
+        data_test_words = set(
+            SemanticMatcher._split_camel_case(raw_dt).replace("_", " ").replace("-", " ").lower().split()
+        )
+        # Expand common id abbreviations to their full forms
+        _id_expansions: dict[str, set[str]] = {"ref": {"reference"}, "ncd": {"claims", "discount", "bonus"}}
+        expanded_id: set[str] = set(id_words)
+        for word in id_words:
+            if word in _id_expansions:
+                expanded_id.update(_id_expansions[word])
+        id_words = expanded_id
+        expanded_dt: set[str] = set(data_test_words)
+        for word in data_test_words:
+            if word in _id_expansions:
+                expanded_dt.update(_id_expansions[word])
+        data_test_words = expanded_dt
+        structural_words = data_test_words | id_words
+        structural_content = structural_words & desc_content_words
+        match_count = len(structural_content)
+        if match_count >= 2:
+            return 80 + match_count * 5
+        if match_count == 1:
+            # Single-word ID match — weaker signal, but still meaningful
+            # (e.g. id=quoteRef matches "quote" in "quote reference number")
+            return 15
+        return 0
         structural_words = data_test_words | id_words
         structural_content = structural_words & desc_content_words
         if len(structural_content) >= 2:
