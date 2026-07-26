@@ -116,19 +116,25 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         # If the user already provided explicit, numbered acceptance criteria, prefer
         # a deterministic mapping (one condition per criterion) over speculative LLM
         # expansion. This keeps the generator aligned with user intent/baselines.
-        explicit_criteria = self._extract_numbered_criteria(spec_text)
+        explicit_criteria, criteria_source = self._extract_numbered_criteria(spec_text)
         if explicit_criteria:
             conditions: list[TestCondition] = []
             for idx, text in enumerate(explicit_criteria, start=1):
+                # Criteria split from unstructured/vague input need refinement.
+                # Tag them as exploratory so the tester knows to add specifics.
+                c_type: ConditionType = "exploratory" if criteria_source == "unstructured" else "happy_path"
+                c_flagged = criteria_source == "unstructured"
                 conditions.append(
                     TestCondition(
                         id=f"TC01.{idx:02d}",
-                        type="happy_path",
+                        type=c_type,
                         text=text,
-                        expected="Meets acceptance criteria.",
+                        expected="Needs refinement — add boundary values, URLs, and expected behaviour."
+                        if criteria_source == "unstructured"
+                        else "Meets acceptance criteria.",
                         source=f"Acceptance Criteria {idx}",
-                        flagged=False,
-                        src="manual",
+                        flagged=c_flagged,
+                        src=("ai" if criteria_source == "unstructured" else "manual"),
                         intent=infer_condition_intent(text),
                     )
                 )
@@ -144,14 +150,15 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
             raise RuntimeError(f"Spec analysis failed: {str(e)}") from e
 
     @staticmethod
-    def _extract_numbered_criteria(spec_text: str) -> list[str]:
+    def _extract_numbered_criteria(spec_text: str) -> tuple[list[str], str]:
         """Extract numbered acceptance criteria lines from spec_text.
 
-        Returns a list like ["Add items to cart", "Go to cart", ...] or [] if not found.
+        Returns (items, source) where source is "numbered" (explicit list),
+        "unstructured" (split from vague input), or "none" (no items found).
         """
         text = (spec_text or "").strip()
         if not text:
-            return []
+            return [], "none"
 
         # Try to isolate the acceptance criteria section if present.
         # Handles common headings:
@@ -190,9 +197,16 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         if not expanded_criteria:
             split_criteria = SpecAnalyzer._split_unstructured_criteria(section)
             if split_criteria:
-                return split_criteria
+                return split_criteria, "unstructured"
 
-        return expanded_criteria
+        # If we had numbered lines (even if comma-expanded), source is "numbered".
+        # Exception: a single numbered item that was comma-expanded means
+        # the original input was vague — treat it as "unstructured".
+        if criteria:
+            was_expanded = len(expanded_criteria) > len(criteria)
+            single_item_expanded = len(criteria) == 1 and was_expanded
+            return expanded_criteria, "unstructured" if single_item_expanded else "numbered"
+        return [], "none"
 
     @staticmethod
     def _split_unstructured_criteria(text: str) -> list[str] | None:
@@ -266,7 +280,7 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                         text=str(item_dict.get("text", "Unknown condition")),
                         expected=str(item_dict.get("expected", "Pass")),
                         source=str(item_dict.get("source", "Implicit")),
-                        flagged=bool(item_dict.get("flagged", ctype == "ambiguity")),
+                        flagged=bool(item_dict.get("flagged", ctype in ("ambiguity", "exploratory"))),
                         src=str(item_dict.get("src", "ai")),  # type: ignore[arg-type]
                         intent=self._normalise_intent(item_dict.get("intent"), str(item_dict.get("text", ""))),
                     )

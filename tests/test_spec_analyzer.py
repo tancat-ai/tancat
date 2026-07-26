@@ -225,6 +225,10 @@ Acceptance Criteria:
     conditions = analyzer.analyze(spec_text)
     assert len(conditions) == 3, f"Expected 3 conditions, got {len(conditions)}"
     assert [c.id for c in conditions] == ["TC01.01", "TC01.02", "TC01.03"]
+    # Single numbered item that was comma-expanded -> treated as unstructured
+    assert all(c.type == "exploratory" for c in conditions)
+    assert all(c.flagged for c in conditions)
+    assert all(c.src == "ai" for c in conditions)
     assert "amount" in conditions[0].text.lower()
     assert "quantity" in conditions[1].text.lower()
     assert "filter" in conditions[2].text.lower()
