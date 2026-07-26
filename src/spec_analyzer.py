@@ -173,14 +173,26 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                 continue
             criteria.append(m.group(2).strip())
 
+        # Expand any criterion that itself contains comma-separated or
+        # "and"-separated concerns into multiple criteria.
+        # Handles cases where parse_requirements_text wraps the whole
+        # input as a single numbered item ("1. X, Y and Z").
+        expanded_criteria: list[str] = []
+        for item in criteria:
+            sub_items = SpecAnalyzer._split_unstructured_criteria(item)
+            if sub_items:
+                expanded_criteria.extend(sub_items)
+            else:
+                expanded_criteria.append(item)
+
         # Fallback: try to split unstructured text into separate criteria.
         # Handles patterns like "changes around X, Y and Z" → ["X", "Y", "Z"].
-        if not criteria:
+        if not expanded_criteria:
             split_criteria = SpecAnalyzer._split_unstructured_criteria(section)
             if split_criteria:
                 return split_criteria
 
-        return criteria
+        return expanded_criteria
 
     @staticmethod
     def _split_unstructured_criteria(text: str) -> list[str] | None:

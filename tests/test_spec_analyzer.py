@@ -203,3 +203,29 @@ changes made to the site around maximum amount of items purchaseable, maximum qu
     assert "filter" in conditions[2].text.lower()
     # Should bypass LLM entirely
     mock_llm.generate_test.assert_not_called()
+
+
+def test_analyze_splits_parse_requirements_text_output() -> None:
+    """Handle the case where parse_requirements_text wraps input as '1. X, Y and Z'.
+
+    This simulates what actually happens with the user's input:
+    FeatureParser parses unstructured text → produces "1. X, Y and Z" →
+    _extract_numbered_criteria finds 1 item → expansion logic splits it.
+    """
+    mock_llm = MagicMock()
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+
+    # This is what parse_requirements_text actually produces
+    spec_text = """User Story:
+changes made to the site around maximum amount of items purchaseable, maximum quantity of items and filters.
+
+Acceptance Criteria:
+1. changes made to the site around maximum amount of items purchaseable, maximum quantity of items and filters."""
+
+    conditions = analyzer.analyze(spec_text)
+    assert len(conditions) == 3, f"Expected 3 conditions, got {len(conditions)}"
+    assert [c.id for c in conditions] == ["TC01.01", "TC01.02", "TC01.03"]
+    assert "amount" in conditions[0].text.lower()
+    assert "quantity" in conditions[1].text.lower()
+    assert "filter" in conditions[2].text.lower()
+    mock_llm.generate_test.assert_not_called()
