@@ -863,6 +863,35 @@ Expected: three focused test cases:
 
 ---
 
+## 🆕 AI-034 — Test Table Generation & Pre-Flight Resolution Reporting
+
+**Status:** 🆕 new  
+**Priority:** High — bridges plan-to-skeleton gap  
+**Spec:** `docs/specs/FEATURE_SPEC_AI034_test_table_preflight.md`  
+**Impact:** Prevents silent `pytest.skip()` by showing resolution failures BEFORE tests are generated
+
+**What:** Add a Test Table between Living Test Plan and skeleton generation.
+LLM expands each condition into one or more concrete test rows (e.g.,
+"4 filters" → 4 filter test rows). Pre-flight resolver checks each row
+against scraped DOM and shows `⚠ blocked` before any code is written.
+
+**Key decisions (grilling session 2026-07-26):**
+- One condition can spawn multiple test rows
+- Living Test Plan gets a "Tests" column showing count
+- Pre-flight resolves first; ⚠ blocked rows have Skip / Edit / Run anyway options
+- No self-healing — surface the mismatch, don't try to fix it
+- Run anyway → normal test failure (red ❌), same bug report pipeline
+
+**Phases:**
+1. Test Table generation (LLM expansion, data model, editor)
+2. Living Test Plan enhancement (Tests column, status propagation)
+3. Pre-flight resolution reporting (⚠ with DOM context, tester options)
+4. Skeleton generation (one function per row, intent-first placeholders)
+
+**Estimated sessions:** 3-4
+
+---
+
 ## 🟡 Active Improvements (Prioritised)
 
 ### AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
