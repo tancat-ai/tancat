@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.failure_classifier import FailureDetail, classify_failure
+from src.failure_classifier import FailureCategory, FailureDetail, classify_failure
 from src.llm_client import LLMClient
 from src.pytest_output_parser import RunResult, TestResult, parse_pytest_output
 
@@ -55,6 +55,9 @@ class HealingReport:
     iterations: int = 0
     patches: list[AppliedPatch] = field(default_factory=list)
     final_results: list[TestResult] = field(default_factory=list)
+    # Failures that are locator-type but couldn't be auto-fixed — candidates
+    # for interactive repair (opens browser, user clicks correct element).
+    interactive_repair_candidates: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def all_fixed(self) -> bool:
@@ -183,10 +186,21 @@ class SelfHealingRunner:
             for result in failed:
                 _progress(f"Reviewing: {result.name}...")
                 detail = classify_failure(result.error_message)
+
+                # Pre-screen: skip LLM for clearly unfixable failures
+                if not self._pre_screen_failure(detail):
+                    _progress(f"  ⏭ Pre-screened as unfixable ({detail.category})")
+                    report.unfixable += 1
+                    # Locator-type failures that skip LLM may still be interactive candidates
+                    self._maybe_add_interactive_candidate(report, result, detail)
+                    continue
+
                 patch = self._review_and_suggest(result, detail, test_source)
 
                 if patch is None:
                     report.unfixable += 1
+                    # If LLM couldn't fix a locator failure, offer interactive repair
+                    self._maybe_add_interactive_candidate(report, result, detail)
                     continue
 
                 # Apply the patch
@@ -255,6 +269,56 @@ class SelfHealingRunner:
             return RunResult(results=[], raw_output="pytest timed out after 300s")
 
         return parse_pytest_output(output)
+
+    # ------------------------------------------------------------------
+    # Internal: pre-screening
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _pre_screen_failure(detail: FailureDetail) -> bool:
+        """Pre-screen: return True if failure is worth sending to the LLM.
+
+        Skips the LLM call for failures that cannot be fixed by code changes:
+        - ASSERTION_FAILURE: logic/test error, not a locator issue
+        - NAVIGATION_ERROR: site down, connection refused — nothing to fix
+        - OTHER: unknown error with no actionable locator signal
+
+        LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review — the LLM
+        can suggest better selectors or disambiguation strategies.
+        """
+        if detail.category in (
+            FailureCategory.ASSERTION_FAILURE,
+            FailureCategory.NAVIGATION_ERROR,
+        ):
+            return False
+        if detail.category == FailureCategory.OTHER:
+            return False
+        # LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review
+        return True
+
+    @staticmethod
+    def _maybe_add_interactive_candidate(
+        report: HealingReport,
+        result: TestResult,
+        detail: FailureDetail,
+    ) -> None:
+        """Add failure to interactive repair candidates if it's a locator-type failure.
+
+        Only LOCATOR_TIMEOUT and STRICT_VIOLATION failures can benefit from
+        interactive repair (open browser → user clicks correct element → capture locator).
+        """
+        if detail.category in (
+            FailureCategory.LOCATOR_TIMEOUT,
+            FailureCategory.STRICT_VIOLATION,
+        ):
+            report.interactive_repair_candidates.append(
+                {
+                    "test_name": result.name,
+                    "raw_locator": detail.raw_locator,
+                    "error_message": detail.error_message,
+                    "failure_url": detail.failure_url,
+                }
+            )
 
     # ------------------------------------------------------------------
     # Internal: LLM reviewer

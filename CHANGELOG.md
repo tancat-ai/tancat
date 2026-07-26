@@ -10,6 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **Phase 2b Self-Healing**: Rule-based pre-screening (`_pre_screen_failure()`) skips LLM call for assertion/navigation/other failures (cost optimization). Interactive repair fallback via `interactive_repair_candidates` in `HealingReport` — locator failures the LLM can't fix flow seamlessly into the existing interactive locator repair UI. (18 new tests, 46 total).
 - **Semantic scraper (B-032)**: Three-layer hybrid extraction — BS4 (structure) + CDP AX tree (accessible_name) + `page.aria_snapshot(boxes=True)` (placeholder, value, bbox, groups). Enabled by default; `SCRAPER_BACKEND=bs4` to disable.
 - `src/aria_parser.py` — Parse Playwright's `aria_snapshot()` YAML output into standard element dicts (33 tests, all ARIA roles).
 - `src/element_matcher.py` — Resolver accuracy improvements (B-024/B-025):
@@ -25,6 +26,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - `docs/ARCHITECTURE.md` — Updated `PageScraper` description + added `aria_parser.py`
 
 ### Changed
+- Self-healing: `HealingReport` gains `interactive_repair_candidates` field for Phase 2b fallback
+- Roadmap hygiene: AI-028/AI-029/Phase 3 RAG/B-021 sub-checkboxes ticked, Phase 5 dataset expansion marked done, dual-tier eval marked `[R]` removed
 - Resolver accuracy: **46.3% → 55.2%** (+8.9pp, RAG off), **53.7% → 64.2%** (+10.5pp, RAG on)
 - lv_insurance eval-005: **54.2% → 79.2%** (+25.0pp)
 - Static eval harness: **79.1% → 88.1%** (+9.0pp vs baseline)
