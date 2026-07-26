@@ -173,7 +173,58 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                 continue
             criteria.append(m.group(2).strip())
 
+        # Fallback: try to split unstructured text into separate criteria.
+        # Handles patterns like "changes around X, Y and Z" → ["X", "Y", "Z"].
+        if not criteria:
+            split_criteria = SpecAnalyzer._split_unstructured_criteria(section)
+            if split_criteria:
+                return split_criteria
+
         return criteria
+
+    @staticmethod
+    def _split_unstructured_criteria(text: str) -> list[str] | None:
+        """Try to split unstructured criteria text into multiple criteria.
+
+        Detects single-sentence comma-separated or "and"-separated lists of
+        distinct test concerns and returns them as individual items.
+
+        Example:
+            Input: "changes around max items, max quantity of items and filters"
+            Output: ["max items", "max quantity of items", "filters"]
+        """
+        text = text.strip()
+        if not text:
+            return None
+
+        # Skip multi-line text (already has structure like paragraphs)
+        if len(text.splitlines()) > 1:
+            return None
+
+        # Skip if already has numbered items or bullet points
+        if re.search(r"^\s*(\d+\.|[-*])\s", text, re.M):
+            return None
+
+        # Need at least one comma or " and " to suggest multiple concerns
+        if "," not in text and " and " not in text:
+            return None
+
+        # Split on commas first
+        parts = [p.strip() for p in text.split(",")]
+
+        # Expand " and " segments: "Y and Z" → ["Y", "Z"]
+        expanded: list[str] = []
+        for part in parts:
+            if " and " in part:
+                sub_parts = [p.strip().rstrip(".") for p in part.split(" and ")]
+                expanded.extend(sub_parts)
+            else:
+                expanded.append(part.rstrip("."))
+
+        # Filter out empty or too-short parts (minimum 3 chars)
+        result = [p for p in expanded if p and len(p) > 2]
+
+        return result if len(result) >= 2 else None
 
     def _parse_response(self, response: str) -> list[TestCondition]:
         """Parse LLM JSON response into TestCondition objects."""

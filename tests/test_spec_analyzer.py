@@ -150,3 +150,56 @@ def test_infer_condition_intent_maps_common_testing_shapes() -> None:
     assert infer_condition_intent("Check items are added correctly") == "state_assertion"
     assert infer_condition_intent("Go to checkout") == "journey_step"
     assert infer_condition_intent("Check out successfully") == "journey_outcome"
+
+
+# ── B-027: Unstructured comma-separated criteria ─────────────────────────
+
+
+def test_split_unstructured_criteria_comma_and_separated() -> None:
+    """Comma + 'and'-separated concerns are split into multiple criteria."""
+    text = "changes around max items, max quantity of items and filters"
+    result = SpecAnalyzer._split_unstructured_criteria(text)
+    assert result is not None
+    assert len(result) == 3
+    assert result[0] == "changes around max items"
+    assert result[1] == "max quantity of items"
+    assert "filters" in result[2]
+
+
+def test_split_unstructured_criteria_single_item_returns_none() -> None:
+    """Single concern without commas or 'and' returns None."""
+    result = SpecAnalyzer._split_unstructured_criteria("test the login page")
+    assert result is None
+
+
+def test_split_unstructured_criteria_numbered_list_returns_none() -> None:
+    """Already-numbered list returns None (should use existing logic)."""
+    result = SpecAnalyzer._split_unstructured_criteria("1. do thing\n2. do other")
+    assert result is None
+
+
+def test_split_unstructured_criteria_multi_line_returns_none() -> None:
+    """Multi-line text returns None (already has structure)."""
+    result = SpecAnalyzer._split_unstructured_criteria("login functionality\ncheckout flow")
+    assert result is None
+
+
+def test_analyze_splits_comma_separated_unstructured_input() -> None:
+    """Full analyze() flow splits comma-separated concerns into separate conditions."""
+    mock_llm = MagicMock()
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+
+    spec_text = """User Story:
+As a user I want to test site changes
+
+Acceptance Criteria:
+changes made to the site around maximum amount of items purchaseable, maximum quantity of items and filters."""
+
+    conditions = analyzer.analyze(spec_text)
+    assert len(conditions) == 3
+    assert [c.id for c in conditions] == ["TC01.01", "TC01.02", "TC01.03"]
+    assert "amount" in conditions[0].text.lower()
+    assert "quantity" in conditions[1].text.lower()
+    assert "filter" in conditions[2].text.lower()
+    # Should bypass LLM entirely
+    mock_llm.generate_test.assert_not_called()
