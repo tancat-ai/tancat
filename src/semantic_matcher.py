@@ -130,6 +130,19 @@ class SemanticMatcher:
     # --- Public helpers -------------------------------------------------------
 
     @staticmethod
+    def _split_camel_case(text: str) -> str:
+        """Split camelCase and PascalCase tokens with spaces.
+
+        ``quoteRef`` → ``quote Ref``, ``usageType`` → ``usage Type``,
+        ``LVQ-000000`` unchanged.
+        """
+        # Insert space before uppercase letters that follow lowercase letters
+        # or before uppercase sequences followed by lowercase (acronym split).
+        result = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+        result = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", result)
+        return result
+
+    @staticmethod
     def get_words(text: str, *, expand_aliases: bool = True) -> set[str]:
         """Return expanded, normalised word tokens for *text*.
 

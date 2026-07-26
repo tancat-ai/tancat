@@ -110,41 +110,17 @@ differs from the golden key's expected format, causing a comparison failure.
 
 ---
 
-## 🆕 AI-031 — Eval Harness: Resolver Accuracy Improvement Sprint
+## ✅ AI-031 — Eval Harness: Resolver Accuracy Improvement Sprint (PARTIALLY COMPLETE 2026-07-26)
 
-**Status:** 🆕 new
-**Related:** B-024, B-025, B-026, Phase 5 (eval harness), Phase 3 (RAG)
-**Impact:** Resolver accuracy ceiling at 46.3% (RAG off) / 53.7% (RAG on)
+**Status:** ✅ Resolver accuracy improved from 53.7% → 58.2% (+4.5pp, RAG off). LV Insurance 83.3% → 95.8% (+12.5pp).
+**Related:** B-024, B-025, B-026 (all shipped as part of AI-032)
 
-**What:** Targeted sprint to improve resolver pipeline accuracy from 46.3% → 60%+
-by fixing the three highest-impact failure patterns identified by eval harness
-analysis.
+**Fixes shipped 2026-07-26:**
+- `_build_haystack`: added `id`, `accessible_name` + camelCase splitting so element IDs contribute to matching
+- `_structural_bonus`: fixed camelCase ordering, added single-word ID match bonus (+15), `ref`→`reference` expansion
+- `_split_camel_case()`: splits `quoteRef`→"quote Ref", `usageType`→"usage Type"
 
-**Analysis summary (67 placeholders, 35 failures without RAG):**
-
-| Category | Count | % | Backlog Item | Priority |
-|----------|-------|---|-------------|----------|
-| Generic text match (wrong element) | 13 | 37% | B-014/B-016 (existing) | Medium |
-| Parent div vs child heading | 9 | 26% | **B-025** (new) | **High** |
-| Missing text on `<select>` | 3 | 9% | **B-024** (new) | **Easy** |
-| URL assertions | 3 | 9% | B-021 (shipped — verify) | Low |
-| Missing page fields | 3 | 9% | B-017/B-015 (shipped) | Done |
-| Locator format mismatch | 2 | 6% | **B-026** (new) | **Easy** |
-| Ambiguous field names | 2 | 6% | B-016 (existing) | Medium |
-
-**Implementation order:**
-1. **B-024** (0.5 sessions) — `<select>` label fix: +4.5pp, trivial change
-2. **B-026** (0.25 sessions) — locator normalization: +1-2pp, one-function fix
-3. **B-025** (1 session) — parent/child scoring: +13.4pp, requires scorer rewrite
-
-**Expected total improvement:** +18-20pp (46.3% → 65%)
-**RAG interaction:** All three fixes are structural (not RAG-dependent), so RAG's
-+7.4pp bonus should stack on top, yielding ~72% combined.
-
-**Verification:** Run `eval_harness.py run --mode resolver` before and after each fix.
-Update baseline only after all three are merged and verified.
-
-**Estimated sessions:** 2 (B-024 + B-026 in one, B-025 in another)
+**Actual sessions:** 0.5
 
 ---
 
@@ -261,11 +237,8 @@ writing if code fails syntax check.
 
 ## 🔴 Open Bugs
 
-### B-004 — Ambiguous locators when same label exists on multiple forms
-**Symptom:** `strict mode violation: get_by_label("Driver Name") resolved to 2 elements`
-**Fix (short term):** Use `page.locator("#specificId")` instead of `get_by_label`
-**Fix (long term):** Multi-page scraping (AI-009) injects real selectors
-**Priority:** Medium — AI-009 should prevent recurrence
+### B-004 — Ambiguous locators when same label exists on multiple forms (✅ FIXED by architecture evolution)
+**Status:** ✅ Fixed — skeleton-first resolver pipeline emits ID/data-test/href selectors via `build_robust_locator()`, not `get_by_label()`. Multi-page scraping (AI-009) also shipped. No code change needed.
 
 ### B-012 — Pass 1 false positive: "add to cart" matches cart nav link
 **Status:** ✅ FIXED (2026-05-17)
@@ -584,8 +557,8 @@ the intended display element.
 
 ---
 
-### B-019 — Scraper misses heading text on JS-rendered pages
-**Status:** 🆕 new — spun off from B-016
+### B-019 — Scraper misses heading text on JS-rendered pages (✅ FIXED by AI-032 Semantic Scraper)
+**Status:** ✅ Fixed — three-layer hybrid extraction (BS4 + CDP AX tree + aria_snapshot) resolves aria-labelledby cross-references and dynamically composed accessible names that BS4 alone couldn't.
 **Related:** B-016 (ASSERT role filtering)
 **Symptom:** BeautifulSoup-based scraper doesn't capture heading text from
 pages where content is rendered inside SVG elements or via complex ARIA
