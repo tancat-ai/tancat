@@ -2,7 +2,9 @@
 
 ## High-Level Purpose
 
-Primary intelligent generation pipeline for the Streamlit app. Coordinates the full skeleton-first test generation workflow: parses user stories into test conditions, generates skeleton code with placeholders, scrapes target URLs for DOM metadata, resolves placeholders to real selectors, post-processes code, and saves output. Supports both single-condition and multi-condition (combined) skeleton generation.
+Primary intelligent generation pipeline for the Streamlit app. Coordinates the full skeleton-first test generation workflow: parses user stories into test conditions, generates skeleton code with placeholders, scrapes target URLs for DOM metadata, resolves placeholders to real selectors, post-processes code, and saves output.
+
+**Phase 1c (2026-07-26):** Now supports dual-path execution — linear pipeline (default fallback) and multi-agent `PipelineGraph` (default when langgraph installed). `LANGGRAPH_ENABLED=0` forces linear mode. See `run_pipeline_via_graph()` and `resume_graph()` for the graph path.
 
 ## Module Metadata
 
