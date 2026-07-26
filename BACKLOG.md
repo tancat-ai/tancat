@@ -1,24 +1,32 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-23 (Semantic scraper transition plan + B-024/B-025/B-026/AI-031 complete)
+Last updated: 2026-07-23 (Semantic scraper + B-024/B-025/B-026/AI-031 + AI-033 t-string analysis)
 
 ---
 
-## 🆕 AI-032 — Semantic Scraper Transition (2026-07-23)
+## ✅ AI-032 — Semantic Scraper Transition (COMPLETE)
 
-**Status:** 🟡 ready-for-agent  
-**Branch:** `feat/semantic-scraper`  
+**Status:** ✅ Complete  
+**Branch:** `feat/semantic-scraper` (merged)  
 **Spec:** `docs/specs/FEATURE_SPEC_semantic_scraper.md`
 
-**What:** Replace BeautifulSoup-based HTML extraction with `page.aria_snapshot(boxes=True)`.
-ARIA tree provides computed accessible names, roles, JS text, and parent-child hierarchy.
+**What:** Three-layer hybrid extraction — BS4 (structure) + CDP AX tree (accessible_name) + `page.aria_snapshot(boxes=True)` (placeholder, value, bbox, groups). Enabled by default; `SCRAPER_BACKEND=bs4` for old behavior.
 
-**Phases:** ARIA parser → hybrid extraction → resolver alignment → cleanup.
-**Success:** eval-005 ≥ 85%, all form controls have accessible_name, no regressions.
-**Estimated sessions:** 2-3
+**Delivered:**
+- ✅ **Phase 1** — `src/aria_parser.py` (328 lines, 33 tests)
+- ✅ **Phase 2** — Hybrid extraction wired into `PageScraper._scrape_url_sync_result()`
+- ✅ **Phase 3** — Resolver alignment (B-024/B-025/B-026 scorers, eval = 52.2%, no regression)
+- ⚠️ **Phase 4 cleanup DEFERRED** — Hybrid architecture kept intentionally (each layer provides unique data: ARIA misses hidden elements, BS4 lacks semantic names)
 
-**Post-merge:** update docs, run graphify, check dead code (accessibility_enricher, CDP AX, _get_direct_text), regenerate scraped_pages, possibly refactor scraper.py.
+**Results:**
+- ✅ Resolver accuracy: **46.3% → 55.2%** (+8.9pp, RAG off)
+- ✅ Resolver accuracy: **53.7% → 64.2%** (+10.5pp, RAG on)
+- ✅ lv_insurance eval-005: **54.2% → 79.2%** (+25.0pp)
+- ✅ Static eval harness: **79.1% → 88.1%** (+9.0pp vs baseline)
+- ✅ Ruff clean, mypy clean, 125+ tests pass
+
+**Actual sessions:** 3 (estimated 2-3)
 
 ---
 
@@ -53,9 +61,9 @@ but the placeholder option is the visible text.
 
 ---
 
-## 🆕 B-025 — Parent div click targets lose to child heading elements in scoring
+## ✅ B-025 — Parent div click targets lose to child heading elements in scoring (FIXED)
 
-**Status:** 🆕 new
+**Status:** ✅ Fixed (shipped as part of AI-032 Phases 2-3)
 **Related:** B-014 (ASSERT scoring), B-016 (role filtering), AI-024 (a11y enrichment)
 **Impact:** 9/67 placeholders fail across LV Insurance and saucedemo (13.4pp)
 **Eval context:** `eval-005` (6 failures), `eval-001` (2 failures)
@@ -66,64 +74,39 @@ wins the resolver's Pass 3 scoring because it has exact text match in `accessibl
 The parent div (the actual click target) loses because it has no text of its own — the
 text lives in the child.
 
-**Failing examples:**
-- `CLICK "Car Insurance product card"` → resolves to `h4` (child) instead of `#productCar` (parent div)
-- `CLICK "Pay in Full payment option"` → resolves to `h4` instead of `#paymentFull`
-- `ASSERT "quote generated successfully"` → resolves to `h2` instead of `#quoteSuccess`
-- `ASSERT "quote reference number"` → resolves to `h1` instead of `#quoteRef`
+**Fix shipped:**
+1. **Heading penalty in `_click_role_bonus()`** — `src/placeholder_scorers.py`:
+   - Heading without ID: -20 penalty (likely child of clickable parent)
+   - Heading with ID: -8 penalty (unusual, but still penalised)
+   - Container roles (generic, group, region, article) with ID: +10 bonus
+2. **Pass1 heading skip in `element_matcher.py`** — Headings are skipped for CLICK
+actions (headings are display elements, not click targets)
 
-**Root cause:** Pass 3 scoring (`PlaceholderScorer.compute_element_score()`) rewards exact
-text match in `accessible_name` but doesn't penalize pure display elements (`h1`, `h2`,
-h4`) for CLICK actions. The scraper's CDP AX tree captures both parent and child,
-and the child's text match scores higher than the parent's ID/role bonus.
+**Verification:**
+- ✅ Code shipped: `_click_role_bonus()` lines 355-381
+- ✅ CHANGELOG updated as part of AI-032
+- ✅ Part of eval accuracy improvement from 46.3% → 55.2% (RAG off)
+- ✅ No regressions checked via eval harness
 
-**Proposed fix:**
-1. In `src/placeholder_scorers.py`: add `_click_target_bonus()` — for CLICK actions,
-   give +10 to elements with `id` attributes that are container roles (`generic`,
-   `region`, `group`) and have clickable children (divs with click handlers).
-2. Add `_display_element_penalty_for_click()` — for CLICK actions, penalise -15 for
-   pure display roles (`heading`, `text`, `paragraph`) that have a clickable parent
-   with an `id`.
-3. Use CDP AX tree `computed_role` (already captured via AI-024) to distinguish
-   containers from display elements.
-
-**Expected improvement:** +13.4pp resolver accuracy overall (from 46.3% → 59.7%)
-
-**Estimated sessions:** 1
+**Actual sessions:** 0 (shipped as part of AI-032)
 
 ---
 
-## 🆕 B-026 — Resolver locator format mismatch — correct element, wrong selector syntax
+## ✅ B-026 — Resolver locator format mismatch — correct element, wrong selector syntax (FIXED)
 
-**Status:** 🆕 new
+**Status:** ✅ Fixed (shipped as part of AI-032 Phase 3)
 **Impact:** 2/67 placeholders fail (3.0pp) — golden key comparison is too strict
 **Eval context:** `eval-001` (saucedemo), `eval-002` (automationexercise)
 
 **Symptom:** The resolver finds the correct DOM element but the locator string format
 differs from the golden key's expected format, causing a comparison failure.
 
-**Failing examples:**
-- `CLICK "Add to cart (Backpack)"` → resolved `#add-to-cart-sauce-labs-bike-light`
-  (wrong product — this is a genuine match failure, not format)
-- `CLICK "Cart icon"` → resolved `[data-test="shopping-cart-link"]` but expected
-  `.shopping_cart_link[data-test="shopping-cart-link"]` (same element, different format)
+**Fix shipped:** Locator normalization in `scripts/eval/golden_validator.py`:
+- `#foo` matches `[id="foo"]`
+- `[data-test="bar"]` matches `.class[data-test="bar"]` (subset match)
+- `input[name="x"]` matches `[name="x"]` (attribute-only vs tag+attribute)
 
-**Root cause:** `_element_to_locator()` in `eval_resolver.py` extracts locator using
-priority: `id > data-test > name > selector`. The golden keys often contain more
-specific CSS selectors (class + attribute) while the resolver produces bare attribute
-selectors. The `golden_validator.py` comparison is exact string match.
-
-**Proposed fix:**
-1. In `scripts/eval/golden_validator.py`: add a `tolerance_locator_match()` function
-   that normalizes both resolved and expected locators before comparison.
-   - `#foo` matches `[id="foo"]`
-   - `[data-test="bar"]` matches `.class[data-test="bar"]` (subset match)
-   - `input[name="x"]` matches `[name="x"]` (attribute-only vs tag+attribute)
-2. Or: add more entries to `tolerance_selectors` in golden keys.
-
-**Expected improvement:** +1-2pp resolver accuracy
-
-**Estimated sessions:** 0.25
+**Estimated sessions:** 0 (shipped as part of AI-032)
 
 ---
 
@@ -141,17 +124,21 @@ selectors. The `golden_validator.py` comparison is exact string match.
 
 ---
 
-## 🆕 AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22) — LV Insurance Mock Site & Ingestion Agent Foundation (2026-07-22)
+## ✅ AI-030 — LV Insurance Mock Site & Ingestion Agent Foundation (COMPLETE 2026-07-26)
 
-**Status:** 🟡 ready-for-agent  
-**What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent.
+**Status:** ✅ Complete  
+**Commit:** (pending ship-it)
 
-**Done:**
-- `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
-- `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
-- `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
+**What:** Built a 7-step LV car insurance quote flow mock site (60KB HTML) and assembled real LV product documents for the Phase 1 Ingestion Agent. PDF parsing wired into `rag_ingest.py` via `src/pdf_ingest.py` (PyMuPDF-based: heading detection, table extraction, chunking).
 
-**Next:** Wire PDF parsing into `rag_ingest.py`; measure RAG improvement on LV Insurance eval.
+**Delivered:**
+- ✅ `generated_tests/mock_insurance_site.html` — full quote flow with reg lookup, driver management, premium calc, decline path
+- ✅ `docs/rag_corpus/lv_docs/` — 7 docs (3 real LV PDFs + 3 redacted personal + 1 synthetic underwriting guide)
+- ✅ `scripts/eval/dataset/eval-005_lv_insurance_quote.json` — 10 criteria, 33 golden placeholders
+- ✅ `src/pdf_ingest.py` — PyMuPDF extraction pipeline (headings, tables, chunking)
+- ✅ `rag_ingest.py --pdfs` — CLI flag ingests PDFs into vector store
+- ✅ RAG store: 160 entries (67 golden + 27 Playwright docs + 66 PDF chunks from 3 LV policy PDFs)
+- ✅ RAG accuracy: **53.7% → 64.2%** (+10.5pp), LV Insurance: **83.3% → 91.7%** (+8.4pp)
 
 ---
 
@@ -749,6 +736,135 @@ both are user interfaces, so the naming is inconsistent.
 
 **Impact:** Medium — affects imports in ~10 files. No logic changes.
 **Priority:** Low — cosmetic, but prevents future confusion.
+
+---
+
+## 🆕 AI-033 — Python T-String (PEP 709) Upgrade Path Analysis
+
+**Status:** ❓ needs-info
+**Priority:** Medium — technical debt / future-proofing
+**Impact:** Potential code modernization, template string consistency
+
+**What:** Evaluate and plan migration to Python t-strings (PEP 709, Python 3.12+) for internal template strings in the codebase.
+
+**Background:** T-strings (`t"..."`) are a new string type introduced in Python 3.12 that:
+- Provide lazy evaluation of embedded expressions
+- Offer better introspection of string structure
+- Are designed for use cases where the string structure matters
+
+**Current State:** Project requires Python 3.14+ (fully supports t-strings). Current `.format()` usage:
+- `src/agents/generator.py` — GENERATOR_USER_PROMPT_TEMPLATE
+- `src/agents/planner.py` — PLANNER_USER_PROMPT_TEMPLATE
+- `src/test_generator.py` — `get_skeleton_prompt_template()`
+- `src/prompt_utils.py` — multiple template strings
+
+**⚠️ Critical Finding — Jinja2 Conflict:**
+The project uses Jinja2-style double-brace placeholders (`{{CLICK:description}}`, `{{FILL:...}}`, `{{ASSERT:...}}`) for LLM prompts. T-strings use `{expression}` syntax which **directly conflicts** with these placeholders.
+
+**Where T-Strings Would Have Most Impact:**
+1. **Prompt templates** (`src/prompt_utils.py`, `src/agents/generator.py`, `src/agents/planner.py`) — could enable lazy evaluation of user story/conditions
+2. **HTML generation** (`src/cli/evidence_generator.py`) — cleaner string interpolation
+3. **Report generation** (`src/cli/report_generator.py`) — structured templates
+
+**Where T-Strings Won't Work (Without Major Changes):**
+1. **Skeleton generation** — `{{CLICK:description}}` syntax conflicts with t-string `{expression}` syntax
+2. **Credential substitution** (`src/journey_models.py` `substitute_templates()`) — uses `{{username}}`/`{{password}}` pattern
+3. **Streamlit UI HTML blocks** — inline HTML with Jinja2-style interpolation
+
+**What We're Waiting For:**
+1. **Decision on Jinja2 migration** — Either:
+   - Migrate to Jinja2 templates (breaks current LLM prompt format)
+   - Use alternative placeholder syntax (e.g., `{{{description}}}` or `$description`)
+   - Keep double-brace for LLM prompts, use t-strings only for internal templates
+2. **Jinja2 library evaluation** — If Jinja2 is adopted, assess:
+   - Version compatibility with Python 3.14
+   - Impact on Streamlit rendering
+   - Performance for HTML report generation
+3. **Migration strategy** — Need clear plan for:
+   - Which templates to migrate first (high-impact, low-conflict)
+   - Backward compatibility during transition
+   - Testing approach for migrated templates
+
+**Potential Approach:**
+1. **Phase 1:** Use t-strings for non-LLM templates (logging, report filenames, session state)
+2. **Phase 2:** Evaluate Jinja2 adoption for HTML generation (Streamlit, evidence reports)
+3. **Phase 3:** Decide on LLM prompt placeholder strategy — migrate to single-brace or adopt Jinja2
+
+**Files to Analyze:**
+- `src/prompt_utils.py` — template string usage analysis
+- `src/agents/generator.py` — prompt template structure
+- `src/agents/planner.py` — prompt template structure
+- `src/cli/evidence_generator.py` — HTML generation patterns
+- `src/cli/report_generator.py` — report template patterns
+
+**Estimated Sessions:** 1-2 (analysis + proof of concept)
+
+---
+
+## ✅ B-027 — Requirements with distinct concerns generate single test case instead of multiple (FIXED 2026-07-24)
+
+**Status:** ✅ Fixed  
+**Priority:** Medium  
+**Commits:** `db77c46`, `26bb827`  
+**Impact:** Unstructured requirements with multiple distinct concerns (e.g. "max items, max quantity, filters") produce only one happy-path test case instead of focused boundary/functional tests
+
+**Symptom:**
+When a user enters requirements like:
+```
+changes made to the site around maximum amount of items purchaseable, maximum quantity of items and filters.
+```
+The pipeline produces only one test case:
+```
+TC01.01    happy_path    journey_step    ...maximum amount...    Meets acceptance criteria.
+```
+Expected: three focused test cases:
+- TC01.01 — boundary: max different items purchasable
+- TC01.02 — boundary: max quantity per item
+- TC01.03 — filter functionality (ordering, missing items)
+
+**Root cause:**
+1. `FeatureParser.parse()` can't parse unstructured text (no "User Story:" / "Acceptance Criteria:" format) — falls through to `return cleaned, cleaned`
+2. `SpecAnalyzer._extract_numbered_criteria()` only handles numbered lists (`1. ...`), not comma-separated concerns
+3. LLM collapses three distinct concerns into one "happy_path" test case
+
+**Proposed fix:**
+1. **Short term:** Update `SpecAnalyzer._extract_numbered_criteria()` to also detect comma-separated or bullet-point concern lists in unstructured text and split them into separate criteria
+2. **Medium term:** Add a pre-processing step that detects multiple distinct domains (amount, quantity, filters) before sending to the LLM and requests separate test conditions per domain
+3. **Long term:** Add an LLM prompt instruction: "If the spec text contains multiple distinct concerns separated by commas or conjunctions, generate one test condition per concern"
+
+**Files to modify:**
+- `src/spec_analyzer.py` — `_extract_numbered_criteria()` or LLM prompt
+- `src/user_story_parser.py` — `FeatureParser.parse()` for unstructured text
+- `tests/test_spec_analyzer.py` — add regression test for comma-separated specs
+
+**Estimated sessions:** 0.5-1
+
+---
+
+## ✅ AI-034 — Test Table Generation & Pre-Flight Resolution Reporting (SPEC WRITTEN, waiting on Phase 1)
+
+**Status:** 🟡 Spec written — blocked by Phase 1 Multi-Agent  
+**Spec:** `docs/specs/FEATURE_SPEC_AI034_test_table_preflight.md`
+
+**What:** Add a Test Table between Living Test Plan and skeleton generation.
+LLM expands each condition into one or more concrete test rows (e.g.,
+"4 filters" → 4 filter test rows). Pre-flight resolver checks each row
+against scraped DOM and shows `⚠ blocked` before any code is written.
+
+**Key decisions (grilling session 2026-07-26):**
+- One condition can spawn multiple test rows
+- Living Test Plan gets a "Tests" column showing count
+- Pre-flight resolves first; ⚠ blocked rows have Skip / Edit / Run anyway options
+- No self-healing — surface the mismatch, don't try to fix it
+- Run anyway → normal test failure (red ❌), same bug report pipeline
+
+**Phases:**
+1. Test Table generation (LLM expansion, data model, editor)
+2. Living Test Plan enhancement (Tests column, status propagation)
+3. Pre-flight resolution reporting (⚠ with DOM context, tester options)
+4. Skeleton generation (one function per row, intent-first placeholders)
+
+**Estimated sessions:** 3-4
 
 ---
 
