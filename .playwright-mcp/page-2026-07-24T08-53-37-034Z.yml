@@ -1,0 +1,152 @@
+- generic [ref=f1e2]:
+  - generic [ref=f1e3]:
+    - link "Skip to content" [ref=f1e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f1e6]:
+      - heading "Navigation Menu" [level=2] [ref=f1e7]
+      - generic [ref=f1e8]:
+        - link "Homepage" [ref=f1e10] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f1e13]:
+          - navigation "Global" [ref=f1e16]:
+            - list [ref=f1e17]:
+              - listitem [ref=f1e18]:
+                - button "Platform" [ref=f1e20] [cursor=pointer]
+              - listitem [ref=f1e23]:
+                - button "Solutions" [ref=f1e25] [cursor=pointer]
+              - listitem [ref=f1e28]:
+                - button "Resources" [ref=f1e30] [cursor=pointer]
+              - listitem [ref=f1e33]:
+                - button "Open Source" [ref=f1e35] [cursor=pointer]
+              - listitem [ref=f1e38]:
+                - button "Enterprise" [ref=f1e40] [cursor=pointer]
+              - listitem [ref=f1e43]:
+                - link "Pricing" [ref=f1e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=f1e46]:
+            - button "Search or jump to…" [ref=f1e49] [cursor=pointer]
+            - link "Sign in" [ref=f1e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Factions%2Fruns%2F30080271365%2Fjob%2F89440451065
+            - link "Sign up" [ref=f1e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Factions%2Fjob%2Findex&source=header-repo&source_repo=lacattano%2FAI-Playwright-Test-Generator
+            - button "Appearance settings" [disabled] [ref=f1e58]
+  - main [ref=f1e62]:
+    - generic [ref=f1e63]:
+      - generic [ref=f1e64]:
+        - generic [ref=f1e65]:
+          - generic [ref=f1e67]:
+            - link "lacattano" [ref=f1e71] [cursor=pointer]:
+              - /url: /lacattano
+            - generic [ref=f1e72]: /
+            - strong [ref=f1e73]:
+              - link "AI-Playwright-Test-Generator" [ref=f1e74] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator
+            - generic [ref=f1e75]: Public
+          - generic [ref=f1e76]:
+            - list:
+              - listitem [ref=f1e77]:
+                - link "You must be signed in to change notification settings" [ref=f1e78] [cursor=pointer]:
+                  - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                  - text: Notifications
+              - listitem [ref=f1e81]:
+                - link "Fork 0" [ref=f1e82] [cursor=pointer]:
+                  - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                  - text: Fork
+                  - generic "0" [ref=f1e85]
+              - listitem [ref=f1e86]:
+                - link "You must be signed in to star a repository" [ref=f1e88] [cursor=pointer]:
+                  - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                  - text: Star
+                  - generic "0 users starred this repository" [ref=f1e91]: "0"
+        - navigation "Repository" [ref=f1e92]:
+          - list [ref=f1e93]:
+            - listitem [ref=f1e94]:
+              - link "Code" [ref=f1e95] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator
+            - listitem [ref=f1e99]:
+              - link "Issues" [ref=f1e100] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/issues
+            - listitem [ref=f1e105]:
+              - link "Pull requests" [ref=f1e106] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/pulls
+            - listitem [ref=f1e110]:
+              - link "Actions" [ref=f1e111] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/actions
+            - listitem [ref=f1e115]:
+              - link "Projects" [ref=f1e116] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/projects
+            - listitem [ref=f1e120]:
+              - link "Security and quality" [ref=f1e121] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/security
+            - listitem [ref=f1e125]:
+              - link "Insights" [ref=f1e126] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/pulse
+      - generic [ref=f1e134]:
+        - generic [ref=f1e137]:
+          - link "CI/CD Pipeline" [ref=f1e140] [cursor=pointer]:
+            - /url: /lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml
+          - generic [ref=f1e144]:
+            - generic [ref=f1e145]:
+              - img "failed:" [ref=f1e149]
+              - 'heading "docs: update markdown_docs for semantic scraper + resolver fixes #197" [level=1] [ref=f1e151]'
+            - link "Sign in to view logs" [ref=f1e155] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Factions%2Fruns%2F30080271365%2Fjob%2F89440451065
+        - region "Check run summary" [ref=f1e159]:
+          - generic [ref=f1e160]:
+            - region "Annotations" [ref=f1e162]:
+              - generic [ref=f1e166]:
+                - button "Open job annotations" [ref=f1e168] [cursor=pointer]
+                - generic [ref=f1e173]:
+                  - heading "Annotations" [level=2] [ref=f1e174]
+                  - generic [ref=f1e175]: 1 error and 2 warnings
+            - generic [ref=f1e177]:
+              - generic [ref=f1e179]:
+                - link "PyTest + Coverage" [ref=f1e182] [cursor=pointer]:
+                  - /url: "#logs"
+                - generic [ref=f1e184]: failed Jul 24, 20261 minute ago in 1m 12s
+              - generic [ref=f1e186]:
+                - generic [ref=f1e187]:
+                  - group:
+                    - generic "Set up job"
+                - generic [ref=f1e188]:
+                  - group:
+                    - generic "Checkout repository"
+                - generic [ref=f1e189]:
+                  - group:
+                    - generic "Set up Python 3.14"
+                - generic [ref=f1e190]:
+                  - group:
+                    - generic "Install uv"
+                - generic [ref=f1e191]:
+                  - group:
+                    - generic "Install dependencies"
+                - generic [ref=f1e192]:
+                  - group:
+                    - generic "Cache Playwright browsers"
+                - generic [ref=f1e193]:
+                  - group:
+                    - generic "Install Playwright Chromium browser"
+                - generic [ref=f1e194]:
+                  - group:
+                    - generic "Run tests with coverage"
+                - generic [ref=f1e195]:
+                  - group:
+                    - generic "Upload coverage reports to Codecov"
+                - generic [ref=f1e196]:
+                  - group:
+                    - generic "Upload failure artifacts"
+                - generic [ref=f1e197]:
+                  - group:
+                    - generic "Post Cache Playwright browsers"
+                - generic [ref=f1e198]:
+                  - group:
+                    - generic "Post Install uv"
+                - generic [ref=f1e199]:
+                  - group:
+                    - generic "Post Set up Python 3.14"
+                - generic [ref=f1e200]:
+                  - group:
+                    - generic "Post Checkout repository"
+                - generic [ref=f1e201]:
+                  - group:
+                    - generic "Complete job"

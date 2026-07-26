@@ -1,0 +1,325 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Factions
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Factions%2Findex&source=header-repo&source_repo=lacattano%2FAI-Playwright-Test-Generator
+            - button "Appearance settings" [ref=e58] [cursor=pointer]
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e66]:
+          - link "lacattano" [ref=e70] [cursor=pointer]:
+            - /url: /lacattano
+          - generic [ref=e71]: /
+          - strong [ref=e72]:
+            - link "AI-Playwright-Test-Generator" [ref=e73] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - generic [ref=e74]: Public
+        - generic [ref=e75]:
+          - list:
+            - listitem [ref=e76]:
+              - link "You must be signed in to change notification settings" [ref=e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Notifications
+            - listitem [ref=e80]:
+              - link "Fork 0" [ref=e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Fork
+                - generic "0" [ref=e84]
+            - listitem [ref=e85]:
+              - link "You must be signed in to star a repository" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Star
+                - generic "0 users starred this repository" [ref=e90]: "0"
+      - navigation "Repository" [ref=e91]:
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link "Code" [ref=e94] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - listitem [ref=e98]:
+            - link "Issues" [ref=e99] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/issues
+          - listitem [ref=e104]:
+            - link "Pull requests" [ref=e105] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulls
+          - listitem [ref=e109]:
+            - link "Actions" [ref=e110] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions
+          - listitem [ref=e114]:
+            - link "Projects" [ref=e115] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/projects
+          - listitem [ref=e119]:
+            - link "Security and quality" [ref=e120] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/security
+          - listitem [ref=e124]:
+            - link "Insights" [ref=e125] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulse
+    - generic [ref=e970]:
+      - generic [ref=e973]:
+        - link "CI/CD Pipeline" [ref=e976] [cursor=pointer]:
+          - /url: /lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml
+        - generic [ref=e980]:
+          - generic [ref=e981]:
+            - img "completed successfully:" [ref=e985]
+            - 'heading "fix: element matcher pass 1 and pass 3 fallback resolution #198" [level=1] [ref=e987]'
+          - link "Sign in to view logs" [ref=e991] [cursor=pointer]:
+            - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Factions%2Fruns%2F30092870322
+      - generic [ref=e992]:
+        - navigation "Workflow run" [ref=e998]:
+          - list [ref=e999]:
+            - listitem [ref=e1000]:
+              - link "Summary" [ref=e1001] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322
+            - generic [ref=e1004]:
+              - heading "All jobs" [level=4] [ref=e1005]
+              - button "Filter by job status" [ref=e1006] [cursor=pointer]
+            - listitem [ref=e1009]
+            - listitem [ref=e1010]:
+              - list [ref=e1011]:
+                - listitem [ref=e1012]:
+                  - link "Smoke Test" [ref=e1013] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889901
+                - listitem [ref=e1016]:
+                  - link "Project Sanitizer" [ref=e1017] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889941
+                - listitem [ref=e1020]:
+                  - link "Graph Freshness Check" [ref=e1021] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889898
+                - listitem [ref=e1024]:
+                  - link "Documentation Coverage Check" [ref=e1025] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889918
+                - listitem [ref=e1028]:
+                  - link "Ruff Lint & Format" [ref=e1029] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018046
+                - listitem [ref=e1032]:
+                  - link "MyPy Type Check" [ref=e1033] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018029
+                - listitem [ref=e1036]:
+                  - link "PyTest + Coverage" [ref=e1037] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480256193
+            - listitem [ref=e1040]
+            - listitem [ref=e1041]:
+              - heading "Run details" [level=3] [ref=e1043]
+              - list "Run details" [ref=e1044]:
+                - listitem [ref=e1045]:
+                  - link "Usage" [ref=e1046] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/usage
+                - listitem [ref=e1049]:
+                  - link "Workflow file" [ref=e1050] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/workflow
+        - generic [ref=e1054]:
+          - region "Workflow run summary" [ref=e1055]:
+            - generic [ref=e1056]:
+              - generic [ref=e1057]:
+                - generic [ref=e1058]: Triggered via push July 24, 2026 12:226 minutes ago
+                - generic [ref=e1059]:
+                  - link [ref=e1060] [cursor=pointer]:
+                    - /url: /lacattano
+                    - img "@lacattano" [ref=e1061]
+                    - text: lacattano
+                  - generic [ref=e1062]:
+                    - generic [ref=e1063]: pushed
+                    - link "c78a0e3" [ref=e1064] [cursor=pointer]:
+                      - /url: /lacattano/AI-Playwright-Test-Generator/commit/c78a0e3b2310e1826c6b8aef2f9f50d6cb863728
+                  - link "main" [ref=e1067] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+              - generic [ref=e1068]:
+                - generic [ref=e1069]: Status
+                - text: Success
+              - generic [ref=e1070]:
+                - generic [ref=e1071]: Total duration
+                - link "3m 27s" [ref=e1072] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/usage
+              - generic [ref=e1073]:
+                - generic [ref=e1074]: Artifacts
+                - text: –
+          - region "Workflow run graph" [ref=e1075]:
+            - generic [ref=e1077]:
+              - generic [ref=e1079]:
+                - heading [level=2] [ref=e1080]:
+                  - link "ci.yml" [ref=e1081] [cursor=pointer]:
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/workflow
+                - generic [ref=e1082]: "on: push"
+              - generic [ref=e1084]:
+                - generic [ref=e1085]:
+                  - generic [ref=e1086]:
+                    - 'link "completed successfully: Smoke Test 37s" [ref=e1089] [cursor=pointer]':
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889901
+                      - generic [ref=e1091]:
+                        - img "completed successfully:" [ref=e1093]
+                        - generic [ref=e1095]: Smoke Test
+                        - generic [ref=e1097]: 37s
+                    - generic [ref=e1099]:
+                      - 'link "completed successfully: Project Sanitizer 35s" [ref=e1101] [cursor=pointer]':
+                        - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889941
+                        - generic [ref=e1103]:
+                          - img "completed successfully:" [ref=e1105]
+                          - generic [ref=e1107]: Project Sanitizer
+                          - generic [ref=e1109]: 35s
+                      - 'link "completed successfully: Graph Freshness Check 5s" [ref=e1111] [cursor=pointer]':
+                        - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889898
+                        - generic [ref=e1113]:
+                          - img "completed successfully:" [ref=e1115]
+                          - generic [ref=e1117]: Graph Freshness Check
+                          - generic [ref=e1119]: 5s
+                      - 'link "completed successfully: Documentation Coverage Check 5s" [ref=e1121] [cursor=pointer]':
+                        - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889918
+                        - generic [ref=e1123]:
+                          - img "completed successfully:" [ref=e1125]
+                          - generic [ref=e1127]: Documentation Coverage Check
+                          - generic [ref=e1129]: 5s
+                  - generic [ref=e1131]:
+                    - 'link "completed successfully: Ruff Lint & Format 48s" [ref=e1133] [cursor=pointer]':
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018046
+                      - generic [ref=e1135]:
+                        - img "completed successfully:" [ref=e1137]
+                        - generic [ref=e1139]: Ruff Lint & Format
+                        - generic [ref=e1141]: 48s
+                    - 'link "completed successfully: MyPy Type Check 1m 11s" [ref=e1143] [cursor=pointer]':
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018029
+                      - generic [ref=e1145]:
+                        - img "completed successfully:" [ref=e1147]
+                        - generic [ref=e1149]: MyPy Type Check
+                        - generic [ref=e1151]: 1m 11s
+                  - 'link "completed successfully: PyTest + Coverage 1m 31s" [ref=e1157] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480256193
+                    - generic [ref=e1159]:
+                      - img "completed successfully:" [ref=e1161]
+                      - generic [ref=e1163]: PyTest + Coverage
+                      - generic [ref=e1165]: 1m 31s
+                - generic [ref=e1167]:
+                  - paragraph [ref=e1168]: Oh hello! Nice to see you.
+                  - paragraph [ref=e1169]:
+                    - text: Made with ❤️ by
+                    - link [ref=e1170] [cursor=pointer]:
+                      - /url: https://actions.github.io/humans.txt
+                      - text: humans.txt
+              - generic [ref=e1171]:
+                - button "Fit to window" [disabled] [ref=e1172]
+                - generic [ref=e1173]:
+                  - button "Zoom out" [disabled] [ref=e1175]
+                  - button "Zoom in" [ref=e1177] [cursor=pointer]
+          - region "Annotations" [ref=e1178]:
+            - generic [ref=e1179]:
+              - generic [ref=e1181]:
+                - heading "Annotations" [level=2] [ref=e1182]
+                - generic [ref=e1183]: 8 warnings
+              - table [ref=e1184]:
+                - rowgroup [ref=e1185]:
+                  - row [ref=e1186]:
+                    - cell [ref=e1187]:
+                      - generic [ref=e1192]:
+                        - link [ref=e1193] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889898#step:7:2
+                          - strong [ref=e1194]: Graph Freshness Check
+                        - generic [ref=e1195]:
+                          - generic [ref=e1197]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1198] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1199] [cursor=pointer]
+                  - row [ref=e1200]:
+                    - cell "Graph Freshness Check No graphify-out/graph.json found — knowledge graph not generated" [ref=e1201]:
+                      - generic [ref=e1206]:
+                        - link [ref=e1207] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889898#step:3:18
+                          - strong [ref=e1208]: Graph Freshness Check
+                        - generic [ref=e1209]: No graphify-out/graph.json found — knowledge graph not generated
+                  - row [ref=e1212]:
+                    - cell [ref=e1213]:
+                      - generic [ref=e1218]:
+                        - link [ref=e1219] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889918#step:7:2
+                          - strong [ref=e1220]: Documentation Coverage Check
+                        - generic [ref=e1221]:
+                          - generic [ref=e1223]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1224] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1225] [cursor=pointer]
+                  - row [ref=e1226]:
+                    - cell [ref=e1227]:
+                      - generic [ref=e1232]:
+                        - link [ref=e1233] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889941#step:13:2
+                          - strong [ref=e1234]: Project Sanitizer
+                        - generic [ref=e1235]:
+                          - generic [ref=e1237]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v5. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1238] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1239] [cursor=pointer]
+                  - row [ref=e1240]:
+                    - cell [ref=e1241]:
+                      - generic [ref=e1246]:
+                        - link [ref=e1247] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89479889901#step:13:2
+                          - strong [ref=e1248]: Smoke Test
+                        - generic [ref=e1249]:
+                          - generic [ref=e1251]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v5. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1252] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1253] [cursor=pointer]
+                  - row [ref=e1254]:
+                    - cell [ref=e1255]:
+                      - generic [ref=e1260]:
+                        - link [ref=e1261] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018046#step:15:2
+                          - strong [ref=e1262]: Ruff Lint & Format
+                        - generic [ref=e1263]:
+                          - generic [ref=e1265]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v5. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1266] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1267] [cursor=pointer]
+                  - row [ref=e1268]:
+                    - cell [ref=e1269]:
+                      - generic [ref=e1274]:
+                        - link [ref=e1275] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480018029#step:13:2
+                          - strong [ref=e1276]: MyPy Type Check
+                        - generic [ref=e1277]:
+                          - generic [ref=e1279]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, astral-sh/setup-uv@v5. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1280] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1281] [cursor=pointer]
+                  - row [ref=e1282]:
+                    - cell [ref=e1283]:
+                      - generic [ref=e1288]:
+                        - link [ref=e1289] [cursor=pointer]:
+                          - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322/job/89480256193#step:21:2
+                          - strong [ref=e1290]: PyTest + Coverage
+                        - generic [ref=e1291]:
+                          - generic [ref=e1293]:
+                            - text: "Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache@v4, actions/checkout@v4, actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea, actions/setup-python@v5, astral-sh/setup-uv@v5. For more information see:"
+                            - link "https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/" [ref=e1294] [cursor=pointer]:
+                              - /url: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+                          - button "Show more" [ref=e1295] [cursor=pointer]

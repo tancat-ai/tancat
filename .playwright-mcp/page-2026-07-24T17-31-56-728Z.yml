@@ -1,0 +1,953 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Fcommit%2Fb8a4af42f18dc216d2690a44dda95b308f8f1f86
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Fcommit%2Fshow&source=header-repo&source_repo=lacattano%2FAI-Playwright-Test-Generator
+            - button "Appearance settings" [ref=e58] [cursor=pointer]
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e66]:
+          - link "lacattano" [ref=e70] [cursor=pointer]:
+            - /url: /lacattano
+          - generic [ref=e71]: /
+          - strong [ref=e72]:
+            - link "AI-Playwright-Test-Generator" [ref=e73] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - generic [ref=e74]: Public
+        - generic [ref=e75]:
+          - list:
+            - listitem [ref=e76]:
+              - link "You must be signed in to change notification settings" [ref=e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Notifications
+            - listitem [ref=e80]:
+              - link "Fork 0" [ref=e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Fork
+                - generic "0" [ref=e84]
+            - listitem [ref=e85]:
+              - link "You must be signed in to star a repository" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Star
+                - generic "0 users starred this repository" [ref=e90]: "0"
+      - navigation "Repository" [ref=e91]:
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link "Code" [ref=e94] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - listitem [ref=e98]:
+            - link "Issues" [ref=e99] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/issues
+          - listitem [ref=e104]:
+            - link "Pull requests" [ref=e105] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulls
+          - listitem [ref=e109]:
+            - link "Actions" [ref=e110] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions
+          - listitem [ref=e114]:
+            - link "Projects" [ref=e115] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/projects
+          - listitem [ref=e119]:
+            - link "Security and quality" [ref=e120] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/security
+          - listitem [ref=e124]:
+            - link "Insights" [ref=e125] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulse
+    - generic [ref=e134]:
+      - generic [ref=e137]:
+        - heading "Commit b8a4af4" [level=1] [ref=e139]
+        - tooltip "Browse the repository at this point in the history" [ref=e142]:
+          - link "Browse files" [ref=e143] [cursor=pointer]:
+            - /url: /lacattano/AI-Playwright-Test-Generator/tree/b8a4af42f18dc216d2690a44dda95b308f8f1f86
+        - generic [ref=e147]:
+          - generic [ref=e148]:
+            - generic [ref=e149]:
+              - link [ref=e150] [cursor=pointer]:
+                - /url: /lacattano
+                - img "lacattano" [ref=e151]
+              - link "commits by lacattano" [ref=e152] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/commits?author=lacattano
+                - text: lacattano
+            - generic [ref=e153]: committed
+          - generic [ref=e156]:
+            - generic [ref=e157]:
+              - generic [ref=e158]: "chore: repo cleanup — remove trash, archive stale files, add kanban infrastructure"
+              - generic [ref=e160]: "Removals: - bench_*.json: LLM benchmarks moved to sibling llm-benchmarks/ directory - requirements.txt: obsolete (project uses pyproject.toml + uv) - memory-bank/: superseded by CONTEXT.md + BACKLOG.md - e2e/example.spec.ts: wrong language (project is Python-only) - before/, custom-ws/, explicit/, downloads/: empty shell directories - __pycache__/ (root): Python bytecode - .tmp/: stale temp directories - results_*.json: stale UAT run artifacts - scratch/cart.html, scratch/scratch_raw_out.txt: old debug data - demo_party.html: dead tracked file Archived: - datasets/phase5_frozen.yaml -> docs/archived/ (superseded by eval harness JSON datasets) Additions: - kanban.html, scripts/maintenance/kanban.py: kanban board generator - AGENTS.md: added kanban + housekeeping sections - .github/workflows/ci.yml: added kanban freshness gate - .pre-commit-config.yaml: added kanban freshness hook"
+            - generic [ref=e167]:
+              - text: 1 parent
+              - link "c78a0e3" [ref=e168] [cursor=pointer]:
+                - /url: /lacattano/AI-Playwright-Test-Generator/commit/c78a0e3b2310e1826c6b8aef2f9f50d6cb863728
+              - text: commit
+              - generic [ref=e169]: b8a4af4
+              - button "Copy full SHA for b8a4af4" [ref=e171] [cursor=pointer]
+            - generic [ref=e175]:
+              - paragraph [ref=e177]: 14 files changed
+              - generic [ref=e178]:
+                - generic [ref=e179]: "+888"
+                - generic [ref=e180]: "-2,550"
+                - generic [ref=e181]: "Lines changed: 888 additions & 2550 deletions"
+      - generic [ref=e189]:
+        - generic [ref=e190]:
+          - generic [ref=e192]:
+            - heading "File tree" [level=2] [ref=e193]
+            - generic [ref=e194]:
+              - textbox "Filter files…" [ref=e199]
+              - button "Filter options" [ref=e201] [cursor=pointer]
+            - tree "File Tree" [ref=e205]:
+              - treeitem ".github/workflows" [expanded] [level=1] [ref=e206]:
+                - group [ref=e218]:
+                  - treeitem "ci.yml" [level=2] [ref=e219]:
+                    - link "ci.yml" [ref=e230] [cursor=pointer]:
+                      - /url: "#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03f"
+              - treeitem ".pre-commit-config.yaml" [level=1] [ref=e231]:
+                - link ".pre-commit-config.yaml" [ref=e239] [cursor=pointer]:
+                  - /url: "#diff-63a9c44a44acf85fea213a857769990937107cf072831e1a26808cfde9d096b9"
+              - treeitem "AGENTS.md" [level=1] [ref=e240]:
+                - link "AGENTS.md" [ref=e248] [cursor=pointer]:
+                  - /url: "#diff-a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9"
+              - treeitem "bench_windows_vulkan_mtp_20260520_100044.json" [level=1] [ref=e249]:
+                - link "bench_windows_vulkan_mtp_20260520_100044.json" [ref=e257] [cursor=pointer]:
+                  - /url: "#diff-9d650bb81556026f62df8d9a78a53990f87a08c46dd9ae67f86e48463a721c79"
+              - treeitem "bench_windows_vulkan_mtp_q5_k_xl_20260531_105732.json" [level=1] [ref=e258]:
+                - link "bench_windows_vulkan_mtp_q5_k_xl_20260531_105732.json" [ref=e266] [cursor=pointer]:
+                  - /url: "#diff-33df623cce4e4fe75b8bc53f055f91c9109b91ca105d73cc04578c156af0b90c"
+              - treeitem "bench_windows_vulkan_mtp_q5_k_xl_20260531_111054.json" [level=1] [ref=e267]:
+                - link "bench_windows_vulkan_mtp_q5_k_xl_20260531_111054.json" [ref=e275] [cursor=pointer]:
+                  - /url: "#diff-5dfd74db8d190b760d429ebd945434100e636baf3f95b518929e809bf45c8e0c"
+              - treeitem "demo_party.html" [level=1] [ref=e276]:
+                - link "demo_party.html" [ref=e284] [cursor=pointer]:
+                  - /url: "#diff-9fe8d7647f53d49ce9846b604461af0ab71aad951d2a3d2123f7862adf0b7f09"
+              - treeitem "docs/archived" [expanded] [level=1] [ref=e285]:
+                - group [ref=e297]:
+                  - treeitem "phase5_frozen.yaml" [level=2] [ref=e298]:
+                    - link "phase5_frozen.yaml" [ref=e310] [cursor=pointer]:
+                      - /url: "#diff-2886a1545cab27a1e1c0de0b139cbed19e0900fce6b5976b79def527903b420f"
+              - treeitem "e2e" [expanded] [level=1] [ref=e311]:
+                - group [ref=e323]:
+                  - treeitem "example.spec.ts" [level=2] [ref=e324]:
+                    - link "example.spec.ts" [ref=e335] [cursor=pointer]:
+                      - /url: "#diff-f3c0c435a87c7307435ac5f522f36b2bcccf4e32c5132317151d2af1014314c6"
+              - treeitem "kanban.html" [level=1] [ref=e336]:
+                - link "kanban.html" [ref=e344] [cursor=pointer]:
+                  - /url: "#diff-a71d977770444e0c74fc6980b7269068b0fb809c8a714705a50e147267541cca"
+              - treeitem "requirements.txt" [level=1] [ref=e345]:
+                - link "requirements.txt" [ref=e353] [cursor=pointer]:
+                  - /url: "#diff-4d7c51b1efe9043e44439a949dfd92e5827321b34082903477fd04876edb7552"
+              - treeitem "scratch" [expanded] [level=1] [ref=e354]:
+                - group [ref=e366]:
+                  - treeitem "cart.html" [level=2] [ref=e367]:
+                    - link "cart.html" [ref=e378] [cursor=pointer]:
+                      - /url: "#diff-ab12d1da895859b553a3c8e8bd3d586f6b099e4ba1dc7ec5eec4ced93d7c7106"
+                  - treeitem "scratch_raw_out.txt" [level=2] [ref=e379]:
+                    - link "scratch_raw_out.txt" [ref=e390] [cursor=pointer]:
+                      - /url: "#diff-7e445ca9197f4107e50bd3e74e9128723a88f12355ea8a23ae93e2f9ddb5cb89"
+              - treeitem "scripts/maintenance" [expanded] [level=1] [ref=e391]:
+                - group [ref=e403]:
+                  - treeitem "kanban.py" [level=2] [ref=e404]:
+                    - link "kanban.py" [ref=e415] [cursor=pointer]:
+                      - /url: "#diff-4c67e95039ccfd02eb791846b7699f867a74cb8dd057919ed8db4f8fe5b997ff"
+          - slider "Draggable pane splitter" [ref=e417]
+        - generic [ref=e420]:
+          - generic [ref=e421]:
+            - generic [ref=e422]:
+              - button "Collapse file tree" [expanded] [ref=e424] [cursor=pointer]
+              - button "Open diff view settings" [ref=e429] [cursor=pointer]
+            - region [ref=e433]:
+              - generic [ref=e435]:
+                - button "Collapse file" [ref=e437] [cursor=pointer]
+                - generic [ref=e440]:
+                  - heading [level=3] [ref=e441]:
+                    - link [ref=e442] [cursor=pointer]:
+                      - /url: "#diff-b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03f"
+                      - code [ref=e443]: ‎.github/workflows/ci.yml‎
+                  - button "Copy file name to clipboard" [ref=e444] [cursor=pointer]
+                  - 'button "Expand all lines: .github/workflows/ci.yml" [ref=e448] [cursor=pointer]'
+                - generic [ref=e451]:
+                  - generic [ref=e454]:
+                    - generic [ref=e455]: "+32"
+                    - generic [ref=e456]: "Lines changed: 32 additions & 0 deletions"
+                  - button "More options" [ref=e463] [cursor=pointer]
+              - 'grid "Diff for: .github/workflows/ci.yml" [ref=e467]':
+                - rowgroup [ref=e468]:
+                  - row [ref=e469]:
+                    - columnheader "Original file line number" [ref=e470]
+                    - columnheader "Diff line number" [ref=e471]
+                    - columnheader "Diff line change" [ref=e472]
+                - rowgroup [ref=e477]:
+                  - row [ref=e478]:
+                    - gridcell "@@ -123,6 +123,38 @@ jobs:" [ref=e479]:
+                      - generic [ref=e480]:
+                        - button [ref=e481] [cursor=pointer]
+                        - code [ref=e484]:
+                          - generic [ref=e485]: "@@ -123,6 +123,38 @@ jobs:"
+                  - row [ref=e486]:
+                    - gridcell [ref=e487] [cursor=pointer]:
+                      - code [ref=e488]: "123"
+                    - gridcell [ref=e489] [cursor=pointer]:
+                      - code [ref=e490]: "123"
+                    - 'gridcell "print(f''✅ All {d.get(\\\"total\\\", 0)} files documented'')" [ref=e491]':
+                      - code [ref=e492]:
+                        - generic [ref=e493]: "print(f'✅ All {d.get(\\\"total\\\", 0)} files documented')"
+                  - row [ref=e494]:
+                    - gridcell [ref=e495] [cursor=pointer]:
+                      - code [ref=e496]: "124"
+                    - gridcell [ref=e497] [cursor=pointer]:
+                      - code [ref=e498]: "124"
+                    - gridcell "\"" [ref=e499]:
+                      - code [ref=e500]:
+                        - generic [ref=e501]: "\""
+                  - row [ref=e502]:
+                    - gridcell [ref=e503] [cursor=pointer]:
+                      - code [ref=e504]: "125"
+                    - gridcell [ref=e505] [cursor=pointer]:
+                      - code [ref=e506]: "125"
+                    - gridcell [ref=e507]:
+                      - code
+                  - row [ref=e508]:
+                    - gridcell [ref=e509] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e510] [cursor=pointer]:
+                      - code [ref=e511]: "126"
+                    - 'gridcell "+ # ── Gate 1d: Kanban freshness (warning-only, non-blocking) ──────────" [ref=e512]':
+                      - code [ref=e513]:
+                        - generic [ref=e514]: +
+                        - generic [ref=e515]: "# ── Gate 1d: Kanban freshness (warning-only, non-blocking) ──────────"
+                  - row [ref=e517]:
+                    - gridcell [ref=e518] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e519] [cursor=pointer]:
+                      - code [ref=e520]: "127"
+                    - gridcell "+ kanban-freshness:" [ref=e521]:
+                      - code [ref=e522]:
+                        - generic [ref=e523]: +
+                        - generic [ref=e524]: "kanban-freshness:"
+                  - row [ref=e525]:
+                    - gridcell [ref=e526] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e527] [cursor=pointer]:
+                      - code [ref=e528]: "128"
+                    - 'gridcell "+ name: Kanban Freshness Check" [ref=e529]':
+                      - code [ref=e530]:
+                        - generic [ref=e531]: +
+                        - generic [ref=e532]: "name: Kanban Freshness Check"
+                  - row [ref=e533]:
+                    - gridcell [ref=e534] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e535] [cursor=pointer]:
+                      - code [ref=e536]: "129"
+                    - 'gridcell "+ runs-on: ubuntu-latest" [ref=e537]':
+                      - code [ref=e538]:
+                        - generic [ref=e539]: +
+                        - generic [ref=e540]: "runs-on: ubuntu-latest"
+                  - row [ref=e541]:
+                    - gridcell [ref=e542] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e543] [cursor=pointer]:
+                      - code [ref=e544]: "130"
+                    - 'gridcell "+ timeout-minutes: 2" [ref=e545]':
+                      - code [ref=e546]:
+                        - generic [ref=e547]: +
+                        - generic [ref=e548]: "timeout-minutes: 2"
+                  - row [ref=e549]:
+                    - gridcell [ref=e550] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e551] [cursor=pointer]:
+                      - code [ref=e552]: "131"
+                    - gridcell "+" [ref=e553]:
+                      - code:
+                        - generic [ref=e554]: +
+                  - row [ref=e555]:
+                    - gridcell [ref=e556] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e557] [cursor=pointer]:
+                      - code [ref=e558]: "132"
+                    - gridcell "+ steps:" [ref=e559]:
+                      - code [ref=e560]:
+                        - generic [ref=e561]: +
+                        - generic [ref=e562]: "steps:"
+                  - row [ref=e563]:
+                    - gridcell [ref=e564] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e565] [cursor=pointer]:
+                      - code [ref=e566]: "133"
+                    - 'gridcell "+ - name: Checkout repository" [ref=e567]':
+                      - code [ref=e568]:
+                        - generic [ref=e569]: +
+                        - generic [ref=e570]: "- name: Checkout repository"
+                  - row [ref=e571]:
+                    - gridcell [ref=e572] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e573] [cursor=pointer]:
+                      - code [ref=e574]: "134"
+                    - 'gridcell "+ uses: actions/checkout@v4" [ref=e575]':
+                      - code [ref=e576]:
+                        - generic [ref=e577]: +
+                        - generic [ref=e578]: "uses: actions/checkout@v4"
+                  - row [ref=e579]:
+                    - gridcell [ref=e580] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e581] [cursor=pointer]:
+                      - code [ref=e582]: "135"
+                    - gridcell "+" [ref=e583]:
+                      - code:
+                        - generic [ref=e584]: +
+                  - row [ref=e585]:
+                    - gridcell [ref=e586] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e587] [cursor=pointer]:
+                      - code [ref=e588]: "136"
+                    - 'gridcell "+ - name: Set up Python 3.14" [ref=e589]':
+                      - code [ref=e590]:
+                        - generic [ref=e591]: +
+                        - generic [ref=e592]: "- name: Set up Python 3.14"
+                  - row [ref=e593]:
+                    - gridcell [ref=e594] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e595] [cursor=pointer]:
+                      - code [ref=e596]: "137"
+                    - 'gridcell "+ uses: actions/setup-python@v5" [ref=e597]':
+                      - code [ref=e598]:
+                        - generic [ref=e599]: +
+                        - generic [ref=e600]: "uses: actions/setup-python@v5"
+                  - row [ref=e601]:
+                    - gridcell [ref=e602] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e603] [cursor=pointer]:
+                      - code [ref=e604]: "138"
+                    - gridcell "+ with:" [ref=e605]:
+                      - code [ref=e606]:
+                        - generic [ref=e607]: +
+                        - generic [ref=e608]: "with:"
+                  - row [ref=e609]:
+                    - gridcell [ref=e610] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e611] [cursor=pointer]:
+                      - code [ref=e612]: "139"
+                    - 'gridcell "+ python-version: \"3.14\"" [ref=e613]':
+                      - code [ref=e614]:
+                        - generic [ref=e615]: +
+                        - generic [ref=e616]:
+                          - text: "python-version:"
+                          - generic [ref=e617]: "\"3.14\""
+                  - row [ref=e618]:
+                    - gridcell [ref=e619] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e620] [cursor=pointer]:
+                      - code [ref=e621]: "140"
+                    - gridcell "+" [ref=e622]:
+                      - code:
+                        - generic [ref=e623]: +
+                  - row [ref=e624]:
+                    - gridcell [ref=e625] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e626] [cursor=pointer]:
+                      - code [ref=e627]: "141"
+                    - 'gridcell "+ - name: Install uv" [ref=e628]':
+                      - code [ref=e629]:
+                        - generic [ref=e630]: +
+                        - generic [ref=e631]: "- name: Install uv"
+                  - row [ref=e632]:
+                    - gridcell [ref=e633] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e634] [cursor=pointer]:
+                      - code [ref=e635]: "142"
+                    - 'gridcell "+ uses: astral-sh/setup-uv@v5" [ref=e636]':
+                      - code [ref=e637]:
+                        - generic [ref=e638]: +
+                        - generic [ref=e639]: "uses: astral-sh/setup-uv@v5"
+                  - row [ref=e640]:
+                    - gridcell [ref=e641] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e642] [cursor=pointer]:
+                      - code [ref=e643]: "143"
+                    - gridcell "+ with:" [ref=e644]:
+                      - code [ref=e645]:
+                        - generic [ref=e646]: +
+                        - generic [ref=e647]: "with:"
+                  - row [ref=e648]:
+                    - gridcell [ref=e649] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e650] [cursor=pointer]:
+                      - code [ref=e651]: "144"
+                    - 'gridcell "+ enable-cache: true" [ref=e652]':
+                      - code [ref=e653]:
+                        - generic [ref=e654]: +
+                        - generic [ref=e655]: "enable-cache: true"
+                  - row [ref=e656]:
+                    - gridcell [ref=e657] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e658] [cursor=pointer]:
+                      - code [ref=e659]: "145"
+                    - 'gridcell "+ cache-dependency-glob: \"uv.lock\"" [ref=e660]':
+                      - code [ref=e661]:
+                        - generic [ref=e662]: +
+                        - generic [ref=e663]:
+                          - text: "cache-dependency-glob:"
+                          - generic [ref=e664]: "\"uv.lock\""
+                  - row [ref=e665]:
+                    - gridcell [ref=e666] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e667] [cursor=pointer]:
+                      - code [ref=e668]: "146"
+                    - gridcell "+" [ref=e669]:
+                      - code:
+                        - generic [ref=e670]: +
+                  - row [ref=e671]:
+                    - gridcell [ref=e672] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e673] [cursor=pointer]:
+                      - code [ref=e674]: "147"
+                    - 'gridcell "+ - name: Install dependencies" [ref=e675]':
+                      - code [ref=e676]:
+                        - generic [ref=e677]: +
+                        - generic [ref=e678]: "- name: Install dependencies"
+                  - row [ref=e679]:
+                    - gridcell [ref=e680] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e681] [cursor=pointer]:
+                      - code [ref=e682]: "148"
+                    - 'gridcell "+ run: uv sync --frozen" [ref=e683]':
+                      - code [ref=e684]:
+                        - generic [ref=e685]: +
+                        - generic [ref=e686]: "run: uv sync --frozen"
+                  - row [ref=e687]:
+                    - gridcell [ref=e688] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e689] [cursor=pointer]:
+                      - code [ref=e690]: "149"
+                    - gridcell "+" [ref=e691]:
+                      - code:
+                        - generic [ref=e692]: +
+                  - row [ref=e693]:
+                    - gridcell [ref=e694] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e695] [cursor=pointer]:
+                      - code [ref=e696]: "150"
+                    - 'gridcell "+ - name: Check kanban.html is up to date" [ref=e697]':
+                      - code [ref=e698]:
+                        - generic [ref=e699]: +
+                        - generic [ref=e700]: "- name: Check kanban.html is up to date"
+                  - row [ref=e701]:
+                    - gridcell [ref=e702] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e703] [cursor=pointer]:
+                      - code [ref=e704]: "151"
+                    - 'gridcell "+ run: |" [ref=e705]':
+                      - code [ref=e706]:
+                        - generic [ref=e707]: +
+                        - generic [ref=e708]: "run: |"
+                  - row [ref=e709]:
+                    - gridcell [ref=e710] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e711] [cursor=pointer]:
+                      - code [ref=e712]: "152"
+                    - gridcell "+ if [ ! -f kanban.html ]; then" [ref=e713]:
+                      - code [ref=e714]:
+                        - generic [ref=e715]: +
+                        - generic [ref=e716]: if [ ! -f kanban.html ]; then
+                  - row [ref=e717]:
+                    - gridcell [ref=e718] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e719] [cursor=pointer]:
+                      - code [ref=e720]: "153"
+                    - gridcell "+ echo \"::warning::kanban.html not found — run scripts/maintenance/kanban.py\"" [ref=e721]:
+                      - code [ref=e722]:
+                        - generic [ref=e723]: +
+                        - generic [ref=e724]: echo "::warning::kanban.html not found — run scripts/maintenance/kanban.py"
+                  - row [ref=e725]:
+                    - gridcell [ref=e726] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e727] [cursor=pointer]:
+                      - code [ref=e728]: "154"
+                    - gridcell "+ exit 0" [ref=e729]:
+                      - code [ref=e730]:
+                        - generic [ref=e731]: +
+                        - generic [ref=e732]: exit 0
+                  - row [ref=e733]:
+                    - gridcell [ref=e734] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e735] [cursor=pointer]:
+                      - code [ref=e736]: "155"
+                    - gridcell "+ fi" [ref=e737]:
+                      - code [ref=e738]:
+                        - generic [ref=e739]: +
+                        - generic [ref=e740]: fi
+                  - row [ref=e741]:
+                    - gridcell [ref=e742] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e743] [cursor=pointer]:
+                      - code [ref=e744]: "156"
+                    - gridcell "+ uv run python scripts/maintenance/kanban.py --check 2>&1 || echo \"::warning::kanban.html stale — run scripts/maintenance/kanban.py\"" [ref=e745]:
+                      - code [ref=e746]:
+                        - generic [ref=e747]: +
+                        - generic [ref=e748]: uv run python scripts/maintenance/kanban.py --check 2>&1 || echo "::warning::kanban.html stale — run scripts/maintenance/kanban.py"
+                  - row [ref=e749]:
+                    - gridcell [ref=e750] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e751] [cursor=pointer]:
+                      - code [ref=e752]: "157"
+                    - gridcell "+" [ref=e753]:
+                      - code:
+                        - generic [ref=e754]: +
+                  - row [ref=e755]:
+                    - gridcell [ref=e756] [cursor=pointer]:
+                      - code [ref=e757]: "126"
+                    - gridcell [ref=e758] [cursor=pointer]:
+                      - code [ref=e759]: "158"
+                    - 'gridcell "# ── Gate 2: Quality gates (run in parallel after smoke) ──────────────" [ref=e760]':
+                      - code [ref=e761]:
+                        - generic [ref=e762]: "# ── Gate 2: Quality gates (run in parallel after smoke) ──────────────"
+                  - row [ref=e764]:
+                    - gridcell [ref=e765] [cursor=pointer]:
+                      - code [ref=e766]: "127"
+                    - gridcell [ref=e767] [cursor=pointer]:
+                      - code [ref=e768]: "159"
+                    - gridcell "lint:" [ref=e769]:
+                      - code [ref=e770]:
+                        - generic [ref=e771]: "lint:"
+                  - row [ref=e772]:
+                    - gridcell [ref=e773] [cursor=pointer]:
+                      - code [ref=e774]: "128"
+                    - gridcell [ref=e775] [cursor=pointer]:
+                      - code [ref=e776]: "160"
+                    - 'gridcell "name: Ruff Lint & Format" [ref=e777]':
+                      - code [ref=e778]:
+                        - generic [ref=e779]: "name: Ruff Lint & Format"
+                  - row [ref=e780]:
+                    - gridcell [ref=e781]:
+                      - generic [ref=e782]:
+                        - button [ref=e783] [cursor=pointer]
+                        - code [ref=e786]
+            - region [ref=e788]:
+              - generic [ref=e790]:
+                - button "Collapse file" [ref=e792] [cursor=pointer]
+                - generic [ref=e795]:
+                  - heading [level=3] [ref=e796]:
+                    - link [ref=e797] [cursor=pointer]:
+                      - /url: "#diff-63a9c44a44acf85fea213a857769990937107cf072831e1a26808cfde9d096b9"
+                      - code [ref=e798]: ‎.pre-commit-config.yaml‎
+                  - button "Copy file name to clipboard" [ref=e799] [cursor=pointer]
+                  - 'button "Expand all lines: .pre-commit-config.yaml" [ref=e803] [cursor=pointer]'
+                - generic [ref=e806]:
+                  - generic [ref=e809]:
+                    - generic [ref=e810]: "+8"
+                    - generic [ref=e811]: "Lines changed: 8 additions & 0 deletions"
+                  - button "More options" [ref=e818] [cursor=pointer]
+              - 'grid "Diff for: .pre-commit-config.yaml" [ref=e822]':
+                - rowgroup [ref=e823]:
+                  - row [ref=e824]:
+                    - columnheader "Original file line number" [ref=e825]
+                    - columnheader "Diff line number" [ref=e826]
+                    - columnheader "Diff line change" [ref=e827]
+                - rowgroup [ref=e832]:
+                  - row [ref=e833]:
+                    - gridcell "@@ -37,3 +37,11 @@ repos:" [ref=e834]:
+                      - generic [ref=e835]:
+                        - button [ref=e836] [cursor=pointer]
+                        - code [ref=e839]:
+                          - generic [ref=e840]: "@@ -37,3 +37,11 @@ repos:"
+                  - row [ref=e841]:
+                    - gridcell [ref=e842] [cursor=pointer]:
+                      - code [ref=e843]: "37"
+                    - gridcell [ref=e844] [cursor=pointer]:
+                      - code [ref=e845]: "37"
+                    - 'gridcell "pass_filenames: false" [ref=e846]':
+                      - code [ref=e847]:
+                        - generic [ref=e848]: "pass_filenames: false"
+                  - row [ref=e849]:
+                    - gridcell [ref=e850] [cursor=pointer]:
+                      - code [ref=e851]: "38"
+                    - gridcell [ref=e852] [cursor=pointer]:
+                      - code [ref=e853]: "38"
+                    - 'gridcell "always_run: true" [ref=e854]':
+                      - code [ref=e855]:
+                        - generic [ref=e856]: "always_run: true"
+                  - row [ref=e857]:
+                    - gridcell [ref=e858] [cursor=pointer]:
+                      - code [ref=e859]: "39"
+                    - gridcell [ref=e860] [cursor=pointer]:
+                      - code [ref=e861]: "39"
+                    - 'gridcell "verbose: true" [ref=e862]':
+                      - code [ref=e863]:
+                        - generic [ref=e864]: "verbose: true"
+                  - row [ref=e865]:
+                    - gridcell [ref=e866] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e867] [cursor=pointer]:
+                      - code [ref=e868]: "40"
+                    - gridcell "+" [ref=e869]:
+                      - code:
+                        - generic [ref=e870]: +
+                  - row [ref=e871]:
+                    - gridcell [ref=e872] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e873] [cursor=pointer]:
+                      - code [ref=e874]: "41"
+                    - 'gridcell "+ - id: kanban-freshness" [ref=e875]':
+                      - code [ref=e876]:
+                        - generic [ref=e877]: +
+                        - generic [ref=e878]: "- id: kanban-freshness"
+                  - row [ref=e879]:
+                    - gridcell [ref=e880] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e881] [cursor=pointer]:
+                      - code [ref=e882]: "42"
+                    - 'gridcell "+ name: Kanban Freshness Check" [ref=e883]':
+                      - code [ref=e884]:
+                        - generic [ref=e885]: +
+                        - generic [ref=e886]: "name: Kanban Freshness Check"
+                  - row [ref=e887]:
+                    - gridcell [ref=e888] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e889] [cursor=pointer]:
+                      - code [ref=e890]: "43"
+                    - 'gridcell "+ description: Blocks commits when kanban.html is stale vs BACKLOG.md" [ref=e891]':
+                      - code [ref=e892]:
+                        - generic [ref=e893]: +
+                        - generic [ref=e894]: "description: Blocks commits when kanban.html is stale vs BACKLOG.md"
+                  - row [ref=e895]:
+                    - gridcell [ref=e896] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e897] [cursor=pointer]:
+                      - code [ref=e898]: "44"
+                    - 'gridcell "+ entry: uv run python scripts/maintenance/kanban.py --check" [ref=e899]':
+                      - code [ref=e900]:
+                        - generic [ref=e901]: +
+                        - generic [ref=e902]: "entry: uv run python scripts/maintenance/kanban.py --check"
+                  - row [ref=e903]:
+                    - gridcell [ref=e904] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e905] [cursor=pointer]:
+                      - code [ref=e906]: "45"
+                    - 'gridcell "+ language: system" [ref=e907]':
+                      - code [ref=e908]:
+                        - generic [ref=e909]: +
+                        - generic [ref=e910]: "language: system"
+                  - row [ref=e911]:
+                    - gridcell [ref=e912] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e913] [cursor=pointer]:
+                      - code [ref=e914]: "46"
+                    - 'gridcell "+ pass_filenames: false" [ref=e915]':
+                      - code [ref=e916]:
+                        - generic [ref=e917]: +
+                        - generic [ref=e918]: "pass_filenames: false"
+                  - row [ref=e919]:
+                    - gridcell [ref=e920] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e921] [cursor=pointer]:
+                      - code [ref=e922]: "47"
+                    - 'gridcell "+ always_run: true" [ref=e923]':
+                      - code [ref=e924]:
+                        - generic [ref=e925]: +
+                        - generic [ref=e926]: "always_run: true"
+            - region [ref=e928]:
+              - generic [ref=e930]:
+                - button "Collapse file" [ref=e932] [cursor=pointer]
+                - generic [ref=e935]:
+                  - heading [level=3] [ref=e936]:
+                    - link [ref=e937] [cursor=pointer]:
+                      - /url: "#diff-a54ff182c7e8acf56acfd6e4b9c3ff41e2c41a31c9b211b2deb9df75d9a478f9"
+                      - code [ref=e938]: ‎AGENTS.md‎
+                  - button "Copy file name to clipboard" [ref=e939] [cursor=pointer]
+                  - 'button "Expand all lines: AGENTS.md" [ref=e943] [cursor=pointer]'
+                - generic [ref=e946]:
+                  - generic [ref=e949]:
+                    - generic [ref=e950]: "+16"
+                    - generic [ref=e951]: "Lines changed: 16 additions & 0 deletions"
+                  - list "File view" [ref=e958]:
+                    - listitem [ref=e959]:
+                      - button "Display the source diff" [ref=e960] [cursor=pointer]
+                    - listitem [ref=e964]:
+                      - button "Display the rich diff" [ref=e965] [cursor=pointer]
+                  - button "More options" [ref=e969] [cursor=pointer]
+              - 'grid "Diff for: AGENTS.md" [ref=e973]':
+                - rowgroup [ref=e974]:
+                  - row [ref=e975]:
+                    - columnheader "Original file line number" [ref=e976]
+                    - columnheader "Diff line number" [ref=e977]
+                    - columnheader "Diff line change" [ref=e978]
+                - rowgroup [ref=e983]:
+                  - row [ref=e984]:
+                    - 'gridcell "@@ -155,6 +155,22 @@ Full table with causes: see `docs/reference/agents_archive.md` §7." [ref=e985]':
+                      - generic [ref=e986]:
+                        - button [ref=e987] [cursor=pointer]
+                        - code [ref=e990]:
+                          - generic [ref=e991]: "@@ -155,6 +155,22 @@ Full table with causes: see `docs/reference/agents_archive.md` §7."
+                  - row [ref=e992]:
+                    - gridcell [ref=e993] [cursor=pointer]:
+                      - code [ref=e994]: "155"
+                    - gridcell [ref=e995] [cursor=pointer]:
+                      - code [ref=e996]: "155"
+                    - 'gridcell "- Use `document-manager` skill to generate/update" [ref=e997]':
+                      - code [ref=e998]:
+                        - generic [ref=e999]: "- Use `document-manager` skill to generate/update"
+                  - row [ref=e1000]:
+                    - gridcell [ref=e1001] [cursor=pointer]:
+                      - code [ref=e1002]: "156"
+                    - gridcell [ref=e1003] [cursor=pointer]:
+                      - code [ref=e1004]: "156"
+                    - 'gridcell "- Check `markdown_docs/.sweep_progress.json` for coverage status" [ref=e1005]':
+                      - code [ref=e1006]:
+                        - generic [ref=e1007]: "- Check `markdown_docs/.sweep_progress.json` for coverage status"
+                  - row [ref=e1008]:
+                    - gridcell [ref=e1009] [cursor=pointer]:
+                      - code [ref=e1010]: "157"
+                    - gridcell [ref=e1011] [cursor=pointer]:
+                      - code [ref=e1012]: "157"
+                    - gridcell [ref=e1013]:
+                      - code [ref=e1014]
+                  - row [ref=e1016]:
+                    - gridcell [ref=e1017] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1018] [cursor=pointer]:
+                      - code [ref=e1019]: "158"
+                    - 'gridcell "+ ### Kanban Board" [ref=e1020]':
+                      - code [ref=e1021]:
+                        - generic [ref=e1022]: +
+                        - generic [ref=e1023]: "### Kanban Board"
+                  - row [ref=e1025]:
+                    - gridcell [ref=e1026] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1027] [cursor=pointer]:
+                      - code [ref=e1028]: "159"
+                    - gridcell "+" [ref=e1029]:
+                      - code:
+                        - generic [ref=e1030]: +
+                  - row [ref=e1031]:
+                    - gridcell [ref=e1032] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1033] [cursor=pointer]:
+                      - code [ref=e1034]: "160"
+                    - 'gridcell "+ - **`BACKLOG.md` is the single source of truth** for active work (bugs, improvements, features)." [ref=e1035]':
+                      - code [ref=e1036]:
+                        - generic [ref=e1037]: +
+                        - generic [ref=e1038]: "- **`BACKLOG.md` is the single source of truth** for active work (bugs, improvements, features)."
+                  - row [ref=e1039]:
+                    - gridcell [ref=e1040] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1041] [cursor=pointer]:
+                      - code [ref=e1042]: "161"
+                    - 'gridcell "+ - **`kanban.html` is a generated view** — never edit it directly. It''s regenerated from `BACKLOG.md`." [ref=e1043]':
+                      - code [ref=e1044]:
+                        - generic [ref=e1045]: +
+                        - generic [ref=e1046]: "- **`kanban.html` is a generated view** — never edit it directly. It's regenerated from `BACKLOG.md`."
+                  - row [ref=e1047]:
+                    - gridcell [ref=e1048] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1049] [cursor=pointer]:
+                      - code [ref=e1050]: "162"
+                    - 'gridcell "+ - After updating `BACKLOG.md`, run `python scripts/maintenance/kanban.py` to regenerate." [ref=e1051]':
+                      - code [ref=e1052]:
+                        - generic [ref=e1053]: +
+                        - generic [ref=e1054]: "- After updating `BACKLOG.md`, run `python scripts/maintenance/kanban.py` to regenerate."
+                  - row [ref=e1055]:
+                    - gridcell [ref=e1056] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1057] [cursor=pointer]:
+                      - code [ref=e1058]: "163"
+                    - 'gridcell "+ - Commit `BACKLOG.md` and `kanban.html` together." [ref=e1059]':
+                      - code [ref=e1060]:
+                        - generic [ref=e1061]: +
+                        - generic [ref=e1062]: "- Commit `BACKLOG.md` and `kanban.html` together."
+                  - row [ref=e1063]:
+                    - gridcell [ref=e1064] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1065] [cursor=pointer]:
+                      - code [ref=e1066]: "164"
+                    - 'gridcell "+ - Pre-commit hook and CI verify `kanban.html` is up to date." [ref=e1067]':
+                      - code [ref=e1068]:
+                        - generic [ref=e1069]: +
+                        - generic [ref=e1070]: "- Pre-commit hook and CI verify `kanban.html` is up to date."
+                  - row [ref=e1071]:
+                    - gridcell [ref=e1072] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1073] [cursor=pointer]:
+                      - code [ref=e1074]: "165"
+                    - gridcell "+" [ref=e1075]:
+                      - code:
+                        - generic [ref=e1076]: +
+                  - row [ref=e1077]:
+                    - gridcell [ref=e1078] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1079] [cursor=pointer]:
+                      - code [ref=e1080]: "166"
+                    - 'gridcell "+ ### Housekeeping (run via ship-it skill or manually before commit)" [ref=e1081]':
+                      - code [ref=e1082]:
+                        - generic [ref=e1083]: +
+                        - generic [ref=e1084]: "### Housekeeping (run via ship-it skill or manually before commit)"
+                  - row [ref=e1086]:
+                    - gridcell [ref=e1087] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1088] [cursor=pointer]:
+                      - code [ref=e1089]: "167"
+                    - gridcell "+" [ref=e1090]:
+                      - code:
+                        - generic [ref=e1091]: +
+                  - row [ref=e1092]:
+                    - gridcell [ref=e1093] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1094] [cursor=pointer]:
+                      - code [ref=e1095]: "168"
+                    - 'gridcell "+ - `python scripts/maintenance/kanban.py` — regenerate kanban" [ref=e1096]':
+                      - code [ref=e1097]:
+                        - generic [ref=e1098]: +
+                        - generic [ref=e1099]: "- `python scripts/maintenance/kanban.py` — regenerate kanban"
+                  - row [ref=e1100]:
+                    - gridcell [ref=e1101] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1102] [cursor=pointer]:
+                      - code [ref=e1103]: "169"
+                    - 'gridcell "+ - If `graphify-out/graph.json` is stale: run `graphify update .` then regenerate callflow.html" [ref=e1104]':
+                      - code [ref=e1105]:
+                        - generic [ref=e1106]: +
+                        - generic [ref=e1107]: "- If `graphify-out/graph.json` is stale: run `graphify update .` then regenerate callflow.html"
+                  - row [ref=e1108]:
+                    - gridcell [ref=e1109] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1110] [cursor=pointer]:
+                      - code [ref=e1111]: "170"
+                    - 'gridcell "+ - If new `src/` files added: run `document-manager` skill to update markdown_docs" [ref=e1112]':
+                      - code [ref=e1113]:
+                        - generic [ref=e1114]: +
+                        - generic [ref=e1115]: "- If new `src/` files added: run `document-manager` skill to update markdown_docs"
+                  - row [ref=e1116]:
+                    - gridcell [ref=e1117] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1118] [cursor=pointer]:
+                      - code [ref=e1119]: "171"
+                    - 'gridcell "+ - If notable changes shipped: update `CHANGELOG.md` [Unreleased] section" [ref=e1120]':
+                      - code [ref=e1121]:
+                        - generic [ref=e1122]: +
+                        - generic [ref=e1123]: "- If notable changes shipped: update `CHANGELOG.md` [Unreleased] section"
+                  - row [ref=e1124]:
+                    - gridcell [ref=e1125] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1126] [cursor=pointer]:
+                      - code [ref=e1127]: "172"
+                    - 'gridcell "+ - If modules added/removed/renamed: update `docs/ARCHITECTURE.md`" [ref=e1128]':
+                      - code [ref=e1129]:
+                        - generic [ref=e1130]: +
+                        - generic [ref=e1131]: "- If modules added/removed/renamed: update `docs/ARCHITECTURE.md`"
+                  - row [ref=e1132]:
+                    - gridcell [ref=e1133] [cursor=pointer]:
+                      - code
+                    - gridcell [ref=e1134] [cursor=pointer]:
+                      - code [ref=e1135]: "173"
+                    - gridcell "+" [ref=e1136]:
+                      - code:
+                        - generic [ref=e1137]: +
+                  - row [ref=e1138]:
+                    - gridcell [ref=e1139] [cursor=pointer]:
+                      - code [ref=e1140]: "158"
+                    - gridcell [ref=e1141] [cursor=pointer]:
+                      - code [ref=e1142]: "174"
+                    - gridcell "---" [ref=e1143]:
+                      - code [ref=e1144]:
+                        - generic [ref=e1145]: "---"
+                  - row [ref=e1146]:
+                    - gridcell [ref=e1147] [cursor=pointer]:
+                      - code [ref=e1148]: "159"
+                    - gridcell [ref=e1149] [cursor=pointer]:
+                      - code [ref=e1150]: "175"
+                    - gridcell [ref=e1151]:
+                      - code [ref=e1152]
+                  - row [ref=e1154]:
+                    - gridcell [ref=e1155] [cursor=pointer]:
+                      - code [ref=e1156]: "160"
+                    - gridcell [ref=e1157] [cursor=pointer]:
+                      - code [ref=e1158]: "176"
+                    - gridcell "## 11. General Discipline" [ref=e1159]:
+                      - code [ref=e1160]:
+                        - generic [ref=e1161]: "## 11. General Discipline"
+                  - row [ref=e1163]:
+                    - gridcell [ref=e1164]:
+                      - generic [ref=e1165]:
+                        - button [ref=e1166] [cursor=pointer]
+                        - code [ref=e1169]
+            - region [ref=e1171]:
+              - generic [ref=e1173]:
+                - button "Collapse file" [ref=e1175] [cursor=pointer]
+                - generic [ref=e1178]:
+                  - heading [level=3] [ref=e1179]:
+                    - link [ref=e1180] [cursor=pointer]:
+                      - /url: "#diff-9d650bb81556026f62df8d9a78a53990f87a08c46dd9ae67f86e48463a721c79"
+                      - code [ref=e1181]: ‎bench_windows_vulkan_mtp_20260520_100044.json‎
+                  - button "Copy file name to clipboard" [ref=e1182] [cursor=pointer]
+                  - 'button "Expand all lines: bench_windows_vulkan_mtp_20260520_100044.json" [ref=e1186] [cursor=pointer]'
+                - generic [ref=e1189]:
+                  - generic [ref=e1192]:
+                    - generic [ref=e1193]: "-189"
+                    - generic [ref=e1194]: "Lines changed: 0 additions & 189 deletions"
+                  - button "More options" [ref=e1201] [cursor=pointer]
+              - generic [ref=e1209]:
+                - button "Load diff" [ref=e1210] [cursor=pointer]
+                - generic [ref=e1213]: This file was deleted.
+          - generic [ref=e1215]:
+            - heading "0 commit comments" [level=2] [ref=e1216]
+            - generic [ref=e1217]:
+              - generic [ref=e1218]: Comments
+              - generic [ref=e1219]: "0"
+              - generic [ref=e1220]: (0)
+  - contentinfo [ref=e1222]:
+    - heading "Footer" [level=2] [ref=e1223]
+    - generic [ref=e1224]:
+      - generic [ref=e1225]:
+        - link "GitHub Homepage" [ref=e1226] [cursor=pointer]:
+          - /url: https://github.com
+        - generic [ref=e1229]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e1230]:
+        - heading "Footer navigation" [level=3] [ref=e1231]
+        - list "Footer navigation" [ref=e1232]:
+          - listitem [ref=e1233]:
+            - link "Terms" [ref=e1234] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e1235]:
+            - link "Privacy" [ref=e1236] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e1237]:
+            - link "Security" [ref=e1238] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e1239]:
+            - link "Status" [ref=e1240] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e1241]:
+            - link "Community" [ref=e1242] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e1243]:
+            - link "Docs" [ref=e1244] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e1245]:
+            - link "Contact" [ref=e1246] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e1247]:
+            - button "Manage cookies" [ref=e1249] [cursor=pointer]
+          - listitem [ref=e1250]:
+            - button "Do not share my personal information" [ref=e1252] [cursor=pointer]

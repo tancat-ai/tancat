@@ -330,8 +330,8 @@ class EvidenceViewer:
         )
 
         selected_idx = None
-        if event and event.selection and event.selection.rows:
-            selected_idx = int(df.iloc[event.selection.rows[0]]["_idx"])
+        if event and event.get("selection") and event["selection"].get("rows"):
+            selected_idx = int(df.iloc[event["selection"]["rows"][0]]["_idx"])
 
         if selected_idx is not None:
             selected = results[selected_idx]
@@ -395,7 +395,7 @@ class EvidenceViewer:
                 if test.name == test_name:
                     history_data.append(
                         {
-                            "Run Date": run.created_at,
+                            "Run Date": run.run_id,
                             "Status": test.status,
                             "Duration (s)": test.duration,
                             "Error": test.error_message or "",
@@ -536,7 +536,8 @@ class EvidenceViewer:
                         }
                         for e in entries
                     ],
-                    key=lambda r: -r["Duration (s)"],
+                    key=lambda r: r["Duration (s)"],  # type: ignore[arg-type]
+                    reverse=True,
                 ),
                 use_container_width=True,
                 hide_index=True,
