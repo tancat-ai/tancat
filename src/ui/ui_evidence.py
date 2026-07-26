@@ -536,7 +536,7 @@ class EvidenceViewer:
                         }
                         for e in entries
                     ],
-                    key=lambda r: r["Duration (s)"],  # type: ignore[arg-type]
+                    key=lambda r: float(r["Duration (s)"]),  # type: ignore[arg-type, return-value]
                     reverse=True,
                 ),
                 use_container_width=True,
