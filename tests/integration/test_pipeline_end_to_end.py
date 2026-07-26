@@ -39,7 +39,8 @@ def mock_insurance_html() -> Path:
 
 def mock_insurance_file_url() -> str:
     """Return a file:// URL for the mock insurance site."""
-    return f"file://{mock_insurance_html()}"
+    path_str = str(mock_insurance_html()).replace("\\", "/")
+    return f"file:///{path_str}"
 
 
 # ── Test: Scraper captures known elements ─────────────────────────────

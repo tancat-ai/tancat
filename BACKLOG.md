@@ -841,12 +841,10 @@ Expected: three focused test cases:
 
 ---
 
-## 🆕 AI-034 — Test Table Generation & Pre-Flight Resolution Reporting
+## ✅ AI-034 — Test Table Generation & Pre-Flight Resolution Reporting (SPEC WRITTEN, waiting on Phase 1)
 
-**Status:** 🆕 new  
-**Priority:** High — bridges plan-to-skeleton gap  
-**Spec:** `docs/specs/FEATURE_SPEC_AI034_test_table_preflight.md`  
-**Impact:** Prevents silent `pytest.skip()` by showing resolution failures BEFORE tests are generated
+**Status:** 🟡 Spec written — blocked by Phase 1 Multi-Agent  
+**Spec:** `docs/specs/FEATURE_SPEC_AI034_test_table_preflight.md`
 
 **What:** Add a Test Table between Living Test Plan and skeleton generation.
 LLM expands each condition into one or more concrete test rows (e.g.,

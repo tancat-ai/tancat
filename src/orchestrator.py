@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.agents.pipeline_state import PipelineState
 from src.code_postprocessor import normalise_generated_code
 from src.journey_scraper import (
     CredentialProfile,
@@ -93,6 +94,23 @@ class TestOrchestrator:
         self._debug_enabled = os.getenv("PIPELINE_DEBUG", "").strip() == "1"
         # Diagnostics for journey execution
         self._pipeline_diagnostics: dict[str, Any] = {}
+
+        # Phase 1c: LangGraph multi-agent pipeline (enabled by default, set LANGGRAPH_ENABLED=0 to disable)
+        langgraph_disabled = os.getenv("LANGGRAPH_ENABLED", "").strip() == "0"
+        self._use_graph = not langgraph_disabled
+        self._pipeline_graph: Any | None = None
+        if self._use_graph:
+            try:
+                from src.agents.pipeline_graph import PipelineGraph
+
+                self._pipeline_graph = PipelineGraph(
+                    client=test_generator.client,
+                    rag_retriever=rag_retriever,
+                )
+                logger.info("LangGraph multi-agent pipeline enabled")
+            except Exception:
+                logger.warning("LangGraph failed to initialise — falling back to linear pipeline", exc_info=True)
+                self._use_graph = False
 
     @staticmethod
     def _build_rag_retriever() -> Any | None:
@@ -595,6 +613,80 @@ class TestOrchestrator:
             else:
                 normalized_steps.append(step)
         return normalized_steps
+
+    # ------------------------------------------------------------------
+    # Phase 1c: Graph-based pipeline (opt-in via LANGGRAPH_ENABLED=1)
+    # ------------------------------------------------------------------
+
+    async def run_pipeline_via_graph(
+        self,
+        user_story: str,
+        conditions: str,
+        target_urls: list[str] | None = None,
+        auto_confirm: bool = False,
+    ) -> PipelineState | None:
+        """Execute the full pipeline through the LangGraph multi-agent graph.
+
+        Returns the PipelineState after execution.  If the graph pauses
+        at the human checkpoint (auto_confirm=False), the returned state
+        has ``plan_confirmed=False`` and the caller should present the
+        test plan to the user, then call ``resume_graph()`` to continue.
+
+        Args:
+            auto_confirm: If True, skip the human checkpoint.
+        """
+        if self._pipeline_graph is None:
+            logger.warning("PipelineGraph not initialised — falling back to linear pipeline")
+            return None
+
+        base_url = target_urls[0] if target_urls else ""
+        additional = target_urls[1:] if target_urls and len(target_urls) > 1 else []
+
+        result = await self._pipeline_graph.run(
+            user_story=user_story,
+            base_url=base_url,
+            additional_urls=additional,
+            auto_confirm=auto_confirm,
+            pom_mode=self._pom_mode,
+        )
+
+        # Store the result for the caller
+        self._graph_state = result
+
+        if result.plan_confirmed or auto_confirm:
+            # Graph completed — skeleton code is ready
+            logger.info(
+                "Graph pipeline completed: %d conditions, %d chars of code",
+                len(result.test_conditions),
+                len(result.test_code),
+            )
+        else:
+            logger.info("Graph paused at human checkpoint — %d conditions awaiting review", len(result.test_conditions))
+
+        return result
+
+    async def resume_graph(
+        self,
+        confirmed_conditions: list,
+    ) -> PipelineState | None:
+        """Resume the graph after the human checkpoint.
+
+        Call this after the tester has reviewed and confirmed the test plan.
+        """
+        if self._pipeline_graph is None or not hasattr(self, "_graph_state"):
+            return None
+
+        return await self._pipeline_graph.resume_after_checkpoint(
+            self._graph_state,
+            confirmed_conditions,
+        )
+
+    @property
+    def graph_conditions(self) -> list:
+        """Access the test conditions from the last graph run (for UI display)."""
+        if hasattr(self, "_graph_state") and self._graph_state is not None:
+            return self._graph_state.test_conditions
+        return []
 
     @staticmethod
     def _build_generation_conditions(

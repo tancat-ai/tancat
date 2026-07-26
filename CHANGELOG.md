@@ -10,6 +10,16 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **Phase 1 Multi-Agent Architecture (a-c)**: LangGraph-based `PipelineGraph` with three agents:
+  - `IngestionAgent` — wraps `SpecAnalyzer` for criteria extraction + RAG domain enrichment
+  - `QADirectorAgent` — priority assignment, prerequisite chaining, ambiguity flagging
+  - `ScriptSynthesizerAgent` — delegates to `SkeletonGraph` for skeleton generation
+  - Human-in-the-loop checkpoint: graph pauses after QA Director for test plan review
+  - Enabled by default when langgraph installed (`pip install ai-playwright-generator[langgraph]`)
+  - Graceful degradation to linear pipeline when langgraph not available
+  - `LANGGRAPH_ENABLED=0` to force linear mode
+  - 31 new tests, 1790 total, zero failures
+- **AI-035 spec**: Self-Learning RAG — local pattern write-back from self-healing to RAG store
 - **AI-030 Ingestion Agent**: `src/pdf_ingest.py` — PyMuPDF-based PDF extraction (heading detection, table extraction, chunking). `rag_ingest.py --pdfs` ingests domain PDFs into the RAG vector store. 3 real LV Insurance policy PDFs ingested → 66 chunks. RAG accuracy 53.7 → 64.2% (+10.5pp).
 - **Phase 2b Self-Healing**: Rule-based pre-screening (`_pre_screen_failure()`) skips LLM call for assertion/navigation/other failures (cost optimization). Interactive repair fallback via `interactive_repair_candidates` in `HealingReport`.
 - **Semantic scraper (B-032)**: Three-layer hybrid extraction — BS4 (structure) + CDP AX tree (accessible_name) + `page.aria_snapshot(boxes=True)` (placeholder, value, bbox, groups). Enabled by default; `SCRAPER_BACKEND=bs4` to disable.
