@@ -201,6 +201,8 @@ changes made to the site around maximum amount of items purchaseable, maximum qu
     assert "amount" in conditions[0].text.lower()
     assert "quantity" in conditions[1].text.lower()
     assert "filter" in conditions[2].text.lower()
+    assert all(c.type == "exploratory" for c in conditions)
+    assert "edit this cell" in conditions[0].expected.lower()
     # Should bypass LLM entirely
     mock_llm.generate_test.assert_not_called()
 

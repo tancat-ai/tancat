@@ -129,7 +129,7 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                         id=f"TC01.{idx:02d}",
                         type=c_type,
                         text=text,
-                        expected="Needs refinement — add boundary values, URLs, and expected behaviour."
+                        expected="Needs refinement — edit this cell with specific boundary values and expected behaviour."
                         if criteria_source == "unstructured"
                         else "Meets acceptance criteria.",
                         source=f"Acceptance Criteria {idx}",
