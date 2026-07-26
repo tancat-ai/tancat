@@ -824,6 +824,45 @@ The project uses Jinja2-style double-brace placeholders (`{{CLICK:description}}`
 
 ---
 
+## 🆕 B-027 — Requirements with distinct concerns generate single test case instead of multiple
+
+**Status:** 🆕 new  
+**Priority:** Medium — affects test plan quality  
+**Impact:** Unstructured requirements with multiple distinct concerns (e.g. "max items, max quantity, filters") produce only one happy-path test case instead of focused boundary/functional tests
+
+**Symptom:**
+When a user enters requirements like:
+```
+changes made to the site around maximum amount of items purchaseable, maximum quantity of items and filters.
+```
+The pipeline produces only one test case:
+```
+TC01.01    happy_path    journey_step    ...maximum amount...    Meets acceptance criteria.
+```
+Expected: three focused test cases:
+- TC01.01 — boundary: max different items purchasable
+- TC01.02 — boundary: max quantity per item
+- TC01.03 — filter functionality (ordering, missing items)
+
+**Root cause:**
+1. `FeatureParser.parse()` can't parse unstructured text (no "User Story:" / "Acceptance Criteria:" format) — falls through to `return cleaned, cleaned`
+2. `SpecAnalyzer._extract_numbered_criteria()` only handles numbered lists (`1. ...`), not comma-separated concerns
+3. LLM collapses three distinct concerns into one "happy_path" test case
+
+**Proposed fix:**
+1. **Short term:** Update `SpecAnalyzer._extract_numbered_criteria()` to also detect comma-separated or bullet-point concern lists in unstructured text and split them into separate criteria
+2. **Medium term:** Add a pre-processing step that detects multiple distinct domains (amount, quantity, filters) before sending to the LLM and requests separate test conditions per domain
+3. **Long term:** Add an LLM prompt instruction: "If the spec text contains multiple distinct concerns separated by commas or conjunctions, generate one test condition per concern"
+
+**Files to modify:**
+- `src/spec_analyzer.py` — `_extract_numbered_criteria()` or LLM prompt
+- `src/user_story_parser.py` — `FeatureParser.parse()` for unstructured text
+- `tests/test_spec_analyzer.py` — add regression test for comma-separated specs
+
+**Estimated sessions:** 0.5-1
+
+---
+
 ## 🟡 Active Improvements (Prioritised)
 
 ### AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
