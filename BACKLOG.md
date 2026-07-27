@@ -30,7 +30,7 @@ Last updated: 2026-07-23 (Semantic scraper + B-024/B-025/B-026/AI-031 + AI-033 t
 
 ---
 
-## 🟡 B-024 — `<select>` elements use placeholder text instead of label for accessible_name (✅ FIXED 2026-07-23)
+## ✅ B-024 — `<select>` elements use placeholder text instead of label for accessible_name (✅ FIXED 2026-07-23)
 **Related:** B-016 (synonym-aware matching), eval harness resolver accuracy
 **Impact:** 3/67 placeholders fail (4.5pp) — `scheme`, `occupation`, `overnightLocation` on LV Insurance
 **Eval context:** `eval-005_lv_insurance_quote.json` resolver mode
@@ -870,7 +870,7 @@ against scraped DOM and shows `⚠ blocked` before any code is written.
 
 ## 🟡 Active Improvements (Prioritised)
 
-### AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
+### ✅ AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
 **Phase A:** Static multi-page scraping with placeholder resolution — COMPLETE.
 **Phase B (completed 2026-05-13):** Authenticated journey scraping — single browser
 session follows user-defined steps (goto, click, fill, capture, wait), credential profiles

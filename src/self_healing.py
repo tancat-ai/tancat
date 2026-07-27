@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.failure_classifier import FailureDetail, classify_failure
+from src.failure_classifier import FailureCategory, FailureDetail, classify_failure
 from src.llm_client import LLMClient
 from src.pytest_output_parser import RunResult, TestResult, parse_pytest_output
 
@@ -55,6 +55,14 @@ class HealingReport:
     iterations: int = 0
     patches: list[AppliedPatch] = field(default_factory=list)
     final_results: list[TestResult] = field(default_factory=list)
+    # Failures that are locator-type but couldn't be auto-fixed — candidates
+    # for interactive repair (opens browser, user clicks correct element).
+    interactive_repair_candidates: list[dict[str, Any]] = field(default_factory=list)
+    # Per-test attempt history: test_name -> list of {strategy, old_text, new_text,
+    # outcome} records. Drives the reflection loop so the LLM knows what was tried.
+    attempt_history: dict[str, list[dict[str, str]]] = field(default_factory=dict)
+    # Total LLM calls made (for cost monitoring across iterations).
+    total_llm_calls: int = 0
 
     @property
     def all_fixed(self) -> bool:
@@ -72,6 +80,7 @@ You will receive:
 1. The test function source code
 2. The exact error message from pytest
 3. Scraped page elements (selectors, text, roles) from the page where it failed
+4. Optionally: PREVIOUS FIX ATTEMPTS — what was already tried and why it failed
 
 Output ONLY a valid JSON object with these fields:
 {
@@ -97,7 +106,17 @@ RULES:
 - For locator replacements, prefer selectors with data-test, id, or aria-label.
 - Do NOT change the test logic — only fix the technical issue.
 - old_line must match the source code exactly (character-for-character).
-- If confidence < 0.5, set "fixable": false."""
+- If confidence < 0.5, set "fixable": false.
+
+REFLECTION RULES (when PREVIOUS FIX ATTEMPTS are provided):
+- Do NOT repeat a strategy that already failed. If replace_locator failed, try
+  add_wait or a different selector approach.
+- If the same locator keeps timing out, the element may not exist on this page —
+  consider add_navigation to ensure the test is on the correct page first.
+- If two different locator replacements both failed, the real issue may be page
+  load timing — try add_wait (page.wait_for_load_state or wait_for_selector).
+- Mention in your diagnosis WHY the previous attempt failed and how your new
+  approach differs."""
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +174,8 @@ class SelfHealingRunner:
 
         report = HealingReport()
         current_test_names = test_names  # None means "all tests"
+        # Track per-test attempt history across iterations for reflection
+        per_test_attempts: dict[str, list[dict[str, str]]] = {}
 
         for iteration in range(1, self.max_iterations + 1):
             _progress(f"Healing iteration {iteration}/{self.max_iterations} — running tests...")
@@ -168,6 +189,7 @@ class SelfHealingRunner:
                 report.total_failures = report.total_failures or 0
                 report.iterations = iteration
                 report.final_results = run_result.results
+                report.attempt_history = dict(per_test_attempts)
                 return report
 
             # Track initial failure count on first iteration
@@ -183,18 +205,49 @@ class SelfHealingRunner:
             for result in failed:
                 _progress(f"Reviewing: {result.name}...")
                 detail = classify_failure(result.error_message)
-                patch = self._review_and_suggest(result, detail, test_source)
+
+                # Pre-screen: skip LLM for clearly unfixable failures
+                if not self._pre_screen_failure(detail):
+                    _progress(f"  ⏭ Pre-screened as unfixable ({detail.category})")
+                    report.unfixable += 1
+                    self._maybe_add_interactive_candidate(report, result, detail)
+                    continue
+
+                # Get prior attempts for this test (reflection context)
+                prior = per_test_attempts.get(result.name, [])
+                patch = self._review_and_suggest(result, detail, test_source, prior_attempts=prior)
+                report.total_llm_calls += 1  # Count each LLM reviewer call
 
                 if patch is None:
                     report.unfixable += 1
+                    self._maybe_add_interactive_candidate(report, result, detail)
                     continue
 
                 # Apply the patch
                 if self._apply_patch(test_path, test_source, patch):
                     report.patches.append(patch)
                     fixed_this_iteration += 1
+                    # Record the attempt for reflection if it fails again
+                    per_test_attempts.setdefault(result.name, []).append(
+                        {
+                            "strategy": patch.strategy,
+                            "old_text": patch.old_text[:120],
+                            "new_text": patch.new_text[:120],
+                            "diagnosis": patch.diagnosis,
+                        }
+                    )
                     # Refresh source after patch
                     test_source = test_path.read_text(encoding="utf-8")
+                else:
+                    report.unfixable += 1
+                    per_test_attempts.setdefault(result.name, []).append(
+                        {
+                            "strategy": patch.strategy,
+                            "old_text": patch.old_text[:120],
+                            "new_text": patch.new_text[:120],
+                            "diagnosis": f"PATCH FAILED: {patch.diagnosis}",
+                        }
+                    )
 
             report.fixed += fixed_this_iteration
 
@@ -210,6 +263,7 @@ class SelfHealingRunner:
         report.remaining = len([r for r in final_run.results if r.status == "failed"])
         report.iterations = iteration
         report.final_results = final_run.results
+        report.attempt_history = dict(per_test_attempts)
         return report
 
     # ------------------------------------------------------------------
@@ -257,6 +311,56 @@ class SelfHealingRunner:
         return parse_pytest_output(output)
 
     # ------------------------------------------------------------------
+    # Internal: pre-screening
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _pre_screen_failure(detail: FailureDetail) -> bool:
+        """Pre-screen: return True if failure is worth sending to the LLM.
+
+        Skips the LLM call for failures that cannot be fixed by code changes:
+        - ASSERTION_FAILURE: logic/test error, not a locator issue
+        - NAVIGATION_ERROR: site down, connection refused — nothing to fix
+        - OTHER: unknown error with no actionable locator signal
+
+        LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review — the LLM
+        can suggest better selectors or disambiguation strategies.
+        """
+        if detail.category in (
+            FailureCategory.ASSERTION_FAILURE,
+            FailureCategory.NAVIGATION_ERROR,
+        ):
+            return False
+        if detail.category == FailureCategory.OTHER:
+            return False
+        # LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review
+        return True
+
+    @staticmethod
+    def _maybe_add_interactive_candidate(
+        report: HealingReport,
+        result: TestResult,
+        detail: FailureDetail,
+    ) -> None:
+        """Add failure to interactive repair candidates if it's a locator-type failure.
+
+        Only LOCATOR_TIMEOUT and STRICT_VIOLATION failures can benefit from
+        interactive repair (open browser → user clicks correct element → capture locator).
+        """
+        if detail.category in (
+            FailureCategory.LOCATOR_TIMEOUT,
+            FailureCategory.STRICT_VIOLATION,
+        ):
+            report.interactive_repair_candidates.append(
+                {
+                    "test_name": result.name,
+                    "raw_locator": detail.raw_locator,
+                    "error_message": detail.error_message,
+                    "failure_url": detail.failure_url,
+                }
+            )
+
+    # ------------------------------------------------------------------
     # Internal: LLM reviewer
     # ------------------------------------------------------------------
 
@@ -265,8 +369,17 @@ class SelfHealingRunner:
         result: TestResult,
         detail: FailureDetail,
         test_source: str,
+        prior_attempts: list[dict[str, str]] | None = None,
     ) -> AppliedPatch | None:
-        """Send failure context to the LLM reviewer and parse the suggested patch."""
+        """Send failure context to the LLM reviewer and parse the suggested patch.
+
+        Args:
+            result: The failed test result.
+            detail: Classified failure details.
+            test_source: Full test file source code.
+            prior_attempts: Previous fix attempts for this test (for reflection).
+                Each entry: {strategy, old_text, new_text, diagnosis}.
+        """
         # Extract the failing test function from source
         test_func = self._extract_test_function(test_source, result.name)
         if not test_func:
@@ -279,6 +392,20 @@ class SelfHealingRunner:
             elements = self._scraped_data[detail.failure_url][:30]
             elements_context = self._format_elements_for_prompt(elements)
 
+        # Build prior attempts section for reflection
+        prior_section = ""
+        if prior_attempts:
+            lines = ["PREVIOUS FIX ATTEMPTS (all failed):"]
+            for i, attempt in enumerate(prior_attempts, 1):
+                lines.append(
+                    f"  {i}. {attempt['strategy']}: '{attempt['old_text'][:80]}' -> '{attempt['new_text'][:80]}'"
+                )
+                if attempt.get("diagnosis"):
+                    lines.append(f"     Diagnosis: {attempt['diagnosis'][:120]}")
+            lines.append("")
+            lines.append("Do NOT repeat any strategy that already failed. Try a different approach.")
+            prior_section = "\n".join(lines) + "\n\n"
+
         prompt = f"""FAILING TEST:
 ```python
 {test_func}
@@ -287,7 +414,7 @@ class SelfHealingRunner:
 ERROR MESSAGE:
 {result.error_message or detail.error_message}
 
-SCRAPED PAGE ELEMENTS (selectors, text, roles):
+{prior_section}SCRAPED PAGE ELEMENTS (selectors, text, roles):
 {elements_context or "(no scraped data available for this page)"}
 
 Analyze this failure and suggest a fix."""
