@@ -669,3 +669,365 @@ class TestHealPreScreenIntegration:
         # Should be flagged as interactive candidate since it's a locator failure
         assert len(report.interactive_repair_candidates) >= 1
         assert report.interactive_repair_candidates[0]["test_name"] == "test_weird_click"
+
+
+# ---------------------------------------------------------------------------
+# Reflection loop tests (Phase 2 — iterative reflection)
+# ---------------------------------------------------------------------------
+
+
+class TestHealingReportAttemptHistory:
+    """HealingReport.attempt_history and total_llm_calls fields."""
+
+    def test_attempt_history_defaults_empty(self) -> None:
+        report = HealingReport()
+        assert report.attempt_history == {}
+
+    def test_total_llm_calls_defaults_zero(self) -> None:
+        report = HealingReport()
+        assert report.total_llm_calls == 0
+
+    def test_attempt_history_can_be_populated(self) -> None:
+        report = HealingReport()
+        report.attempt_history["test_foo"] = [
+            {
+                "strategy": "replace_locator",
+                "old_text": "#old",
+                "new_text": "#new",
+                "diagnosis": "Wrong selector",
+            }
+        ]
+        assert len(report.attempt_history["test_foo"]) == 1
+
+
+class TestReviewAndSuggestWithPriorAttempts:
+    """Reflection: prior attempts are injected into the LLM prompt."""
+
+    def test_prior_attempts_included_in_prompt(self) -> None:
+        """When prior_attempts is provided, prompt includes PREVIOUS FIX ATTEMPTS."""
+        import json
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Trying add_wait instead",
+                "strategy": "add_wait",
+                "old_line": "page.locator('#btn').click()",
+                "new_line": "page.wait_for_load_state('networkidle')\n    page.locator('#btn').click()",
+                "confidence": 0.85,
+            }
+        )
+
+        runner = SelfHealingRunner(llm_client=mock_llm)
+
+        from src.failure_classifier import FailureCategory, FailureDetail
+        from src.pytest_output_parser import TestResult
+
+        result = TestResult(
+            name="test_reflect",
+            status="failed",
+            error_message="Timeout waiting for locator('#btn')",
+            duration=0.5,
+            file_path="test.py",
+        )
+        detail = FailureDetail(
+            category=FailureCategory.LOCATOR_TIMEOUT,
+            raw_locator="#btn",
+            failure_url=None,
+            line_number=None,
+            error_message="Timeout waiting for locator('#btn')",
+        )
+        source = "def test_reflect():\n    page.locator('#btn').click()\n"
+
+        prior = [
+            {
+                "strategy": "replace_locator",
+                "old_text": "page.locator('#old').click()",
+                "new_text": "page.locator('#btn').click()",
+                "diagnosis": "Wrong selector",
+            }
+        ]
+
+        runner._review_and_suggest(result, detail, source, prior_attempts=prior)
+
+        call_args = mock_llm.generate_test.call_args
+        user_prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
+        assert "PREVIOUS FIX ATTEMPTS" in user_prompt
+        assert "replace_locator" in user_prompt
+        assert "page.locator('#old').click()" in user_prompt
+        assert "Do NOT repeat" in user_prompt
+
+    def test_empty_prior_attempts_no_section(self) -> None:
+        """When prior_attempts is empty, no PREVIOUS section in user prompt."""
+        import json
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Simple fix",
+                "strategy": "replace_locator",
+                "old_line": "page.locator('#btn').click()",
+                "new_line": "page.locator('#real-btn').click()",
+                "confidence": 0.9,
+            }
+        )
+
+        runner = SelfHealingRunner(llm_client=mock_llm)
+
+        from src.failure_classifier import FailureCategory, FailureDetail
+        from src.pytest_output_parser import TestResult
+
+        result = TestResult(
+            name="test_first_try",
+            status="failed",
+            error_message="Timeout waiting for locator('#btn')",
+            duration=0.5,
+            file_path="test.py",
+        )
+        detail = FailureDetail(
+            category=FailureCategory.LOCATOR_TIMEOUT,
+            raw_locator="#btn",
+            failure_url=None,
+            line_number=None,
+            error_message="Timeout waiting for locator('#btn')",
+        )
+        source = "def test_first_try():\n    page.locator('#btn').click()\n"
+
+        runner._review_and_suggest(result, detail, source, prior_attempts=[])
+
+        call_args = mock_llm.generate_test.call_args
+        user_prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
+        assert "PREVIOUS FIX ATTEMPTS" not in user_prompt
+
+    def test_multiple_prior_attempts_both_listed(self) -> None:
+        """Multiple prior attempts should all appear, numbered."""
+        import json
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Third attempt",
+                "strategy": "add_navigation",
+                "old_line": "page.locator('#btn').click()",
+                "new_line": "page.goto('/correct-page')\n    page.locator('#btn').click()",
+                "confidence": 0.8,
+            }
+        )
+
+        runner = SelfHealingRunner(llm_client=mock_llm)
+
+        from src.failure_classifier import FailureCategory, FailureDetail
+        from src.pytest_output_parser import TestResult
+
+        result = TestResult(
+            name="test_multiple",
+            status="failed",
+            error_message="Timeout waiting for locator('#btn')",
+            duration=0.5,
+            file_path="test.py",
+        )
+        detail = FailureDetail(
+            category=FailureCategory.LOCATOR_TIMEOUT,
+            raw_locator="#btn",
+            failure_url=None,
+            line_number=None,
+            error_message="Timeout waiting for locator('#btn')",
+        )
+        source = "def test_multiple():\n    page.locator('#btn').click()\n"
+
+        prior = [
+            {"strategy": "replace_locator", "old_text": "#a", "new_text": "#b", "diagnosis": "First try"},
+            {"strategy": "add_wait", "old_text": "#b", "new_text": "wait + #b", "diagnosis": "Second try"},
+        ]
+
+        runner._review_and_suggest(result, detail, source, prior_attempts=prior)
+
+        call_args = mock_llm.generate_test.call_args
+        user_prompt = call_args.kwargs.get("prompt", call_args.args[0] if call_args.args else "")
+        assert "1. replace_locator" in user_prompt
+        assert "2. add_wait" in user_prompt
+
+
+class TestHealReflectionHistoryTracking:
+    """Integration: heal() builds attempt_history and tracks LLM calls."""
+
+    def test_heal_tracks_attempt_history(self, tmp_path: Path) -> None:
+        """After healing, report.attempt_history contains recorded attempts."""
+        import json
+
+        test_file = tmp_path / "test_tracked.py"
+        test_file.write_text(
+            "def test_tracked():\n"
+            '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+            "waiting for locator('#bad-btn')\")\n",
+            encoding="utf-8",
+        )
+
+        reviewer_response = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Wrong selector",
+                "strategy": "replace_locator",
+                "old_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#bad-btn')\")"
+                ),
+                "new_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#better-btn')\")"
+                ),
+                "confidence": 0.9,
+            }
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = reviewer_response
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        assert "test_tracked" in report.attempt_history, (
+            f"Expected test_tracked in attempt_history, got keys: {list(report.attempt_history.keys())}"
+        )
+        attempts = report.attempt_history["test_tracked"]
+        assert len(attempts) >= 1
+        assert attempts[0]["strategy"] == "replace_locator"
+
+    def test_heal_counts_total_llm_calls(self, tmp_path: Path) -> None:
+        """report.total_llm_calls matches the number of LLM reviewer calls."""
+        import json
+
+        test_file = tmp_path / "test_llm_count.py"
+        test_file.write_text(
+            "def test_count():\n"
+            '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+            "waiting for locator('#btn')\")\n",
+            encoding="utf-8",
+        )
+
+        reviewer_response = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Fix",
+                "strategy": "replace_locator",
+                "old_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#btn')\")"
+                ),
+                "new_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#new')\")"
+                ),
+                "confidence": 0.9,
+            }
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = reviewer_response
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        assert report.total_llm_calls >= 1
+
+    def test_heal_two_failures_two_llm_calls(self, tmp_path: Path) -> None:
+        """Two failing tests produce two LLM calls and attempt history."""
+        import json
+
+        test_file = tmp_path / "test_two.py"
+        test_file.write_text(
+            "def test_a():\n"
+            '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+            "waiting for locator('#a')\")\n"
+            "def test_b():\n"
+            '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+            "waiting for locator('#b')\")\n",
+            encoding="utf-8",
+        )
+
+        call_count = [0]
+        prior_per_call: list[list[dict]] = []
+
+        def side_effect(*args: object, **kwargs: object) -> str:
+            call_count[0] += 1
+            prior_raw = kwargs.get("prior_attempts", args[4] if len(args) > 4 else [])
+            prior: list[dict[str, str]] = prior_raw if isinstance(prior_raw, list) else []
+            prior_per_call.append(list(prior))
+            return json.dumps(
+                {
+                    "fixable": call_count[0] == 1,
+                    "diagnosis": f"Attempt {call_count[0]}",
+                    "strategy": "replace_locator" if call_count[0] == 1 else "skip_test",
+                    "old_line": "some.line('x')",
+                    "new_line": "some.line('y')",
+                    "confidence": 0.9 if call_count[0] == 1 else 0.0,
+                }
+            )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.side_effect = side_effect
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        assert call_count[0] >= 2, f"Expected >=2 LLM calls, got {call_count[0]}"
+        assert prior_per_call[0] == []  # First call: no priors
+        assert isinstance(report.attempt_history, dict)
+
+    def test_heal_no_prior_on_first_iteration(self, tmp_path: Path) -> None:
+        """On iteration 1, there are no prior attempts."""
+        import json
+
+        test_file = tmp_path / "test_first_iter.py"
+        test_file.write_text(
+            "def test_fresh():\n"
+            '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+            "waiting for locator('#fresh')\")\n",
+            encoding="utf-8",
+        )
+
+        reviewer_response = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "First fix",
+                "strategy": "replace_locator",
+                "old_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#fresh')\")"
+                ),
+                "new_line": (
+                    'raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+                    "waiting for locator('#fixed')\")"
+                ),
+                "confidence": 0.9,
+            }
+        )
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = reviewer_response
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        runner.heal(test_file)
+
+        first_call = mock_llm.generate_test.call_args_list[0]
+        user_prompt = first_call.kwargs.get("prompt", first_call.args[0] if first_call.args else "")
+        assert "PREVIOUS FIX ATTEMPTS" not in user_prompt, (
+            "First iteration should NOT have prior attempts in user prompt"
+        )
+
+    def test_all_passing_returns_empty_history(self, tmp_path: Path) -> None:
+        """When all tests pass on first run, attempt_history is empty."""
+        test_file = tmp_path / "test_all_good.py"
+        test_file.write_text(
+            "def test_good():\n    assert True\n",
+            encoding="utf-8",
+        )
+
+        runner = SelfHealingRunner(max_iterations=3)
+        report = runner.heal(test_file)
+
+        assert report.attempt_history == {}
+        assert report.total_llm_calls == 0
