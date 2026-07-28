@@ -430,7 +430,7 @@ class EvalRunner:
         client = LLMClient()
         generator = TestGenerator(client=client)
         # Default to POM mode for regeneration
-        orchestrator = TestOrchestrator(generator, pom_mode=True)
+        orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
 
         logger.info("Regenerating code for %d stories...", len(list(self.dataset_dir.glob("*.json"))))
 
