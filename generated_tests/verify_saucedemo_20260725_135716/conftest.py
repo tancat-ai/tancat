@@ -1,4 +1,5 @@
 """Conftest for production verification tests."""
+
 from pathlib import Path
 from typing import Any
 

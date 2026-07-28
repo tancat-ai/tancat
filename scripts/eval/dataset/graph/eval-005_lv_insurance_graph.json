@@ -1,427 +1,377 @@
 {
-  "id": "eval-005",
-  "site": "lv_insurance",
-  "user_story": "As a new customer, I want to get a car insurance quote for my Honda CR-V so that I can insure my vehicle with LV.",
-  "conditions": [
-    "1. Create account with personal details (email, password, name, DOB, address)",
-    "2. Select Car Insurance product",
-    "3. Enter policy details with Standard scheme and start date",
-    "4. Enter account holder driver details (license, years licensed, occupation)",
-    "5. Add a vehicle via registration lookup (AB12CDE \u00e2\u2020\u2019 Honda CR-V)",
-    "6. Select Social, Domestic & Pleasure usage type",
-    "7. Set No Claims Discount and overnight parking location",
-    "8. Verify extras page displays estimated premium and compulsory excess",
-    "9. Select payment method (Pay in Full) and submit quote",
-    "10. Verify quote confirmation page with reference number and premium"
-  ],
-  "base_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-  "golden_resolutions": [
-    {
-      "criterion": "Graph criterion 1",
-      "placeholders": [
+    "id": "eval-005",
+    "site": "lv_insurance",
+    "user_story": "As a new customer, I want to get a car insurance quote for my Honda CR-V so that I can insure my vehicle with LV.",
+    "conditions": [
+        "1. Create account with personal details (email, password, name, DOB, address)",
+        "2. Select Car Insurance product",
+        "3. Enter policy details with Standard scheme and start date",
+        "4. Enter account holder driver details (license, years licensed, occupation)",
+        "5. Add a vehicle via registration lookup (AB12CDE \u00e2\u2020\u2019 Honda CR-V)",
+        "6. Select Social, Domestic & Pleasure usage type",
+        "7. Set No Claims Discount and overnight parking location",
+        "8. Verify extras page displays estimated premium and compulsory excess",
+        "9. Select payment method (Pay in Full) and submit quote",
+        "10. Verify quote confirmation page with reference number and premium",
+    ],
+    "base_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "golden_resolutions": [
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 2",
-      "placeholders": [
+            "criterion": "Graph criterion 1",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 3",
-      "placeholders": [
+            "criterion": "Graph criterion 2",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Create account with personal details",
-          "expected_locator": "Create account with personal details",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 4",
-      "placeholders": [
+            "criterion": "Graph criterion 3",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Create account with personal details",
+                    "expected_locator": "Create account with personal details",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "account created",
-          "expected_locator": "p:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 5",
-      "placeholders": [
+            "criterion": "Graph criterion 4",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "account created",
+                    "expected_locator": "p:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 6",
-      "placeholders": [
+            "criterion": "Graph criterion 5",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 7",
-      "placeholders": [
+            "criterion": "Graph criterion 6",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Select Car Insurance product",
-          "expected_locator": "Select Car Insurance product",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 8",
-      "placeholders": [
+            "criterion": "Graph criterion 7",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Select Car Insurance product",
+                    "expected_locator": "Select Car Insurance product",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "Car Insurance product selected",
-          "expected_locator": "p:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 9",
-      "placeholders": [
+            "criterion": "Graph criterion 8",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "Car Insurance product selected",
+                    "expected_locator": "p:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 10",
-      "placeholders": [
+            "criterion": "Graph criterion 9",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 11",
-      "placeholders": [
+            "criterion": "Graph criterion 10",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Enter policy details",
-          "expected_locator": "Enter policy details",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 12",
-      "placeholders": [
+            "criterion": "Graph criterion 11",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Enter policy details",
+                    "expected_locator": "Enter policy details",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "policy details entered",
-          "expected_locator": "h1:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 13",
-      "placeholders": [
+            "criterion": "Graph criterion 12",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "policy details entered",
+                    "expected_locator": "h1:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 14",
-      "placeholders": [
+            "criterion": "Graph criterion 13",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 15",
-      "placeholders": [
+            "criterion": "Graph criterion 14",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Enter account holder driver details",
-          "expected_locator": "Enter account holder driver details",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 16",
-      "placeholders": [
+            "criterion": "Graph criterion 15",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Enter account holder driver details",
+                    "expected_locator": "Enter account holder driver details",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "driver details entered",
-          "expected_locator": "h1:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 17",
-      "placeholders": [
+            "criterion": "Graph criterion 16",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "driver details entered",
+                    "expected_locator": "h1:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 18",
-      "placeholders": [
+            "criterion": "Graph criterion 17",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 19",
-      "placeholders": [
+            "criterion": "Graph criterion 18",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Add a vehicle via registration lookup",
-          "expected_locator": "Add a vehicle via registration lookup",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 20",
-      "placeholders": [
+            "criterion": "Graph criterion 19",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Add a vehicle via registration lookup",
+                    "expected_locator": "Add a vehicle via registration lookup",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 21",
-      "placeholders": [
+            "criterion": "Graph criterion 20",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 22",
-      "placeholders": [
+            "criterion": "Graph criterion 21",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Select Social, Domestic & Pleasure usage type",
-          "expected_locator": "Select Social, Domestic & Pleasure usage type",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 23",
-      "placeholders": [
+            "criterion": "Graph criterion 22",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Select Social, Domestic & Pleasure usage type",
+                    "expected_locator": "Select Social, Domestic & Pleasure usage type",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "usage type selected",
-          "expected_locator": "h1:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 24",
-      "placeholders": [
+            "criterion": "Graph criterion 23",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "usage type selected",
+                    "expected_locator": "h1:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 25",
-      "placeholders": [
+            "criterion": "Graph criterion 24",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 26",
-      "placeholders": [
+            "criterion": "Graph criterion 25",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Set No Claims Discount and overnight parking location",
-          "expected_locator": "Set No Claims Discount and overnight parking location",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 27",
-      "placeholders": [
+            "criterion": "Graph criterion 26",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Set No Claims Discount and overnight parking location",
+                    "expected_locator": "Set No Claims Discount and overnight parking location",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "details set",
-          "expected_locator": "p:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 28",
-      "placeholders": [
+            "criterion": "Graph criterion 27",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "details set",
+                    "expected_locator": "p:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 29",
-      "placeholders": [
+            "criterion": "Graph criterion 28",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 30",
-      "placeholders": [
+            "criterion": "Graph criterion 29",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 31",
-      "placeholders": [
+            "criterion": "Graph criterion 30",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 32",
-      "placeholders": [
+            "criterion": "Graph criterion 31",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Select payment method",
-          "expected_locator": "Select payment method",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 33",
-      "placeholders": [
+            "criterion": "Graph criterion 32",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Select payment method",
+                    "expected_locator": "Select payment method",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "submit quote",
-          "expected_locator": "submit quote",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 34",
-      "placeholders": [
+            "criterion": "Graph criterion 33",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "submit quote",
+                    "expected_locator": "submit quote",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "quote submitted",
-          "expected_locator": "p:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 35",
-      "placeholders": [
+            "criterion": "Graph criterion 34",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "quote submitted",
+                    "expected_locator": "p:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 36",
-      "placeholders": [
+            "criterion": "Graph criterion 35",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Login",
-          "expected_locator": "Login",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 37",
-      "placeholders": [
+            "criterion": "Graph criterion 36",
+            "placeholders": [
+                {"action": "CLICK", "description": "Login", "expected_locator": "Login", "tolerance_selectors": []}
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "quote confirmation page with reference number and premium",
-          "expected_locator": "p:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    }
-  ]
+            "criterion": "Graph criterion 37",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "quote confirmation page with reference number and premium",
+                    "expected_locator": "p:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+    ],
 }

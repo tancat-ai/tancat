@@ -1,22 +1,22 @@
 {
-  "source": "A/B test July 28 2026 \u2014 DeepSeek, POM mode, RAG on",
-  "pipeline_comparison": {
-    "linear": {
-      "eval-001": 30.0,
-      "eval-002": 37.5,
-      "eval-003": 75.0,
-      "eval-004": 57.1,
-      "eval-005": 29.2,
-      "average": 45.8
+    "source": "A/B test July 28 2026 \u2014 DeepSeek, POM mode, RAG on",
+    "pipeline_comparison": {
+        "linear": {
+            "eval-001": 30.0,
+            "eval-002": 37.5,
+            "eval-003": 75.0,
+            "eval-004": 57.1,
+            "eval-005": 29.2,
+            "average": 45.8,
+        },
+        "graph": {
+            "eval-001": 30.0,
+            "eval-002": 25.0,
+            "eval-003": 75.0,
+            "eval-004": 42.9,
+            "eval-005": 29.2,
+            "average": 40.4,
+        },
+        "delta": -5.4,
     },
-    "graph": {
-      "eval-001": 30.0,
-      "eval-002": 25.0,
-      "eval-003": 75.0,
-      "eval-004": 42.9,
-      "eval-005": 29.2,
-      "average": 40.4
-    },
-    "delta": -5.4
-  }
 }
