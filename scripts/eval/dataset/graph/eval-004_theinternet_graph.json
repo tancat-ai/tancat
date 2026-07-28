@@ -1,180 +1,180 @@
 {
-  "id": "eval-004",
-  "site": "theinternet",
-  "user_story": "As a user, I want to interact with the dynamic content features on the-internet.herokuapp.com, including triggering a JavaScript alert and verifying its message.",
-  "conditions": [
-    "1. Navigate to the the-internet.herokuapp.com main page",
-    "2. Click the JavaScript Alerts link",
-    "3. Click the Click for JS Alert button",
-    "4. Accept the JavaScript alert popup",
-    "5. Verify the result message displays on the page"
-  ],
-  "base_url": "https://the-internet.herokuapp.com",
-  "golden_resolutions": [
-    {
-      "criterion": "Graph criterion 1",
-      "placeholders": [
+    "id": "eval-004",
+    "site": "theinternet",
+    "user_story": "As a user, I want to interact with the dynamic content features on the-internet.herokuapp.com, including triggering a JavaScript alert and verifying its message.",
+    "conditions": [
+        "1. Navigate to the the-internet.herokuapp.com main page",
+        "2. Click the JavaScript Alerts link",
+        "3. Click the Click for JS Alert button",
+        "4. Accept the JavaScript alert popup",
+        "5. Verify the result message displays on the page",
+    ],
+    "base_url": "https://the-internet.herokuapp.com",
+    "golden_resolutions": [
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "https://the-internet.herokuapp.com",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 2",
-      "placeholders": [
+            "criterion": "Graph criterion 1",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "https://the-internet.herokuapp.com",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "https://the-internet.herokuapp.com",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 3",
-      "placeholders": [
+            "criterion": "Graph criterion 2",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "https://the-internet.herokuapp.com",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "JavaScript Alerts link",
-          "expected_locator": "a[href=",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 4",
-      "placeholders": [
+            "criterion": "Graph criterion 3",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "JavaScript Alerts link",
+                    "expected_locator": "a[href=",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "https://the-internet.herokuapp.com",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 5",
-      "placeholders": [
+            "criterion": "Graph criterion 4",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "https://the-internet.herokuapp.com",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "JavaScript Alerts link",
-          "expected_locator": "a[href=",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 6",
-      "placeholders": [
+            "criterion": "Graph criterion 5",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "JavaScript Alerts link",
+                    "expected_locator": "a[href=",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Click for JS Alert button",
-          "expected_locator": "Click for JS Alert button",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 7",
-      "placeholders": [
+            "criterion": "Graph criterion 6",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Click for JS Alert button",
+                    "expected_locator": "Click for JS Alert button",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "https://the-internet.herokuapp.com",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 8",
-      "placeholders": [
+            "criterion": "Graph criterion 7",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "https://the-internet.herokuapp.com",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "JavaScript Alerts link",
-          "expected_locator": "a[href=",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 9",
-      "placeholders": [
+            "criterion": "Graph criterion 8",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "JavaScript Alerts link",
+                    "expected_locator": "a[href=",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Click for JS Alert button",
-          "expected_locator": "Click for JS Alert button",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 10",
-      "placeholders": [
+            "criterion": "Graph criterion 9",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Click for JS Alert button",
+                    "expected_locator": "Click for JS Alert button",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Accept JavaScript alert popup",
-          "expected_locator": "Accept JavaScript alert popup",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 11",
-      "placeholders": [
+            "criterion": "Graph criterion 10",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Accept JavaScript alert popup",
+                    "expected_locator": "Accept JavaScript alert popup",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "GOTO",
-          "description": "navigate",
-          "expected_locator": "https://the-internet.herokuapp.com",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 12",
-      "placeholders": [
+            "criterion": "Graph criterion 11",
+            "placeholders": [
+                {
+                    "action": "GOTO",
+                    "description": "navigate",
+                    "expected_locator": "https://the-internet.herokuapp.com",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "JavaScript Alerts link",
-          "expected_locator": "a[href=",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 13",
-      "placeholders": [
+            "criterion": "Graph criterion 12",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "JavaScript Alerts link",
+                    "expected_locator": "a[href=",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Click for JS Alert button",
-          "expected_locator": "Click for JS Alert button",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 14",
-      "placeholders": [
+            "criterion": "Graph criterion 13",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Click for JS Alert button",
+                    "expected_locator": "Click for JS Alert button",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "CLICK",
-          "description": "Accept JavaScript alert popup",
-          "expected_locator": "Accept JavaScript alert popup",
-          "tolerance_selectors": []
-        }
-      ]
-    },
-    {
-      "criterion": "Graph criterion 15",
-      "placeholders": [
+            "criterion": "Graph criterion 14",
+            "placeholders": [
+                {
+                    "action": "CLICK",
+                    "description": "Accept JavaScript alert popup",
+                    "expected_locator": "Accept JavaScript alert popup",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
         {
-          "action": "ASSERT",
-          "description": "result message displays on the page",
-          "expected_locator": "h3:has-text(",
-          "tolerance_selectors": []
-        }
-      ]
-    }
-  ]
+            "criterion": "Graph criterion 15",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "result message displays on the page",
+                    "expected_locator": "h3:has-text(",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+    ],
 }
