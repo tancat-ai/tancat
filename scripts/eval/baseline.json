@@ -43,7 +43,7 @@
           "tolerance_selectors": [
             "[data-test=\"inventory-item-description\"]"
           ],
-          "generated_locator": "[data-test=\"inventory-item-description\"]",
+          "generated_locator": ".inventory_item_description[data-test=\"inventory-item-description\"]",
           "matched": true
         },
         {
@@ -81,8 +81,8 @@
           "description": "Add to cart (Backpack)",
           "expected_locator": "#add-to-cart-sauce-labs-backpack",
           "tolerance_selectors": [],
-          "generated_locator": "#add-to-cart-sauce-labs-backpack",
-          "matched": true
+          "generated_locator": "#login-button",
+          "matched": false
         },
         {
           "action": "ASSERT",
@@ -91,7 +91,7 @@
           "tolerance_selectors": [
             ".shopping_cart_link[data-test=\"shopping-cart-link\"]"
           ],
-          "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
+          "generated_locator": ".shopping_cart_badge[data-test=\"shopping-cart-badge\"]",
           "matched": true
         },
         {
@@ -101,16 +101,16 @@
           "tolerance_selectors": [
             "a.shopping_cart_link"
           ],
-          "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
-          "matched": true
+          "generated_locator": "#login-button",
+          "matched": false
         },
         {
           "action": "ASSERT",
           "description": "Cart Summary",
           "expected_locator": "#cart_contents_container",
           "tolerance_selectors": [],
-          "generated_locator": "#cart_contents_container",
-          "matched": true
+          "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com\")",
+          "matched": false
         },
         {
           "action": "ASSERT",
@@ -119,24 +119,24 @@
           "tolerance_selectors": [
             ".cart_list[data-test=\"cart-list\"]"
           ],
-          "generated_locator": ".cart_list[data-test=\"cart-list\"]",
-          "matched": true
+          "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com\")",
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Checkout",
           "expected_locator": "#checkout",
           "tolerance_selectors": [],
-          "generated_locator": "#checkout",
-          "matched": true
+          "generated_locator": "#login-button",
+          "matched": false
         },
         {
           "action": "ASSERT",
           "description": "Checkout Info form",
           "expected_locator": "#checkout_info_container",
           "tolerance_selectors": [],
-          "generated_locator": "#checkout_info_container",
-          "matched": true
+          "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com\")",
+          "matched": false
         },
         {
           "action": "FILL",
@@ -145,8 +145,8 @@
           "tolerance_selectors": [
             "input[name=\"firstName\"]"
           ],
-          "generated_locator": "#first-name",
-          "matched": true
+          "generated_locator": "#password",
+          "matched": false
         },
         {
           "action": "FILL",
@@ -155,7 +155,7 @@
           "tolerance_selectors": [
             "input[name=\"lastName\"]"
           ],
-          "generated_locator": "#postal-code",
+          "generated_locator": "#password",
           "matched": false
         },
         {
@@ -165,31 +165,31 @@
           "tolerance_selectors": [
             "input[name=\"postalCode\"]"
           ],
-          "generated_locator": "#postal-code",
-          "matched": true
+          "generated_locator": "#password",
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Continue",
           "expected_locator": "#continue",
           "tolerance_selectors": [],
-          "generated_locator": "#continue",
-          "matched": true
+          "generated_locator": "#login-button",
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Finish",
           "expected_locator": "#finish",
           "tolerance_selectors": [],
-          "generated_locator": "#finish",
-          "matched": true
+          "generated_locator": "#login-button",
+          "matched": false
         },
         {
           "action": "ASSERT",
           "description": "Thank You page",
           "expected_locator": "[data-test=\"title\"]",
           "tolerance_selectors": [],
-          "generated_locator": null,
+          "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com\")",
           "matched": false
         }
       ],
@@ -207,13 +207,12 @@
         {
           "action": "ASSERT",
           "description": "home page loaded",
-          "expected_locator": "h2:has-text(\"Featured Products\")",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
           "tolerance_selectors": [
-            ".main",
-            "#slider"
+            "expect(page).to_have_url"
           ],
-          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
-          "matched": false
+          "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
+          "matched": true
         },
         {
           "action": "CLICK",
@@ -228,11 +227,12 @@
         {
           "action": "ASSERT",
           "description": "products page title",
-          "expected_locator": "h2:has-text(\"Your Products\")",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
           "tolerance_selectors": [
+            "expect(page).to_have_url",
             "h2"
           ],
-          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
           "matched": false
         },
         {
@@ -242,18 +242,20 @@
           "tolerance_selectors": [
             ".add-to-cart.btn[data-product-id=\"1\"]"
           ],
-          "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
-          "matched": true
+          "generated_locator": "a[href=\"/products\"]",
+          "matched": false
         },
         {
           "action": "ASSERT",
           "description": "add to cart confirmation",
-          "expected_locator": ".modal-body",
+          "expected_locator": "[data-product-id=\"11\"]",
           "tolerance_selectors": [
-            ".modal-header"
+            ".text-center",
+            ".modal-body",
+            "[data-product-id]"
           ],
-          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
-          "matched": false
+          "generated_locator": "[data-product-id=\"11\"]",
+          "matched": true
         },
         {
           "action": "CLICK",
@@ -262,27 +264,29 @@
           "tolerance_selectors": [
             ".cart"
           ],
-          "generated_locator": "a[href=\"/view_cart\"]",
-          "matched": true
+          "generated_locator": "a[href=\"/products\"]",
+          "matched": false
         },
         {
           "action": "ASSERT",
           "description": "cart page title",
-          "expected_locator": "h2:has-text(\"Your Cart\")",
+          "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
           "tolerance_selectors": [
+            "expect(page).to_have_url",
             "#cart_item"
           ],
-          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
           "matched": false
         },
         {
           "action": "ASSERT",
           "description": "product name and price",
-          "expected_locator": "#cart_item",
+          "expected_locator": ".cart_total_price",
           "tolerance_selectors": [
+            "#cart_item",
             ".cart_table"
           ],
-          "generated_locator": ":has-text(\"Dictionaries & Encyclopedias\")",
+          "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
           "matched": false
         }
       ],
@@ -312,15 +316,15 @@
           "description": "First Name",
           "expected_locator": "#firstName",
           "tolerance_selectors": [],
-          "generated_locator": "#firstName",
-          "matched": true
+          "generated_locator": null,
+          "matched": false
         },
         {
           "action": "FILL",
           "description": "Last Name",
           "expected_locator": "#lastName",
           "tolerance_selectors": [],
-          "generated_locator": "#userEmail",
+          "generated_locator": null,
           "matched": false
         },
         {
@@ -328,16 +332,16 @@
           "description": "Email",
           "expected_locator": "#userEmail",
           "tolerance_selectors": [],
-          "generated_locator": "#userEmail",
-          "matched": true
+          "generated_locator": null,
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Male radio",
           "expected_locator": "#gender-radio-1",
           "tolerance_selectors": [],
-          "generated_locator": "#gender-radio-1",
-          "matched": true
+          "generated_locator": null,
+          "matched": false
         },
         {
           "action": "ASSERT",
@@ -352,8 +356,8 @@
           "description": "Submit",
           "expected_locator": "#submit",
           "tolerance_selectors": [],
-          "generated_locator": "#submit",
-          "matched": true
+          "generated_locator": null,
+          "matched": false
         },
         {
           "action": "ASSERT",
@@ -362,8 +366,8 @@
           "tolerance_selectors": [
             "table"
           ],
-          "generated_locator": ".group-header",
-          "matched": true
+          "generated_locator": "#userEmail",
+          "matched": false
         }
       ],
       "tests_executed": 0,
@@ -410,24 +414,24 @@
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "generated_locator": "a[href=\"/javascript_alerts\"]",
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "generated_locator": "a[href=\"/javascript_alerts\"]",
+          "matched": false
         },
         {
           "action": "CLICK",
           "description": "Click for JS Alert",
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
-          "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "generated_locator": "a[href=\"/javascript_alerts\"]",
+          "matched": false
         },
         {
           "action": "ASSERT",
@@ -436,7 +440,228 @@
           "tolerance_selectors": [
             "h4:has-text(\"Result\")"
           ],
-          "generated_locator": "h4:has-text(\"Result:\")",
+          "generated_locator": "#result",
+          "matched": true
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-005",
+      "site": "lv_insurance",
+      "total_criteria": 10,
+      "criteria_with_skeletons": 10,
+      "resolutions": [
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_locator": "#email",
+          "tolerance_selectors": [
+            "input[type='email']"
+          ],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "password",
+          "expected_locator": "#password",
+          "tolerance_selectors": [
+            "input[type='password']"
+          ],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "first name",
+          "expected_locator": "#firstName",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "last name",
+          "expected_locator": "#lastName",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "postcode",
+          "expected_locator": "#postcode",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Next button on account page",
+          "expected_locator": "#accountNext",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Car Insurance product card",
+          "expected_locator": "#productCar",
+          "tolerance_selectors": [
+            "h4:has-text('Car Insurance')"
+          ],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "cover start date",
+          "expected_locator": "#startDate",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "scheme",
+          "expected_locator": "#scheme",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "driving license number",
+          "expected_locator": "#mainLicenseNumber",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "years licensed",
+          "expected_locator": "#mainLicenseYears",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "occupation select",
+          "expected_locator": "#mainOccupation",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "vehicle registration number",
+          "expected_locator": "#vehicleReg",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Look Up registration button",
+          "expected_locator": "#lookupRegBtn",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "usage type",
+          "expected_locator": "input[name='usageType'][value='SDP']",
+          "tolerance_selectors": [
+            "input[name='usageType']"
+          ],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "No Claims Discount (Years)",
+          "expected_locator": "#ncdYears",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "FILL",
+          "description": "overnight location",
+          "expected_locator": "#overnightLocation",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Add Vehicle button",
+          "expected_locator": "#addVehicleBtn",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "ASSERT",
+          "description": "estimated annual premium displayed",
+          "expected_locator": "#premiumPrice",
+          "tolerance_selectors": [
+            ".price-value",
+            ".price-display"
+          ],
+          "generated_locator": "p:has-text(\"Error code explanation: 404 - Nothing matches the given URI.\")",
+          "matched": false
+        },
+        {
+          "action": "ASSERT",
+          "description": "compulsory excess information",
+          "expected_locator": "#excessInfo",
+          "tolerance_selectors": [
+            "#excessValue"
+          ],
+          "generated_locator": "p:has-text(\"Error code explanation: 404 - Nothing matches the given URI.\")",
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay in Full payment option",
+          "expected_locator": "#paymentFull",
+          "tolerance_selectors": [
+            "h4:has-text('Pay in Full')"
+          ],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Submit and Get Quote button",
+          "expected_locator": "#quoteSubmit",
+          "tolerance_selectors": [],
+          "generated_locator": null,
+          "matched": false
+        },
+        {
+          "action": "ASSERT",
+          "description": "quote generated successfully message",
+          "expected_locator": "#quoteSuccess",
+          "tolerance_selectors": [
+            "h2:has-text('Quote Generated')"
+          ],
+          "generated_locator": "p:has-text(\"Error code explanation: 404 - Nothing matches the given URI.\")",
+          "matched": false
+        },
+        {
+          "action": "ASSERT",
+          "description": "quote reference number",
+          "expected_locator": "#quoteRef",
+          "tolerance_selectors": [],
+          "generated_locator": "p:has-text(\"Error code explanation: 404 - Nothing matches the given URI.\")",
           "matched": false
         }
       ],

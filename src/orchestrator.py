@@ -188,8 +188,22 @@ class TestOrchestrator:
         target_urls: list[str] | None = None,
         consent_mode: str = "auto-dismiss",
         reviewed_conditions: list[TestCondition] | None = None,
+        prebuilt_skeleton: str | None = None,
     ) -> str:
-        """Execute the full intelligent pipeline and return final code."""
+        """Execute the full intelligent pipeline and return final code.
+
+        Args:
+            user_story: The raw user story text.
+            conditions: Numbered acceptance criteria.
+            target_urls: Starting URLs for scraping.
+            consent_mode: How to handle consent banners.
+            reviewed_conditions: Pre-reviewed test conditions (bypasses skeleton generation).
+            prebuilt_skeleton: Pre-generated skeleton code (from LangGraph graph).
+                When provided, skips skeleton generation and uses this directly.
+
+        Returns:
+            Final test code with resolved placeholders.
+        """
         self._starting_url = (target_urls[0].strip() if target_urls else None) or None
         # Build list of known URLs for journey resolution
         self._starting_url_list = list(set(target_urls or []))
@@ -198,66 +212,69 @@ class TestOrchestrator:
         self._starting_url_list = list(set(self._starting_url_list))
         # Update the placeholder orchestrator with the starting URL
         self._placeholder_orchestrator._starting_url = self._starting_url
-        self._debug("phase=generate_skeleton start")
-        generation_conditions = self._build_generation_conditions(conditions, reviewed_conditions)
-        expected_test_count = len(generation_conditions) if reviewed_conditions else count_conditions(conditions)
-        prepared_conditions = prepare_conditions_for_generation(conditions)
 
-        if reviewed_conditions and len(generation_conditions) > 1:
-            skeleton_code = await self._generate_combined_skeleton_for_conditions(
-                user_story=user_story,
-                conditions=generation_conditions,
-                target_urls=target_urls or [],
-            )
+        if prebuilt_skeleton:
+            # Phase 1d: Use pre-generated skeleton from the LangGraph graph
+            skeleton_code = prebuilt_skeleton
+            self._debug("phase=use_prebuilt_skeleton")
+            generation_conditions = self._build_generation_conditions(conditions, reviewed_conditions)
+            expected_test_count = len(generation_conditions) if reviewed_conditions else count_conditions(conditions)
+            prepared_conditions = prepare_conditions_for_generation(conditions)
         else:
-            skeleton_code = await self.test_generator.generate_skeleton(
-                user_story,
-                prepared_conditions,
-                target_urls=target_urls,
-                expected_count=expected_test_count,
-            )
-            skeleton_code = self.parser.normalise_placeholder_actions(skeleton_code)
-            skeleton_error = self.parser.validate_skeleton(skeleton_code)
-            if skeleton_error:
-                raise ValueError(skeleton_error)
-            validator = SkeletonValidator()
-            validation_result = validator.validate(skeleton_code)
-            placeholders_found = self.parser.parse_placeholders(skeleton_code)
+            self._debug("phase=generate_skeleton start")
+            generation_conditions = self._build_generation_conditions(conditions, reviewed_conditions)
+            expected_test_count = len(generation_conditions) if reviewed_conditions else count_conditions(conditions)
+            prepared_conditions = prepare_conditions_for_generation(conditions)
 
-            # Phase 3: Detect zero-placeholder skeletons or hallucinated selectors and retry once
-            if (not validation_result.is_valid or not placeholders_found) and expected_test_count > 0:
-                if not validation_result.is_valid:
-                    self._debug(f"skeleton validation violations: {validation_result.violations}")
-                    logger.warning("Hallucinated CSS selectors found in skeleton. Retrying with stricter prompt.")
-                else:
-                    logger.warning(
-                        "Zero placeholders found in skeleton (expected %d tests). "
-                        "LLM likely wrote real selectors. Retrying with stricter prompt.",
-                        expected_test_count,
-                    )
-
-                retry_conditions = build_retry_conditions(prepared_conditions, expected_test_count)
+            if reviewed_conditions and len(generation_conditions) > 1:
+                skeleton_code = await self._generate_combined_skeleton_for_conditions(
+                    user_story=user_story,
+                    conditions=generation_conditions,
+                    target_urls=target_urls or [],
+                )
+            else:
                 skeleton_code = await self.test_generator.generate_skeleton(
                     user_story,
-                    retry_conditions + "\n\nCRITICAL: Every test body line must be a standalone placeholder "
-                    "like {{{{CLICK:description}}}}. Do NOT write evidence_tracker.xxx() calls or real selectors.",
+                    prepared_conditions,
                     target_urls=target_urls,
                     expected_count=expected_test_count,
                 )
                 skeleton_code = self.parser.normalise_placeholder_actions(skeleton_code)
-
-                # Re-validate
+                skeleton_error = self.parser.validate_skeleton(skeleton_code)
+                if skeleton_error:
+                    raise ValueError(skeleton_error)
+                validator = SkeletonValidator()
                 validation_result = validator.validate(skeleton_code)
-                if not validation_result.is_valid:
-                    self._debug(f"skeleton validation violations: {validation_result.violations}")
+                placeholders_found = self.parser.parse_placeholders(skeleton_code)
+
+                # Phase 3: Detect zero-placeholder skeletons and retry once
+                if (not validation_result.is_valid or not placeholders_found) and expected_test_count > 0:
+                    if not validation_result.is_valid:
+                        self._debug(f"skeleton validation violations: {validation_result.violations}")
+                        logger.warning("Hallucinated CSS selectors found. Retrying with stricter prompt.")
+                    else:
+                        logger.warning(
+                            "Zero placeholders found (expected %d tests). Retrying with stricter prompt.",
+                            expected_test_count,
+                        )
+                    retry_conditions = build_retry_conditions(prepared_conditions, expected_test_count)
+                    skeleton_code = await self.test_generator.generate_skeleton(
+                        user_story,
+                        retry_conditions + "\n\nCRITICAL: Every test body line must be a standalone placeholder "
+                        "like {{{{CLICK:description}}}}.",
+                        target_urls=target_urls,
+                        expected_count=expected_test_count,
+                    )
+                    skeleton_code = self.parser.normalise_placeholder_actions(skeleton_code)
+                    validation_result = validator.validate(skeleton_code)
+                    if not validation_result.is_valid:
+                        raise ValueError(
+                            f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}"
+                        )
+                elif not validation_result.is_valid:
                     raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
 
-            elif not validation_result.is_valid:
-                # If expected_test_count is 0 but it still failed validation (rare)
-                self._debug(f"skeleton validation violations: {validation_result.violations}")
-                raise ValueError(f"Skeleton contains hallucinated CSS selectors. {validation_result.suggestion}")
-
-            self._debug("phase=generate_skeleton done")
+                self._debug("phase=generate_skeleton done")
 
         placeholders = self.parser.parse_placeholders(skeleton_code)
         journeys = self.parser.parse_test_journeys(skeleton_code)
@@ -273,7 +290,12 @@ class TestOrchestrator:
                 "  journey[%d]: %s (lines %d-%d, steps=%d)", idx, j.test_name, j.start_line, j.end_line, len(j.steps)
             )
 
-        if not reviewed_conditions and expected_test_count and len(journeys) != expected_test_count:
+        if (
+            not prebuilt_skeleton
+            and not reviewed_conditions
+            and expected_test_count
+            and len(journeys) != expected_test_count
+        ):
             logger.warning(
                 "Journey count mismatch: expected=%d, got=%d. Retrying once with stricter prompt.",
                 expected_test_count,
@@ -644,6 +666,7 @@ class TestOrchestrator:
 
         result = await self._pipeline_graph.run(
             user_story=user_story,
+            conditions=conditions,
             base_url=base_url,
             additional_urls=additional,
             auto_confirm=auto_confirm,

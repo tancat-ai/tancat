@@ -239,15 +239,32 @@ class OpenAIProvider(LLMProvider):
     LOCAL_PROVIDER_NAME = "openai-local"
     LOCAL_DEFAULT_PORTS = [8080, 8000, 5000]  # llama.cpp, vLLM, text-gen-webui
 
-    def __init__(self, api_key: str | None = None, base_url: str | None = None, is_local: bool = False):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        is_local: bool = False,
+        is_openai_compatible: bool = False,
+    ):
         import os
 
         self._is_local = is_local
+        self._is_openai_compatible = is_openai_compatible
 
         if is_local:
             # Local mode: no API key required, use dummy key for auth header
             self._api_key = api_key or "llama"
             self._base_url = base_url or self._detect_local_url()
+        elif is_openai_compatible:
+            # OpenAI-compatible cloud mode (OpenRouter, Together AI, Groq, etc.)
+            compat_key: str | None = api_key or os.environ.get("OPENAI_COMPATIBLE_API_KEY")
+            if not compat_key:
+                raise ValueError(
+                    "API key is required for OpenAI-compatible providers. "
+                    "Set OPENAI_COMPATIBLE_API_KEY in your .env file."
+                )
+            self._api_key = compat_key
+            self._base_url = base_url or os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "https://openrouter.ai/api/v1")
         else:
             # Cloud mode: API key is required
             resolved_key: str | None = api_key or os.environ.get("OPENAI_API_KEY")
@@ -306,6 +323,8 @@ class OpenAIProvider(LLMProvider):
 
     @property
     def provider_name(self) -> str:
+        if self._is_openai_compatible:
+            return "openai-compatible"
         return self.LOCAL_PROVIDER_NAME if self._is_local else self.PROVIDER_NAME
 
     @property
@@ -327,6 +346,8 @@ class OpenAIProvider(LLMProvider):
 
         if self._is_local:
             model = model or os.environ.get("OPENAI_MODEL", "llama")
+        elif self._is_openai_compatible:
+            model = model or os.environ.get("OPENAI_COMPATIBLE_MODEL", "openai/gpt-4o")
         else:
             model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
 
@@ -435,7 +456,8 @@ def get_provider(provider_name: str, **kwargs: Any) -> LLMProvider:
     """Factory function to create an LLM provider instance.
 
     Args:
-        provider_name: Name of the provider ('ollama', 'lm-studio', 'openai', or 'openai-local').
+        provider_name: Name of the provider ('ollama', 'lm-studio', 'openai',
+            'openai-local', 'openai-compatible', or 'openrouter').
         **kwargs: Additional keyword arguments passed to the provider constructor.
 
     Returns:
@@ -449,6 +471,8 @@ def get_provider(provider_name: str, **kwargs: Any) -> LLMProvider:
         "lm-studio": LMStudioProvider,
         "openai": OpenAIProvider,
         "openai-local": OpenAIProvider,
+        "openai-compatible": OpenAIProvider,
+        "openrouter": OpenAIProvider,
     }
 
     if provider_name not in providers:
@@ -458,6 +482,14 @@ def get_provider(provider_name: str, **kwargs: Any) -> LLMProvider:
     if provider_name == "openai-local":
         kwargs.setdefault("is_local", True)
 
+    # openai-compatible needs is_openai_compatible=True
+    if provider_name == "openai-compatible":
+        kwargs.setdefault("is_openai_compatible", True)
+
+    # openrouter is a convenience alias for openai-compatible with default base URL
+    if provider_name == "openrouter":
+        kwargs.setdefault("is_openai_compatible", True)
+
     return providers[provider_name](**kwargs)
 
 
@@ -465,13 +497,18 @@ def create_provider_from_env() -> LLMProvider:
     """Create an LLM provider instance from environment variables.
 
     This function reads the following env vars to determine which provider to use:
-    - LLM_PROVIDER: 'ollama', 'lm-studio', 'openai', or 'openai-local' (default: 'ollama')
+    - LLM_PROVIDER: 'ollama', 'lm-studio', 'openai', 'openai-local',
+      'openai-compatible', or 'openrouter' (default: 'ollama')
 
     Each provider has its own required environment variables:
     - ollama: OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
     - lm-studio: LM_STUDIO_BASE_URL, LM_STUDIO_MODEL
     - openai: OPENAI_API_KEY, OPENAI_MODEL
     - openai-local: OPENAI_BASE_URL, OPENAI_MODEL (no API key required)
+    - openai-compatible: OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_BASE_URL,
+      OPENAI_COMPATIBLE_MODEL
+    - openrouter: OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_MODEL
+      (base URL auto-set to https://openrouter.ai/api/v1)
 
     Returns:
         An instantiated LLMProvider subclass.
@@ -494,7 +531,21 @@ def create_provider_from_env() -> LLMProvider:
         )
     elif provider_name == "openai":
         return OpenAIProvider(api_key=os.environ.get("OPENAI_API_KEY"), base_url=os.environ.get("OPENAI_BASE_URL"))
+    elif provider_name == "openai-compatible":
+        return OpenAIProvider(
+            api_key=os.environ.get("OPENAI_COMPATIBLE_API_KEY"),
+            base_url=os.environ.get("OPENAI_COMPATIBLE_BASE_URL"),
+            is_openai_compatible=True,
+        )
+    elif provider_name == "openrouter":
+        return OpenAIProvider(
+            api_key=os.environ.get("OPENAI_COMPATIBLE_API_KEY"),
+            base_url="https://openrouter.ai/api/v1",
+            is_openai_compatible=True,
+        )
     else:
         raise ValueError(
-            f"Unknown LLM_PROVIDER '{provider_name}'. Must be one of: ollama, lm-studio, openai, openai-local"
+            f"Unknown LLM_PROVIDER '{provider_name}'. Must be one of: "
+            f"ollama, lm-studio, openai, openai-local, openai-compatible, "
+            f"openrouter"
         )

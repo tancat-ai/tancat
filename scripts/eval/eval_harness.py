@@ -68,7 +68,17 @@ def _setup_logging(verbose: bool = False) -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute the evaluation harness."""
     # resolver mode delegates to the resolver-only evaluator
-    if args.mode == "resolver":
+    if args.mode == "semantic" or args.semantic:
+        from eval_runner import EvalRunner
+
+        dataset_dir = _DATASET_DIR if args.dataset is None else Path(args.dataset)
+        captures_dir = _CAPTURES_DIR if args.captures is None else Path(args.captures)
+        runner = EvalRunner(dataset_dir=dataset_dir, code_dir=captures_dir, db_path=Path())
+        results = runner.run_semantic_comparison()
+        runner.print_semantic_report(results)
+        if args.min_accuracy is not None and results.get("accuracy", 0) < args.min_accuracy:
+            return 2
+        return 0
         import asyncio
 
         from eval_resolver import _cmd_static as resolver_static
@@ -95,6 +105,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         db_path=db_path,
         test_output_dir=test_output if args.mode == "full" else None,
         regenerate=args.regenerate,
+        use_graph=args.use_graph,
     )
 
     report = runner.run(
@@ -247,6 +258,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Regenerate code via the actual pipeline before validating",
     )
+    run_parser.add_argument(
+        "--use-graph",
+        action="store_true",
+        help="Use the LangGraph multi-agent pipeline for skeleton generation (Phase 1d)",
+    )
     run_parser.add_argument("--dataset", help="Path to dataset directory")
     run_parser.add_argument("--captures", help="Path to captures directory")
     run_parser.add_argument("--db", help="Path to SQLite database")
@@ -269,10 +285,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Skip persisting results to SQLite",
     )
     run_parser.add_argument(
+        "--semantic",
+        action="store_true",
+        help="Fast semantic comparison: match golden keys against capture locators (Phase 1d)",
+    )
+    run_parser.add_argument(
         "--mode",
-        choices=["static", "resolver", "full"],
+        choices=["static", "resolver", "full", "semantic"],
         default="static",
-        help="Evaluation mode: static (CI gate, default), resolver (resolution-only), full (static + pytest)",
+        help="Evaluation mode",
     )
 
     # --- baseline ---

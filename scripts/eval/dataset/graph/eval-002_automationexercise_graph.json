@@ -1,0 +1,225 @@
+{
+  "id": "eval-002",
+  "site": "automationexercise",
+  "user_story": "As a customer, I want to browse products on the website and add them to my cart so that I can purchase them later.",
+  "conditions": [
+    "1. Navigate to the automationexercise.com home page",
+    "2. Click the Products link in the header navigation to go to the products page",
+    "3. On the products page, click the Add to cart button next to a product (e.g. Blue Top)",
+    "4. Verify a confirmation message appears indicating the product was added to cart",
+    "5. Click the Cart link in the header navigation to go to the cart page",
+    "6. Verify the cart page displays the product that was added with its name and price"
+  ],
+  "base_url": "https://automationexercise.com",
+  "golden_resolutions": [
+    {
+      "criterion": "Graph criterion 1",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 2",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 3",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products",
+          "expected_locator": "a[href=",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 4",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 5",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products",
+          "expected_locator": "a[href=",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 6",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart Blue Top",
+          "expected_locator": "Add to cart Blue Top",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 7",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 8",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products",
+          "expected_locator": "a[href=",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 9",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart Blue Top",
+          "expected_locator": "Add to cart Blue Top",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 10",
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "Product added to cart",
+          "expected_locator": ".text-center",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 11",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 12",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products",
+          "expected_locator": "a[href=",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 13",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart Blue Top",
+          "expected_locator": "Add to cart Blue Top",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 14",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Cart",
+          "expected_locator": "Cart",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 15",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://automationexercise.com",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 16",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Products",
+          "expected_locator": "a[href=",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 17",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart Blue Top",
+          "expected_locator": "Add to cart Blue Top",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 18",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Cart",
+          "expected_locator": "Cart",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 19",
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "Blue Top",
+          "expected_locator": "p:has-text(",
+          "tolerance_selectors": []
+        }
+      ]
+    }
+  ]
+}

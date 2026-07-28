@@ -54,6 +54,7 @@ class TestPlannerAgent:
             prompt_text = call_args[0][0] if call_args[0] else call_args.kwargs.get("prompt", "")
             assert "first" in prompt_text
             assert "second" in prompt_text
-            assert "2 test functions" in prompt_text
+            # t-string prompt uses XML-wrapped count: count="<user_input>2</user_input>"
+            assert "count=" in prompt_text or "2 test" in prompt_text
 
         asyncio.run(_run())

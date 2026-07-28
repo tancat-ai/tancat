@@ -324,12 +324,14 @@ class EvalRunner:
         db_path: Path,
         test_output_dir: Path | None = None,
         regenerate: bool = False,
+        use_graph: bool = False,
     ) -> None:
         self.dataset_dir = dataset_dir
         self.code_dir = code_dir
         self.db_path = db_path
         self.test_output_dir = test_output_dir
         self.regenerate = regenerate
+        self.use_graph = use_graph
 
     def _load_code_map(self) -> dict[str, str]:
         """Load all captured code files into a map keyed by story_id."""
@@ -394,6 +396,9 @@ class EvalRunner:
         """
         if self.regenerate:
             code_map, durations = self._regenerate_code()
+            # Phase 1d: When regenerating via graph, save captures for future CI gates
+            if self.use_graph and code_map:
+                self._save_captures(code_map)
         else:
             code_map = self._load_code_map()
             durations = {}
@@ -417,7 +422,17 @@ class EvalRunner:
         return HarnessReport(stories=results)
 
     def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
-        """Regenerate code for all stories in the dataset using the live pipeline."""
+        """Regenerate code for all stories using the live pipeline.
+
+        When ``self.use_graph`` is True, the multi-agent LangGraph pipeline
+        is used for skeleton generation instead of the linear path.
+
+        Each story gets a fresh orchestrator to avoid URL resolver state
+        contamination across concurrent stories.
+        """
+        if self.use_graph:
+            return self._regenerate_code_via_graph()
+
         import asyncio
 
         from src.llm_client import LLMClient
@@ -427,19 +442,16 @@ class EvalRunner:
         code_map: dict[str, str] = {}
         durations: dict[str, float] = {}
 
-        client = LLMClient()
-        generator = TestGenerator(client=client)
-        # Default to POM mode for regeneration
-        orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
-
-        logger.info("Regenerating code for %d stories...", len(list(self.dataset_dir.glob("*.json"))))
-
         async def process_story(golden_file: Path):
             golden = load_golden_key(golden_file)
             story_id = golden["id"]
 
             try:
                 start = datetime.now(UTC).timestamp()
+                # Fresh orchestrator per story — prevents state contamination
+                client = LLMClient()
+                generator = TestGenerator(client=client)
+                orchestrator = TestOrchestrator(generator, pom_mode=True)
                 code = await orchestrator.run_pipeline(
                     user_story=golden["user_story"],
                     conditions="\n".join(golden["conditions"]),
@@ -454,7 +466,193 @@ class EvalRunner:
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        tasks = [process_story(f) for f in sorted(self.dataset_dir.glob("*.json"))]
-        loop.run_until_complete(asyncio.gather(*tasks))
+
+        # Process sequentially to avoid browser/resource conflicts
+        async def run_sequential():
+            for f in sorted(self.dataset_dir.glob("*.json")):
+                await process_story(f)
+
+        loop.run_until_complete(run_sequential())
 
         return code_map, durations
+
+    def _regenerate_code_via_graph(self) -> tuple[dict[str, str], dict[str, float]]:
+        """Regenerate code using the LangGraph multi-agent pipeline.
+
+        Each story gets a fresh orchestrator to prevent URL resolver
+        state contamination. Stories are processed sequentially to
+        avoid browser/resource conflicts.
+        """
+        import asyncio
+
+        from src.llm_client import LLMClient
+        from src.orchestrator import TestOrchestrator
+        from src.test_generator import TestGenerator
+
+        code_map: dict[str, str] = {}
+        durations: dict[str, float] = {}
+
+        logger.info(
+            "Regenerating code via graph pipeline for %d stories (sequential)...",
+            len(list(self.dataset_dir.glob("*.json"))),
+        )
+
+        async def process_story(golden_file: Path):
+            golden = load_golden_key(golden_file)
+            story_id = golden["id"]
+
+            try:
+                start = datetime.now(UTC).timestamp()
+
+                # Fresh orchestrator per story
+                client = LLMClient()
+                generator = TestGenerator(client=client)
+                orchestrator = TestOrchestrator(generator, pom_mode=True)
+
+                # Step 1: Generate skeleton via graph
+                state = await orchestrator.run_pipeline_via_graph(
+                    user_story=golden["user_story"],
+                    conditions="\n".join(golden["conditions"]),
+                    target_urls=[golden["base_url"]],
+                    auto_confirm=True,
+                )
+
+                if state is None:
+                    logger.warning("Graph pipeline returned None for %s \u2014 using linear fallback", story_id)
+                    code = await orchestrator.run_pipeline(
+                        user_story=golden["user_story"],
+                        conditions="\n".join(golden["conditions"]),
+                        target_urls=[golden["base_url"]],
+                    )
+                elif not state.test_code:
+                    logger.warning("Graph produced empty code for %s \u2014 using linear fallback", story_id)
+                    code = await orchestrator.run_pipeline(
+                        user_story=golden["user_story"],
+                        conditions="\n".join(golden["conditions"]),
+                        target_urls=[golden["base_url"]],
+                    )
+                else:
+                    # Step 2: Feed graph skeleton into standard pipeline
+                    code = await orchestrator.run_pipeline(
+                        user_story=golden["user_story"],
+                        conditions="\n".join(golden["conditions"]),
+                        target_urls=[golden["base_url"]],
+                        prebuilt_skeleton=state.test_code,
+                    )
+
+                durations[story_id] = datetime.now(UTC).timestamp() - start
+                code_map[story_id] = code
+                logger.info("Regenerated %s via graph", story_id)
+            except Exception as e:
+                logger.error("Failed to regenerate %s via graph: %s", story_id, e)
+                code_map[story_id] = ""
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        async def run_sequential():
+            for f in sorted(self.dataset_dir.glob("*.json")):
+                await process_story(f)
+
+        loop.run_until_complete(run_sequential())
+
+        return code_map, durations
+
+    def _save_captures(self, code_map: dict[str, str]) -> None:
+        """Save regenerated code as capture files for future static CI comparison."""
+        site_map = {
+            "eval-001": "saucedemo",
+            "eval-002": "automationexercise",
+            "eval-003": "demoqa",
+            "eval-004": "theinternet",
+            "eval-005": "lv_insurance",
+        }
+        for story_id, code in code_map.items():
+            site = site_map.get(story_id, story_id)
+            capture_file = self.code_dir / f"{site}_code.py"
+            capture_file.write_text(code, encoding="utf-8")
+            logger.info("Saved capture: %s (%d chars)", capture_file.name, len(code))
+
+    def run_semantic_comparison(self) -> dict[str, Any]:
+        """Locator-level comparison: golden keys vs capture files. Fast, no browser."""
+        import re
+
+        results: dict[str, Any] = {"per_story": {}, "total_ph": 0, "total_matched": 0}
+        site_map = {
+            "eval-001": "saucedemo",
+            "eval-002": "automationexercise",
+            "eval-003": "demoqa",
+            "eval-004": "theinternet",
+            "eval-005": "lv_insurance",
+        }
+
+        for golden_file in sorted(self.dataset_dir.glob("*.json")):
+            golden = load_golden_key(golden_file)
+            story_id = golden["id"]
+            site = site_map.get(story_id, story_id)
+            capture_file = self.code_dir / f"{site}_code.py"
+
+            if not capture_file.exists():
+                results["per_story"][story_id] = {"error": "Capture not found"}
+                continue
+
+            capture_code = capture_file.read_text(encoding="utf-8")
+
+            # Extract (action, description) → locator from capture
+            capture_map: dict[tuple[str, str], str] = {}
+            for line in capture_code.splitlines():
+                m = re.match(
+                    r'\s*evidence_tracker\.(\w+)\(["\']([^"\']+)["\'].*label=["\']([^"\']+)["\']',
+                    line,
+                )
+                if m:
+                    action = m.group(1).upper().replace("ASSERT_VISIBLE", "ASSERT").replace("NAVIGATE", "GOTO")
+                    capture_map[(action, m.group(3))] = m.group(2)
+
+            # Compare golden key placeholders against capture locators
+            story_total = 0
+            story_matched = 0
+            for crit in golden.get("golden_resolutions", []):
+                for ph in crit.get("placeholders", []):
+                    story_total += 1
+                    ph_action = ph["action"]
+                    ph_desc = ph["description"]
+                    expected_loc = ph.get("expected_locator", "")
+                    tolerance = ph.get("tolerance_selectors", [])
+
+                    for (ca_action, ca_desc), ca_loc in capture_map.items():
+                        if ca_action == ph_action:
+                            ca_tokens = set(ca_desc.lower().split())
+                            ph_tokens = set(ph_desc.lower().split())
+                            if ca_tokens & ph_tokens:
+                                if ca_loc == expected_loc or ca_loc in tolerance:
+                                    story_matched += 1
+                                    break
+
+            results["per_story"][story_id] = {
+                "total": story_total,
+                "matched": story_matched,
+                "accuracy": story_matched / story_total * 100 if story_total else 0,
+            }
+            results["total_ph"] += story_total
+            results["total_matched"] += story_matched
+
+        results["accuracy"] = results["total_matched"] / results["total_ph"] * 100 if results["total_ph"] else 0
+        return results
+
+    def print_semantic_report(self, results: dict[str, Any]) -> None:
+        """Print the semantic comparison report."""
+        print("=" * 70)
+        print("SEMANTIC COMPARISON (locator-level — no browser)")
+        print("=" * 70)
+        print(f"\n  Placeholders evaluated: {results['total_ph']}")
+        print(f"  Semantic matches:      {results['total_matched']}")
+        print(f"  Accuracy:              {results['accuracy']:.1f}%")
+        print()
+        print("-" * 70)
+        for story_id, data in sorted(results["per_story"].items()):
+            if "error" in data:
+                print(f"  {story_id}: ERROR — {data['error']}")
+            else:
+                print(f"  {story_id}: {data['matched']}/{data['total']} ({data['accuracy']:.1f}%)")
+        print("=" * 70)
