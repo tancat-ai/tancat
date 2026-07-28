@@ -1,45 +1,55 @@
-from playwright.sync_api import Page, expect
 import pytest
 from playwright.sync_api import Page
-from pages.automation_practice_form_page import AutomationPracticeFormPage
+
+from src.browser_utils import dismiss_consent_overlays
+from src.evidence_tracker import EvidenceTracker
 
 
 @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
-def test_01_navigate_to_the_demoqa_com_practice_form_page(page: Page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
+def test_01_navigate_to_practice_form(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.assert_visible(".text-center", label="practice form page title")
+
 
 @pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
-def test_02_fill_in_the_first_name_field_with_a_value(page: Page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
-    automation_practice_form_page.fill('First Name', 'John')
+def test_02_fill_first_name(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.fill("#firstName", "John", label="First Name")
+    evidence_tracker.assert_value("#react-select-3-placeholder", "John", label="First Name field filled")
+
 
 @pytest.mark.evidence(condition_ref="TC-03", story_ref="S01")
-def test_03_fill_in_the_last_name_field_with_a_value(page: Page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
-    automation_practice_form_page.fill('Last Name', 'Doe')
+def test_03_fill_last_name(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.fill("#firstName", "Doe", label="Last Name")
+    evidence_tracker.assert_visible('h5:has-text("Student Registration Form")', label="Last Name field filled")
+
 
 @pytest.mark.evidence(condition_ref="TC-04", story_ref="S01")
-def test_04_fill_in_the_email_address_field_with_a_value(page: Page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
-    automation_practice_form_page.fill('Email Address', 'test@example.com')
+def test_04_fill_email_address(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.fill("#userEmail", "john.doe@example.com", label="Email")
+    evidence_tracker.assert_visible(".text-center", label="Email field filled")
+
 
 @pytest.mark.evidence(condition_ref="TC-05", story_ref="S01")
-def test_05_select_a_radio_button_option_(page: Page, e.g._Male, evidence_tracker)(page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
-    automation_practice_form_page.click('Male')
+def test_05_select_gender_radio_button(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.click("#gender-radio-1", label="Male radio")
+    evidence_tracker.assert_checked("#gender-radio-1", label="Male radio selected")
+
 
 @pytest.mark.evidence(condition_ref="TC-06", story_ref="S01")
-def test_06_click_the_submit_button_at_the_bottom_of_the_form(page: Page, evidence_tracker):
-    automation_practice_form_page = AutomationPracticeFormPage(page, evidence_tracker)
-    evidence_tracker.navigate('https://demoqa.com/automation-practice-form')
-    automation_practice_form_page.fill('First Name', 'John')
-    automation_practice_form_page.fill('Last Name', 'Doe')
-    automation_practice_form_page.fill('Email Address', 'test@example.com')
-    automation_practice_form_page.click('Male')
-    automation_practice_form_page.click('Submit')
-    evidence_tracker.assert_visible('.text-center', label='Thank You')
+def test_06_submit_form(page: Page, evidence_tracker: EvidenceTracker) -> None:
+    evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
+    dismiss_consent_overlays(page)
+    evidence_tracker.fill("#firstName", "John", label="First Name")
+    evidence_tracker.fill("#firstName", "Doe", label="Last Name")
+    evidence_tracker.fill("#userEmail", "john.doe@example.com", label="Email")
+    evidence_tracker.click("#submit", label="Submit")
+    evidence_tracker.assert_visible(".group-header", label="submission success message")

@@ -451,7 +451,7 @@ class EvalRunner:
                 # Fresh orchestrator per story — prevents state contamination
                 client = LLMClient()
                 generator = TestGenerator(client=client)
-                orchestrator = TestOrchestrator(generator, pom_mode=True)
+                orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
                 code = await orchestrator.run_pipeline(
                     user_story=golden["user_story"],
                     conditions="\n".join(golden["conditions"]),
@@ -507,7 +507,7 @@ class EvalRunner:
                 # Fresh orchestrator per story
                 client = LLMClient()
                 generator = TestGenerator(client=client)
-                orchestrator = TestOrchestrator(generator, pom_mode=True)
+                orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
 
                 # Step 1: Generate skeleton via graph
                 state = await orchestrator.run_pipeline_via_graph(
