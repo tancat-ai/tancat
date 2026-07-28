@@ -46,6 +46,7 @@ class PipelineState:
 
     # ── Input ──────────────────────────────────────────────────────
     user_story: str = ""
+    conditions: str = ""  # acceptance criteria — used by Ingestion Agent
     base_url: str = ""
     additional_urls: list[str] = field(default_factory=list)
     credential_profile: dict[str, str] | None = None

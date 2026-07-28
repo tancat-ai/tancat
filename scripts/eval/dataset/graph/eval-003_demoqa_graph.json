@@ -1,0 +1,170 @@
+{
+  "id": "eval-003",
+  "site": "demoqa",
+  "user_story": "As a user, I want to fill out the practice form on demoqa.com with text inputs, checkboxes, radio buttons, and a dropdown selection.",
+  "conditions": [
+    "1. Navigate to the demoqa.com practice form page",
+    "2. Fill in the first name field with a value",
+    "3. Fill in the last name field with a value",
+    "4. Fill in the email address field with a value",
+    "5. Select a radio button option (e.g. Male)",
+    "6. Click the Submit button at the bottom of the form"
+  ],
+  "base_url": "https://demoqa.com/automation-practice-form",
+  "golden_resolutions": [
+    {
+      "criterion": "Graph criterion 1",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 2",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 3",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "first name",
+          "expected_locator": "first name",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 4",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 5",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "last name",
+          "expected_locator": "last name",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 6",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 7",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_locator": "email address",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 8",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 9",
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate",
+          "expected_locator": "https://demoqa.com/automation-practice-form",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 10",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "first name",
+          "expected_locator": "first name",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 11",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "last name",
+          "expected_locator": "last name",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 12",
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_locator": "email address",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 13",
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Submit",
+          "expected_locator": "Submit",
+          "tolerance_selectors": []
+        }
+      ]
+    },
+    {
+      "criterion": "Graph criterion 14",
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "Thank You",
+          "expected_locator": ".text-center",
+          "tolerance_selectors": []
+        }
+      ]
+    }
+  ]
+}

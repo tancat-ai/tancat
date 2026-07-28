@@ -36,8 +36,9 @@ class IngestionAgent:
     async def __call__(self, state: PipelineState) -> dict[str, Any]:
         """Analyse the user story and return ``story_analysis`` for the graph state.
 
-        Returns a dict with ``story_analysis`` set, to be merged into the
-        LangGraph state.
+        When ``state.conditions`` is provided (numbered acceptance criteria),
+        each line becomes its own criterion — no LLM needed for extraction.
+        Falls back to SpecAnalyzer for unstructured story-only input.
         """
         story_text = state.user_story
         if not story_text or not story_text.strip():
@@ -46,12 +47,17 @@ class IngestionAgent:
                 "errors": ["Empty user story — nothing to analyse"],
             }
 
-        # 1. Deterministic + LLM analysis via SpecAnalyzer
-        try:
-            conditions = self._analyzer.analyze(story_text)
-        except Exception as e:
-            logger.warning("SpecAnalyzer failed: %s — falling back to raw text", e)
-            conditions = []
+        # 1. Deterministic: use acceptance criteria if provided
+        if state.conditions and state.conditions.strip():
+            conditions = self._criteria_from_text(state.conditions)
+            logger.info("Ingestion: extracted %d criteria from acceptance criteria text", len(conditions))
+        else:
+            # Fall back to SpecAnalyzer for unstructured story text
+            try:
+                conditions = self._analyzer.analyze(story_text)
+            except Exception as e:
+                logger.warning("SpecAnalyzer failed: %s — using raw text", e)
+                conditions = self._criteria_from_text(story_text)
 
         # 2. Query RAG for domain context (non-blocking, best-effort)
         domain_terms: list[str] = []
@@ -105,3 +111,43 @@ class IngestionAgent:
                 source_format=source_format,
             ),
         }
+
+    @staticmethod
+    def _criteria_from_text(conditions_text: str) -> list:
+        """Extract criteria deterministically from numbered acceptance criteria.
+
+        Each non-empty line becomes one ``TestCondition``.  Strips leading
+        numbering (e.g. '1.', '1)', '[TC-01]').  Returns objects
+        compatible with ``SpecAnalyzer.TestCondition``.
+        """
+        import re
+
+        from src.spec_analyzer import TestCondition
+
+        lines = [line.strip() for line in conditions_text.splitlines() if line.strip()]
+        if not lines:
+            return []
+
+        conditions: list[TestCondition] = []
+        for i, line in enumerate(lines, start=1):
+            # Strip leading numbers and markers
+            cleaned = re.sub(r"^\d+[.)\]\s]+", "", line).strip()
+            cleaned = re.sub(r"^\[([^\]]+)\]\s*", "", cleaned).strip()
+            if not cleaned:
+                continue
+
+            ref = f"TC01.{i:02d}"
+            conditions.append(
+                TestCondition(
+                    id=ref,
+                    type="happy_path",
+                    text=cleaned,
+                    expected="Meets acceptance criteria.",
+                    source=line,
+                    flagged=False,
+                    src="ai",
+                    intent="journey_step",
+                )
+            )
+
+        return conditions

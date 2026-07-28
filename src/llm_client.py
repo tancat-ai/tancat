@@ -105,6 +105,14 @@ class LLMClient:
             env_model = os.environ.get("OPENAI_MODEL")
             if env_model:
                 return env_model
+        elif self._provider.provider_name == "openai-local":
+            env_model = os.environ.get("OPENAI_MODEL")
+            if env_model:
+                return env_model
+        elif self._provider.provider_name == "openai-compatible":
+            env_model = os.environ.get("OPENAI_COMPATIBLE_MODEL")
+            if env_model:
+                return env_model
 
         # 2. For local providers that expose a loaded/available model endpoint,
         # prefer the model already hosted by the user's server.
@@ -126,7 +134,12 @@ class LLMClient:
                     return loaded
 
         # 3. If no env var, try to list models and pick the first one (for local providers)
-        if self._provider.provider_name in ("ollama", "lm-studio", "openai-local"):
+        if self._provider.provider_name in (
+            "ollama",
+            "lm-studio",
+            "openai-local",
+            "openai-compatible",
+        ):
             try:
                 models = self.list_models(timeout=5)
                 if models:
@@ -142,6 +155,8 @@ class LLMClient:
             return "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
         if self._provider.provider_name == "openai-local":
             return "llama"
+        if self._provider.provider_name == "openai-compatible":
+            return "openai/gpt-4o"
         return "gpt-4o"
 
     @property

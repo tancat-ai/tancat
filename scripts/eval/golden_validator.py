@@ -55,6 +55,11 @@ _TO_HAVE_URL_RE = re.compile(
 
 _TEST_FUNC_RE = re.compile(r"^def\s+test_\d+_\w+", re.MULTILINE)
 
+# POM calls: xxx_page.method("description", ...)
+_POM_CALL_RE = re.compile(
+    r"(\w+_page)\.(" + _METHODS + r")\s*\(\s*['\"]([^'\"]+)['\"]",
+)
+
 
 def _action_from_method(method: str) -> str:
     """Map evidence_tracker method name to placeholder action."""
@@ -95,6 +100,19 @@ def extract_locators_from_code(code: str) -> list[dict[str, str]]:
                 "method": "to_have_url",
                 "action": "ASSERT",
                 "locator": full_expr,
+            }
+        )
+    # POM calls: inventory_page.click('Add to cart')
+    for match in _POM_CALL_RE.finditer(code):
+        method = match.group(2)
+        desc = match.group(3)
+        if method == "navigate":
+            continue
+        results.append(
+            {
+                "method": method,
+                "action": _action_from_method(method),
+                "locator": desc,
             }
         )
     return results

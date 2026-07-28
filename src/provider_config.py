@@ -6,12 +6,16 @@ import os
 
 CLOUD_OPENAI_PROVIDER = "openai"
 LOCAL_OPENAI_PROVIDER = "openai-local"
+OPENAI_COMPATIBLE_PROVIDER = "openai-compatible"
+OPENROUTER_PROVIDER = "openrouter"
 
 SUPPORTED_PROVIDERS: tuple[str, ...] = (
     "ollama",
     "lm-studio",
     LOCAL_OPENAI_PROVIDER,
     CLOUD_OPENAI_PROVIDER,
+    OPENAI_COMPATIBLE_PROVIDER,
+    OPENROUTER_PROVIDER,
 )
 
 PROVIDER_LABELS: dict[str, str] = {
@@ -19,6 +23,8 @@ PROVIDER_LABELS: dict[str, str] = {
     "lm-studio": "LM Studio (local)",
     LOCAL_OPENAI_PROVIDER: "OpenAI-Compatible (local)",
     CLOUD_OPENAI_PROVIDER: "OpenAI (cloud)",
+    OPENAI_COMPATIBLE_PROVIDER: "OpenAI-Compatible (cloud)",
+    OPENROUTER_PROVIDER: "OpenRouter (cloud)",
 }
 
 
@@ -30,12 +36,16 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
         return "http://localhost:8080", "llama"
     if provider == CLOUD_OPENAI_PROVIDER:
         return "https://api.openai.com/v1", "gpt-4o"
+    if provider == OPENAI_COMPATIBLE_PROVIDER:
+        return "https://openrouter.ai/api/v1", "openai/gpt-4o"
+    if provider == OPENROUTER_PROVIDER:
+        return "https://openrouter.ai/api/v1", "openai/gpt-4o"
     return "http://localhost:11434", "qwen3.5:35b"
 
 
 def provider_requires_openai_api_key(provider: str) -> bool:
-    """Return True when the provider needs a cloud OpenAI API key."""
-    return provider == CLOUD_OPENAI_PROVIDER
+    """Return True when the provider needs a cloud API key."""
+    return provider in (CLOUD_OPENAI_PROVIDER, OPENAI_COMPATIBLE_PROVIDER, OPENROUTER_PROVIDER)
 
 
 def resolve_openai_api_key(*, provider: str, user_api_key: str | None = None) -> str | None:

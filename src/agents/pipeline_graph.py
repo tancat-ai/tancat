@@ -209,6 +209,7 @@ class PipelineGraph:
         self,
         *,
         user_story: str,
+        conditions: str = "",
         base_url: str = "",
         additional_urls: list[str] | None = None,
         credential_profile: dict[str, str] | None = None,
@@ -221,6 +222,7 @@ class PipelineGraph:
         """
         initial = PipelineState(
             user_story=user_story,
+            conditions=conditions,
             base_url=base_url,
             additional_urls=additional_urls or [],
             credential_profile=credential_profile,
