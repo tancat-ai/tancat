@@ -1,0 +1,32 @@
+{
+  "source": "git commit 0896b14 (semantic scraper, July 23 2026)",
+  "pipeline": "linear (flat mode, pre-LangGraph, pre-POM)",
+  "stories": {
+    "eval-001": {
+      "site": "saucedemo",
+      "accuracy": 90.0,
+      "placeholders": 20
+    },
+    "eval-002": {
+      "site": "automationexercise",
+      "accuracy": 50.0,
+      "placeholders": 8
+    },
+    "eval-003": {
+      "site": "demoqa",
+      "accuracy": 87.5,
+      "placeholders": 8
+    },
+    "eval-004": {
+      "site": "theinternet",
+      "accuracy": 85.7,
+      "placeholders": 7
+    },
+    "eval-005": {
+      "site": "lv_insurance",
+      "accuracy": 100.0,
+      "placeholders": 24
+    }
+  },
+  "average_accuracy": 82.6
+}
