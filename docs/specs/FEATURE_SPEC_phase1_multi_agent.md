@@ -290,3 +290,257 @@ With `"auto"`, the system uses `auto_detect_provider()` and whatever model that 
 | Per-agent prompts need tuning | Eval harness gates every change. Can't ship prompt change that regresses accuracy |
 | Graph state gets too large | State is TypedDict with clear boundaries. No unbounded accumulation. Serde via JSON for checkpointing |
 | Human checkpoint blocks automation | CLI mode skips checkpoint (`--auto-confirm`). Streamlit mode shows the panel |
+
+---
+
+## 9. Document-Driven Input Mode
+
+### 9.1 What This Is
+
+An alternative input path where the pipeline ingests **specification documents** (PDFs, Word docs, Confluence pages, change logs) instead of free-form user stories. The graph extracts structured change deltas, routes analysis by persona role, generates impact-aware test plans, and produces a consolidated report — all within the same `PipelineGraph` framework.
+
+This is **not a separate pipeline**. It extends the existing graph with richer state, an optional parsing front-end node, and persona-aware routing in the QA Director. The text-mode path (`user_story: str`) continues to work unchanged — document mode is additive.
+
+**Use case:** A QA lead receives a 40-page PRD. Instead of manually extracting "what changed" and writing test cases, they drop the PDF into the tool. The pipeline:
+1. Parses the PDF into structured Markdown
+2. Extracts change deltas (new features, modified schemas, unchanged systems)
+3. Routes analysis based on role (QA gets test plans; PM gets business logic validation; Ops gets deployment impact)
+4. Generates an impact map showing what's affected and what needs regression testing
+5. Produces a consolidated report with HITL checkpoint for review and refinement
+
+### 9.2 State Schema Additions
+
+`PipelineState` gains these fields (all optional — empty in text mode):
+
+```python
+@dataclass
+class ChangeDelta:
+    """A single change extracted from a spec document."""
+    category: str          # "new_feature" | "modified" | "removed" | "unchanged"
+    name: str              # human-readable name
+    description: str       # what changed and why
+    affected_systems: list[str]  # downstream systems impacted
+    data_schema_changes: list[DataSchemaChange]
+
+@dataclass
+class DataSchemaChange:
+    field: str             # e.g. "customer_id"
+    change_type: str       # "NEW" | "MODIFIED" | "REMOVED"
+    old_value: str         # e.g. "VARCHAR(8)"
+    new_value: str         # e.g. "VARCHAR(10)"
+    migration_notes: str   # breaking change? rollback plan?
+
+@dataclass
+class ImpactMap:
+    """Cross-reference of changes to affected test areas."""
+    change_ref: str               # which ChangeDelta this maps to
+    impact_radius: list[str]       # systems/modules in blast radius
+    regression_areas: list[str]    # unchanged systems needing sanity checks
+    test_scenarios: list[str]      # concrete test ideas
+    risk_level: str                # "high" | "medium" | "low"
+
+@dataclass
+class ConsolidatedReport:
+    """Final output of the document-driven pipeline."""
+    executive_summary: str
+    change_summary: list[ChangeDelta]
+    impact_maps: list[ImpactMap]
+    test_plan: list[TestCondition]
+    generated_tests: str           # pytest code
+    unresolved_items: list[str]    # questions for the human
+```
+
+PipelineState additions:
+
+```python
+# ── Document Input (all optional, empty in text mode) ──
+input_mode: str = "text"                # "text" | "document"
+raw_document_text: str = ""             # parsed PDF/Markdown content
+document_source: str = ""               # original filename
+change_deltas: list[ChangeDelta] = field(default_factory=list)
+persona_role: str = ""                  # "qa_lead" | "product_owner" | "developer" | "operations"
+impact_maps: list[ImpactMap] = field(default_factory=list)
+consolidated_report: ConsolidatedReport | None = None
+```
+
+### 9.3 Parsing Front-End
+
+Document mode starts with a parsing step before the graph's `ingest` node. This is a **pre-processing node** — it converts the uploaded document into structured text that the Ingestion Agent can consume.
+
+**Strategy: phased adoption.**
+
+| Phase | Engine | Strengths | Limits |
+|---|---|---|---|
+| **Now** (AI-030 shipped) | `src/pdf_ingest.py` — PyMuPDF | Heading detection, table extraction as Markdown, chunking. Already wired into `rag_ingest.py`. Zero new dependencies. | No multi-column layout awareness. Table detection quality varies by PDF. |
+| **Upgrade path** | Unlimited OCR (arXiv:2606.23050) | Constant KV cache → dozens of pages in one 32K forward pass. R-SWA attention for long-document copying tasks. Open-source (Baidu, Apache 2.0). | Requires GPU infrastructure. June 2026 release — limited community, possible rough edges. |
+
+**Decision:** Start with PyMuPDF (already in the project). The unlimited-OCR paper is a compelling upgrade path but blocked on GPU infra. When GPU becomes available, swap the parsing node's engine — the downstream graph nodes are engine-agnostic (they consume `raw_document_text: str`, not PDF bytes).
+
+**Parsing node contract:**
+
+```python
+async def _parse_document(state: PipelineState) -> dict[str, Any]:
+    """Pre-processing node: PDF/Markdown → structured text.
+    
+    Only runs when input_mode == "document".
+    Calls src/pdf_ingest.ingest_pdf() or equivalent.
+    """
+    if state.input_mode != "document" or not state.document_source:
+        return {}  # skip — text mode
+    
+    chunks = ingest_pdf(Path(state.document_source))
+    raw_text = "\n\n".join(chunk.text for chunk in chunks)
+    
+    return {
+        "raw_document_text": raw_text,
+        # Forward original user_story for the existing IngestionAgent path
+        "user_story": raw_text[:500],  # summary for backward compat
+    }
+```
+
+### 9.4 Extended Graph Design
+
+Document mode extends the existing graph with a pre-processing node and an impact-mapping node. The core three-agent flow is unchanged:
+
+```
+                          ┌─ text mode: skip ──────────────────────────┐
+                          │                                             │
+START ──→ [Parse Document] ──→ [Ingestion Agent] ──→ [QA Director] ──→ [Human Checkpoint]
+              │                      │                      │                      │
+              │ PDF→Markdown         │ StoryAnalysis        │ TestPlan +          │ confirmed
+              │ (PyMuPDF /           │ + ChangeDeltas       │ Persona Route       │ TestPlan
+              │  Unlimited OCR)      │                      │                      │
+              │                      │                      │              ┌───────┘
+              │                      │                      │              ▼
+              │                      │                      │       [Impact Mapper]
+              │                      │                      │              │
+              │                      │                      │              │ ImpactMap
+              │                      │                      │              │ per change
+              │                      │                      │       ┌──────┘
+              │                      │                      │       ▼
+              │                      │                      └──→ [Script Synthesizer]
+              │                                                       │
+              │                                                       │ test_code
+              │                                                       ▼
+              │                                                [Code Postprocessor]
+              │                                                       │
+              │                                                       ▼
+              └────────────────────────────────────────────────→ [Consolidated Report]
+                                                                      │
+                                                                      ▼
+                                                                     END
+```
+
+**New nodes:**
+
+| Node | Runs in | What it does |
+|---|---|---|
+| `parse_document` | document mode only | PDF/Markdown → `raw_document_text` via PyMuPDF (now) or Unlimited OCR (future) |
+| `impact_map` | document mode only | Cross-references `ChangeDelta`s against `persona_role` → `ImpactMap` per change |
+| `consolidated_report` | document mode only | Aggregates all outputs into a `ConsolidatedReport` struct for export |
+
+**Modified nodes:**
+
+| Node | Change |
+|---|---|
+| `ingest` | When `input_mode == "document"`, passes `raw_document_text` through `SpecAnalyzer` **plus** runs change-delta extraction (LLM call: "extract new features, modified schemas, unchanged systems from the following spec text"). Outputs both `StoryAnalysis` and `change_deltas`. |
+| `plan` (QA Director) | When `persona_role` is set, routes conditions with role-specific annotations. QA Lead: adds boundary/regression checks. Product Owner: adds business logic validation. Developer: adds API contract tests. Operations: adds deployment/migration checks. Uses LangGraph conditional edges with role-based routing keys. |
+| `synthesize` | When `impact_maps` are present, the prompt includes impact context: "Field X changed from 8 to 10 digits — generate tests that verify the ingestion pipeline handles the new format." |
+
+**Unchanged nodes:** `postprocess` (syntax validation, evidence stripping — same logic regardless of input mode).
+
+### 9.5 Persona Routing
+
+The QA Director's `_after_qa_director()` conditional edge already supports routing (`auto_confirm`/`plan_confirmed`). Document mode adds persona-aware routing within the `plan` node itself:
+
+```python
+def _route_by_persona(state: PipelineState) -> str:
+    """Route the plan node's output based on persona role."""
+    if not state.persona_role:
+        return "default"  # standard test generation
+    
+    routes = {
+        "qa_lead": "impact_map",        # QA → impact analysis → test generation
+        "product_owner": "report",       # PM → business logic validation → report
+        "developer": "synthesize",       # Dev → skip impact, straight to code
+        "operations": "impact_map",      # Ops → impact analysis (deployment focus)
+    }
+    return routes.get(state.persona_role, "default")
+```
+
+All personas converge on the `ConsolidatedReport` node, which tailors the output format by role.
+
+### 9.6 Relationship to AI-030
+
+AI-030 (shipped) built:
+- `src/pdf_ingest.py` — PyMuPDF extraction pipeline
+- RAG corpus of LV Insurance PDFs (7 docs, 66 chunks)
+- `rag_ingest.py --pdfs` CLI flag
+
+**How document mode builds on it:**
+
+| AI-030 capability | Document mode usage |
+|---|---|
+| `ingest_pdf()` → `list[DocChunk]` | Used directly in `_parse_document()` node |
+| Heading detection + table extraction | Feeds structured text into change-delta extraction |
+| RAG store populated with domain PDFs | IngestionAgent queries RAG for domain context during change analysis |
+| PyMuPDF dependency | Already installed — zero new dependencies for Phase 1 |
+
+**What's new vs. AI-030:**
+
+| AI-030 | Document mode |
+|---|---|
+| PDF → vector chunks (RAG) | PDF → structured state (graph pipeline) |
+| Improves resolver accuracy | Generates test plans from specs |
+| Background ingestion | Interactive user workflow |
+| Output: better placeholder resolution | Output: test plan + impact map + generated tests |
+
+### 9.7 Implementation Phases (Document Mode Extension)
+
+These phases are additive to the existing Phase 1a-1e plan. They can run in parallel with or after the core Phase 1 work.
+
+#### Phase 1f — State schema + parsing node (0.5 sessions)
+- Add `ChangeDelta`, `DataSchemaChange`, `ImpactMap`, `ConsolidatedReport` dataclasses to `src/agents/pipeline_state.py`
+- Add document-mode fields to `PipelineState`
+- Implement `_parse_document()` node in `src/agents/pipeline_graph.py` (calls `src/pdf_ingest.ingest_pdf()`)
+- Conditional edge: skip `parse_document` when `input_mode == "text"`
+- Unit tests: `test_pipeline_graph_document_mode.py`
+
+#### Phase 1g — Change delta extraction (0.5 sessions)
+- Extend `IngestionAgent` with `_extract_change_deltas()` method
+- LLM prompt: "Given this spec document, extract: new features, modified systems, unchanged systems, data schema changes"
+- Output parser: LLM structured output → `list[ChangeDelta]`
+- Fallback: if LLM fails, extract headings as feature names (deterministic)
+- Unit tests: `test_ingestion_document_mode.py`
+
+#### Phase 1h — Persona routing + impact mapping (1 session)
+- Add `persona_role` routing to `QADirectorAgent`
+- Implement `ImpactMapper` agent: `ChangeDelta` + `persona_role` → `ImpactMap`
+- Add `impact_map` node to `PipelineGraph`
+- Implement `_build_consolidated_report()` postprocessor node
+- Add persona selector to Streamlit UI sidebar
+- CLI: `--persona qa_lead|product_owner|developer|operations`
+- Unit tests: `test_director_persona_routing.py`, `test_impact_mapper.py`
+
+#### Phase 1i — Unlimited OCR integration (0.5 sessions, blocked on GPU infra)
+- Add `UnlimitedOCRParser` adapter class implementing the same interface as `src/pdf_ingest.ingest_pdf()`
+- Feature flag: `PARSER_ENGINE=unlimited-ocr` (default: `pymupdf`)
+- A/B comparison harness: same PDF → both engines → diff report
+- Decision gate: if Unlimited OCR quality ≥ PyMuPDF, make it the default for documents >10 pages
+
+#### Phase 1j — Eval validation (0.5 sessions)
+- Create eval dataset: 3 spec documents (PRD, change log, Jira export) → golden test plans
+- Run eval harness in document mode vs. text mode (same document, user story extracted manually)
+- Gate: document mode must produce ≥90% of the test conditions that a human would extract
+
+**Document mode total: 3 sessions** (plus 0.5 for Unlimited OCR when GPU available)
+
+### 9.8 Document Mode Risks
+
+| Risk | Mitigation |
+|---|---|
+| PDF layout complexity (multi-column, scanned docs) | PyMuPDF handles most layouts. Image-only pages logged as warnings, skipped. Unlimited OCR as upgrade path for complex docs. |
+| Change delta extraction hallucinates features | Structured output parser validates against document text. Flagged discrepancies shown at HITL checkpoint. |
+| Persona routing scope creep | Roles are predefined (4 roles). Adding a role requires code change — prevents unbounded branching. |
+| Large documents (50+ pages) blow up state | Documents chunked before graph ingestion (PyMuPDF already does this). Change delta extraction runs on summary, not full text. |
+| Unlimited OCR requires GPU that doesn't exist | Feature-flagged behind `PARSER_ENGINE`. PyMuPDF remains the default. No GPU dependency for the pipeline to work. |

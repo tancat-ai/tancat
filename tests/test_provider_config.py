@@ -34,6 +34,8 @@ def test_get_provider_defaults(provider: str, expected: tuple[str, str]) -> None
         ("lm-studio", False),
         ("openai-local", False),
         ("openai", True),
+        ("openai-compatible", True),
+        ("openrouter", True),
     ],
 )
 def test_provider_requires_openai_api_key(provider: str, requires_key: bool) -> None:

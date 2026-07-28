@@ -10,6 +10,11 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **Cloud Provider Support**: `openai-compatible` and `openrouter` provider names for OpenRouter, Together AI, Groq, etc. via `OPENAI_COMPATIBLE_*` env vars. Uses existing `OpenAIProvider` with `is_openai_compatible` flag.
+- **T-String Prompt Safety** (`src/agents/prompt_safety.py`): `safe_prompt()` wraps dynamic user input in `<user_input>` XML tags using Python 3.14 t-strings (PEP 750). Prevents prompt injection.
+- **Graph Golden Keys** (`scripts/eval/dataset/graph/`): graph-specific evaluation keys extracted from captures via `scripts/eval/extract_graph_keys.py`.
+- **POM Extraction in Validator**: `scripts/eval/golden_validator.py` now extracts POM calls (`inventory_page.click(...)`) alongside `evidence_tracker` calls.
+- **Semantic Comparison Mode**: `python scripts/eval/eval_harness.py run --mode semantic` for locator-level comparison.
 - **Phase 1 Multi-Agent Architecture (a-c)**: LangGraph-based `PipelineGraph` with three agents:
   - `IngestionAgent` — wraps `SpecAnalyzer` for criteria extraction + RAG domain enrichment
   - `QADirectorAgent` — priority assignment, prerequisite chaining, ambiguity flagging

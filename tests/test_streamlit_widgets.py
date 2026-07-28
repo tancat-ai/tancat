@@ -78,10 +78,10 @@ class TestProviderSelector:
         assert "LM Studio" in option_text, f"Expected LM Studio in options. Got: {option_labels}"
         assert "OpenAI" in option_text, f"Expected OpenAI in options. Got: {option_labels}"
 
-    def test_provider_selector_has_four_options(self, at: AppTest) -> None:
-        """Provider selectbox should have exactly four options."""
+    def test_provider_selector_has_six_options(self, at: AppTest) -> None:
+        """Provider selectbox should have exactly six options."""
         provider_box = at.sidebar.selectbox[0]
-        assert len(provider_box.options) == 4, f"Expected 4 provider options, got {len(provider_box.options)}"
+        assert len(provider_box.options) == 6, f"Expected 6 provider options, got {len(provider_box.options)}"
 
 
 # ---------------------------------------------------------------------------

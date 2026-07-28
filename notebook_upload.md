@@ -300,6 +300,51 @@ CLI entry point. Parses args, loads data, calls `rebuild_store()`. Returns count
 
 
 
+# `src/agents/director.py`
+
+## Purpose
+
+QA Director Agent â€” routes test criteria, assigns priority, chains prerequisites, and flags ambiguities for human review. Takes the `StoryAnalysis` from the Ingestion Agent and produces a prioritised list of `Criterion` objects ready for the Script Synthesizer.
+
+## Key Class: `QADirectorAgent`
+
+### Constructor
+```python
+QADirectorAgent(client=None)
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `client` | `LLMClient \| None` | Reserved for future LLM-based prioritisation |
+
+### `__call__(state: PipelineState) â†’ dict`
+
+LangGraph node interface. Returns a dict with:
+
+- `test_conditions`: list of `Criterion` with assigned priority, prerequisites, clarification flags
+- `errors`: error strings (empty on success)
+
+### Priority assignment
+| Condition Type | Priority |
+|---|---|
+| `boundary`, `negative`, `ambiguity` | `high` |
+| `happy_path`, `regression` | `medium` |
+| `exploratory` | `low` |
+
+### Prerequisite chaining
+Simple heuristic: test N depends on test N-1's setup. Future: LLM-based dependency analysis for complex multi-page flows.
+
+### Ambiguity detection
+Conditions with type `ambiguity` or `exploratory` are flagged `needs_clarification=True`. The human checkpoint in `PipelineGraph` pauses for review when any condition needs clarification.
+
+## Dependencies
+
+- `src.agents.pipeline_state` (data types)
+
+
+
+
+
 # src/agents/generator.py â€” GeneratorAgent
 
 ## Overview
@@ -401,6 +446,148 @@ Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED
 
 
 
+# `src/agents/ingestion.py`
+
+## Purpose
+
+Ingestion Agent â€” analyses raw user story text into structured `StoryAnalysis`. Wraps the existing `SpecAnalyzer` for deterministic criteria extraction (handles numbered lists, comma-separated concerns, and LLM fallback for unstructured text). Optionally queries the RAG vector store for domain-specific pattern enrichment.
+
+## Key Class: `IngestionAgent`
+
+### Constructor
+```python
+IngestionAgent(client, rag_retriever=None)
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `client` | `LLMClient` | LLM client passed to `SpecAnalyzer` |
+| `rag_retriever` | `RAGRetriever \| None` | Optional â€” queries RAG for domain vocabulary |
+
+### `__call__(state: PipelineState) â†’ dict`
+
+LangGraph node interface. Analyses `state.user_story` and returns a dict with:
+
+- `story_analysis`: `StoryAnalysis` with extracted criteria, domain terms, assumptions
+- `errors`: list of error strings (empty on success)
+
+### Processing pipeline
+1. Run `SpecAnalyzer.analyze()` for criteria extraction
+2. Query RAG for domain patterns (best-effort, non-blocking)
+3. Map `SpecAnalyzer.TestCondition` â†’ pipeline `Criterion`
+4. Detect source format (numbered, gherkin, free-form)
+
+## Dependencies
+
+- `src.spec_analyzer.SpecAnalyzer` (deterministic + LLM criteria extraction)
+- `src.agents.pipeline_state` (data types)
+
+
+
+
+
+# `src/agents/pipeline_graph.py`
+
+## Purpose
+
+Full-pipeline LangGraph `StateGraph` â€” orchestrates the complete test-generation flow through four nodes: Ingestion â†’ QA Director â†’ Script Synthesizer â†’ Postprocessor. Composes the existing `SkeletonGraph` as a sub-component of the Synthesizer node.
+
+## Key Class: `PipelineGraph`
+
+### Constructor
+```python
+PipelineGraph(client=None, rag_retriever=None, enable_checkpoint=True)
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `client` | `LLMClient \| None` | LLM client shared across agents. None â†’ mock agents |
+| `rag_retriever` | `RAGRetriever \| None` | Optional RAG retriever for domain enrichment |
+| `enable_checkpoint` | `bool` | If True, pause after QA Director for human review |
+
+### Methods
+
+- **`async run(user_story, base_url, ...)`** â†’ `PipelineState`: Execute full graph. With `auto_confirm=True`, runs to completion. Without it, pauses at human checkpoint.
+- **`async resume_after_checkpoint(state, confirmed_conditions)`** â†’ `PipelineState`: Resume a paused graph with tester-confirmed conditions.
+- **`compiled_graph`** â†’ `CompiledStateGraph`: Expose the compiled graph for testing.
+
+## Graph Structure
+
+```
+ingest â†’ plan â†’ [human checkpoint] â†’ synthesize â‡„ postprocess â†’ END
+```
+
+### Nodes
+| Node | Agent | Input â†’ Output |
+|---|---|---|
+| `ingest` | `IngestionAgent` | user_story â†’ StoryAnalysis |
+| `plan` | `QADirectorAgent` | StoryAnalysis â†’ test_conditions |
+| `synthesize` | `ScriptSynthesizerAgent` | test_conditions â†’ test_code |
+| `postprocess` | (inline) | test_code â†’ validated + errors |
+
+### Conditional Edges
+- **After plan:** `auto_confirm` or `plan_confirmed` â†’ synthesize; else â†’ END (pause)
+- **After synthesize:** errors + retries left â†’ retry synthesize; else â†’ postprocess
+
+## Dependencies
+
+- `langgraph` (optional â€” graph degrades gracefully if not installed)
+- `src.agents.ingestion`, `src.agents.director`, `src.agents.synthesizer`
+- `src.agents.pipeline_state`
+
+
+
+
+
+# `src/agents/pipeline_state.py`
+
+## Purpose
+
+Dataclass definitions for the full-pipeline LangGraph state. Distinct from `src/agents/state.py` (`WorkflowState`) which covers only the skeleton-generation sub-phase.
+
+## Key Classes
+
+### `Criterion`
+Single test criterion extracted from user story analysis.
+
+| Field | Type | Description |
+|---|---|---|
+| `ref` | `str` | Unique ID (e.g. `TC01.03`) |
+| `description` | `str` | Human-readable condition text |
+| `condition_type` | `str` | `happy_path`, `boundary`, `negative`, `exploratory`, `ambiguity` |
+| `priority` | `str` | `high`, `medium`, `low` |
+| `needs_clarification` | `bool` | True if tester must review before generation |
+| `prerequisite_refs` | `list[str]` | Refs of criteria that must execute first |
+
+### `StoryAnalysis`
+Output of the Ingestion Agent.
+
+| Field | Type | Description |
+|---|---|---|
+| `story_text` | `str` | Original user story |
+| `criteria` | `list[Criterion]` | Extracted criteria |
+| `domain_terms` | `list[str]` | RAG-retrieved domain vocabulary |
+| `assumptions` | `list[str]` | Inferred assumptions |
+| `source_format` | `str` | `gherkin`, `jira`, `free-form`, `numbered` |
+
+### `PipelineState`
+Typed state flowing through all nodes of the multi-agent graph. Serializable for LangGraph checkpointing.
+
+Key fields:
+- **Input:** `user_story`, `base_url`, `additional_urls`, `pom_mode`
+- **Intermediate:** `story_analysis`, `test_conditions`, `plan_confirmed`, `scraped_pages`
+- **Output:** `test_code`, `pom_classes`, `unresolved_placeholders`, `errors`
+- **Control:** `max_retries`, `auto_confirm`
+
+## Dependencies
+
+- `dataclasses` (stdlib)
+- `typing.Any`
+
+
+
+
+
 # src/agents/planner.py â€” PlannerAgent
 
 ## Overview
@@ -471,6 +658,55 @@ Pydantic `BaseModel` defining the serialisable workflow state passed between Lan
 
 
 
+# `src/agents/synthesizer.py`
+
+## Purpose
+
+Script Synthesizer Agent â€” test conditions â†’ pytest skeleton code. Wraps the existing `SkeletonGraph` (Planner â†’ Generator â†’ Validator retry loop) for skeleton generation. When no LLM client is available, produces a placeholder skeleton with `{{GOTO}}`/`{{ASSERT}}` placeholders.
+
+## Key Class: `ScriptSynthesizerAgent`
+
+### Constructor
+```python
+ScriptSynthesizerAgent(client=None)
+```
+
+| Param | Type | Description |
+|---|---|---|
+| `client` | `LLMClient \| None` | If provided, builds `SkeletonGraph` for real generation |
+
+### `__call__(state: PipelineState) â†’ dict`
+
+LangGraph node interface. Returns a dict with:
+
+- `test_code`: generated pytest skeleton code with placeholders
+- `errors`: validation errors or generation failure messages
+- `retry_count`: reset to 0 on success
+
+### Generation paths
+1. **LLM path** (client provided): Calls `SkeletonGraph.run()` with conditions text â†’ Planner â†’ Generator â†’ Validator â†’ returns skeleton code
+2. **Fallback path** (no client): Produces minimal skeleton:
+   - `happy_path` conditions â†’ `{{GOTO:home}}` + `{{ASSERT:description}}`
+   - Other types â†’ `pytest.skip('type: description â€” TODO')`
+
+### Placeholder skeleton format
+```python
+@pytest.mark.evidence(condition_ref='TC01.01', story_ref='S01')
+def test_tc01_01(page: Page, evidence_tracker):
+    # Login with valid credentials
+    {{GOTO:home}}
+    {{ASSERT:Login with valid credentials}}
+```
+
+## Dependencies
+
+- `src.agents.graph.SkeletonGraph` (Planner â†’ Generator â†’ Validator)
+- `src.agents.pipeline_state` (data types)
+
+
+
+
+
 # src/agents/validator.py â€” ValidatorAgent
 
 ## Overview
@@ -513,30 +749,37 @@ Returns:
 
 ## Overview
 
-Package init for the LangGraph multi-agent skeleton generation system (Phase 1c). Enabled via `LANGGRAPH_ENABLED=1` environment variable.
+Package init for the LangGraph multi-agent pipeline system (Phase 1a-c). Lazy-imports agent modules to avoid hard dependency on langgraph. Degrades gracefully when langgraph is not installed â€” the linear pipeline continues working normally.
+
+Enabled by default when langgraph is available (`pip install ai-playwright-generator[langgraph]`). Set `LANGGRAPH_ENABLED=0` to force single-call linear mode.
 
 ## Public API
 
-- `SkeletonGraph` â€” Compiled LangGraph workflow (Planner â†’ Generator â†’ Validator with retry loop)
-- `WorkflowState` â€” Pydantic state model for inter-node communication
+- `PipelineGraph` â€” Full multi-agent graph: Ingestion â†’ QA Director â†’ Script Synthesizer â†’ Postprocessor
+- `SkeletonGraph` â€” Skeleton-generation sub-graph: Planner â†’ Generator â†’ Validator (retry loop)
+- `PipelineState`, `Criterion`, `StoryAnalysis` â€” Dataclass state types for the full pipeline
+- `WorkflowState` â€” Pydantic state model for the skeleton-generation sub-phase
+- `IngestionAgent` â€” Story analysis + RAG enrichment
+- `QADirectorAgent` â€” Priority assignment + prerequisite chaining
+- `ScriptSynthesizerAgent` â€” Skeleton code generation
 
 ## Usage
 
 ```python
-from src.agents import SkeletonGraph, WorkflowState
+from src.agents import PipelineGraph
 
-graph = SkeletonGraph(llm_client)
+graph = PipelineGraph(client=llm_client, rag_retriever=rag)
 result = await graph.run(
-    user_story="...",
-    conditions="1. ...\\n2. ...",
-    expected_test_count=2,
+    user_story="As a user I want to...",
+    base_url="https://example.com",
+    auto_confirm=True,
 )
+print(result.test_code)
 ```
 
 ## Dependencies
 
-- `langgraph>=1.2.9` (optional dependency)
-- Falls back to single-call pipeline when not installed or `LANGGRAPH_ENABLED=0`
+- `langgraph>=1.2.9` (optional â€” lazy import, degrades if not installed)
 
 
 
@@ -7968,7 +8211,9 @@ Return the top N fallback candidates that score higher than the failed locator.
 
 ## High-Level Purpose
 
-Primary intelligent generation pipeline for the Streamlit app. Coordinates the full skeleton-first test generation workflow: parses user stories into test conditions, generates skeleton code with placeholders, scrapes target URLs for DOM metadata, resolves placeholders to real selectors, post-processes code, and saves output. Supports both single-condition and multi-condition (combined) skeleton generation.
+Primary intelligent generation pipeline for the Streamlit app. Coordinates the full skeleton-first test generation workflow: parses user stories into test conditions, generates skeleton code with placeholders, scrapes target URLs for DOM metadata, resolves placeholders to real selectors, post-processes code, and saves output.
+
+**Phase 1c (2026-07-26):** Now supports dual-path execution â€” linear pipeline (default fallback) and multi-agent `PipelineGraph` (default when langgraph installed). `LANGGRAPH_ENABLED=0` forces linear mode. See `run_pipeline_via_graph()` and `resume_graph()` for the graph path.
 
 ## Module Metadata
 
