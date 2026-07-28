@@ -1,0 +1,12 @@
+{
+  "story": "eval-005",
+  "linear": {
+    "accuracy": 0.0,
+    "duration_s": 32.86601114273071
+  },
+  "graph": {
+    "accuracy": 0.0,
+    "duration_s": 38.50507616996765
+  },
+  "delta_pp": 0.0
+}

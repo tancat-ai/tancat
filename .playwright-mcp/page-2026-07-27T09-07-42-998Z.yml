@@ -1,0 +1,757 @@
+- generic [ref=f1e2]:
+  - generic [ref=f1e3]:
+    - link "Skip to content" [ref=f1e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=f1e6]:
+      - heading "Navigation Menu" [level=2] [ref=f1e7]
+      - generic [ref=f1e8]:
+        - link "Homepage" [ref=f1e10] [cursor=pointer]:
+          - /url: /
+        - generic [ref=f1e13]:
+          - navigation "Global" [ref=f1e16]:
+            - list [ref=f1e17]:
+              - listitem [ref=f1e18]:
+                - button "Platform" [ref=f1e20] [cursor=pointer]
+              - listitem [ref=f1e23]:
+                - button "Solutions" [ref=f1e25] [cursor=pointer]
+              - listitem [ref=f1e28]:
+                - button "Resources" [ref=f1e30] [cursor=pointer]
+              - listitem [ref=f1e33]:
+                - button "Open Source" [ref=f1e35] [cursor=pointer]
+              - listitem [ref=f1e38]:
+                - button "Enterprise" [ref=f1e40] [cursor=pointer]
+              - listitem [ref=f1e43]:
+                - link "Pricing" [ref=f1e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+          - generic [ref=f1e46]:
+            - button "Search or jump to…" [ref=f1e49] [cursor=pointer]
+            - link "Sign in" [ref=f1e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Flacattano%2FAI-Playwright-Test-Generator%2Factions
+            - link "Sign up" [ref=f1e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E%2Factions%2Findex&source=header-repo&source_repo=lacattano%2FAI-Playwright-Test-Generator
+            - button "Appearance settings" [ref=f1e58] [cursor=pointer]
+  - main [ref=f1e62]:
+    - generic [ref=f1e63]:
+      - generic [ref=f1e64]:
+        - generic [ref=f1e66]:
+          - link "lacattano" [ref=f1e70] [cursor=pointer]:
+            - /url: /lacattano
+          - generic [ref=f1e71]: /
+          - strong [ref=f1e72]:
+            - link "AI-Playwright-Test-Generator" [ref=f1e73] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - generic [ref=f1e74]: Public
+        - generic [ref=f1e75]:
+          - list:
+            - listitem [ref=f1e76]:
+              - link "You must be signed in to change notification settings" [ref=f1e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Notifications
+            - listitem [ref=f1e80]:
+              - link "Fork 0" [ref=f1e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Fork
+                - generic "0" [ref=f1e84]
+            - listitem [ref=f1e85]:
+              - link "You must be signed in to star a repository" [ref=f1e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Flacattano%2FAI-Playwright-Test-Generator
+                - text: Star
+                - generic "1 user starred this repository" [ref=f1e90]: "1"
+      - navigation "Repository" [ref=f1e91]:
+        - list [ref=f1e92]:
+          - listitem [ref=f1e93]:
+            - link "Code" [ref=f1e94] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator
+          - listitem [ref=f1e98]:
+            - link "Issues" [ref=f1e99] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/issues
+          - listitem [ref=f1e104]:
+            - link "Pull requests" [ref=f1e105] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulls
+          - listitem [ref=f1e109]:
+            - link "Actions" [ref=f1e110] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions
+          - listitem [ref=f1e114]:
+            - link "Projects" [ref=f1e115] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/projects
+          - listitem [ref=f1e119]:
+            - link "Security and quality" [ref=f1e120] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/security
+          - listitem [ref=f1e124]:
+            - link "Insights" [ref=f1e125] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/pulse
+    - generic [ref=f1e130]:
+      - 'heading "Actions: lacattano/AI-Playwright-Test-Generator" [level=1] [ref=f1e131]'
+      - generic [ref=f1e134]:
+        - generic [ref=f1e135]:
+          - heading "Actions" [level=2] [ref=f1e137]
+          - navigation "Actions Workflows" [ref=f1e141]:
+            - list [ref=f1e143]:
+              - listitem [ref=f1e144]:
+                - link "All workflows" [ref=f1e145] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/actions
+              - listitem [ref=f1e147]
+              - listitem [ref=f1e148]:
+                - list "Workflows" [ref=f1e152]:
+                  - listitem [ref=f1e153]:
+                    - link "CI/CD Pipeline" [ref=f1e154] [cursor=pointer]:
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml
+                  - listitem [ref=f1e156]:
+                    - link "Dependency Graph" [ref=f1e157] [cursor=pointer]:
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/workflows/dependabot/update-graph
+                  - listitem [ref=f1e159]:
+                    - link "Evaluation Harness" [ref=f1e160] [cursor=pointer]:
+                      - /url: /lacattano/AI-Playwright-Test-Generator/actions/workflows/eval-harness.yml
+              - listitem [ref=f1e162]
+              - listitem [ref=f1e163]:
+                - generic [ref=f1e166]:
+                  - heading "Management" [level=3] [ref=f1e168]
+                  - list "Management" [ref=f1e169]:
+                    - listitem [ref=f1e170]:
+                      - link "Caches" [ref=f1e171] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/actions/caches
+        - generic [ref=f1e175]:
+          - generic [ref=f1e176]:
+            - generic [ref=f1e177]:
+              - heading "All workflows" [level=2] [ref=f1e179]
+              - search [ref=f1e185]:
+                - combobox "Filter workflow runs" [ref=f1e186]
+            - generic [ref=f1e187]: Showing runs from all workflows
+          - generic [ref=f1e188]:
+            - generic [ref=f1e189]:
+              - strong [ref=f1e192]: 310 workflow runs
+              - generic [ref=f1e193]:
+                - button "Workflow" [ref=f1e197] [cursor=pointer]
+                - button "Event" [ref=f1e203] [cursor=pointer]
+                - button "Status" [ref=f1e209] [cursor=pointer]
+                - button "Branch" [ref=f1e215] [cursor=pointer]
+                - button "Actor" [ref=f1e221] [cursor=pointer]
+            - generic [ref=f1e224]:
+              - generic [ref=f1e226]:
+                - generic [ref=f1e227]:
+                  - 'link "queued: Run 217 of CI/CD Pipeline. feat: iterative reflection loop for self-healing + kanban roadmap int…" [ref=f1e228] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30252437980
+                    - img "queued:" [ref=f1e230]
+                    - generic [ref=f1e232]: "feat: iterative reflection loop for self-healing + kanban roadmap int…"
+                  - generic [ref=f1e233]:
+                    - text: "CI/CD Pipeline #217:"
+                    - generic [ref=f1e234]:
+                      - text: Commit
+                      - link "c7b835f" [ref=f1e235] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/c7b835faeb64ad6f317c6cb6eec35fca234d9263
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e236] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e238] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e240]:
+                  - generic [ref=f1e241]:
+                    - generic "Jul 27, 2026, 10:05 GMT+1" [ref=f1e246]: 2 minutes ago
+                    - generic [ref=f1e247]: Queued
+                  - group [ref=f1e251]:
+                    - img "Show options" [ref=f1e253] [cursor=pointer]
+              - generic [ref=f1e256]:
+                - generic [ref=f1e257]:
+                  - 'link "completed successfully: Run 216 of CI/CD Pipeline. docs: update ARCHITECTURE.md + markdown_docs for Phase 1a-c agents" [ref=f1e258] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30223858721
+                    - img "completed successfully:" [ref=f1e260]
+                    - generic [ref=f1e262]: "docs: update ARCHITECTURE.md + markdown_docs for Phase 1a-c agents"
+                  - generic [ref=f1e263]:
+                    - text: "CI/CD Pipeline #216:"
+                    - generic [ref=f1e264]:
+                      - text: Commit
+                      - link "c1ced0b" [ref=f1e265] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/c1ced0b4ac1a7c3ccbc1776559de017d8812e14c
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e266] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e268] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e270]:
+                  - generic [ref=f1e271]:
+                    - generic "Jul 26, 2026, 23:47 GMT+1" [ref=f1e276]: Jul 26, 23:47 GMT+1
+                    - generic [ref=f1e277]:
+                      - img "Run duration" [ref=f1e278]
+                      - text: 3m 33s
+                  - group [ref=f1e281]:
+                    - img "Show options" [ref=f1e283] [cursor=pointer]
+              - generic [ref=f1e286]:
+                - generic [ref=f1e287]:
+                  - 'link "completed successfully: Run 25 of Dependency Graph. Graph Update: uv in /. #1483950486" [ref=f1e288] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30220708004
+                    - img "completed successfully:" [ref=f1e290]
+                    - generic [ref=f1e292]: "Graph Update: uv in /. #1483950486"
+                  - generic [ref=f1e293]:
+                    - text: "Dependency Graph #25:"
+                    - generic [ref=f1e294]:
+                      - text: by
+                      - link "dependabot" [ref=f1e295] [cursor=pointer]:
+                        - /url: /apps/dependabot
+                      - generic [ref=f1e296]: Bot
+                - link "main" [ref=f1e298] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e301]:
+                  - generic "Jul 26, 2026, 22:15 GMT+1" [ref=f1e306]: Jul 26, 22:15 GMT+1
+                  - generic [ref=f1e307]:
+                    - img "Run duration" [ref=f1e308]
+                    - text: 42s
+              - generic [ref=f1e311]:
+                - generic [ref=f1e312]:
+                  - 'link "completed successfully: Run 215 of CI/CD Pipeline. feat(agents): Phase 1a-c — LangGraph multi-agent pipeline" [ref=f1e313] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30220706710
+                    - img "completed successfully:" [ref=f1e315]
+                    - generic [ref=f1e317]: "feat(agents): Phase 1a-c — LangGraph multi-agent pipeline"
+                  - generic [ref=f1e318]:
+                    - text: "CI/CD Pipeline #215:"
+                    - generic [ref=f1e319]:
+                      - text: Commit
+                      - link "9123a64" [ref=f1e320] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/9123a64b7ed8b8cb7c703aef75d28f53570c8efa
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e321] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e323] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e325]:
+                  - generic [ref=f1e326]:
+                    - generic "Jul 26, 2026, 22:15 GMT+1" [ref=f1e331]: Jul 26, 22:15 GMT+1
+                    - generic [ref=f1e332]:
+                      - img "Run duration" [ref=f1e333]
+                      - text: 4m 11s
+                  - group [ref=f1e336]:
+                    - img "Show options" [ref=f1e338] [cursor=pointer]
+              - generic [ref=f1e341]:
+                - generic [ref=f1e342]:
+                  - 'link "completed successfully: Run 214 of CI/CD Pipeline. fix(resolver): +4.5pp accuracy — haystack enrichment + structural bon…" [ref=f1e343] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30213097896
+                    - img "completed successfully:" [ref=f1e345]
+                    - generic [ref=f1e347]: "fix(resolver): +4.5pp accuracy — haystack enrichment + structural bon…"
+                  - generic [ref=f1e348]:
+                    - text: "CI/CD Pipeline #214:"
+                    - generic [ref=f1e349]:
+                      - text: Commit
+                      - link "b8e51be" [ref=f1e350] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/b8e51be7d08736cc5f17918f95b34ca4c4f70c97
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e351] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e353] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e355]:
+                  - generic [ref=f1e356]:
+                    - generic "Jul 26, 2026, 18:41 GMT+1" [ref=f1e361]: Jul 26, 18:41 GMT+1
+                    - generic [ref=f1e362]:
+                      - img "Run duration" [ref=f1e363]
+                      - text: 3m 58s
+                  - group [ref=f1e366]:
+                    - img "Show options" [ref=f1e368] [cursor=pointer]
+              - generic [ref=f1e371]:
+                - generic [ref=f1e372]:
+                  - 'link "completed successfully: Run 24 of Dependency Graph. Graph Update: uv in /. #1483329150" [ref=f1e373] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30207360786
+                    - img "completed successfully:" [ref=f1e375]
+                    - generic [ref=f1e377]: "Graph Update: uv in /. #1483329150"
+                  - generic [ref=f1e378]:
+                    - text: "Dependency Graph #24:"
+                    - generic [ref=f1e379]:
+                      - text: by
+                      - link "dependabot" [ref=f1e380] [cursor=pointer]:
+                        - /url: /apps/dependabot
+                      - generic [ref=f1e381]: Bot
+                - link "main" [ref=f1e383] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e386]:
+                  - generic "Jul 26, 2026, 16:02 GMT+1" [ref=f1e391]: Jul 26, 16:02 GMT+1
+                  - generic [ref=f1e392]:
+                    - img "Run duration" [ref=f1e393]
+                    - text: 40s
+              - generic [ref=f1e396]:
+                - generic [ref=f1e397]:
+                  - 'link "completed successfully: Run 213 of CI/CD Pipeline. feat(ingestion): AI-030 — PDF parsing wired into RAG pipeline" [ref=f1e398] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30207359173
+                    - img "completed successfully:" [ref=f1e400]
+                    - generic [ref=f1e402]: "feat(ingestion): AI-030 — PDF parsing wired into RAG pipeline"
+                  - generic [ref=f1e403]:
+                    - text: "CI/CD Pipeline #213:"
+                    - generic [ref=f1e404]:
+                      - text: Commit
+                      - link "f1f5318" [ref=f1e405] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/f1f53189892f9ca50b1f359bcb8ce408f8c86af2
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e406] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e408] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e410]:
+                  - generic [ref=f1e411]:
+                    - generic "Jul 26, 2026, 16:02 GMT+1" [ref=f1e416]: Jul 26, 16:02 GMT+1
+                    - generic [ref=f1e417]:
+                      - img "Run duration" [ref=f1e418]
+                      - text: 3m 50s
+                  - group [ref=f1e421]:
+                    - img "Show options" [ref=f1e423] [cursor=pointer]
+              - generic [ref=f1e426]:
+                - generic [ref=f1e427]:
+                  - 'link "completed successfully: Run 212 of CI/CD Pipeline. feat(self-healing): Phase 2b — pre-screening + interactive repair fal…" [ref=f1e428] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30204938934
+                    - img "completed successfully:" [ref=f1e430]
+                    - generic [ref=f1e432]: "feat(self-healing): Phase 2b — pre-screening + interactive repair fal…"
+                  - generic [ref=f1e433]:
+                    - text: "CI/CD Pipeline #212:"
+                    - generic [ref=f1e434]:
+                      - text: Commit
+                      - link "8ad632f" [ref=f1e435] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/8ad632f4c3fbe44c81e84acc3decc26a16c8d027
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e436] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e438] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e440]:
+                  - generic [ref=f1e441]:
+                    - generic "Jul 26, 2026, 14:52 GMT+1" [ref=f1e446]: Jul 26, 14:52 GMT+1
+                    - generic [ref=f1e447]:
+                      - img "Run duration" [ref=f1e448]
+                      - text: 3m 47s
+                  - group [ref=f1e451]:
+                    - img "Show options" [ref=f1e453] [cursor=pointer]
+              - generic [ref=f1e456]:
+                - generic [ref=f1e457]:
+                  - 'link "completed successfully: Run 211 of CI/CD Pipeline. add AI-034 spec: Test Table generation & pre-flight resolution reporting" [ref=f1e458] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30202329208
+                    - img "completed successfully:" [ref=f1e460]
+                    - generic [ref=f1e462]: "add AI-034 spec: Test Table generation & pre-flight resolution reporting"
+                  - generic [ref=f1e463]:
+                    - text: "CI/CD Pipeline #211:"
+                    - generic [ref=f1e464]:
+                      - text: Commit
+                      - link "600c54d" [ref=f1e465] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/600c54db7bd409af41f9637f03eb45b8692bb80f
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e466] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e468] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e470]:
+                  - generic [ref=f1e471]:
+                    - generic "Jul 26, 2026, 13:34 GMT+1" [ref=f1e476]: Jul 26, 13:34 GMT+1
+                    - generic [ref=f1e477]:
+                      - img "Run duration" [ref=f1e478]
+                      - text: 3m 55s
+                  - group [ref=f1e481]:
+                    - img "Show options" [ref=f1e483] [cursor=pointer]
+              - generic [ref=f1e486]:
+                - generic [ref=f1e487]:
+                  - 'link "completed successfully: Run 210 of CI/CD Pipeline. fix: clarify ''Needs refinement'' hint - remove URL, guide to edit grid…" [ref=f1e488] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30199771139
+                    - img "completed successfully:" [ref=f1e490]
+                    - generic [ref=f1e492]: "fix: clarify 'Needs refinement' hint - remove URL, guide to edit grid…"
+                  - generic [ref=f1e493]:
+                    - text: "CI/CD Pipeline #210:"
+                    - generic [ref=f1e494]:
+                      - text: Commit
+                      - link "cfbbabc" [ref=f1e495] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/cfbbabcfd62be0d3f43d535dd1193ca00a2b0b14
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e496] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e498] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e500]:
+                  - generic [ref=f1e501]:
+                    - generic "Jul 26, 2026, 12:14 GMT+1" [ref=f1e506]: Jul 26, 12:14 GMT+1
+                    - generic [ref=f1e507]:
+                      - img "Run duration" [ref=f1e508]
+                      - text: 4m 5s
+                  - group [ref=f1e511]:
+                    - img "Show options" [ref=f1e513] [cursor=pointer]
+              - generic [ref=f1e516]:
+                - generic [ref=f1e517]:
+                  - 'link "completed successfully: Run 209 of CI/CD Pipeline. feat: tag vague/underspecified criteria as exploratory, not happy_path" [ref=f1e518] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30199585601
+                    - img "completed successfully:" [ref=f1e520]
+                    - generic [ref=f1e522]: "feat: tag vague/underspecified criteria as exploratory, not happy_path"
+                  - generic [ref=f1e523]:
+                    - text: "CI/CD Pipeline #209:"
+                    - generic [ref=f1e524]:
+                      - text: Commit
+                      - link "753f9fa" [ref=f1e525] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/753f9fa485f0c63ddedd176c8572faacc199de38
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e526] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e528] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e530]:
+                  - generic [ref=f1e531]:
+                    - generic "Jul 26, 2026, 12:08 GMT+1" [ref=f1e536]: Jul 26, 12:08 GMT+1
+                    - generic [ref=f1e537]:
+                      - img "Run duration" [ref=f1e538]
+                      - text: 3m 47s
+                  - group [ref=f1e541]:
+                    - img "Show options" [ref=f1e543] [cursor=pointer]
+              - generic [ref=f1e546]:
+                - generic [ref=f1e547]:
+                  - 'link "completed successfully: Run 208 of CI/CD Pipeline. fix B-027: expand comma-separated criteria inside numbered items too" [ref=f1e548] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30198767369
+                    - img "completed successfully:" [ref=f1e550]
+                    - generic [ref=f1e552]: "fix B-027: expand comma-separated criteria inside numbered items too"
+                  - generic [ref=f1e553]:
+                    - text: "CI/CD Pipeline #208:"
+                    - generic [ref=f1e554]:
+                      - text: Commit
+                      - link "26bb827" [ref=f1e555] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/26bb827f1196946e17ab9367266db9167e7037b6
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e556] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e558] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e560]:
+                  - generic [ref=f1e561]:
+                    - generic "Jul 26, 2026, 11:43 GMT+1" [ref=f1e566]: Jul 26, 11:43 GMT+1
+                    - generic [ref=f1e567]:
+                      - img "Run duration" [ref=f1e568]
+                      - text: 3m 14s
+                  - group [ref=f1e571]:
+                    - img "Show options" [ref=f1e573] [cursor=pointer]
+              - generic [ref=f1e576]:
+                - generic [ref=f1e577]:
+                  - 'link "completed successfully: Run 207 of CI/CD Pipeline. fix B-027: split comma-separated unstructured requirements into multi…" [ref=f1e578] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30198347496
+                    - img "completed successfully:" [ref=f1e580]
+                    - generic [ref=f1e582]: "fix B-027: split comma-separated unstructured requirements into multi…"
+                  - generic [ref=f1e583]:
+                    - text: "CI/CD Pipeline #207:"
+                    - generic [ref=f1e584]:
+                      - text: Commit
+                      - link "db77c46" [ref=f1e585] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/db77c46e2fe5aa2bbd4c5769dad306d4d4ef081c
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e586] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e588] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e590]:
+                  - generic [ref=f1e591]:
+                    - generic "Jul 26, 2026, 11:29 GMT+1" [ref=f1e596]: Jul 26, 11:29 GMT+1
+                    - generic [ref=f1e597]:
+                      - img "Run duration" [ref=f1e598]
+                      - text: 3m 40s
+                  - group [ref=f1e601]:
+                    - img "Show options" [ref=f1e603] [cursor=pointer]
+              - generic [ref=f1e606]:
+                - generic [ref=f1e607]:
+                  - 'link "completed successfully: Run 206 of CI/CD Pipeline. add B-027: requirements with distinct concerns generate single test case" [ref=f1e608] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30197820678
+                    - img "completed successfully:" [ref=f1e610]
+                    - generic [ref=f1e612]: "add B-027: requirements with distinct concerns generate single test case"
+                  - generic [ref=f1e613]:
+                    - text: "CI/CD Pipeline #206:"
+                    - generic [ref=f1e614]:
+                      - text: Commit
+                      - link "18191f3" [ref=f1e615] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/18191f35bb1d3a195e38367d122464974757752e
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e616] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e618] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e620]:
+                  - generic [ref=f1e621]:
+                    - generic "Jul 26, 2026, 11:11 GMT+1" [ref=f1e626]: Jul 26, 11:11 GMT+1
+                    - generic [ref=f1e627]:
+                      - img "Run duration" [ref=f1e628]
+                      - text: 3m 49s
+                  - group [ref=f1e631]:
+                    - img "Show options" [ref=f1e633] [cursor=pointer]
+              - generic [ref=f1e636]:
+                - generic [ref=f1e637]:
+                  - 'link "completed successfully: Run 205 of CI/CD Pipeline. fix: update B-025 and B-026 status to fixed in BACKLOG.md" [ref=f1e638] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30196449782
+                    - img "completed successfully:" [ref=f1e640]
+                    - generic [ref=f1e642]: "fix: update B-025 and B-026 status to fixed in BACKLOG.md"
+                  - generic [ref=f1e643]:
+                    - text: "CI/CD Pipeline #205:"
+                    - generic [ref=f1e644]:
+                      - text: Commit
+                      - link "4fc8ecd" [ref=f1e645] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/4fc8ecdece8009e009f2348ba936927fa7b751f7
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e646] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e648] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e650]:
+                  - generic [ref=f1e651]:
+                    - generic "Jul 26, 2026, 10:26 GMT+1" [ref=f1e656]: Jul 26, 10:26 GMT+1
+                    - generic [ref=f1e657]:
+                      - img "Run duration" [ref=f1e658]
+                      - text: 3m 49s
+                  - group [ref=f1e661]:
+                    - img "Show options" [ref=f1e663] [cursor=pointer]
+              - generic [ref=f1e666]:
+                - generic [ref=f1e667]:
+                  - 'link "cancelled: Run 204 of CI/CD Pipeline. fix: update AI-032 status to complete in BACKLOG.md" [ref=f1e668] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30196357318
+                    - img "cancelled:" [ref=f1e670]
+                    - generic [ref=f1e672]: "fix: update AI-032 status to complete in BACKLOG.md"
+                  - generic [ref=f1e673]:
+                    - text: "CI/CD Pipeline #204:"
+                    - generic [ref=f1e674]:
+                      - text: Commit
+                      - link "e02de3c" [ref=f1e675] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/e02de3c0853b33baf1a8285a887581e728e39943
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e676] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e678] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e680]:
+                  - generic [ref=f1e681]:
+                    - generic "Jul 26, 2026, 10:23 GMT+1" [ref=f1e686]: Jul 26, 10:23 GMT+1
+                    - generic [ref=f1e687]:
+                      - img "Run duration" [ref=f1e688]
+                      - text: 3m 18s
+                  - group [ref=f1e691]:
+                    - img "Show options" [ref=f1e693] [cursor=pointer]
+              - generic [ref=f1e696]:
+                - generic [ref=f1e697]:
+                  - 'link "completed successfully: Run 203 of CI/CD Pipeline. fix: satisfy mypy strict typing in ui_evidence.py sorted() key lambda" [ref=f1e698] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30195639500
+                    - img "completed successfully:" [ref=f1e700]
+                    - generic [ref=f1e702]: "fix: satisfy mypy strict typing in ui_evidence.py sorted() key lambda"
+                  - generic [ref=f1e703]:
+                    - text: "CI/CD Pipeline #203:"
+                    - generic [ref=f1e704]:
+                      - text: Commit
+                      - link "148ae00" [ref=f1e705] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/148ae00eeeaaac8393158b56346c33dcb4e22d40
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e706] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e708] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e710]:
+                  - generic [ref=f1e711]:
+                    - generic "Jul 26, 2026, 10:00 GMT+1" [ref=f1e716]: Jul 26, 10:00 GMT+1
+                    - generic [ref=f1e717]:
+                      - img "Run duration" [ref=f1e718]
+                      - text: 3m 51s
+                  - group [ref=f1e721]:
+                    - img "Show options" [ref=f1e723] [cursor=pointer]
+              - generic [ref=f1e726]:
+                - generic [ref=f1e727]:
+                  - 'link "failed: Run 202 of CI/CD Pipeline. fix: resolve pre-existing mypy errors in ui_evidence.py" [ref=f1e728] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30180475330
+                    - img "failed:" [ref=f1e730]
+                    - generic [ref=f1e732]: "fix: resolve pre-existing mypy errors in ui_evidence.py"
+                  - generic [ref=f1e733]:
+                    - text: "CI/CD Pipeline #202:"
+                    - generic [ref=f1e734]:
+                      - text: Commit
+                      - link "d839cbf" [ref=f1e735] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/d839cbfaccbc60b5ea68217f8d5200872915f01f
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e736] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e738] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e740]:
+                  - generic [ref=f1e741]:
+                    - generic "Jul 26, 2026, 01:02 GMT+1" [ref=f1e746]: Jul 26, 01:02 GMT+1
+                    - generic [ref=f1e747]:
+                      - img "Run duration" [ref=f1e748]
+                      - text: 2m 13s
+                  - group [ref=f1e751]:
+                    - img "Show options" [ref=f1e753] [cursor=pointer]
+              - generic [ref=f1e756]:
+                - generic [ref=f1e757]:
+                  - 'link "failed: Run 201 of CI/CD Pipeline. fix: resolve ruff lint issues (unused vars, trailing whitespace, dict…" [ref=f1e758] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30180252930
+                    - img "failed:" [ref=f1e760]
+                    - generic [ref=f1e762]: "fix: resolve ruff lint issues (unused vars, trailing whitespace, dict…"
+                  - generic [ref=f1e763]:
+                    - text: "CI/CD Pipeline #201:"
+                    - generic [ref=f1e764]:
+                      - text: Commit
+                      - link "03cda48" [ref=f1e765] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/03cda486b95daf5fc8c6e115a4a5ec1af03a7c1e
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e766] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e768] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e770]:
+                  - generic [ref=f1e771]:
+                    - generic "Jul 26, 2026, 00:55 GMT+1" [ref=f1e776]: Jul 26, 00:55 GMT+1
+                    - generic [ref=f1e777]:
+                      - img "Run duration" [ref=f1e778]
+                      - text: 3m 5s
+                  - group [ref=f1e781]:
+                    - img "Show options" [ref=f1e783] [cursor=pointer]
+              - generic [ref=f1e786]:
+                - generic [ref=f1e787]:
+                  - 'link "completed successfully: Run 200 of CI/CD Pipeline. fix: strip bare numbered prose from LLM skeleton output" [ref=f1e788] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30160866365
+                    - img "completed successfully:" [ref=f1e790]
+                    - generic [ref=f1e792]: "fix: strip bare numbered prose from LLM skeleton output"
+                  - generic [ref=f1e793]:
+                    - text: "CI/CD Pipeline #200:"
+                    - generic [ref=f1e794]:
+                      - text: Commit
+                      - link "b5a0413" [ref=f1e795] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/b5a0413d2e61d8c677c08edbfe8d9917859c6f96
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e796] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e798] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e800]:
+                  - generic [ref=f1e801]:
+                    - generic "Jul 25, 2026, 15:02 GMT+1" [ref=f1e806]: Jul 25, 15:02 GMT+1
+                    - generic [ref=f1e807]:
+                      - img "Run duration" [ref=f1e808]
+                      - text: 3m 42s
+                  - group [ref=f1e811]:
+                    - img "Show options" [ref=f1e813] [cursor=pointer]
+              - generic [ref=f1e816]:
+                - generic [ref=f1e817]:
+                  - 'link "completed successfully: Run 23 of Dependency Graph. Graph Update: uv in /. #1479780854" [ref=f1e818] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30112759598
+                    - img "completed successfully:" [ref=f1e820]
+                    - generic [ref=f1e822]: "Graph Update: uv in /. #1479780854"
+                  - generic [ref=f1e823]:
+                    - text: "Dependency Graph #23:"
+                    - generic [ref=f1e824]:
+                      - text: by
+                      - link "dependabot" [ref=f1e825] [cursor=pointer]:
+                        - /url: /apps/dependabot
+                      - generic [ref=f1e826]: Bot
+                - link "main" [ref=f1e828] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e831]:
+                  - generic "Jul 24, 2026, 18:22 GMT+1" [ref=f1e836]: Jul 24, 18:22 GMT+1
+                  - generic [ref=f1e837]:
+                    - img "Run duration" [ref=f1e838]
+                    - text: 39s
+              - generic [ref=f1e841]:
+                - generic [ref=f1e842]:
+                  - 'link "completed successfully: Run 199 of CI/CD Pipeline. chore: repo cleanup — remove trash, archive stale files, add kanban i…" [ref=f1e843] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30112755862
+                    - img "completed successfully:" [ref=f1e845]
+                    - generic [ref=f1e847]: "chore: repo cleanup — remove trash, archive stale files, add kanban i…"
+                  - generic [ref=f1e848]:
+                    - text: "CI/CD Pipeline #199:"
+                    - generic [ref=f1e849]:
+                      - text: Commit
+                      - link "b8a4af4" [ref=f1e850] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/b8a4af42f18dc216d2690a44dda95b308f8f1f86
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e851] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e853] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e855]:
+                  - generic [ref=f1e856]:
+                    - generic "Jul 24, 2026, 18:22 GMT+1" [ref=f1e861]: Jul 24, 18:22 GMT+1
+                    - generic [ref=f1e862]:
+                      - img "Run duration" [ref=f1e863]
+                      - text: 3m 39s
+                  - group [ref=f1e866]:
+                    - img "Show options" [ref=f1e868] [cursor=pointer]
+              - generic [ref=f1e871]:
+                - generic [ref=f1e872]:
+                  - 'link "completed successfully: Run 198 of CI/CD Pipeline. fix: element matcher pass 1 and pass 3 fallback resolution" [ref=f1e873] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30092870322
+                    - img "completed successfully:" [ref=f1e875]
+                    - generic [ref=f1e877]: "fix: element matcher pass 1 and pass 3 fallback resolution"
+                  - generic [ref=f1e878]:
+                    - text: "CI/CD Pipeline #198:"
+                    - generic [ref=f1e879]:
+                      - text: Commit
+                      - link "c78a0e3" [ref=f1e880] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/c78a0e3b2310e1826c6b8aef2f9f50d6cb863728
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e881] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e883] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e885]:
+                  - generic [ref=f1e886]:
+                    - generic "Jul 24, 2026, 13:22 GMT+1" [ref=f1e891]: Jul 24, 13:22 GMT+1
+                    - generic [ref=f1e892]:
+                      - img "Run duration" [ref=f1e893]
+                      - text: 3m 27s
+                  - group [ref=f1e896]:
+                    - img "Show options" [ref=f1e898] [cursor=pointer]
+              - generic [ref=f1e901]:
+                - generic [ref=f1e902]:
+                  - 'link "failed: Run 197 of CI/CD Pipeline. docs: update markdown_docs for semantic scraper + resolver fixes" [ref=f1e903] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30080271365
+                    - img "failed:" [ref=f1e905]
+                    - generic [ref=f1e907]: "docs: update markdown_docs for semantic scraper + resolver fixes"
+                  - generic [ref=f1e908]:
+                    - text: "CI/CD Pipeline #197:"
+                    - generic [ref=f1e909]:
+                      - text: Commit
+                      - link "38a64db" [ref=f1e910] [cursor=pointer]:
+                        - /url: /lacattano/AI-Playwright-Test-Generator/commit/38a64db60993b8f69405783e288acfc983397611
+                      - text: pushed by
+                      - link "lacattano" [ref=f1e911] [cursor=pointer]:
+                        - /url: /lacattano
+                - link "main" [ref=f1e913] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e915]:
+                  - generic [ref=f1e916]:
+                    - generic "Jul 24, 2026, 09:49 GMT+1" [ref=f1e921]: Jul 24, 09:49 GMT+1
+                    - generic [ref=f1e922]:
+                      - img "Run duration" [ref=f1e923]
+                      - text: 3m 35s
+                  - group [ref=f1e926]:
+                    - img "Show options" [ref=f1e928] [cursor=pointer]
+              - generic [ref=f1e931]:
+                - generic [ref=f1e932]:
+                  - 'link "completed successfully: Run 22 of Dependency Graph. Graph Update: uv in /. #1476494321" [ref=f1e933] [cursor=pointer]':
+                    - /url: /lacattano/AI-Playwright-Test-Generator/actions/runs/30011673939
+                    - img "completed successfully:" [ref=f1e935]
+                    - generic [ref=f1e937]: "Graph Update: uv in /. #1476494321"
+                  - generic [ref=f1e938]:
+                    - text: "Dependency Graph #22:"
+                    - generic [ref=f1e939]:
+                      - text: by
+                      - link "dependabot" [ref=f1e940] [cursor=pointer]:
+                        - /url: /apps/dependabot
+                      - generic [ref=f1e941]: Bot
+                - link "main" [ref=f1e943] [cursor=pointer]:
+                  - /url: /lacattano/AI-Playwright-Test-Generator/tree/refs/heads/main
+                - generic [ref=f1e946]:
+                  - generic "Jul 23, 2026, 14:32 GMT+1" [ref=f1e951]: Jul 23, 14:32 GMT+1
+                  - generic [ref=f1e952]:
+                    - img "Run duration" [ref=f1e953]
+                    - text: 53s
+          - navigation "Pagination" [ref=f1e957]:
+            - generic "Previous page" [ref=f1e958]: Previous
+            - emphasis [ref=f1e959] [cursor=pointer]: "1"
+            - link "Page 2" [ref=f1e960] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=2
+              - text: "2"
+            - link "Page 3" [ref=f1e961] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=3
+              - text: "3"
+            - link "Page 4" [ref=f1e962] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=4
+              - text: "4"
+            - link "Page 5" [ref=f1e963] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=5
+              - text: "5"
+            - generic [ref=f1e964]: …
+            - link "Page 12" [ref=f1e965] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=12
+              - text: "12"
+            - link "Page 13" [ref=f1e966] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=13
+              - text: "13"
+            - link "Next page" [ref=f1e967] [cursor=pointer]:
+              - /url: /lacattano/AI-Playwright-Test-Generator/actions?page=2
+              - text: Next
