@@ -42,9 +42,9 @@ PLACEHOLDER DESCRIPTION RULES:
 7. For GOTO: use a keyword, e.g. {{GOTO:home}}, {{GOTO:cart}}, {{GOTO:checkout}}
 
 PREREQUISITE STEPS:
-Each test must be self-contained. If a test depends on earlier criteria
-being completed first (e.g., you must log in before adding items to cart),
-include those prerequisite steps at the start of the test function.
+Only include login/authentication steps if the site requires them.
+Do NOT include steps from earlier criteria — each test does its OWN work.
+Each test starts from the beginning via GOTO and is SHORT (3-6 steps ideal).
 
 EXAMPLE (login + browse):
 import pytest

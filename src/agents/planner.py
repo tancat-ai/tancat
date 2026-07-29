@@ -27,7 +27,13 @@ CRITICAL — USE THE CRITERIA'S EXACT WORDS:
 - Never generalize or simplify. The downstream code generator needs the exact words.
 
 ONE TEST PER CRITERION — never merge, never skip.
-Each test must be self-contained with its own prerequisite steps.
+Each test must start from the beginning and include ONLY:
+- Navigation to the starting page (GOTO)
+- The specific steps for THIS criterion
+- Authentication steps (login) if the site requires it
+Do NOT include steps from earlier criteria unless they are login/auth steps.
+Do NOT accumulate all prior test steps as prerequisites.
+Each test function should be SHORT — 3-6 steps for simple criteria.
 
 OUTPUT FORMAT:
 
@@ -59,7 +65,9 @@ PLANNER_USER_PROMPT_TEMPLATE = """Create a test plan from the acceptance criteri
 <instruction>
 Generate EXACTLY {count} test plan entries — one per criterion above.
 Use the criteria's EXACT words for step descriptions — do NOT rewrite.
-Include prerequisite login/navigation steps in each test.
+Each test starts from the beginning (GOTO) and does ONLY its own steps.
+Include login/auth ONLY if the site requires it. Do NOT chain prior criteria.
+Keep each test SHORT — 3-6 steps is ideal.
 </instruction>"""
 
 
