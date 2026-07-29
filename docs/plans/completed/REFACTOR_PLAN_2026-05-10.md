@@ -76,6 +76,7 @@ Extract from `PlaceholderResolver`:
 # src/intent_matcher.py
 class IntentMatcher:
     """Classifies placeholder descriptions into intent buckets."""
+
     NAVIGATION_VERBS: set[str] = {...}
     INPUT_VERBS: set[str] = {...}
     ASSERTION_VERBS: set[str] = {...}
@@ -96,6 +97,7 @@ Extract from `PlaceholderResolver`:
 # src/semantic_matcher.py
 class SemanticMatcher:
     """Token-based semantic similarity for placeholder matching."""
+
     TOKEN_EXPANSIONS: dict[str, list[str]] = {...}
 
     @staticmethod
@@ -199,6 +201,7 @@ Extract:
 # src/journey_coordinator.py
 class JourneyCoordinator:
     """Coordinates multi-page journey scraping."""
+
     def scrape_journeys(self, journeys: list[Journey]) -> dict[str, ScrapedPage]: ...
     def build_journey_map(self, pages: list[ScrapedPage]) -> dict[str, list[str]]: ...
 ```
@@ -212,6 +215,7 @@ Extract:
 # src/page_context_validator.py
 class PageContextValidator:
     """Validates resolved locators against their source pages."""
+
     @staticmethod
     def verify_context(locator: str, expected_page: str, actual_page: str) -> bool: ...
 ```
@@ -280,6 +284,7 @@ Extract session state management:
 @dataclass
 class CliSession:
     """CLI session state."""
+
     user_story: str = ""
     criteria: list[str] = field(default_factory=list)
     ...

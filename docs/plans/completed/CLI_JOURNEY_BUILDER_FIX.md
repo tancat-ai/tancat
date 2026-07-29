@@ -157,16 +157,17 @@ def test_journey_builder_quit_at_add_menu():
     steps = collect_journey_steps()
     assert steps == []  # No steps added before quit
 
+
 def test_journey_builder_quit_at_step_type_menu():
     """Pressing Q on 'Step type' menu preserves steps added so far."""
     step = {"action": "navigate", "url": "https://example.com", "description": "Go to home"}
     adapter = TestingTerminal(
         responses_iterable=[
-            "1",          # Add step
-            "0",          # navigate
-            "Go to home", # description
+            "1",  # Add step
+            "0",  # navigate
+            "Go to home",  # description
             "https://example.com",  # url
-            "q",          # Quit at "Add step / Done building" menu
+            "q",  # Quit at "Add step / Done building" menu
         ]
     )
     set_terminal_adapter(adapter)

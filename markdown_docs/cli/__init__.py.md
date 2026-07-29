@@ -31,16 +31,8 @@ The file contains **no classes** and **no function definitions**. All logic runs
 2. **Re-wire stdout and stderr**  
    Inside the `if` block:
    ```python
-   sys.stdout = io.TextIOWrapper(
-       open(sys.stdout.fileno(), "wb"),
-       encoding="utf-8",
-       write_through=True
-   )
-   sys.stderr = io.TextIOWrapper(
-       open(sys.stderr.fileno(), "wb"),
-       encoding="utf-8",
-       write_through=True
-   )
+   sys.stdout = io.TextIOWrapper(open(sys.stdout.fileno(), "wb"), encoding="utf-8", write_through=True)
+   sys.stderr = io.TextIOWrapper(open(sys.stderr.fileno(), "wb"), encoding="utf-8", write_through=True)
    ```
    - `open(sys.stdout.fileno(), "wb")` — re-opens the underlying raw file descriptor in binary-write mode.
    - `io.TextIOWrapper(..., encoding="utf-8", write_through=True)` — wraps the binary stream in a UTF-8 text layer. `write_through=True` flushes immediately on every write, avoiding buffering issues.

@@ -158,9 +158,7 @@ def _build_excluded_selectors(
         return set()
 
     # Allow reuse if descriptions reference the same element
-    if previous_description and self.resolver.text_matches_description(
-        previous_description, description
-    ):
+    if previous_description and self.resolver.text_matches_description(previous_description, description):
         return set()
 
     # Find all selector forms for the previous element

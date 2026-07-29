@@ -86,8 +86,8 @@ def render_credential_profiles() -> CredentialProfile | None:
 **Session state keys:**
 ```python
 st.session_state.credential_profiles: list[dict]  # [{"label": "...", "username": "...", "password": "..."}]
-st.session_state.active_credential_index: int      # index of selected profile
-st.session_state.auth_enabled: bool                # toggle state
+st.session_state.active_credential_index: int  # index of selected profile
+st.session_state.auth_enabled: bool  # toggle state
 ```
 
 **Security:** Never print credential values. Mask passwords in display (show "••••••").
@@ -130,7 +130,7 @@ def render_journey_builder(additional_urls: list[str]) -> list[JourneyStep] | No
 **Session state keys:**
 ```python
 st.session_state.journey_steps: list[dict]  # [{"action": "goto", "url": "...", ...}]
-st.session_state.journey_enabled: bool      # whether journey builder is in use
+st.session_state.journey_enabled: bool  # whether journey builder is in use
 ```
 
 **"Build from URL list" logic:**
@@ -158,15 +158,17 @@ from src.journey_scraper import JourneyStep, CredentialProfile
 # Credential profiles
 active_profile = render_credential_profiles()
 
-# Journey builder  
+# Journey builder
 journey_steps = render_journey_builder(additional_urls) if additional_urls else None
 
 # Pass to pipeline
-asyncio.run(run_pipeline(
-    # ... existing params ...
-    credential_profile=active_profile,
-    journey_steps=journey_steps,
-))
+asyncio.run(
+    run_pipeline(
+        # ... existing params ...
+        credential_profile=active_profile,
+        journey_steps=journey_steps,
+    )
+)
 ```
 
 ---
@@ -188,6 +190,7 @@ async def run_pipeline(
 if journey_steps is not None and len(journey_steps) > 0:
     # Use journey-based scraping
     from src.journey_scraper import execute_journey
+
     journey_result = execute_journey(
         journey_steps=journey_steps,
         credential_profile=credential_profile,

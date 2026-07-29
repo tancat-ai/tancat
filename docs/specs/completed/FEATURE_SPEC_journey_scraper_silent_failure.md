@@ -52,15 +52,17 @@ After the PAGES_NEEDED fix (where the journey scraper detects page changes inlin
 When the method returns `None`, emit a structured warning:
 
 ```python
-self._context_log.append({
-    "event": "locator_not_found",
-    "step": step_index,
-    "action": action,  # "CLICK"
-    "description": description,  # "cart link"
-    "page_url": page.url,
-    "best_candidate_score": best_score if best_candidate else 0,
-    "available_elements": self._list_available_elements(page, limit=10),
-})
+self._context_log.append(
+    {
+        "event": "locator_not_found",
+        "step": step_index,
+        "action": action,  # "CLICK"
+        "description": description,  # "cart link"
+        "page_url": page.url,
+        "best_candidate_score": best_score if best_candidate else 0,
+        "available_elements": self._list_available_elements(page, limit=10),
+    }
+)
 ```
 
 `_list_available_elements()` returns a summary of clickable elements on the page (up to a limit) to help diagnose why the match failed.
@@ -74,13 +76,15 @@ In the step execution loop, when `_discover_selector()` returns `None`:
 ```python
 selector = self._discover_selector(description, action)
 if selector is None:
-    self._context_log.append({
-        "event": "step_skipped",
-        "step": step_index,
-        "reason": "locator_not_found",
-        "description": description,
-        "page_url": page.url,
-    })
+    self._context_log.append(
+        {
+            "event": "step_skipped",
+            "step": step_index,
+            "reason": "locator_not_found",
+            "description": description,
+            "page_url": page.url,
+        }
+    )
     continue  # Don't silently fall through — explicit skip
 ```
 
@@ -115,20 +119,24 @@ if selector is None:
     # Retry with relaxed criteria
     selector = self._discover_selector_relaxed(description, action)
     if selector is not None:
-        self._context_log.append({
-            "event": "locator_relaxed_fallback",
-            "step": step_index,
-            "description": description,
-            "selector": selector,
-        })
+        self._context_log.append(
+            {
+                "event": "locator_relaxed_fallback",
+                "step": step_index,
+                "description": description,
+                "selector": selector,
+            }
+        )
     else:
-        self._context_log.append({
-            "event": "step_skipped",
-            "step": step_index,
-            "reason": "locator_not_found_even_relaxed",
-            "description": description,
-            "page_url": page.url,
-        })
+        self._context_log.append(
+            {
+                "event": "step_skipped",
+                "step": step_index,
+                "reason": "locator_not_found_even_relaxed",
+                "description": description,
+                "page_url": page.url,
+            }
+        )
 ```
 
 ---

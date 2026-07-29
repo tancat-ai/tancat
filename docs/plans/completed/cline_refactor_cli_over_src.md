@@ -46,14 +46,17 @@ This provides keyword-based analysis that overlaps with `src/spec_analyzer.py` (
 **Create `src/config.py`:**
 ```python
 """Centralized configuration for AI Playwright Test Generator."""
+
 from __future__ import annotations
 import os
 from enum import Enum
+
 
 class AnalysisMode(Enum):
     FAST = "fast"
     THOROUGH = "thorough"
     AUTO = "auto"
+
 
 class ReportFormat(Enum):
     CONFLUENCE = "confluence"
@@ -64,21 +67,25 @@ class ReportFormat(Enum):
     JIRA = "jira"
     SHAREABLE = "shareable"
 
+
 class DetectionMode(Enum):
     AUTO = "auto"
     EXPLICIT = "explicit"
     FAST = "fast"
     THOROUGH = "thorough"
 
+
 class CaptureLevel(Enum):
     BASIC = "basic"
     STANDARD = "standard"
     THOROUGH = "thorough"
 
+
 class ScreenshotNaming(Enum):
     SEQUENTIAL = "sequential"
     DESCRIPTIVE = "descriptive"
     HYBRID = "hybrid"
+
 
 # Global defaults
 JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "TEST")
@@ -87,6 +94,7 @@ JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "TEST")
 **Update `cli/config.py` to re-export:**
 ```python
 """Backwards-compatible re-exports for CLI."""
+
 from src.config import (
     AnalysisMode,
     CaptureLevel,
@@ -160,9 +168,11 @@ Thin wrapper around keyword-based analysis extracted from `cli/story_analyzer.py
 
 ```python
 """Keyword-based test case analyzer (fast, no LLM required)."""
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
+
 
 @dataclass
 class AnalyzedTestCase:
@@ -173,10 +183,10 @@ class AnalyzedTestCase:
     suggested_data: dict[str, Any] = field(default_factory=dict)
     estimated_complexity: str = "low"
 
+
 class KeywordAnalyzer:
     @classmethod
-    def analyze(cls, title: str, description: str) -> AnalyzedTestCase:
-        ...
+    def analyze(cls, title: str, description: str) -> AnalyzedTestCase: ...
 ```
 
 **Impact:** ~80 lines in src/

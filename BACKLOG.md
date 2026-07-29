@@ -688,9 +688,9 @@ Even tests WITH prerequisite add-to-cart steps (TC01.05) resolve cart assertions
 **Concrete failure (automationexercise.com, 2026-07-20):**
 ```python
 def test_tc01_07(page: Page, evidence_tracker):
-    evidence_tracker.navigate('https://automationexercise.com/view_cart')
+    evidence_tracker.navigate("https://automationexercise.com/view_cart")
     pytest.skip("Skipping: unresolved placeholders for: 'Proceed to checkout'")
-    evidence_tracker.assert_visible('#empty_cart', label='order summary')
+    evidence_tracker.assert_visible("#empty_cart", label="order summary")
 ```
 The test jumps straight to `/view_cart`. The scraper visited that URL in a fresh session,
 found an empty cart, and only `#empty_cart` elements were captured. "Proceed to checkout"
@@ -700,7 +700,7 @@ never existed in the scraped DOM → placeholder can't resolve → test skipped.
 POM instantiations:
 ```python
 home_page = HomePage(page, evidence_tracker)
-home_page = HomePage(page, evidence_tracker)        # duplicate!
+home_page = HomePage(page, evidence_tracker)  # duplicate!
 generated_page = GeneratedPage(page, evidence_tracker)
 generated_page = GeneratedPage(page, evidence_tracker)  # duplicate!
 ```

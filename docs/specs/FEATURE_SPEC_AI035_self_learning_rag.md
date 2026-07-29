@@ -78,14 +78,14 @@ New collection/table in the RAG store alongside golden patterns:
 ```python
 @dataclass
 class LearnedPattern:
-    action_type: str          # "CLICK" | "FILL" | "ASSERT"
-    description: str          # placeholder description text
-    locator: str              # corrected locator
-    site_hash: str            # sha256(domain) for scoped retrieval
-    confidence: float          # 1.0 for self-healing verified
-    source: str               # "self_healing"
-    created_at: float          # unix timestamp
-    hit_count: int             # how many times this pattern was retrieved
+    action_type: str  # "CLICK" | "FILL" | "ASSERT"
+    description: str  # placeholder description text
+    locator: str  # corrected locator
+    site_hash: str  # sha256(domain) for scoped retrieval
+    confidence: float  # 1.0 for self-healing verified
+    source: str  # "self_healing"
+    created_at: float  # unix timestamp
+    hit_count: int  # how many times this pattern was retrieved
 ```
 
 ### 3.4 Deduplication

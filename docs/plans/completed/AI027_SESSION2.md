@@ -153,6 +153,7 @@ class TestScrapeResultWithScreenshot:
 def mock_page(mock_browser) -> MagicMock:
     """Mock Playwright Page for screenshot testing."""
 
+
 @pytest.fixture
 def mock_page_with_elements(mock_page) -> MagicMock:
     """Mock Page with interactive elements and bounding boxes."""

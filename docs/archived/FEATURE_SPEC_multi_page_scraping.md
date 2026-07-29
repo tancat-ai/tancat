@@ -94,9 +94,10 @@ state management. Implement this first.
 @dataclass
 class MultiPageContext:
     """Context scraped from multiple pages in a user flow."""
-    pages: list[PageContext]          # one PageContext per URL visited
-    base_url: str                     # the starting URL
-    total_elements: int               # sum across all pages
+
+    pages: list[PageContext]  # one PageContext per URL visited
+    base_url: str  # the starting URL
+    total_elements: int  # sum across all pages
     scrape_duration_ms: int
 
     def to_prompt_block(self) -> str:
@@ -186,10 +187,7 @@ with st.expander("➕ Add more pages to scrape (optional)", expanded=False):
 
 Parse additional URLs:
 ```python
-additional_urls = [
-    u.strip() for u in additional_urls_raw.splitlines()
-    if u.strip().startswith("http")
-]
+additional_urls = [u.strip() for u in additional_urls_raw.splitlines() if u.strip().startswith("http")]
 all_urls = [base_url] + additional_urls if base_url else []
 ```
 
@@ -227,8 +225,8 @@ actions, not just visiting static URLs. This is significantly more complex.
 
 ```python
 # .env additions for Phase B
-TEST_USERNAME=standard_user
-TEST_PASSWORD=secret_sauce
+TEST_USERNAME = standard_user
+TEST_PASSWORD = secret_sauce
 ```
 
 These would be injected into the scraper when it encounters login forms.

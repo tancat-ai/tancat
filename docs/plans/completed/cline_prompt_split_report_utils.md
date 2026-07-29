@@ -93,6 +93,7 @@ all existing callers continue to work without any changes:
 
 ```python
 """Backwards-compatible re-exports. Import from specific modules in new code."""
+
 from src.report_builder import build_report_dicts, escape_html
 from src.report_formatters import (
     generate_html_report,

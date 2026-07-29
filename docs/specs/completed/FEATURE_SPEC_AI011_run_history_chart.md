@@ -87,9 +87,9 @@ Key data structures:
 ```python
 @dataclass
 class PersistedRunResult:
-    run_id: str                          # ISO-8601 timestamp
-    test_package: str                    # path to test package (for filtering)
-    results: list[PersistedTestResult]   # per-test results
+    run_id: str  # ISO-8601 timestamp
+    test_package: str  # path to test package (for filtering)
+    results: list[PersistedTestResult]  # per-test results
     total: int
     passed: int
     failed: int
@@ -98,13 +98,14 @@ class PersistedRunResult:
     duration: float
     raw_output: str
 
+
 @dataclass
 class RunComparison:
     older: PersistedRunResult
     newer: PersistedRunResult
-    improved: list[str]                  # fail/error → pass
-    regressed: list[str]                 # pass → fail/error
-    new_failures: list[str]              # absent → fail/error
+    improved: list[str]  # fail/error → pass
+    regressed: list[str]  # pass → fail/error
+    new_failures: list[str]  # absent → fail/error
 ```
 
 **Session reload compatibility:** Runs are stored as JSON files on disk. `load_all_run_results()` scans the directory on-demand with no caching. Data survives session restarts and can be filtered by `test_package` field.
@@ -165,25 +166,27 @@ def format_run_history_table(
     max_rows: int = 10,
 ) -> str:
     """Format run history as an ASCII table string.
-    
+
     Returns a formatted string with columns:
     Date | Package | Pass | Fail | Skip | Error | Pass Rate
     """
+
 
 def format_flaky_tests_table(
     flaky: list[tuple[str, dict[str, int]]],
 ) -> str:
     """Format flaky tests as an ASCII table string.
-    
+
     Returns a formatted string with columns:
     Test Name | Pass | Fail | Flakiness Score
     """
+
 
 def format_run_comparison(
     comparison: RunComparison | None,
 ) -> str:
     """Format run comparison as an ASCII summary.
-    
+
     Returns sections for Improved, Regressed, New Failures.
     """
 ```
@@ -225,12 +228,14 @@ Add a fourth tab in the `_render_evidence_viewer()` method:
 
 ```python
 # Existing tabs
-tab_screenshot, tab_gantt, tab_heatmap, tab_history = st.tabs([
-    "Annotated Screenshot",
-    "Gantt Timeline",
-    "Coverage Heat Map",
-    "Run History",  # NEW
-])
+tab_screenshot, tab_gantt, tab_heatmap, tab_history = st.tabs(
+    [
+        "Annotated Screenshot",
+        "Gantt Timeline",
+        "Coverage Heat Map",
+        "Run History",  # NEW
+    ]
+)
 
 with tab_history:
     self._render_run_history()
@@ -247,23 +252,22 @@ def _render_run_history(self) -> None:
         load_all_run_results,
     )
     from src.run_history_chart import build_run_history_chart
-    
+
     runs = load_all_run_results()
-    
+
     if not runs:
         st.info("No run history available. Run tests first to see trends here.")
         return
-    
+
     # Scope selector
     packages = list(set(r.test_package for r in runs if r.test_package)) or ["All"]
-    scope = st.selectbox("Scope", ["Current Package" if packages else "All"], 
-                         key="run_history_scope")
+    scope = st.selectbox("Scope", ["Current Package" if packages else "All"], key="run_history_scope")
     filtered_runs = self._filter_runs(runs, scope)
-    
+
     # Chart
     fig = build_run_history_chart(filtered_runs, include_flaky_markers=True)
     st.plotly_chart(fig, use_container_width=True)
-    
+
     # Flaky tests (expandable)
     flaky = get_flaky_tests(filtered_runs)
     with st.expanded(f"Flaky Tests ({len(flaky)})", len(flaky) > 0):
@@ -272,7 +276,7 @@ def _render_run_history(self) -> None:
             ...
         else:
             st.success("No flaky tests detected ✅")
-    
+
     # Run comparison
     comparison = compare_latest_runs(directory=None)
     if comparison:

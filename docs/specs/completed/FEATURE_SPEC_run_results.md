@@ -85,11 +85,12 @@ User clicks "Run" → PipelineRunService.run_saved_test()
 # pytest_output_parser.py
 @dataclass
 class TestResult:
-    name: str              # "test_01_login_page_displayed"
-    status: str            # "passed" | "failed" | "error" | "skipped"
-    duration: float        # seconds, 0.0 if not available
-    error_message: str     # "" if passed, short error if failed
-    file_path: str         # relative path to test file
+    name: str  # "test_01_login_page_displayed"
+    status: str  # "passed" | "failed" | "error" | "skipped"
+    duration: float  # seconds, 0.0 if not available
+    error_message: str  # "" if passed, short error if failed
+    file_path: str  # relative path to test file
+
 
 @dataclass
 class RunResult:
@@ -99,8 +100,9 @@ class RunResult:
     failed: int
     errors: int
     skipped: int
-    duration: float        # total run duration in seconds
-    raw_output: str        # preserve original for expander
+    duration: float  # total run duration in seconds
+    raw_output: str  # preserve original for expander
+
 
 # pipeline_run_service.py
 @dataclass(frozen=True)
@@ -110,14 +112,15 @@ class PipelineExecutionResult:
     display_output: str
     return_code: int
 
+
 # coverage_utils.py
 @dataclass
 class CoverageDisplayRow:
-    id_cell: str           # "✅ TC-001"
+    id_cell: str  # "✅ TC-001"
     requirement: str
-    status: str            # "COVERED" | "NOT_COVERED"
-    tests: str             # "test_01_login_page_..."
-    result: str            # "✅" | "❌" | "⏭️" | "⏳" | "N/A"
+    status: str  # "COVERED" | "NOT_COVERED"
+    tests: str  # "test_01_login_page_..."
+    result: str  # "✅" | "❌" | "⏭️" | "⏳" | "N/A"
 ```
 
 ### Session State Keys

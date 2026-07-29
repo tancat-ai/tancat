@@ -114,6 +114,7 @@ class ProductPage:
     Scraped: 2026-04-06T10:30:00
     Elements found: 42
     """
+
     URL = "https://automationexercise.com/products"
 
     def __init__(self, page: Page) -> None:

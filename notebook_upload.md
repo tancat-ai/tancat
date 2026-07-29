@@ -91,16 +91,8 @@ The file contains **no classes** and **no function definitions**. All logic runs
 2. **Re-wire stdout and stderr**  
    Inside the `if` block:
    ```python
-   sys.stdout = io.TextIOWrapper(
-       open(sys.stdout.fileno(), "wb"),
-       encoding="utf-8",
-       write_through=True
-   )
-   sys.stderr = io.TextIOWrapper(
-       open(sys.stderr.fileno(), "wb"),
-       encoding="utf-8",
-       write_through=True
-   )
+   sys.stdout = io.TextIOWrapper(open(sys.stdout.fileno(), "wb"), encoding="utf-8", write_through=True)
+   sys.stderr = io.TextIOWrapper(open(sys.stderr.fileno(), "wb"), encoding="utf-8", write_through=True)
    ```
    - `open(sys.stdout.fileno(), "wb")` â€” re-opens the underlying raw file descriptor in binary-write mode.
    - `io.TextIOWrapper(..., encoding="utf-8", write_through=True)` â€” wraps the binary stream in a UTF-8 text layer. `write_through=True` flushes immediately on every write, avoiding buffering issues.
@@ -2241,7 +2233,7 @@ provider = get_provider("ollama")
 # Send a completion request
 messages = [
     ChatMessage(role="system", content="You are a helpful assistant."),
-    ChatMessage(role="user", content="Generate a Playwright test.")
+    ChatMessage(role="user", content="Generate a Playwright test."),
 ]
 response = provider.complete(messages, model="qwen2.5:7b")
 print(response.content)
@@ -9512,7 +9504,9 @@ High-level retrieval store: embeds text and delegates to a vector backend.
 def __init__(self, backend: VectorStoreBackend, embedder: EmbeddingProvider) -> None: ...
 def add_patterns(self, patterns: list[GoldenPattern]) -> int: ...
 def add_docs(self, chunks: list[DocChunk]) -> int: ...
-def retrieve(self, query: str, *, action_type: str = "", k: int = 5, min_confidence: float = 0.6) -> list[RetrievedPattern]: ...
+def retrieve(
+    self, query: str, *, action_type: str = "", k: int = 5, min_confidence: float = 0.6
+) -> list[RetrievedPattern]: ...
 ```
 
 **`retrieve()`:** Embeds the query, searches the backend, filters by `min_confidence`, and returns `RetrievedPattern` objects sorted by confidence descending. Returns empty list when the store is empty.

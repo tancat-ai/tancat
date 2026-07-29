@@ -215,13 +215,15 @@ for journey_result in journey_results:
     for step in journey_result.steps:
         if step.selector:
             # Add to resolver's element pool
-            resolver_element_pool.append({
-                "selector": step.selector,
-                "url": journey_result.url,
-                "step_type": step.type,
-                "step_label": step.label,
-                "is_journey_discovered": True,
-            })
+            resolver_element_pool.append(
+                {
+                    "selector": step.selector,
+                    "url": journey_result.url,
+                    "step_type": step.type,
+                    "step_label": step.label,
+                    "is_journey_discovered": True,
+                }
+            )
 ```
 
 **Modified in `src/placeholder_orchestrator.py`:**

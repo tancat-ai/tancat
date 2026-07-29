@@ -257,14 +257,14 @@ class EvidenceSearchResult:
     status: str
     page_url: str
     test_package: str
-    matched_field: str       # which field matched the query
+    matched_field: str  # which field matched the query
 
 
 @dataclass
 class EvidenceFilterOptions:
-    statuses: list[str]              # distinct status values
-    domains: list[str]               # distinct URL domains
-    condition_prefixes: list[str]     # e.g. ["TC01", "TC02"]
+    statuses: list[str]  # distinct status values
+    domains: list[str]  # distinct URL domains
+    condition_prefixes: list[str]  # e.g. ["TC01", "TC02"]
     story_refs: list[str]
     step_types: list[str]
     total_indexed: int

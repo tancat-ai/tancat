@@ -132,9 +132,9 @@ Since the a11y tree doesn't include DOM selectors directly, matching is done by 
 
 ```python
 {
-    "accessible_name": "View Cart",     # computed from a11y tree if available
-    "computed_role": "button",          # explicit role from a11y (may differ from raw 'role' attr)
-    "aria_describedby": "...",          # resolved text from aria-describedby reference
+    "accessible_name": "View Cart",  # computed from a11y tree if available
+    "computed_role": "button",  # explicit role from a11y (may differ from raw 'role' attr)
+    "aria_describedby": "...",  # resolved text from aria-describedby reference
 }
 ```
 
@@ -154,6 +154,7 @@ a11y_tree = page.accessibility.snapshot()
 
 # NEW: enrich elements with computed accessible names
 from src.accessibility_enricher import AccessibilityEnricher
+
 elements = AccessibilityEnricher.enrich(elements, a11y_tree)
 ```
 

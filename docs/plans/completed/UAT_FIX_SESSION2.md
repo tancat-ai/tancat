@@ -84,9 +84,24 @@ MIN_SPECIFIC_WORDS: int = 3
 
 # Generic words that don't add specificity to ASSERT descriptions.
 GENERIC_ASSERT_WORDS: set[str] = {
-    "button", "link", "element", "message", "text", "content",
-    "visible", "displayed", "shown", "present", "available",
-    "the", "a", "an", "is", "are", "it", "its",
+    "button",
+    "link",
+    "element",
+    "message",
+    "text",
+    "content",
+    "visible",
+    "displayed",
+    "shown",
+    "present",
+    "available",
+    "the",
+    "a",
+    "an",
+    "is",
+    "are",
+    "it",
+    "its",
 }
 
 

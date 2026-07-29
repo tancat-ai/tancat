@@ -24,7 +24,7 @@ When a user provides acceptance criteria that have implicit dependencies (e.g., 
 ```python
 # Generated — test_02 starts at login page but never logs in:
 def test_02_add_item(page):
-    evidence_tracker.navigate('https://www.saucedemo.com')  # ← Login page
+    evidence_tracker.navigate("https://www.saucedemo.com")  # ← Login page
     dismiss_consent_overlays(page)
     pytest.skip("Unresolved placeholder: {{CLICK:Sauce Labs Backpack add to cart button}}")
     # ^ This button doesn't exist on the login page because user isn't logged in
@@ -65,23 +65,23 @@ Parse the journey chain:
 **Before (broken):**
 ```python
 def test_02_add_item(page):
-    evidence_tracker.navigate('https://www.saucedemo.com')
+    evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
-    evidence_tracker.click('#backpack-add-to-cart', label='Sauce Labs Backpack add to cart button')
+    evidence_tracker.click("#backpack-add-to-cart", label="Sauce Labs Backpack add to cart button")
 ```
 
 **After (fixed):**
 ```python
 def test_02_add_item(page):
     # --- Prerequisite: login (injected from TC-01) ---
-    evidence_tracker.navigate('https://www.saucedemo.com')
+    evidence_tracker.navigate("https://www.saucedemo.com")
     dismiss_consent_overlays(page)
-    evidence_tracker.fill('#user-name', 'standard_user', label='username input')
-    evidence_tracker.fill('#password', 'secret_sauce', label='password input')
-    evidence_tracker.click('#login-button', label='login button')
+    evidence_tracker.fill("#user-name", "standard_user", label="username input")
+    evidence_tracker.fill("#password", "secret_sauce", label="password input")
+    evidence_tracker.click("#login-button", label="login button")
     # --- Original test steps ---
-    evidence_tracker.click('#backpack-add-to-cart', label='Sauce Labs Backpack add to cart button')
-    evidence_tracker.assert_visible('.cart-badge', label='cart badge updated')
+    evidence_tracker.click("#backpack-add-to-cart", label="Sauce Labs Backpack add to cart button")
+    evidence_tracker.assert_visible(".cart-badge", label="cart badge updated")
 ```
 
 ---
@@ -124,24 +124,28 @@ def test_02_add_item(page):
 @dataclass
 class PrerequisiteStep:
     """A resolved step extracted from a prerequisite test."""
-    raw_line: str          # e.g., "    evidence_tracker.fill('#user-name', 'standard_user', ...)"
-    source_test: str       # e.g., "test_01_login"
+
+    raw_line: str  # e.g., "    evidence_tracker.fill('#user-name', 'standard_user', ...)"
+    source_test: str  # e.g., "test_01_login"
     source_condition: str  # e.g., "TC-01"
+
 
 @dataclass
 class InjectionPlan:
     """Describes what needs to be injected into a test."""
+
     target_test: str
     prerequisites: list[PrerequisiteStep]
-    reason: str            # e.g., "TC-02 requires authentication (TC-01)"
+    reason: str  # e.g., "TC-02 requires authentication (TC-01)"
+
 
 class PrerequisiteInjector:
     """Detect dependency chains and inject prerequisite steps.
-    
+
     Operates on resolved code (after placeholder resolution) using TestJourney data
     to understand which tests need prerequisite steps.
     """
-    
+
     def analyze_dependencies(
         self,
         journeys: list[TestJourney],
@@ -149,7 +153,7 @@ class PrerequisiteInjector:
         scraped_pages: dict[str, list[dict]],
     ) -> dict[str, InjectionPlan]:
         """Return injection plans for tests that need prerequisite steps.
-        
+
         Algorithm:
         1. Build a map of test_name → first GOTO target page
         2. For each test, check if first GOTO resolves to starting_url
@@ -158,14 +162,14 @@ class PrerequisiteInjector:
         5. Extract resolved steps from the auth test (usually test_01)
         """
         ...
-    
+
     def inject_into_code(
         self,
         code: str,
         injection_plans: dict[str, InjectionPlan],
     ) -> str:
         """Prepend prerequisite steps into the target test functions.
-        
+
         Preserves indentation, adds comment markers, maintains evidence_tracker pattern.
         """
         ...

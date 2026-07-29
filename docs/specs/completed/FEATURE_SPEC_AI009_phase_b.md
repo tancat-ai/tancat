@@ -106,12 +106,12 @@ button is visible for "Admin user" but not for "Standard user".
 @dataclass
 class JourneyStep:
     step_type: Literal["goto", "click", "fill", "submit", "capture", "wait"]
-    url: str | None = None           # for goto steps
-    selector: str | None = None      # CSS selector or role locator
+    url: str | None = None  # for goto steps
+    selector: str | None = None  # CSS selector or role locator
     visible_text: str | None = None  # for click steps — alternative to selector
-    value: str | None = None         # for fill steps
-    label: str | None = None         # display name shown in UI
-    capture_label: str | None = None # label for captured context (e.g. "Dashboard")
+    value: str | None = None  # for fill steps
+    label: str | None = None  # display name shown in UI
+    capture_label: str | None = None  # label for captured context (e.g. "Dashboard")
 ```
 
 ### `JourneyResult`
@@ -121,8 +121,8 @@ class JourneyStep:
 class JourneyResult:
     success: bool
     captured_pages: list[PageContext]
-    failed_steps: list[str]          # human-readable descriptions of failures
-    error_message: str | None = None # top-level error (SSO, MFA, CAPTCHA)
+    failed_steps: list[str]  # human-readable descriptions of failures
+    error_message: str | None = None  # top-level error (SSO, MFA, CAPTCHA)
     redirected_urls: list[str] = field(default_factory=list)
 ```
 

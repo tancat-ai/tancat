@@ -56,24 +56,25 @@ The current test generator is hardcoded to work only with Ollama's API format. T
 from abc import ABC, abstractmethod
 from typing import List, Protocol
 
+
 class LLMProvider(ABC):
     """Abstract base class for all LLM providers."""
-    
+
     def __init__(self, base_url: str, model: str, api_key: str | None = None):
         self.base_url = base_url
         self.model = model
         self.api_key = api_key
-    
+
     @abstractmethod
     async def generate(self, prompt: str) -> str:
         """Generate test code from the given prompt."""
         pass
-    
+
     @abstractmethod
     async def validate_connection(self) -> bool:
         """Verify connectivity to the provider's server."""
         pass
-    
+
     @abstractmethod
     async def list_available_models(self) -> List[str]:
         """Fetch and return list of available model names from the server."""
@@ -82,11 +83,11 @@ class LLMProvider(ABC):
 
 class OllamaProvider(LLMProvider):
     """Ollama-specific implementation using /api/generate endpoint."""
-    
+
     async def generate(self, prompt: str) -> str:
         # Uses Ollama's custom format
         ...
-    
+
     async def list_available_models(self) -> List[str]:
         # GET /api/tags → extract name field from each model
         ...
@@ -94,11 +95,11 @@ class OllamaProvider(LLMProvider):
 
 class LMStudioProvider(LLMProvider):
     """LM Studio implementation using OpenAI-compatible endpoint."""
-    
+
     async def generate(self, prompt: str) -> str:
         # Uses /v1/chat/completions with OpenAI format
         ...
-    
+
     async def list_available_models(self) -> List[str]:
         # GET /v1/models → extract id field from data[].models
         ...
@@ -106,7 +107,7 @@ class LMStudioProvider(LLMProvider):
 
 class ProviderFactory:
     """Factory for creating provider instances based on configuration."""
-    
+
     @staticmethod
     def create_provider(provider_type: str, config: dict) -> LLMProvider:
         providers = {
@@ -114,10 +115,10 @@ class ProviderFactory:
             "lm-studio": LMStudioProvider,
             # "openai-compatible": OpenAICompatibleProvider  # Future
         }
-        
+
         if provider_type not in providers:
             raise ValueError(f"Unknown provider: {provider_type}")
-        
+
         return providers[provider_type](**config)
 ```
 
@@ -128,9 +129,10 @@ class ProviderFactory:
 
 from .llm_providers import ProviderFactory, LLMProvider
 
+
 class LLMClient:
     """Facade for LLM operations — delegates to provider."""
-    
+
     def __init__(self, config: dict):
         self.provider = ProviderFactory.create_provider(
             provider_type=config["provider"],
@@ -138,17 +140,17 @@ class LLMClient:
                 "base_url": config["base_url"],
                 "model": config["model"],
                 "api_key": config.get("api_key"),
-            }
+            },
         )
-    
+
     async def generate(self, prompt: str) -> str:
         """Generate test code from the given prompt."""
         return await self.provider.generate(prompt)
-    
+
     async def validate_connection(self) -> bool:
         """Verify connectivity to the provider's server."""
         return await self.provider.validate_connection()
-    
+
     async def list_available_models(self) -> List[str]:
         """Fetch available models from the connected server."""
         return await self.provider.list_available_models()
@@ -197,27 +199,24 @@ provider = st.sidebar.selectbox(
     "Select Provider",
     options=["Ollama", "LM Studio"],  # Future: "OpenAI-Compatible"
     index=0 if current_provider == "ollama" else 1,
-    help="Choose which LLM server to connect to"
+    help="Choose which LLM server to connect to",
 )
 
 # Show/hide fields based on selection
 if provider == "Ollama":
-    base_url = st.sidebar.text_input(
-        "Base URL", 
-        value=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    )
+    base_url = st.sidebar.text_input("Base URL", value=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
 elif provider == "LM Studio":
     base_url = st.sidebar.text_input(
-        "Base URL", 
+        "Base URL",
         value=os.getenv("LLM_BASE_URL", "http://localhost:1234"),
-        help="Default LM Studio OpenAI-compatible server port is 1234"
+        help="Default LM Studio OpenAI-compatible server port is 1234",
     )
 
 # Model name input (same for both providers)
 model = st.sidebar.text_input(
-    "Model Name", 
+    "Model Name",
     value=os.getenv("OLLAMA_MODEL", os.getenv("LLM_MODEL", "qwen3.5:35b")),
-    help="Enter model name or use 'Refresh Models' to auto-discover"
+    help="Enter model name or use 'Refresh Models' to auto-discover",
 )
 
 # New: Refresh Models button
@@ -233,7 +232,7 @@ if st.session_state.get("available_models"):
     selected_model = st.sidebar.selectbox(
         "Select Model",
         options=st.session_state.available_models,
-        index=0  # or calculate based on current model
+        index=0,  # or calculate based on current model
     )
 ```
 
@@ -276,6 +275,7 @@ When user changes provider or base URL:
 ```python
 # tests/integration/test_multi_provider_llm.py
 
+
 @pytest.mark.integration
 class TestMultiProviderLLM:
     @pytest.fixture
@@ -284,20 +284,20 @@ class TestMultiProviderLLM:
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
         return LLMClient()
-    
+
     @pytest.fixture
     def lmstudio_client(self, monkeypatch):
-        # Set up LM Studio environment  
+        # Set up LM Studio environment
         monkeypatch.setenv("LLM_PROVIDER", "lm-studio")
         monkeypatch.setenv("LLM_BASE_URL", "http://localhost:1234")
         return LLMClient()
-    
+
     def test_ollama_provider_generation(self, ollama_client):
         """Generate tests using Ollama provider."""
         prompt = "Generate a test for login page"
         result = await ollama_client.generate(prompt)
         assert "def test_" in result
-    
+
     def test_lmstudio_provider_generation(self, lmstudio_client):
         """Generate tests using LM Studio provider."""
         prompt = "Generate a test for login page"

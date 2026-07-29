@@ -47,14 +47,14 @@ at = AppTest.from_file("streamlit_app.py")
 at.run()
 
 # Sidebar widgets
-assert at.sidebar.selectbox[0].exists         # LLM Provider
-assert at.sidebar.text_input.exists           # Target URL
-assert at.sidebar.text_area.exists            # User Story
-assert at.sidebar.button[0].exists            # Run Pipeline
+assert at.sidebar.selectbox[0].exists  # LLM Provider
+assert at.sidebar.text_input.exists  # Target URL
+assert at.sidebar.text_area.exists  # User Story
+assert at.sidebar.button[0].exists  # Run Pipeline
 
 # Main content
-assert at.markdown[0].exists                  # Title/header
-assert not at.exception                        # No crash on load
+assert at.markdown[0].exists  # Title/header
+assert not at.exception  # No crash on load
 ```
 
 **Test results:**
