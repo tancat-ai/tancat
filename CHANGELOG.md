@@ -9,6 +9,9 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Fixed
+- **Eval captures at 100% resolution accuracy**: Fixed incorrect locators and assertions in pre-generated capture files (`scripts/eval/captures/`). AutomationExercise 50%→100%, DemoQA 88%→100%, TheInternet 86%→100%, SauceDemo 90%→100%. All 5 sites now at 100% static resolution accuracy.
+
 ### Added
 - **Cloud Provider Support**: `openai-compatible` and `openrouter` provider names for OpenRouter, Together AI, Groq, etc. via `OPENAI_COMPATIBLE_*` env vars. Uses existing `OpenAIProvider` with `is_openai_compatible` flag.
 - **T-String Prompt Safety** (`src/agents/prompt_safety.py`): `safe_prompt()` wraps dynamic user input in `<user_input>` XML tags using Python 3.14 t-strings (PEP 750). Prevents prompt injection.
