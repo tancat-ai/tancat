@@ -14,8 +14,6 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
     "lm-studio",
     LOCAL_OPENAI_PROVIDER,
     CLOUD_OPENAI_PROVIDER,
-    OPENAI_COMPATIBLE_PROVIDER,
-    OPENROUTER_PROVIDER,
 )
 
 PROVIDER_LABELS: dict[str, str] = {
@@ -45,7 +43,7 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
 
 def provider_requires_openai_api_key(provider: str) -> bool:
     """Return True when the provider needs a cloud API key."""
-    return provider in (CLOUD_OPENAI_PROVIDER, OPENAI_COMPATIBLE_PROVIDER, OPENROUTER_PROVIDER)
+    return provider == CLOUD_OPENAI_PROVIDER
 
 
 def resolve_openai_api_key(*, provider: str, user_api_key: str | None = None) -> str | None:
