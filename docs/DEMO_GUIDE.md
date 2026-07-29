@@ -128,18 +128,19 @@ Acceptance Criteria:
 ```python
 from playwright.sync_api import Page
 
+
 def test_01_login_page_displayed(page: Page) -> None:
-    '''TC-1: Verify login form is visible and user can enter credentials.'''
+    """TC-1: Verify login form is visible and user can enter credentials."""
     page.goto("https://www.saucedemo.com")
-    
+
     # Verify login form fields are present
     assert page.get_by_placeholder("Username").is_visible()
     assert page.get_by_placeholder("Password").is_visible()
-    
+
     # Enter valid credentials
     page.get_by_placeholder("Username").fill("standard_user")
     page.get_by_placeholder("Password").fill("secret_sauce")
-    
+
     # Click login button and verify redirect
     page.get_by_role("button", name="LOGIN").click()
     assert page.get_by_text("PRODUCTS").is_visible()

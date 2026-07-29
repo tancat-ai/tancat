@@ -75,20 +75,21 @@ In `run_pipeline()`, add journey-based scraping as a third path:
 if self._journey_steps is not None and len(self._journey_steps) > 0:
     # Journey-based scraping (Phase B)
     from src.journey_scraper import execute_journey
+
     journey_result = execute_journey(
         journey_steps=self._journey_steps,
         credential_profile=self._credential_profile,
         starting_url=self._starting_url,
     )
     scraped_data = journey_result.captured_pages
-    
+
     # Record diagnostics
     self._pipeline_diagnostics["journey_failed_steps"] = journey_result.failed_steps
     if journey_result.error_message:
         self._pipeline_diagnostics["journey_error"] = journey_result.error_message
     if journey_result.redirected_urls:
         self._pipeline_diagnostics["auth_redirects"] = journey_result.redirected_urls
-        
+
     # Merge with any static scrape data
     all_scraped_data = {**raw_scraped_data, **scraped_data}
 elif self._pages_to_scrape:

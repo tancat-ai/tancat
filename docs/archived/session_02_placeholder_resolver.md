@@ -11,11 +11,7 @@ The goal of this session is to implement the "Intelligence" layer that transform
 - **Output**: A dictionary mapping `{ url: [list_of_element_metadata] }`. 
 - **Element Metadata Structure**:
   ```python
-  {
-      "selector": "css_selector_string",
-      "text": "visible_text_content",
-      "role": "html_attribute_or_tag_name"
-  }
+  {"selector": "css_selector_string", "text": "visible_text_content", "role": "html_attribute_or_tag_name"}
   ```
 
 ### 2. PlaceholderResolver (`src/placeholder_resolver.py`)

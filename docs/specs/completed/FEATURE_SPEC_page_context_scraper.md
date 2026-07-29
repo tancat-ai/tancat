@@ -74,27 +74,27 @@ LLM prompt as a structured block:
 ```python
 @dataclass
 class PageElement:
-    tag: str                          # input, button, a, etc.
-    role: Optional[str]               # ARIA role
-    label: Optional[str]              # aria-label or associated <label>
-    test_id: Optional[str]            # data-testid value
-    element_id: Optional[str]         # id attribute
-    name: Optional[str]               # name attribute
-    placeholder: Optional[str]        # placeholder text
-    visible_text: Optional[str]       # innerText (buttons/links)
-    input_type: Optional[str]         # text, password, email, etc.
+    tag: str  # input, button, a, etc.
+    role: Optional[str]  # ARIA role
+    label: Optional[str]  # aria-label or associated <label>
+    test_id: Optional[str]  # data-testid value
+    element_id: Optional[str]  # id attribute
+    name: Optional[str]  # name attribute
+    placeholder: Optional[str]  # placeholder text
+    visible_text: Optional[str]  # innerText (buttons/links)
+    input_type: Optional[str]  # text, password, email, etc.
     is_required: bool = False
 
 
 @dataclass
 class PageContext:
-    url: str                          # actual URL visited
-    page_title: str                   # <title> content
-    h1_text: Optional[str]            # first <h1>
-    elements: list[PageElement]       # all interactive elements
-    forms: list[list[PageElement]]    # grouped by parent <form>
-    scraped_at: str                   # ISO timestamp
-    scrape_duration_ms: int           # how long it took
+    url: str  # actual URL visited
+    page_title: str  # <title> content
+    h1_text: Optional[str]  # first <h1>
+    elements: list[PageElement]  # all interactive elements
+    forms: list[list[PageElement]]  # grouped by parent <form>
+    scraped_at: str  # ISO timestamp
+    scrape_duration_ms: int  # how long it took
 ```
 
 ---

@@ -37,8 +37,8 @@ Use `to_be_hidden()` for confirmation that an element has disappeared
 
 ```python
 expect(locator).to_have_text("Expected text")  # exact match
-expect(locator).to_contain_text("partial")     # substring match
-expect(locator).to_have_value("input value")   # for <input> elements
+expect(locator).to_contain_text("partial")  # substring match
+expect(locator).to_have_value("input value")  # for <input> elements
 ```
 
 For checkout/order confirmation pages, verify the summary text:

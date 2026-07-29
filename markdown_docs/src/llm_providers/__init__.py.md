@@ -203,7 +203,7 @@ provider = get_provider("ollama")
 # Send a completion request
 messages = [
     ChatMessage(role="system", content="You are a helpful assistant."),
-    ChatMessage(role="user", content="Generate a Playwright test.")
+    ChatMessage(role="user", content="Generate a Playwright test."),
 ]
 response = provider.complete(messages, model="qwen2.5:7b")
 print(response.content)

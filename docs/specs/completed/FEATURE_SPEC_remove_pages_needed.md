@@ -118,8 +118,7 @@ Keep `parse_pages_needed()` but mark as deprecated. Don't fail if the comment is
 
 ```python
 @deprecated("Pages are now discovered organically by the journey scraper")
-def parse_pages_needed(self, skeleton: str) -> list[tuple[str, str]]:
-    ...
+def parse_pages_needed(self, skeleton: str) -> list[tuple[str, str]]: ...
 ```
 
 #### Step 6: Update tests

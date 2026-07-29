@@ -65,11 +65,11 @@ Each agent: configurable model/provider via env vars or model_config.json
 @dataclass
 class StoryAnalysis:
     story_text: str
-    criteria: list[Criterion]       # extracted + enriched
-    domain_terms: list[str]          # from RAG retrieval
-    assumptions: list[str]           # inferred gaps
+    criteria: list[Criterion]  # extracted + enriched
+    domain_terms: list[str]  # from RAG retrieval
+    assumptions: list[str]  # inferred gaps
     boundary_values: list[Boundary]  # numeric/date boundaries
-    source_format: str               # "gherkin" | "jira" | "free-form" | "numbered"
+    source_format: str  # "gherkin" | "jira" | "free-form" | "numbered"
 ```
 
 **RAG integration:** Queries the vector store for domain-specific patterns (e.g., insurance terms from ingested PDFs, Playwright best practices). Augments the story analysis, not the user input.
@@ -86,14 +86,14 @@ class StoryAnalysis:
 ```python
 @dataclass
 class TestCondition:
-    ref: str                        # "TC01.03"
-    description: str                # human-readable
-    condition_type: ConditionType   # happy_path | boundary | negative | exploratory | ambiguity
-    priority: Priority              # high | medium | low
-    source_criterion: str           # which criterion from StoryAnalysis spawned this
-    needs_clarification: bool       # True → pause for human
-    clarification_question: str     # shown to tester if needs_clarification
-    prerequisite_refs: list[str]    # TC refs that must run before this one
+    ref: str  # "TC01.03"
+    description: str  # human-readable
+    condition_type: ConditionType  # happy_path | boundary | negative | exploratory | ambiguity
+    priority: Priority  # high | medium | low
+    source_criterion: str  # which criterion from StoryAnalysis spawned this
+    needs_clarification: bool  # True → pause for human
+    clarification_question: str  # shown to tester if needs_clarification
+    prerequisite_refs: list[str]  # TC refs that must run before this one
 ```
 
 **Human-in-the-loop checkpoint:** After the QA Director produces the TestPlan, the graph pauses. The tester reviews conditions, edits/removes/adds, and confirms. Then the graph resumes with the Script Synthesizer.
@@ -110,11 +110,11 @@ class TestCondition:
 ```python
 @dataclass
 class SynthesisResult:
-    test_code: str                  # complete pytest file
-    pom_classes: list[PomClass]     # if POM mode
+    test_code: str  # complete pytest file
+    pom_classes: list[PomClass]  # if POM mode
     unresolved_placeholders: list[str]  # for pre-flight reporting (AI-034)
-    evidence_hooks: bool            # evidence_tracker integrated
-    syntax_valid: bool              # passes ast.parse()
+    evidence_hooks: bool  # evidence_tracker integrated
+    syntax_valid: bool  # passes ast.parse()
 ```
 
 ---
@@ -316,49 +316,55 @@ This is **not a separate pipeline**. It extends the existing graph with richer s
 @dataclass
 class ChangeDelta:
     """A single change extracted from a spec document."""
-    category: str          # "new_feature" | "modified" | "removed" | "unchanged"
-    name: str              # human-readable name
-    description: str       # what changed and why
+
+    category: str  # "new_feature" | "modified" | "removed" | "unchanged"
+    name: str  # human-readable name
+    description: str  # what changed and why
     affected_systems: list[str]  # downstream systems impacted
     data_schema_changes: list[DataSchemaChange]
 
+
 @dataclass
 class DataSchemaChange:
-    field: str             # e.g. "customer_id"
-    change_type: str       # "NEW" | "MODIFIED" | "REMOVED"
-    old_value: str         # e.g. "VARCHAR(8)"
-    new_value: str         # e.g. "VARCHAR(10)"
-    migration_notes: str   # breaking change? rollback plan?
+    field: str  # e.g. "customer_id"
+    change_type: str  # "NEW" | "MODIFIED" | "REMOVED"
+    old_value: str  # e.g. "VARCHAR(8)"
+    new_value: str  # e.g. "VARCHAR(10)"
+    migration_notes: str  # breaking change? rollback plan?
+
 
 @dataclass
 class ImpactMap:
     """Cross-reference of changes to affected test areas."""
-    change_ref: str               # which ChangeDelta this maps to
-    impact_radius: list[str]       # systems/modules in blast radius
-    regression_areas: list[str]    # unchanged systems needing sanity checks
-    test_scenarios: list[str]      # concrete test ideas
-    risk_level: str                # "high" | "medium" | "low"
+
+    change_ref: str  # which ChangeDelta this maps to
+    impact_radius: list[str]  # systems/modules in blast radius
+    regression_areas: list[str]  # unchanged systems needing sanity checks
+    test_scenarios: list[str]  # concrete test ideas
+    risk_level: str  # "high" | "medium" | "low"
+
 
 @dataclass
 class ConsolidatedReport:
     """Final output of the document-driven pipeline."""
+
     executive_summary: str
     change_summary: list[ChangeDelta]
     impact_maps: list[ImpactMap]
     test_plan: list[TestCondition]
-    generated_tests: str           # pytest code
-    unresolved_items: list[str]    # questions for the human
+    generated_tests: str  # pytest code
+    unresolved_items: list[str]  # questions for the human
 ```
 
 PipelineState additions:
 
 ```python
 # ── Document Input (all optional, empty in text mode) ──
-input_mode: str = "text"                # "text" | "document"
-raw_document_text: str = ""             # parsed PDF/Markdown content
-document_source: str = ""               # original filename
+input_mode: str = "text"  # "text" | "document"
+raw_document_text: str = ""  # parsed PDF/Markdown content
+document_source: str = ""  # original filename
 change_deltas: list[ChangeDelta] = field(default_factory=list)
-persona_role: str = ""                  # "qa_lead" | "product_owner" | "developer" | "operations"
+persona_role: str = ""  # "qa_lead" | "product_owner" | "developer" | "operations"
 impact_maps: list[ImpactMap] = field(default_factory=list)
 consolidated_report: ConsolidatedReport | None = None
 ```
@@ -458,12 +464,12 @@ def _route_by_persona(state: PipelineState) -> str:
     """Route the plan node's output based on persona role."""
     if not state.persona_role:
         return "default"  # standard test generation
-    
+
     routes = {
-        "qa_lead": "impact_map",        # QA → impact analysis → test generation
-        "product_owner": "report",       # PM → business logic validation → report
-        "developer": "synthesize",       # Dev → skip impact, straight to code
-        "operations": "impact_map",      # Ops → impact analysis (deployment focus)
+        "qa_lead": "impact_map",  # QA → impact analysis → test generation
+        "product_owner": "report",  # PM → business logic validation → report
+        "developer": "synthesize",  # Dev → skip impact, straight to code
+        "operations": "impact_map",  # Ops → impact analysis (deployment focus)
     }
     return routes.get(state.persona_role, "default")
 ```

@@ -62,9 +62,10 @@ Add AFTER existing `JourneyStep` and `ScrapedStep` dataclasses:
 @dataclass
 class CredentialProfile:
     """User-defined credentials for authenticated journey scraping.
-    
+
     Stored in session state only — never persisted to disk.
     """
+
     label: str
     username: str
     password: str
@@ -73,10 +74,11 @@ class CredentialProfile:
 @dataclass
 class JourneyResult:
     """Result of executing a journey through authenticated pages."""
+
     success: bool
     captured_pages: dict[str, list[dict[str, Any]]]  # url -> elements
-    failed_steps: list[str]                          # human-readable descriptions
-    error_message: str | None = None                 # top-level error (SSO, MFA, CAPTCHA)
+    failed_steps: list[str]  # human-readable descriptions
+    error_message: str | None = None  # top-level error (SSO, MFA, CAPTCHA)
     redirected_urls: list[str] = field(default_factory=list)
 ```
 

@@ -108,6 +108,7 @@ The "Add to cart" vs "Cart" example is already handled correctly:
 ```python
 from src.placeholder_scorers import PlaceholderScorer
 
+
 def _discover_selector(self, page, action, description):
     """Select best element for the action+description using unified scoring.
 
@@ -120,8 +121,7 @@ def _discover_selector(self, page, action, description):
     # Stage 1: Score all candidates with PlaceholderScorer
     best_element = None
     best_score = -1
-    match_threshold = float(os.environ.get("PLACEHOLDER_MIN_CONFIDENCE", "0.3")
-                           ) * 10  # Scale to score space
+    match_threshold = float(os.environ.get("PLACEHOLDER_MIN_CONFIDENCE", "0.3")) * 10  # Scale to score space
 
     for element in elements:
         selector = element.get("selector", "")

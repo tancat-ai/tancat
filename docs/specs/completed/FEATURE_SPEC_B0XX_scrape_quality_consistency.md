@@ -90,6 +90,7 @@ def _capture_element_visibility(
     """Check runtime visibility of each scraped element using Playwright is_visible()."""
     # Same logic as PageScraper._capture_element_visibility() — copy or delegate.
 
+
 def _capture_a11y_snapshot(
     self,
     context: Any,
@@ -117,10 +118,9 @@ def _scrape_current_page(self, page: Any, url: str) -> list[dict[str, Any]]:
     html = page.content()
     return self._html_scraper._extract_elements_from_html(html, base_url=url)
 
+
 # Fixed (needs context for CDP):
-def _scrape_current_page(
-    self, page: Any, url: str, context: Any | None = None
-) -> list[dict[str, Any]]:
+def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
     html = page.content()
     elements = self._html_scraper._extract_elements_from_html(html, base_url=url)
     elements = self._capture_element_visibility(page, elements)

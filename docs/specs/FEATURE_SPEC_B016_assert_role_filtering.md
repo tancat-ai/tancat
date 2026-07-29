@@ -71,22 +71,24 @@ close enough, we log a low-confidence warning and return the interactive element
 ### Display Roles
 
 ```python
-DISPLAY_ROLES = frozenset({
-    "heading",      # page/section titles
-    "paragraph",    # body text
-    "text",         # standalone text nodes
-    "status",       # live announcements
-    "alert",        # error/warning messages
-    "listitem",     # list entries
-    "cell",         # table data cells
-    "columnheader", # table column headers
-    "rowheader",    # table row headers
-    "image",        # images (assert visibility)
-    "strong",       # emphasized text
-    "em",           # italicized text
-    "caption",      # table/figure captions
-    "figure",       # figures with captions
-})
+DISPLAY_ROLES = frozenset(
+    {
+        "heading",  # page/section titles
+        "paragraph",  # body text
+        "text",  # standalone text nodes
+        "status",  # live announcements
+        "alert",  # error/warning messages
+        "listitem",  # list entries
+        "cell",  # table data cells
+        "columnheader",  # table column headers
+        "rowheader",  # table row headers
+        "image",  # images (assert visibility)
+        "strong",  # emphasized text
+        "em",  # italicized text
+        "caption",  # table/figure captions
+        "figure",  # figures with captions
+    }
+)
 ```
 
 **Notably excluded:** `link` and `textbox` are leaf ARIA roles but are interactive.
@@ -146,8 +148,12 @@ if display_ranked:
     if gap <= ROLE_FALLBACK_GAP:  # 3 points
         return best_display[1]
     else:
-        logger.warning("[RESOLVE] low-confidence fallback: no display element "
-                       "within %d of top score %s for '%s'", ROLE_FALLBACK_GAP, global_top, description)
+        logger.warning(
+            "[RESOLVE] low-confidence fallback: no display element within %d of top score %s for '%s'",
+            ROLE_FALLBACK_GAP,
+            global_top,
+            description,
+        )
         # Fall through to return global best (may be interactive)
 
 return all_ranked[0][1] if all_ranked else None
@@ -156,11 +162,24 @@ return all_ranked[0][1] if all_ranked else None
 ### Helper Method
 
 ```python
-DISPLAY_ROLES = frozenset({
-    "heading", "paragraph", "text", "status", "alert",
-    "listitem", "cell", "columnheader", "rowheader",
-    "image", "strong", "em", "caption", "figure",
-})
+DISPLAY_ROLES = frozenset(
+    {
+        "heading",
+        "paragraph",
+        "text",
+        "status",
+        "alert",
+        "listitem",
+        "cell",
+        "columnheader",
+        "rowheader",
+        "image",
+        "strong",
+        "em",
+        "caption",
+        "figure",
+    }
+)
 
 ROLE_FALLBACK_GAP = 3  # points — tunable after UAT
 

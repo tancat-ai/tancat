@@ -110,6 +110,7 @@ class LoginPage:
     def click_login_button(self) -> None:
         self.tracker.click("#login-button", label="login button")
 
+
 # EXPORTED (clean POM for external consumption):
 class LoginPage:
     def __init__(self, page: Page) -> None:
@@ -156,13 +157,9 @@ def _build_method_source(
             )
         if method_name.startswith("navigate_"):
             return (
-                f"    def {method_name}(self) -> None:\n"
-                f"        self.tracker.navigate({selector!r}, label={label!r})\n"
+                f"    def {method_name}(self) -> None:\n        self.tracker.navigate({selector!r}, label={label!r})\n"
             )
-        return (
-            f"    def {method_name}(self) -> None:\n"
-            f"        self.tracker.click({selector!r}, label={label!r})\n"
-        )
+        return f"    def {method_name}(self) -> None:\n        self.tracker.click({selector!r}, label={label!r})\n"
     # Existing page.locator() path (backward compatible)
     ...
 ```
@@ -190,14 +187,8 @@ def _build_module_source(
             "from src.evidence_tracker import EvidenceTracker\n\n\n"
         )
     else:
-        init_code = (
-            "    def __init__(self, page: Page) -> None:\n"
-            "        self.page = page\n"
-        )
-        imports = (
-            '"""Auto-generated page object module."""\n\n'
-            "from playwright.sync_api import Page\n\n\n"
-        )
+        init_code = "    def __init__(self, page: Page) -> None:\n        self.page = page\n"
+        imports = '"""Auto-generated page object module."""\n\nfrom playwright.sync_api import Page\n\n\n'
     ...
 ```
 

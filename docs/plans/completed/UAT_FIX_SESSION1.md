@@ -113,8 +113,10 @@ if len(ranked_candidates) >= 2:
     second_score = ranked_candidates[1][0]
     if top_score - second_score <= self.disambiguation_threshold:
         llm_pick = self._disambiguate_with_llm(
-            action, description, ranked_candidates[:3],
-            aria_snapshot=aria_snapshot  # passed from caller
+            action,
+            description,
+            ranked_candidates[:3],
+            aria_snapshot=aria_snapshot,  # passed from caller
         )
         if llm_pick:
             return llm_pick

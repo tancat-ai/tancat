@@ -17,19 +17,20 @@ Stage A (prerequisite injection) solves the immediate problem of missing login s
 ```python
 def test_02_add_item(page):
     # --- Prerequisite: login (injected from TC-01) ---
-    evidence_tracker.fill('#user-name', 'standard_user', label='username input')
-    evidence_tracker.fill('#password', 'secret_sauce', label='password input')
-    evidence_tracker.click('#login-button', label='login button')
+    evidence_tracker.fill("#user-name", "standard_user", label="username input")
+    evidence_tracker.fill("#password", "secret_sauce", label="password input")
+    evidence_tracker.click("#login-button", label="login button")
     # --- Original test steps ---
-    evidence_tracker.click('#backpack-add-to-cart', label='add to cart')
+    evidence_tracker.click("#backpack-add-to-cart", label="add to cart")
+
 
 def test_03_navigate_cart(page):
     # --- Prerequisite: login (injected from TC-01) ---
-    evidence_tracker.fill('#user-name', 'standard_user', label='username input')
-    evidence_tracker.fill('#password', 'secret_sauce', label='password input')
-    evidence_tracker.click('#login-button', label='login button')
+    evidence_tracker.fill("#user-name", "standard_user", label="username input")
+    evidence_tracker.fill("#password", "secret_sauce", label="password input")
+    evidence_tracker.click("#login-button", label="login button")
     # --- Original test steps ---
-    evidence_tracker.click('#cart-icon', label='shopping cart icon')
+    evidence_tracker.click("#cart-icon", label="shopping cart icon")
 ```
 
 **Problems with duplication:**
@@ -85,15 +86,17 @@ class LoginPage:
 from pages.login_page import LoginPage
 from pages.products_page import ProductsPage
 
+
 def test_01_login(page):
     login = LoginPage(page, evidence_tracker)
-    login.login('standard_user', 'secret_sauce')
+    login.login("standard_user", "secret_sauce")
     evidence_tracker.assert_visible(".inventory_item", label="products page")
+
 
 def test_02_add_item(page):
     # Reuse login — ONE line instead of 4 inline steps
     login = LoginPage(page, evidence_tracker)
-    login.login('standard_user', 'secret_sauce')
+    login.login("standard_user", "secret_sauce")
     products = ProductsPage(page, evidence_tracker)
     products.click_add_to_cart_backpack()
     evidence_tracker.assert_visible(".cart-badge", label="cart badge updated")
@@ -167,10 +170,13 @@ def _build_method_source(
 ) -> str:
     if use_evidence_tracker:
         if method_name.startswith("fill_"):
-            return f"    def {method_name}(self, value: str) -> None:\n" \
-                   f"        self.tracker.fill({selector!r}, value, label={method_name!r})\n"
-        return f"    def {method_name}(self) -> None:\n" \
-               f"        self.tracker.click({selector!r}, label={method_name!r})\n"
+            return (
+                f"    def {method_name}(self, value: str) -> None:\n"
+                f"        self.tracker.fill({selector!r}, value, label={method_name!r})\n"
+            )
+        return (
+            f"    def {method_name}(self) -> None:\n        self.tracker.click({selector!r}, label={method_name!r})\n"
+        )
     # Existing raw page.locator() path (backward compatible)
     ...
 ```
@@ -207,10 +213,10 @@ def test_02_add_item(page):
 ```python
 def test_02_add_item(page):
     login = LoginPage(page, evidence_tracker)
-    login.login('standard_user', 'secret_sauce')
+    login.login("standard_user", "secret_sauce")
     products = ProductsPage(page, evidence_tracker)
-    products.add_item_to_cart('Sauce Labs Backpack')
-    evidence_tracker.assert_visible('.cart-badge', label='cart badge updated')
+    products.add_item_to_cart("Sauce Labs Backpack")
+    evidence_tracker.assert_visible(".cart-badge", label="cart badge updated")
 ```
 
 ### Phase 3 — Placeholder Resolver POM Mode
@@ -222,10 +228,10 @@ Add a new resolution path for `{{POM:...}}` placeholders:
 ```python
 def resolve_pom_placeholder(self, placeholder: PlaceholderUse) -> str:
     """Resolve a POM-style placeholder to a POM method call.
-    
+
     {{POM:LoginPage:login}} → LoginPage(page, evidence_tracker).login(...)
     """
-    class_name, method_name = placeholder.description.split(':')
+    class_name, method_name = placeholder.description.split(":")
     # Generate instantiation + method call
     return f"    {method_name} = {class_name}(page, evidence_tracker)\n    {method_name}.{method_name}(...)"
 ```

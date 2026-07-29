@@ -695,10 +695,10 @@ These are the core data structures that flow through the pipeline. Understanding
 ### `TestCondition` (from `spec_analyzer.py`)
 ```python
 class TestCondition:
-    id: str           # "AC01", "AC02", etc.
-    text: str         # The acceptance criterion text
-    intent: str       # "happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"
-    source_ref: str   # Reference to the original spec line
+    id: str  # "AC01", "AC02", etc.
+    text: str  # The acceptance criterion text
+    intent: str  # "happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"
+    source_ref: str  # Reference to the original spec line
 ```
 
 ### `TestJourney` (from `pipeline_models.py`)
@@ -713,7 +713,7 @@ class TestJourney:
 ### `PlaceholderUse` (from `pipeline_models.py`)
 ```python
 class PlaceholderUse:
-    action: str       # "GOTO", "CLICK", "FILL", "ASSERT"
+    action: str  # "GOTO", "CLICK", "FILL", "ASSERT"
     description: str  # "checkout button", "email field"
     line_number: int  # Where in the skeleton code
 ```
@@ -723,7 +723,7 @@ class PlaceholderUse:
 class ScrapedPage:
     url: str
     elements: list[dict]  # Each dict has: selector, text, role, tag, attributes
-    metadata: dict        # Page title, timestamp, etc.
+    metadata: dict  # Page title, timestamp, etc.
 ```
 
 ---
