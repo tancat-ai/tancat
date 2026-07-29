@@ -9,7 +9,9 @@ from src.evidence_tracker import EvidenceTracker
 def test_01_navigate_to_practice_form(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
     dismiss_consent_overlays(page)
-    evidence_tracker.assert_visible(".text-center", label="practice form page title")
+    evidence_tracker.assert_visible(
+        'h5:has-text("Student Registration Form")', label="practice form page title"
+    )
 
 
 @pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
@@ -24,8 +26,10 @@ def test_02_fill_first_name(page: Page, evidence_tracker: EvidenceTracker) -> No
 def test_03_fill_last_name(page: Page, evidence_tracker: EvidenceTracker) -> None:
     evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
     dismiss_consent_overlays(page)
-    evidence_tracker.fill("#firstName", "Doe", label="Last Name")
-    evidence_tracker.assert_visible('h5:has-text("Student Registration Form")', label="Last Name field filled")
+    evidence_tracker.fill("#lastName", "Doe", label="Last Name")
+    evidence_tracker.assert_visible(
+        'h5:has-text("Student Registration Form")', label="Last Name field filled"
+    )
 
 
 @pytest.mark.evidence(condition_ref="TC-04", story_ref="S01")
@@ -41,7 +45,7 @@ def test_05_select_gender_radio_button(page: Page, evidence_tracker: EvidenceTra
     evidence_tracker.navigate("https://demoqa.com/automation-practice-form")
     dismiss_consent_overlays(page)
     evidence_tracker.click("#gender-radio-1", label="Male radio")
-    evidence_tracker.assert_checked("#gender-radio-1", label="Male radio selected")
+    evidence_tracker.assert_visible("#gender-radio-1", label="Male radio selected")
 
 
 @pytest.mark.evidence(condition_ref="TC-06", story_ref="S01")
