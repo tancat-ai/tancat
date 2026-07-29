@@ -116,25 +116,19 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         # If the user already provided explicit, numbered acceptance criteria, prefer
         # a deterministic mapping (one condition per criterion) over speculative LLM
         # expansion. This keeps the generator aligned with user intent/baselines.
-        explicit_criteria, criteria_source = self._extract_numbered_criteria(spec_text)
+        explicit_criteria, _criteria_source = self._extract_numbered_criteria(spec_text)
         if explicit_criteria:
             conditions: list[TestCondition] = []
             for idx, text in enumerate(explicit_criteria, start=1):
-                # Criteria split from unstructured/vague input need refinement.
-                # Tag them as exploratory so the tester knows to add specifics.
-                c_type: ConditionType = "exploratory" if criteria_source == "unstructured" else "happy_path"
-                c_flagged = criteria_source == "unstructured"
                 conditions.append(
                     TestCondition(
                         id=f"TC01.{idx:02d}",
-                        type=c_type,
+                        type="happy_path",
                         text=text,
-                        expected="Needs refinement — edit this cell with specific boundary values and expected behaviour."
-                        if criteria_source == "unstructured"
-                        else "Meets acceptance criteria.",
+                        expected="Meets acceptance criteria.",
                         source=f"Acceptance Criteria {idx}",
-                        flagged=c_flagged,
-                        src=("ai" if criteria_source == "unstructured" else "manual"),
+                        flagged=False,
+                        src="manual",
                         intent=infer_condition_intent(text),
                     )
                 )
@@ -180,77 +174,9 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                 continue
             criteria.append(m.group(2).strip())
 
-        # Expand any criterion that itself contains comma-separated or
-        # "and"-separated concerns into multiple criteria.
-        # Handles cases where parse_requirements_text wraps the whole
-        # input as a single numbered item ("1. X, Y and Z").
-        expanded_criteria: list[str] = []
-        for item in criteria:
-            sub_items = SpecAnalyzer._split_unstructured_criteria(item)
-            if sub_items:
-                expanded_criteria.extend(sub_items)
-            else:
-                expanded_criteria.append(item)
-
-        # Fallback: try to split unstructured text into separate criteria.
-        # Handles patterns like "changes around X, Y and Z" → ["X", "Y", "Z"].
-        if not expanded_criteria:
-            split_criteria = SpecAnalyzer._split_unstructured_criteria(section)
-            if split_criteria:
-                return split_criteria, "unstructured"
-
-        # If we had numbered lines (even if comma-expanded), source is "numbered".
-        # Exception: a single numbered item that was comma-expanded means
-        # the original input was vague — treat it as "unstructured".
-        if criteria:
-            was_expanded = len(expanded_criteria) > len(criteria)
-            single_item_expanded = len(criteria) == 1 and was_expanded
-            return expanded_criteria, "unstructured" if single_item_expanded else "numbered"
-        return [], "none"
-
-    @staticmethod
-    def _split_unstructured_criteria(text: str) -> list[str] | None:
-        """Try to split unstructured criteria text into multiple criteria.
-
-        Detects single-sentence comma-separated or "and"-separated lists of
-        distinct test concerns and returns them as individual items.
-
-        Example:
-            Input: "changes around max items, max quantity of items and filters"
-            Output: ["max items", "max quantity of items", "filters"]
-        """
-        text = text.strip()
-        if not text:
-            return None
-
-        # Skip multi-line text (already has structure like paragraphs)
-        if len(text.splitlines()) > 1:
-            return None
-
-        # Skip if already has numbered items or bullet points
-        if re.search(r"^\s*(\d+\.|[-*])\s", text, re.M):
-            return None
-
-        # Need at least one comma or " and " to suggest multiple concerns
-        if "," not in text and " and " not in text:
-            return None
-
-        # Split on commas first
-        parts = [p.strip() for p in text.split(",")]
-
-        # Expand " and " segments: "Y and Z" → ["Y", "Z"]
-        expanded: list[str] = []
-        for part in parts:
-            if " and " in part:
-                sub_parts = [p.strip().rstrip(".") for p in part.split(" and ")]
-                expanded.extend(sub_parts)
-            else:
-                expanded.append(part.rstrip("."))
-
-        # Filter out empty or too-short parts (minimum 3 chars)
-        result = [p for p in expanded if p and len(p) > 2]
-
-        return result if len(result) >= 2 else None
+        # Return criteria as-is — no comma splitting.
+        # Criteria should match what the user wrote exactly.
+        return criteria, "numbered" if criteria else "none"
 
     def _parse_response(self, response: str) -> list[TestCondition]:
         """Parse LLM JSON response into TestCondition objects."""
