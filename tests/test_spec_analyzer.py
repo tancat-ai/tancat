@@ -153,5 +153,3 @@ def test_infer_condition_intent_maps_common_testing_shapes() -> None:
 
 
 # ── B-027: Unstructured comma-separated criteria ─────────────────────────
-
-
