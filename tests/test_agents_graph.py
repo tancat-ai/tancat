@@ -5,6 +5,10 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+pytest.importorskip("langgraph", reason="langgraph extra not installed")
+
 from src.agents.graph import SkeletonGraph, _should_retry
 from src.agents.state import WorkflowState
 
