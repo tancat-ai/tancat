@@ -117,6 +117,78 @@ class SemanticCandidateRanker:
 
         return result
 
+    async def choose_best_candidates_batch(
+        self,
+        *,
+        items: list[dict[str, Any]],
+    ) -> list[dict[str, Any] | None]:
+        """Batch-resolve multiple placeholder-candidate sets in one LLM call.
+
+        Each item in ``items`` should be a dict with keys:
+            - action: str
+            - description: str
+            - candidates: list of candidate dicts
+
+        Returns a list of the same length, where each entry is the selected
+        candidate dict (or None if batch resolution failed).
+        """
+        if self.generator is None or not items:
+            return [None] * len(items)
+
+        # Quick path: handle items with 0 or 1 candidates without LLM
+        results: list[dict[str, Any] | None] = []
+        batch_items: list[tuple[int, dict[str, Any]]] = []
+
+        for i, item in enumerate(items):
+            candidates = item.get("candidates", [])
+            if not candidates:
+                results.append(None)
+            elif len(candidates) == 1:
+                result = dict(candidates[0])
+                if item.get("action") == "ASSERT":
+                    result["assertion_type"] = "toBeVisible"
+                results.append(result)
+            else:
+                results.append(None)  # placeholder, will fill from batch
+                batch_items.append((i, item))
+
+        if not batch_items:
+            return results
+
+        # Build batch prompt
+        prompt = self._build_batch_prompt(batch_items)
+        try:
+            raw = await self.generator.generate(prompt, timeout=45, system_prompt=self.SYSTEM_PROMPT)
+        except Exception:
+            return results
+
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return results
+
+        batch_results = payload.get("results", [])
+        if not isinstance(batch_results, list):
+            return results
+
+        for entry in batch_results:
+            idx = entry.get("id")
+            selected_index = entry.get("selected_index")
+            if not isinstance(idx, int) or not isinstance(selected_index, int):
+                continue
+            if idx < 0 or idx >= len(items):
+                continue
+            candidates = items[idx].get("candidates", [])
+            if selected_index < 0 or selected_index >= len(candidates):
+                continue
+            result = dict(candidates[selected_index])
+            if items[idx].get("action") == "ASSERT":
+                result["assertion_type"] = entry.get("assertion_type", "toBeVisible")
+                result["expected_value"] = entry.get("expected_value")
+            results[idx] = result
+
+        return results
+
     @staticmethod
     def _build_prompt(
         *,
@@ -187,4 +259,55 @@ class SemanticCandidateRanker:
             "For CLICK, prefer the control that advances the intended journey.\n"
             f"{assertion_instructions}"
             "Candidates:\n" + "\n".join(candidate_lines) + return_json
+        )
+
+    @staticmethod
+    def _build_batch_prompt(batch_items: list[tuple[int, dict[str, Any]]]) -> str:
+        """Build a batch prompt for multiple placeholder-candidate groups.
+
+        The LLM returns JSON with a "results" array, one entry per placeholder:
+            {"results": [{"id": 0, "selected_index": 1, ...}, ...]}
+        """
+        placeholder_blocks: list[str] = []
+        for idx, item in batch_items:
+            action = item.get("action", "CLICK")
+            description = item.get("description", "")
+            candidates = item.get("candidates", [])
+
+            candidate_lines: list[str] = []
+            for ci, candidate in enumerate(candidates):
+                candidate_lines.append(
+                    json.dumps(
+                        {
+                            "index": ci,
+                            "selector": str(candidate.get("selector", "")).strip(),
+                            "text": str(candidate.get("text", "")).strip(),
+                            "role": str(candidate.get("role", "")).strip(),
+                        }
+                    )
+                )
+
+            assertion_field = ""
+            if action == "ASSERT":
+                assertion_field = ', "assertion_type": "toBeVisible", "expected_value": null'
+
+            placeholder_blocks.append(
+                json.dumps(
+                    {
+                        "id": idx,
+                        "action": action,
+                        "description": description,
+                        "candidates": candidate_lines,
+                    }
+                )
+                + f'\nReturn: {{"id": {idx}, "selected_index": <int>{assertion_field}}}'
+            )
+
+        return (
+            "Batch ranking: for each placeholder below, pick the best candidate.\n"
+            "Return ONE JSON object with a 'results' array.\n"
+            "For ASSERT actions, also set assertion_type and expected_value.\n"
+            "Prefer semantic evidence over navigation chrome.\n\n"
+            + "\n\n".join(placeholder_blocks)
+            + '\n\nReturn JSON: {"results": [{"id": 0, "selected_index": 1, ...}, ...]}'
         )

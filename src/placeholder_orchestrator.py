@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
 if TYPE_CHECKING:
@@ -401,57 +401,84 @@ class PlaceholderOrchestrator:
                     if next_url:
                         current_url = next_url
 
-        # 2. Resolve remaining placeholders using fallback context
+        # 2. Resolve remaining placeholders using fallback context (batched Pass 3)
         resolved_tokens = {
             token
             for replacements in line_resolutions.values()
             for token, _action, _resolved_value, _description, _fill, _url, _at in replacements
         }
 
+        # Collect element-based unresolved placeholders for batch resolution
+        batch_requests: list[dict[str, str]] = []
+        batch_uses: list[Any] = []
+
         for use in all_placeholder_uses:
             if use.token in resolved_tokens:
                 continue
+            if use.action in ("GOTO", "URL"):
+                # GOTO/URL are URL resolution — handle per-use
+                continue
+            batch_requests.append({"action": use.action, "description": use.description})
+            batch_uses.append(use)
+
+        if batch_requests:
+            await self._ensure_scraped(fallback_url, scraped_data, scraped_errors)
+            pages_data = self._build_scoped_pages(fallback_url, scraped_data)
+            pages_to_search = pages_data if pages_data else scraped_data
+            batch_results = await self._element_matcher.find_best_elements_batch(
+                requests=batch_requests,
+                current_url=fallback_url,
+                pages_data=pages_to_search,
+            )
+
+            for i, use in enumerate(batch_uses):
+                matched = batch_results[i] if i < len(batch_results) else None
+                fill_value = ""
+                action = use.action
+                description = use.description
+                if action == "FILL" and ":" in description:
+                    parts = description.split(":", 1)
+                    description = parts[0]
+                    fill_value = parts[1]
+
+                if matched is not None:
+                    selector = matched.get("selector", "")
+                    at = matched.get("assertion_type")
+                    resolved_value = repr(selector) if selector else f'pytest.skip("No match for: {description}")'
+                    line_resolutions.setdefault(use.line_number, []).append(
+                        (use.token, action, resolved_value, description, fill_value, fallback_url, at)
+                    )
+                else:
+                    journey_name = self._find_journey_for_line(use.line_number, journeys)
+                    if journey_name:
+                        journey_unresolved.setdefault(journey_name, []).append(description)
+
+        # Handle GOTO/URL placeholders individually
+        for use in all_placeholder_uses:
+            if use.token in resolved_tokens:
+                continue
+            if use.action not in ("GOTO", "URL"):
+                continue  # already handled in batch above
 
             fill_value = ""
             action = use.action
             description = use.description
-
             if action == "FILL" and ":" in description:
                 parts = description.split(":", 1)
                 description = parts[0]
                 fill_value = parts[1]
 
-            journey_name = self._find_journey_for_line(use.line_number, journeys)
-            if journey_name:
-                resolved_value, _, assertion_type = await self._resolve_placeholder_for_page(
-                    action=action,
-                    description=description,
-                    current_url=fallback_url,
-                    scraped_data=scraped_data,
-                    scraped_errors=errors,
+            resolved_value, _, assertion_type = await self._resolve_placeholder_for_page(
+                action=action,
+                description=description,
+                current_url=fallback_url,
+                scraped_data=scraped_data,
+                scraped_errors=errors,
+            )
+            if "pytest.skip" not in resolved_value:
+                line_resolutions.setdefault(use.line_number, []).append(
+                    (use.token, action, resolved_value, description, fill_value, fallback_url, assertion_type)
                 )
-                if "pytest.skip" in resolved_value:
-                    journey_unresolved.setdefault(journey_name, []).append(description)
-                else:
-                    if journey_name in journey_unresolved:
-                        journey_unresolved[journey_name] = [
-                            unresolved for unresolved in journey_unresolved[journey_name] if unresolved != description
-                        ]
-                    line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value, fallback_url, assertion_type)
-                    )
-            else:
-                resolved_value, _, assertion_type = await self._resolve_placeholder_for_page(
-                    action=action,
-                    description=description,
-                    current_url=fallback_url,
-                    scraped_data=scraped_data,
-                    scraped_errors=errors,
-                )
-                if "pytest.skip" not in resolved_value:
-                    line_resolutions.setdefault(use.line_number, []).append(
-                        (use.token, action, resolved_value, description, fill_value, fallback_url, assertion_type)
-                    )
 
         # 3. Apply line-level replacements first.
         final_lines: list[str] = []
