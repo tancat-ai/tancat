@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sqlite3
 import subprocess
 import uuid
@@ -43,11 +44,34 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     generation_duration  REAL NOT NULL DEFAULT 0.0,
     mode         TEXT NOT NULL DEFAULT 'static',
     raw_report   TEXT,
-    created_at   TEXT NOT NULL
+    created_at   TEXT NOT NULL,
+    pipeline     TEXT NOT NULL DEFAULT 'linear',
+    generation_mode TEXT NOT NULL DEFAULT 'captured',
+    rag_enabled  INTEGER NOT NULL DEFAULT 0,
+    pom_mode     INTEGER NOT NULL DEFAULT 0,
+    provider     TEXT NOT NULL DEFAULT '',
+    model        TEXT NOT NULL DEFAULT '',
+    git_commit   TEXT NOT NULL DEFAULT ''
 )
 """
 
 _EVAL_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_story ON eval_runs(story_id)"
+
+
+def _get_git_commit() -> str:
+    """Return the current git HEAD commit hash, or empty string on failure."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _ensure_eval_table(conn: sqlite3.Connection) -> None:
@@ -210,13 +234,28 @@ def persist_results(
     db_path: Path,
     stories: list[StoryResult],
     mode: str = "static",
+    *,
+    pipeline: str = "linear",
+    generation_mode: str = "captured",
+    rag_enabled: bool = False,
+    pom_mode: bool = False,
+    provider: str = "",
+    model: str = "",
+    git_commit: str = "",
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
     Args:
         db_path: Path to SQLite database file.
         stories: List of StoryResult to persist.
-        mode: "static" or "full" — what validation was performed.
+        mode: "static", "resolver", "full", or "semantic".
+        pipeline: "linear" or "graph" — which skeleton pipeline was used.
+        generation_mode: "regenerated" or "captured".
+        rag_enabled: Whether RAG-enhanced scoring was active.
+        pom_mode: Whether POM-mode output was enabled.
+        provider: LLM provider name (e.g. "openai-local").
+        model: LLM model path or identifier.
+        git_commit: Git commit hash for the code that produced these results.
 
     Returns:
         List of run_ids inserted.
@@ -238,8 +277,9 @@ def persist_results(
                 INSERT INTO eval_runs
                     (run_id, story_id, site, placeholders_total, placeholders_correct,
                      resolution_accuracy, test_pass_rate, false_positive_rate,
-                     skeleton_completeness, generation_duration, mode, raw_report, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     skeleton_completeness, generation_duration, mode, raw_report, created_at,
+                     pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -255,6 +295,13 @@ def persist_results(
                     mode,
                     json.dumps(report.to_dict()),
                     timestamp,
+                    pipeline,
+                    generation_mode,
+                    1 if rag_enabled else 0,
+                    1 if pom_mode else 0,
+                    provider,
+                    model,
+                    git_commit,
                 ),
             )
             run_ids.append(run_id)
@@ -416,7 +463,19 @@ class EvalRunner:
             results = run_static_validation(self.dataset_dir, code_map, durations)
 
         if persist:
-            run_ids = persist_results(self.db_path, results, mode)
+            pipeline_type = "graph" if (self.use_graph or os.environ.get("LANGGRAPH_ENABLED") == "1") else "linear"
+            gen_mode = "regenerated" if self.regenerate else "captured"
+            rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
+            git_commit = _get_git_commit()
+            run_ids = persist_results(
+                self.db_path,
+                results,
+                mode,
+                pipeline=pipeline_type,
+                generation_mode=gen_mode,
+                rag_enabled=rag_enabled,
+                git_commit=git_commit,
+            )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
         return HarnessReport(stories=results)

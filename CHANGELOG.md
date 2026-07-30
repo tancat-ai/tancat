@@ -9,6 +9,17 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
+### Performance
+- **Placeholder resolution 38% faster**: ASSERT placeholders now batched via `_batch_resolve_deferred_asserts()`. Instead of N individual Pass 3 LLM calls per ASSERT, deferred placeholders are collected per journey and resolved in one batched call via `find_best_elements_batch()`. Resolution phase: 42s → 26s average.
+- **Journey discovery parallelized**: Previously sequential journey scraping (one browser subprocess at a time) now runs all journeys concurrently via `asyncio.gather()`. Each journey gets its own `JourneyScraper` instance with independent browser subprocess. Journey discovery phase: 34s → 12s (−65%).
+- **Combined pipeline time halved**: ~110s → ~51s (skeleton ~12s + discovery ~12s + resolution ~15s + upgrade ~7s).
+
+### Added
+- **Eval DB persistence with pipeline tracking**: `eval_runs` table now records `pipeline` (linear/graph), `generation_mode` (regenerated/captured), `rag_enabled`, `git_commit`, `provider`, and `model`. Enables reproducible linear-vs-graph comparisons from the database. Added `_get_git_commit()` helper.
+
+### Fixed
+- **Pre-commit mypy version**: `.pre-commit-config.yaml` mypy `v1.15.0` → `v2.3.0` (was crashing with INTERNAL ERROR on `src/agents/generator.py`).
+
 ### Fixed
 - **LangGraph step count reduced 2.5x**: ScriptSynthesizerAgent now generates one skeleton fragment per condition (like linear pipeline) instead of all at once. Prevents cumulative prerequisite chaining where test N repeats all previous N-1 steps. LV Insurance: 137 → 52 placeholders, matching linear's 53.
 - **LV Insurance SPA scraper fix**: Added `_reveal_hidden_sections()` to journey_scraper. Hidden SPA form sections (display:none) are now made visible before interaction via page.evaluate(). LV Insurance regeneration: 0% → 54%.

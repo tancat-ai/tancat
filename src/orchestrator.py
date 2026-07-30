@@ -565,39 +565,37 @@ class TestOrchestrator:
     ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
         """Scrape pages by following the generated skeleton journeys step-by-step.
 
+        Journeys are independent — each starts from the same base URL and follows
+        its own path. They run in parallel via asyncio.gather to cut the journey
+        discovery phase time (~34s → ~10-15s expected).
+
         Returns a tuple of (scraped_data, pages_visited) where pages_visited is
         extracted from the journey scraper's context log.
         """
         if not starting_url:
             return {}, []
 
-        all_scraped_data: dict[str, list[dict[str, Any]]] = {}
-        scraper = JourneyScraper(
-            starting_url=starting_url,
-            credential_profile=credential_profile,
-        )
+        import asyncio
 
-        for journey in journeys:
-            self._debug(f"following discovery journey for: {journey.test_name}")
+        async def _scrape_one(journey: TestJourney) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+            """Scrape a single journey in its own JourneyScraper instance."""
+            scraper = JourneyScraper(
+                starting_url=starting_url,
+                credential_profile=credential_profile,
+            )
             steps: list[JourneyStep] = []
 
             for step in journey.steps:
                 for placeholder in step.placeholders:
                     action = placeholder.action.lower()
                     if action == "goto":
-                        # For GOTO, we try to resolve the URL from the description
-                        url = self._resolver.resolve_url(
-                            placeholder.description, all_scraped_data, self._starting_url_list
-                        )
+                        url = self._resolver.resolve_url(placeholder.description, {}, self._starting_url_list)
                         if url:
                             steps.append(JourneyStep(action="navigate", url=url, description=placeholder.description))
                     elif action in ("click", "fill"):
                         fill_text: str | None = None
                         if action == "fill":
-                            # Try to extract fill text from the raw line first
                             fill_text = self._placeholder_orchestrator._extract_fill_text(step.raw_line)
-                            # Fallback: if the placeholder description contains a colon,
-                            # the fill value may be embedded as FILL:description:value
                             if not fill_text and ":" in placeholder.description:
                                 parts = placeholder.description.split(":", 1)
                                 fill_text = parts[1].strip() if len(parts) > 1 else None
@@ -611,19 +609,26 @@ class TestOrchestrator:
                     elif action == "assert":
                         steps.append(JourneyStep(action="scrape", description=placeholder.description))
 
-            # R-003: Normalize URLs in navigate steps to handle common path variations.
-            # E.g., "category-product/1" -> "category_products/1" for automationexercise.
             steps = self._normalize_journey_urls(steps)
-
-            # Add a final scrape step if not already there
             if not steps or steps[-1].action != "scrape":
                 steps.append(JourneyStep(action="scrape", description="final page state"))
 
+            self._debug(f"following discovery journey for: {journey.test_name}")
             journey_data = await scraper.scrape_journey(steps, credential_profile=credential_profile)
-            all_scraped_data.update(journey_data)
+            pages = scraper.get_pages_visited()
+            return journey_data, pages
 
-        pages_visited = scraper.get_pages_visited()
-        return all_scraped_data, pages_visited
+        # Run all journeys concurrently — each gets its own browser subprocess
+        tasks = [_scrape_one(j) for j in journeys]
+        results = await asyncio.gather(*tasks)
+
+        all_scraped_data: dict[str, list[dict[str, Any]]] = {}
+        all_pages_visited: list[str] = []
+        for data, pages in results:
+            all_scraped_data.update(data)
+            all_pages_visited.extend(pages)
+
+        return all_scraped_data, all_pages_visited
 
     @staticmethod
     def _normalize_journey_urls(steps: list[JourneyStep]) -> list[JourneyStep]:
