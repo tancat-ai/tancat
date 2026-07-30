@@ -10,6 +10,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Fixed
+- **LangGraph step count reduced 2.5x**: ScriptSynthesizerAgent now generates one skeleton fragment per condition (like linear pipeline) instead of all at once. Prevents cumulative prerequisite chaining where test N repeats all previous N-1 steps. LV Insurance: 137 → 52 placeholders, matching linear's 53.
+- **LV Insurance SPA scraper fix**: Added `_reveal_hidden_sections()` to journey_scraper. Hidden SPA form sections (display:none) are now made visible before interaction via page.evaluate(). LV Insurance regeneration: 0% → 54%.
 - **Eval captures at 100% resolution accuracy**: Fixed incorrect locators and assertions in pre-generated capture files (`scripts/eval/captures/`). AutomationExercise 50%→100%, DemoQA 88%→100%, TheInternet 86%→100%, SauceDemo 90%→100%. All 5 sites now at 100% static resolution accuracy.
 - **LangGraph dependency handling**: Moved langgraph from optional `[langgraph]` extra to core dependency. `uv sync --upgrade` no longer silently drops it. Added `pytest.importorskip` guards to 3 test files for graceful degradation.
 - **openai client pin**: Changed `openai==2.48.0` → `openai>=2.48.0` (was over-pinned during cherry-pick; it's just an HTTP client library). Updated to 2.50.0.

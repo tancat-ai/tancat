@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -94,6 +95,7 @@ class TestOrchestrator:
         self._debug_enabled = os.getenv("PIPELINE_DEBUG", "").strip() == "1"
         # Diagnostics for journey execution
         self._pipeline_diagnostics: dict[str, Any] = {}
+        self._last_phase_time: float = 0.0
 
         # Phase 1c: LangGraph multi-agent pipeline (enabled by default, set LANGGRAPH_ENABLED=0 to disable)
         langgraph_disabled = os.getenv("LANGGRAPH_ENABLED", "").strip() == "0"
@@ -179,7 +181,13 @@ class TestOrchestrator:
 
     def _debug(self, message: str) -> None:
         if self._debug_enabled:
-            print(f"[pipeline] {message}", flush=True)
+            now = time.time()
+            elapsed = now - self._last_phase_time if self._last_phase_time else 0
+            self._last_phase_time = now
+            if " start" in message or self._last_phase_time == 0:
+                print(f"[pipeline] {message}", flush=True)
+            else:
+                print(f"[pipeline] {message}  [{elapsed:.1f}s]", flush=True)
 
     async def run_pipeline(
         self,

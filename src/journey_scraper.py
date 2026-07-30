@@ -552,6 +552,9 @@ class JourneyScraper:
             self._debug(f"Click failed: Locator {selector} not found on page.")
             return
 
+        # Reveal hidden SPA sections before interacting
+        self._reveal_hidden_sections(page)
+
         try:
             locator.scroll_into_view_if_needed(timeout=min(2000, timeout_ms))
         except Exception as e:
@@ -574,6 +577,10 @@ class JourneyScraper:
         if locator.count() == 0:
             self._debug(f"Fill failed: Locator {selector} not found on page.")
             return
+
+        # Reveal hidden SPA sections before interacting
+        self._reveal_hidden_sections(page)
+
         try:
             locator.fill(text)
             self._debug(f"Filled successfully: {selector}")
@@ -597,6 +604,50 @@ class JourneyScraper:
             pass
 
         return elements
+
+    @staticmethod
+    def _reveal_hidden_sections(page: Any) -> None:
+        """Reveal hidden SPA form sections by making all sections visible.
+
+        On multi-step single-page forms (e.g. the LV Insurance mock site),
+        sections are hidden behind JavaScript section toggles (showPage()).
+        Elements in hidden sections exist in the DOM but Playwright cannot
+        interact with them because they have display:none.
+
+        This method forces all hidden sections to become visible so that
+        placeholder resolution can click/fill elements in any section.
+        Best-effort — non-destructive if no section pattern is detected.
+        """
+        try:
+            page.evaluate(
+                """
+                () => {
+                    // Pattern 1: .page { display:none } / .page.active { display:block }
+                    const pages = document.querySelectorAll('.page');
+                    pages.forEach(el => {
+                        el.style.display = 'block';
+                        el.classList.add('active');
+                    });
+
+                    // Pattern 2: sections hidden via display:none in inline styles
+                    document.querySelectorAll('[style*="display: none"], [style*="display:none"]').forEach(el => {
+                        el.style.display = 'block';
+                    });
+
+                    // Pattern 3: Any section/div that is a direct child of the form
+                    // and is not visible, but has interactive elements
+                    document.querySelectorAll('section, .section, [class*="Section"]').forEach(el => {
+                        const style = window.getComputedStyle(el);
+                        if (style.display === 'none') {
+                            el.style.display = 'block';
+                        }
+                    });
+                }
+                """
+            )
+            page.wait_for_timeout(200)
+        except Exception:
+            pass
 
     @staticmethod
     def _dismiss_consent_overlays(page: Any) -> None:
