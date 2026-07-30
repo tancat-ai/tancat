@@ -150,8 +150,7 @@ class POMCache:
     This is NOT reversible — no URLs are stored in plain text.
     """
 
-    def __init__(self, cache_dir: str = "cache/poms") -> None:
-        ...
+    def __init__(self, cache_dir: str = "cache/poms") -> None: ...
 
     def get(self, url: str) -> POMCacheEntry | None:
         """Return cached POMs for a site, or None if no cache exists."""
@@ -159,9 +158,7 @@ class POMCache:
     def put(self, url: str, page_objects: list[GeneratedPageObject]) -> POMCacheEntry:
         """Store generated POMs for a site."""
 
-    def verify(
-        self, entry: POMCacheEntry, page: Page
-    ) -> CacheVerificationResult:
+    def verify(self, entry: POMCacheEntry, page: Page) -> CacheVerificationResult:
         """Test each cached selector against the live DOM.
 
         Returns:
@@ -170,9 +167,7 @@ class POMCache:
             - ALL_STALE: all selectors fail (site structure changed)
         """
 
-    def update(
-        self, entry: POMCacheEntry, re_resolved: dict[str, str]
-    ) -> POMCacheEntry:
+    def update(self, entry: POMCacheEntry, re_resolved: dict[str, str]) -> POMCacheEntry:
         """Replace stale selectors with newly resolved ones."""
 
     def get_changelog(self, url: str) -> list[dict]:
