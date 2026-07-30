@@ -11,6 +11,8 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ### Fixed
 - **Eval captures at 100% resolution accuracy**: Fixed incorrect locators and assertions in pre-generated capture files (`scripts/eval/captures/`). AutomationExercise 50%→100%, DemoQA 88%→100%, TheInternet 86%→100%, SauceDemo 90%→100%. All 5 sites now at 100% static resolution accuracy.
+- **LangGraph dependency handling**: Moved langgraph from optional `[langgraph]` extra to core dependency. `uv sync --upgrade` no longer silently drops it. Added `pytest.importorskip` guards to 3 test files for graceful degradation.
+- **openai client pin**: Changed `openai==2.48.0` → `openai>=2.48.0` (was over-pinned during cherry-pick; it's just an HTTP client library). Updated to 2.50.0.
 
 ### Added
 - **Cloud Provider Support**: `openai-compatible` and `openrouter` provider names for OpenRouter, Together AI, Groq, etc. via `OPENAI_COMPATIBLE_*` env vars. Uses existing `OpenAIProvider` with `is_openai_compatible` flag.

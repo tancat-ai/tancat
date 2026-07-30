@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("langgraph", reason="langgraph extra not installed")
+
 from src.agents.pipeline_graph import PipelineGraph, _after_qa_director, _after_synthesizer
 from src.agents.pipeline_state import Criterion, PipelineState, StoryAnalysis
 

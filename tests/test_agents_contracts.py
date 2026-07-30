@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
+pytest.importorskip("langgraph", reason="langgraph extra not installed")
+
 from src.agents.director import QADirectorAgent
 from src.agents.ingestion import IngestionAgent
 from src.agents.pipeline_state import Criterion, PipelineState, StoryAnalysis
