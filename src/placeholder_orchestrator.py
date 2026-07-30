@@ -353,6 +353,7 @@ class PlaceholderOrchestrator:
             last_selector: str | None = None
             last_description: str | None = None
             resolved_steps: list[str] = []
+            deferred_asserts: list[dict[str, Any]] = []
 
             for step in journey.steps:
                 if current_url is None:
@@ -366,6 +367,42 @@ class PlaceholderOrchestrator:
                         parts = description.split(":", 1)
                         description = parts[0]
                         fill_value = parts[1]
+
+                    if action == "ASSERT":
+                        # B-021: Page-state assertions become URL assertions —
+                        # resolve immediately (no element matching or LLM needed).
+                        if self._is_page_state_assertion(description):
+                            resolved_url = self.resolver.resolve_url(
+                                description,
+                                scraped_data,
+                                known_urls=list(scraped_data.keys()),
+                            )
+                            if resolved_url:
+                                line_resolutions.setdefault(placeholder.line_number, []).append(
+                                    (
+                                        placeholder.token,
+                                        action,
+                                        f'expect(page).to_have_url("{resolved_url}")',
+                                        description,
+                                        fill_value,
+                                        current_url,
+                                        "url",
+                                    )
+                                )
+                                continue
+                        # Defer element-based ASSERT for batch resolution.
+                        deferred_asserts.append(
+                            {
+                                "placeholder": placeholder,
+                                "action": action,
+                                "description": description,
+                                "fill_value": fill_value,
+                                "current_url": current_url,
+                                "previous_selector": last_selector,
+                                "previous_description": last_description,
+                            }
+                        )
+                        continue
 
                     resolved_value, next_url, assertion_type = await self._resolve_placeholder_for_page(
                         action=action,
@@ -400,6 +437,18 @@ class PlaceholderOrchestrator:
 
                     if next_url:
                         current_url = next_url
+
+            # Batch-resolve deferred ASSERT placeholders for this journey
+            if deferred_asserts:
+                await self._batch_resolve_deferred_asserts(
+                    deferred_asserts=deferred_asserts,
+                    scraped_data=scraped_data,
+                    scraped_errors=errors,
+                    fallback_url=fallback_url,
+                    line_resolutions=line_resolutions,
+                    journey_unresolved=journey_unresolved,
+                    journey_name=journey.test_name,
+                )
 
         # 2. Resolve remaining placeholders using fallback context (batched Pass 3)
         resolved_tokens = {
@@ -544,6 +593,90 @@ class PlaceholderOrchestrator:
         final_lines = remove_raw_placeholder_lines(final_lines)
 
         return "\n".join(final_lines)
+
+    async def _batch_resolve_deferred_asserts(
+        self,
+        deferred_asserts: list[dict[str, Any]],
+        scraped_data: dict[str, list[dict[str, str]]],
+        scraped_errors: dict[str, str] | None,
+        fallback_url: str | None,
+        line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]],
+        journey_unresolved: dict[str, list[str]],
+        journey_name: str,
+    ) -> None:
+        """Batch-resolve deferred ASSERT placeholders grouped by page URL.
+
+        ASSERT placeholders are independent — they don't update sequential state
+        (last_selector, current_url, resolved_steps). By deferring them and
+        batching Pass 3 LLM calls, we avoid N individual LLM calls.
+        """
+        # Group by current_url
+        by_url: dict[str, list[dict[str, Any]]] = {}
+        for da in deferred_asserts:
+            url = da["current_url"] or fallback_url or ""
+            by_url.setdefault(url, []).append(da)
+
+        for url, group in by_url.items():
+            await self._ensure_scraped(url, scraped_data, scraped_errors)
+            pages_data = self._build_scoped_pages(url, scraped_data)
+            pages_to_search = pages_data if pages_data else scraped_data
+
+            # Build excluded selectors from the last CLICK/FILL step in the journey.
+            # All ASSERTs share the same previous_selector (last interactive action).
+            excluded: set[str] | None = None
+            for da in group:
+                if da["previous_selector"]:
+                    excluded = {da["previous_selector"]}
+                    for elements in pages_to_search.values():
+                        for element in elements:
+                            robust = build_robust_locator(element)
+                            raw = str(element.get("selector", "")).strip()
+                            if robust == da["previous_selector"] or raw == da["previous_selector"]:
+                                if robust:
+                                    excluded.add(robust)
+                                if raw:
+                                    excluded.add(raw)
+                    break
+
+            batch_requests: list[dict[str, str]] = [
+                {"action": da["action"], "description": da["description"]} for da in group
+            ]
+
+            batch_results = await self._element_matcher.find_best_elements_batch(
+                requests=batch_requests,
+                current_url=url,
+                pages_data=pages_to_search,
+                excluded_selectors=excluded,
+            )
+
+            for i, da in enumerate(group):
+                placeholder = da["placeholder"]
+                action = da["action"]
+                description = da["description"]
+                fill_value = da["fill_value"]
+
+                matched = batch_results[i] if i < len(batch_results) else None
+
+                if matched is not None:
+                    robust_selector = build_robust_locator(matched)
+                    if not robust_selector:
+                        robust_selector = str(matched.get("selector", "")).strip()
+                    selector = repr(robust_selector)
+                    assertion_type = matched.get("assertion_type")
+
+                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                        (
+                            placeholder.token,
+                            action,
+                            selector,
+                            description,
+                            fill_value,
+                            url,
+                            assertion_type,
+                        )
+                    )
+                else:
+                    journey_unresolved.setdefault(journey_name, []).append(description)
 
     # ═════════════════════════════════════════════════════════════
     # Resolution engine
