@@ -65,6 +65,44 @@ class ElementMatcher:
         self._resolver = resolver
         self._semantic_ranker = SemanticCandidateRanker(generator)
 
+        # Batching state for Pass 3 LLM calls
+        self._pass3_batch: list[dict[str, Any]] = []
+        self._pass3_results: dict[int, dict[str, Any] | None] = {}
+
+    async def flush_pass3_batch(self) -> None:
+        """Flush any pending Pass 3 batch, sending all in one LLM call.
+
+        Call this after resolving a group of placeholders to batch their
+        semantic ranking into a single LLM prompt.
+        """
+        if not self._pass3_batch:
+            return
+
+        batch = self._pass3_batch
+        self._pass3_batch = []
+
+        results = await self._semantic_ranker.choose_best_candidates_batch(items=batch)
+        for i, result in enumerate(results):
+            idx = batch[i].get("_batch_idx", i)
+            self._pass3_results[idx] = result
+
+    def _queue_pass3(
+        self,
+        batch_idx: int,
+        action: str,
+        description: str,
+        candidates: list[dict[str, Any]],
+    ) -> None:
+        """Queue a Pass 3 resolution for batch flushing."""
+        self._pass3_batch.append(
+            {
+                "action": action,
+                "description": description,
+                "candidates": candidates,
+                "_batch_idx": batch_idx,
+            }
+        )
+
     # ── Pass 0: Exact text match ────────────────────────────────
 
     def pass0_exact_text_match(
@@ -653,6 +691,115 @@ class ElementMatcher:
             )
             return top_candidate
         return None
+
+    async def find_best_elements_batch(
+        self,
+        requests: list[dict[str, Any]],
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+        excluded_selectors: set[str] | None = None,
+    ) -> list[dict[str, str] | None]:
+        """Batch-resolve multiple placeholders, batching Pass 3 LLM calls.
+
+        Each request dict should have:
+            - action: str (CLICK, FILL, ASSERT, etc.)
+            - description: str
+
+        Returns a list of resolved element dicts (or None) in the same order.
+        """
+        # Phase 1: Pass 0-2 for all requests (fast, no LLM)
+        pass3_requests: list[tuple[int, str, str, list[Any]]] = []
+        results: list[dict[str, str] | None] = [None] * len(requests)
+
+        for i, req in enumerate(requests):
+            action = req.get("action", "CLICK")
+            description = req.get("description", "")
+
+            # Pass 0 — exact text match
+            pass0_result = self.pass0_exact_text_match(action, description, pages_data)
+            if pass0_result is not None and (
+                not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors)
+            ):
+                pass0_result["assertion_type"] = "toHaveText"
+                pass0_result["expected_value"] = description.strip("'\"")
+                results[i] = pass0_result
+                continue
+
+            # Pass 1 — text match
+            pass1_result = self.pass1_text_match(action, description, pages_data)
+            if pass1_result is not None and (
+                not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors)
+            ):
+                results[i] = pass1_result
+                continue
+
+            # Pass 1 — ASSERT text
+            pass1_assert = self.pass1_assert_text_match(action, description, pages_data)
+            if pass1_assert is not None and (
+                not excluded_selectors or not _is_excluded(pass1_assert, excluded_selectors)
+            ):
+                results[i] = pass1_assert
+                continue
+
+            # Pass 2 — structural match
+            pass2_result = self.pass2_structural_match(action, description, pages_data)
+            if pass2_result is not None and (
+                not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors)
+            ):
+                results[i] = pass2_result
+                continue
+
+            # Collect Pass 3 candidates
+            all_ranked: list[tuple[float, dict[str, str]]] = []
+            for _url, elements in pages_data.items():
+                ranked = self._resolver.rank_candidates(action, description, elements)
+                all_ranked.extend(ranked)
+
+            if excluded_selectors:
+                all_ranked = [(s, e) for s, e in all_ranked if not _is_excluded(e, excluded_selectors)]
+
+            all_ranked.sort(key=lambda x: x[0], reverse=True)
+            if not all_ranked:
+                continue
+
+            pass3_requests.append((i, action, description, all_ranked))  # type: ignore
+
+        if not pass3_requests:
+            return results
+
+        # Phase 2: Batch Pass 3 LLM calls
+        batch_items: list[dict[str, Any]] = []
+        for i, action, description, ranked in pass3_requests:
+            top_score = ranked[0][0]
+
+            if action == "ASSERT":
+                shortlisted = [e for _s, e in ranked[:8]]
+            else:
+                threshold = max(1, top_score - 2)
+                shortlisted = [e for _s, e in ranked if _s >= threshold][:4]
+
+            if len(shortlisted) <= 1:
+                if shortlisted:
+                    results[i] = shortlisted[0]
+                continue
+
+            batch_items.append(
+                {
+                    "action": action,
+                    "description": description,
+                    "candidates": shortlisted,
+                    "_batch_idx": i,
+                }
+            )
+
+        if batch_items:
+            batch_results = await self._semantic_ranker.choose_best_candidates_batch(items=batch_items)
+            for j, result in enumerate(batch_results):
+                idx = batch_items[j].get("_batch_idx", j)
+                if result is not None:
+                    results[idx] = result
+
+        return results
 
     async def _resolve_assert_semantically(
         self,
