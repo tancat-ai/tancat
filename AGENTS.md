@@ -48,6 +48,7 @@ Tests written to `generated_tests/`, run via pytest, evidence exported as Jira/H
 | `src/llm_client.py` | Stable LLM client |
 | `.github/workflows/ci.yml` | CI/CD configured and passing |
 | `src/llm_providers/` | Provider implementations — stable |
+| `src/agents/` | LangGraph multi-agent pipeline — Planner, Generator, Validator, Ingestion, QA Director, Synthesizer |
 
 **Rule:** If you find a bug in a protected file, document it in BACKLOG.md and ask before editing.
 

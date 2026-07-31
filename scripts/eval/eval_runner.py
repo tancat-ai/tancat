@@ -441,6 +441,11 @@ class EvalRunner:
         Returns:
             HarnessReport with all metrics computed.
         """
+        # Auto-manage mock server for lv_insurance (eval-005) — the mock
+        # insurance SPA requires a local HTTP server.  ThreadingHTTPServer
+        # handles concurrent Playwright requests without crashing.
+        # The server runs as a daemon thread — auto-stops when the process exits.
+        _mock_server = self._ensure_mock_server()
         if self.regenerate:
             code_map, durations = self._regenerate_code()
             # Phase 1d: When regenerating via graph, save captures for future CI gates
@@ -479,6 +484,23 @@ class EvalRunner:
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
         return HarnessReport(stories=results)
+
+    def _ensure_mock_server(self) -> Any | None:
+        """Auto-start the mock HTTP server if any story needs it (eval-005 / lv_insurance).
+
+        Returns a ``MockServer`` instance that auto-stops on exit, or None
+        if no mock server is needed.
+        """
+        needs_mock = any(
+            f.name.startswith("eval-005") for f in self.dataset_dir.glob("*.json")
+        )
+        if not needs_mock:
+            return None
+
+        from scripts.mock_server import MockServer
+
+        logger.info("Auto-starting mock server for lv_insurance (eval-005)...")
+        return MockServer.start(port=8781, directory=os.getcwd())
 
     def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
         """Regenerate code for all stories using the live pipeline.

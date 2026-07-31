@@ -1,0 +1,73 @@
+{
+  "id": "doc-eval-001",
+  "title": "PRD: Login & Authentication Overhaul",
+  "document": "doc-001_prd_login_overhaul.md",
+  "user_story": "Login and authentication system overhaul for the customer portal.",
+  "golden_changes": [
+    {
+      "category": "new_feature",
+      "name": "Two-Factor Authentication",
+      "description": "Add SMS-based two-factor authentication to the login flow.",
+      "affected_systems": ["auth-service", "sms-gateway", "user-db"],
+      "data_schema_changes": [
+        {
+          "field": "users.phone_number",
+          "change_type": "NEW",
+          "old_value": "",
+          "new_value": "VARCHAR(15)",
+          "migration_notes": ""
+        },
+        {
+          "field": "users.two_factor_enabled",
+          "change_type": "NEW",
+          "old_value": "",
+          "new_value": "BOOLEAN",
+          "migration_notes": ""
+        }
+      ]
+    },
+    {
+      "category": "modified",
+      "name": "Password Reset Flow",
+      "description": "Modify password reset to support magic links.",
+      "affected_systems": ["auth-service", "email-service"],
+      "data_schema_changes": [
+        {
+          "field": "password_reset_tokens.token_type",
+          "change_type": "MODIFIED",
+          "old_value": "VARCHAR(8)",
+          "new_value": "VARCHAR(16)",
+          "migration_notes": ""
+        }
+      ]
+    },
+    {
+      "category": "removed",
+      "name": "Old Basic Auth Endpoint",
+      "description": "Remove legacy /api/v1/basic-auth endpoint.",
+      "affected_systems": ["api-gateway", "legacy-proxy"],
+      "data_schema_changes": [
+        {
+          "field": "api_keys.basic_auth_support",
+          "change_type": "REMOVED",
+          "old_value": "",
+          "new_value": "",
+          "migration_notes": "Column dropped"
+        }
+      ]
+    }
+  ],
+  "golden_conditions_min": 4,
+  "golden_conditions": [
+    "Verify that two-factor authentication can be enabled for a user account",
+    "Verify that SMS code is sent and validated within 5 minutes",
+    "Verify that password reset magic link is generated and works correctly",
+    "Verify that the old basic auth endpoint returns 410 Gone"
+  ],
+  "expected_deltas_min": 3,
+  "expected_heading_deltas": [
+    "Two-Factor Authentication",
+    "Password Reset Flow",
+    "Old Basic Auth Endpoint"
+  ]
+}

@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-23 (Semantic scraper + B-024/B-025/B-026/AI-031 + AI-033 t-string analysis)
+Last updated: 2026-07-31 (Phase 1f-1i doc-mode + AI-038 Unlimited OCR AMD test)
 
 ---
 
@@ -736,6 +736,65 @@ both are user interfaces, so the naming is inconsistent.
 
 **Impact:** Medium — affects imports in ~10 files. No logic changes.
 **Priority:** Low — cosmetic, but prevents future confusion.
+
+---
+
+## 🆕 AI-037 — LV Insurance Resolution Gap Optimization
+
+**Status:** 🟡 ready-for-agent
+**Priority:** Medium (Tier 2 — Resolver Accuracy)
+**Spec:** `docs/specs/FEATURE_SPEC_AI037_lv_insurance_resolution_gap.md`
+**Impact:** LV Insurance resolution 54% → ≥80%, overall regeneration ≥65%
+**Estimated sessions:** 1-2
+
+**What:** After the SPA scraper fix, LV Insurance resolution jumped 0% → 54%. The remaining
+46% (11/24 placeholders) fail due to description-to-element mismatches — the skeleton says
+"vehicle registration number" but the DOM has `#vehicleReg` labelled "Registration Number".
+The resolver's token-matching pipeline lacks insurance-specific vocabulary.
+
+**Phases:**
+1. **Diagnostic** — Classify each failing placeholder into: synonym gap, description
+   mismatch, scraper blind spot, scoring underflow, or page-not-found. Produce a structured
+   report.
+2. **Token Expansion** — Add insurance terms to `TOKEN_EXPANSIONS` in `semantic_matcher.py`
+   (registration, license, occupation, scheme, premium, excess, overnight, NCD, usage).
+   Wire `_split_camel_case` into `get_words()` so `#vehicleReg` → "vehicle Reg" → "vehicle
+   registration".
+3. **Description Cleanup** — Optional: tune skeleton prompt or post-process descriptions to
+   match observed DOM labels.
+4. **Scoring Tuning** — Optional: adjust thresholds/bonuses if underflow or false positives
+   are detected.
+
+**Success criteria:**
+- LV Insurance linear resolution: 54% → ≥80% (19/24)
+- LV Insurance graph resolution: 50% → ≥75% (18/24)
+- Static eval (all 5 sites): 100% (no regression)
+- Overall linear regeneration: 56.7% → ≥65%
+
+**Related:** B-016 (synonym matching), AI-031 (resolver accuracy), AI-030 (mock site)
+
+---
+
+## 🆕 AI-038 — Unlimited OCR ROCm/AMD Compatibility Test
+
+**Status:** 🟡 ready-for-agent  
+**Priority:** Low — future enhancement  
+**Spec:** `src/ocr_backends.py` (Phase 1i)  
+**Estimated sessions:** 0.5
+
+**What:** Test Baidu's Unlimited-OCR 3B vision model on the Strix Halo AMD APU
+(64GB unified memory) with a ROCm-compatible PyTorch build. The adapter is already
+built (`OCR_BACKEND=unlimited-ocr`), but the model uses `trust_remote_code=True`
+which may contain CUDA-specific kernels that fail on ROCm/HIP.
+
+**Steps:**
+1. Install ROCm PyTorch (replace current `torch 2.13.0+cpu`)
+2. Run `OCR_BACKEND=unlimited-ocr` against sample PDFs
+3. If the model loads and infers successfully → enable as default for document
+   mode when GPU is available
+4. If custom CUDA kernels fail → document limitation, keep PyMuPDF as default
+
+**Blocked by:** Need ROCm PyTorch build installed on host machine
 
 ---
 

@@ -1,0 +1,50 @@
+{
+  "id": "doc-eval-003",
+  "title": "Jira Export: Sprint 47 Dashboard Features",
+  "document": "doc-003_jira_dashboard.md",
+  "user_story": "Sprint 47 dashboard features — new analytics widget, export button relocation, real-time refresh, legacy chart removal.",
+  "golden_changes": [
+    {
+      "category": "new_feature",
+      "name": "Analytics Dashboard Widget",
+      "description": "Customizable analytics dashboard widget with drag-and-drop positioning and resizing.",
+      "affected_systems": ["dashboard-ui", "metrics-api", "user-preferences"],
+      "data_schema_changes": []
+    },
+    {
+      "category": "modified",
+      "name": "Export Button Relocation",
+      "description": "Move Export to CSV button from toolbar to widget header dropdown.",
+      "affected_systems": ["dashboard-ui"],
+      "data_schema_changes": []
+    },
+    {
+      "category": "modified",
+      "name": "Real-Time Data Refresh",
+      "description": "WebSocket-based real-time data refresh with configurable intervals.",
+      "affected_systems": ["dashboard-ui", "websocket-service", "metrics-api"],
+      "data_schema_changes": []
+    },
+    {
+      "category": "removed",
+      "name": "Legacy Chart Library",
+      "description": "Remove Chart.js v2 dependency — all charts migrated to v4.",
+      "affected_systems": ["dashboard-ui", "build-pipeline"],
+      "data_schema_changes": []
+    }
+  ],
+  "golden_conditions_min": 4,
+  "golden_conditions": [
+    "Verify analytics dashboard widget can be added and configured",
+    "Verify export button is in widget header dropdown",
+    "Verify real-time data refresh updates metrics at configured interval",
+    "Verify dashboard loads without Chart.js v2 dependency"
+  ],
+  "expected_deltas_min": 4,
+  "expected_heading_deltas": [
+    "New Analytics Dashboard Widget",
+    "Export Button Relocation",
+    "Real-Time Data Refresh",
+    "Legacy Chart Library"
+  ]
+}

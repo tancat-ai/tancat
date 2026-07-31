@@ -434,6 +434,37 @@ class PlaceholderResolver:
         # Enforce global slice cap across all available pool items
         return ranked[:20]
 
+    @staticmethod
+    def _discover_urls_from_elements(pages_data: dict[str, list[dict[str, Any]]]) -> set[str]:
+        """Extract navigable URLs from anchor hrefs in already-scraped elements.
+
+        Links like ``<a href="./cart.html">`` on inventory.html are captured
+        by the scraper as element ``href`` fields but never surfaced as known
+        URLs.  This method collects them so ``GOTO:cart`` can resolve even
+        when the destination has never been visited.
+        """
+        from urllib.parse import urljoin, urlparse
+
+        discovered: set[str] = set()
+        for page_url, elements in pages_data.items():
+            for element in elements:
+                href = str(element.get("href", "")).strip()
+                if not href:
+                    continue
+                # Skip fragment-only, javascript, mailto, tel links
+                if href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                    continue
+                # Resolve relative href against the page URL
+                try:
+                    absolute = urljoin(page_url, href)
+                except ValueError:
+                    continue
+                # Only keep same-origin URLs (avoid external links)
+                if urlparse(absolute).netloc != urlparse(page_url).netloc:
+                    continue
+                discovered.add(absolute)
+        return discovered
+
     def resolve_url(
         self, description: str, pages_data: dict[str, list[dict[str, Any]]], known_urls: list[str] | None = None
     ) -> str | None:
@@ -453,10 +484,24 @@ class PlaceholderResolver:
                 description,
             )
 
+        desc_norm = description.lower().strip()
+
         # 2. Match against known URLs (provided by orchestrator)
         if known_urls:
-            desc_norm = description.lower().strip()
             for url in known_urls:
+                parsed = urlparse(url)
+                path_norm = (parsed.path or "/").lower().replace("/", " ")
+                if desc_norm in path_norm or path_norm in desc_norm:
+                    return url
+
+        # 3. Discover URLs from anchor hrefs in already-scraped pages.
+        #    Links like <a href="./cart.html"> on inventory.html are
+        #    captured by the scraper but never surfaced as known URLs.
+        #    Without this, GOTO:cart can never resolve unless the cart
+        #    page was already visited by the journey.
+        discovered_urls = self._discover_urls_from_elements(pages_data)
+        if discovered_urls:
+            for url in sorted(discovered_urls):
                 parsed = urlparse(url)
                 path_norm = (parsed.path or "/").lower().replace("/", " ")
                 if desc_norm in path_norm or path_norm in desc_norm:

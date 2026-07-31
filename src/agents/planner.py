@@ -98,6 +98,7 @@ Include prerequisite login/navigation steps in each test.
             prompt,
             timeout=300,
             system_prompt=PLANNER_SYSTEM_PROMPT,
+            temperature=0,
         )
 
         return {"test_plan": response.strip()}

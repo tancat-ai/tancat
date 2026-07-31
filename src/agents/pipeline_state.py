@@ -10,6 +10,56 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# ── Document-mode dataclasses (Phase 1f) ────────────────────────────
+
+
+@dataclass
+class DataSchemaChange:
+    """A single data schema modification extracted from a spec document."""
+
+    field: str  # e.g. "customer_id"
+    change_type: str  # "NEW" | "MODIFIED" | "REMOVED"
+    old_value: str  # e.g. "VARCHAR(8)"
+    new_value: str  # e.g. "VARCHAR(10)"
+    migration_notes: str = ""  # breaking change? rollback plan?
+
+
+@dataclass
+class ChangeDelta:
+    """A single change extracted from a spec document."""
+
+    category: str  # "new_feature" | "modified" | "removed" | "unchanged"
+    name: str  # human-readable name
+    description: str  # what changed and why
+    affected_systems: list[str] = field(default_factory=list)
+    data_schema_changes: list[DataSchemaChange] = field(default_factory=list)
+
+
+@dataclass
+class ImpactMap:
+    """Cross-reference of changes to affected test areas."""
+
+    change_ref: str  # which ChangeDelta.name this maps to
+    impact_radius: list[str] = field(default_factory=list)  # systems/modules in blast radius
+    regression_areas: list[str] = field(default_factory=list)  # unchanged systems needing sanity checks
+    test_scenarios: list[str] = field(default_factory=list)  # concrete test ideas
+    risk_level: str = "medium"  # "high" | "medium" | "low"
+
+
+@dataclass
+class ConsolidatedReport:
+    """Final output of the document-driven pipeline."""
+
+    executive_summary: str = ""
+    change_summary: list[ChangeDelta] = field(default_factory=list)
+    impact_maps: list[ImpactMap] = field(default_factory=list)
+    test_plan: list[Criterion] = field(default_factory=list)  # type: ignore[name-defined]  # forward ref
+    generated_tests: str = ""  # pytest code
+    unresolved_items: list[str] = field(default_factory=list)  # questions for the human
+
+
+# ── Core pipeline dataclasses ───────────────────────────────────────
+
 
 @dataclass
 class Criterion:
@@ -51,6 +101,15 @@ class PipelineState:
     additional_urls: list[str] = field(default_factory=list)
     credential_profile: dict[str, str] | None = None
     pom_mode: bool = False
+
+    # ── Document Input (Phase 1f — all optional, empty in text mode) ──
+    input_mode: str = "text"  # "text" | "document"
+    raw_document_text: str = ""  # parsed PDF/Markdown content
+    document_source: str = ""  # original filename
+    change_deltas: list[ChangeDelta] = field(default_factory=list)
+    persona_role: str = ""  # "qa_lead" | "product_owner" | "developer" | "operations"
+    impact_maps: list[ImpactMap] = field(default_factory=list)
+    consolidated_report: ConsolidatedReport | None = None
 
     # ── Intermediate ───────────────────────────────────────────────
     story_analysis: StoryAnalysis | None = None
