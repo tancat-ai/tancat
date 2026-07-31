@@ -267,6 +267,36 @@ class JourneyScraper:
                                                     "page_url": page.url,
                                                 }
                                             )
+                                            # B-015 / Phase 1d: When a CLICK description can't
+                                            # find a matching element, try to navigate to a
+                                            # related URL instead.  This bridges the gap
+                                            # between skeleton descriptions ("checkout button")
+                                            # and sites where the button is on a different
+                                            # page (checkout-step-one.html).
+                                            inferred_url = self._infer_url_from_description(
+                                                step.description, page.url
+                                            )
+                                            if inferred_url:
+                                                self._debug(
+                                                    f"Navigating to inferred URL '{inferred_url}' "
+                                                    f"for unfound click '{step.description}'"
+                                                )
+                                                self._context_log.append(
+                                                    {
+                                                        "event": "url_inference_fallback",
+                                                        "step": step_index,
+                                                        "description": step.description,
+                                                        "inferred_url": inferred_url,
+                                                        "page_url": page.url,
+                                                    }
+                                                )
+                                                current_url = self._navigate_to(page, inferred_url, step.timeout_ms)
+                                                # Auto-scrape after URL-inferred navigation so the
+                                                # destination page's elements are captured for
+                                                # subsequent resolution.
+                                                if current_url:
+                                                    elements = self._scrape_current_page(page, current_url, context)
+                                                    output[current_url] = elements
                                 if selector:
                                     self._click_selector(page, selector, step.timeout_ms)
 
@@ -361,6 +391,73 @@ class JourneyScraper:
         return (
             list(dict.fromkeys(url for url in self._captured_pages if url)) if hasattr(self, "_captured_pages") else []
         )
+
+    # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
+
+    @staticmethod
+    def _infer_url_from_description(description: str, current_url: str) -> str | None:
+        """Infer a navigation URL from a description when no click target is found.
+
+        When the skeleton generates ``CLICK: checkout button`` but the current
+        page has no checkout button (it's on the next page), this method tries
+        common URL patterns based on the description keywords.
+
+        Uses a lightweight HEAD probe to avoid navigating to 404s.
+        """
+        from urllib.parse import urljoin, urlparse
+
+        import httpx
+
+        desc_lower = description.lower()
+        origin = urlparse(current_url)
+        base = f"{origin.scheme}://{origin.netloc}"
+
+        # Map description keywords to common path patterns
+        keyword_routes: dict[str, list[str]] = {
+            "cart": ["/cart.html", "/cart", "/view_cart", "/basket"],
+            "checkout": [
+                "/checkout-step-one.html",
+                "/checkout_step_one",
+                "/checkout.html",
+                "/checkout",
+            ],
+            "continue": [
+                "/checkout-step-two.html",
+                "/checkout_step_two",
+                "/checkout-overview.html",
+            ],
+            "finish": [
+                "/checkout-complete.html",
+                "/complete",
+                "/thank-you",
+            ],
+            "product": ["/products", "/inventory.html"],
+            "login": ["/login", "/signin", "/"],
+            "home": ["/", "/index.html", "/home"],
+        }
+
+        candidates: list[str] = []
+        for keyword, paths in keyword_routes.items():
+            if keyword in desc_lower:
+                for path in paths:
+                    candidates.append(urljoin(base, path))
+                break  # first keyword match wins
+
+        if not candidates:
+            return None
+
+        # Probe candidates with HEAD (fast, no page load)
+        for candidate in candidates:
+            try:
+                resp = httpx.head(candidate, timeout=3, follow_redirects=True)
+                if resp.status_code < 400:
+                    return candidate
+            except Exception:
+                continue
+
+        # Fallback: return the first candidate even if HEAD failed —
+        # Playwright will handle 404 gracefully via timeout
+        return candidates[0]
 
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 

@@ -119,6 +119,7 @@ DO NOT summarize, shorten, or rewrite the criteria words.
             prompt,
             timeout=300,
             system_prompt=GENERATOR_SYSTEM_PROMPT,
+            temperature=0,
         )
 
         return {"skeleton_code": response, "validation_errors": []}

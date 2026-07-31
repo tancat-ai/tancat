@@ -9,15 +9,18 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [Unreleased]
 
-### Performance
-- **Placeholder resolution 38% faster**: ASSERT placeholders now batched via `_batch_resolve_deferred_asserts()`. Instead of N individual Pass 3 LLM calls per ASSERT, deferred placeholders are collected per journey and resolved in one batched call via `find_best_elements_batch()`. Resolution phase: 42s → 26s average.
-- **Journey discovery parallelized**: Previously sequential journey scraping (one browser subprocess at a time) now runs all journeys concurrently via `asyncio.gather()`. Each journey gets its own `JourneyScraper` instance with independent browser subprocess. Journey discovery phase: 34s → 12s (−65%).
-- **Combined pipeline time halved**: ~110s → ~51s (skeleton ~12s + discovery ~12s + resolution ~15s + upgrade ~7s).
-
 ### Added
-- **Eval DB persistence with pipeline tracking**: `eval_runs` table now records `pipeline` (linear/graph), `generation_mode` (regenerated/captured), `rag_enabled`, `git_commit`, `provider`, and `model`. Enables reproducible linear-vs-graph comparisons from the database. Added `_get_git_commit()` helper.
+- **Phase 1 Multi-Agent Architecture (LangGraph)**: Complete document-driven pipeline with three specialized agents (Ingestion, QA Director, Script Synthesizer). Supports dual-path execution (linear or graph via `LANGGRAPH_ENABLED`). See `docs/specs/FEATURE_SPEC_phase1_multi_agent.md`.
+- **Document input mode**: Parse PDF and Markdown specs via pluggable OCR backends (`src/ocr_backends.py`). Extracts change deltas from headings, routes by persona role (QA lead, developer, product owner, operations), generates impact maps and consolidated reports.
+- **OCR backend adapter**: `src/ocr_backends.py` with `PyMuPDFBackend` (CPU, default) and `UnlimitedOCRBackend` (GPU, 3B vision model). Auto-detects GPU/ROCm availability, configurable via `OCR_BACKEND` env var.
+- **Journey URL inference**: When the journey scraper can't find a click target, probes common URL patterns (cart, checkout, finish) via HEAD requests and navigates there. SauceDemo checkout pages now reachable (5 pages scraped, was 2).
+- **Mock server for eval**: `scripts/mock_server.py` uses `ThreadingHTTPServer` with daemon threads and error suppression. Auto-starts in eval runner for lv_insurance (eval-005).
 
-### Fixed
+### Changed
+- **Deterministic skeleton generation**: Planner and Generator agents now use `temperature=0` for reproducible graph pipeline output. Skeleton self-consistency: 55.6% → 100% (byte-for-byte identical across runs).
+- **LLM provider temperature support**: `LLMProvider.complete()` and `LLMClient.generate()` now accept optional `temperature` parameter. Backward compatible — defaults to None (provider default).
+- **PipelineGraph entry routing**: `PipelineState` now supports `input_mode`, `document_source`, `persona_role` fields. Document mode routes through `_parse_document` node before `ingest`.
+- **AGENTS.md protected files**: Added `src/agents/` to protected files list.
 - **Pre-commit mypy version**: `.pre-commit-config.yaml` mypy `v1.15.0` → `v2.3.0` (was crashing with INTERNAL ERROR on `src/agents/generator.py`).
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Phase 1 — Multi-Agent Architecture (LangGraph)
 
 **Created:** 2026-07-26
-**Status:** Spec
+**Status:** ✅ Complete (all phases 1a-1j shipped 2026-07-31)
 **Depends on:** Phase 5 Eval Harness (shipped), Phase 3 RAG (shipped), `src/llm_providers/` (shipped)
 **Blocks:** AI-034 (Test Table & Pre-Flight)
 

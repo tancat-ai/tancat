@@ -51,13 +51,14 @@ class LLMProvider(ABC):
         pass
 
     @abstractmethod
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300) -> ChatCompletion:
+    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
         """Send a chat completion request to the LLM.
 
         Args:
             messages: List of chat messages in conversation order.
             model: Optional model override (uses provider default if not provided).
             timeout: Request timeout in seconds.
+            temperature: Sampling temperature (0.0 = deterministic, None = provider default).
 
         Returns:
             ChatCompletion with the assistant's response.
@@ -115,7 +116,7 @@ class OllamaProvider(LLMProvider):
 
         return os.environ.get("OLLAMA_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300) -> ChatCompletion:
+    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
         import os
 
         model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
@@ -123,9 +124,11 @@ class OllamaProvider(LLMProvider):
         # Ollama expects messages in its native format
         ollama_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-        response = self._client.post(
-            "/api/chat", json={"model": model, "messages": ollama_messages, "stream": False}, timeout=timeout
-        )
+        payload: dict[str, Any] = {"model": model, "messages": ollama_messages, "stream": False}
+        if temperature is not None:
+            payload["options"] = {"temperature": temperature}
+
+        response = self._client.post("/api/chat", json=payload, timeout=timeout)
 
         response.raise_for_status()
         data = response.json()
@@ -168,7 +171,7 @@ class LMStudioProvider(LLMProvider):
 
         return os.environ.get("LM_STUDIO_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300) -> ChatCompletion:
+    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
         import os
 
         model = model or os.environ.get("LM_STUDIO_MODEL", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF")
@@ -176,9 +179,11 @@ class LMStudioProvider(LLMProvider):
         # Normalize messages to OpenAI format (LM Studio expects this)
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-        response = self._client.post(
-            "/chat/completions", json={"model": model, "messages": openai_messages, "stream": False}, timeout=timeout
-        )
+        payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+        response = self._client.post("/chat/completions", json=payload, timeout=timeout)
 
         response.raise_for_status()
         data = response.json()
@@ -341,7 +346,7 @@ class OpenAIProvider(LLMProvider):
             return None
         return f"{self._api_key[:4]}...{self._api_key[-4:]}" if len(self._api_key) > 8 else "***"
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300) -> ChatCompletion:
+    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
         import os
 
         if self._is_local:
@@ -353,9 +358,11 @@ class OpenAIProvider(LLMProvider):
 
         openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-        response = self._client.post(
-            "/chat/completions", json={"model": model, "messages": openai_messages, "stream": False}, timeout=timeout
-        )
+        payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
+        if temperature is not None:
+            payload["temperature"] = temperature
+
+        response = self._client.post("/chat/completions", json=payload, timeout=timeout)
 
         response.raise_for_status()
         data = response.json()

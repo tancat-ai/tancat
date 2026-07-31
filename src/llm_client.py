@@ -246,7 +246,7 @@ class LLMClient:
         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
             print(f"[llm_client] {message}", flush=True)
 
-    def _complete_sync(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> ChatCompletion:
+    def _complete_sync(self, prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None) -> ChatCompletion:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
 
@@ -257,11 +257,13 @@ class LLMClient:
 
         start_time = time.time()
         try:
-            self._debug(f"Calling provider={self.provider_name} model={self._model} timeout={timeout}")
+            temp_label = f"temp={temperature}" if temperature is not None else "temp=default"
+            self._debug(f"Calling provider={self.provider_name} model={self._model} timeout={timeout} {temp_label}")
             completion = self._provider.complete(
                 messages=self._conversation_history,
                 model=self._model,
                 timeout=timeout,
+                temperature=temperature,
             )
             elapsed = time.time() - start_time
             content_len = len(completion.content) if completion.content else 0
@@ -278,10 +280,10 @@ class LLMClient:
             self._conversation_history.pop()
             raise
 
-    async def generate(self, prompt: str, timeout: int = 600, system_prompt: str | None = None) -> str:
+    async def generate(self, prompt: str, timeout: int = 600, system_prompt: str | None = None, temperature: float | None = None) -> str:
         """Async wrapper used by the intelligent pipeline."""
         try:
-            completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt)
+            completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt, temperature)
         except Exception as exc:
             raise RuntimeError(f"Failed to generate tests: {exc}") from exc
 

@@ -1,0 +1,56 @@
+{
+  "id": "doc-eval-002",
+  "title": "Change Log: E-Commerce Platform v4.2",
+  "document": "doc-002_changelog_ecommerce.md",
+  "user_story": "E-Commerce Platform v4.2 release — recommendations, tax calculation, email redesign.",
+  "golden_changes": [
+    {
+      "category": "new_feature",
+      "name": "Product Recommendations Engine",
+      "description": "New ML-based product recommendations on product detail page.",
+      "affected_systems": ["recommendation-service", "product-api", "analytics-pipeline"],
+      "data_schema_changes": []
+    },
+    {
+      "category": "modified",
+      "name": "Shopping Cart Tax Calculation",
+      "description": "Region-specific VAT rates instead of flat 20%.",
+      "affected_systems": ["cart-service", "tax-engine"],
+      "data_schema_changes": [
+        {
+          "field": "tax_rates.region",
+          "change_type": "NEW",
+          "old_value": "",
+          "new_value": "VARCHAR(50)",
+          "migration_notes": ""
+        },
+        {
+          "field": "tax_rates.rate",
+          "change_type": "MODIFIED",
+          "old_value": "DECIMAL(3,2)",
+          "new_value": "DECIMAL(5,4)",
+          "migration_notes": ""
+        }
+      ]
+    },
+    {
+      "category": "modified",
+      "name": "Order Confirmation Email",
+      "description": "Redesigned email template with product images and tracking link.",
+      "affected_systems": ["email-service"],
+      "data_schema_changes": []
+    }
+  ],
+  "golden_conditions_min": 3,
+  "golden_conditions": [
+    "Verify product recommendations appear on product detail page",
+    "Verify tax calculation uses region-specific rate based on shipping address",
+    "Verify order confirmation email includes product images and tracking link"
+  ],
+  "expected_deltas_min": 3,
+  "expected_heading_deltas": [
+    "Product Recommendations Engine",
+    "Shopping Cart Tax Calculation",
+    "Order Confirmation Email"
+  ]
+}
