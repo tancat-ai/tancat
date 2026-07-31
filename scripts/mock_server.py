@@ -35,14 +35,14 @@ class _RobustRequestHandler(http.server.SimpleHTTPRequestHandler):
     def handle(self) -> None:
         try:
             super().handle()
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+        except BrokenPipeError, ConnectionResetError, ConnectionAbortedError:
             # Client disconnected — normal behaviour for Playwright browsers
             pass
 
     def handle_one_request(self) -> None:
         try:
             super().handle_one_request()
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+        except BrokenPipeError, ConnectionResetError, ConnectionAbortedError:
             pass
 
     def log_message(self, format: str, *args: Any) -> None:
@@ -50,7 +50,7 @@ class _RobustRequestHandler(http.server.SimpleHTTPRequestHandler):
         # args[1] is the status code for format '"%s" %s %s'
         try:
             status = int(args[1]) if len(args) > 1 else None
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             status = None
         if status is not None and status < 400:
             return  # silence successful requests

@@ -175,9 +175,7 @@ class UnlimitedOCRBackend(OcrBackend):
         logger.info("Loading Unlimited-OCR on %s (dtype=%s)...", gpu_name, self._dtype)
         logger.info("First load downloads ~6 GB from Hugging Face — this may take a few minutes.")
 
-        self._tokenizer = AutoTokenizer.from_pretrained(
-            self.MODEL_NAME, trust_remote_code=True
-        )
+        self._tokenizer = AutoTokenizer.from_pretrained(self.MODEL_NAME, trust_remote_code=True)
         self._model = AutoModel.from_pretrained(
             self.MODEL_NAME,
             trust_remote_code=True,
@@ -301,9 +299,7 @@ def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
         if backend.available:
             logger.info("OCR backend: unlimited-ocr (GPU)")
             return backend
-        logger.warning(
-            "Unlimited-OCR requested but GPU not available — falling back to PyMuPDF"
-        )
+        logger.warning("Unlimited-OCR requested but GPU not available — falling back to PyMuPDF")
 
     logger.debug("OCR backend: pymupdf (CPU)")
     return PyMuPDFBackend()

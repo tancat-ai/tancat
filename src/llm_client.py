@@ -246,7 +246,9 @@ class LLMClient:
         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
             print(f"[llm_client] {message}", flush=True)
 
-    def _complete_sync(self, prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None) -> ChatCompletion:
+    def _complete_sync(
+        self, prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None
+    ) -> ChatCompletion:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
 
@@ -280,7 +282,9 @@ class LLMClient:
             self._conversation_history.pop()
             raise
 
-    async def generate(self, prompt: str, timeout: int = 600, system_prompt: str | None = None, temperature: float | None = None) -> str:
+    async def generate(
+        self, prompt: str, timeout: int = 600, system_prompt: str | None = None, temperature: float | None = None
+    ) -> str:
         """Async wrapper used by the intelligent pipeline."""
         try:
             completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt, temperature)

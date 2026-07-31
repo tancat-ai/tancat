@@ -158,9 +158,7 @@ class TestParseChangeDeltasJson:
         assert IngestionAgent._parse_change_deltas_json(response) == []
 
     def test_non_dict_entries_skipped(self) -> None:
-        response = json.dumps(
-            {"change_deltas": [{"name": "Valid"}, "not a dict", 123, {"name": "Also valid"}]}
-        )
+        response = json.dumps({"change_deltas": [{"name": "Valid"}, "not a dict", 123, {"name": "Also valid"}]})
         deltas = IngestionAgent._parse_change_deltas_json(response)
         assert len(deltas) == 2
         names = [d.name for d in deltas]
@@ -200,9 +198,7 @@ class TestExtractChangeDeltasLLM:
         mock_client.generate.return_value = response
 
         agent = IngestionAgent(mock_client)
-        deltas = await agent._extract_change_deltas(
-            "## New dark mode feature\n\nWe added dark mode support."
-        )
+        deltas = await agent._extract_change_deltas("## New dark mode feature\n\nWe added dark mode support.")
         assert len(deltas) == 1
         assert deltas[0].name == "Dark mode"
         mock_client.generate.assert_called_once()

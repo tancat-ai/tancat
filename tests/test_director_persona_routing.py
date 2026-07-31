@@ -276,9 +276,7 @@ class TestConsolidatedReport:
     async def test_includes_test_code_and_errors(self, graph: PipelineGraph) -> None:
         state = PipelineState(
             user_story="test",
-            change_deltas=[
-                ChangeDelta(category="new_feature", name="A", description="A")
-            ],
+            change_deltas=[ChangeDelta(category="new_feature", name="A", description="A")],
             test_code="def test_a(): pass",
             errors=["Something went wrong"],
             unresolved_placeholders=["Unresolved: X"],
@@ -293,12 +291,8 @@ class TestConsolidatedReport:
     async def test_includes_impact_maps(self, graph: PipelineGraph) -> None:
         state = PipelineState(
             user_story="test",
-            change_deltas=[
-                ChangeDelta(category="new_feature", name="A", description="A")
-            ],
-            impact_maps=[
-                ImpactMap(change_ref="A", risk_level="low")
-            ],
+            change_deltas=[ChangeDelta(category="new_feature", name="A", description="A")],
+            impact_maps=[ImpactMap(change_ref="A", risk_level="low")],
         )
         result = await graph._consolidated_report(state)
         report = result["consolidated_report"]
