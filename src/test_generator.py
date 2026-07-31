@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from src.llm_client import LLMClient
-from src.prompt_utils import get_skeleton_prompt_template
+from src.prompt_builder import PromptBuilder, build_skeleton_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class TestGenerator:
@@ -62,7 +65,14 @@ class TestGenerator:
         target_urls: list[str] | None = None,
         expected_count: int | None = None,
     ) -> str:
-        """Single-call skeleton generation (original pipeline)."""
+        """Single-call skeleton generation (original pipeline).
+
+        Prompt assembly uses the PEP 750 t-string PromptBuilder
+        (``src/prompt_builder.py``): trusted static structure stays separate
+        from untrusted interpolated values, per-field transforms are applied
+        at render time, and the structured audit entry (which fields, which
+        values, what was truncated) is logged separately from the prompt text.
+        """
         urls = target_urls or []
         known_urls_block = "\n".join(f"- {url}" for url in urls) if urls else "- No URLs were supplied."
         count_note = (
@@ -70,16 +80,18 @@ class TestGenerator:
             if expected_count
             else ""
         )
-        count_label_upper = str(expected_count).upper() if expected_count is not None else "N"
-        prompt = (
-            get_skeleton_prompt_template(expected_count=expected_count).format(
+        rendered = PromptBuilder(
+            build_skeleton_prompt(
                 user_story=user_story,
                 conditions=conditions,
                 known_urls_block=known_urls_block,
-                count_label_upper=count_label_upper,
+                expected_count=expected_count,
             )
-            + count_note
-        )
+        ).render()
+        # Structured audit trail — the LLM gets the text, the store gets the
+        # metadata (fields, truncation, static-vs-dynamic split).
+        logger.debug("llm_call=generate_skeleton fields=%s", rendered.to_log_entry())
+        prompt = rendered.text + count_note
         return await self.client.generate(prompt)
 
     async def _generate_skeleton_langgraph(

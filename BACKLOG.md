@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-31 (Phase 1f-1i doc-mode + AI-038 Unlimited OCR AMD test)
+Last updated: 2026-07-31 (t-string PromptBuilder + AI-037 diagnostic + Phase 1f-1i doc-mode + AI-038 Unlimited OCR AMD test)
 
 ---
 
@@ -747,6 +747,32 @@ both are user interfaces, so the naming is inconsistent.
 **Impact:** LV Insurance resolution 54% → ≥80%, overall regeneration ≥65%
 **Estimated sessions:** 1-2
 
+**📊 Diagnostic update 2026-07-31:** Resolver-only eval shows LV Insurance at
+**23/24 (95.8%)** — not 54%. The 54% figure is the *regeneration* metric, dominated
+by LLM skeleton-generation nondeterminism (verified by UAT: LEGACY 54.2% / 50.0%,
+TSTRING 50.0% / 37.5% across runs — same byte-identical prompt, different LLM
+samples; one run's skeleton omitted `first name`/`last name`/`postcode` entirely).
+The only resolver-level failure is `usage type` → `[name="usageType"]` vs golden
+`input[name='usageType'][value='SDP']` — a **locator-format mismatch (B-026
+pattern)**, not a vocabulary gap: the radio button has no `id` and the scraper
+captures no label (radio labels "Social, Domestic & Pleasure" not associated).
+
+**Revised plan (no vocabulary list — the DOM already provides labels):**
+1. ✅ Diagnostic done (above).
+2. **Radio group label capture** — associate `<label>` text with nameless radio
+   inputs in the scraper (fixes `usage type` + saucedemo/demoqa radio cases).
+3. **Locator format** — `_element_to_locator()` prefers `tag+name+value` for
+   nameless radio buttons (B-026 style).
+4. **`_split_camel_case` in `get_words()`** — domain-agnostic camelCase splitting
+   (`#vehicleReg` → "vehicle Reg"), helps every site.
+5. **Phase 3 description cleanup** — skeleton prompt produces descriptions that
+   don't match golden keys (LLM invents steps like `Sign up`; merges fields);
+   prompt layer is now t-string structured (AI-033) so description guidance
+   can be tuned auditable.
+
+**Anti-goal:** do NOT add an insurance vocabulary list to `TOKEN_EXPANSIONS` —
+it duplicates the DOM's own label text and doesn't scale across domains.
+
 **What:** After the SPA scraper fix, LV Insurance resolution jumped 0% → 54%. The remaining
 46% (11/24 placeholders) fail due to description-to-element mismatches — the skeleton says
 "vehicle registration number" but the DOM has `#vehicleReg` labelled "Registration Number".
@@ -814,13 +840,61 @@ docs headers, script docstrings, CI badge URL. Regenerate graphify output.
 
 ---
 
-## 🆕 AI-033 — Python T-String (PEP 709) Upgrade Path Analysis
+## ✅ AI-033 — Python T-String (PEP 750) Upgrade — ANALYSIS COMPLETE + PROMPT LAYER MIGRATED
 
-**Status:** ❓ needs-info
+**Status:** ✅ Complete 2026-07-31 (analysis + prompt-layer migration shipped)
 **Priority:** Medium — technical debt / future-proofing
-**Impact:** Potential code modernization, template string consistency
+**Impact:** Prompt assembly now structured + auditable; Jinja2 blocker resolved
 
-**What:** Evaluate and plan migration to Python t-strings (PEP 709, Python 3.12+) for internal template strings in the codebase.
+**What:** Evaluate and plan migration to Python t-strings (PEP 750, Python 3.14) for
+internal template strings in the codebase.
+
+**Original question:** Whether t-strings can separate LLM calls from other things
+(structured rendering, audit trails, injection-aware transforms).
+
+### ✅ Resolution — the Jinja2 blocker is NOT a blocker for the prompt path
+
+**Critical finding disproved by implementation:** the original spec assumed
+``{{CLICK:description}}`` double-brace skeleton placeholders would conflict with
+t-string ``{expression}`` interpolation. In practice t-strings escape ``{{`` the
+same way f-strings do — so ``t"...{{CLICK:x}}... {user_story}"`` renders literal
+``{CLICK:x}`` *and* interpolates ``{user_story}`` side by side. Byte-identical to
+the legacy ``.format()`` output (verified by UAT, 2886 chars, both count variants).
+
+### ✅ Delivered 2026-07-31
+
+- **`src/prompt_builder.py`** (new, PEP 750) — `PromptBuilder` + `RenderedPrompt`:
+  renders a `Template` with per-field transforms keyed by `Interpolation.expression`,
+  records structured metadata (fields, truncated, static-vs-dynamic parts),
+  exposes `to_log_entry()` for structured audit logging. LangChain-parallel:
+  declare template in code, bind variables, render — no runtime template parsing.
+- **`build_skeleton_prompt()`** — t-string skeleton prompt, byte-identical to legacy.
+- **`build_single_condition_prompt()`** — t-string single-condition prompt. Fixes a
+  latent inconsistency: the legacy function sent literal `{{CLICK:...}}` (double
+  braces) to the LLM while the main skeleton prompt sent `{CLICK:...}`. Now both
+  render single braces (parser accepts both).
+- **Wired into `src/test_generator.py`** `_generate_skeleton_single_call` and
+  **`src/orchestrator.py`** `_generate_single_condition_fragment` — both now log
+  `llm_call=... fields={...}` structured audit entries (prompt text to the LLM,
+  metadata to the audit trail — the "separate LLM calls from other things" pattern).
+- **`tests/test_prompt_builder.py`** (13 tests) — byte-identity, brace survival,
+  per-field truncation, audit metadata. Full suite: 1913 passed.
+- **UAT** (`scripts/eval/uat_tstring_prototype.py` + `scripts/eval/generated_tests/`)
+  — prompts byte-identical; post-wiring regeneration variance (LEGACY 54.2→50%,
+  TSTRING 50→37.5%) confirmed to be LLM skeleton sampling, not prompt-path change.
+
+**Not migrated (deferred, separate work):** Streamlit HTML blocks, evidence/report
+generation templates — no prompt-assembly benefit; double-brace skeleton
+placeholders were the only compatibility question and it is resolved.
+
+**Files:**
+- `src/prompt_builder.py` (new)
+- `src/test_generator.py` (wired)
+- `src/orchestrator.py` (wired)
+- `tests/test_prompt_builder.py` (new)
+- `scripts/eval/uat_tstring_prototype.py` (new)
+
+**Estimated sessions:** 1 (analysis) + 1 (migration)
 
 **Background:** T-strings (`t"..."`) are a new string type introduced in Python 3.12 that:
 - Provide lazy evaluation of embedded expressions

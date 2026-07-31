@@ -80,6 +80,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/llm_errors.py` | LLM error types and retry logic helpers. |
 | `src/llm_reasoning_filter.py` | LLM reasoning text detection and stripping. Extracted from `code_postprocessor.py`. |
 | `src/prompt_utils.py` | Prompt construction: `build_single_condition_skeleton_prompt()`, `prepare_conditions_for_generation()`, `build_retry_conditions()`. |
+| `src/prompt_builder.py` | PEP 750 t-string prompt assembly (Python 3.14): `PromptBuilder` + `RenderedPrompt` render `Template` objects with per-field transforms (truncation) and structured audit metadata (`to_log_entry()`). Templates: `build_skeleton_prompt()`, `build_single_condition_prompt()`. Wired into `test_generator.py` and `orchestrator.py`. |
 | `src/provider_config.py` | Shared LLM provider configuration for CLI and Streamlit. Defines `SUPPORTED_PROVIDERS`, `PROVIDER_LABELS`, and `get_provider_defaults()`. Unifies provider config across UI and CLI (B-021). |
 
 ### 🔍 Context Extraction Layer
