@@ -198,6 +198,20 @@ def _normalize_locator(locator: str) -> str:
     return locator
 
 
+def _has_text_content(locator: str) -> str | None:
+    """Return the ``:has-text(...)`` needle if the locator uses it, else None.
+
+    AI-037 Phase 3: Playwright ``has-text`` is substring semantics —
+    ``h2:has-text("✅ Quote Generated Successfully!")`` and
+    ``h2:has-text("Quote Generated")`` target the same element. The golden
+    validator must treat them as equivalent when one needle contains the other.
+    """
+    m = re.search(r':has-text\((["\'])(.*?)\1\)', locator)
+    if not m:
+        return None
+    return m.group(2)
+
+
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
     """Check if resolved locator matches expected, with normalization.
 
@@ -212,6 +226,25 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
     for t in tolerances:
         if _normalize_locator(resolved) == _normalize_locator(t):
             return True
+    # AI-037 Phase 3: has-text substring equivalence (Playwright semantics).
+    # Both locators must use :has-text() and the tag must match; then the
+    # needle containment either direction is a match.
+    resolved_needle = _has_text_content(resolved)
+    expected_needle = _has_text_content(expected)
+    if resolved_needle and expected_needle:
+        resolved_tag = resolved.split(":has-text(")[0].strip()
+        expected_tag = expected.split(":has-text(")[0].strip()
+        if resolved_tag == expected_tag or not resolved_tag or not expected_tag:
+            if resolved_needle in expected_needle or expected_needle in resolved_needle:
+                return True
+    for t in tolerances:
+        t_needle = _has_text_content(t)
+        if resolved_needle and t_needle:
+            resolved_tag = resolved.split(":has-text(")[0].strip()
+            t_tag = t.split(":has-text(")[0].strip()
+            if resolved_tag == t_tag or not resolved_tag or not t_tag:
+                if resolved_needle in t_needle or t_needle in resolved_needle:
+                    return True
     return False
 
 

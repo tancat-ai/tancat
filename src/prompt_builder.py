@@ -217,6 +217,17 @@ Each test must be self-contained. If a test depends on earlier criteria
 being completed first (e.g., you must log in before adding items to cart),
 include those prerequisite steps at the start of the test function.
 
+=== JOURNEY STRUCTURE (MANDATORY) ===
+1. Every step must appear on the page it belongs to. Follow the story order:
+   fill ALL fields on the current page BEFORE navigating (Next) to the next page.
+2. Never place a step after the navigation that leaves its page. A field or
+   button introduced early in the story must appear early in the test — before
+   the click that advances to a later page.
+3. Do NOT emit pytest.skip for steps you cannot place. Place each step on its
+   natural page instead.
+4. Use the exact labels from the story for fields and buttons. Do not invent
+   intermediate clicks or pages that the story does not describe.
+
 === EXAMPLE OUTPUT ===
 import pytest
 from playwright.sync_api import Page
@@ -288,6 +299,17 @@ Expected: {target_condition_expected}
 3. For FILL: {{FILL:username:admin}}, {{FILL:email:test@example.com}}
 4. For ASSERT: {{ASSERT:product list}}, {{ASSERT:Cart Summary}}
 5. DO NOT write long verbose descriptions — use short, concrete element labels.
+
+=== JOURNEY STRUCTURE (MANDATORY) ===
+1. Every step must appear on the page it belongs to. Follow the story order:
+   fill ALL fields on the current page BEFORE navigating (Next) to the next page.
+2. Never place a step after the navigation that leaves its page. A field or
+   button introduced early in the story must appear early in the test — before
+   the click that advances to a later page.
+3. Do NOT emit pytest.skip for steps you cannot place. Place each step on its
+   natural page instead.
+4. Use the exact labels from the story for fields and buttons. Do not invent
+   intermediate clicks or pages that the story does not describe.
 
 === USER STORY ===
 {user_story}
