@@ -23,9 +23,9 @@ from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPag
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
 from src.prerequisite_injector import PrerequisiteInjector
+from src.prompt_builder import PromptBuilder, build_single_condition_prompt
 from src.prompt_utils import (
     build_retry_conditions,
-    build_single_condition_skeleton_prompt,
     count_conditions,
     prepare_conditions_for_generation,
 )
@@ -809,16 +809,26 @@ class TestOrchestrator:
         ordered_conditions: list[str],
         condition: TestCondition,
     ) -> str:
-        """Generate one skeleton fragment for one reviewed condition."""
-        prompt = build_single_condition_skeleton_prompt(
-            user_story=user_story,
-            known_urls_block=known_urls_block,
-            ordered_conditions=ordered_conditions,
-            target_condition_ref=condition.id,
-            target_condition_text=condition.text,
-            target_condition_expected=condition.expected,
-            target_condition_intent=condition.intent,
-        )
+        """Generate one skeleton fragment for one reviewed condition.
+
+        Prompt assembly uses the PEP 750 t-string PromptBuilder — same pattern
+        as ``TestGenerator._generate_skeleton_single_call``. Note this renders
+        placeholder examples as single-brace ``{CLICK:...}`` (consistent with
+        the main skeleton prompt); the parser accepts both brace forms.
+        """
+        rendered = PromptBuilder(
+            build_single_condition_prompt(
+                user_story=user_story,
+                conditions_block="\n".join(f"- {c}" for c in ordered_conditions),
+                known_urls_block=known_urls_block,
+                target_condition_ref=condition.id,
+                target_condition_text=condition.text,
+                target_condition_expected=condition.expected,
+            )
+        ).render()
+        # Structured audit trail — same seam as skeleton generation.
+        logger.debug("llm_call=generate_single_condition_fragment fields=%s", rendered.to_log_entry())
+        prompt = rendered.text
         fragment = await self.test_generator.client.generate(prompt)
         fragment = self.parser.normalise_placeholder_actions(fragment)
 

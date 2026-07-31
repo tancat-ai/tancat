@@ -10,6 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **PEP 750 t-string PromptBuilder**: `src/prompt_builder.py` — structured prompt assembly that keeps trusted static structure separate from untrusted interpolated values. Per-field transforms (truncation) keyed by interpolation expression; `RenderedPrompt.to_log_entry()` emits a JSON-serialisable audit record (fields, truncation, static-vs-dynamic split). Templates: `build_skeleton_prompt()`, `build_single_condition_prompt()`. 13 tests.
 - **Phase 1 Multi-Agent Architecture (LangGraph)**: Complete document-driven pipeline with three specialized agents (Ingestion, QA Director, Script Synthesizer). Supports dual-path execution (linear or graph via `LANGGRAPH_ENABLED`). See `docs/specs/FEATURE_SPEC_phase1_multi_agent.md`.
 - **Document input mode**: Parse PDF and Markdown specs via pluggable OCR backends (`src/ocr_backends.py`). Extracts change deltas from headings, routes by persona role (QA lead, developer, product owner, operations), generates impact maps and consolidated reports.
 - **OCR backend adapter**: `src/ocr_backends.py` with `PyMuPDFBackend` (CPU, default) and `UnlimitedOCRBackend` (GPU, 3B vision model). Auto-detects GPU/ROCm availability, configurable via `OCR_BACKEND` env var.
@@ -17,6 +18,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **Mock server for eval**: `scripts/mock_server.py` uses `ThreadingHTTPServer` with daemon threads and error suppression. Auto-starts in eval runner for lv_insurance (eval-005).
 
 ### Changed
+- **Prompt assembly migrated to t-strings**: `TestGenerator._generate_skeleton_single_call` and `Orchestrator._generate_single_condition_fragment` render prompts via `PromptBuilder` (byte-identical output to legacy `.format()`; verified by UAT). Both paths log structured `llm_call=... fields={...}` audit entries. Single-condition prompt now renders `{CLICK:...}` single-brace placeholders consistently with the main skeleton prompt (was literal `{{CLICK:...}}`).
 - **Deterministic skeleton generation**: Planner and Generator agents now use `temperature=0` for reproducible graph pipeline output. Skeleton self-consistency: 55.6% → 100% (byte-for-byte identical across runs).
 - **LLM provider temperature support**: `LLMProvider.complete()` and `LLMClient.generate()` now accept optional `temperature` parameter. Backward compatible — defaults to None (provider default).
 - **PipelineGraph entry routing**: `PipelineState` now supports `input_mode`, `document_source`, `persona_role` fields. Document mode routes through `_parse_document` node before `ingest`.

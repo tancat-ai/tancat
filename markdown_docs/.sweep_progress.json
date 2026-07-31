@@ -1,6 +1,6 @@
 {
-  "total": 126,
-  "completed": 126,
+  "total": 127,
+  "completed": 127,
   "pending": 0,
   "files": [
     {
@@ -631,6 +631,11 @@
     {
       "source": "src/secure_config.py",
       "doc": "markdown_docs/src/secure_config.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/prompt_builder.py",
+      "doc": "markdown_docs/src/prompt_builder.py.md",
       "status": "completed"
     }
   ],
