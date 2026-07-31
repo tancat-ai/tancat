@@ -193,9 +193,7 @@ class PipelineGraph:
         if state.input_mode == "document" and state.raw_document_text:
             from src.agents.ingestion import IngestionAgent
 
-            change_deltas = IngestionAgent._extract_deltas_from_headings(
-                state.raw_document_text
-            )
+            change_deltas = IngestionAgent._extract_deltas_from_headings(state.raw_document_text)
 
         return {
             "story_analysis": StoryAnalysis(

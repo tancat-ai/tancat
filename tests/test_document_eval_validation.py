@@ -108,9 +108,7 @@ class TestDocumentPipeline:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_pipeline_produces_test_conditions(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_pipeline_produces_test_conditions(self, graph: PipelineGraph, golden: dict) -> None:
         """Document mode pipeline generates at least min test conditions."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -125,15 +123,11 @@ class TestDocumentPipeline:
 
         # Should have parsed the document
         assert result.raw_document_text, "Document text was not parsed"
-        assert len(result.raw_document_text) > 200, (
-            f"Document text too short: {len(result.raw_document_text)} chars"
-        )
+        assert len(result.raw_document_text) > 200, f"Document text too short: {len(result.raw_document_text)} chars"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_pipeline_produces_change_deltas(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_pipeline_produces_change_deltas(self, graph: PipelineGraph, golden: dict) -> None:
         """Document mode pipeline extracts change deltas from headings."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -147,15 +141,12 @@ class TestDocumentPipeline:
         )
 
         assert len(result.change_deltas) >= golden["expected_deltas_min"], (
-            f"Expected at least {golden['expected_deltas_min']} deltas, "
-            f"got {len(result.change_deltas)}"
+            f"Expected at least {golden['expected_deltas_min']} deltas, got {len(result.change_deltas)}"
         )
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_pipeline_produces_test_code(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_pipeline_produces_test_code(self, graph: PipelineGraph, golden: dict) -> None:
         """Document mode pipeline produces non-empty test code."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -176,9 +167,7 @@ class TestDocumentPipeline:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_pipeline_no_errors(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_pipeline_no_errors(self, graph: PipelineGraph, golden: dict) -> None:
         """Document mode pipeline runs without errors."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -204,9 +193,7 @@ class TestImpactMapGeneration:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_qa_lead_generates_impact_maps(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_qa_lead_generates_impact_maps(self, graph: PipelineGraph, golden: dict) -> None:
         """QA lead persona generates impact maps from change deltas."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -225,15 +212,11 @@ class TestImpactMapGeneration:
         # Each impact map should reference a delta
         delta_names = {d.name for d in result.change_deltas}
         for im in result.impact_maps:
-            assert im.change_ref in delta_names, (
-                f"Impact map ref '{im.change_ref}' not in deltas {delta_names}"
-            )
+            assert im.change_ref in delta_names, f"Impact map ref '{im.change_ref}' not in deltas {delta_names}"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("golden", GOLDEN_KEYS, ids=GOLDEN_IDS)
-    async def test_product_owner_generates_report(
-        self, graph: PipelineGraph, golden: dict
-    ) -> None:
+    async def test_product_owner_generates_report(self, graph: PipelineGraph, golden: dict) -> None:
         """Product owner persona generates consolidated report, not test code."""
         doc_path = DATASET_DIR / golden["document"]
         doc_path_str = str(doc_path.resolve())
@@ -282,6 +265,4 @@ class TestDocumentQualityGate:
 
         accuracy = total_extracted / total_expected if total_expected > 0 else 0
         print(f"\nHeading extraction accuracy: {total_extracted}/{total_expected} = {accuracy:.0%}")
-        assert accuracy >= 0.90, (
-            f"Heading extraction accuracy {accuracy:.0%} below 90% gate"
-        )
+        assert accuracy >= 0.90, f"Heading extraction accuracy {accuracy:.0%} below 90% gate"

@@ -172,9 +172,7 @@ class TestParseDocumentNode:
 
     @pytest.mark.asyncio
     async def test_markdown_file_read_directly(self, graph: PipelineGraph) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write("# Test Spec\n\n## Feature: Login\n\nAs a user I want to log in.")
             f.flush()
             path = f.name
@@ -234,9 +232,7 @@ class TestParseDocumentNode:
 
     @pytest.mark.asyncio
     async def test_empty_document_returns_error(self, graph: PipelineGraph) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write("   \n\n")
             f.flush()
             path = f.name
@@ -272,9 +268,7 @@ class TestPipelineGraphDocumentRun:
 
     @pytest.mark.asyncio
     async def test_document_mode_params_propagate(self, graph: PipelineGraph) -> None:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write("# Test\n\nLogin feature spec.")
             f.flush()
             path = f.name
@@ -299,9 +293,7 @@ class TestPipelineGraphDocumentRun:
         """When conditions are provided in document mode, mock Ingestion Agent
         splits user_story by newlines (no LLM client → _ingest_mock path).
         Real agent would use deterministic criteria_from_text."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".md", delete=False, encoding="utf-8"
-        ) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
             f.write("# Spec\n\n## 1. Login feature\n## 2. Add to cart")
             f.flush()
             path = f.name

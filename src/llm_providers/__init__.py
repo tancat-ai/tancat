@@ -51,7 +51,13 @@ class LLMProvider(ABC):
         pass
 
     @abstractmethod
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        timeout: int = 300,
+        temperature: float | None = None,
+    ) -> ChatCompletion:
         """Send a chat completion request to the LLM.
 
         Args:
@@ -116,7 +122,13 @@ class OllamaProvider(LLMProvider):
 
         return os.environ.get("OLLAMA_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        timeout: int = 300,
+        temperature: float | None = None,
+    ) -> ChatCompletion:
         import os
 
         model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
@@ -171,7 +183,13 @@ class LMStudioProvider(LLMProvider):
 
         return os.environ.get("LM_STUDIO_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        timeout: int = 300,
+        temperature: float | None = None,
+    ) -> ChatCompletion:
         import os
 
         model = model or os.environ.get("LM_STUDIO_MODEL", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF")
@@ -346,7 +364,13 @@ class OpenAIProvider(LLMProvider):
             return None
         return f"{self._api_key[:4]}...{self._api_key[-4:]}" if len(self._api_key) > 8 else "***"
 
-    def complete(self, messages: list[ChatMessage], model: str | None = None, timeout: int = 300, temperature: float | None = None) -> ChatCompletion:
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        timeout: int = 300,
+        temperature: float | None = None,
+    ) -> ChatCompletion:
         import os
 
         if self._is_local:

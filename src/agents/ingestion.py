@@ -227,12 +227,8 @@ Return ONLY valid JSON, no markdown fences, no prose."""
 
         deltas: list[ChangeDelta] = []
         heading_pattern = re.compile(r"^#{2,3}\s+(.+)$", re.MULTILINE)
-        prefix_pattern = re.compile(
-            r"^(New|Modified|Removed|Unchanged)\s*:\s*", re.IGNORECASE
-        )
-        suffix_pattern = re.compile(
-            r"\s*\[(NEW FEATURE|MODIFIED|REMOVED|UNCHANGED)\]\s*$", re.IGNORECASE
-        )
+        prefix_pattern = re.compile(r"^(New|Modified|Removed|Unchanged)\s*:\s*", re.IGNORECASE)
+        suffix_pattern = re.compile(r"\s*\[(NEW FEATURE|MODIFIED|REMOVED|UNCHANGED)\]\s*$", re.IGNORECASE)
         jira_pattern = re.compile(r"^[A-Z]+-\d+\s*:\s*")
         matches = heading_pattern.findall(text)
 
@@ -246,9 +242,7 @@ Return ONLY valid JSON, no markdown fences, no prose."""
                 continue
             # Also skip sections with "Unchanged" prefix or suffix — they're not deltas
             prefix_match = prefix_pattern.match(heading)
-            skip_unchanged = bool(
-                prefix_match and prefix_match.group(1).lower() == "unchanged"
-            )
+            skip_unchanged = bool(prefix_match and prefix_match.group(1).lower() == "unchanged")
             suffix_match = suffix_pattern.search(heading)
             if suffix_match and "UNCHANGED" in suffix_match.group(1).upper():
                 skip_unchanged = True

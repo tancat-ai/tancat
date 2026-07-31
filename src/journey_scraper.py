@@ -273,9 +273,7 @@ class JourneyScraper:
                                             # between skeleton descriptions ("checkout button")
                                             # and sites where the button is on a different
                                             # page (checkout-step-one.html).
-                                            inferred_url = self._infer_url_from_description(
-                                                step.description, page.url
-                                            )
+                                            inferred_url = self._infer_url_from_description(step.description, page.url)
                                             if inferred_url:
                                                 self._debug(
                                                     f"Navigating to inferred URL '{inferred_url}' "

@@ -491,9 +491,7 @@ class EvalRunner:
         Returns a ``MockServer`` instance that auto-stops on exit, or None
         if no mock server is needed.
         """
-        needs_mock = any(
-            f.name.startswith("eval-005") for f in self.dataset_dir.glob("*.json")
-        )
+        needs_mock = any(f.name.startswith("eval-005") for f in self.dataset_dir.glob("*.json"))
         if not needs_mock:
             return None
 
