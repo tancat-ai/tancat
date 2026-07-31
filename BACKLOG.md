@@ -798,6 +798,22 @@ which may contain CUDA-specific kernels that fail on ROCm/HIP.
 
 ---
 
+## 🆕 AI-039 — Repo Rename: TanCat
+
+**Status:** 🟡 ready-for-agent
+**Priority:** Medium — GTM (Phase 8)
+**Estimated sessions:** 0.5
+
+**What:** Rename GitHub repo from `AI-Playwright-Test-Generator` to `tancat`.
+Update all internal references: `pyproject.toml` (PyPI package name), README,
+docs headers, script docstrings, CI badge URL. Regenerate graphify output.
+
+**Product name:** TanCat (`pip install tancat` / `uv add tancat`)
+**Holding company:** Cat Tan Operations Ltd (cattanooperations.co.uk)
+**Domains acquired:** tancat.dev, cattanooperations.co.uk, cattanooperations.com
+
+---
+
 ## 🆕 AI-033 — Python T-String (PEP 709) Upgrade Path Analysis
 
 **Status:** ❓ needs-info
