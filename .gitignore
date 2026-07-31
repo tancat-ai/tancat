@@ -79,6 +79,7 @@ evidence/
 # ── Generated Test Files ──────────────────────────────────────────────────────
 # Ignore all generated test outputs (test packages, reports, parsed cases)
 generated_tests/test_*/
+generated_tests/verify_*/
 generated_tests/test_cases_*.*
 generated_tests/test_report_*.*
 generated_tests/pages/
