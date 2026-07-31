@@ -16,12 +16,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.agents.pipeline_graph import PipelineGraph
 from src.ocr_backends import (
     PyMuPDFBackend,
     UnlimitedOCRBackend,
     get_ocr_backend,
 )
-from src.agents.pipeline_graph import PipelineGraph
 
 # ---------------------------------------------------------------------------
 # PyMuPDF backend
