@@ -741,36 +741,52 @@ both are user interfaces, so the naming is inconsistent.
 
 ## 🆕 AI-037 — LV Insurance Resolution Gap Optimization
 
-**Status:** 🟡 ready-for-agent
+**Status:** 🟡 in progress — Phase 1-2 (diagnostic + structural resolver fixes) SHIPPED 2026-07-31; **Phase 3 (skeleton journey-structure guidance) is the next session**
 **Priority:** Medium (Tier 2 — Resolver Accuracy)
 **Spec:** `docs/specs/FEATURE_SPEC_AI037_lv_insurance_resolution_gap.md`
-**Impact:** LV Insurance resolution 54% → ≥80%, overall regeneration ≥65%
-**Estimated sessions:** 1-2
+**Handover:** `docs/sessions/2026-07-31_ai037_resolver_fixes.md`
+**Impact:** LV Insurance resolution 54% → 62.5% regeneration (resolver 100%), target ≥80%
+**Estimated sessions:** 1-2 (1 done)
 
 **📊 Diagnostic update 2026-07-31:** Resolver-only eval shows LV Insurance at
-**23/24 (95.8%)** — not 54%. The 54% figure is the *regeneration* metric, dominated
-by LLM skeleton-generation nondeterminism (verified by UAT: LEGACY 54.2% / 50.0%,
-TSTRING 50.0% / 37.5% across runs — same byte-identical prompt, different LLM
-samples; one run's skeleton omitted `first name`/`last name`/`postcode` entirely).
-The only resolver-level failure is `usage type` → `[name="usageType"]` vs golden
-`input[name='usageType'][value='SDP']` — a **locator-format mismatch (B-026
-pattern)**, not a vocabulary gap: the radio button has no `id` and the scraper
-captures no label (radio labels "Social, Domestic & Pleasure" not associated).
+**24/24 (100%)** — not 54%. The regeneration metric is dominated by LLM
+skeleton-generation nondeterminism.
 
-**Revised plan (no vocabulary list — the DOM already provides labels):**
-1. ✅ Diagnostic done (above).
-2. **Radio group label capture** — associate `<label>` text with nameless radio
-   inputs in the scraper (fixes `usage type` + saucedemo/demoqa radio cases).
-3. **Locator format** — `_element_to_locator()` prefers `tag+name+value` for
-   nameless radio buttons (B-026 style).
-4. **`_split_camel_case` in `get_words()`** — domain-agnostic camelCase splitting
-   (`#vehicleReg` → "vehicle Reg"), helps every site.
-5. **Phase 3 description cleanup** — skeleton prompt produces descriptions that
-   don't match golden keys (LLM invents steps like `Sign up`; merges fields);
-   prompt layer is now t-string structured (AI-033) so description guidance
-   can be tuned auditable.
+### ✅ Shipped 2026-07-31 (Phase 1-2) — all structural, NO vocabulary list
 
-**Anti-goal:** do NOT add an insurance vocabulary list to `TOKEN_EXPANSIONS` —
+- **Radio/checkbox label capture** (`src/scraper.py`) — radios wrapped in `<label>`
+  get accessible_name ("Social, Domestic & Pleasure" was previously lost)
+- **Clickable div capture** (`src/scraper.py`) — divs with explicit id kept even
+  without direct text (`#productCar`, `#paymentFull`) — B-025 click-target premise
+- **`<strong>` in display_tags** (`src/scraper.py`) — `#quoteRef` was never captured
+- **Synthetic ARIA marker** (`src/scraper.py`) — Pass-2 containers flagged `synthetic_id`
+- **Radio locator format** (`src/locator_builder.py`, `scripts/eval/eval_resolver.py`)
+  — `input[name][value]` disambiguates radio groups
+- **Quote-agnostic locator normalization** (`scripts/eval/golden_validator.py`)
+- **camelCase in `get_words()`** (`src/semantic_matcher.py`) — `#vehicleReg` → "vehicle Reg"
+- **Pass 1 synthetic skip** (`src/element_matcher.py`) — synthetic groups no longer
+  win fast-text over real radios
+- **Radio CLICK bonus + synthetic exclusion** (`src/placeholder_scorers.py`)
+- **Proportional text bonus + punctuation normalisation** (`src/placeholder_scorers.py`)
+- **`scripts/eval/refresh_lv_capture.py`** (new) — journey-state capture for frozen eval data
+- 15 new tests (`tests/test_scraper_ai037.py`, `tests/test_ai037_resolver_fixes.py`)
+
+**Results (2026-07-31):**
+- Resolver eval (frozen data): LV **24/24 (100%)**, overall **59.7%** (was 58.2%), no regression elsewhere
+- Full regeneration UAT: LV **15/24 (62.5%)** (spec baseline 54%), overall 56.7%
+- Static eval 100% · 1928 tests · ruff/mypy clean
+
+### ⚠️ Phase 3 (NEXT SESSION): skeleton journey-structure guidance
+
+The remaining LV gap is NOT the resolver (100% on identical descriptions). The LLM
+skeleton places steps on the wrong page → wrong-page resolution. Evidence (9 misses):
+`first name`/`postcode` → `#paymentFull`, `usage type`/`Add Vehicle` → `#quoteSubmit`.
+
+**Levers:** skeleton prompt guidance in `src/prompt_builder.py` (now t-string structured):
+"fill all fields on the current page before navigating; never place a field after
+reaching a later page". Verify via `uat_tstring_prototype.py` / `eval_harness.py run --regenerate`.
+
+**Anti-goal (confirmed):** do NOT add an insurance vocabulary list to `TOKEN_EXPANSIONS` —
 it duplicates the DOM's own label text and doesn't scale across domains.
 
 **What:** After the SPA scraper fix, LV Insurance resolution jumped 0% → 54%. The remaining

@@ -210,12 +210,22 @@ def _resolve_placeholder(
 def _element_to_locator(element: dict[str, str]) -> str:
     """Extract best locator from an element dict.
 
-    Priority: id > data-test > name > css selector.
+    Priority: id > data-test > radio name+value > name > css selector.
+    Radio/checkbox pairs are disambiguated by their value attribute — a bare
+    ``[name="usageType"]`` matches every option in the group.
     """
     if element.get("id"):
         return f"#{element['id']}"
     if element.get("data-test"):
         return f'[data-test="{element["data-test"]}"]'
+    role = str(element.get("role", "")).lower()
+    if role in ("radio", "checkbox"):
+        name = element.get("name", "")
+        value = element.get("value", "")
+        if name and value:
+            return f"input[name='{name}'][value='{value}']"
+        if name:
+            return f"[name='{name}']"
     if element.get("name"):
         return f'[name="{element["name"]}"]'
     return element.get("selector", element.get("tag", "*"))

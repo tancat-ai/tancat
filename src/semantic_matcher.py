@@ -150,6 +150,9 @@ class SemanticMatcher:
         removes stop-words, and optionally applies token expansions.
         """
         normalized = text.replace("_", " ").replace("-", " ")
+        # AI-037: split camelCase IDs before tokenizing so "vehicleReg" yields
+        # "vehicle" + "reg" (which then partially matches "registration").
+        normalized = SemanticMatcher._split_camel_case(normalized)
         clean_text = re.sub(r"[^a-zA-Z0-9\s]", " ", normalized.lower())
         base_words = {word for word in clean_text.split() if word and word not in SemanticMatcher.STOP_WORDS}
         expanded_words = set(base_words)

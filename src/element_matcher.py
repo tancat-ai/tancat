@@ -208,6 +208,13 @@ class ElementMatcher:
 
         for elements in pages_data.values():
             for element in elements:
+                # AI-037: skip synthetic ARIA-only containers (Pass 2 of the
+                # hybrid scraper) — they have no real DOM id and are not
+                # interactive targets. Their snake_case ids/text (e.g.
+                # "Vehicle Usage") otherwise win fast-text matching over the
+                # real radio/button (which may have empty text).
+                if element.get("synthetic_id"):
+                    continue
                 norm_text = normalise_element_text(element)
                 if len(norm_text) < 3:
                     continue

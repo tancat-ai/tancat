@@ -10,6 +10,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **AI-037 resolver fixes**: radio/checkbox label capture (scraper), clickable-div-with-id capture, `<strong>` display capture, synthetic-ARIA marker, radio `input[name][value]` locator format, quote-agnostic locator normalisation, camelCase splitting in `SemanticMatcher.get_words()`, Pass 1 synthetic-container skip, proportional text-content bonus + punctuation normalisation. LV Insurance resolver 23/24 → **24/24 (100%)**; regeneration 54% → **62.5%**. 15 new tests. `scripts/eval/refresh_lv_capture.py` reproduces the frozen LV eval data in journey state.
 - **PEP 750 t-string PromptBuilder**: `src/prompt_builder.py` — structured prompt assembly that keeps trusted static structure separate from untrusted interpolated values. Per-field transforms (truncation) keyed by interpolation expression; `RenderedPrompt.to_log_entry()` emits a JSON-serialisable audit record (fields, truncation, static-vs-dynamic split). Templates: `build_skeleton_prompt()`, `build_single_condition_prompt()`. 13 tests.
 - **Phase 1 Multi-Agent Architecture (LangGraph)**: Complete document-driven pipeline with three specialized agents (Ingestion, QA Director, Script Synthesizer). Supports dual-path execution (linear or graph via `LANGGRAPH_ENABLED`). See `docs/specs/FEATURE_SPEC_phase1_multi_agent.md`.
 - **Document input mode**: Parse PDF and Markdown specs via pluggable OCR backends (`src/ocr_backends.py`). Extracts change deltas from headings, routes by persona role (QA lead, developer, product owner, operations), generates impact maps and consolidated reports.
@@ -18,6 +19,7 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **Mock server for eval**: `scripts/mock_server.py` uses `ThreadingHTTPServer` with daemon threads and error suppression. Auto-starts in eval runner for lv_insurance (eval-005).
 
 ### Changed
+- **AI-037 scoring/scraper behaviour**: synthetic ARIA-only containers no longer win Pass 1 fast-text or the B-025 container bonus for CLICK; text-content bonus now scales with overlap and normalises punctuation (`excess:` ≡ `excess`).
 - **Prompt assembly migrated to t-strings**: `TestGenerator._generate_skeleton_single_call` and `Orchestrator._generate_single_condition_fragment` render prompts via `PromptBuilder` (byte-identical output to legacy `.format()`; verified by UAT). Both paths log structured `llm_call=... fields={...}` audit entries. Single-condition prompt now renders `{CLICK:...}` single-brace placeholders consistently with the main skeleton prompt (was literal `{{CLICK:...}}`).
 - **Deterministic skeleton generation**: Planner and Generator agents now use `temperature=0` for reproducible graph pipeline output. Skeleton self-consistency: 55.6% → 100% (byte-for-byte identical across runs).
 - **LLM provider temperature support**: `LLMProvider.complete()` and `LLMClient.generate()` now accept optional `temperature` parameter. Backward compatible — defaults to None (provider default).

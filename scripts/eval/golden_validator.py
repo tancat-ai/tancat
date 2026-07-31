@@ -173,6 +173,7 @@ def _normalize_locator(locator: str) -> str:
     - ``#foo`` and ``[id="foo"]`` normalize to ``[id="foo"]``
     - ``.class[data-test="bar"]`` and ``[data-test="bar"]`` normalize to the bare attribute
     - ``input[name="x"]`` and ``[name="x"]`` normalize to ``[name="x"]``
+    - single vs double quote style is normalized (AI-037: ``input[name='usageType'][value='SDP']``)
 
     Returns the normalized form, or the original if no normalization applies.
     """
@@ -184,7 +185,8 @@ def _normalize_locator(locator: str) -> str:
     if id_match:
         return f'[id="{id_match.group(1)}"]'
 
-    # Extract attribute selectors: [attr="val"]
+    # Quote-agnostic attribute extraction (normalize ' to " first).
+    locator = locator.replace("'", '"')
     attr_matches = re.findall(r'\[([\w-]+)="([^"]+)"\]', locator)
     if attr_matches:
         # Rebuild from just the attributes (strip tag/class prefix)

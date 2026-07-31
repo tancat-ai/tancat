@@ -388,7 +388,7 @@ class PlaceholderScorer:
         selector = str(element.get("selector", "")).strip().lower()
         element_id = str(element.get("id", "")).strip()
         bonus = 0
-        if role in {"button", "link", "a", "submit"}:
+        if role in {"button", "link", "a", "submit", "radio", "checkbox", "option"}:
             bonus += 3
         if href:
             bonus += 2
@@ -413,8 +413,12 @@ class PlaceholderScorer:
         _container_roles = {"generic", "group", "region", "article", ""}
         is_container = role in _container_roles or computed_role in _container_roles
         if is_container and element_id:
-            # Container with ID — likely the right click target
-            bonus += 10
+            # AI-037: skip synthetic ids (ARIA-only appended containers) —
+            # they have no real DOM id and are not click targets; the bonus
+            # must not let them outscore real buttons/radios.
+            if not element.get("synthetic_id"):
+                # Container with ID — likely the right click target
+                bonus += 10
         return bonus
 
     @staticmethod
@@ -703,9 +707,12 @@ class PlaceholderScorer:
         element_text = str(element.get("text", "")).strip()
         if not element_text:
             return 0
-        norm_elem_text = re.sub(r"[_\s]+", " ", element_text).strip().lower()
-        norm_desc_text = re.sub(r"['\"']", "", description)
-        norm_desc_text = re.sub(r"[_\s]+", " ", norm_desc_text).strip().lower()
+        # Punctuation-normalise before tokenising ("excess:" should match "excess").
+        norm_elem_text = re.sub(r"[^a-zA-Z0-9\s]", " ", element_text).lower()
+        norm_elem_text = re.sub(r"\s+", " ", norm_elem_text).strip()
+        norm_desc_text = re.sub(r"['\"]", "", description)
+        norm_desc_text = re.sub(r"[^a-zA-Z0-9\s]", " ", norm_desc_text).lower()
+        norm_desc_text = re.sub(r"\s+", " ", norm_desc_text).strip()
         if norm_elem_text in norm_desc_text or norm_desc_text in norm_elem_text:
             return 10
         # Word overlap fallback
@@ -714,7 +721,11 @@ class PlaceholderScorer:
         if desc_text_words:
             text_overlap = len(elem_text_words & desc_text_words)
             if text_overlap >= max(1, len(desc_text_words) // 2):
-                return 5
+                # AI-037: proportional reward — more overlapping tokens means a
+                # stronger match. Without this, "compulsory excess information"
+                # ties "voluntary excess" (both overlap "excess" once at the
+                # +5 floor) and document order breaks the tie wrongly.
+                return 5 + 2 * (text_overlap - 1)
         return 0
 
     @staticmethod

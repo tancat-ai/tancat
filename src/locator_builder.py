@@ -84,6 +84,17 @@ def build_robust_locator(element: dict) -> str | None:
             return class_part + "".join(data_parts)
         return "".join(data_parts)
 
+    # Priority 3.5: radio/checkbox — name+value disambiguates group members.
+    # Bare radios carry no id/text/aria-label, so the value attribute is the
+    # only stable discriminator within a named group (e.g. usageType=SDP).
+    if role in ("radio", "checkbox"):
+        element_name = str(element.get("name", "")).strip()
+        value_attr = str(element.get("value", "")).strip()
+        if element_name and value_attr:
+            return f'input[name="{element_name}"][value="{value_attr}"]'
+        if element_name:
+            return f'input[name="{element_name}"]'
+
     # Priority 4: Class-based without brittle framework prefixes
     selector_class_matches = re.findall(r"\.([\w-]+)", selector)
     if selector_class_matches:

@@ -659,6 +659,23 @@ class PageScraper:
         if tag.name == "select" and tag.get("id") and str(tag.get("id")) in labels:
             accessible_name = labels[str(tag.get("id"))]
 
+        # AI-037: For radio/checkbox inputs wrapped in a <label>, use the
+        # label text as accessible_name. Unlike <label for=...>, wrapping
+        # labels have no id reference — the input is a child of the label.
+        # Radios otherwise capture no accessible name (they carry only
+        # name+value), which starves the resolver of the human-readable label
+        # (e.g. "Social, Domestic & Pleasure").
+        if (
+            not accessible_name
+            and tag.name == "input"
+            and str(tag.get("type", "")).strip().lower() in ("radio", "checkbox")
+        ):
+            wrapped_label = tag.find_parent("label")
+            if wrapped_label is not None:
+                label_text = wrapped_label.get_text(" ", strip=True)
+                if label_text:
+                    accessible_name = label_text
+
         return {
             "selector": selector,
             "text": text_content,
@@ -702,6 +719,7 @@ class PageScraper:
             "h6",
             "p",
             "span",
+            "strong",
             "div",
             "section",
             "main",
@@ -765,7 +783,12 @@ class PageScraper:
                 direct_text = self._get_direct_text(tag)
                 # Only keep divs that have meaningful direct text
                 if len(direct_text) < 3:
-                    continue
+                    # AI-037: but keep divs with an explicit id — clickable
+                    # container divs (card-option pattern: #productCar,
+                    # #paymentFull, #quoteSuccess) carry their semantics in
+                    # child headings, and B-025 resolution depends on them.
+                    if not tag.get("id"):
+                        continue
             else:
                 # Headings, spans, SVG, title, desc — use full text (they're leaf elements)
                 direct_text = tag.get_text(" ", strip=True)
@@ -791,7 +814,11 @@ class PageScraper:
                     if desc_child:
                         text_content = desc_child.get_text(" ", strip=True)
 
-            if len(direct_text) < 3 and not data_test:
+            # AI-037: divs with an explicit id are kept even without direct
+            # text (clickable card containers, e.g. #productCar); otherwise
+            # require meaningful direct text.
+            has_div_id = tag.name == "div" and bool(tag.get("id"))
+            if len(direct_text) < 3 and not data_test and not has_div_id:
                 continue
 
             # Skip text that's too long — likely a container, not a leaf element
@@ -878,6 +905,10 @@ class PageScraper:
             synthetic_id = name.lower().replace(" ", "_")[:40]
             ae["id"] = synthetic_id
             ae["selector"] = f"#{synthetic_id}"
+            # AI-037: mark as synthetic so scorers can deprioritise these
+            # ARIA-only containers vs real DOM elements (they are not real
+            # click targets — B-025's container bonus must not apply).
+            ae["synthetic_id"] = True
             bs4_elements.append(ae)
         # Note: bs4_elements are already enriched by _extract_elements_from_html.
         # ARIA-only appended elements get their bbox from the ARIA tree directly.
