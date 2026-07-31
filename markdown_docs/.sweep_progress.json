@@ -1,6 +1,6 @@
 {
-  "total": 110,
-  "completed": 110,
+  "total": 126,
+  "completed": 126,
   "pending": 0,
   "files": [
     {
@@ -557,7 +557,82 @@
       "source": "src/storage.py",
       "doc": "markdown_docs/src/storage.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/evidence_export.py",
+      "doc": "markdown_docs/src/evidence_export.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/evidence_index.py",
+      "doc": "markdown_docs/src/evidence_index.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/journey_enrichment.py",
+      "doc": "markdown_docs/src/journey_enrichment.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/journey_subprocess.py",
+      "doc": "markdown_docs/src/journey_subprocess.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/ocr_backends.py",
+      "doc": "markdown_docs/src/ocr_backends.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/pdf_ingest.py",
+      "doc": "markdown_docs/src/pdf_ingest.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/pom_helpers.py",
+      "doc": "markdown_docs/src/pom_helpers.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/role_mapper.py",
+      "doc": "markdown_docs/src/role_mapper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/skip_manager.py",
+      "doc": "markdown_docs/src/skip_manager.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/cart_seeding_scraper.py",
+      "doc": "markdown_docs/src/cart_seeding_scraper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/element_matcher.py",
+      "doc": "markdown_docs/src/element_matcher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/aria_parser.py",
+      "doc": "markdown_docs/src/aria_parser.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/prompt_safety.py",
+      "doc": "markdown_docs/src/agents/prompt_safety.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/section_scoper.py",
+      "doc": "markdown_docs/src/section_scoper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/secure_config.py",
+      "doc": "markdown_docs/src/secure_config.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-07-23"
+  "last_updated": "2026-07-31"
 }
