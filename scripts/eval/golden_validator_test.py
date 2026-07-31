@@ -314,6 +314,59 @@ class TestValidateStory:
         result = validate_story(code, golden)
         assert result.resolutions[0].matched is False
 
+    def test_has_text_substring_tolerance(self) -> None:
+        """AI-037 Phase 3: :has-text() needles match by substring (Playwright semantics).
+
+        Resolver emits the full visible text (e.g. h2 with emoji prefix) while
+        the golden tolerance carries a shorter needle. Both target the same
+        element, so the validator must treat them as equivalent.
+        """
+        code = 'evidence_tracker.assert_visible(\'h2:has-text("✅ Quote Generated Successfully!")\', label="msg")'
+        golden = {
+            "id": "s1",
+            "site": "test",
+            "conditions": ["1. Confirm"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "msg",
+                            "expected_locator": "#quoteSuccess",
+                            "tolerance_selectors": ["h2:has-text('Quote Generated')"],
+                        },
+                    ],
+                },
+            ],
+        }
+        result = validate_story(code, golden)
+        assert result.resolutions[0].matched is True
+
+    def test_has_text_substring_not_match_unrelated(self) -> None:
+        """Substring equivalence must not fire for unrelated needles."""
+        code = 'evidence_tracker.assert_visible(\'h2:has-text("Submit")\', label="msg")'
+        golden = {
+            "id": "s1",
+            "site": "test",
+            "conditions": ["1. Confirm"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "msg",
+                            "expected_locator": "#quoteSuccess",
+                            "tolerance_selectors": ["h2:has-text('Quote Generated')"],
+                        },
+                    ],
+                },
+            ],
+        }
+        result = validate_story(code, golden)
+        assert result.resolutions[0].matched is False
+
     def test_unresolved_skip(self) -> None:
         code = "pytest.skip('unresolved')"
         golden = {

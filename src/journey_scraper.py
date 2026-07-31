@@ -684,7 +684,16 @@ class JourneyScraper:
             raise
 
     def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
-        """Scrape elements from the current page state."""
+        """Scrape elements from the current page state.
+
+        Mirrors the frozen-capture methodology (``refresh_lv_capture.py``):
+        reveal hidden SPA sections before capturing visibility. Multi-step
+        single-page forms keep all sections in the DOM with ``display:none``
+        toggled by JS — without reveal, every element in a non-active section
+        is marked ``is_visible=False`` and the resolver's Pass 3 hard-skips
+        hidden CLICK/FILL targets, so SPA pages can never resolve.
+        """
+        self._reveal_hidden_sections(page)
         html = page.content()
         elements = self._html_scraper._extract_elements_from_html(html, base_url=url)  # noqa: SLF001
 
