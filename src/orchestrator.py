@@ -97,7 +97,12 @@ class TestOrchestrator:
         self._pipeline_diagnostics: dict[str, Any] = {}
         self._last_phase_time: float = 0.0
 
-        # Phase 1c: LangGraph multi-agent pipeline (enabled by default, set LANGGRAPH_ENABLED=0 to disable)
+        # Phase 1c: LangGraph multi-agent pipeline (PipelineGraph).
+        # NOTE (2026-08-01): this graph is NOT wired into the user-facing path —
+        # ``run_pipeline()`` (Streamlit/CLI/uat) always uses the linear pipeline.
+        # The graph is reachable only via ``run_pipeline_via_graph()``, which the
+        # eval harness exercises with ``--use-graph`` and which unit tests cover
+        # directly. Initialisation here is harmless but unused in normal runs.
         langgraph_disabled = os.getenv("LANGGRAPH_ENABLED", "").strip() == "0"
         self._use_graph = not langgraph_disabled
         self._pipeline_graph: Any | None = None
@@ -650,8 +655,12 @@ class TestOrchestrator:
         return normalized_steps
 
     # ------------------------------------------------------------------
-    # Phase 1c: Graph-based pipeline (opt-in via LANGGRAPH_ENABLED=1)
+    # Phase 1c: LangGraph graph-based pipeline (experimental / opt-in)
     # ------------------------------------------------------------------
+    # NOTE (2026-08-01): not part of the user-facing flow. Only the eval
+    # harness (``eval_harness.py run --use-graph``) and unit tests call
+    # ``run_pipeline_via_graph``; the UI/CLI/uat all use ``run_pipeline``
+    # (linear). See BACKLOG "LangGraph pipeline: dormant" note.
 
     async def run_pipeline_via_graph(
         self,

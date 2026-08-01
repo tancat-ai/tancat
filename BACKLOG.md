@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-07-31 (AI-037 Phase 3 complete — journey guidance + SPA reveal fix + has-text normalization)
+Last updated: 2026-08-01 (AI-034 Test Table complete, B-027 re-fixed, B-028 logged, AI-039 deferred)
 
 ---
 
@@ -236,6 +236,45 @@ writing if code fails syntax check.
 ---
 
 ## 🔴 Open Bugs
+
+### B-028 — Journey discovery selects cart nav link for product / add-to-cart actions
+**Status:** 🟡 Open — logged 2026-08-01 from live UAT evidence; fix in a fresh session
+**Priority:** High — cascades: wrong click → missing pages → unresolved placeholders → skips/fails
+
+**Symptom:** During journey discovery, generic descriptions resolve to the cart nav link
+instead of product cards / add-to-cart buttons:
+```
+'click on a product to view it'  → a[href="/view_cart"]  (score=1)   ❌
+'add product to cart'           → a[href="/view_cart"]  (score=11)  ❌
+'dismiss confirmation modal'    → a[href="/view_cart"]  (score=1)   ❌
+```
+The journey navigates products → view_cart instead of a product page, so checkout pages
+are never scraped and cart-dependent placeholders never resolve.
+
+**Live evidence (2026-08-01, automationexercise.com, generated package
+test_20260801_120204_...):** T02 add-to-cart FAILED — resolver emitted a hallucinated
+locator `text=First product link` (not in DOM; failure reporter suggested `#Men`,
+`#gda`, `#Kids`) → `Locator.click: Timeout 5000ms` at ~249s per test. T06 (max cart
+items) same root cause. T03/T04/T05 (cart/checkout/purchase) and T08/T09 (quantity)
+skip — checkout pages never scraped + site uses +/- quantity buttons (no fillable input).
+
+**Root cause:** `_discover_selector()` in `src/journey_scraper.py` scores generic
+descriptions poorly and falls back to weak matches (B-012/B-015 family — those fixes
+covered the resolver Pass 1, not journey discovery's element selection). Also: resolver
+emits non-existent locators ("First product link") instead of skipping — needs a
+DOM-existence guard.
+
+**Proposed fix (next session):**
+1. Structural hint in journey discovery: "product" descriptions should prefer
+   product-card selectors (img/a/div inside `.product` containers) over nav links.
+2. DOM-existence guard: resolver candidates must exist in scraped data before
+   emitting a locator (prevents `text=First product link`).
+3. Quantity: add a fallback mapping FILL-quantity → +/- button clicks when no
+   fillable input exists.
+
+**Mitigations available now:** explicit journey steps ("click on product name 'Blue Top'"),
+credential profile for checkout, cart-seeding for state-dependent pages.
+
 
 ### B-004 — Ambiguous locators when same label exists on multiple forms (✅ FIXED by architecture evolution)
 **Status:** ✅ Fixed — skeleton-first resolver pipeline emits ID/data-test/href selectors via `build_robust_locator()`, not `get_by_label()`. Multi-page scraping (AI-009) also shipped. No code change needed.
@@ -900,11 +939,16 @@ which may contain CUDA-specific kernels that fail on ROCm/HIP.
 
 ---
 
-## 🆕 AI-039 — Repo Rename: TanCat
+## 👤 AI-039 — Repo Rename: TanCat (DEFERRED)
 
-**Status:** 🟡 ready-for-agent
+**Status:** 👤 ready-for-human — deferred by decision 2026-08-01; revisit at launch readiness
 **Priority:** Medium — GTM (Phase 8)
 **Estimated sessions:** 0.5
+
+> **Why deferred:** Renaming the repo + PyPI package is disruptive once the package is
+> published (users, CI, docs links depend on the name) and carries zero functional value
+> pre-launch. Parked until the product is ready for launch; branding decisions (TanCat
+> product name, Cat Tan Operations Ltd, domains) stay as decided.
 
 **What:** Rename GitHub repo from `AI-Playwright-Test-Generator` to `tancat`.
 Update all internal references: `pyproject.toml` (PyPI package name), README,
@@ -1026,12 +1070,20 @@ The project uses Jinja2-style double-brace placeholders (`{{CLICK:description}}`
 
 ---
 
-## ✅ B-027 — Requirements with distinct concerns generate single test case instead of multiple (FIXED 2026-07-24)
+## ✅ B-027 — Requirements with distinct concerns generate single test case instead of multiple (FIXED 2026-08-01)
 
-**Status:** ✅ Fixed  
+**Status:** ✅ Fixed 2026-08-01 (second attempt — the original 2026-07-24 fix was REVERTED as too aggressive)
 **Priority:** Medium  
-**Commits:** `db77c46`, `26bb827`  
+**Commits:** `db77c46`, `26bb827` (REVERTED in `5071621` 2026-07-29 — naive comma-splitting mangled narrative stories and broke golden-key alignment) → real fix 2026-08-01 (uncommitted at time of writing)
 **Impact:** Unstructured requirements with multiple distinct concerns (e.g. "max items, max quantity, filters") produce only one happy-path test case instead of focused boundary/functional tests
+
+**Real fix (2026-08-01):**
+1. **Prompt** — `SpecAnalyzer.SYSTEM_PROMPT` gains SPLITTING RULES: one condition per distinct concern, `boundary` for limit questions, DO NOT collapse/skip.
+2. **Routing** — `parse_requirements_text` wraps unstructured input as a single numbered item ("1. <story>"); a single numbered criterion with multi-concern signals now routes to the LLM path instead of the deterministic 1:1 mapping.
+3. **JSON hardening** — prompt forbids verbatim quoting in `source`; retry-once with CORRECTION on parse failure; partial salvage (silently dropping corrupted objects) now raises so the retry fires.
+4. **Conservative fallback** — if the LLM still collapses, split on sentence boundaries only (never mid-sentence commas — the revert lesson) and tag limit sentences `boundary`.
+
+**Verified (real LLM, exact UI flow):** user story → 3 conditions (journey happy_path + 2 boundary). 22 spec_analyzer tests, 1998 total.
 
 **Symptom:**
 When a user enters requirements like:
@@ -1066,34 +1118,67 @@ Expected: three focused test cases:
 
 ---
 
-## ✅ AI-034 — Test Table Generation & Pre-Flight Resolution Reporting (SPEC WRITTEN, waiting on Phase 1)
+## ✅ AI-034 — Test Table Generation (COMPLETE 2026-08-01)
 
-**Status:** 🟡 Spec written — blocked by Phase 1 Multi-Agent  
+**Status:** ✅ Complete — Phases 1-3 shipped 2026-08-01
 **Spec:** `docs/specs/FEATURE_SPEC_AI034_test_table_preflight.md`
+**Note:** Pre-flight resolution reporting stripped from spec 2026-07-31 — the resolver already surfaces failures via `pytest.skip()` + evidence (AI-028).
 
-**What:** Add a Test Table between Living Test Plan and skeleton generation.
-LLM expands each condition into one or more concrete test rows (e.g.,
-"4 filters" → 4 filter test rows). Pre-flight resolver checks each row
-against scraped DOM and shows `⚠ blocked` before any code is written.
+**What:** A Test Table between Living Test Plan and skeleton generation. The LLM
+expands each condition into one or more concrete test rows (e.g., "4 filters" →
+4 rows); the tester reviews/edits/confirms rows before one skeleton is generated
+per row.
 
-**Key decisions (grilling session 2026-07-26):**
-- One condition can spawn multiple test rows
-- Living Test Plan gets a "Tests" column showing count
-- Pre-flight resolves first; ⚠ blocked rows have Skip / Edit / Run anyway options
-- No self-healing — surface the mismatch, don't try to fix it
-- Run anyway → normal test failure (red ❌), same bug report pipeline
-
-**Phases:**
-1. Test Table generation (LLM expansion, data model, editor)
-2. Living Test Plan enhancement (Tests column, status propagation)
-3. Pre-flight resolution reporting (⚠ with DOM context, tester options)
-4. Skeleton generation (one function per row, intent-first placeholders)
-
-**Estimated sessions:** 3-4
+**Delivered:**
+- **Phase 1** — `src/test_table.py` (NEW): `TestRow`/`TestTable` data model + CRUD
+  (add/remove/update/confirm per-row & per-condition), `TestTableExpander` (LLM
+  expansion, 1-row-per-condition fallback on LLM failure, cap `DEFAULT_MAX_ROWS_PER_CONDITION=10`),
+  `build_table()`, `apply_editor_rows()`. 33 unit tests.
+- **Phase 2** — editors in **both** UIs: Streamlit `🧪 Test Table` expander
+  (data_editor + Save/Confirm-All) and CLI "Expand into Test Rows" menu flow
+  (`build_test_table_interactive`); LTP gains a disabled "Tests" column via
+  `plan_rows_from_plan(plan, test_table)`.
+- **Phase 3** — one skeleton per confirmed row: `table_to_conditions()` converts
+  confirmed rows → `TestCondition`s (id=row.id, text=intent+target); wired into
+  `reviewed_conditions` (Streamlit) and `_select_conditions_for_generation()` (CLI).
+- **UAT** — `scripts/uat/uat_test_table.py` (real LLM): 2 conditions → 8 rows → 8
+  skeleton functions (1:1, no skips). UI-verified: 9 rows → 9 test functions, live run.
+- **Regressions:** none — full suite 1998 passed, static eval 100%.
 
 ---
 
 ## 🟡 Active Improvements (Prioritised)
+
+## 📌 LangGraph Pipeline — Dormant / Not Wired into User Flow (documented 2026-08-01)
+
+**Status:** 📌 Documented — no code change required
+**Related:** Phase 1 Multi-Agent (ROADMAP), `src/agents/pipeline_graph.py`
+
+**Finding (2026-08-01):** The Phase 1 Multi-Agent LangGraph pipeline
+(`PipelineGraph`, `TestOrchestrator.run_pipeline_via_graph()`) is built and
+unit-tested but **NOT active for users**:
+
+- The user-facing path (Streamlit, CLI, `scripts/uat.py`) always calls
+  `TestOrchestrator.run_pipeline()` — the **linear** pipeline (single-call
+  skeleton → scraper → resolver).
+- The graph is reachable only via `eval_harness.py run --use-graph` and its
+  own unit tests.
+- `langgraph` is a **core dependency** — graph tests run locally AND in CI
+  (71/71 pass). The `pytest.importorskip` guards only degrade gracefully in
+  minimal installs.
+- Code comments previously contradicted each other (default-on vs opt-in) —
+  corrected 2026-08-01 in `src/orchestrator.py` + `src/test_generator.py`.
+- Doc-mode (`input_mode="document"`, PDF/Markdown parsing + persona routing)
+  exists in the graph but has **no UI/CLI entry point** — only tests exercise it.
+
+**Impact on results:** None for published numbers — static eval (100%) and
+regeneration eval use the linear path by default, matching what users run.
+Graph tests run in CI (langgraph is core) and pass 71/71.
+
+**Decision:** Linear remains the production path; the graph is experimental and
+opt-in (reachable via `eval --use-graph` + unit tests). Revisit options:
+(1) wire the graph in as default, (2) add a user-facing doc-mode entry
+(PDF → LTP conditions).
 
 ### ✅ AI-009 — Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE (2026-05-13)
 **Phase A:** Static multi-page scraping with placeholder resolution — COMPLETE.

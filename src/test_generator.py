@@ -53,6 +53,10 @@ class TestGenerator:
         When ``LANGGRAPH_ENABLED=1``, delegates to the multi-agent LangGraph
         workflow (Planner → Generator → Validator).  Otherwise uses the
         original single-call pipeline.
+
+        NOTE (2026-08-01): the LangGraph skeleton workflow is experimental and
+        opt-in — the production path is the single-call pipeline. ``langgraph``
+        is an optional extra; CI skips graph tests when it is absent.
         """
         if os.environ.get("LANGGRAPH_ENABLED", "").strip() == "1":
             return await self._generate_skeleton_langgraph(user_story, conditions, target_urls, expected_count)

@@ -31,6 +31,8 @@ from src.provider_config import (
 from src.pytest_output_parser import RunResult
 from src.storage import get_storage, init_storage
 from src.test_plan import TestPlan, apply_editor_rows
+from src.test_table import TestTable, table_to_conditions
+from src.test_table import apply_editor_rows as apply_test_table_rows
 from src.ui.ui_evidence import EvidenceViewer
 from src.ui.ui_journey import render_credential_profiles, render_journey_builder
 from src.ui.ui_requirements import RequirementsInput
@@ -41,10 +43,12 @@ from src.ui.ui_sidebar import SidebarConfig
 from src.ui_pipeline import (
     PipelineSessionState,
     build_test_plan,
+    build_test_table,
     parse_requirements_text,
     parse_target_urls,
     plan_rows_from_plan,
     run_pipeline,
+    test_table_rows,
 )
 
 st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.png", layout="wide")
@@ -61,6 +65,7 @@ def _init_session_state() -> None:
         "pipeline_manifest_path": "",
         "pipeline_error": "",
         "pipeline_unresolved": [],
+        "run_tests_error": "",
         "pipeline_scraped_pages": {},
         "pipeline_urls": [],
         "pipeline_criteria": "",
@@ -77,6 +82,7 @@ def _init_session_state() -> None:
         "pipeline_html_report_path": "",
         "test_plan": None,
         "plan_confirmed": False,
+        "test_table": None,
         "openai_api_key": os.environ.get("OPENAI_API_KEY", ""),
     }
     for key, value in defaults.items():
@@ -268,6 +274,7 @@ def generator_page() -> None:
                             model_name=model_name,
                         )
                         st.session_state.plan_confirmed = False
+                        st.session_state.test_table = None
                         st.session_state.pipeline_error = ""
                     except Exception as exc:
                         st.session_state.pipeline_error = f"Failed to build living test plan: {exc}"
@@ -288,13 +295,14 @@ def generator_page() -> None:
             current_plan = st.session_state.test_plan
             if isinstance(current_plan, TestPlan):
                 edited_rows_raw = st.data_editor(
-                    plan_rows_from_plan(current_plan),
+                    plan_rows_from_plan(current_plan, st.session_state.test_table),
                     width="stretch",
                     num_rows="dynamic",
                     key="living_test_plan_editor",
                     column_config={
                         "reviewed": st.column_config.CheckboxColumn("Reviewed"),
                         "id": st.column_config.TextColumn("ID", disabled=True),
+                        "tests": st.column_config.NumberColumn("Tests", disabled=True),
                         "type": st.column_config.SelectboxColumn(
                             "Type",
                             options=[
@@ -336,6 +344,7 @@ def generator_page() -> None:
                     st.caption("Optional: save edits without signing off.")
                     if st.button("Save Test Plan Edits", type="secondary"):
                         st.session_state.test_plan = apply_editor_rows(current_plan, edited_rows)
+                        st.session_state.test_table = None
                         st.session_state.plan_confirmed = st.session_state.test_plan.is_ready_for_generation
 
                 with signoff_col:
@@ -356,6 +365,7 @@ def generator_page() -> None:
                             sign_off_notes=sign_off_notes,
                         )
                         st.session_state.test_plan = signed_plan
+                        st.session_state.test_table = None
                         st.session_state.plan_confirmed = signed_plan.is_ready_for_generation
 
                 if current_plan.unreviewed_ids:
@@ -365,6 +375,88 @@ def generator_page() -> None:
                     st.info("All conditions are reviewed. Add tester sign-off to unlock generation.")
                 else:
                     st.success("The living test plan is signed off and generation is unlocked.")
+
+    # ------------------------------------------------------------------
+    # Test Table (AI-034 Phase 2) — expand conditions into concrete rows
+    # ------------------------------------------------------------------
+    if isinstance(st.session_state.get("test_plan"), TestPlan) and st.session_state.plan_confirmed:
+        with st.expander(
+            "🧪 Test Table",
+            expanded=st.session_state.test_table is None,
+        ):
+            st.caption(
+                "Expand each condition into concrete test rows. One skeleton will be generated "
+                "per confirmed row — edit or split rows before generation (AI-034)."
+            )
+
+            build_table_col, table_state_col = st.columns([1, 2])
+            with build_table_col:
+                if st.button("Expand Conditions into Test Rows", type="secondary"):
+                    try:
+                        st.session_state.test_table = build_test_table(
+                            plan=st.session_state.test_plan,
+                            provider=provider,
+                            provider_base_url=provider_base_url,
+                            model_name=model_name,
+                        )
+                        st.session_state.pipeline_error = ""
+                        st.rerun()
+                    except Exception as exc:
+                        st.session_state.pipeline_error = f"Failed to expand test rows: {exc}"
+                        st.rerun()
+
+            with table_state_col:
+                current_table = st.session_state.test_table
+                if isinstance(current_table, TestTable):
+                    total_rows = len(current_table.rows)
+                    reviewed_rows = len(current_table.confirmed_row_ids)
+                    expanded_conditions = len({row.condition_ref for row in current_table.rows})
+                    st.write(f"Test rows reviewed: `{reviewed_rows}/{total_rows}`")
+                    st.write(f"Conditions expanded: `{expanded_conditions}` → `{total_rows}` rows")
+                else:
+                    st.write("Expand the plan to preview the concrete test rows that will be generated.")
+
+            current_table = st.session_state.test_table
+            if isinstance(current_table, TestTable):
+                table_rows_raw = st.data_editor(
+                    test_table_rows(current_table),
+                    width="stretch",
+                    num_rows="dynamic",
+                    key="test_table_editor",
+                    column_config={
+                        "reviewed": st.column_config.CheckboxColumn("Reviewed"),
+                        "id": st.column_config.TextColumn("ID", disabled=True),
+                        "condition_ref": st.column_config.TextColumn("Condition", disabled=True),
+                        "intent": st.column_config.TextColumn("Intent"),
+                        "expected_action": st.column_config.SelectboxColumn(
+                            "Action",
+                            options=["SELECT", "CLICK", "FILL", "ASSERT", "NAVIGATE"],
+                        ),
+                        "expected_target": st.column_config.TextColumn("Target"),
+                    },
+                )
+                if hasattr(table_rows_raw, "to_dict"):  # type: ignore[attr-defined]
+                    table_edited_rows = table_rows_raw.to_dict("records")  # type: ignore[attr-defined]
+                else:
+                    table_edited_rows = list(table_rows_raw)
+
+                table_action_col, table_confirm_col = st.columns([3, 2])
+                with table_action_col:
+                    if st.button("Save Test Table Edits", type="secondary"):
+                        st.session_state.test_table = apply_test_table_rows(current_table, table_edited_rows)
+                with table_confirm_col:
+                    if st.button("Confirm All Test Rows", type="primary"):
+                        saved_table = apply_test_table_rows(current_table, table_edited_rows)
+                        st.session_state.test_table = TestTable(
+                            rows=saved_table.rows,
+                            confirmed_ids=set(saved_table.row_ids),
+                        )
+
+                if not current_table.is_fully_confirmed:
+                    pending_rows = ", ".join(sorted(current_table.unreviewed_row_ids))
+                    st.warning(f"Rows pending review: {pending_rows}")
+                else:
+                    st.success("All test rows are confirmed.")
 
     # ------------------------------------------------------------------
     # Credential profiles & journey builder
@@ -381,6 +473,7 @@ def generator_page() -> None:
     run_disabled = bool(raw_requirements.strip()) and not bool(st.session_state.plan_confirmed)
     if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
         st.session_state.pipeline_error = ""
+        st.session_state.run_tests_error = ""
         raw_requirements_for_run = str(
             st.session_state.get("requirements_text") or st.session_state.get("Requirements") or raw_requirements or ""
         )
@@ -433,9 +526,14 @@ def generator_page() -> None:
                             target_urls=target_urls,
                             consent_mode=consent_mode,
                             reviewed_conditions=(
-                                st.session_state.test_plan.conditions
-                                if isinstance(st.session_state.test_plan, TestPlan)
-                                else None
+                                table_to_conditions(st.session_state.test_table)
+                                if isinstance(st.session_state.test_table, TestTable)
+                                and st.session_state.test_table.confirmed_row_ids
+                                else (
+                                    st.session_state.test_plan.conditions
+                                    if isinstance(st.session_state.test_plan, TestPlan)
+                                    else None
+                                )
                             ),
                             session=session,
                             credential_profile=st.session_state._active_credential_profile,

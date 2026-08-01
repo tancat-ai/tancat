@@ -46,6 +46,7 @@ from .menu_renderer import (
 )
 from .pipeline_runner import (
     build_test_plan,
+    build_test_table_interactive,
     bundle_evidence_zip,
     export_clean_package,
     generate_bug_report,
@@ -137,6 +138,10 @@ async def interactive_session() -> None:
                 menu_items.append("Build Living Test Plan")
             else:
                 menu_items.append("Review Test Plan")
+                if session.test_table is None or not session.test_table_confirmed:
+                    menu_items.append("Expand into Test Rows")
+                else:
+                    menu_items.append("Review Test Rows")
 
             menu_items.append("Run Intelligent Pipeline")
 
@@ -230,6 +235,8 @@ async def interactive_session() -> None:
             _collect_journey_inline(session)
         elif menu_items[idx] in ("Build Living Test Plan", "Review Test Plan"):
             await build_test_plan(session)
+        elif menu_items[idx] in ("Expand into Test Rows", "Review Test Rows"):
+            build_test_table_interactive(session)
         elif menu_items[idx] == "Run Intelligent Pipeline":
             await run_pipeline(session)
         elif menu_items[idx] == "View Generated Code":

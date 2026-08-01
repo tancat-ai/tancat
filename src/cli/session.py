@@ -18,6 +18,7 @@ from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult
 from src.spec_analyzer import TestCondition
 from src.test_plan import TestPlan
+from src.test_table import TestTable
 
 
 @dataclass
@@ -55,6 +56,10 @@ class Session:
     # Test plan
     test_plan: TestPlan | None = None
     plan_confirmed: bool = False
+
+    # Test table (AI-034) — expanded rows per condition
+    test_table: TestTable | None = None
+    test_table_confirmed: bool = False
 
     # LLM configuration
     provider: str = ""

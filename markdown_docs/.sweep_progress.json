@@ -1,6 +1,6 @@
 {
-  "total": 127,
-  "completed": 127,
+  "total": 128,
+  "completed": 128,
   "pending": 0,
   "files": [
     {
@@ -636,6 +636,11 @@
     {
       "source": "src/prompt_builder.py",
       "doc": "markdown_docs/src/prompt_builder.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/test_table.py",
+      "doc": "markdown_docs/src/test_table.py.md",
       "status": "completed"
     }
   ],

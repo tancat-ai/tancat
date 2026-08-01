@@ -48,10 +48,10 @@ class PipelineRunService:
         env["PYTHONPATH"] = os.pathsep.join([project_root, package_dir, env.get("PYTHONPATH", "")])
 
         # Enforce a hard timeout so the CLI never hangs forever on stuck tests.
-        # 8 tests x ~30s each = ~5 minutes max. Individual tests timeout at 5s
-        # per assertion, so 30s per test is generous. Configurable via
-        # PIPELINE_TEST_TIMEOUT env var.
-        timeout_secs = int(os.environ.get("PIPELINE_TEST_TIMEOUT", "300"))
+        # Default 10 minutes: live-site suites with browser startup, evidence
+        # tracking and 9+ tests routinely exceed 5 minutes. Configurable via
+        # PIPELINE_TEST_TIMEOUT.
+        timeout_secs = int(os.environ.get("PIPELINE_TEST_TIMEOUT", "600"))
 
         completed = subprocess.run(
             command,

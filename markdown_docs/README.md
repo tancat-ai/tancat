@@ -71,6 +71,10 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 
 Living test plan with sign-off workflow. Conditions derived from acceptance criteria, reviewed by tester, then signed off before generation is unlocked.
 
+### Test Table (`src/test_table.py`)
+
+AI-034 — LLM expansion of plan conditions into concrete test rows (one row per scenario). Tester reviews/edits/confirms rows before one skeleton function per row is generated. Editors in both Streamlit (🧪 Test Table) and CLI ("Expand into Test Rows").
+
 ### Tests (`tests/`)
 
 Unit tests for all core modules — validates the tool itself, not the tests it generates.

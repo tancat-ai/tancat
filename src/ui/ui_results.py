@@ -78,6 +78,12 @@ class ResultsPanel:
             if st.button("Generate Bug Report", disabled=not has_failures):
                 _handle_generate_bug_report()
 
+        # Render run errors inline here — not in the shared pipeline_error slot,
+        # which displays up near "Run Intelligent Pipeline" and is off-screen.
+        run_tests_error = st.session_state.get("run_tests_error", "")
+        if run_tests_error:
+            st.error(run_tests_error)
+
 
 def _handle_generate_bug_report() -> None:
     """Handle the 'Generate Bug Report' button click."""
@@ -123,8 +129,9 @@ def _handle_run_tests() -> None:
     """Handle the 'Run Generated Tests' button click."""
     from src.pipeline_run_service import PipelineRunService
 
+    st.session_state.run_tests_error = ""
     try:
-        with st.spinner("Running generated tests with pytest. This can take a couple of minutes..."):
+        with st.spinner("Running generated tests with pytest. This can take a few minutes..."):
             execution_result = PipelineRunService().run_saved_test(st.session_state.pipeline_saved_path)
             st.session_state.pipeline_run_result = execution_result.run_result
             st.session_state.pipeline_run_output = execution_result.display_output
@@ -133,7 +140,7 @@ def _handle_run_tests() -> None:
             _store_run_report()
         st.rerun()
     except Exception as exc:
-        st.session_state.pipeline_error = f"Failed to run generated tests: {exc}"
+        st.session_state.run_tests_error = f"Failed to run generated tests: {exc}"
         st.rerun()
 
 
@@ -142,6 +149,7 @@ def _handle_rerun_failed() -> None:
     from src.pipeline_run_service import PipelineRunService
 
     previous_run_result = st.session_state.pipeline_run_result
+    st.session_state.run_tests_error = ""
     try:
         with st.spinner("Re-running failed generated tests with pytest..."):
             execution_result = PipelineRunService().run_saved_test(
@@ -156,7 +164,7 @@ def _handle_rerun_failed() -> None:
             _store_run_report()
         st.rerun()
     except Exception as exc:
-        st.session_state.pipeline_error = f"Failed to rerun generated tests: {exc}"
+        st.session_state.run_tests_error = f"Failed to rerun generated tests: {exc}"
         st.rerun()
 
 
