@@ -17,6 +17,7 @@ from src.pytest_output_parser import RunResult
 from src.spec_analyzer import SpecAnalyzer, TestCondition
 from src.test_generator import TestGenerator
 from src.test_plan import TestPlan, build_story_ref
+from src.test_table import TestTable, TestTableExpander, build_table
 
 # Backwards-compatible alias used by streamlit_app and tests.
 _get_provider_defaults = get_provider_defaults
@@ -84,10 +85,32 @@ def build_test_plan(
     )
 
 
-def plan_rows_from_plan(plan: TestPlan) -> list[dict[str, object]]:
-    """Return editable table rows for the current plan."""
-    return [
-        {
+def build_test_table(
+    *,
+    plan: TestPlan,
+    provider: str,
+    provider_base_url: str,
+    model_name: str,
+) -> TestTable:
+    """Expand a reviewed plan into a Test Table (one row per test scenario).
+
+    Shared by both the Streamlit UI and the CLI (AI-034 Phase 2). Falls back to
+    one deterministic row per condition when the LLM is unavailable.
+    """
+    client = LLMClient(provider=provider, model=model_name, base_url=provider_base_url)
+    expander = TestTableExpander(llm_client=client)
+    return build_table(plan.conditions, expander=expander)
+
+
+def plan_rows_from_plan(plan: TestPlan, test_table: TestTable | None = None) -> list[dict[str, object]]:
+    """Return editable table rows for the current plan.
+
+    When a ``test_table`` is supplied, each row gains a ``tests`` column showing
+    how many test rows that condition expands into (AI-034 Phase 2).
+    """
+    rows: list[dict[str, object]] = []
+    for condition in plan.conditions:
+        row: dict[str, object] = {
             "reviewed": condition.id in plan.reviewed_ids,
             "id": condition.id,
             "type": condition.type,
@@ -98,7 +121,24 @@ def plan_rows_from_plan(plan: TestPlan) -> list[dict[str, object]]:
             "flagged": condition.flagged,
             "src": condition.src,
         }
-        for condition in plan.conditions
+        if test_table is not None:
+            row["tests"] = test_table.tests_count_for(condition.id)
+        rows.append(row)
+    return rows
+
+
+def test_table_rows(table: TestTable) -> list[dict[str, object]]:
+    """Return editable table rows for the current test table."""
+    return [
+        {
+            "reviewed": row.id in table.confirmed_row_ids,
+            "id": row.id,
+            "condition_ref": row.condition_ref,
+            "intent": row.intent,
+            "expected_action": row.expected_action,
+            "expected_target": row.expected_target,
+        }
+        for row in table.rows
     ]
 
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.spec_analyzer import SpecAnalyzer, infer_condition_intent
+from src.spec_analyzer import SpecAnalyzer, TestCondition, infer_condition_intent
 
 
 def test_spec_analyzer_success() -> None:
@@ -153,3 +153,152 @@ def test_infer_condition_intent_maps_common_testing_shapes() -> None:
 
 
 # ── B-027: Unstructured comma-separated criteria ─────────────────────────
+
+
+# ---------------------------------------------------------------------------
+# B-027 regression: multi-concern unstructured requirements must NOT collapse
+# ---------------------------------------------------------------------------
+
+MULTI_CONCERN_TEXT = (
+    "As a shopper on automationexercise.com, I want to browse products by category, add items to my cart, "
+    "review the cart contents, and proceed to checkout so that I can complete a purchase. "
+    "I want to check how many items I can add to cart and maximum quantity of an item."
+)
+
+
+def test_prompt_contains_multi_concern_splitting_rules() -> None:
+    assert "SPLITTING RULES" in SpecAnalyzer.SYSTEM_PROMPT
+    assert "ONE condition PER CONCERN" in SpecAnalyzer.SYSTEM_PROMPT
+    assert "Do NOT collapse" in SpecAnalyzer.SYSTEM_PROMPT
+
+
+def test_has_multi_concern_signal() -> None:
+    assert SpecAnalyzer._has_multi_concern_signal("how many items can I add")
+    assert SpecAnalyzer._has_multi_concern_signal("maximum quantity of an item")
+    assert SpecAnalyzer._has_multi_concern_signal("max items limit")
+    assert not SpecAnalyzer._has_multi_concern_signal("login with valid credentials")
+
+
+def test_conservative_sentence_split_multiple_sentences() -> None:
+    sentences = SpecAnalyzer._conservative_sentence_split(MULTI_CONCERN_TEXT)
+    assert sentences is not None
+    assert len(sentences) == 2
+    assert "complete a purchase" in sentences[0]
+    assert "maximum quantity" in sentences[1]
+
+
+def test_conservative_sentence_split_atomic_returns_none() -> None:
+    assert SpecAnalyzer._conservative_sentence_split("login with valid credentials") is None
+    assert SpecAnalyzer._conservative_sentence_split("") is None
+
+
+def test_conservative_sentence_split_never_splits_mid_sentence_commas() -> None:
+    """A single narrative sentence with commas stays whole (the B-027 revert lesson)."""
+    journey = (
+        "As a user I want to browse products by category, add items to my cart, "
+        "review the cart contents, and proceed to checkout to complete a purchase."
+    )
+    assert SpecAnalyzer._conservative_sentence_split(journey) is None
+
+
+def test_conservative_sentence_split_skips_structured_text() -> None:
+    assert SpecAnalyzer._conservative_sentence_split("1. filters\n2. login") is None
+
+
+def test_collapsed_multi_concern_detection() -> None:
+
+    collapsed = [TestCondition(id="TC01.01", type="happy_path", text=MULTI_CONCERN_TEXT, expected="ok", source="AC 1")]
+    assert SpecAnalyzer._collapsed_multi_concern(collapsed, MULTI_CONCERN_TEXT) is True
+    # Multiple conditions → not collapsed
+    multi = collapsed + [TestCondition(id="TC01.02", type="boundary", text="max items", expected="ok", source="AC 2")]
+    assert SpecAnalyzer._collapsed_multi_concern(multi, MULTI_CONCERN_TEXT) is False
+    # Single condition but atomic text → not collapsed
+    assert SpecAnalyzer._collapsed_multi_concern(collapsed, "login with valid credentials") is False
+
+
+def test_analyze_fallback_when_llm_collapses() -> None:
+    """LLM returns one happy_path for a multi-concern story → conservative fallback kicks in."""
+    mock_llm = MagicMock()
+    mock_llm.generate_test.return_value = (
+        '[{"id": "TC01.01", "type": "happy_path", "text": "whole story", '
+        '"expected": "ok", "source": "Acceptance Criteria 1", "src": "ai", "intent": "element_behavior"}]'
+    )
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze(f"User Story:\n{MULTI_CONCERN_TEXT}\n\nAcceptance Criteria:\n{MULTI_CONCERN_TEXT}")
+
+    assert len(conditions) >= 2
+    assert conditions[0].type == "happy_path"
+    assert conditions[-1].type == "boundary"  # limit question
+    assert all(condition.id.startswith("TC01.") for condition in conditions)
+
+
+def test_analyze_keeps_llm_output_when_not_collapsed() -> None:
+    mock_llm = MagicMock()
+    mock_llm.generate_test.return_value = (
+        "[\n"
+        '  {"id": "TC01.01", "type": "happy_path", "text": "journey", "expected": "ok", "source": "AC 1", "src": "ai", "intent": "element_behavior"},\n'
+        '  {"id": "TC01.02", "type": "boundary", "text": "max items", "expected": "ok", "source": "AC 2", "src": "ai", "intent": "element_behavior"}\n'
+        "]"
+    )
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze(MULTI_CONCERN_TEXT)
+    assert len(conditions) == 2
+    assert conditions[0].id == "TC01.01"
+    assert conditions[1].id == "TC01.02"
+
+
+def test_analyze_atomic_text_unchanged() -> None:
+    """Atomic stories must still produce exactly one condition (no over-splitting)."""
+    mock_llm = MagicMock()
+    mock_llm.generate_test.return_value = '[{"id": "TC01.01", "type": "happy_path", "text": "login", "expected": "ok", "source": "AC 1", "src": "ai", "intent": "element_behavior"}]'
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze("login with valid credentials")
+    assert len(conditions) == 1
+
+
+# ---------------------------------------------------------------------------
+# JSON robustness — LLM quoting story text verbatim breaks parsing; retry once
+# ---------------------------------------------------------------------------
+
+
+def test_prompt_forbids_verbatim_quotes_in_source() -> None:
+    assert "NEVER quote the spec text verbatim" in SpecAnalyzer.SYSTEM_PROMPT
+    assert "Do NOT use double-quote characters inside any string value" in SpecAnalyzer.SYSTEM_PROMPT
+
+
+def test_analyze_retries_once_when_llm_embeds_quotes() -> None:
+    """First response has an unescaped quote in source; correction retry succeeds."""
+    mock_llm = MagicMock()
+    mock_llm.generate_test.side_effect = [
+        # Broken: unescaped double quote inside "source" value
+        (
+            '[{"id": "TC01.01", "type": "happy_path", "text": "journey", "expected": "ok", '
+            '"source": "User Story: "browse products"", "src": "ai", "intent": "element_behavior"},'
+            '{"id": "TC01.02", "type": "boundary", "text": "max items", "expected": "ok", '
+            '"source": "AC 2", "src": "ai", "intent": "element_behavior"}]'
+        ),
+        # Corrected response
+        (
+            "[\n"
+            '  {"id": "TC01.01", "type": "happy_path", "text": "journey", "expected": "ok", "source": "User Story", "src": "ai", "intent": "element_behavior"},\n'
+            '  {"id": "TC01.02", "type": "boundary", "text": "max items", "expected": "ok", "source": "AC 2", "src": "ai", "intent": "element_behavior"}\n'
+            "]"
+        ),
+    ]
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    conditions = analyzer.analyze(MULTI_CONCERN_TEXT)
+
+    assert mock_llm.generate_test.call_count == 2
+    assert len(conditions) == 2
+    assert "CORRECTION" in mock_llm.generate_test.call_args_list[1].kwargs["prompt"]
+    assert conditions[1].id == "TC01.02"
+
+
+def test_analyze_raises_after_retry_still_fails() -> None:
+    """Both the initial call and the correction retry return unusable JSON."""
+    mock_llm = MagicMock()
+    mock_llm.generate_test.side_effect = ["not json at all", "also not json"]
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    with pytest.raises(RuntimeError, match="Failed to parse LLM response"):
+        analyzer.analyze(MULTI_CONCERN_TEXT)
+    assert mock_llm.generate_test.call_count == 2

@@ -23,13 +23,18 @@ from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import load_all_run_results
+from src.spec_analyzer import TestCondition
 from src.storage import get_storage
+from src.test_table import TestRow, TestTable, table_to_conditions
 from src.ui_pipeline import (
     PipelineSessionState,
     parse_requirements_text,
 )
 from src.ui_pipeline import (
     build_test_plan as ui_build_test_plan,
+)
+from src.ui_pipeline import (
+    build_test_table as ui_build_test_table,
 )
 from src.ui_pipeline import (
     parse_target_urls as ui_parse_target_urls,
@@ -295,7 +300,152 @@ async def _prompt_sign_off(session: Any) -> None:
             return
 
 
+# ── Test Table (AI-034 Phase 2) ───────────────────────────────────────────
+
+
+def build_test_table_interactive(session: Any) -> None:
+    """Expand the signed-off plan into concrete test rows for review.
+
+    Mirrors the Living Test Plan workflow: the LLM proposes rows, the tester
+    can edit them, then confirm before generation.
+    """
+    print_header("Test Table")
+    if not session.test_plan or not session.test_plan.conditions:
+        print(yellow("  No plan to expand. Build and sign off the Living Test Plan first."))
+        return
+    if not session.plan_confirmed:
+        print(yellow("  The plan is not signed off. Sign off the Living Test Plan first."))
+        return
+
+    try:
+        session.test_table = ui_build_test_table(
+            plan=session.test_plan,
+            provider=session.provider,
+            provider_base_url=session.provider_base_url,
+            model_name=session.model_name,
+        )
+        session.test_table_confirmed = False
+    except Exception as exc:
+        print(yellow(f"  Could not expand test rows ({exc}). Proceeding without test table."))
+        return
+
+    while True:
+        _display_test_rows_table(session.test_table)
+        print()
+
+        action = print_menu(
+            ["Edit a test row", "Re-expand rows", "Confirm all rows", "Skip"],
+            "Test table actions",
+            shortcuts=[("E", "Edit"), ("R", "Re-expand"), ("C", "Confirm"), ("K", "Skip")],
+        )
+
+        if action == 0:
+            _edit_test_row_interactive(session)
+            continue
+        elif action == 1:
+            try:
+                session.test_table = ui_build_test_table(
+                    plan=session.test_plan,
+                    provider=session.provider,
+                    provider_base_url=session.provider_base_url,
+                    model_name=session.model_name,
+                )
+                session.test_table_confirmed = False
+                print(green("  Rows re-expanded."))
+            except Exception as exc:
+                print(yellow(f"  Could not re-expand rows ({exc})."))
+            continue
+        elif action == 2:
+            table = session.test_table
+            session.test_table = TestTable(rows=table.rows, confirmed_ids=set(table.row_ids))
+            session.test_table_confirmed = True
+            print(green("  All test rows confirmed. Generation unlocked."))
+            return
+        else:
+            print(yellow("  Test table not confirmed. Generation will use plan conditions."))
+            return
+
+
+def _display_test_rows_table(table: Any) -> None:
+    """Print a formatted table of all test rows."""
+    if not table or not table.rows:
+        print(yellow("  No test rows in table."))
+        return
+
+    print(f"\n  {'ID':<6} {'Cond':<10} {'Action':<10} {'OK':<4} {'Intent'}")
+    print("  " + "-" * 80)
+    for row in table.rows:
+        reviewed = "✔" if row.id in table.confirmed_row_ids else "–"
+        intent = row.intent[:50] + "..." if len(row.intent) > 50 else row.intent
+        print(f"  {row.id:<6} {row.condition_ref:<10} {row.expected_action:<10} {reviewed:<4} {intent}")
+
+
+_ROW_FIELDS: list[tuple[str, str, list[str]]] = [
+    ("intent", "Intent", []),
+    ("expected_action", "Action", ["SELECT", "CLICK", "FILL", "ASSERT", "NAVIGATE"]),
+    ("expected_target", "Target", []),
+]
+
+
+def _edit_test_row_interactive(session: Any) -> None:
+    """Let the user pick a test row by ID and edit its fields."""
+    table = session.test_table
+    if not table or not table.rows:
+        return
+
+    row_ids = [row.id for row in table.rows]
+    id_index = print_menu(row_ids, "Select test row to edit")
+    if id_index < 0:
+        return
+
+    row_id = row_ids[id_index]
+    row = next(r for r in table.rows if r.id == row_id)
+
+    while True:
+        print_header(f"Editing: {row_id}")
+        print("  Current values:")
+        for field_name, field_label, _ in _ROW_FIELDS:
+            print(f"    {field_label}: {getattr(row, field_name, '')}")
+        print()
+
+        field_index = print_menu([label for _, label, _ in _ROW_FIELDS] + ["Done"], "Field to edit")
+        if field_index < 0 or field_index >= len(_ROW_FIELDS):
+            break
+
+        field_name, _field_label, options = _ROW_FIELDS[field_index]
+        if options:
+            option_index = print_menu(options, f"Select {field_name}")
+            if option_index < 0:
+                continue
+            new_value = options[option_index]
+        else:
+            new_value = read_optional(f"  New {field_name} (Enter to keep):")
+            if not new_value:
+                continue
+
+        row_data = row.to_dict()
+        row_data[field_name] = new_value
+        updated = TestRow.from_dict(row_data)
+        session.test_table = table.update_row(row_id, updated)
+        table = session.test_table
+        row = updated
+
+
 # ── Pipeline execution ────────────────────────────────────────────────────
+
+
+def _select_conditions_for_generation(session: Any) -> list[TestCondition]:
+    """Choose generation conditions: confirmed test rows first, then plan conditions.
+
+    AI-034 Phase 3 — a confirmed Test Table (one skeleton per row) takes
+    precedence over the Living Test Plan's raw conditions.
+    """
+    if session.test_table is not None and session.test_table.confirmed_row_ids:
+        return table_to_conditions(session.test_table)
+    conditions = list(session.pipeline_conditions or [])
+    if not conditions and session.test_plan:
+        conditions = session.test_plan.conditions
+    return conditions
 
 
 async def run_pipeline(session: Any) -> None:
@@ -327,9 +477,7 @@ async def run_pipeline(session: Any) -> None:
 
     print(cyan("  Running pipeline — this may take a few minutes…"))
 
-    conditions = list(session.pipeline_conditions or [])
-    if not conditions and session.test_plan:
-        conditions = session.test_plan.conditions
+    conditions = _select_conditions_for_generation(session)
 
     try:
         ui_session = PipelineSessionState()

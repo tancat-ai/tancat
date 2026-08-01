@@ -64,7 +64,8 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/analyzer.py` | Lightweight user story analyzer (replaces `story_analyzer.py`). |
 | `src/user_story_parser.py` | Breaks down raw user stories into structured components. |
 | `src/test_plan.py` | Data model for test planning and coverage tracking. |
-| `src/test_generator.py` (`TestGenerator`) | Core engine that generates skeleton Playwright tests with `{{ACTION:description}}` placeholders using the LLM. Supports two modes: single-call (default when langgraph not installed) and multi-agent (`PipelineGraph`, enabled by default when langgraph is available via `pip install ai-playwright-generator[langgraph]`). Set `LANGGRAPH_ENABLED=0` to force single-call mode. |
+| `src/test_table.py` | AI-034 — LLM expansion of plan conditions into concrete test rows (`TestRow`/`TestTable`/`TestTableExpander`); `table_to_conditions()` converts confirmed rows into one generation condition per row. Editors in Streamlit + CLI; LTP "Tests" column. |
+| `src/test_generator.py` (`TestGenerator`) | Core engine that generates skeleton Playwright tests with `{{ACTION:description}}` placeholders using the LLM. Production path is single-call; the multi-agent LangGraph skeleton workflow is experimental/opt-in (`LANGGRAPH_ENABLED=1`). |
 | `src/agents/state.py` | Pydantic `WorkflowState` — serialisable state schema for the skeleton-generation LangGraph sub-phase. |
 | `src/agents/pipeline_state.py` | `PipelineState`, `Criterion`, `StoryAnalysis` dataclasses — full-pipeline state flowing through the multi-agent graph. |
 | `src/agents/planner.py` | LangGraph node — parses user story + conditions into structured test plan Markdown. |

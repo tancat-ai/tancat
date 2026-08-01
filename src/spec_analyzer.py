@@ -80,6 +80,17 @@ You must perform four analysis steps mentally, then output a JSON array of test 
 3. Surface ambiguities (spec gaps where behaviour is undefined).
 4. Derive specific test conditions.
 
+SPLITTING RULES (CRITICAL):
+- If the requirement expresses MULTIPLE DISTINCT CONCERNS — a main journey PLUS separate
+  questions or limits ("how many items can I add", "maximum quantity"), comma-separated or
+  "and"-joined concern lists, or multiple sentences each stating a different goal — generate
+  ONE condition PER CONCERN.
+- Do NOT collapse distinct concerns into a single happy_path condition.
+- A main journey (browse -> add to cart -> review cart -> checkout -> purchase) is ONE
+  happy_path condition; separate limit questions become their own boundary conditions.
+- Use "boundary" for limit/threshold questions (max items, max quantity, minimums, limits).
+- DO NOT skip, merge, or omit any concern. Enumerate them all with distinct ids.
+
 The condition types are:
 - `happy_path` (valid input, all rules pass)
 - `boundary` (value at exactly the rule limit and +/-1 unit either side)
@@ -102,6 +113,8 @@ Output ONLY valid JSON matching this schema:
   }
 ]
 No markdown fences around the JSON. No conversational text.
+- "source" must be a SHORT plain label (e.g. "User Story", "AC 1"). NEVER quote the spec text verbatim.
+- Do NOT use double-quote characters inside any string value — paraphrase instead of quoting.
 CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
 
     def __init__(self, llm_client: LLMClient | None = None) -> None:
@@ -117,6 +130,13 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         # a deterministic mapping (one condition per criterion) over speculative LLM
         # expansion. This keeps the generator aligned with user intent/baselines.
         explicit_criteria, _criteria_source = self._extract_numbered_criteria(spec_text)
+        # B-027 regression: ``parse_requirements_text`` wraps unstructured input as a
+        # single numbered item ("1. <whole story>"). A single item carrying
+        # multi-concern signals is almost certainly that wrapping — route it to the
+        # LLM path (SPLITTING RULES prompt) so distinct concerns become separate
+        # conditions instead of a deterministic 1:1 mapping.
+        if len(explicit_criteria) == 1 and self._has_multi_concern_signal(explicit_criteria[0]):
+            explicit_criteria = []
         if explicit_criteria:
             conditions: list[TestCondition] = []
             for idx, text in enumerate(explicit_criteria, start=1):
@@ -139,9 +159,112 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         try:
             # We use generate_test (or direct generation) to get the response string.
             response = self.llm_client.generate_test(prompt=prompt, system_prompt=self.SYSTEM_PROMPT, timeout=300)
-            return self._parse_response(response)
+            conditions = self._parse_response(response)
         except Exception as e:
-            raise RuntimeError(f"Spec analysis failed: {str(e)}") from e
+            # Retry once with a JSON-correctness correction. LLMs commonly embed
+            # unescaped quotes when quoting story text verbatim inside a value.
+            correction = (
+                prompt
+                + "\n\nCORRECTION: Your previous answer was not valid JSON. "
+                + "Do NOT embed double-quote characters inside any string value — paraphrase, do not quote verbatim. "
+                + 'Keep "source" short. Output ONLY valid JSON.'
+            )
+            try:
+                response = self.llm_client.generate_test(
+                    prompt=correction,
+                    system_prompt=self.SYSTEM_PROMPT,
+                    timeout=300,
+                )
+                conditions = self._parse_response(response)
+            except Exception as retry_exc:
+                raise RuntimeError(f"Spec analysis failed: {str(retry_exc)}") from e
+
+        # Safety net: if the LLM collapsed a multi-concern requirement into a single
+        # happy_path condition, split conservatively on sentence boundaries so the
+        # tester still gets distinct concerns to review (B-027 — naive comma-splitting
+        # was reverted as too aggressive; this never splits mid-sentence).
+        if self._collapsed_multi_concern(conditions, spec_text):
+            fallback = self._conservative_sentence_split(spec_text)
+            if fallback:
+                return self._fallback_conditions(fallback)
+        return conditions
+
+    @staticmethod
+    def _has_multi_concern_signal(text: str) -> bool:
+        """Return True when the text hints at multiple distinct test concerns."""
+        lowered = (text or "").lower()
+        return any(
+            hint in lowered
+            for hint in (
+                "maximum",
+                "max quantity",
+                "max items",
+                "how many",
+                " max ",
+                "limit",
+                " at least ",
+                " at most ",
+            )
+        )
+
+    @staticmethod
+    def _conservative_sentence_split(text: str) -> list[str] | None:
+        """Split a single-blob requirement into distinct concern sentences.
+
+        Conservative by design: splits on sentence boundaries only (never
+        mid-sentence commas), so narrative journeys stay whole. Returns None
+        when the text is atomic, already structured, or has no multi-concern
+        signal. This is a fallback for LLM collapse — the LLM is the primary
+        splitter (the naive comma-splitter of B-027 was reverted as too
+        aggressive for exactly this reason).
+        """
+        text = (text or "").strip()
+        if not text:
+            return None
+        # Structured input (numbered/bulleted) is handled by the numbered path.
+        if re.search(r"^\s*(\d+[.)]|[-*])\s+", text, re.M):
+            return None
+        if not SpecAnalyzer._has_multi_concern_signal(text):
+            return None
+        # Strip the wrapper labels build_test_plan prepends ("User Story:" etc.).
+        cleaned = re.sub(r"(?im)^\s*(?:user story|acceptance criteria)\s*:?\s*$", "", text)
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+|\n+", cleaned)
+            if sentence.strip() and len(sentence.strip()) > 2
+        ]
+        if len(sentences) <= 1:
+            return None
+        return sentences
+
+    @staticmethod
+    def _collapsed_multi_concern(conditions: list[TestCondition], spec_text: str) -> bool:
+        """Return True when the LLM collapsed a multi-concern requirement to one condition."""
+        return (
+            len(conditions) == 1
+            and conditions[0].type == "happy_path"
+            and SpecAnalyzer._has_multi_concern_signal(spec_text)
+        )
+
+    @classmethod
+    def _fallback_conditions(cls, sentences: list[str]) -> list[TestCondition]:
+        """Build conditions from a conservative sentence split."""
+        conditions: list[TestCondition] = []
+        for idx, sentence in enumerate(sentences, start=1):
+            ctype: ConditionType = "boundary" if SpecAnalyzer._has_multi_concern_signal(sentence) else "happy_path"
+            conditions.append(
+                TestCondition(
+                    id=f"TC01.{idx:02d}",
+                    type=ctype,
+                    text=sentence,
+                    expected="Meets acceptance criteria.",
+                    source=f"Concern {idx}",
+                    flagged=False,
+                    src="manual",
+                    intent=infer_condition_intent(sentence),
+                )
+            )
+        return conditions
 
     @staticmethod
     def _extract_numbered_criteria(spec_text: str) -> tuple[list[str], str]:
@@ -215,7 +338,12 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         except json.JSONDecodeError as e:
             # Fallback: try to salvage individual objects even if the array is malformed.
             salvaged = self._try_parse_objects_from_array(json_str)
-            if salvaged:
+            # Only accept salvage when every detected object block was recovered —
+            # partial salvage silently drops conditions (an LLM embedding quotes in
+            # one value corrupts that object). Prefer raising so the caller's retry
+            # produces a clean response.
+            object_block_count = len(re.findall(r"\{[\s\S]*?\}", json_str))
+            if salvaged and len(salvaged) == object_block_count:
                 return salvaged
 
             preview = json_str[:600].replace("\n", "\\n")
