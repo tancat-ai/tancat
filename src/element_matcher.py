@@ -11,7 +11,7 @@ import logging
 import re
 from typing import Any
 
-from src.intent_matcher import SemanticFillStrategy
+from src.intent_matcher import SemanticFillStrategy, _is_fillable
 from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
 from src.role_mapper import (
@@ -214,6 +214,12 @@ class ElementMatcher:
                 # "Vehicle Usage") otherwise win fast-text matching over the
                 # real radio/button (which may have empty text).
                 if element.get("synthetic_id"):
+                    continue
+                # FILL gate: containers whose accessible_name collides with a
+                # field label (e.g. a div wrapping the username input reports
+                # accessible_name="Username") must not win over the real input.
+                # rank_candidates() already applies this gate — Pass 1 must too.
+                if action == "FILL" and not _is_fillable(element):
                     continue
                 norm_text = normalise_element_text(element)
                 if len(norm_text) < 3:

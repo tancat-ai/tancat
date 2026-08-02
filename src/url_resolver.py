@@ -8,11 +8,27 @@ heuristic matching against URL paths, then falls back to common path candidates.
 from __future__ import annotations
 
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from src.url_utils import build_common_path_candidates
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_url(url: str) -> str:
+    """Return a canonical URL — root http(s) URLs get a trailing slash.
+
+    Sites canonicalize ``https://host`` to ``https://host/`` (HTTP redirect),
+    so asserting or navigating to the no-slash form fails ``to_have_url()``
+    after the redirect. Query/fragment are preserved.
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme in ("http", "https") and parsed.path in ("", "/"):
+            return urlunparse((parsed.scheme, parsed.netloc, "/", parsed.params, parsed.query, parsed.fragment))
+    except ValueError:
+        pass
+    return url
 
 
 class UrlResolver:

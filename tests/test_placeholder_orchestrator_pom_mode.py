@@ -149,17 +149,21 @@ def test_get_pom_instance_name_matches_url() -> None:
 
 
 def test_get_pom_method_call_click_returns_pom_call_when_pom_mode() -> None:
-    """CLICK should generate POM method call in POM mode."""
+    """CLICK should generate a POM method call carrying the resolved selector."""
     orch = PlaceholderOrchestrator(pom_mode=True)
     result = orch._get_pom_method_call("CLICK", "Submit button", "#submit", "home_page")
-    assert result == "home_page.click('Submit button')"
+    assert result == "home_page.click('Submit button', selector='#submit')"
+
+    # Unresolved placeholders defer to the runtime matcher (no selector arg)
+    result_skip = orch._get_pom_method_call("CLICK", "Submit button", 'pytest.skip("nope")', "home_page")
+    assert result_skip == "home_page.click('Submit button')"
 
 
 def test_get_pom_method_call_fill_returns_pom_call_when_pom_mode() -> None:
-    """FILL should generate POM method call with fill_value in POM mode."""
+    """FILL should generate a POM method call carrying fill_value and selector."""
     orch = PlaceholderOrchestrator(pom_mode=True)
     result = orch._get_pom_method_call("FILL", "Username input", "#username", "login_page", fill_value="testuser")
-    assert result == "login_page.fill('Username input', 'testuser')"
+    assert result == "login_page.fill('Username input', 'testuser', selector='#username')"
 
 
 def test_get_pom_method_call_assert_returns_none_in_pom_mode() -> None:

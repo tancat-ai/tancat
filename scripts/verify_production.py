@@ -304,6 +304,7 @@ async def verify_site(
 
     # Execute the generated tests
     print(f"\n  [RUN] Executing tests against {site_id}...")
+    exec_timeout = max(60, min(300, len(test_funcs) * 30))
     try:
         run_start = time.time()
         proc = subprocess.run(
@@ -325,7 +326,7 @@ async def verify_site(
             ],
             capture_output=True,
             text=True,
-            timeout=max(60, min(180, len(test_funcs) * 25)),
+            timeout=exec_timeout,
             cwd=str(PROJECT_ROOT),
         )
         run_duration = time.time() - run_start
@@ -365,9 +366,18 @@ async def verify_site(
         if proc.stderr:
             (output_dir / "pytest_stderr.txt").write_text(proc.stderr, encoding="utf-8")
 
-    except subprocess.TimeoutExpired:
-        result.gates.append(Gate("Test execution", False, "timeout after {max(60, min(180, len(test_funcs) * 25))}s"))
-        print("  [FAIL] Execution: timeout after {max(60, min(180, len(test_funcs) * 25))}s")
+    except subprocess.TimeoutExpired as exc:
+        # The suite cap fired — salvage whatever completed so the verdict is
+        # informative instead of a bare "timeout" gate.
+        partial_stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        (output_dir / "pytest_output.txt").write_text(partial_stdout, encoding="utf-8")
+        evidence_files = (
+            list((output_dir / "evidence").glob("*.evidence.json")) if (output_dir / "evidence").exists() else []
+        )
+        run_duration = time.time() - run_start
+        detail = f"timed out after {exec_timeout:.0f}s — {len(evidence_files)}/{len(test_funcs)} tests completed"
+        result.gates.append(Gate("Test execution", False, detail))
+        print(f"  [FAIL] Execution: {detail} ({run_duration:.1f}s)")
     except Exception as e:
         result.gates.append(Gate("Test execution", False, str(e)))
         print(f"  [FAIL] Execution: {e}")

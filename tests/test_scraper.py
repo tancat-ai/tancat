@@ -110,3 +110,33 @@ def test_capture_element_visibility_preserves_existing_elements() -> None:
     assert result[1]["selector"] == ""
     assert result[0]["is_visible"] is True
     assert result[1]["is_visible"] is True
+
+
+def test_remove_consent_overlays_filters_onetrust_class_markup() -> None:
+    """OneTrust consent frameworks keep hidden .fc-* / #onetrust markup in the DOM.
+
+    Regression: consent removal previously only matched ID-based selectors, so
+    class-based OneTrust preference-center elements polluted the scrape (1,448
+    of 2,328 elements on automationexercise.com).
+    """
+    html = """
+    <html><body>
+      <div class="fc-consent-root"><button>Consent</button></div>
+      <div class="fc-preference-container">
+        <h2 class="fc-preference-slider-label">vendor a</h2>
+        <p class="fc-truncated-single-line">data</p>
+      </div>
+      <div id="onetrust-banner-sdk"><button>Accept all</button></div>
+      <a href="/products">Products</a>
+      <a href="/product_details/1">View product</a>
+    </body></html>
+    """
+    cleaned = PageScraper._remove_consent_overlays(html)
+
+    assert "fc-consent-root" not in cleaned
+    assert "fc-preference-container" not in cleaned
+    assert "fc-truncated-single-line" not in cleaned
+    assert "onetrust-banner-sdk" not in cleaned
+    # Real page content must survive
+    assert "/products" in cleaned
+    assert "/product_details/1" in cleaned

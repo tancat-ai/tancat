@@ -280,3 +280,13 @@ def test_resolve_scraped_url_fallback_no_false_positives() -> None:
         seed_url="https://example.com/",
     )
     assert resolver.resolve("nonexistent-gibberish") is None
+
+
+def test_normalize_url_root_gets_trailing_slash() -> None:
+    from src.url_resolver import normalize_url
+
+    assert normalize_url("https://automationexercise.com") == "https://automationexercise.com/"
+    assert normalize_url("https://automationexercise.com/") == "https://automationexercise.com/"
+    assert normalize_url("https://automationexercise.com/products") == "https://automationexercise.com/products"
+    assert normalize_url("http://shop.example") == "http://shop.example/"
+    assert normalize_url("https://shop.example?q=1") == "https://shop.example/?q=1"

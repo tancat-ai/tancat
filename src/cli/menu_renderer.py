@@ -733,7 +733,7 @@ def show_package_metadata(package: dict[str, str]) -> None:
     from src.pipeline_artifact_manager import load_package_manifest
 
     package_dir = Path(package["path"])
-    manifest = load_package_manifest(package_dir)
+    manifest = load_package_manifest(package_dir, reconstruct=True)
 
     print_header(f"Package: {manifest.package_name}")
     print(f"  Created     : {manifest.created_at}")

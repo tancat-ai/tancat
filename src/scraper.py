@@ -487,6 +487,12 @@ class PageScraper:
         consent_selectors = [
             # IAB Global Vendor List overlays
             '[id^="fc-preference"]',
+            # OneTrust / IAB consent framework — class-based markup (the DOM keeps
+            # the preference center + vendor list hidden but present, so ID-based
+            # selectors alone miss hundreds of .fc-* elements).
+            '[class*="fc-"]',
+            '[id*="onetrust"]',
+            '[class*="onetrust"]',
             # Common consent modal patterns (more specific to avoid false positives)
             'div[id*="consent"][role="dialog"]',
             'div[id*="cookie"][role="dialog"]',

@@ -141,6 +141,47 @@ class TestSaveAndLoadManifest:
         loaded = load_package_manifest(package_root / MANIFEST_FILENAME)
         assert loaded.package_name == "my_package"
 
+    def test_load_package_directory_resolves_canonical_manifest(self, tmp_path: Path) -> None:
+        """A package root (directory) with a manifest should load the canonical file.
+
+        Regression: the CLI passed a directory to load_package_manifest() which
+        previously tried to read the directory as JSON (PermissionError on
+        Windows).
+        """
+        package_root = tmp_path / "test_pkg"
+        package_root.mkdir()
+        save_package_manifest(package_root, _make_manifest(package_name="test_pkg"))
+
+        loaded = load_package_manifest(package_root)
+        assert loaded.package_name == "test_pkg"
+
+    def test_load_package_directory_without_manifest_raises(self, tmp_path: Path) -> None:
+        """A package root without a manifest raises FileNotFoundError (not
+        PermissionError) unless reconstruct=True is given."""
+        package_root = tmp_path / "legacy_pkg"
+        package_root.mkdir()
+
+        try:
+            load_package_manifest(package_root)
+            raise AssertionError("Expected FileNotFoundError")
+        except FileNotFoundError:
+            pass  # expected
+
+    def test_load_package_directory_reconstructs_legacy(self, tmp_path: Path) -> None:
+        """Legacy/verify packages (no manifest, only test_*.py files) load via
+        reconstruct=True — the path the CLI uses for Load Existing Generated
+        Tests."""
+        package_root = tmp_path / "verify_automationexercise_20260801"
+        package_root.mkdir()
+        (package_root / "test_automationexercise.py").write_text(
+            "def test_01():\n    pass\n",
+            encoding="utf-8",
+        )
+
+        loaded = load_package_manifest(package_root, reconstruct=True)
+        assert loaded.package_name == "verify_automationexercise_20260801"
+        assert len(loaded.generated_test_files) >= 1
+
 
 # ---------------------------------------------------------------------------
 # find_existing_packages tests

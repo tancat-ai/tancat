@@ -46,7 +46,7 @@ from src.skip_manager import (
 )
 from src.stateful_scraper import StatefulPageScraper
 from src.url_inference import infer_next_page_url
-from src.url_resolver import UrlResolver
+from src.url_resolver import UrlResolver, normalize_url
 from src.url_utils import (
     build_common_path_candidates,
     extract_route_concepts,
@@ -378,6 +378,7 @@ class PlaceholderOrchestrator:
                                 known_urls=list(scraped_data.keys()),
                             )
                             if resolved_url:
+                                resolved_url = normalize_url(resolved_url)
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
                                         placeholder.token,
@@ -713,24 +714,28 @@ class PlaceholderOrchestrator:
             # Step 1: Try UrlResolver
             url_from_resolver = self.url_resolver.resolve(description)
             if url_from_resolver:
+                url_from_resolver = normalize_url(url_from_resolver)
                 logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
                 return repr(url_from_resolver), url_from_resolver, None
 
             # Step 2: Try PlaceholderResolver
             resolved_url = self.resolver.resolve_url(description, scoped_pages or scraped_data)
             if resolved_url:
+                resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
 
             # Step 3: Heuristic fallback
             if current_url:
                 heuristic = heuristic_url_from_description(current_url, description)
                 if heuristic:
+                    heuristic = normalize_url(heuristic)
                     await self._ensure_scraped(heuristic, scraped_data, scraped_errors)
                     return repr(heuristic), heuristic, None
 
             # Step 4: Try seed URL as last resort
             seed_url = self.url_resolver.get_seed_url()
             if seed_url:
+                seed_url = normalize_url(seed_url)
                 logger.debug("Falling back to seed URL for '%s': %s", description, seed_url)
                 return repr(seed_url), seed_url, None
 
@@ -754,6 +759,7 @@ class PlaceholderOrchestrator:
         if action == "ASSERT" and self._is_page_state_assertion(description):
             resolved_url = self.resolver.resolve_url(description, scraped_data, known_urls=list(scraped_data.keys()))
             if resolved_url:
+                resolved_url = normalize_url(resolved_url)
                 logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
                 return f'expect(page).to_have_url("{resolved_url}")', None, "url"
             logger.debug("URL assertion failed for '%s' — falling through to element resolution", description)
