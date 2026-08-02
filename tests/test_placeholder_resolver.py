@@ -916,3 +916,65 @@ def test_resolve_url_validates_relative_urls_against_scraped_data() -> None:
     assert result != "/nonexistent-page", f"URL validation failed: returned non-existent URL {result}"
     # Should fall back to a known URL
     assert result in scraped_data, f"Expected fallback to known URL, got {result}"
+
+
+# --------------------------------------------------------------------------
+# Root-path guard (2026-08-03) — a bare root URL must not substring-match
+# multi-word descriptions when the base URL comes first in known_urls.
+# --------------------------------------------------------------------------
+
+
+def _three_page_fixture() -> tuple[PlaceholderResolver, dict[str, list[dict[str, str]]], list[str]]:
+    """Return resolver + scraped pages with the base URL FIRST in known_urls (production order)."""
+    resolver = PlaceholderResolver()
+    pages: dict[str, list[dict[str, str]]] = {
+        "https://automationexercise.com": [
+            {
+                "selector": "body",
+                "text": "Home with cart link",
+                "tag": "body",
+                "href": "https://automationexercise.com/view_cart",
+            },
+        ],
+        "https://automationexercise.com/products": [
+            {"selector": "body", "text": "Products list", "tag": "body"},
+        ],
+        "https://automationexercise.com/view_cart": [
+            {"selector": "body", "text": "Cart contents", "tag": "body"},
+        ],
+    }
+    return resolver, pages, list(pages.keys())
+
+
+def test_resolve_url_cart_page_loaded_does_not_hit_root() -> None:
+    """Multi-word page-state descriptions must not resolve to the base URL.
+
+    Regression: ``(parsed.path or "/").replace("/", " ")`` normalizes the
+    root path to a single space, which substring-matches ANY multi-word
+    description — so "cart page loaded" resolved to the home URL when the
+    base URL came first in known_urls.
+    """
+    resolver, pages, known = _three_page_fixture()
+    for desc, expected in (
+        ("cart page loaded", "https://automationexercise.com/view_cart"),
+        ("cart page title", "https://automationexercise.com/view_cart"),
+        ("go to cart page", "https://automationexercise.com/view_cart"),
+        ("products page title", "https://automationexercise.com/products"),
+    ):
+        result = resolver.resolve_url(desc, pages, known_urls=known)
+        assert result == expected, f"{desc!r} → {result}, expected {expected}"
+
+
+def test_resolve_url_home_keywords_still_hit_root() -> None:
+    """Home/start/landing descriptions still resolve to the root URL."""
+    resolver, pages, known = _three_page_fixture()
+    for desc in ("home", "home page loaded", "home page title", "landing page"):
+        result = resolver.resolve_url(desc, pages, known_urls=known)
+        assert result == "https://automationexercise.com", f"{desc!r} → {result}, expected home"
+
+
+def test_resolve_url_single_word_keywords_unchanged() -> None:
+    """Existing single-word GOTO keyword behavior is preserved."""
+    resolver, pages, known = _three_page_fixture()
+    assert resolver.resolve_url("cart", pages, known_urls=known) == "https://automationexercise.com/view_cart"
+    assert resolver.resolve_url("products", pages, known_urls=known) == "https://automationexercise.com/products"

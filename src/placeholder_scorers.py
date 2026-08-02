@@ -163,12 +163,19 @@ class PlaceholderScorer:
         # --- Haystack match (fast path) ---
         haystack = PlaceholderScorer._build_haystack(element).lower()
         normalized_desc = re.sub(r"['\"]", "", description).lower().replace("_", " ")
+        desc_words = SemanticMatcher.get_words(description)
         if haystack and normalized_desc in haystack:
             haystack_score = PlaceholderScorer._haystack_score(action, description, element)
+            # CLICK gates that the slow path applies must apply to the fast
+            # path too — a short description like "OK" can match a substring
+            # inside a hidden input's haystack ("csrfmiddlewareTOKen") and
+            # short-circuit at a flat 100 with no penalties applied.
+            if action == "CLICK":
+                haystack_score += PlaceholderScorer._hidden_element_penalty(action, element)
+                haystack_score += PlaceholderScorer._click_text_penalty(action, description, desc_words, element)
             return haystack_score if haystack_score >= match_threshold else None
 
         # --- Semantic score (slow path) ---
-        desc_words = SemanticMatcher.get_words(description)
         element_words = SemanticMatcher.get_words(haystack, expand_aliases=False)
         score = len(desc_words.intersection(element_words))
 

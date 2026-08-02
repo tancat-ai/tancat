@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -191,9 +192,9 @@ class TestOrchestrator:
             elapsed = now - self._last_phase_time if self._last_phase_time else 0
             self._last_phase_time = now
             if " start" in message or self._last_phase_time == 0:
-                print(f"[pipeline] {message}", flush=True)
+                print(f"[pipeline] {message}", flush=True, file=sys.stderr)
             else:
-                print(f"[pipeline] {message}  [{elapsed:.1f}s]", flush=True)
+                print(f"[pipeline] {message}  [{elapsed:.1f}s]", flush=True, file=sys.stderr)
 
     async def run_pipeline(
         self,
@@ -887,11 +888,12 @@ class TestOrchestrator:
                 "{{GOTO:page description}}\n"
                 "{{CLICK:button or link text}}\n"
                 "{{FILL:field description:value to type}}\n"
-                "{{ASSERT:what should be visible}}\n"
+                "{{ASSERT:what should be visible or true (element, content, or page state; 'home page loaded' → URL check)}}\n"
                 "\n"
                 "=== EXAMPLE ===\n"
                 "def test_example(page, evidence_tracker):\n"
                 "    {{GOTO:home}}\n"
+                "    {{ASSERT:home page loaded}}\n"
                 "    {{FILL:username:admin}}\n"
                 "    {{FILL:password:secret}}\n"
                 "    {{CLICK:Login}}\n"
@@ -921,7 +923,7 @@ class TestOrchestrator:
                     "    {{GOTO:page}}\n"
                     "    {{CLICK:button text}}\n"
                     "    {{FILL:field:value}}\n"
-                    "    {{ASSERT:what to see}}\n\n"
+                    "    {{ASSERT:what to see ('page loaded' → URL check)}}\n\n"
                     "Every body line MUST be a {{ACTION:description}} placeholder. No real code."
                 )
                 fragment = await self.test_generator.client.generate(minimal_prompt)

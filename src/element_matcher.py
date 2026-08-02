@@ -14,6 +14,7 @@ from typing import Any
 from src.intent_matcher import SemanticFillStrategy, _is_fillable
 from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
+from src.placeholder_scorers import PlaceholderScorer
 from src.role_mapper import (
     ROLE_FALLBACK_GAP,
     is_display_role,
@@ -43,6 +44,26 @@ TEXT_BEARING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "
 
 # B-020: Minimum score for text fallback when no LLM selection is available.
 MIN_SCORE_FOR_TEXT_FALLBACK = 5
+
+#: Description-side dialog/dismiss/confirm intent. Generic ARIA dialog
+#: vocabulary (the actions a dialog's buttons perform) — NOT a site-specific
+#: element list. Word-boundary matched so "ok" doesn't fire on "token".
+DIALOG_INTENT_TERMS: tuple[str, ...] = (
+    "ok",
+    "okay",
+    "close",
+    "dismiss",
+    "confirm",
+    "cancel",
+    "accept",
+    "done",
+    "continue",
+    "got it",
+    "gotit",
+)
+
+#: Interactive ARIA roles a dialog-action may target.
+DIALOG_SCOPED_ROLES: frozenset[str] = frozenset({"button", "link", "submit", "a", "menuitem", "checkbox", "radio"})
 
 
 class ElementMatcher:
@@ -137,6 +158,86 @@ class ElementMatcher:
                     return element
 
         return None
+
+    # ── Pass D: Dialog-action scoping (CLICK) ──────────────────
+
+    def pass_dialog_action(
+        self,
+        action: str,
+        description: str,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str] | None:
+        """Pass D — dialog-action scoping for CLICK placeholders.
+
+        When the description implies a dialog/dismiss/confirm action
+        ("OK", "close popup", "dismiss", "Continue Shopping"), resolve it
+        against the modal/dialog's OWN interactive elements instead of the
+        whole page. Without this, a 2-char description like "OK" matches
+        substrings inside unrelated elements ("csrfmiddlewareTOKen",
+        "Kookie Kids") and short-circuits to the wrong target.
+
+        The candidate scope is purely structural (ARIA): elements inside a
+        modal (the scraper's ``in_modal`` flag) or carrying a
+        dialog/alertdialog role, restricted to interactive roles. No
+        site-specific lists.
+
+        Returns None when the description is not dialog-intent or no
+        in-modal candidate exists — the caller falls through to the normal
+        resolution passes.
+        """
+        if action != "CLICK":
+            return None
+
+        lowered = description.replace("_", " ").lower()
+        words = set(lowered.split())
+        intent = any((" " in term and term in lowered) or term in words for term in DIALOG_INTENT_TERMS)
+        if not intent:
+            return None
+
+        # Dismiss-intent descriptions ("OK", "close", "dismiss", "done",
+        # "cancel", "got it") target the modal's DISMISSAL control — prefer
+        # elements whose selector/classes carry close-modal semantics (the
+        # button that closes the dialog without navigating away).
+        dismiss_intent = any(
+            term in words for term in ("ok", "okay", "close", "dismiss", "done", "cancel", "got", "gotit")
+        )
+
+        best_element: dict[str, str] | None = None
+        best_score = -1
+        for elements in pages_data.values():
+            for element in elements:
+                role = str(element.get("role", "")).lower()
+                if role not in DIALOG_SCOPED_ROLES:
+                    continue
+                if not (element.get("in_modal") or role in {"dialog", "alertdialog"}):
+                    continue
+                selector = str(element.get("selector", "")).strip() or str(element.get("tag", ""))
+                if not selector:
+                    continue
+                score = PlaceholderScorer.compute_element_score(
+                    "CLICK", description, element, selector, match_threshold=0.0
+                )
+                if score is None:
+                    continue
+                if dismiss_intent:
+                    classes = str(element.get("classes", "")).lower()
+                    if any(
+                        mark in f"{classes} {selector.lower()}"
+                        for mark in ("close-modal", "modal-close", "btn-close", "dismiss")
+                    ):
+                        score += 10
+                if score > best_score:
+                    best_score = score
+                    best_element = element
+
+        if best_element is not None:
+            logger.info(
+                "[RESOLVE] '%s' | pass=D (dialog-action scoping) | selector=%s | score=%s",
+                description,
+                best_element.get("selector"),
+                best_score,
+            )
+        return best_element
 
     # ── Pass 1: Text match ─────────────────────────────────────
 
@@ -476,6 +577,14 @@ class ElementMatcher:
             for element in elements:
                 if action == "ASSERT" and not is_display_role(element):
                     continue
+                # CLICK/FILL: hidden elements are not valid targets — parity
+                # with rank_candidates. Without this, a short description like
+                # "OK" can substring-match "csrfmiddlewareTOKen" via the
+                # element's name attribute and win on the fast path.
+                if action in {"CLICK", "FILL"} and (
+                    str(element.get("role", "")).lower() == "hidden" or element.get("is_visible") is False
+                ):
+                    continue
                 for field in structural_fields:
                     raw = str(element.get(field, "")).strip()
                     if len(raw) < 2:
@@ -488,7 +597,9 @@ class ElementMatcher:
                     if normalized_field in description.lower():
                         return element
                     desc_normalized = description.lower().replace("_", " ").replace("-", " ")
-                    if desc_normalized in normalized_field:
+                    # 2-char substrings are noise ("ok" inside "token") —
+                    # only trust >= 3-char substring containment.
+                    if len(desc_normalized) >= 3 and desc_normalized in normalized_field:
                         return element
                     if action == "FILL" and SemanticFillStrategy().match(action, description, element):
                         return element
@@ -527,6 +638,14 @@ class ElementMatcher:
                 pass0_result["expected_value"] = description.strip("'\"")
                 return pass0_result
             logger.debug("[RESOLVE] '%s' | pass=0 exact text EXCLUDED (step context)", description)
+
+        # Pass D — dialog-action scoping (CLICK descriptions implying
+        # dismiss/confirm resolve to the modal's own controls)
+        pass_dialog_result = self.pass_dialog_action(action, description, pages_data)
+        if pass_dialog_result is not None:
+            if not excluded_selectors or not _is_excluded(pass_dialog_result, excluded_selectors):
+                return pass_dialog_result
+            logger.debug("[RESOLVE] '%s' | pass=D dialog EXCLUDED (step context)", description)
 
         # Pass 1 — fast text match (CLICK/FILL)
         pass1_result = self.pass1_text_match(action, description, pages_data)

@@ -406,6 +406,29 @@ class EvalRunner:
 
         return code_map
 
+    def _persist_regenerated_tests(self, code_map: dict[str, str]) -> None:
+        """Write regenerated code to ``test_output_dir`` for the execution phase.
+
+        ``_load_test_files`` globs ``test_*.py`` files whose stem contains the
+        site name — write one deterministic file per story (``test_<site>.py``)
+        so full-mode actually executes the JUST-regenerated tests and reports a
+        pass rate instead of "Tests executed: 0".
+        """
+        if self.test_output_dir is None:
+            return
+        self.test_output_dir.mkdir(parents=True, exist_ok=True)
+        for golden_file in sorted(self.dataset_dir.glob("*.json")):
+            golden = load_golden_key(golden_file)
+            story_id = golden["id"]
+            site = golden["site"]
+            code = code_map.get(story_id, "")
+            if not code.strip():
+                logger.warning("No regenerated code for %s — skipping test persistence", story_id)
+                continue
+            out_path = self.test_output_dir / f"test_{site}.py"
+            out_path.write_text(code, encoding="utf-8")
+            logger.info("Persisted regenerated tests for %s → %s", story_id, out_path)
+
     def _load_test_files(self) -> dict[str, Path]:
         """Map story_ids to generated test files for execution."""
         test_files: dict[str, Path] = {}
@@ -451,6 +474,11 @@ class EvalRunner:
             # Phase 1d: When regenerating via graph, save captures for future CI gates
             if self.use_graph and code_map:
                 self._save_captures(code_map)
+            # Full mode: persist regenerated code so the test-execution phase
+            # can actually run it — without this the executor finds no test
+            # files and "Tests executed: 0" is reported every run.
+            if mode == "full" and self.test_output_dir is not None:
+                self._persist_regenerated_tests(code_map)
         else:
             code_map = self._load_code_map()
             durations = {}

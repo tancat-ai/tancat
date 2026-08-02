@@ -160,6 +160,7 @@ _ASSERTION_TO_ET_METHOD: dict[str, str] = {
     "toHaveCount": "assert_count",
     "toHaveClass": "assert_visible",  # no dedicated method yet, fall back
     "toHaveAttribute": "assert_visible",  # no dedicated method yet, fall back
+    "toBeHidden": "assert_hidden",  # polarity: "popup closed" / "item removed"
 }
 
 
@@ -606,7 +607,7 @@ def strip_evidence_from_test_code(code: str) -> str:
     # Ensure playwright import includes expect
     if "expect(" in result:
         result = re.sub(
-            r"from playwright\.sync_api import Page\b",
+            r"from playwright\.sync_api import Page\b(?!, expect)",
             "from playwright.sync_api import Page, expect",
             result,
         )
@@ -620,6 +621,44 @@ def strip_evidence_from_test_code(code: str) -> str:
     # Remove dismiss_consent_overlays(page) calls
     result = re.sub(r"^\s*dismiss_consent_overlays\(page\)\s*$", "", result, flags=re.MULTILINE)
     result = re.sub(r"^\s*dismiss_consent_overlays\(self\.page\)\s*$", "", result, flags=re.MULTILINE)
+
+    # --- POM → flat conversion (export of POM-mode packages) ---
+    # POM-mode tests reference page objects that a flat export does not
+    # carry: imports, instantiations, and method calls must be converted to
+    # direct Playwright calls (the POM methods carry the resolved selector).
+    # Remove POM imports:  from pages.home_page import HomePage
+    result = re.sub(r"^from pages\.[\w.]* import .*$", "", result, flags=re.MULTILINE)
+    # Remove POM instantiations:  home_page = HomePage(page, evidence_tracker)
+    result = re.sub(
+        r"^\s*(\w+_page)\s*=\s*\w+\((?:self\.)?page,\s*evidence_tracker\s*\)\s*$",
+        "",
+        result,
+        flags=re.MULTILINE,
+    )
+    # home_page.click('label', selector='sel') -> page.locator('sel').click()
+    result = re.sub(
+        r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*,\s*selector=\s*(['\"])(.*?)\3\s*\)",
+        r"page.locator('\4').click()",
+        result,
+    )
+    # home_page.click('label') -> page.get_by_text('label').first.click() (best effort)
+    result = re.sub(
+        r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*\)",
+        r"page.get_by_text('\2').first.click()",
+        result,
+    )
+    # home_page.fill('label', 'value', selector='sel') -> page.locator('sel').fill('value')
+    result = re.sub(
+        r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*,\s*selector=\s*(['\"])(.*?)\5\s*\)",
+        r"page.locator('\6').fill('\4')",
+        result,
+    )
+    # home_page.fill('label', 'value') -> page.get_by_label('label').fill('value') (best effort)
+    result = re.sub(
+        r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*\)",
+        r"page.get_by_label('\2').fill('\4')",
+        result,
+    )
 
     # Remove blank lines that were left behind (collapse multiple blank lines to one)
     result = re.sub(r"\n{3,}", "\n\n", result)

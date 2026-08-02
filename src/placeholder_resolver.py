@@ -485,12 +485,25 @@ class PlaceholderResolver:
             )
 
         desc_norm = description.lower().strip()
+        desc_tokens = set(desc_norm.split())
+
+        # Root-path guard: ``(parsed.path or "/").replace("/", " ")`` for a
+        # bare root URL normalizes to a single space, which would
+        # substring-match ANY multi-word description ("cart page loaded"
+        # would resolve to the home URL when the base URL comes first in
+        # known_urls). Only home/start/landing-style descriptions match root.
+        def _matches_root() -> bool:
+            return bool(desc_tokens & {"home", "start", "landing", "store"})
 
         # 2. Match against known URLs (provided by orchestrator)
         if known_urls:
             for url in known_urls:
                 parsed = urlparse(url)
                 path_norm = (parsed.path or "/").lower().replace("/", " ")
+                if not path_norm.strip():
+                    if _matches_root():
+                        return url
+                    continue
                 if desc_norm in path_norm or path_norm in desc_norm:
                     return url
 
@@ -504,6 +517,10 @@ class PlaceholderResolver:
             for url in sorted(discovered_urls):
                 parsed = urlparse(url)
                 path_norm = (parsed.path or "/").lower().replace("/", " ")
+                if not path_norm.strip():
+                    if _matches_root():
+                        return url
+                    continue
                 if desc_norm in path_norm or path_norm in desc_norm:
                     return url
 

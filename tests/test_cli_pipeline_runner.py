@@ -468,3 +468,99 @@ class TestSelectConditionsForGeneration:
         session.pipeline_conditions = []
         conditions = _select_conditions_for_generation(session)
         assert [c.id for c in conditions] == ["TC01.03"]
+
+
+class TestStorySlug:
+    """Session.story_slug — the export flow referenced it without defining it."""
+
+    def test_empty_when_no_requirements(self) -> None:
+        session = Session()
+        assert session.story_slug == ""
+
+    def test_slugified_from_raw_requirements(self) -> None:
+        session = Session()
+        session.raw_requirements = "As a shopper I want to view product details on the store"
+        assert session.story_slug == "as_a_shopper_i_want_to_view_product_details_on_the"
+
+
+class TestExportCleanPackage:
+    """export_clean_package must not raise AttributeError on story_slug."""
+
+    def test_export_calls_service_with_story_slug(self, tmp_path: Path) -> None:
+        from types import SimpleNamespace
+
+        session = Session()
+        pkg = tmp_path / "test_20260802_120000_as_a_shopper"
+        pkg.mkdir()
+        session.pipeline_saved_path = str(pkg)
+        session.raw_requirements = "As a shopper I want to view product details"
+
+        fake_result = SimpleNamespace(summary=lambda: "Exported OK")
+
+        with (
+            patch("src.cli.menu_renderer.print_menu", return_value=0),
+            patch("src.cli.pipeline_runner.export_clean_suite", return_value=fake_result) as mock_export,
+            patch("builtins.input", return_value=""),
+        ):
+            from src.cli.pipeline_runner import export_clean_package
+
+            export_clean_package(session)
+
+        mock_export.assert_called_once()
+        _, kwargs = mock_export.call_args
+        assert kwargs["story_slug"] == "as_a_shopper_i_want_to_view_product_details"
+
+
+class TestExportSourceNormalization:
+    """export_clean_package must derive the package dir when the saved path is the test file."""
+
+    def test_file_saved_path_resolves_to_package_dir(self, tmp_path: Path) -> None:
+        from types import SimpleNamespace
+
+        session = Session()
+        pkg = tmp_path / "test_20260802_120000_as_a_shopper"
+        pkg.mkdir()
+        test_file = pkg / "test_as_a_shopper.py"
+        test_file.write_text("def test_x():\n    pass\n", encoding="utf-8")
+        # ui_pipeline stores the artifact FILE path — the bug that produced
+        # "Tests: 0 / Page Objects: 0" exports.
+        session.pipeline_saved_path = str(test_file)
+        session.raw_requirements = "As a shopper I want to view product details"
+
+        fake_result = SimpleNamespace(summary=lambda: "Exported OK")
+
+        with (
+            patch("src.cli.menu_renderer.print_menu", return_value=0),
+            patch("src.cli.pipeline_runner.export_clean_suite", return_value=fake_result) as mock_export,
+            patch("builtins.input", return_value=""),
+        ):
+            from src.cli.pipeline_runner import export_clean_package
+
+            export_clean_package(session)
+
+        mock_export.assert_called_once()
+        args, kwargs = mock_export.call_args
+        assert Path(kwargs["source_package_dir"]) == pkg
+
+    def test_dir_saved_path_passed_through(self, tmp_path: Path) -> None:
+        from types import SimpleNamespace
+
+        session = Session()
+        pkg = tmp_path / "test_pkg_dir"
+        pkg.mkdir()
+        session.pipeline_saved_path = str(pkg)
+
+        fake_result = SimpleNamespace(summary=lambda: "Exported OK")
+
+        with (
+            patch("src.cli.menu_renderer.print_menu", return_value=0),
+            patch("src.cli.pipeline_runner.export_clean_suite", return_value=fake_result) as mock_export,
+            patch("builtins.input", return_value=""),
+        ):
+            from src.cli.pipeline_runner import export_clean_package
+
+            export_clean_package(session)
+
+        mock_export.assert_called_once()
+        _, kwargs = mock_export.call_args
+        assert Path(kwargs["source_package_dir"]) == pkg

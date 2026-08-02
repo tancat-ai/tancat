@@ -10,7 +10,25 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
-- **CLI walkthrough driver** (`scripts/cli_walkthrough.py`): marker-driven subprocess driver that exercises every CLI menu button — `--pass nav` (41/41, ~1 min) and `--pass full` (59/59 with real LLM + live site, ~15 min). Documents Windows pipe gotchas (use `read1()`, one write per `input()`, paste terminates on first blank line). Full logs to `scripts/archive/cli_snapshots/`.
+- **Eval harness full-regenerate test execution**: `EvalRunner._persist_regenerated_tests()` writes just-generated code to `generated_tests/test_<site>.py` so `--mode full --regenerate` actually runs the tests — "Tests executed: 0" (every run) is now 33 executed / 17 passed (51.5% pass rate) with per-site breakdown and false-positive estimation.
+- **Dialog-action scoping (Pass D)**: `ElementMatcher.pass_dialog_action()` — descriptions implying dialog/dismiss/confirm intent (ok/okay/close/dismiss/confirm/cancel/accept/done/continue/got it) resolve against in-modal interactive elements (`in_modal` flag / dialog role), preferring the modal's dismissal control (close-modal class semantics). Generic ARIA-based — no site-specific lists. Plus CLICK fast-path hygiene (`_hidden_element_penalty` + `_click_text_penalty` in the haystack fast path) and pass-2 hidden/role gates + ≥3-char substring containment ("OK" can no longer match "csrfmiddlewareTOKen").
+- **Assertion-state polarity**: `polarity_assertion_type()` (closed/gone/disappeared/removed/hidden/dismissed/vanished/no longer/not visible/not shown) → `toBeHidden` → `EvidenceTracker.assert_hidden()` (`wait_for(state="hidden")` — hidden OR detached). Hooked at both ASSERT resolution paths.
+- **`Session.story_slug`** property (slugify of the pasted story) — fixes the export flow's AttributeError.
+- **CLI walkthrough `reject:` capability** — a step now fails when rejected text (e.g. "Export failed") appears in output, catching errors the loose "Press Enter" markers previously swallowed.
+
+### Fixed
+- **Page-load assertions**: `_is_page_state_assertion` no longer vetoes "title" — `<page> page title` routes to `to_have_url` (matches the golden encoding; "practice form page title" stays element-level). `resolve_url` root-path substring bug (a bare root URL no longer matches every multi-word description, e.g. "cart page loaded" → home URL). Golden validator compares `to_have_url` URLs trailing-slash-insensitively (production emits `https://host/`, goldens hold the bare form).
+- **CLI tables truncated at 50 chars**: Living Test Plan and Test Table now wrap text to the full terminal width (`shutil.get_terminal_size` + `textwrap`) with continuation lines.
+- **CLI log/menu interleaving**: `LLMClient._debug` and `TestOrchestrator._debug` (plus the short-response warnings) now print to stderr — `[llm_client]`/`[pipeline]` lines no longer pollute menu/table output under `PIPELINE_DEBUG=1`.
+- **Export Clean Package produced empty suites**: `pipeline_saved_path` holds the test-FILE path (ui_pipeline) but export treated it as a directory — file→parent-dir normalization; export now carries the tests ("Tests: 1").
+- **Flat export left broken POM references**: `strip_evidence_from_test_code` now removes POM imports/instantiations and converts `_page.click/fill(label, selector='sel')` → `page.locator('sel').click()/fill(...)`; `expect` import is idempotent (no more `import Page, expect, expect`). Exported flat tests are valid, runnable Playwright.
+- **CLI walkthrough heal-flow staleness**: step markers updated for the "2 test(s) still failing. → Choice:" outcome (was a 1200s timeout).
+
+### Changed
+- **Skeleton prompts (all four templates)**: page-state ASSERT form added — "For 'verify <page> loads/opens' use `{{ASSERT:<page> loaded}}` (→ URL check). Do NOT write `{{ASSERT:<page> title}}`." Plus a polarity rule: "For disappearance checks ('popup closed', 'item removed') describe the ABSENCE." Legacy `prompt_utils.py` templates kept byte-identical to the t-string versions.
+
+### CLI walkthrough driver
+- **CLI walkthrough driver** (`scripts/cli_walkthrough.py`): marker-driven subprocess driver that exercises every CLI menu button — `--pass nav` (41/41, ~1 min) and `--pass full` (60/60 with real LLM + live site, ~15 min). Documents Windows pipe gotchas (use `read1()`, one write per `input()`, paste terminates on first blank line). Full logs to `scripts/archive/cli_snapshots/`.
 
 ### Fixed
 - **CLI "Load Existing Generated Tests" crash** (`PermissionError`): `load_package_manifest()` was handed a package directory instead of the manifest file; now resolves `<dir>/package_manifest.json` or reconstructs, and both CLI callers pass `reconstruct=True` (legacy/`verify_*` packages have no manifest). 4 new tests.
