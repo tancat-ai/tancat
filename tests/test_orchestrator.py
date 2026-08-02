@@ -845,6 +845,21 @@ def test_02_add_item(page):
     )
 
     orchestrator = TestOrchestrator(generator)
+    # scrape_url is ALSO called by _ensure_scraped() for the normalized
+    # (trailing-slash) base URL during resolution — must be mocked or the
+    # test hits the live site and flakes on CI (bot/consent walls return
+    # empty data → resolution fails). Regression: CI-only failure 2026-08-02.
+    orchestrator.scraper.scrape_url = AsyncMock(  # type: ignore[method-assign]
+        return_value=(
+            [
+                {"selector": "#user-name", "text": "", "role": "text", "id": "user-name"},
+                {"selector": "#password", "text": "", "role": "password", "id": "password"},
+                {"selector": "#login-button", "text": "Login", "role": "submit", "id": "login-button"},
+            ],
+            None,
+            "https://www.saucedemo.com/",
+        )
+    )
     orchestrator.scraper.scrape_all = AsyncMock(  # type: ignore[method-assign]
         return_value={
             "https://www.saucedemo.com": (
