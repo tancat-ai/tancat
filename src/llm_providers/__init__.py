@@ -31,6 +31,24 @@ class ChatCompletion:
     usage: dict[str, int] | None = None  # {'prompt_tokens': int, 'completion_tokens': int}
 
 
+def generation_max_tokens() -> int:
+    """Return the per-call generation token cap.
+
+    No provider currently sends a max_tokens/num_predict limit, so a runaway
+    generation (e.g. the model repeating placeholders) burns the full request
+    timeout (600s for skeleton calls) before the client gives up. A cap makes
+    the server stop early and fail fast instead. Configurable via
+    ``LLM_MAX_TOKENS`` (default 4096 — safely above the largest legit output
+    of ~2k tokens for a full generated test file).
+    """
+    import os
+
+    try:
+        return max(512, int(os.environ.get("LLM_MAX_TOKENS", "4096")))
+    except ValueError:
+        return 4096
+
+
 class LLMProvider(ABC):
     """Abstract base class for all LLM providers.
 
@@ -137,8 +155,10 @@ class OllamaProvider(LLMProvider):
         ollama_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
         payload: dict[str, Any] = {"model": model, "messages": ollama_messages, "stream": False}
+        options: dict[str, Any] = {"num_predict": generation_max_tokens()}
         if temperature is not None:
-            payload["options"] = {"temperature": temperature}
+            options["temperature"] = temperature
+        payload["options"] = options
 
         response = self._client.post("/api/chat", json=payload, timeout=timeout)
 
@@ -200,6 +220,7 @@ class LMStudioProvider(LLMProvider):
         payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
         if temperature is not None:
             payload["temperature"] = temperature
+        payload["max_tokens"] = generation_max_tokens()
 
         response = self._client.post("/chat/completions", json=payload, timeout=timeout)
 
@@ -385,6 +406,7 @@ class OpenAIProvider(LLMProvider):
         payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
         if temperature is not None:
             payload["temperature"] = temperature
+        payload["max_tokens"] = generation_max_tokens()
 
         response = self._client.post("/chat/completions", json=payload, timeout=timeout)
 

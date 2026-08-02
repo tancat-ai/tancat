@@ -52,6 +52,14 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # Convert standalone placeholder lines and unwrap evidence_tracker-wrapped placeholders.
     fixed_code = convert_standalone_placeholders(fixed_code)
 
+    # Strip stray module-level executable statements (LLM leaks).
+    # LLMs sometimes emit bare calls like ``home_page.click('Categories')`` or
+    # ``evidence_tracker.assert_visible('h2')`` OUTSIDE any test function.
+    # They reference fixtures that don't exist at module scope and crash pytest
+    # at COLLECTION time — before any test runs. Imports, constants, decorators
+    # and def/class blocks are preserved.
+    fixed_code = _strip_module_level_statements(fixed_code)
+
     # Clean up malformed decorators if the LLM added spaces
     fixed_code = re.sub(r"@\s*pytest\s*\.\s*mark\s*\.\s*evidence", "@pytest.mark.evidence", fixed_code)
 
@@ -153,6 +161,42 @@ _ASSERTION_TO_ET_METHOD: dict[str, str] = {
     "toHaveClass": "assert_visible",  # no dedicated method yet, fall back
     "toHaveAttribute": "assert_visible",  # no dedicated method yet, fall back
 }
+
+
+def _strip_module_level_statements(code: str) -> str:
+    """Remove stray executable statements at module scope (LLM leaks).
+
+    LLMs sometimes emit bare calls like ``home_page.click('Categories')`` or
+    ``evidence_tracker.assert_visible('h2')`` outside any test function.
+    They reference fixtures/variables that don't exist at module scope and
+    crash pytest at COLLECTION time — before any test runs.
+
+    Preserved: imports, comments, blank lines, module-level constants
+    (``NAME = value``), decorators, and ``def``/``class`` blocks.
+    """
+    output_lines: list[str] = []
+    for line in code.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            output_lines.append(line)
+            continue
+        if line[:1] in (" ", "	"):
+            # Indented — inside a function/class body; leave untouched.
+            output_lines.append(line)
+            continue
+        if stripped.startswith(("#", "def ", "class ", "from ", "import ", "@")):
+            output_lines.append(line)
+            continue
+        # Module-level constant assignment (no call in the target): keep.
+        lhs = stripped.split("=")[0].strip()
+        if "=" in stripped and "(" not in lhs:
+            output_lines.append(line)
+            continue
+        # Any remaining module-level line containing a call is a leak.
+        if "(" in stripped and ")" in stripped:
+            continue
+        output_lines.append(line)
+    return "\n".join(output_lines)
 
 
 def _normalize_test_function_names(code: str) -> str:

@@ -208,3 +208,117 @@ def test_pom_mode_preserves_page_object_builder_evidence_tracker_param() -> None
     assert len(objects) == 1
     # Evidence-aware POM should have tracker in __init__
     assert "tracker" in objects[0].module_source
+
+
+# ── B-028 follow-up: batch fallback searches ALL scraped pages ─────────────
+
+
+def test_batch_fallback_resolves_placeholder_on_non_fallback_page() -> None:
+    """B-028 follow-up: a leftover placeholder whose element lives on a page
+    OTHER than the fallback URL must still resolve via the batch pass.
+
+    Before the fix, the batch fallback scoped to the seed/fallback URL only,
+    so 'Proceed To Checkout' (present in the scraped view_cart page) was left
+    unresolved and the whole test skipped.
+    """
+    import asyncio
+
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+    skeleton = "page.click('{{CLICK:Proceed To Checkout}}')\n"
+    home_elements = [
+        {"selector": 'a[href="/products"]', "tag": "a", "role": "a", "text": "Products"},
+    ]
+    cart_elements = [
+        {"selector": 'a[href="/products"]', "tag": "a", "role": "a", "text": "Products"},
+        {"selector": ".btn.btn-default.check_out", "tag": "a", "role": "a", "text": "Proceed To Checkout"},
+    ]
+    scraped_data = {
+        "https://example.com/": home_elements,
+        "https://example.com/view_cart": cart_elements,
+    }
+    journey = TestJourney(
+        test_name="test_checkout",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=1,
+                raw_line="page.click('{{CLICK:Proceed To Checkout}}')",
+                placeholders=[
+                    PlaceholderUse(
+                        action="CLICK",
+                        description="Proceed To Checkout",
+                        token="{{CLICK:Proceed To Checkout}}",
+                        line_number=1,
+                        raw_line="page.click('{{CLICK:Proceed To Checkout}}')",
+                    )
+                ],
+            )
+        ],
+    )
+
+    orch = PlaceholderOrchestrator(starting_url="https://example.com/")
+
+    async def run() -> str:
+        return await orch._replace_placeholders_sequentially(
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="home")],
+            seed_urls=["https://example.com/"],
+            scraped_data=scraped_data,
+            scraped_errors={},
+        )
+
+    result = asyncio.run(run())
+    assert "pytest.skip" not in result
+    assert ".btn.btn-default.check_out" in result
+
+
+def test_batch_fallback_still_skips_when_element_nowhere() -> None:
+    """A placeholder whose element exists on NO scraped page still skips."""
+    import asyncio
+
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+    skeleton = "page.click('{{CLICK:Place Order}}')\n"
+    home_elements = [{"selector": 'a[href="/products"]', "tag": "a", "role": "a", "text": "Products"}]
+    scraped_data = {"https://example.com/": home_elements}
+    journey = TestJourney(
+        test_name="test_checkout",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=1,
+                raw_line="page.click('{{CLICK:Place Order}}')",
+                placeholders=[
+                    PlaceholderUse(
+                        action="CLICK",
+                        description="Place Order",
+                        token="{{CLICK:Place Order}}",
+                        line_number=1,
+                        raw_line="page.click('{{CLICK:Place Order}}')",
+                    )
+                ],
+            )
+        ],
+    )
+
+    orch = PlaceholderOrchestrator(starting_url="https://example.com/")
+
+    async def run() -> str:
+        from src.code_normalizer import replace_remaining_placeholders
+
+        raw = await orch._replace_placeholders_sequentially(
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="home")],
+            seed_urls=["https://example.com/"],
+            scraped_data=scraped_data,
+            scraped_errors={},
+        )
+        return replace_remaining_placeholders(raw)
+
+    result = asyncio.run(run())
+    assert "pytest.skip" in result

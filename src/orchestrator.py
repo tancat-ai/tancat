@@ -35,6 +35,7 @@ from src.skeleton_parser import SkeletonParser
 from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
+from src.test_structure_assembler import rebuild_test_structure
 from src.url_utils import build_common_path_candidates, extract_route_concepts
 
 logger = logging.getLogger(__name__)
@@ -517,6 +518,15 @@ class TestOrchestrator:
         final_code = normalise_generated_code(
             final_code, consent_mode=consent_mode, target_url=self._starting_url or ""
         )
+
+        # Structural safety pass: rebuild the file from the parsed journey
+        # model so the pipeline owns the structure. Module-level statement
+        # leaks / dangling decorators (LLM skeleton mistakes that crashed
+        # pytest at COLLECTION time) become structurally impossible.
+        self._debug("phase=structure_assembly start")
+        final_code = rebuild_test_structure(final_code)
+        self._debug("phase=structure_assembly done")
+
         unresolved = [line.strip() for line in final_code.splitlines() if "pytest.skip(" in line]
         self.last_result = PipelineRunResult(
             skeleton_code=skeleton_code,

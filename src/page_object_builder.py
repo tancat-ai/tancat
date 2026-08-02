@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 from urllib.parse import urlparse
 
 from src.file_utils import slugify
@@ -76,14 +77,23 @@ _CLICK_METHOD_SOURCE_ET = (
     "        if best_method and best_score > 0.5:\n"
     "            getattr(self, best_method)()\n"
     "            return\n"
-    "        # Last resort: use page.locator with text matching (fast-fail).\n"
-    "        # Avoids delegating to evidence_tracker with a raw description\n"
-    "        # which Playwright tries as a CSS selector and hangs on 5s timeout.\n"
-    "        try:\n"
-    "            self.tracker.click('text=' + description, label=description)\n"
-    "        except Exception:\n"
-    "            self.page.locator('text=' + description).first.click(timeout=3000)\n"
-    "            raise\n"
+    "        # Last resort: element-index lookup (B-028 DOM-existence guard).\n"
+    "        # Only click selectors that were actually scraped — never emit\n"
+    "        # text=... locators from unresolved descriptions (hallucination).\n"
+    "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
+    "        # Multi-word descriptions must match on 2+ words to avoid a single\n"
+    "        # noisy overlap (single common word like cart is not enough).\n"
+    "        min_score = 2 if len(want) >= 2 else 1\n"
+    "        best_sel, best_score = None, 0\n"
+    "        for _hay, _sel in self._ELEMENTS:\n"
+    "            _score = len(want & set(_hay.split()))\n"
+    "            if _score >= min_score and _score > best_score:\n"
+    "                best_score, best_sel = _score, _sel\n"
+    "        if best_sel:\n"
+    "            self.tracker.click(best_sel, label=description)\n"
+    "            return\n"
+    "        import pytest\n"
+    "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
 )
 
 _CLICK_METHOD_SOURCE_PLAIN = (
@@ -130,8 +140,23 @@ _CLICK_METHOD_SOURCE_PLAIN = (
     "        if best_method and best_score > 0.5:\n"
     "            getattr(self, best_method)()\n"
     "            return\n"
-    "        # Last resort: use page.locator with text matching (fast-fail).\n"
-    "        self.page.locator('text=' + description).first.click(timeout=3000)\n"
+    "        # Last resort: element-index lookup (B-028 DOM-existence guard).\n"
+    "        # Only click selectors that were actually scraped — never emit\n"
+    "        # text=... locators from unresolved descriptions (hallucination).\n"
+    "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
+    "        # Multi-word descriptions must match on 2+ words to avoid a single\n"
+    "        # noisy overlap (single common word like cart is not enough).\n"
+    "        min_score = 2 if len(want) >= 2 else 1\n"
+    "        best_sel, best_score = None, 0\n"
+    "        for _hay, _sel in self._ELEMENTS:\n"
+    "            _score = len(want & set(_hay.split()))\n"
+    "            if _score >= min_score and _score > best_score:\n"
+    "                best_score, best_sel = _score, _sel\n"
+    "        if best_sel:\n"
+    "            self.page.locator(best_sel).first.click(timeout=3000)\n"
+    "            return\n"
+    "        import pytest\n"
+    "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
 )
 
 
@@ -176,6 +201,7 @@ class PageObjectBuilder:
             methods=methods,
             element_count=scraped_page.element_count,
             use_evidence_tracker=use_evidence_tracker,
+            elements=scraped_page.elements,
         )
 
         return GeneratedPageObject(
@@ -241,6 +267,13 @@ class PageObjectBuilder:
             if not selector:
                 continue
 
+            # Skip hidden / non-interactive elements — they must never become
+            # click targets. Hidden CSRF/token inputs (role="hidden") were
+            # previously derived into click_csrfmiddlewaretoken() methods that
+            # burned ~29s of fallback attempts per click during execution.
+            if PageObjectBuilder._is_hidden_element(element):
+                continue
+
             method_name = self._derive_method_name(element)
             if not method_name or method_name in seen_names:
                 continue
@@ -256,6 +289,23 @@ class PageObjectBuilder:
             seen_names.add(method_name)
 
         return methods
+
+    @staticmethod
+    def _is_hidden_element(element: dict[str, Any]) -> bool:
+        """True when the element is hidden / non-interactive and must not be a POM method.
+
+        Hidden CSRF/token inputs (role="hidden") and csrf/token/authenticity
+        named fields are never valid click or fill targets.
+        """
+        role = str(element.get("role", "")).strip().lower()
+        name = str(element.get("name", "")).strip().lower()
+        element_id = str(element.get("id", "")).strip().lower()
+        selector = str(element.get("selector", "")).strip().lower()
+        if role == "hidden":
+            return True
+        if any(term in name or term in element_id or term in selector for term in ("csrf", "token", "authenticity")):
+            return True
+        return False
 
     def _derive_method_name(self, element: dict[str, object]) -> str:
         """Return a reusable method name for a scraped element."""
@@ -364,6 +414,7 @@ class PageObjectBuilder:
         methods: list[tuple[str, str]],
         element_count: int,
         use_evidence_tracker: bool = False,
+        elements: list[dict[str, Any]] | None = None,
     ) -> str:
         """Return the final Python module source.
 
@@ -374,6 +425,8 @@ class PageObjectBuilder:
             element_count: Number of scraped elements.
             use_evidence_tracker: Generate evidence-aware module with
                 ``EvidenceTracker`` dependency injection.
+            elements: Raw scraped elements — used to build the B-028
+                DOM-existence index for the generic click() fallback.
         """
         method_blocks = "\n".join(method_source.rstrip() for _name, method_source in methods)
         if method_blocks:
@@ -384,6 +437,10 @@ class PageObjectBuilder:
                 "        # No specific interaction methods were derived for this page yet.\n"
                 "        pass\n"
             )
+
+        # B-028: DOM-existence guard — the generic click() fallback may only
+        # target selectors that were actually scraped for this page.
+        index_source = self._build_element_index_source(elements or [])
 
         if use_evidence_tracker:
             imports = (
@@ -407,6 +464,15 @@ class PageObjectBuilder:
             f"class {class_name}:\n"
             f'    """Page Object for {url}. Scraped elements: {element_count}."""\n\n'
             f'    URL = "{url}"\n\n'
+            "    # B-028: DOM-existence index — label words -> scraped selector.\n"
+            "    # The generic click() fallback may only target these selectors.\n"
+            f"{index_source}\n"
+            "    _NOISE_WORDS = frozenset({\n"
+            "        'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'with', 'by',\n"
+            "        'from', 'of', 'and', 'or', 'link', 'button', 'section', 'navigation',\n"
+            "        'category', 'page', 'header', 'popup', 'menu', 'list', 'click',\n"
+            "        'navigate', 'first', 'second', 'third', 'then', 'now', 'please',\n"
+            "    })\n\n"
             f"{init_code}"
             f"{navigate_code}"
             + (_CLICK_METHOD_SOURCE_ET if use_evidence_tracker else _CLICK_METHOD_SOURCE_PLAIN)
@@ -418,3 +484,48 @@ class PageObjectBuilder:
             "        return fallback\n"
             f"{method_blocks}"
         )
+
+    @staticmethod
+    def _build_element_index_source(elements: list[dict[str, Any]]) -> str:
+        """Build a ``_ELEMENTS`` tuple literal mapping label words -> scraped selector.
+
+        B-028: the generic POM ``click()`` fallback must only click selectors
+        that actually exist in the scraped data — it must never emit
+        ``text=<description>`` locators for unresolved descriptions (that is
+        how "First product link" turned into a hallucinated locator that
+        timeouts instead of skipping).
+        """
+        seen_selectors: set[str] = set()
+        entries: list[str] = []
+        for element in elements:
+            selector = str(element.get("selector", "")).strip()
+            if not selector:
+                continue
+            if selector in seen_selectors:
+                continue
+            seen_selectors.add(selector)
+            label_parts = [
+                str(element.get(key, "")).strip() for key in ("text", "aria_label", "title", "name", "placeholder")
+            ]
+            element_id = str(element.get("id", "")).strip()
+            label = " ".join(part for part in label_parts if part)
+            haystack_words = PageObjectBuilder._normalize_label_words(f"{label} {element_id}")
+            if not haystack_words:
+                continue
+            entries.append(f"    ({haystack_words!r}, {selector!r}),")
+        if not entries:
+            return "    _ELEMENTS: tuple = ()\n"
+        return "    _ELEMENTS: tuple = (\n" + "\n".join(entries) + "\n    )\n"
+
+    @staticmethod
+    def _normalize_label_words(text: str) -> str:
+        """Normalize element labels into a deduplicated lowercase word string."""
+        words: list[str] = []
+        seen: set[str] = set()
+        # Split camelCase tokens so "addToCart" yields "add to cart".
+        split_camel = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", text)
+        for token in re.split(r"[^a-zA-Z0-9]+", split_camel.lower()):
+            if token and token not in seen:
+                seen.add(token)
+                words.append(token)
+        return " ".join(words)

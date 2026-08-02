@@ -432,3 +432,166 @@ class TestCartSeedingScraper:
         selectors = CartSeedingScraper.ADD_TO_CART_SELECTORS
         assert any("add-to-cart" in s for s in selectors)
         assert any("submit" in s for s in selectors)
+
+
+class TestB028DiscoveryContextHints:
+    """B-028: journey discovery context hints (product / dismiss / nav chrome)."""
+
+    def test_product_intent_detection(self) -> None:
+        assert JourneyScraper._has_product_intent("click on a product to view it")
+        assert JourneyScraper._has_product_intent("add product to cart")
+        assert JourneyScraper._has_product_intent("add to cart")
+        assert JourneyScraper._has_product_intent("click on the first item")
+        assert not JourneyScraper._has_product_intent("view cart")
+        assert not JourneyScraper._has_product_intent("login to my account")
+
+    def test_browse_intent_prefers_detail_links(self) -> None:
+        assert JourneyScraper._has_browse_intent("click on a product to view it")
+        assert JourneyScraper._has_browse_intent("open product details")
+        assert not JourneyScraper._has_browse_intent("add product to cart")
+        assert not JourneyScraper._has_browse_intent("add to cart")
+
+    def test_dismiss_intent_detection(self) -> None:
+        assert JourneyScraper._has_dismiss_intent("dismiss confirmation modal")
+        assert JourneyScraper._has_dismiss_intent("close the popup")
+        assert JourneyScraper._has_dismiss_intent("click continue shopping")
+        assert not JourneyScraper._has_dismiss_intent("add product to cart")
+
+    def test_modal_root_detection(self) -> None:
+        assert JourneyScraper._is_modal_root({"selector": "#cartModal", "id": "cartModal"})
+        assert JourneyScraper._is_modal_root({"classes": "modal fade", "selector": ".modal"})
+        assert not JourneyScraper._is_modal_root({"selector": 'a[href="/view_cart"]'})
+
+    def test_product_card_element_detection(self) -> None:
+        card = {
+            "selector": 'a.btn.btn-default.add-to-cart[data-product-id="1"]',
+            "classes": "btn btn-default add-to-cart",
+        }
+        detail = {"selector": 'a[href="/product_details/1"]', "href": "https://example.com/product_details/1"}
+        nav = {"selector": 'a[href="/view_cart"]', "href": "https://example.com/view_cart"}
+        assert JourneyScraper._is_product_card_element(card)
+        assert JourneyScraper._is_product_card_element(detail)
+        assert not JourneyScraper._is_product_card_element(nav)
+
+    def test_nav_chrome_link_detection(self) -> None:
+        assert JourneyScraper._is_nav_chrome_link({"href": "https://example.com/view_cart"})
+        assert JourneyScraper._is_nav_chrome_link({"href": "https://example.com/login"})
+        assert JourneyScraper._is_nav_chrome_link({"href": "https://example.com/"})
+        assert not JourneyScraper._is_nav_chrome_link({"href": "https://example.com/product_details/1"})
+        assert not JourneyScraper._is_nav_chrome_link({"href": ""})
+
+    def test_dismiss_element_detection(self) -> None:
+        assert JourneyScraper._is_dismiss_element(
+            {"selector": ".btn.btn-success.close-modal.btn-block", "classes": "btn btn-success close-modal btn-block"}
+        )
+        assert JourneyScraper._is_dismiss_element({"text": "Continue Shopping"})
+        assert JourneyScraper._is_dismiss_element({"classes": "close", "text": "x"})
+        assert not JourneyScraper._is_dismiss_element({"selector": 'a[href="/view_cart"]', "text": "View Cart"})
+
+
+class TestB028QuantityStepperFallback:
+    """B-028: FILL-quantity -> +/- stepper button fallback."""
+
+    def test_ignores_non_quantity_fills(self) -> None:
+        scraper = JourneyScraper(starting_url="https://example.com")
+        assert (
+            scraper._try_quantity_stepper_fallback(
+                _FakePage(),
+                JourneyStep(action="fill", description="email", text="a@b.com"),
+            )
+            is False
+        )
+
+    def test_ignores_non_numeric_text(self) -> None:
+        scraper = JourneyScraper(starting_url="https://example.com")
+        assert (
+            scraper._try_quantity_stepper_fallback(
+                _FakePage(),
+                JourneyStep(action="fill", description="quantity", text="many"),
+            )
+            is False
+        )
+
+    def test_clicks_increment_button(self) -> None:
+        page = _FakePage()
+        page.visible_selectors = {"button.qty-plus": True}
+        scraper = JourneyScraper(starting_url="https://example.com")
+        step = JourneyStep(action="fill", description="quantity", text="3")
+        assert scraper._try_quantity_stepper_fallback(page, step) is True
+        assert page.clicked_selectors == ["button.qty-plus", "button.qty-plus"]
+
+    def test_no_stepper_returns_false(self) -> None:
+        page = _FakePage()
+        page.visible_selectors = {}
+        scraper = JourneyScraper(starting_url="https://example.com")
+        step = JourneyStep(action="fill", description="quantity", text="3")
+        assert scraper._try_quantity_stepper_fallback(page, step) is False
+
+
+class _FakePage:
+    """Minimal Playwright page stand-in for the stepper fallback."""
+
+    def __init__(self) -> None:
+        self.visible_selectors: dict[str, bool] = {}
+        self.clicked_selectors: list[str] = []
+
+    def locator(self, selector: str) -> _FakeLocator:
+        return _FakeLocator(self, selector)
+
+    def wait_for_timeout(self, ms: int) -> None:
+        pass
+
+
+class _FakeLocator:
+    def __init__(self, page: _FakePage, selector: str) -> None:
+        self._page = page
+        self._selector = selector
+
+    @property
+    def first(self) -> _FakeLocator:
+        return self
+
+    def count(self) -> int:
+        return 1 if self._selector in self._page.visible_selectors else 0
+
+    def is_visible(self, timeout: int = 0) -> bool:
+        return self._page.visible_selectors.get(self._selector, False)
+
+    def click(self, timeout: int = 0) -> None:
+        self._page.clicked_selectors.append(self._selector)
+
+
+class TestB028CategoryIntent:
+    """B-028 follow-up: 'Product Category' must prefer listing pages over detail."""
+
+    def test_category_intent_detection(self) -> None:
+        assert JourneyScraper._has_category_intent("Product Category")
+        assert JourneyScraper._has_category_intent("browse categories")
+        assert JourneyScraper._has_category_intent("click on category listing")
+        assert not JourneyScraper._has_category_intent("add to cart")
+        assert not JourneyScraper._has_category_intent("click on a product to view it")
+
+    def test_category_listing_link_detection(self) -> None:
+        listing = {"href": "https://example.com/category_products/1"}
+        products = {"href": "https://example.com/products"}
+        detail = {"href": "https://example.com/product_details/1"}
+        assert JourneyScraper._is_category_listing_link(listing)
+        assert JourneyScraper._is_category_listing_link(products)
+        assert not JourneyScraper._is_category_listing_link(detail)
+
+    def test_category_intent_prefers_listing_over_detail(self) -> None:
+        # A category description must score the listing link ABOVE the detail link.
+        listing = {
+            "selector": 'a[href="/products"]',
+            "href": "https://example.com/products",
+            "role": "a",
+            "text": "Products",
+        }
+        detail = {
+            "selector": 'a[href="/product_details/11"]',
+            "href": "https://example.com/product_details/11",
+            "role": "a",
+            "text": "View Product",
+        }
+        assert JourneyScraper._is_category_listing_link(listing)
+        assert not JourneyScraper._is_category_listing_link(detail)

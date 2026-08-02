@@ -55,6 +55,9 @@ def test_evidence_tracker_click_failure_takes_screenshot(tmp_path: Any) -> None:
 
 def test_evidence_tracker_click_attempts_scroll_into_view_before_click(tmp_path: Any) -> None:
     page_mock = MagicMock()
+    # First count() call = the click target (exists); subsequent calls are the
+    # proactive modal-dismissal probes (no visible modals -> no-op).
+    page_mock.locator.return_value.first.count.side_effect = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     tracker = EvidenceTracker(page_mock, "test_click_scroll", evidence_root=Path(tmp_path))
 
     tracker.click("div#thing")
@@ -186,3 +189,49 @@ class TestLocatorFallback:
             assert "result" in entry
         assert chain[0]["result"] == "failed"
         assert chain[1]["result"] == "success"
+
+
+def test_click_fast_fails_when_locator_missing_on_page(tmp_path: Any) -> None:
+    """B-028 follow-up: a click on a locator that does not exist on the current
+    page must fail immediately (no fallback marathon) and record a fast-fail
+    step without the expensive screenshot/diagnosis path."""
+    page_mock = MagicMock()
+    # Element not on the page: count() == 0
+    page_mock.locator.return_value.first.count.return_value = 0
+    page_mock.url = "https://example.com/products"
+    tracker = EvidenceTracker(page_mock, "test_fastfail", evidence_root=Path(tmp_path))
+
+    with pytest.raises(Exception, match="not found on current page"):
+        tracker.click("button.btn.cart")
+
+    assert len(tracker.steps) == 1
+    step = tracker.steps[0]
+    assert step["type"] == "click"
+    assert step["result"]["status"] == "failed"
+    assert "not found on current page" in step["result"]["error"]
+    # Fast-fail: no screenshot and no metadata capture on the missing element.
+    assert step["screenshot"] is None
+    # The 5s click must never have been attempted.
+    page_mock.locator.return_value.first.click.assert_not_called()
+
+
+def test_click_missing_locator_does_not_run_fallback(tmp_path: Any) -> None:
+    """The fallback chain (hover/locator-scoring) must not run for a locator
+    that does not exist — it builds candidates from the same DOM and cannot
+    recover a non-existent element."""
+    from unittest.mock import patch
+
+    page_mock = MagicMock()
+    page_mock.locator.return_value.first.count.return_value = 0
+    page_mock.url = "https://example.com"
+    tracker = EvidenceTracker(page_mock, "test_fallback", evidence_root=Path(tmp_path))
+
+    with (
+        patch("src.evidence_tracker.try_hover_and_click") as mock_hover,
+        patch("src.evidence_tracker.LocatorFallback") as mock_fallback,
+    ):
+        with pytest.raises(Exception, match="not found"):
+            tracker.click("button.btn.cart")
+
+    mock_hover.assert_not_called()
+    mock_fallback.try_fallback.assert_not_called()

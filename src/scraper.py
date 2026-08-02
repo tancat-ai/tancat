@@ -679,6 +679,7 @@ class PageScraper:
         return {
             "selector": selector,
             "text": text_content,
+            "tag": tag.name,
             "role": str(tag.get("role", tag.get("type", tag.name))),
             "href": href,
             "title": str(tag.get("title", "")).strip(),

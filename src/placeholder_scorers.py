@@ -228,7 +228,12 @@ class PlaceholderScorer:
 
     @staticmethod
     def _is_fillable(element: dict[str, Any]) -> bool:
-        """Check if an element is a fillable input."""
+        """Check if an element is a fillable input.
+
+        B-028: role set aligned with ``IntentMatcher._is_fillable`` so journey
+        discovery accepts the same elements the resolver does (e.g. role="number"
+        quantity steppers).
+        """
         role = (element.get("role", "") or "").lower()
         tag = (element.get("tag", "") or "").lower()
         type_attr = (element.get("type", "") or "").lower()
@@ -236,7 +241,21 @@ class PlaceholderScorer:
         readonly = element.get("readonly", False)
         if disabled or readonly:
             return False
-        fillable_roles = {"textbox", "searchbox", "search_box", "combobox", "spinbutton"}
+        fillable_roles = {
+            "input",
+            "textarea",
+            "select",
+            "textbox",
+            "searchbox",
+            "search_box",
+            "combobox",
+            "email",
+            "password",
+            "text",
+            "tel",
+            "number",
+            "spinbutton",
+        }
         fillable_tags = {"input", "textarea", "select"}
         input_types = {"text", "search", "email", "password", "tel", "url", "number"}
         if role in fillable_roles:

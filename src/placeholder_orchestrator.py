@@ -472,8 +472,13 @@ class PlaceholderOrchestrator:
 
         if batch_requests:
             await self._ensure_scraped(fallback_url, scraped_data, scraped_errors)
-            pages_data = self._build_scoped_pages(fallback_url, scraped_data)
-            pages_to_search = pages_data if pages_data else scraped_data
+            # B-028 follow-up: the batch fallback is the LAST chance for leftover
+            # placeholders — search ALL scraped pages, not just the fallback URL.
+            # Scoping to fallback_url left 'Proceed To Checkout' unresolved even
+            # though view_cart was scraped with the checkout button present.
+            # (Per-journey resolution stays scoped for precision/speed; the
+            # batch pass only runs when placeholders remain unresolved.)
+            pages_to_search = scraped_data
             batch_results = await self._element_matcher.find_best_elements_batch(
                 requests=batch_requests,
                 current_url=fallback_url,
