@@ -531,3 +531,59 @@ def test_checkout(page: Page, evidence_tracker) -> None:
     assert "page.goto(" not in fixed
     # Malformed indent is fixed
     ast.parse(fixed)
+
+
+# ── B-028 follow-up: module-level statement leaks ─────────────────────────
+
+
+def test_module_level_leaks_stripped() -> None:
+    """B-028 follow-up: LLM skeletons sometimes leak bare calls like
+    ``home_page.click('Categories')`` OUTSIDE any test function. They reference
+    fixtures that don't exist at module scope and crash pytest at COLLECTION
+    time, before any test runs. The normalizer must strip them while keeping
+    imports, constants, decorators and functions."""
+    code = (
+        "from playwright.sync_api import Page, expect\n"
+        "import pytest\n"
+        "from pages.home_page import HomePage\n"
+        "\n"
+        "home_page.click('Categories')\n"
+        "evidence_tracker.assert_visible('h2', label='Category page')\n"
+        "\n"
+        "BASE_URL = 'https://example.com'\n"
+        "\n"
+        "@pytest.mark.evidence(condition_ref='T01', story_ref='S01')\n"
+        "def test_01(page: Page, evidence_tracker):\n"
+        "    home_page = HomePage(page, evidence_tracker)\n"
+        "    evidence_tracker.navigate(BASE_URL)\n"
+        "    home_page.click('Products')\n"
+    )
+
+    result = normalise_generated_code(code)
+
+    # Collection-safe: no module-level Call nodes.
+    tree = ast.parse(result)
+    module_calls = [node for node in tree.body if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)]
+    assert module_calls == []
+
+    # Constants and test functions preserved.
+    assert "BASE_URL = 'https://example.com'" in result
+    assert "def test_01(" in result
+    # Legitimate in-function calls preserved.
+    assert "home_page.click('Products')" in result
+
+
+def test_module_level_assignments_preserved() -> None:
+    """Constants like BASE_URL / URL must survive the module-level strip."""
+    code = (
+        "import pytest\n"
+        "URL = 'https://example.com'\n"
+        "PAGES_NEEDED = ['home', 'cart']\n"
+        "\n"
+        "def test_01(page):\n"
+        "    page.goto(URL)\n"
+    )
+    result = normalise_generated_code(code)
+    assert "URL = 'https://example.com'" in result
+    assert "PAGES_NEEDED = ['home', 'cart']" in result
+    assert "def test_01(" in result

@@ -398,6 +398,7 @@ async def run_site_uat(
                     f"pythonpath={output_dir}",
                     "--browser=chromium",
                     "--screenshot=only-on-failure",
+                    "--timeout=120",
                     "-v",
                     "--tb=short",
                     "--no-header",

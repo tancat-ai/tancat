@@ -318,6 +318,7 @@ async def verify_site(
                 f"pythonpath={PROJECT_ROOT}",
                 "--browser=chromium",
                 "--screenshot=only-on-failure",
+                "--timeout=120",
                 "-v",
                 "--tb=short",
                 "--no-header",

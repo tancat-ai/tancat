@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-01 (AI-034 Test Table complete, B-027 re-fixed, B-028 logged, AI-039 deferred)
+Last updated: 2026-08-01 (B-028 fixed + follow-ups shipped: assembler, fast-fail, token cap, per-test timeout)
 
 ---
 
@@ -238,8 +238,46 @@ writing if code fails syntax check.
 ## 🔴 Open Bugs
 
 ### B-028 — Journey discovery selects cart nav link for product / add-to-cart actions
-**Status:** 🟡 Open — logged 2026-08-01 from live UAT evidence; fix in a fresh session
+**Status:** ✅ Fixed (2026-08-01, ship-it) — full fix + follow-ups landed
 **Priority:** High — cascades: wrong click → missing pages → unresolved placeholders → skips/fails
+
+**Fixed (2026-08-01):**
+- **Root cause #1 — action case mismatch:** `_discover_selector()` passed lowercase
+  `"click"/"fill"` to `PlaceholderScorer.compute_element_score()` which branches on
+  uppercase — every action bonus/gate was silently disabled, so discovery scores
+  collapsed to raw word overlap ("View Cart" beat real product buttons at score=1).
+  Fixed by normalising the action to uppercase + skipping invisible elements for
+  CLICK/FILL + modal penalty only when a modal is actually visible.
+- **Root cause #2 — context hints:** product-intent descriptions now prefer
+  product-card selectors over nav chrome; category descriptions ("Product Category")
+  prefer listing pages over detail pages; modal-dismiss descriptions only click real
+  dismiss controls.
+- **Root cause #3 — hallucinated locators:** generated POMs now embed a DOM-existence
+  index (`_ELEMENTS`) — the click() fallback only targets scraped selectors or
+  pytest.skip (never `text=<description>`). Hidden elements (CSRF inputs) excluded
+  from POM method generation entirely.
+- **Root cause #4 — fillability:** `PlaceholderScorer._is_fillable` aligned with
+  `IntentMatcher` (role=number/email/password/...) so quantity inputs resolve;
+  FILL-quantity falls back to +/- stepper clicks when no input exists.
+- **Root cause #5 — `tag` field missing** from `_build_element_dict` (killed ASSERT
+  display scoring in discovery).
+
+**Follow-ups landed with the fix:**
+- Batch placeholder fallback now searches ALL scraped pages (was scoped to the seed
+  URL — left `Proceed To Checkout` unresolved despite scraped data).
+- EvidenceTracker click fast-fails on missing/hidden locators (148s fallback marathon
+  → 0.0s) and proactively dismisses consent/ad/modals (~2s vs 30s per blocked click).
+- Per-test pytest `--timeout=120` in UI/UAT/verify runs — a stuck test can't hang the suite.
+- LLM generation capped at 4096 tokens (`LLM_MAX_TOKENS`) — a runaway no longer burns
+  the full 600s request timeout.
+- Structural assembler (`src/test_structure_assembler.py`) rebuilds the generated file
+  from the parsed journey model — module-level LLM statement leaks are structurally
+  impossible (previously crashed pytest at COLLECTION time).
+
+**Verified:** journey home → product page → fill quantity → add to cart → view cart
+(with items). verify_production automationexercise: 12/13 gates, execution completes
+in ~65-75s (was 600s timeout). Full eval (live regenerate): 53.7% → 65.7% resolution
+accuracy vs prior run; static mode unchanged at 100%.
 
 **Symptom:** During journey discovery, generic descriptions resolve to the cart nav link
 instead of product cards / add-to-cart buttons:

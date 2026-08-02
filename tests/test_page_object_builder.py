@@ -116,8 +116,11 @@ def test_evidence_aware_pom_click_delegates_to_tracker() -> None:
 
     # POM methods delegate to tracker
     assert "self.tracker.click('#submit-btn', label='submit')" in page_object.module_source
-    # Generic click() fallback uses page.locator with text matching for fast-fail
-    assert "self.page.locator('text=' + description).first.click(timeout=3000)" in page_object.module_source
+    # B-028: generic click() fallback uses the DOM-existence index (scraped
+    # selectors only) and pytest.skip — never a hallucinated text= locator.
+    assert "self.page.locator('text=' + description)" not in page_object.module_source
+    assert "_ELEMENTS: tuple = (" in page_object.module_source
+    assert 'pytest.skip(f"No element matches' in page_object.module_source
 
 
 def test_evidence_aware_pom_fill_delegates_to_tracker() -> None:
@@ -225,3 +228,97 @@ def test_evidence_aware_pom_cart_navigation_delegates_to_tracker() -> None:
 
     assert "self.tracker.click('a[href=\"/cart\"]', label='" in page_object.module_source
     assert "def navigate_to_cart(self) -> None" in page_object.module_source
+
+
+# ── B-028: DOM-existence guard for the generic click() fallback ────────────
+
+
+def test_click_fallback_uses_dom_existence_index() -> None:
+    """B-028: unresolved descriptions must resolve via scraped selectors only.
+
+    The generated click() must never emit ``text=<description>`` locators
+    (hallucination). Descriptions that match a scraped element's label use its
+    selector; unmatchable descriptions pytest.skip.
+    """
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/products",
+        element_count=2,
+        elements=[
+            {"selector": 'a[href="/product_details/1"]', "role": "a", "text": "View Product"},
+            {"selector": 'a[href="/view_cart"]', "role": "a", "text": "View Cart"},
+        ],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+    module_source = page_object.module_source
+    compile(module_source, "<generated>", "exec")
+
+    # The index maps label words -> scraped selectors.
+    assert "('view product', 'a[href=\"/product_details/1\"]')" in module_source
+    assert "('view cart', 'a[href=\"/view_cart\"]')" in module_source
+    # No hallucinated text locator anywhere in the generated POM.
+    assert "self.page.locator('text=' + description)" not in module_source
+
+    # Runtime behaviour: "First product link" (LLM invention) maps to the first
+    # scraped product card — it is NOT emitted as text=First product link.
+    namespace: dict = {}
+    exec(module_source, namespace)  # noqa: S102
+
+    class FakeTracker:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def click(self, locator: str, label: str = "") -> None:
+            self.calls.append((locator, label))
+
+    tracker = FakeTracker()
+    pom = namespace["ProductsPage"](object(), tracker)  # type: ignore[attr-defined]
+    pom.click("First product link")
+    assert tracker.calls == [('a[href="/product_details/1"]', "First product link")]
+
+
+def test_click_fallback_skips_unmatchable_description() -> None:
+    """B-028: a description with no scraped element match must pytest.skip."""
+    import pytest as _pytest
+
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/products",
+        element_count=1,
+        elements=[{"selector": 'a[href="/view_cart"]', "role": "a", "text": "View Cart"}],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+    namespace: dict = {}
+    exec(page_object.module_source, namespace)  # noqa: S102
+
+    tracker = type("T", (), {"click": lambda self, *a, **k: None})()
+    pom = namespace["ProductsPage"](object(), tracker)  # type: ignore[attr-defined]
+
+    # "add to cart" shares only "cart" with "view cart" — below the 2-word
+    # minimum, so it must skip instead of clicking the wrong element.
+    with _pytest.raises(_pytest.skip.Exception):
+        pom.click("add to cart button")
+
+
+def test_hidden_elements_excluded_from_pom_methods() -> None:
+    """B-028 follow-up: hidden/non-interactive elements (CSRF token inputs)
+    must never become POM click methods — they burned ~29s of fallback
+    attempts per click during live execution."""
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/cart",
+        element_count=3,
+        elements=[
+            {"selector": 'input[name="csrfmiddlewaretoken"]', "role": "hidden", "name": "csrfmiddlewaretoken"},
+            {"selector": 'a[href="/view_cart"]', "role": "a", "text": "Cart"},
+        ],
+    )
+
+    page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
+
+    assert "csrf" not in " ".join(page_object.methods)
+    assert "click_csrfmiddlewaretoken" not in page_object.module_source
+    # The visible cart link still gets a method.
+    assert "navigate_to_cart" in page_object.methods

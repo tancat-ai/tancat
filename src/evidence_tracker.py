@@ -1,4 +1,5 @@
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,15 @@ from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
 from src.storage import get_storage
+
+
+class _LocatorNotFoundError(RuntimeError):
+    """Raised when a click target does not exist on the current page.
+
+    The failure is recorded once with ``fast_fail=True`` (no expensive
+    metadata/screenshot/diagnosis) and re-raised; the outer handler must
+    not re-record it.
+    """
 
 
 class EvidenceTracker:
@@ -88,6 +98,34 @@ class EvidenceTracker:
         from src.browser_utils import dismiss_consent_overlays
 
         dismiss_consent_overlays(self.page)
+
+    def _dismiss_confirmation_modals(self) -> None:
+        """Dismiss confirmation modals/popups that block pointer events.
+
+        E-commerce sites show an "added to cart" modal (#cartModal) that
+        intercepts clicks on navigation links. Best-effort and non-destructive:
+        if no modal is visible these selectors won't match and this is a no-op.
+        Mirrors the journey scraper's ``_dismiss_modals``.
+        """
+        dismiss_selectors = [
+            'button:has-text("Continue Shopping")',
+            "button.btn-success.close-modal",
+            ".continue-shopping",
+            ".modal .close",
+            ".modal-close",
+            ".close-btn",
+            '[data-dismiss="modal"]',
+            ".modal-footer .btn",
+        ]
+        for selector in dismiss_selectors:
+            try:
+                locator = self.page.locator(selector).first
+                if locator.count() and locator.is_visible(timeout=200):
+                    locator.click(timeout=1000)
+                    self.page.wait_for_timeout(300)
+                    return
+            except Exception:
+                continue
 
     def _load_previous_history(self) -> dict[str, int]:
         if self.sidecar_path.exists():
@@ -188,7 +226,16 @@ class EvidenceTracker:
         fallback_used: bool = False,
         fallback_chain: list[dict[str, Any]] | None = None,
         elapsed_ms: int | None = None,
+        fast_fail: bool = False,
     ) -> None:
+        """Record one evidence step.
+
+        Args:
+            fast_fail: True when the step failed because the locator does not
+                exist on the current page. Skips the expensive element-metadata
+                capture (waits ~5s per Playwright call on a missing element),
+                the full-page screenshot and the failure diagnosis.
+        """
         step_idx = len(self.steps)
 
         # Calculate run count for this specific step by checking previous steps
@@ -199,7 +246,7 @@ class EvidenceTracker:
                 step_run_count = prev_step.get("result", {}).get("run_count", 0) + 1
 
         screenshot_path = None
-        if take_screenshot:
+        if take_screenshot and not fast_fail:
             screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}.png"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
@@ -209,12 +256,15 @@ class EvidenceTracker:
             except Exception:
                 pass
 
-        element_data = self._get_element_metadata(locator)
+        if fast_fail:
+            element_data: dict[str, Any] = {}
+        else:
+            element_data = self._get_element_metadata(locator)
 
         # On failure, generate self-diagnosing failure evidence (Tier 1).
         failure_note: str | None = None
         diagnosis: dict[str, Any] | None = None
-        if error:
+        if error and not fast_fail:
             try:
                 diagnosis = FailureReporter.diagnose_failure(self.page, locator, step_type, error)
                 failure_note = FailureReporter.generate_failure_note(diagnosis)
@@ -314,11 +364,54 @@ class EvidenceTracker:
             label = f"Click {locator}"
         _t0 = time.time()
         try:
-            # We record metadata BEFORE clicking in case navigation clears it
-            el_metadata = self._get_element_metadata(locator)
             # Always click `first` to avoid strict-mode failures when a locator is
             # valid but matches multiple elements (common on e-commerce grids).
             loc = self.page.locator(locator).first
+            # Fast-fail FIRST (before metadata capture, which waits ~5s per
+            # Playwright call on a missing element): if the element does not exist
+            # on the CURRENT page, do not run the fallback marathon — it builds
+            # candidates from the same DOM and cannot recover a non-existent
+            # element. A wrong-page locator previously burned 5s + hover +
+            # scoring fallbacks (~150s per click), blowing the whole suite's
+            # 600s budget on a single step.
+            try:
+                if loc.count() == 0:
+                    raise _LocatorNotFoundError(
+                        f"Locator '{locator}' not found on current page ({self.page.url}). "
+                        "The element exists on a different page than the one this step runs on."
+                    )
+                if not loc.is_visible():
+                    # Hidden elements (e.g. CSRF token inputs, display:none
+                    # fields) are never click targets. Playwright would wait the
+                    # full 5s timeout and then the fallback chain would burn
+                    # ~29s clicking nothing useful.
+                    raise _LocatorNotFoundError(
+                        f"Locator '{locator}' is hidden on current page ({self.page.url}). "
+                        "Hidden elements are not clickable — the resolver emitted a "
+                        "non-interactive element (e.g. a hidden CSRF input)."
+                    )
+            except _LocatorNotFoundError:
+                self._record_step(
+                    "click",
+                    label,
+                    locator=locator,
+                    error=str(sys.exc_info()[1]),
+                    elapsed_ms=int((time.time() - _t0) * 1000),
+                    fast_fail=True,
+                )
+                raise
+            # Proactively dismiss consent/ad overlays AND confirmation modals
+            # BEFORE the click attempt. Google's consent banner, ad
+            # interstitials and e-commerce "added to cart" modals re-render
+            # after the initial navigate() dismissal; without this, Playwright
+            # waits the full 5s timeout per click and then falls into the
+            # hover/scoring fallback chain (~8-30s per click on covered
+            # elements). Dismissal costs ~1.5s and makes the click succeed on
+            # the first try.
+            self._dismiss_ad_overlays()
+            self._dismiss_confirmation_modals()
+            # We record metadata BEFORE clicking in case navigation clears it
+            el_metadata = self._get_element_metadata(locator)
             try:
                 loc.scroll_into_view_if_needed(timeout=2000)
             except Exception:
@@ -364,6 +457,9 @@ class EvidenceTracker:
                 else:
                     raise
         except Exception as e:
+            # Fast-failed not-found clicks were already recorded (fast_fail).
+            if isinstance(e, _LocatorNotFoundError):
+                raise
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
             self._record_step(

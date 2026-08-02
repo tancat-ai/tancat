@@ -325,6 +325,18 @@ class JourneyScraper:
                                                     "page_url": page.url,
                                                 }
                                             )
+                                            # B-028: FILL-quantity with no fillable
+                                            # input -> click +/- stepper buttons.
+                                            if self._try_quantity_stepper_fallback(page, step):
+                                                self._context_log.append(
+                                                    {
+                                                        "event": "quantity_stepper_fallback",
+                                                        "step": step_index,
+                                                        "description": step.description,
+                                                        "value": step.text,
+                                                        "page_url": page.url,
+                                                    }
+                                                )
                                 if selector and step.text:
                                     self._fill_selector(page, selector, step.text, step.timeout_ms)
 
@@ -511,15 +523,200 @@ class JourneyScraper:
 
         return None
 
+    # ─── B-028: e-commerce context hints for journey discovery ────────────
+
+    _PRODUCT_INTENT_TERMS = (
+        "product",
+        "add to cart",
+        "add item",
+        "add product",
+        "item to cart",
+        "buy",
+        "purchase",
+        "browse",
+        "view product",
+        "click on a product",
+        "click on product",
+        "select a product",
+    )
+    _DISMISS_INTENT_TERMS = (
+        "dismiss",
+        "modal",
+        "popup",
+        "pop-up",
+        "dialog",
+        "continue shopping",
+    )
+    _CLOSE_INTENT_WORDS = {"close", "dismiss", "ok", "cancel"}
+    _NAV_CHROME_PATHS = (
+        "/view_cart",
+        "/login",
+        "/signup",
+        "/register",
+        "/contact",
+        "/api",
+        "/test_cases",
+        "/cart",
+        "/checkout",
+        "/payment",
+    )
+
+    @staticmethod
+    def _has_product_intent(description: str) -> bool:
+        """True when a CLICK description targets product browsing / add-to-cart."""
+        lowered = f" {description.lower().strip()} "
+        if any(term in lowered for term in JourneyScraper._PRODUCT_INTENT_TERMS):
+            return True
+        words = set(description.lower().split())
+        return bool(words & {"product", "products", "item", "items"})
+
+    @staticmethod
+    def _has_dismiss_intent(description: str) -> bool:
+        """True when a CLICK description asks to dismiss/close a modal or popup."""
+        lowered = f" {description.lower().strip()} "
+        if any(term in lowered for term in JourneyScraper._DISMISS_INTENT_TERMS):
+            return True
+        return bool(set(description.lower().split()) & JourneyScraper._CLOSE_INTENT_WORDS)
+
+    @staticmethod
+    def _has_browse_intent(description: str) -> bool:
+        """True when a product-intent description asks to OPEN/view a product.
+
+        "Add"/"buy" phrasing (add to cart) is excluded so those steps keep
+        preferring the add-to-cart button over the product detail link.
+        """
+        lowered = f" {description.lower().strip()} "
+        if any(term in lowered for term in ("add", "buy", "purchase")):
+            return False
+        return any(
+            term in lowered
+            for term in (
+                "view",
+                "open",
+                "see",
+                "browse",
+                "details",
+                "click on a product",
+                "click on product",
+                "select a product",
+            )
+        )
+
+    @staticmethod
+    def _has_category_intent(description: str) -> bool:
+        """True when a product-intent description targets a category LISTING.
+
+        "Product Category" / "category link" / "browse category" describe a
+        category listing page, NOT a product detail page. Without this hint,
+        "Product Category" was resolved to a product-detail link ("View
+        Product" outscored the unlabeled category links), the journey visited
+        a detail page, and every downstream locator was resolved against the
+        wrong page.
+        """
+        lowered = f" {description.lower().strip()} "
+        return any(term in lowered for term in ("category", "categories", "listing", "catalog", "catalogue", "browse"))
+
+    @staticmethod
+    def _is_category_listing_link(element: dict[str, Any]) -> bool:
+        """True when the element is a category/products listing link."""
+        sel = str(element.get("selector", "")).lower()
+        href = str(element.get("href", "")).lower()
+        text = str(element.get("text", "")).strip().lower()
+        return (
+            "category_products" in sel
+            or "/category_products" in href
+            or "/category/" in href
+            or "/brand_products" in href
+            or "/products" in href
+            or "/categories" in href
+            or text in ("products", "categories", "all products")
+        )
+
+    @staticmethod
+    def _is_product_detail_link(element: dict[str, Any]) -> bool:
+        """True when the element is a product-detail link (href /product_details/…)."""
+        sel = str(element.get("selector", "")).lower()
+        href = str(element.get("href", "")).lower()
+        return "product_details" in sel or "/product_details" in href or "/product/" in href
+
+    @staticmethod
+    def _is_modal_root(element: dict[str, Any]) -> bool:
+        """True for elements that are modal structure (root/container) rather than content."""
+        sel = str(element.get("selector", "")).lower()
+        classes = str(element.get("classes", "")).lower()
+        element_id = str(element.get("id", "")).lower()
+        return any(
+            marker in sel or marker in classes or marker in element_id for marker in ("modal", "dialog", "popup")
+        )
+
+    @staticmethod
+    def _is_product_card_element(element: dict[str, Any]) -> bool:
+        """True when the element is a product-card link/button (not site chrome)."""
+        sel = str(element.get("selector", "")).lower()
+        classes = str(element.get("classes", "")).lower()
+        href = str(element.get("href", "")).lower()
+        return (
+            "data-product-id" in sel
+            or "add-to-cart" in sel
+            or "add-to-cart" in classes
+            or "product_details" in sel
+            or "/product" in href
+            or ".product" in sel
+        )
+
+    @staticmethod
+    def _is_nav_chrome_link(element: dict[str, Any]) -> bool:
+        """True when the element is a site-chrome navigation link (cart/login/etc)."""
+        href = str(element.get("href", "")).strip().lower()
+        if not href:
+            return False
+        from urllib.parse import urlparse
+
+        path = urlparse(href).path.lower()
+        if path in ("", "/"):
+            return True
+        return any(chrome in path for chrome in JourneyScraper._NAV_CHROME_PATHS)
+
+    @staticmethod
+    def _is_dismiss_element(element: dict[str, Any]) -> bool:
+        """True when the element is a modal dismissal control (Continue/Close/OK)."""
+        sel = str(element.get("selector", "")).lower()
+        classes = str(element.get("classes", "")).lower()
+        text = str(element.get("text", "")).strip().lower()
+        return (
+            "close-modal" in sel
+            or "close-modal" in classes
+            or "dismiss" in sel
+            or "dismiss" in classes
+            or "continue-shopping" in sel
+            or "continue" in classes.split()
+            or "close" in classes.split()
+            or text in ("continue shopping", "close", "dismiss", "ok", "got it", "cancel", "no thanks")
+        )
+
     def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
         """Find the best selector for a description on the current live page.
 
         B-015: Unified ranking pipeline — discovery and resolution share scoring logic.
+        B-028: Journey steps carry lowercase actions ("click"/"fill") which
+        silently disabled every action-specific bonus/gate in PlaceholderScorer
+        (it branches on "CLICK"/"FILL"). Discovery scores collapsed to raw word
+        overlap, so generic descriptions ("click on a product to view it") lost
+        to "View Cart" nav links. Fixes here:
+          - normalize the action to uppercase before scoring
+          - skip invisible elements for CLICK/FILL (rank_candidates parity)
+          - only apply the modal penalty when a modal is actually VISIBLE
+            (hidden modals like #cartModal are always in the e-commerce DOM)
+          - product-intent hints: prefer product-card elements over nav chrome
+          - modal-dismiss hints: prefer dismiss buttons over navigation links
         """
         try:
             page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass
+
+        # B-028: scorer branches on uppercase action values.
+        action = action.upper()
 
         html = page.content()
         elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
@@ -534,8 +731,28 @@ class JourneyScraper:
         best_element: dict[str, Any] | None = None
         best_score: float = -1
 
+        has_product_intent = action == "CLICK" and self._has_product_intent(description)
+        has_browse_intent = has_product_intent and self._has_browse_intent(description)
+        has_category_intent = has_product_intent and self._has_category_intent(description)
+        has_dismiss_intent = action == "CLICK" and self._has_dismiss_intent(description)
+
+        # B-028: a hidden modal container (e.g. #cartModal) is always present in
+        # e-commerce DOMs. Only treat the page as modal-blocked when a modal-
+        # structure element is actually visible.
+        page_has_visible_modal = any(self._is_modal_root(e) and e.get("is_visible") is not False for e in elements)
+
         for element in elements:
             selector = element.get("selector", "")
+            if not selector:
+                continue
+            role = str(element.get("role", "")).lower()
+
+            # B-028: hidden elements are not click/fill targets (rank_candidates
+            # parity). Without this, the hidden modal's "View Cart" link can win
+            # generic descriptions via raw word overlap.
+            if action in ("CLICK", "FILL") and element.get("is_visible") is False:
+                continue
+
             score = PlaceholderScorer.compute_element_score(
                 action=action,
                 description=description,
@@ -543,43 +760,73 @@ class JourneyScraper:
                 selector=selector,
                 match_threshold=1,
             )
+            if score is None:
+                continue
 
             in_modal = element.get("in_modal", False)
-            page_has_modal = any(e.get("in_modal", False) for e in elements)
+            if action == "CLICK" and page_has_visible_modal and not in_modal:
+                score -= 30
+            if action == "FILL" and role not in (
+                "text",
+                "password",
+                "searchbox",
+                "textbox",
+                "combobox",
+                "email",
+                "tel",
+                "number",
+                "select",
+                "textarea",
+                "url",
+            ):
+                score -= 50
+            elif action == "CLICK" and role not in (
+                "button",
+                "submit",
+                "link",
+                "a",
+                "menuitem",
+                "tab",
+                "checkbox",
+                "radio",
+            ):
+                score -= 20
 
-            if score is not None:
-                if action == "click" and page_has_modal and not in_modal:
-                    score -= 30
-                role = str(element.get("role", "")).lower()
-                if action == "fill" and role not in (
-                    "text",
-                    "password",
-                    "searchbox",
-                    "textbox",
-                    "combobox",
-                    "email",
-                    "tel",
-                    "number",
-                    "select",
-                    "textarea",
-                    "url",
-                ):
-                    score -= 50
-                elif action == "click" and role not in (
-                    "button",
-                    "submit",
-                    "link",
-                    "a",
-                    "menuitem",
-                    "tab",
-                    "checkbox",
-                    "radio",
-                ):
-                    score -= 20
+            # B-028: e-commerce context hints.
+            if has_product_intent:
+                if self._is_product_card_element(element):
+                    if has_browse_intent and self._is_product_detail_link(element):
+                        # "click on a product to view it" -> product detail link
+                        score += 16
+                    elif has_category_intent and self._is_category_listing_link(element):
+                        # "Product Category" -> category/products listing page
+                        score += 16
+                    elif has_category_intent and self._is_product_detail_link(element):
+                        # Category intents must NOT visit a single product page.
+                        score -= 10
+                    else:
+                        score += 10
+                elif self._is_nav_chrome_link(element):
+                    score -= 10
+            if has_dismiss_intent:
+                if self._is_dismiss_element(element):
+                    score += 15
+                elif element.get("href"):
+                    # Navigation links never dismiss a modal.
+                    score -= 10
 
-            if score is not None and score > best_score:
+            if score > best_score:
                 best_score = score
                 best_element = element
+
+        if best_element is not None:
+            # B-028: a modal-dismiss step must only click an actual dismissal
+            # control. Generic elements (nav links, product buttons) scoring
+            # weakly should be skipped — the modal was already dismissed by
+            # _dismiss_modals, so clicking anything else is a wasted/wrong click.
+            if has_dismiss_intent and not self._is_dismiss_element(best_element):
+                best_element = None
+                best_score = -1
 
         if best_element is not None:
             robust = build_robust_locator(best_element)
@@ -588,6 +835,23 @@ class JourneyScraper:
                     f"Selected '{robust or best_element.get('selector')}' (score={best_score}) for '{description}'"
                 )
                 return robust or best_element.get("selector")
+
+        # B-028: product/dismiss intents with no viable candidate must NOT fall
+        # back to rank_candidates — its raw word-overlap ranking picks the
+        # hidden modal's "View Cart" link (score=1). Skipping the step is safer
+        # than navigating to the wrong page.
+        if best_element is None and (has_dismiss_intent or has_product_intent):
+            self._context_log.append(
+                {
+                    "event": "locator_not_found",
+                    "action": action,
+                    "description": description,
+                    "page_url": page.url,
+                    "best_candidate_score": 0,
+                    "available_elements": self._list_available_elements(page),
+                }
+            )
+            return None
 
         ranked = self._resolver.rank_candidates(action, description, elements)
         if not ranked:
@@ -682,6 +946,47 @@ class JourneyScraper:
         except Exception as e:
             self._debug(f"Fill exception: {e}")
             raise
+
+    def _try_quantity_stepper_fallback(self, page: Any, step: JourneyStep) -> bool:
+        """Best-effort quantity setting via +/- stepper buttons.
+
+        B-028: some e-commerce sites expose quantity only as +/- stepper
+        buttons with no fillable input. When a FILL-quantity step finds no
+        fillable input, click the increment button ``value`` times instead of
+        silently skipping the step.
+        """
+        if not step.text or not str(step.text).replace(".", "").isdigit():
+            return False
+        lowered = (step.description or "").lower()
+        if not any(term in lowered for term in ("quantity", "qty", "amount", "count")):
+            return False
+        increments = int(float(str(step.text)))
+        if increments < 1:
+            return False
+        candidates = (
+            "button.qty-plus, .qty_plus, .qtyplus, .cart_quantity_up, .increment, .plus",
+            "button:has-text('+'), a:has-text('+'), .fa-plus, .fa.fa-plus, .fa-plus-square",
+            "[data-qty-plus], [aria-label*='increase' i], [aria-label*='increment' i]",
+        )
+        for group in candidates:
+            for raw in group.split(","):
+                sel = raw.strip()
+                if not sel:
+                    continue
+                try:
+                    locator = page.locator(sel).first
+                    if locator.count() and locator.is_visible(timeout=150):
+                        # Quantity steppers start at 1 — reaching ``increments``
+                        # needs (increments - 1) clicks; always at least one.
+                        clicks = max(increments - 1, 1)
+                        for _ in range(min(clicks, 20)):
+                            locator.click(timeout=1000)
+                            page.wait_for_timeout(120)
+                        self._debug(f"Quantity stepper fallback: clicked {sel} {clicks}x")
+                        return True
+                except Exception:
+                    continue
+        return False
 
     def _scrape_current_page(self, page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]:
         """Scrape elements from the current page state.

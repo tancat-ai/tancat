@@ -68,6 +68,7 @@ def build_pytest_run_command(saved_path: str, failed_nodeids: Sequence[str] | No
         "--browser=chromium",
         "--screenshot=only-on-failure",
         "--durations=0",
+        "--timeout=120",
         "-v",
         "--tb=short",
     ]

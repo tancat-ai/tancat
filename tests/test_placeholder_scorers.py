@@ -136,6 +136,15 @@ class TestIsFillable:
     def test_input_without_type_is_fillable(self) -> None:
         assert PlaceholderScorer._is_fillable(_element({"tag": "input", "type": ""}))
 
+    def test_number_role_is_fillable(self) -> None:
+        # B-028: quantity steppers carry role="number" (no tag/type in
+        # discovery elements) — must match IntentMatcher's fillability.
+        assert PlaceholderScorer._is_fillable(_element({"role": "number", "id": "quantity"}))
+
+    def test_email_and_password_roles_are_fillable(self) -> None:
+        assert PlaceholderScorer._is_fillable(_element({"role": "email"}))
+        assert PlaceholderScorer._is_fillable(_element({"role": "password"}))
+
 
 # ── _structural_bonus ────────────────────────────────────────────────────
 

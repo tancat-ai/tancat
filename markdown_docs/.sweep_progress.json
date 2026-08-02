@@ -1,6 +1,6 @@
 {
-  "total": 128,
-  "completed": 128,
+  "total": 129,
+  "completed": 129,
   "pending": 0,
   "files": [
     {
@@ -642,7 +642,12 @@
       "source": "src/test_table.py",
       "doc": "markdown_docs/src/test_table.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/test_structure_assembler.py",
+      "doc": "markdown_docs/src/test_structure_assembler.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-07-31"
+  "last_updated": "2026-08-01"
 }
