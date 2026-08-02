@@ -176,6 +176,7 @@ class LocatorFallback:
                         }
                     ],
                     elapsed_ms=elapsed_ms,
+                    element_metadata=el_metadata,
                 )
                 return
             except Exception as fallback_error:

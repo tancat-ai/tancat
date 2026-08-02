@@ -13,8 +13,13 @@ from src.pipeline_models import GeneratedPageObject, ScrapedPage
 # to resolve to click_dress_category_link() or fall back to self.page.locator().click().
 # Two versions: one for evidence tracker (uses self.tracker) and one for plain POMs.
 _CLICK_METHOD_SOURCE_ET = (
-    "    def click(self, description: str) -> None:\n"
-    '        """Click by semantic description — resolve to POM method or delegate to tracker."""\n'
+    "    def click(self, description: str, selector: str | None = None) -> None:\n"
+    '        """Click by semantic description — resolve to POM method or delegate to tracker.\n'
+    "        When *selector* is provided (resolved during generation) it is used directly;\n"
+    '        the runtime semantic matching below is a fallback only."""\n'
+    "        if selector:\n"
+    "            self.tracker.click(selector, label=description)\n"
+    "            return\n"
     "        import re\n"
     "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
     "        method_name = 'click_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
@@ -97,8 +102,13 @@ _CLICK_METHOD_SOURCE_ET = (
 )
 
 _CLICK_METHOD_SOURCE_PLAIN = (
-    "    def click(self, description: str) -> None:\n"
-    '        """Click by semantic description — resolve to POM method or fall back to page.locator."""\n'
+    "    def click(self, description: str, selector: str | None = None) -> None:\n"
+    '        """Click by semantic description — resolve to POM method or fall back to page.locator.\n'
+    "        When *selector* is provided (resolved during generation) it is used directly;\n"
+    '        the runtime semantic matching below is a fallback only."""\n'
+    "        if selector:\n"
+    "            self.page.locator(selector).first.click(timeout=3000)\n"
+    "            return\n"
     "        import re\n"
     "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
     "        method_name = 'click_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
@@ -154,6 +164,68 @@ _CLICK_METHOD_SOURCE_PLAIN = (
     "                best_score, best_sel = _score, _sel\n"
     "        if best_sel:\n"
     "            self.page.locator(best_sel).first.click(timeout=3000)\n"
+    "            return\n"
+    "        import pytest\n"
+    "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
+)
+
+
+# Generic fill method injected into POM classes — mirrors click(): use a
+# resolution-phase selector directly when provided, otherwise fall back to
+# exact fill_<slug> methods and the B-028 DOM-existence index.
+_FILL_METHOD_SOURCE_ET = (
+    "    def fill(self, description: str, value: str, selector: str | None = None) -> None:\n"
+    '        """Fill by semantic description — resolve to POM method or use selector.\n'
+    "        When *selector* is provided (resolved during generation) it is used directly;\n"
+    '        the runtime semantic matching below is a fallback only."""\n'
+    "        if selector:\n"
+    "            self.tracker.fill(selector, value, label=description)\n"
+    "            return\n"
+    "        import re\n"
+    "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
+    "        method_name = 'fill_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
+    "        method_name = re.sub(r'_+', '_', method_name).strip('_')\n"
+    "        if method_name in dir(self):\n"
+    "            getattr(self, method_name)(value)\n"
+    "            return\n"
+    "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
+    "        min_score = 2 if len(want) >= 2 else 1\n"
+    "        best_sel, best_score = None, 0\n"
+    "        for _hay, _sel in self._ELEMENTS:\n"
+    "            _score = len(want & set(_hay.split()))\n"
+    "            if _score >= min_score and _score > best_score:\n"
+    "                best_score, best_sel = _score, _sel\n"
+    "        if best_sel:\n"
+    "            self.tracker.fill(best_sel, value, label=description)\n"
+    "            return\n"
+    "        import pytest\n"
+    "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
+)
+
+_FILL_METHOD_SOURCE_PLAIN = (
+    "    def fill(self, description: str, value: str, selector: str | None = None) -> None:\n"
+    '        """Fill by semantic description — resolve to POM method or use selector.\n'
+    "        When *selector* is provided (resolved during generation) it is used directly;\n"
+    '        the runtime semantic matching below is a fallback only."""\n'
+    "        if selector:\n"
+    "            self.page.locator(selector).first.fill(value, timeout=3000)\n"
+    "            return\n"
+    "        import re\n"
+    "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
+    "        method_name = 'fill_' + re.sub(r'[^a-z0-9]', '_', clean)\n"
+    "        method_name = re.sub(r'_+', '_', method_name).strip('_')\n"
+    "        if method_name in dir(self):\n"
+    "            getattr(self, method_name)(value)\n"
+    "            return\n"
+    "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
+    "        min_score = 2 if len(want) >= 2 else 1\n"
+    "        best_sel, best_score = None, 0\n"
+    "        for _hay, _sel in self._ELEMENTS:\n"
+    "            _score = len(want & set(_hay.split()))\n"
+    "            if _score >= min_score and _score > best_score:\n"
+    "                best_score, best_sel = _score, _sel\n"
+    "        if best_sel:\n"
+    "            self.page.locator(best_sel).first.fill(value, timeout=3000)\n"
     "            return\n"
     "        import pytest\n"
     "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
@@ -476,6 +548,7 @@ class PageObjectBuilder:
             f"{init_code}"
             f"{navigate_code}"
             + (_CLICK_METHOD_SOURCE_ET if use_evidence_tracker else _CLICK_METHOD_SOURCE_PLAIN)
+            + (_FILL_METHOD_SOURCE_ET if use_evidence_tracker else _FILL_METHOD_SOURCE_PLAIN)
             + "\n"
             "    def __getattr__(self, name):\n"
             "        def fallback(*args, **kwargs):\n"

@@ -1,7 +1,26 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-01 (B-028 fixed + follow-ups shipped: assembler, fast-fail, token cap, per-test timeout)
+Last updated: 2026-08-02 (CLI walkthrough driver + zero-pass pipeline fixes shipped)
+
+---
+
+## ✅ Shipped 2026-08-02 — CLI walkthrough driver + zero-pass pipeline fixes
+
+**Session doc:** `docs/sessions/2026-08-02_cli_walkthrough_and_zero_pass_pipeline_fixes.md`
+
+**What shipped:**
+- **CLI walkthrough driver** (`scripts/cli_walkthrough.py`, new) — marker-driven subprocess driver; NAV pass 41/41, FULL pass 59/59 (real LLM + live automationexercise.com). Documents Windows pipe gotchas (read1 vs read, one-write-per-input, no-blank-lines paste).
+- **CLI crash fixed — "Load Existing Generated Tests"** (`PermissionError`): `load_package_manifest()` called with a package dir instead of the manifest file; now directory-aware + both CLI callers pass `reconstruct=True`. 4 regression tests.
+- **CLI POM/Consent invisible feedback**: State block shows `Consent`/`POM Mode`; toggle handlers pause with confirmation (also fixes stray-Enter msvcrt re-select bug).
+- **POM mode discarded resolved selectors** → tests skipped at runtime (`home_page.click('product name link')` instead of the resolved `a[href="/product_details/1"]`). Now emits `click(label, selector=...)`; generated POMs use it directly; generic `fill()` added. `src/pom_helpers.py`, `src/page_object_builder.py`.
+- **Consent-overlay pollution**: 1,448/2,328 scraped elements were OneTrust `.fc-*` markup (hidden in DOM); consent removal only matched ID-based selectors. Added class-based selectors to `src/scraper.py` — POMs 1806 → ~520 lines.
+- **URL trailing-slash mismatch** in assertions/navigation (`normalize_url()` in `src/url_resolver.py`, applied at all emission points in `src/placeholder_orchestrator.py`).
+- **FILL resolved to container div** (saucedemo `[data-test="login-container"]` accessible_name collision) — fillability gate added to `pass1_text_match`.
+- **Evidence-tracker hang**: `_record_step` re-captured metadata for a locator that no longer exists after a click navigated — each un-timed Playwright call waited 30s (×4 ≈ 120s/test). `_record_step` now accepts pre-captured `element_metadata=`; suites complete in ~140-175s (were 600s timeouts).
+- **verify_production timeout message bug**: printed literal `{max(60, min(180, len(test_funcs) * 25))}s`; now real value + salvages partial pytest output/evidence count on timeout. Suite cap raised to `min(300, tests*30)`.
+
+**Verification:** full suite 2042 passed / 1 skipped; ruff + mypy clean; eval static 100%; `verify_production` 20/26 → 22/26 gates. Verdict still FAIL — remaining failures are the **semantic layer** (see session doc §Open work: dialog-role scoping, assertion-state polarity, heading-role asserts, upstream skeleton phrasing, LLM re-ranking with T-strings + bounded retries; **do not add site-specific lists** — match playwright.dev's ARIA-role vocabulary).
 
 ---
 

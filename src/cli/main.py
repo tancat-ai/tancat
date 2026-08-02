@@ -193,6 +193,10 @@ async def interactive_session() -> None:
             state.append(f"  URL : {session.starting_url}")
         if session.raw_requirements:
             state.append(f"  Story : {len(session.raw_requirements)} chars")
+            # Mode toggles (Consent Mode / POM Mode) — surfaced here so toggling
+            # produces visible feedback on the redrawn screen.
+            state.append(f"  Consent : {session.consent_mode}")
+            state.append(f"  POM Mode : {'ON' if session.pom_mode else 'OFF'}")
         if session.plan_confirmed:
             state.append("  Plan : Signed off")
         if session.pipeline_saved_path:
@@ -223,12 +227,17 @@ async def interactive_session() -> None:
             _collect_urls_inline(session)
         elif menu_items[idx] == "Consent Mode":
             session.consent_mode = collect_consent_mode()
+            print(green(f"  ✓ Consent mode set to '{session.consent_mode}'"))
+            print("  Press Enter to continue...")
+            input()
         elif menu_items[idx] == "POM Mode":
             session.pom_mode = not session.pom_mode
             if session.pom_mode:
                 print(green("  POM Mode: ON — generated tests will include Page Object Model artifacts"))
             else:
                 print(yellow("  POM Mode: OFF — generated tests will use inline locators only"))
+            print("  Press Enter to continue...")
+            input()
         elif "Authentication" in menu_items[idx]:
             _collect_authentication_inline(session)
         elif "Journey" in menu_items[idx]:
@@ -370,7 +379,7 @@ def _load_saved_packages_inline(session: Session) -> None:
 
     package = packages[idx]
     package_dir = Path(package["path"])
-    manifest = load_package_manifest(package_dir)
+    manifest = load_package_manifest(package_dir, reconstruct=True)
     session.loaded_package_manifest = manifest
     session.pipeline_saved_path = package_dir
 

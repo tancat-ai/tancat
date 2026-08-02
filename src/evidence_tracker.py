@@ -227,6 +227,7 @@ class EvidenceTracker:
         fallback_chain: list[dict[str, Any]] | None = None,
         elapsed_ms: int | None = None,
         fast_fail: bool = False,
+        element_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record one evidence step.
 
@@ -235,6 +236,11 @@ class EvidenceTracker:
                 exist on the current page. Skips the expensive element-metadata
                 capture (waits ~5s per Playwright call on a missing element),
                 the full-page screenshot and the failure diagnosis.
+            element_metadata: Pre-captured element metadata to use instead of
+                re-querying the locator. Critical after a click that navigated
+                away — the old locator no longer exists and every un-timed
+                Playwright call would wait the full default timeout (~30s each,
+                ~120s total), hanging the test.
         """
         step_idx = len(self.steps)
 
@@ -256,8 +262,8 @@ class EvidenceTracker:
             except Exception:
                 pass
 
-        if fast_fail:
-            element_data: dict[str, Any] = {}
+        if fast_fail or element_metadata is not None:
+            element_data = element_metadata if element_metadata is not None else {}
         else:
             element_data = self._get_element_metadata(locator)
 
@@ -421,8 +427,13 @@ class EvidenceTracker:
             # Attempt 1: Direct click
             try:
                 loc.click(timeout=5000)
-                self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-                self.steps[-1]["element"] = el_metadata
+                self._record_step(
+                    "click",
+                    label,
+                    locator=locator,
+                    elapsed_ms=int((time.time() - _t0) * 1000),
+                    element_metadata=el_metadata,
+                )
                 return
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
@@ -439,8 +450,13 @@ class EvidenceTracker:
 
                     # Attempt 2: Hover-reveal fallback (delegated to hover_click_utils)
                     if try_hover_and_click(self.page, loc, locator):
-                        self._record_step("click", label, locator=locator, elapsed_ms=int((time.time() - _t0) * 1000))
-                        self.steps[-1]["element"] = el_metadata
+                        self._record_step(
+                            "click",
+                            label,
+                            locator=locator,
+                            elapsed_ms=int((time.time() - _t0) * 1000),
+                            element_metadata=el_metadata,
+                        )
                         return
 
                     # Attempt 3: Locator scoring fallback (new — Tier 2)

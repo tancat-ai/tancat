@@ -145,12 +145,34 @@ def get_pom_method_call(
         return None
 
     label = description
+    # resolved_selector arrives repr'd (e.g. 'a[href="/x"]') from the resolver, or
+    # as a pytest.skip(...) expression when no element matched. Only pass a real
+    # selector through — deferring to the runtime matcher for unresolved ones.
+    selector_ok = bool(resolved_selector) and not str(resolved_selector).startswith("pytest.skip")
     if action == "CLICK":
+        if selector_ok:
+            return f"{pom_instance_name}.click({label!r}, selector={_selector_literal(resolved_selector)})"
         return f"{pom_instance_name}.click({label!r})"
     if action == "FILL":
+        if selector_ok:
+            return (
+                f"{pom_instance_name}.fill({label!r}, {fill_value!r}, selector={_selector_literal(resolved_selector)})"
+            )
         return f"{pom_instance_name}.fill({label!r}, {fill_value!r})"
 
     return None
+
+
+def _selector_literal(value: str) -> str:
+    """Return *value* as a Python string literal.
+
+    The resolution phase already repr()s selectors; guard against raw callers
+    so a bare ``#submit`` becomes ``'#submit'`` rather than broken Python.
+    """
+    v = str(value)
+    if v.startswith(("'", '"')) or v.startswith(("pytest.skip", "expect(")):
+        return v
+    return repr(v)
 
 
 __all__ = [

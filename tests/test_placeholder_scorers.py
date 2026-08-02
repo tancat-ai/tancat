@@ -547,3 +547,51 @@ class TestConstants:
     def test_product_filter_words_defined(self) -> None:
         assert "add" in PlaceholderScorer.PRODUCT_FILTER_WORDS
         assert "cart" in PlaceholderScorer.PRODUCT_FILTER_WORDS
+
+
+# ── ElementMatcher Pass 1 FILL gate regression ─────────────────────────────
+
+
+def test_pass1_fill_gate_skips_container_with_matching_accessible_name() -> None:
+    """FILL must never resolve to a non-fillable container.
+
+    Regression: a div wrapping the username input reports accessible_name
+    'Username' (union of contained content), so Pass 1 fast-text matching
+    selected the container over the real input. rank_candidates gates FILL —
+    Pass 1 must do the same.
+    """
+    from src.element_matcher import ElementMatcher
+    from src.placeholder_resolver import PlaceholderResolver
+
+    pages_data = {
+        "https://saucedemo.com/": [
+            # The container div — non-fillable, but accessible_name collides
+            {
+                "selector": '[data-test="login-container"]',
+                "tag": "div",
+                "role": "div",
+                "text": "Accepted usernames are: standard_user",
+                "accessible_name": "Username",
+                "id": "",
+                "name": "",
+                "placeholder": "",
+                "data_test": "login-container",
+            },
+            # The real input
+            {
+                "selector": "#user-name",
+                "tag": "input",
+                "role": "text",
+                "text": "",
+                "accessible_name": "Username",
+                "id": "user-name",
+                "name": "user-name",
+                "placeholder": "Username",
+                "data_test": "username",
+            },
+        ]
+    }
+    matcher = ElementMatcher(resolver=PlaceholderResolver())
+    result = matcher.pass1_text_match("FILL", "username", pages_data)
+    assert result is not None
+    assert result["selector"] == "#user-name"

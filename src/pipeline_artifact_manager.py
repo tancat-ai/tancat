@@ -124,6 +124,18 @@ def load_package_manifest(
             return _load_from_file(canonical)
         return _reconstruct_manifest(manifest_path)
 
+    if manifest_path.is_dir():
+        # Caller passed a package root instead of the manifest file — resolve
+        # the canonical manifest, falling back to reconstruction when allowed.
+        canonical = manifest_path / MANIFEST_FILENAME
+        if canonical.exists():
+            return _load_from_file(canonical)
+        if reconstruct:
+            return _reconstruct_manifest(manifest_path)
+        raise FileNotFoundError(
+            f"Package manifest not found: {manifest_path}. Use reconstruct=True to build a minimal manifest from disk."
+        )
+
     if not manifest_path.exists():
         raise FileNotFoundError(
             f"Package manifest not found: {manifest_path}. Use reconstruct=True to build a minimal manifest from disk."
