@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.file_utils import slugify
 from src.journey_scraper import CredentialProfile, JourneyStep
 from src.pipeline_artifact_manager import PackageManifest
 from src.provider_config import get_provider_defaults
@@ -76,6 +77,17 @@ class Session:
 
     # Requirements
     raw_requirements: str = ""
+
+    @property
+    def story_slug(self) -> str:
+        """Slug of the pasted story, used to name exported output directories.
+
+        Mirrors the pipeline writer's package naming (slugify of the first 50
+        chars of the story). Previously referenced as ``session.story_slug``
+        without ever being defined — the CLI export flow raised AttributeError.
+        """
+        story_text = (self.raw_requirements or "").strip()
+        return slugify(story_text[:50]) if story_text else ""
 
     # Authentication / Journey (AI-009 Phase B)
     credential_profile: CredentialProfile | None = None

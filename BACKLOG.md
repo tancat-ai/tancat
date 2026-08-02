@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-02 (CLI walkthrough driver + zero-pass pipeline fixes shipped)
+Last updated: 2026-08-02 (semantic layer: page-load assertions, dialog scoping, polarity + CLI quality + eval harness gap)
 
 ---
 
@@ -21,6 +21,24 @@ Last updated: 2026-08-02 (CLI walkthrough driver + zero-pass pipeline fixes ship
 - **verify_production timeout message bug**: printed literal `{max(60, min(180, len(test_funcs) * 25))}s`; now real value + salvages partial pytest output/evidence count on timeout. Suite cap raised to `min(300, tests*30)`.
 
 **Verification:** full suite 2042 passed / 1 skipped; ruff + mypy clean; eval static 100%; `verify_production` 20/26 → 22/26 gates. Verdict still FAIL — remaining failures are the **semantic layer** (see session doc §Open work: dialog-role scoping, assertion-state polarity, heading-role asserts, upstream skeleton phrasing, LLM re-ranking with T-strings + bounded retries; **do not add site-specific lists** — match playwright.dev's ARIA-role vocabulary).
+
+---
+
+## ✅ Shipped 2026-08-02 (continued) — Semantic layer (page-load, dialog scoping, polarity) + CLI quality + eval harness gap
+
+**Session doc:** `docs/sessions/2026-08-02_semantic_layer_and_cli_quality.md`
+
+**What shipped:**
+- **Page-load assertions resolve correctly**: "title" no longer vetoes page-state routing (`<page> page title` → `to_have_url`, matching the golden encoding); `resolve_url` root-path substring bug fixed (multi-word descriptions no longer resolve to the home URL); golden validator compares `to_have_url` trailing-slash-insensitively; skeleton prompts steer load-style conditions to `{{ASSERT:<page> loaded}}`. Production: `test_01_home_page_loads` → `to_have_url("https://automationexercise.com/")`.
+- **Dialog-action scoping (Pass D)**: `{{CLICK:OK}}` no longer resolves to a hidden CSRF input ("ok" substring inside "csrfmiddleware**TOKen**" short-circuited the fast path at a flat 100). CLICK fast-path + pass-2 hygiene (hidden penalties, ≥3-char substring), plus a structural Pass D: dialog-intent descriptions resolve against in-modal interactive elements, preferring close-modal controls. Production: `click('OK button', selector='button.btn.close-modal')`; automationexercise execution 2/7 → 5/7.
+- **Assertion-state polarity**: "popup closed"/"item removed" now emit `assert_hidden(...)` (`wait_for(state="hidden")`) instead of `assert_visible`. `polarity_assertion_type()` hooked at both resolution paths. Production: `assert_visible(...confirmation popup)` → `click('OK', selector='button.btn.close-modal')` → `assert_hidden('p.text-center', label='popup closed')`.
+- **CLI fixes (found by running the real CLI — `scripts/cli_walkthrough.py --pass full` — not by unit tests)**: table truncation (Living Test Plan / Test Table wrap to terminal width), `[llm_client]`/`[pipeline]` debug moved to stderr (was interleaving with menus under `PIPELINE_DEBUG=1`), export `story_slug` AttributeError (Session property), export "Tests: 0" (file→dir path normalization), flat export POM→Playwright conversion + idempotent `expect` import (exported tests now runnable).
+- **CLI walkthrough hardened**: new `reject:` capability (export step now FAILS if "Export failed" appears — previously passed while erroring because it only checked the "Press Enter" marker); heal-flow markers updated for the "2 test(s) still failing. → Choice:" outcome.
+- **Eval harness gap closed**: `--mode full --regenerate` persisted no test files, so "Tests executed: 0" was reported every run. `EvalRunner._persist_regenerated_tests()` writes `generated_tests/test_<site>.py`; full run now executes **33 tests, 17 passed (51.5%)**.
+
+**Verification:** 2081 passed / 1 skipped; ruff check + format clean; mypy `src/ cli/` clean; smoke 35/35; eval static 100% all sites; full-regenerate resolution 65.7-67.2% (best in DB history); CLI walkthrough NAV 41/41 + FULL 60/60; verify_production 22/26 (semantic ceiling unchanged).
+
+**Note:** `src/llm_client.py` is a protected file — changed only for a 3-line stderr-routing fix (CLI log interleaving), flagged per AGENTS.md.
 
 ---
 

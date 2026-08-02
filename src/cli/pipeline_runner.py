@@ -7,7 +7,9 @@ and imports are preserved exactly — this is a pure extraction, no refactoring.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -63,6 +65,10 @@ def export_clean_package(session: Any) -> None:
         return
 
     source_path = Path(session.pipeline_saved_path)
+    # pipeline_saved_path may hold the generated test FILE (ui_pipeline stores
+    # the artifact file path); export operates on the package DIRECTORY.
+    if source_path.is_file():
+        source_path = source_path.parent
     if not source_path.exists():
         print(yellow(f"  Package directory not found: {source_path}"))
         print("  Press Enter to continue...")
@@ -172,17 +178,28 @@ async def build_test_plan(session: Any) -> None:
 
 
 def _display_conditions_table(plan: Any) -> None:
-    """Print a formatted table of all conditions in the plan."""
+    """Print a formatted table of all conditions in the plan.
+
+    The Text column wraps to the full available terminal width so long
+    condition descriptions are fully visible — previously hard-truncated at
+    50 chars, which cut off the meaningful part of the text.
+    """
     if not plan or not plan.conditions:
         print(yellow("  No conditions in plan."))
         return
 
-    print(f"\n  {'ID':<12} {'Type':<16} {'Intent':<20} {'Text'}")
-    print("  " + "-" * 80)
+    id_w, type_w, intent_w = 12, 16, 20
+    terminal = shutil.get_terminal_size((120, 24))
+    text_width = max(40, terminal.columns - (2 + id_w + 1 + type_w + 1 + intent_w + 1 + 1))
+
+    print(f"\n  {'ID':<{id_w}} {'Type':<{type_w}} {'Intent':<{intent_w}} {'Text'}")
+    print("  " + "-" * max(40, min(120, terminal.columns - 2)))
     for c in plan.conditions:
         flagged = " ⚑" if c.flagged else ""
-        text = c.text[:50] + "..." if len(c.text) > 50 else c.text
-        print(f"  {c.id:<12} {c.type:<16} {c.intent:<20} {text}{flagged}")
+        lines = textwrap.wrap(c.text, width=text_width) or [""]
+        print(f"  {c.id:<{id_w}} {c.type:<{type_w}} {c.intent:<{intent_w}} {lines[0]}{flagged}")
+        for extra in lines[1:]:
+            print(f"  {'':<{id_w}} {'':<{type_w}} {'':<{intent_w}} {extra}")
 
 
 _CONDITION_FIELDS: list[tuple[str, str, list[str]]] = [
@@ -367,17 +384,29 @@ def build_test_table_interactive(session: Any) -> None:
 
 
 def _display_test_rows_table(table: Any) -> None:
-    """Print a formatted table of all test rows."""
+    """Print a formatted table of all test rows.
+
+    The Intent column wraps to the full available terminal width so long
+    intents are fully visible — previously hard-truncated at 50 chars.
+    """
     if not table or not table.rows:
         print(yellow("  No test rows in table."))
         return
 
-    print(f"\n  {'ID':<6} {'Cond':<10} {'Action':<10} {'OK':<4} {'Intent'}")
-    print("  " + "-" * 80)
+    id_w, cond_w, action_w, ok_w = 6, 10, 10, 4
+    terminal = shutil.get_terminal_size((120, 24))
+    text_width = max(40, terminal.columns - (2 + id_w + 1 + cond_w + 1 + action_w + 1 + ok_w + 1 + 1))
+
+    print(f"\n  {'ID':<{id_w}} {'Cond':<{cond_w}} {'Action':<{action_w}} {'OK':<{ok_w}} {'Intent'}")
+    print("  " + "-" * max(40, min(120, terminal.columns - 2)))
     for row in table.rows:
         reviewed = "✔" if row.id in table.confirmed_row_ids else "–"
-        intent = row.intent[:50] + "..." if len(row.intent) > 50 else row.intent
-        print(f"  {row.id:<6} {row.condition_ref:<10} {row.expected_action:<10} {reviewed:<4} {intent}")
+        lines = textwrap.wrap(row.intent, width=text_width) or [""]
+        print(
+            f"  {row.id:<{id_w}} {row.condition_ref:<{cond_w}} {row.expected_action:<{action_w}} {reviewed:<{ok_w}} {lines[0]}"
+        )
+        for extra in lines[1:]:
+            print(f"  {'':<{id_w}} {'':<{cond_w}} {'':<{action_w}} {'':<{ok_w}} {extra}")
 
 
 _ROW_FIELDS: list[tuple[str, str, list[str]]] = [

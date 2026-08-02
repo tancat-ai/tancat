@@ -199,7 +199,7 @@ NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
 {{GOTO:page keyword}}
 {{CLICK:button or link description}}
 {{FILL:input field description:value to type}}
-{{ASSERT:what should be visible or true (describe the content/state, not just 'element visible')}}
+{{ASSERT:what should be visible or true (element, content, or page state; 'home page loaded' → URL check)}}
 
 === PLACEHOLDER DESCRIPTION RULES ===
 1. Keep descriptions SHORT (2-5 words). Use the element's visible text or label.
@@ -211,6 +211,11 @@ NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
    Instead write: {{CLICK:Add to cart}}
 7. DO NOT write vague descriptions like 'some element is visible on the page'.
    Instead write: {{ASSERT:product list}} or {{ASSERT:Cart Summary}}
+8. For 'verify <page> loads/opens' conditions, use the page-state form
+   {{ASSERT:<page> loaded}} (e.g. {{ASSERT:home page loaded}}) — it resolves to
+   a URL assertion (expect(page).to_have_url). Do NOT write {{ASSERT:<page> title}}.
+9. For disappearance checks ('popup closed', 'item removed'), describe the
+   ABSENCE — they resolve to not-visible assertions (assert_hidden).
 
 === PREREQUISITE STEPS ===
 Each test must be self-contained. If a test depends on earlier criteria
@@ -235,6 +240,7 @@ from playwright.sync_api import Page
 @pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
 def test_01_example(page, evidence_tracker):
     {{GOTO:home}}
+    {{ASSERT:home page loaded}}
     {{FILL:username:admin}}
     {{CLICK:submit button}}
     {{ASSERT:welcome message}}
@@ -291,14 +297,17 @@ Expected: {target_condition_expected}
 {{GOTO:url or description}}
 {{CLICK:element description}}
 {{FILL:element description:value to type}}
-{{ASSERT:what should be visible or true (describe the content/state, not just 'element visible')}}
+{{ASSERT:what should be visible or true (element, content, or page state; 'home page loaded' → URL check)}}
 
 === PLACEHOLDER DESCRIPTION RULES ===
 1. Keep descriptions SHORT (2-5 words). Use the element's visible text.
 2. For CLICK: {{CLICK:Login}}, {{CLICK:Dress}}, {{CLICK:Add to cart}}
 3. For FILL: {{FILL:username:admin}}, {{FILL:email:test@example.com}}
-4. For ASSERT: {{ASSERT:product list}}, {{ASSERT:Cart Summary}}
-5. DO NOT write long verbose descriptions — use short, concrete element labels.
+4. For ASSERT: {{ASSERT:product list}}, {{ASSERT:Cart Summary}}; for load checks
+   {{ASSERT:home page loaded}} (resolves to a URL assertion). Do NOT write {{ASSERT:<page> title}}.
+5. For disappearance checks ('popup closed', 'item removed'), describe the
+   ABSENCE — they resolve to not-visible assertions (assert_hidden).
+6. DO NOT write long verbose descriptions — use short, concrete element labels.
 
 === JOURNEY STRUCTURE (MANDATORY) ===
 1. Every step must appear on the page it belongs to. Follow the story order:

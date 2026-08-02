@@ -229,3 +229,47 @@ class TestEvalRunner:
         )
         code_map = runner._load_code_map()
         assert "eval-003" in code_map
+
+
+class TestPersistRegeneratedTests:
+    """Full-regenerate mode must persist test files so execution phase runs them."""
+
+    def _make_runner(self, tmp_path: Path) -> EvalRunner:
+        dataset_dir = tmp_path / "dataset"
+        captures_dir = tmp_path / "captures"
+        dataset_dir.mkdir()
+        captures_dir.mkdir()
+        golden = {
+            "id": "eval-003",
+            "site": "demoqa",
+            "base_url": "https://demoqa.com",
+            "conditions": ["1. Fill form"],
+            "golden_resolutions": [],
+        }
+        (dataset_dir / "eval-003_demoqa.json").write_text(json.dumps(golden))
+        return EvalRunner(
+            dataset_dir=dataset_dir,
+            code_dir=captures_dir,
+            db_path=tmp_path / "test.sqlite",
+            test_output_dir=tmp_path / "out",
+        )
+
+    def test_writes_site_named_test_file(self, tmp_path: Path) -> None:
+        runner = self._make_runner(tmp_path)
+        runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
+
+        out_file = tmp_path / "out" / "test_demoqa.py"
+        assert out_file.exists()
+        assert "def test_x()" in out_file.read_text(encoding="utf-8")
+
+    def test_skips_stories_without_code(self, tmp_path: Path) -> None:
+        runner = self._make_runner(tmp_path)
+        runner._persist_regenerated_tests({"eval-003": ""})
+        assert not (tmp_path / "out" / "test_demoqa.py").exists()
+
+    def test_load_test_files_finds_persisted_file(self, tmp_path: Path) -> None:
+        runner = self._make_runner(tmp_path)
+        runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
+
+        test_files = runner._load_test_files()
+        assert test_files["eval-003"] == tmp_path / "out" / "test_demoqa.py"

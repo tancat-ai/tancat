@@ -1,6 +1,6 @@
 """Unit tests for strip_evidence_from_pom() in code_postprocessor."""
 
-from src.code_postprocessor import strip_evidence_from_pom
+from src.code_postprocessor import strip_evidence_from_pom, strip_evidence_from_test_code
 
 
 class TestStripEvidenceFromPomInit:
@@ -213,3 +213,73 @@ class TestStripEvidenceFromPomEdgeCases:
         code = "# Just a comment\nprint('hello')\n"
         result = strip_evidence_from_pom(code)
         assert result == code
+
+
+class TestStripEvidenceFromTestCodePomConversion:
+    """strip_evidence_from_test_code must convert POM-mode tests for flat export."""
+
+    def test_removes_pom_imports_and_instantiations(self) -> None:
+        code = (
+            "from playwright.sync_api import Page, expect\n"
+            "import pytest\n"
+            "from pages.home_page import HomePage\n"
+            "from pages.products_page import ProductsPage\n"
+            "\n"
+            '@pytest.mark.evidence(condition_ref="T01", story_ref="S01")\n'
+            "def test_01(page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    products_page = ProductsPage(page, evidence_tracker)\n"
+            "    evidence_tracker.navigate('https://example.com/')\n"
+            "    home_page.click('Products', selector='a[href=\"/products\"]')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "from pages." not in result
+        assert "= HomePage(" not in result
+        assert "= ProductsPage(" not in result
+
+    def test_converts_pom_click_with_selector(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    home_page.click('Products', selector='a[href=\"/products\"]')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "page.locator('a[href=\"/products\"]').click()" in result
+        assert "_page." not in result
+
+    def test_converts_pom_click_without_selector_best_effort(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    home_page.click('Add to cart')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "page.get_by_text('Add to cart').first.click()" in result
+
+    def test_converts_pom_fill_with_selector(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    login_page = LoginPage(page, evidence_tracker)\n"
+            "    login_page.fill('username', 'standard_user', selector='#user-name')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "page.locator('#user-name').fill('standard_user')" in result
+
+    def test_converts_pom_fill_without_selector_best_effort(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    login_page = LoginPage(page, evidence_tracker)\n"
+            "    login_page.fill('username', 'admin')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "page.get_by_label('username').fill('admin')" in result
+
+    def test_evidence_calls_still_converted(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    evidence_tracker.assert_visible('.modal-body', label='confirmation popup')\n"
+            "    expect(page).to_have_url('https://example.com/')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "expect(page.locator('.modal-body')).to_be_visible()" in result
+        assert "to_have_url" in result

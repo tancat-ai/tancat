@@ -212,6 +212,25 @@ def _has_text_content(locator: str) -> str | None:
     return m.group(2)
 
 
+def _to_have_url_arg(expr: str) -> str | None:
+    """Return the URL argument from an ``expect(page).to_have_url(...)`` expr.
+
+    Returns None for element locators or partial tolerance strings.
+    """
+    m = _TO_HAVE_URL_RE.match(expr)
+    return m.group(1) if m else None
+
+
+def _same_url_without_slash(a: str, b: str) -> bool:
+    """Trailing-slash-insensitive URL comparison for ``to_have_url`` assertions.
+
+    Production ``normalize_url`` canonicalizes root URLs to ``https://host/``
+    (the site redirects), while goldens may hold the no-slash form — the two
+    must count as the same assertion target.
+    """
+    return a.rstrip("/") == b.rstrip("/")
+
+
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
     """Check if resolved locator matches expected, with normalization.
 
@@ -225,6 +244,16 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
         return True
     for t in tolerances:
         if _normalize_locator(resolved) == _normalize_locator(t):
+            return True
+    # to_have_url assertions: trailing-slash-insensitive comparison
+    # (normalize_url emits the "/" form; goldens may hold the bare form).
+    resolved_url = _to_have_url_arg(resolved)
+    expected_url = _to_have_url_arg(expected)
+    if resolved_url and expected_url and _same_url_without_slash(resolved_url, expected_url):
+        return True
+    for t in tolerances:
+        t_url = _to_have_url_arg(t)
+        if resolved_url and t_url and _same_url_without_slash(resolved_url, t_url):
             return True
     # AI-037 Phase 3: has-text substring equivalence (Playwright semantics).
     # Both locators must use :has-text() and the tag must match; then the

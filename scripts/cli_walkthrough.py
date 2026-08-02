@@ -115,6 +115,16 @@ class CliDriver:
             self.cursor = idx + len(marker)
             return chunk
 
+    def buffer_length(self) -> int:
+        """Length of all output received so far (thread-safe)."""
+        with self.lock:
+            return len(self.buffer)
+
+    def has_seen(self, text: str, since: int) -> bool:
+        """True if *text* appears in output received after index *since*."""
+        with self.lock:
+            return text in self.buffer[since:]
+
     def wait_for(self, marker: str, timeout: float) -> str | None:
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -294,17 +304,24 @@ FULL_STEPS: list[dict[str, Any]] = [
     dict(
         prompt="Enter selection:",
         send="20",
-        expect_any=["nothing to heal", "Run tests now?", "All failures fixed!"],
+        expect_any=["nothing to heal", "Run tests now?", "still failing", "All failures fixed!"],
         timeout=1200,
     ),
     dict(prompt="Run tests now?", send="n", expect="Enter selection:", timeout=15, optional=True),
+    # Heal-with-remaining-failures outcome: the CLI shows a "Choice:" prompt
+    # (re-run / interactive repair / return). Enter returns to the menu.
+    dict(prompt="Choice:", send="", expect="Enter selection:", timeout=15, optional=True),
     # Export / bundle / evidence
     dict(prompt="Enter selection:", send="21", expect="Flat (inline locators)", timeout=30),
-    dict(prompt="Enter selection:", send="1", expect="Press Enter to continue...", timeout=120),
+    dict(prompt="Enter selection:", send="1", expect="Press Enter to continue...", reject="Export failed", timeout=120),
     dict(prompt="Press Enter to continue...", send="", expect="Enter selection:", timeout=30),
-    dict(prompt="Enter selection:", send="22", expect="Press Enter to continue...", timeout=120),
+    dict(
+        prompt="Enter selection:", send="22", expect="Press Enter to continue...", reject="Export failed", timeout=120
+    ),
     dict(prompt="Press Enter to continue...", send="", expect="Enter selection:", timeout=30),
-    dict(prompt="Enter selection:", send="23", expect="Press Enter to continue...", timeout=120),
+    dict(
+        prompt="Enter selection:", send="23", expect="Press Enter to continue...", reject="Export failed", timeout=120
+    ),
     dict(prompt="Press Enter to continue...", send="", expect="Enter selection:", timeout=30),
     # Load existing package (the one just created)
     dict(prompt="Enter selection:", send="24", expect="Saved Test Packages", timeout=30),
@@ -348,8 +365,10 @@ def run_steps(driver: CliDriver, steps: list[dict[str, Any]], label: str) -> int
         send_text = step.get("send")
         expect = step.get("expect")
         expect_any = step.get("expect_any")
+        reject = step.get("reject")
         timeout = float(step.get("timeout", 60))
         name = f"{i:02d}"
+        step_start = driver.buffer_length()
 
         ok = True
         detail = ""
@@ -382,6 +401,12 @@ def run_steps(driver: CliDriver, steps: list[dict[str, Any]], label: str) -> int
 
         if not ok:
             last_marker = None  # state unknown — force prompt waits again
+        # Reject check: after a successful expect, the step's output must NOT
+        # contain the rejected text (e.g. "Export failed"). Catches errors the
+        # loose "Press Enter" markers otherwise swallow silently.
+        elif reject and driver.has_seen(reject, step_start):
+            ok = False
+            detail = f"rejected text '{reject}' appeared in output"
 
         if ok:
             print(f"  [PASS] {name}", flush=True)

@@ -56,6 +56,37 @@ from src.url_utils import (
 logger = logging.getLogger(__name__)
 
 
+#: Negative-state ASSERT descriptions assert the ABSENCE of an element — the
+#: state after a popup closes / an item is removed / something disappears.
+#: These resolve to ``toBeHidden`` (Playwright's ``to_be_hidden()`` passes for
+#: hidden OR detached nodes). Generic vocabulary, no site-specific lists.
+POLARITY_TERMS: tuple[str, ...] = (
+    "closed",
+    "gone",
+    "disappeared",
+    "disappears",
+    "removed",
+    "hidden",
+    "dismissed",
+    "vanished",
+    "no longer",
+    "not visible",
+    "not shown",
+)
+
+
+def polarity_assertion_type(description: str) -> str | None:
+    """Return ``"toBeHidden"`` for negative-state ASSERT descriptions, else None.
+
+    "popup closed" / "item removed" assert the ABSENCE of the element, so the
+    emitted assertion must be ``assert_hidden(...)`` — not ``assert_visible``.
+    """
+    lowered = description.replace("_", " ").lower()
+    if any(term in lowered for term in POLARITY_TERMS):
+        return "toBeHidden"
+    return None
+
+
 class PlaceholderOrchestrator:
     """Coordinate placeholder resolution, scraping, and page artifact generation.
 
@@ -669,6 +700,8 @@ class PlaceholderOrchestrator:
                         robust_selector = str(matched.get("selector", "")).strip()
                     selector = repr(robust_selector)
                     assertion_type = matched.get("assertion_type")
+                    if action == "ASSERT":
+                        assertion_type = polarity_assertion_type(description) or assertion_type
 
                     line_resolutions.setdefault(placeholder.line_number, []).append(
                         (
@@ -792,6 +825,10 @@ class PlaceholderOrchestrator:
             if next_url:
                 await self._ensure_scraped(next_url, scraped_data, scraped_errors)
             assertion_type = matched_element.get("assertion_type") if action == "ASSERT" else None
+            # Assertion-state polarity: "popup closed" / "item removed" assert
+            # ABSENCE — emit assert_hidden(...) instead of assert_visible(...).
+            if action == "ASSERT":
+                assertion_type = polarity_assertion_type(description) or assertion_type
             return selector, next_url, assertion_type
 
         error_msg = f"Locator for '{description}' not found on scraped pages."
@@ -820,16 +857,24 @@ class PlaceholderOrchestrator:
         as URL assertions (expect(page).to_have_url(...)).
 
         Only triggers when the description is PURELY about page state — if it
-        mentions specific elements (title, heading, button, link, text, list,
-        table, item, name, price, quantity, confirmation), it's an element
+        mentions specific elements (heading, button, link, text, list, table,
+        item, name, price, quantity, confirmation), it's an element
         assertion, not a page-state assertion.
+
+        "title" is deliberately NOT an element keyword here: "<page> page
+        title" means the title OF that page, which the golden dataset encodes
+        as a URL assertion (eval-002 "products page title" / "cart page
+        title" → to_have_url). Without this, an LLM-invented
+        "{{ASSERT:home page title}}" for a load-style condition falls
+        through to element resolution and matches the wrong element.
+        "practice form page title" stays an element assertion — it contains
+        no page-state term, so the page-state branch below never fires.
         """
         lowered = description.replace("_", " ").lower()
 
         # Element-level keywords — if present, this is an element assertion,
         # not a page-state assertion, even if page names are also mentioned.
         element_keywords = (
-            "title",
             "heading",
             "button",
             "link",

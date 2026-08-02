@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sys
 from typing import Any
 
 from src.llm_providers import (
@@ -242,9 +243,14 @@ class LLMClient:
         return cleaned
 
     def _debug(self, message: str) -> None:
-        """Print debug message if logging is enabled."""
+        """Print debug message to stderr if logging is enabled.
+
+        stderr keeps diagnostic output out of the UI/table rendering that
+        prints to stdout — without this, ``[llm_client]`` lines interleave
+        with the CLI menus during LLM-backed steps.
+        """
         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
-            print(f"[llm_client] {message}", flush=True)
+            print(f"[llm_client] {message}", flush=True, file=sys.stderr)
 
     def _complete_sync(
         self, prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None
@@ -272,7 +278,7 @@ class LLMClient:
             self._debug(f"Received completion in {elapsed:.2f}s, length={content_len} chars")
 
             if not completion.content or content_len < 10:
-                print(f"Warning: LLM returned suspiciously short response: '{completion.content}'")
+                print(f"Warning: LLM returned suspiciously short response: '{completion.content}'", file=sys.stderr)
 
             self._conversation_history.append(ChatMessage(role="assistant", content=completion.content))
             return completion
@@ -408,7 +414,9 @@ INSTRUCTIONS:
             self._debug(f"Received vision completion in {elapsed:.2f}s, length={content_len} chars")
 
             if not completion.content or len(completion.content) < 10:
-                print(f"Warning: Vision LLM returned suspiciously short response: '{completion.content}'")
+                print(
+                    f"Warning: Vision LLM returned suspiciously short response: '{completion.content}'", file=sys.stderr
+                )
 
             self._conversation_history.append(ChatMessage(role="assistant", content=completion.content))
             return completion.content or ""

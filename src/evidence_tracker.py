@@ -519,6 +519,37 @@ class EvidenceTracker:
 
     # --- B-020: Additional assertion methods ---
 
+    def assert_hidden(self, locator: str, label: str = "") -> None:
+        """Assert the element is hidden or detached — a state-ABSENCE check.
+
+        For polarity ASSERTs like "popup closed" / "item removed": Playwright's
+        ``wait_for(state="hidden")`` passes for hidden OR detached nodes, which
+        is exactly the "this is gone" semantics.
+        """
+        if not label:
+            label = f"Assert hidden: {locator}"
+        _t0 = time.time()
+        try:
+            self.page.locator(locator).first.wait_for(state="hidden", timeout=5000)
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=None,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
     def assert_text(self, locator: str, expected: str, label: str = "") -> None:
         """Assert the element's text content matches the expected string exactly."""
         if not label:
