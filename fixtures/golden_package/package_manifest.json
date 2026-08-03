@@ -1,0 +1,10 @@
+{
+  "package_name": "golden_export_fixture",
+  "created_at": "2026-08-03T00:00:00.000000",
+  "source_story": "As a customer, I want to browse the store and navigate to the cart.",
+  "starting_url": "http://127.0.0.1:8123/index.html",
+  "additional_urls": ["http://127.0.0.1:8123/cart.html"],
+  "provider": "fixture",
+  "model": "fixture",
+  "export_mode": "pom"
+}

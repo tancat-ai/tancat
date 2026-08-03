@@ -11,6 +11,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `debug_step_through.py` | Step-by-step interactive debugger for generated tests (headed) | Browser + Enter |
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
+| `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
 | `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |
@@ -143,6 +144,40 @@ python scripts/verify_production.py --flat       # flat mode (non-POM)
 11. Evidence JSON files generated with meaningful steps
 
 **Exit codes:** `0` = PASS (ship it), `1` = FAIL (fix gates first)
+
+---
+
+## export_gate.py — Export Verification Gate
+
+Proves that **exported test suites actually run** (B-031). The 2026-08-03 CLI
+review found 34 of 35 exports were `def test_x(page): pass` stubs and the one
+real export was non-importable (POM imports with no `pages/` dir, dead
+`@pytest.mark.evidence` decorators). This is the export analogue of
+`verify_production.py`:
+
+1. Exports a source package in **both** modes (flat + POM)
+2. Validates the exported artifacts — no evidence_tracker remnants, no
+   `@pytest.mark.evidence` decorators, no stub bodies, POM pages shipped,
+   run-history DB copied (B-032)
+3. Collects both exported suites (catches import errors)
+4. Runs both exported suites and asserts they pass
+
+Default source is the bundled **golden fixture** (`fixtures/golden_package/`),
+which mirrors a real generated package and targets a tiny localhost site
+served by the script — fully deterministic, no external network, CI-able.
+
+```bash
+python scripts/export_gate.py                  # golden fixture, full run
+python scripts/export_gate.py --keep           # keep export dirs on pass
+python scripts/export_gate.py --source <pkg>   # real package, offline checks
+python scripts/export_gate.py --source <pkg> --run-remote  # + live execution
+```
+
+**Gates (9):** stub guard · export flat · export POM · flat artifacts clean ·
+POM artifacts clean · run-history DB copied · suites collect · flat executes
+and passes · POM executes and passes.
+
+**Exit codes:** `0` = PASS, `1` = FAIL
 
 ---
 

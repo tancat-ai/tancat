@@ -1,7 +1,20 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-03 (CLI review session: B-029→B-036, export brokenness, evidence gaps, corrupted DB, test pack restructure, mock-site catalog, consumer config architecture)
+Last updated: 2026-08-03 (export gate session: B-031 + B-032 fixed — runnable exports + export gate)
+
+---
+
+## ✅ Shipped 2026-08-03 — Export gate: exports are now runnable + validated (B-031, B-032)
+
+**Session doc:** `docs/sessions/2026-08-03_export_gate_and_broken_exports.md`
+
+**What shipped** — exports went from 34/35 stubs + 1 non-importable to a gated, verified artifact:
+- **B-031 fixed**: POM glob `po_*.py` → `*.py` (generated pages are `home_page.py`/`cart_page.py`); true POM-mode export (`preserve_pom_calls=True`); `@pytest.mark.evidence(...)` decorators stripped in all forms; B-020 assert family (`assert_hidden` etc.) converted in tests + POMs; stub guard raises on all-stub/all-skip/no-test sources; same-second export collision guard.
+- **B-032 fixed**: export copies `run_results.sqlite` (was the never-created `playwright_tests.db`), legacy fallback; `_count_run_results` fixed too.
+- **`scripts/export_gate.py`**: 9-gate end-to-end export validation against a deterministic golden localhost fixture (`fixtures/golden_package/` + `fixtures/golden_site/`): stub guard → export flat+POM → flat/POM artifact checks → run-history DB copy → collect → both suites execute and pass. Golden 9/9 PASS; real 20260803 package 8/8 PASS (26 tests collect clean).
+
+**Verification:** full suite 2122 passed / 1 skipped (+20 tests); ruff + format + mypy clean; smoke 35/35; export gate 9/9 (golden) + 8/8 (real package).
 
 ---
 
@@ -303,8 +316,8 @@ writing if code fails syntax check.
 **Structural problems found:**
 1. Unit pyramid on a mock foundation — 101 module files test "what the function returns", not "does the product work".
 2. Bugs enshrined as contracts — `test_click_fast_fails_when_locator_missing_on_page` *asserts* `screenshot is None` (B-033 is tested behaviour).
-3. Network tests mislabeled — `tests/integration/test_pom_mode_end_to_end.py` hits live automationexercise.com with NO slow/integration marker → runs in every default `pytest` AND in CI. Only 2 tests in the whole suite carry the exclusion markers.
-4. Real gates outside CI — eval (static mode is offline!) and verify_production never run in CI.
+3. ~~Network tests mislabeled~~ **REVISED 2026-08-03 (export gate session): the audit claim was verified FALSE.** `tests/integration/test_pom_mode_end_to_end.py` is pure offline string/JSON-schema checks (the automationexercise.com URLs live in a module-level sample constant, never executed); the genuinely network-touching tests (LLM pipeline runs in `test_pipeline_end_to_end.py`, real embedding-model downloads in `test_rag_store.py`) already carry `slow`+`integration` markers, and CI applies `-m "not slow and not integration"` via pytest.ini addopts. Corrective action shipped: `tests/test_no_live_network_in_default_suite.py` — a static guard that FAILS if any unmarked test executes a navigation call (goto/navigate/scrape_url/run_pipeline/attempt_login) with a live-site URL literal, so the "default suite is offline" property is durable.
+4. ~~Real gates outside CI~~ **eval static wired into CI (2026-08-03, export gate session)**: new `eval-static` job runs `eval_harness.py run --mode static --min-accuracy 79` (offline, ~0.5s, exit 2 below floor) in parallel with lint/type-check. `verify_production` + `export_gate` remain manual gates (browser+network; the golden export gate is CI-ready once the mock layer exists).
 5. No adversarial/resilience/contract layers.
 
 **Mock-site strategy (investigated 2026-08-03):**
@@ -399,17 +412,17 @@ writing if code fails syntax check.
 ---
 
 ### B-032 — Export run-history DB copy orphaned since AI-012 (`playwright_tests.db` never created)
-**Status:** 🆕 new (2026-08-03 CLI review)
+**Status:** ✅ Fixed (2026-08-03, export gate session, CI green)
 **Priority:** Low — silent no-op, no crash
 
 `src/export_service.py` copies `evidence/playwright_tests.db` — **nothing in the repo creates that file**. The SQLite layer writes `evidence/run_results.sqlite` (`sqlite_persistence.py`, `storage.py`). Same orphan name in `src/pipeline_artifact_manager.py:270`. Dead since AI-012 (2026-06-15) swapped JSON-dir export for the SQLite copy but globbed the wrong filename.
 
-**Fix:** copy `run_results.sqlite` (or drop the run-history copy — the README already claims screenshots/diagnostics aren't captured).
+**Fix shipped:** copy `run_results.sqlite` (primary) with legacy `playwright_tests.db` fallback; WAL/SHM files follow the found DB name; README note + `has_sqlite` check updated; `pipeline_artifact_manager._count_run_results` checks `run_results.sqlite` first (and its Python-2 `except A, B:` fixed). Verified by `test_export_copies_run_results_sqlite` + `test_export_legacy_db_fallback` + export gate gate 6.
 
 ---
 
 ### B-031 — Export feature produces non-runnable/broken suites; never validated end-to-end
-**Status:** 🆕 new (2026-08-03 CLI review)
+**Status:** ✅ Fixed (2026-08-03, export gate session, CI green)
 **Priority:** High — claimed shipped (UI button + CLI step), but no export has ever been verified by running the exported suite
 
 **Confirmed:**
@@ -418,7 +431,16 @@ writing if code fails syntax check.
 - Current strip (`eda9809`) fixes the POM→flat conversion (verified on a live package), but `@pytest.mark.evidence(...)` decorators still survive (regex only matches the bare form) → `PytestUnknownMarkWarning`.
 - No end-to-end gate: unlike `verify_production.py` for the main pipeline, nothing exports → runs the exported suite → asserts pass.
 
-**Proposed fix:** export gate script (export flat + POM → `pytest` the exported suite against the live site → assert pass); fix `po_*.py` glob (match generated page names); strip arg-carrying evidence decorators; guard against stub/empty source packages.
+**Fix shipped:**
+- **POM glob**: `pages/*.py` minus `__init__.py` — matches generated `home_page.py`/`cart_page.py` (exported real package now ships all 5 pages).
+- **True POM-mode export**: `strip_evidence_from_test_code(..., preserve_pom_calls=True)` keeps POM imports/instantiations/method calls (only the `evidence_tracker` arg drops from instantiations) — previously POM-mode silently emitted flat output with a dead `pages/` dir.
+- **Evidence decorators stripped in all forms** (`_strip_evidence_decorators`): bare, arg-carrying, multi-line, whitespace variants.
+- **B-020 assert family converted** (`_strip_tracker_asserts`, tests + POMs): `assert_hidden` → `to_be_hidden()` (the live gap — it survived exports and NameError'd at runtime), plus disabled/enabled/checked/empty/text/text_contains/value/count.
+- **Stub guard**: exporting an all-stub / all-skip / no-test source raises `ValueError` with a clear message.
+- **Export collision guard**: same-second same-slug exports get `_1`, `_2`… suffixes instead of silent overwrite.
+- **Export gate** (`scripts/export_gate.py`): 9 gates — stub guard, flat+POM export, flat/POM artifact validation, run-history DB copy (B-032), collect (importability), and execution of both suites against a deterministic golden localhost fixture (`fixtures/golden_package/` + `fixtures/golden_site/`, port 8123). `--source <pkg>` for real packages (offline), `--run-remote` for live execution.
+
+**Verification:** golden gate 9/9 PASS (flat + POM suites execute and pass), real package 8/8 PASS (26 tests collect clean); exported flat suite of the 20260803 package converts all evidence calls + decorators correctly.
 
 ---
 

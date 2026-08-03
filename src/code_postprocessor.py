@@ -490,7 +490,65 @@ def inject_import(code: str, import_line: str) -> str:
     return "".join(lines)
 
 
-def strip_evidence_from_test_code(code: str) -> str:
+# B-031: EvidenceTracker assert methods added after the original strip was
+# written (B-020 polarity/state family). Map each to its Playwright assertion.
+_SINGLE_ARG_ASSERTS: dict[str, str] = {
+    "assert_hidden": "to_be_hidden",
+    "assert_disabled": "to_be_disabled",
+    "assert_enabled": "to_be_enabled",
+    "assert_checked": "to_be_checked",
+    "assert_empty": "to_be_empty",
+}
+
+_DOUBLE_ARG_ASSERTS: dict[str, str] = {
+    "assert_text": "to_have_text",
+    "assert_text_contains": "to_contain_text",
+    "assert_value": "to_have_value",
+    "assert_count": "to_have_count",
+}
+
+
+def _strip_tracker_asserts(code: str, *, tracker: str, page_expr: str) -> str:
+    """Convert ``tracker.assert_*`` calls to Playwright ``expect()`` assertions.
+
+    Handles the one-arg (locator, label=...) and two-arg (locator, expected,
+    label=...) forms used by the EvidenceTracker assert family that the
+    original strip predates. ``assert_visible`` is handled separately by the
+    callers.
+
+    Args:
+        tracker: callable prefix, e.g. ``"evidence_tracker"`` or
+            ``"self.tracker"``.
+        page_expr: locator receiver, e.g. ``"page"`` or ``"self.page"``.
+    """
+    for method, pw_assert in _SINGLE_ARG_ASSERTS.items():
+        code = re.sub(
+            rf"{re.escape(tracker)}\.{method}\(([^,]+),\s*label=[^\)]*\)",
+            rf"expect({page_expr}.locator(\1)).{pw_assert}()",
+            code,
+        )
+        code = re.sub(
+            rf"{re.escape(tracker)}\.{method}\(([^,)]+)\s*\)",
+            rf"expect({page_expr}.locator(\1)).{pw_assert}()",
+            code,
+        )
+    for method, pw_assert in _DOUBLE_ARG_ASSERTS.items():
+        # Quoted expected value: assert_text(sel, 'Welcome', label=...)
+        code = re.sub(
+            rf"{re.escape(tracker)}\.{method}\(([^,]+),\s*(['\"])(.*?)\2,\s*label=[^\)]*\)",
+            rf"expect({page_expr}.locator(\1)).{pw_assert}(\2\3\2)",
+            code,
+        )
+        # Bare expected value: assert_count(sel, 3, label=...)
+        code = re.sub(
+            rf"{re.escape(tracker)}\.{method}\(([^,]+),\s*([^,'\"]+),\s*label=[^\)]*\)",
+            rf"expect({page_expr}.locator(\1)).{pw_assert}(\2)",
+            code,
+        )
+    return code
+
+
+def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False) -> str:
     """Convert evidence-aware test code to clean Playwright test code.
 
     Before: evidence_tracker.click("#button", label="button")
@@ -501,6 +559,14 @@ def strip_evidence_from_test_code(code: str) -> str:
 
     Before: def test_x(page, evidence_tracker: EvidenceTracker):
     After:  def test_x(page):
+
+    Args:
+        preserve_pom_calls: When True (POM-mode export), keep page-object
+            imports, instantiations and method calls intact (only the
+            ``evidence_tracker`` argument is dropped from instantiations).
+            When False (flat export), POM calls are inlined as direct
+            Playwright locator calls (the POM methods carry the resolved
+            selector).
     """
     result = code
 
@@ -538,6 +604,11 @@ def strip_evidence_from_test_code(code: str) -> str:
         r"expect(page.locator(\1)).to_be_visible()",
         result,
     )
+
+    # Remaining evidence_tracker.assert_* family (B-020 polarity/state
+    # methods added after the original strip was written — assert_hidden was
+    # the live gap: it survived exports and NameError'd at runtime).
+    result = _strip_tracker_asserts(result, tracker="evidence_tracker", page_expr="page")
 
     # evidence_tracker.select(selector, value, label=...) -> page.locator(selector).select_option(value)
     result = re.sub(
@@ -596,13 +667,11 @@ def strip_evidence_from_test_code(code: str) -> str:
         flags=re.MULTILINE,
     )
 
-    # Remove @pytest.mark.evidence decorator
-    result = re.sub(
-        r"^@pytest\.mark\.evidence\s*$",
-        "",
-        result,
-        flags=re.MULTILINE,
-    )
+    # Remove @pytest.mark.evidence decorators (bare, arg-carrying, multi-line).
+    # B-031: the old regex only matched the bare form, so generated tests'
+    # `@pytest.mark.evidence(condition_ref="T01", story_ref="S01")` survived
+    # into exports and produced PytestUnknownMarkWarning at collection.
+    result = _strip_evidence_decorators(result)
 
     # Ensure playwright import includes expect
     if "expect(" in result:
@@ -622,48 +691,88 @@ def strip_evidence_from_test_code(code: str) -> str:
     result = re.sub(r"^\s*dismiss_consent_overlays\(page\)\s*$", "", result, flags=re.MULTILINE)
     result = re.sub(r"^\s*dismiss_consent_overlays\(self\.page\)\s*$", "", result, flags=re.MULTILINE)
 
-    # --- POM → flat conversion (export of POM-mode packages) ---
-    # POM-mode tests reference page objects that a flat export does not
-    # carry: imports, instantiations, and method calls must be converted to
-    # direct Playwright calls (the POM methods carry the resolved selector).
-    # Remove POM imports:  from pages.home_page import HomePage
-    result = re.sub(r"^from pages\.[\w.]* import .*$", "", result, flags=re.MULTILINE)
-    # Remove POM instantiations:  home_page = HomePage(page, evidence_tracker)
-    result = re.sub(
-        r"^\s*(\w+_page)\s*=\s*\w+\((?:self\.)?page,\s*evidence_tracker\s*\)\s*$",
-        "",
-        result,
-        flags=re.MULTILINE,
-    )
-    # home_page.click('label', selector='sel') -> page.locator('sel').click()
-    result = re.sub(
-        r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*,\s*selector=\s*(['\"])(.*?)\3\s*\)",
-        r"page.locator('\4').click()",
-        result,
-    )
-    # home_page.click('label') -> page.get_by_text('label').first.click() (best effort)
-    result = re.sub(
-        r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*\)",
-        r"page.get_by_text('\2').first.click()",
-        result,
-    )
-    # home_page.fill('label', 'value', selector='sel') -> page.locator('sel').fill('value')
-    result = re.sub(
-        r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*,\s*selector=\s*(['\"])(.*?)\5\s*\)",
-        r"page.locator('\6').fill('\4')",
-        result,
-    )
-    # home_page.fill('label', 'value') -> page.get_by_label('label').fill('value') (best effort)
-    result = re.sub(
-        r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*\)",
-        r"page.get_by_label('\2').fill('\4')",
-        result,
-    )
+    if preserve_pom_calls:
+        # --- POM-mode export: keep POM structure, drop the tracker argument ---
+        # home_page = HomePage(page, evidence_tracker) -> home_page = HomePage(page)
+        result = re.sub(
+            r"(\w+_page)\s*=\s*(\w+Page)\((?:self\.)?page,\s*evidence_tracker\s*\)",
+            r"\1 = \2(page)",
+            result,
+        )
+    else:
+        # --- POM → flat conversion (export of POM-mode packages) ---
+        # POM-mode tests reference page objects that a flat export does not
+        # carry: imports, instantiations, and method calls must be converted to
+        # direct Playwright calls (the POM methods carry the resolved selector).
+        # Remove POM imports:  from pages.home_page import HomePage
+        result = re.sub(r"^from pages\.[\w.]* import .*$", "", result, flags=re.MULTILINE)
+        # Remove POM instantiations:  home_page = HomePage(page, evidence_tracker)
+        result = re.sub(
+            r"^\s*(\w+_page)\s*=\s*\w+\((?:self\.)?page,\s*evidence_tracker\s*\)\s*$",
+            "",
+            result,
+            flags=re.MULTILINE,
+        )
+        # home_page.click('label', selector='sel') -> page.locator('sel').click()
+        result = re.sub(
+            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*,\s*selector=\s*(['\"])(.*?)\3\s*\)",
+            r"page.locator('\4').click()",
+            result,
+        )
+        # home_page.click('label') -> page.get_by_text('label').first.click() (best effort)
+        result = re.sub(
+            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*\)",
+            r"page.get_by_text('\2').first.click()",
+            result,
+        )
+        # home_page.fill('label', 'value', selector='sel') -> page.locator('sel').fill('value')
+        result = re.sub(
+            r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*,\s*selector=\s*(['\"])(.*?)\5\s*\)",
+            r"page.locator('\6').fill('\4')",
+            result,
+        )
+        # home_page.fill('label', 'value') -> page.get_by_label('label').fill('value') (best effort)
+        result = re.sub(
+            r"\w+_page\.fill\(\s*(['\"])([^'\"]*)\1\s*,\s*(['\"])(.*?)\3\s*\)",
+            r"page.get_by_label('\2').fill('\4')",
+            result,
+        )
 
     # Remove blank lines that were left behind (collapse multiple blank lines to one)
     result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result
+
+
+def _strip_evidence_decorators(code: str) -> str:
+    """Remove ``@pytest.mark.evidence`` decorators in all emitted forms.
+
+    Generated tests carry arg-carrying decorators:
+
+        @pytest.mark.evidence(condition_ref="T01", story_ref="S01")
+
+    Older exports stripped only the bare form, so the arg-carrying form
+    survived into exports and raised ``PytestUnknownMarkWarning`` at
+    collection time. Handles bare, single-line-arg and multi-line-arg forms
+    (a decorator whose argument list spans several lines is consumed whole).
+    """
+    output_lines: list[str] = []
+    lines = code.splitlines(keepends=True)
+    index = 0
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if re.match(r"^@\s*pytest\s*\.\s*mark\s*\.\s*evidence\s*(?:\(|$)", stripped):
+            # Consume the decorator line(s) until parentheses balance.
+            depth = 0
+            while index < len(lines):
+                depth += lines[index].count("(") - lines[index].count(")")
+                index += 1
+                if depth <= 0:
+                    break
+            continue
+        output_lines.append(lines[index])
+        index += 1
+    return "".join(output_lines)
 
 
 def strip_evidence_from_pom(code: str) -> str:
@@ -676,6 +785,9 @@ def strip_evidence_from_pom(code: str) -> str:
     After:  def __init__(self, page: Page) -> None:
     """
     result = code
+
+    # Remove @pytest.mark.evidence decorators if any (bare / arg-carrying)
+    result = _strip_evidence_decorators(result)
 
     # Remove EvidenceTracker import
     result = re.sub(r"^from src\.evidence_tracker import EvidenceTracker\s*$", "", result, flags=re.MULTILINE)
@@ -710,6 +822,9 @@ def strip_evidence_from_pom(code: str) -> str:
         r"expect(self.page.locator(\1)).to_be_visible()",
         result,
     )
+
+    # Remaining self.tracker.assert_* family (same as the test-code strip).
+    result = _strip_tracker_asserts(result, tracker="self.tracker", page_expr="self.page")
 
     # self.tracker.get_text(selector, label=...) -> self.page.locator(selector).text_content()
     result = re.sub(

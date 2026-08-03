@@ -277,7 +277,9 @@ class TestExportConftest:
         with TemporaryDirectory() as tmpdir:
             source_dir = Path(tmpdir) / "source"
             source_dir.mkdir()
-            (source_dir / "test_login.py").write_text("def test_x(page):\n    pass\n")
+            (source_dir / "test_login.py").write_text(
+                'from playwright.sync_api import Page\n\ndef test_x(page):\n    page.goto("https://example.com")\n'
+            )
 
             result = export_clean_suite(
                 source_package_dir=source_dir,
@@ -300,7 +302,9 @@ class TestExportReadme:
         with TemporaryDirectory() as tmpdir:
             source_dir = Path(tmpdir) / "source"
             source_dir.mkdir()
-            (source_dir / "test_login.py").write_text("def test_x(page):\n    pass\n")
+            (source_dir / "test_login.py").write_text(
+                'from playwright.sync_api import Page\n\ndef test_x(page):\n    page.goto("https://saucedemo.com")\n'
+            )
 
             # Create package_manifest.json
             import json
@@ -358,6 +362,211 @@ class TestExportServiceErrors:
                 source_package_dir="/nonexistent/path",
                 export_mode=ExportMode.FLAT,
             )
+
+    def test_export_raises_for_all_stub_source(self) -> None:
+        """B-031: export refuses an all-stub source package (``pass`` bodies)."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
+            (source_dir / "test_login.py").write_text(
+                "from playwright.sync_api import Page\n\ndef test_x(page):\n    pass\n"
+            )
+            with pytest.raises(ValueError, match="stub"):
+                export_clean_suite(
+                    source_package_dir=source_dir,
+                    export_mode=ExportMode.FLAT,
+                    output_base_dir=str(Path(tmpdir) / "output"),
+                )
+
+    def test_export_raises_for_skip_only_source(self) -> None:
+        """B-031: a package whose tests are only pytest.skip() is a stub."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
+            (source_dir / "test_login.py").write_text(
+                'import pytest\n\ndef test_x(page):\n    pytest.skip("unresolved placeholder")\n'
+            )
+            with pytest.raises(ValueError, match="stub"):
+                export_clean_suite(
+                    source_package_dir=source_dir,
+                    export_mode=ExportMode.FLAT,
+                    output_base_dir=str(Path(tmpdir) / "output"),
+                )
+
+    def test_export_raises_for_no_test_files(self) -> None:
+        """B-031: a source with no test functions is not exportable."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
+            (source_dir / "notes.txt").write_text("not a test\n")
+            with pytest.raises(ValueError, match="no test functions"):
+                export_clean_suite(
+                    source_package_dir=source_dir,
+                    export_mode=ExportMode.FLAT,
+                    output_base_dir=str(Path(tmpdir) / "output"),
+                )
+
+    def test_export_allows_partial_stub_package(self) -> None:
+        """B-031: packages with some real tests (and some skips) still export."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
+            (source_dir / "test_mixed.py").write_text(
+                "import pytest\n"
+                "from playwright.sync_api import Page\n"
+                "\n"
+                "def test_real(page):\n"
+                '    page.goto("https://example.com")\n'
+                "\n"
+                "def test_unresolved(page):\n"
+                '    pytest.skip("no element found")\n'
+            )
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.FLAT,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="mixed",
+            )
+            assert Path(result.export_dir).exists()
+
+
+class TestExportPomGeneratedNames:
+    """B-031: POM-mode export must ship generated page files."""
+
+    def _write_pom_package(self, tmpdir: str, db_name: str = "run_results.sqlite") -> Path:
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
+        pages_dir = source_dir / "pages"
+        pages_dir.mkdir()
+        (pages_dir / "__init__.py").write_text("")
+        # Generated pages are home_page.py / cart_page.py — NOT po_*.py.
+        (pages_dir / "home_page.py").write_text(
+            '"""Auto-generated page object module."""\n'
+            "from playwright.sync_api import Page\n"
+            "from src.evidence_tracker import EvidenceTracker\n"
+            "\n"
+            "\n"
+            "class HomePage:\n"
+            '    URL = "http://127.0.0.1:8123/index.html"\n'
+            "\n"
+            "    def __init__(self, page: Page, tracker: EvidenceTracker) -> None:\n"
+            "        self.page = page\n"
+            "        self.tracker = tracker\n"
+            "\n"
+            "    def click(self, description: str, selector: str | None = None) -> None:\n"
+            "        self.tracker.click(selector, label=description)\n"
+        )
+        (source_dir / "test_flow.py").write_text(
+            "from playwright.sync_api import Page, expect\n"
+            "import pytest\n"
+            "from pages.home_page import HomePage\n"
+            "\n"
+            '@pytest.mark.evidence(condition_ref="T01", story_ref="S01")\n'
+            "def test_home_loads(page: Page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    evidence_tracker.navigate('http://127.0.0.1:8123/index.html')\n"
+            "    home_page.click('go to cart', selector='#go-cart')\n"
+            "    evidence_tracker.assert_visible('#title', label='home page loaded')\n"
+        )
+        # B-032: run history lives in run_results.sqlite
+        evidence_dir = source_dir / "evidence"
+        evidence_dir.mkdir()
+        import sqlite3
+
+        conn = sqlite3.connect(str(evidence_dir / db_name))
+        conn.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY, test_name TEXT)")
+        conn.execute("INSERT INTO runs (test_name) VALUES (?)", ("t1",))
+        conn.commit()
+        conn.close()
+        return source_dir
+
+    def test_export_pom_mode_ships_generated_page_names(self) -> None:
+        """POM export globs *.py (not po_*.py) so home_page.py ships."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = self._write_pom_package(tmpdir)
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.POM,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="golden",
+            )
+            export_dir = Path(result.export_dir)
+            assert (export_dir / "pages" / "home_page.py").exists()
+            assert result.page_objects == [str(export_dir / "pages" / "home_page.py")]
+
+    def test_export_pom_mode_preserves_pom_calls(self) -> None:
+        """B-031: POM-mode export keeps POM structure, strips only tracker."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = self._write_pom_package(tmpdir)
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.POM,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="golden",
+            )
+            export_dir = Path(result.export_dir)
+            test_content = (export_dir / "test_flow.py").read_text(encoding="utf-8")
+            # POM structure preserved
+            assert "from pages.home_page import HomePage" in test_content
+            assert "home_page = HomePage(page)" in test_content
+            assert "home_page.click('go to cart', selector='#go-cart')" in test_content
+            # evidence layer fully stripped
+            assert "evidence_tracker" not in test_content
+            assert "@pytest.mark.evidence" not in test_content
+            # POM file stripped too
+            pom_content = (export_dir / "pages" / "home_page.py").read_text(encoding="utf-8")
+            assert "EvidenceTracker" not in pom_content
+            assert "self.tracker" not in pom_content
+            assert "def __init__(self, page: Page) -> None:" in pom_content
+
+    def test_export_flat_mode_inlines_pom_calls(self) -> None:
+        """B-031: flat export converts POM calls to direct locator calls."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = self._write_pom_package(tmpdir)
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.FLAT,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="golden",
+            )
+            export_dir = Path(result.export_dir)
+            test_content = (export_dir / "test_flow.py").read_text(encoding="utf-8")
+            assert "from pages.home_page" not in test_content
+            assert "HomePage(page" not in test_content
+            assert "page.locator('#go-cart').click()" in test_content
+            assert "evidence_tracker" not in test_content
+            assert "@pytest.mark.evidence" not in test_content
+            assert not (export_dir / "pages").exists()
+
+    def test_export_copies_run_results_sqlite(self) -> None:
+        """B-032: export copies run_results.sqlite (not the legacy orphan name)."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = self._write_pom_package(tmpdir, db_name="run_results.sqlite")
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.FLAT,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="golden",
+            )
+            export_dir = Path(result.export_dir)
+            db = export_dir / "evidence" / "run_results.sqlite"
+            assert db.exists()
+            assert not (export_dir / "evidence" / "playwright_tests.db").exists()
+            readme = (export_dir / "README.md").read_text(encoding="utf-8")
+            assert "evidence/run_results.sqlite" in readme
+
+    def test_export_legacy_db_fallback(self) -> None:
+        """B-032: legacy playwright_tests.db packages still export their DB."""
+        with TemporaryDirectory() as tmpdir:
+            source_dir = self._write_pom_package(tmpdir, db_name="playwright_tests.db")
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=ExportMode.FLAT,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="golden",
+            )
+            export_dir = Path(result.export_dir)
+            assert (export_dir / "evidence" / "playwright_tests.db").exists()
 
 
 # =============================================================================

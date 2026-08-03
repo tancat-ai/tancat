@@ -213,6 +213,39 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/ cli/
 
+  # ── Gate 2b: Eval static (offline resolver regression, ~0.5s) ─────────
+  # Runs in parallel with the other gates. Static mode is fully offline
+  # (golden-key resolution against scraped datasets — no browser, no LLM,
+  # no network), so it is a free regression gate: any resolver/scorer/prompt
+  # change that drops accuracy below the 79% floor fails here before tests
+  # even run. Raises floor as static accuracy improves.
+  eval-static:
+    name: Eval Static (resolver accuracy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: smoke
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run eval harness (static mode)
+        run: uv run python scripts/eval/eval_harness.py run --mode static --min-accuracy 79
+
   # ── Gate 3: Test execution (needs lint + type-check green) ────────────
   test:
     name: PyTest + Coverage
