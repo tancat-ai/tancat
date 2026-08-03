@@ -87,6 +87,16 @@ class SemanticMatcher:
         "address": {"addr", "location", "street"},
         "phone": {"tel", "telephone", "mobile", "cell"},
         "email": {"e-mail", "mail"},
+        # --- Payment-card fields (B-037) ---
+        # The skeleton family uses "cvc"/"security code" for the field the
+        # mock labels "CVV" — without this group, the FILL resolved to
+        # nothing and the whole checkout test skipped. Note: no standalone
+        # "card" expansion — "product card" (e-commerce cards) must not
+        # conflate with payment-card vocabulary. Multi-word aliases are
+        # avoided: the synonym Jaccard matches whole tokens only.
+        "cvc": {"cvv", "cvv2"},
+        "cvv": {"cvc", "cvv2"},
+        "cardholder": {"card holder", "name on card"},
         # --- Authentication / identity ---
         "login": {"sign", "signin", "authenticate", "auth", "log"},
         "log": {"login", "sign", "signin", "logon"},

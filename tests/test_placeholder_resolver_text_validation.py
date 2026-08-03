@@ -336,3 +336,23 @@ class TestB016SynonymExpansion:
     def test_synonym_jaccard_does_not_override_strong_non_matches(self) -> None:
         """Synonym expansion should not produce false positives on truly unrelated text."""
         assert self.resolver.text_matches_description("About Us", "Delete account confirmation") is False
+
+    # --- Payment-card synonyms (B-037) ---
+
+    @pytest.mark.parametrize(
+        "element_text,description,reason",
+        [
+            pytest.param("CVV", "cvc", "cvv ↔ cvc", id="cvv-cvc"),
+            pytest.param("CVC", "CVV field", "cvc ↔ cvv (reversed)", id="cvc-cvv"),
+        ],
+    )
+    def test_payment_card_synonyms_match(self, element_text: str, description: str, reason: str) -> None:
+        """B-037: payment-card synonyms unblock the checkout FILL skip family."""
+        assert self.resolver.text_matches_description(element_text, description) is True, (
+            f"Card synonym should match: {reason}"
+        )
+
+    def test_card_number_does_not_match_cardholder_name(self) -> None:
+        """B-037: 'card number' must not conflate with 'cardholder name'."""
+        assert self.resolver.text_matches_description("Cardholder Name", "card number") is False
+        assert self.resolver.text_matches_description("Card Number", "card number") is True
