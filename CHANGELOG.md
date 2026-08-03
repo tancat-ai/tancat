@@ -10,6 +10,13 @@ Version numbers follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 ## [Unreleased]
 
 ### Added
+- **Step-through test debugger** (`scripts/debug_step_through.py`): runs real generated test functions in a headed Chromium window, pausing after every tracker step and printing the live overlay/modal state the auto-dismissal logic hides (add-to-cart modal, FreeCmp consent dialog, Google vignette, cart-link count, URL). `--auto`/`--headless` for non-interactive runs. Surfaces the invisible `EvidenceTracker.click()` dismissals.
+- **Mock-site catalog** (`mock_sites/README.md`): plan for a local catalog of deterministic test targets across 8 product types (e-commerce, banking, insurance, booking, healthcare, HR, widgets, security) — no ad/consent overlay noise, CI-capable, golden keys never decay. E-commerce mock is build priority #1 (exercises the B-029/B-030 bug classes).
+- **BACKLOG audit (2026-08-03 CLI review)**: logged B-029→B-036 — false-pass clicks w/o navigation verification, `#do_action` wrapper-div resolution, broken export suites, AI-012 orphaned DB copy, evidence gaps (no failure screenshots), corrupted `evidence/run_results.sqlite`, end-only sidecar persistence, consumer config architecture (env-var gates → always-on/UI). Plus test-pack restructure strategy (contract/adversarial/resilience layers, eval static in CI) and the mock-site catalog.
+
+---
+
+### Added
 - **Soft-404 SPA recovery** (`src/scraper.py`): saucedemo (SPA on GitHub Pages) serves every `.html` path as HTTP 404 from an app shell that JS-redirects to the real view. `_scrape_url_sync_result` now proceeds when the final URL differs from the requested one (`_is_soft_404`), instead of bailing with `HTTP 404` and zero elements.
 - **Site-agnostic stateful routing** (`src/url_utils.py`): `is_stateful_cart_checkout_path()` replaces the automationexercise-hardcoded `{/view_cart, /checkout}` path set — covers saucedemo's `/cart.html`, `/checkout-step-one.html` etc.
 - **Concept-driven URL candidates re-enabled** (`build_common_path_candidates`): same-domain candidates from the shared route vocabulary (mirrors `journey_scraper.keyword_routes`); SPA sites have no hrefs for journey discovery, so cart/checkout URLs previously never entered the scrape set.
