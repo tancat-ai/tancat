@@ -68,3 +68,27 @@ patterns = retriever.retrieve("Add to cart button", action_type="CLICK")
 for elem in candidates:
     bonus = retriever.scoring_bonus_for(elem, patterns)
 ```
+
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Graceful degradation (B-036 Phase 1)
+The retriever is now built **by default** (always-on). `retrieve()` wraps the
+store/embedder call in try/except: any failure (offline model download, corrupt
+DB) degrades to an empty list — RAG can never block generation. A warning is
+logged once per retriever, not per resolution.
+
+### Learned-pattern scoring (AI-035 Phase 2 / B-036 Phase 3)
+`scoring_bonus_for(element, patterns, site_hash="")` now handles learned
+patterns:
+
+| Pattern source | Match | Bonus |
+|----------------|-------|-------|
+| `golden` | direct / substring | `GOLDEN_PATTERN_BONUS` (20) / half |
+| `learned` + same `site_hash` | direct / substring | `SAME_SITE_LEARNED_BONUS` (5) / half |
+| `learned` + different `site_hash` | — | `0` (could be wrong here — never boost) |
+
+Cross-site learned patterns are returned by retrieval (no hard filter) but
+earn zero bonus — the anti-poisoning guard. Golden patterns stay unscoped
+(+20 anywhere) to preserve the shipped baseline.

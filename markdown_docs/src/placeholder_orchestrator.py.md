@@ -133,3 +133,14 @@ GOTO/URL placeholders resolve against ALL verified pages (not just the current p
 - **2026-08-03 (saucedemo checkout cluster):** soft-404 dead-page filter, redirect-duplicate filter, navigation-intent GOTO fallback, post-login ASSERT mapping, site-agnostic stateful routing, CartSeedingScraper credentials
 - **Phase 3 RAG (2026-07-21):** `rag_retriever` kwarg + `_retrieve_golden_patterns()` → golden patterns flow into `ElementMatcher.find_best_element_for_current_page()` → `PlaceholderScorer.compute_element_score()` for +GOLDEN_PATTERN_BONUS
 - Consolidated skip logic reduces noise in generated tests
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Site-scoped learned-pattern bonus
+`_resolve_placeholder()` now computes the current site's hash from
+`current_url` (`src.rag_learn.site_hash(domain_from_url(...))`) and threads it
+as `site_hash` into `ElementMatcher.find_best_element_for_current_page(...)` →
+`PlaceholderResolver.rank_candidates(...)` → `PlaceholderScorer.compute_element_score(...)`.
+Learned patterns from the same site earn +5; cross-site earned 0. Golden
+patterns are unaffected (+20 anywhere).

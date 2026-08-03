@@ -101,11 +101,15 @@ class RAGRetriever:
         self,
         element: dict[str, str],
         patterns: list[RetrievedPattern],
+        site_hash: str = "",
     ) -> float:
-        """Compute a scoring bonus for an element based on golden pattern overlap.
+        """Compute a scoring bonus for an element based on pattern overlap.
 
-        Returns ``GOLDEN_PATTERN_BONUS`` (20) for a direct selector match,
-        scaled by pattern confidence for partial (tolerance) matches.
+        Returns ``GOLDEN_PATTERN_BONUS`` (20) for a direct golden selector
+        match, scaled by pattern confidence for partial (tolerance) matches.
+        Same-site learned patterns (``source == "learned"`` and matching
+        ``site_hash``) earn ``SAME_SITE_LEARNED_BONUS`` (5) instead — cross-
+        site learned patterns earn nothing (they could be wrong here).
         Returns 0 when no patterns match.
 
         The bonus is designed to tip the scale between similarly-scored
@@ -122,17 +126,21 @@ class RAGRetriever:
             return 0.0
 
         for pattern in patterns:
-            if pattern.source != "golden":
-                continue
             if not pattern.selector:
                 continue
-
-            # Direct selector match
-            if pattern.selector == element_selector:
-                return float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * pattern.confidence
-
-            # Tolerance / substring match (scaled down)
-            if element_selector in pattern.selector or pattern.selector in element_selector:
-                return float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * 0.5 * pattern.confidence
+            if pattern.source == "golden":
+                # Direct selector match
+                if pattern.selector == element_selector:
+                    return float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * pattern.confidence
+                # Tolerance / substring match (scaled down)
+                if element_selector in pattern.selector or pattern.selector in element_selector:
+                    return float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * 0.5 * pattern.confidence
+            elif pattern.source == "learned" and site_hash and pattern.site_hash == site_hash:
+                # Direct selector match
+                if pattern.selector == element_selector:
+                    return float(PlaceholderScorer.SAME_SITE_LEARNED_BONUS) * pattern.confidence
+                # Tolerance / substring match (scaled down)
+                if element_selector in pattern.selector or pattern.selector in element_selector:
+                    return float(PlaceholderScorer.SAME_SITE_LEARNED_BONUS) * 0.5 * pattern.confidence
 
         return 0.0

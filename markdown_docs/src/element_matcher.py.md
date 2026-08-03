@@ -20,3 +20,14 @@
 - `src/semantic_candidate_ranker.py` — Pass 3 LLM ranking
 - `src/placeholder_scorers.py` — scoring functions
 - `src/role_mapper.py` — `normalise_element_text` (now includes placeholder)
+
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### `site_hash` parameter
+`find_best_element_for_current_page(..., golden_patterns=None, site_hash=None)`
+gained a `site_hash` kwarg, forwarded to
+`PlaceholderResolver.rank_candidates(..., site_hash=site_hash)` — enables the
+same-site learned-pattern bonus (+5, AI-035 Phase 2). Optional; absent → no
+learned bonus (unchanged behavior).

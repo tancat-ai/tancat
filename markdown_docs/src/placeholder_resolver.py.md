@@ -33,3 +33,14 @@ Main resolution class.
 
 ## Dependencies
 - `src.semantic_matcher`, `src.placeholder_scorers`, `src.page_context_tracker`
+
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### `site_hash` parameter
+`rank_candidates(action, description, page_elements, golden_patterns=None, site_hash=None)`
+gained a `site_hash` kwarg, forwarded to
+`PlaceholderScorer.compute_element_score(..., site_hash=site_hash)` — enables
+the same-site learned-pattern bonus (+5, AI-035 Phase 2). Callers that don't
+pass it get identical behavior (bonus only applies when a site hash is present).

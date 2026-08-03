@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,6 +18,7 @@ from src.rag_store import (
     DocChunk,
     GoldenPattern,
     KnowledgeEntry,
+    LearnedPattern,
     MilvusLiteBackend,
     RAGStore,
     RetrievedPattern,
@@ -88,7 +90,7 @@ class InMemoryBackend:
 
     def __init__(self, dimension: int) -> None:
         self._dimension = dimension
-        self._entries: list[tuple[list[float], dict[str, str], str]] = []
+        self._entries: list[tuple[list[float], dict[str, Any], str]] = []
 
     @property
     def dimension(self) -> int:
@@ -123,6 +125,35 @@ class InMemoryBackend:
         before = len(self._entries)
         self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
         return before - len(self._entries)
+
+    def find_learned(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned"
+                and meta.get("action_type") == action_type
+                and meta.get("description") == description
+                and meta.get("site_hash") == site_hash
+            ):
+                return dict(meta)
+        return None
+
+    def increment_learned_hit(self, row: dict[str, Any]) -> int:
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned"
+                and meta.get("action_type") == row.get("action_type")
+                and meta.get("description") == row.get("description")
+                and meta.get("site_hash") == row.get("site_hash")
+            ):
+                new_hit = int(meta.get("hit_count", 0)) + 1
+                meta["hit_count"] = new_hit
+                return new_hit
+        return 1
 
     @staticmethod
     def _cosine_sim(a: list[float], b: list[float]) -> float:
@@ -351,6 +382,50 @@ class TestCountsByTypeAndDeleteLearned:
 
     def test_delete_learned_with_nothing_to_prune(self, rag_store: RAGStore) -> None:
         assert rag_store.delete_learned() == 0
+
+
+class TestUpsertPattern:
+    """AI-035/B-036 Phase 3: learned-pattern write-back with dedup."""
+
+    def _pattern(self, **overrides: str) -> LearnedPattern:
+        base = {
+            "action_type": "FILL",
+            "description": "username",
+            "locator": "#user-name",
+            "site_hash": "abc123",
+        }
+        base.update(overrides)
+        return LearnedPattern(**base)  # type: ignore[arg-type]
+
+    def test_inserts_new_pattern(self, rag_store: RAGStore) -> None:
+        status, hit = rag_store.upsert_pattern(self._pattern())
+        assert status == "inserted"
+        assert hit == 1
+        counts = rag_store.counts_by_type()
+        assert counts["learned"] == 1
+
+    def test_repeat_bumps_hit_count_not_rows(self, rag_store: RAGStore) -> None:
+        rag_store.upsert_pattern(self._pattern())
+        status, hit = rag_store.upsert_pattern(self._pattern())
+        assert status == "exists"
+        assert hit == 2
+        # Store stays bounded — one row, hit bumped
+        assert rag_store.counts_by_type()["learned"] == 1
+
+    def test_dedup_key_includes_action_and_site(self, rag_store: RAGStore) -> None:
+        rag_store.upsert_pattern(self._pattern())
+        # Same description, different action → distinct row
+        rag_store.upsert_pattern(self._pattern(action_type="ASSERT"))
+        # Same action+description, different site → distinct row
+        rag_store.upsert_pattern(self._pattern(site_hash="def456"))
+        assert rag_store.counts_by_type()["learned"] == 3
+
+    def test_different_locator_same_key_is_deduped(self, rag_store: RAGStore) -> None:
+        """A repeat with a changed locator still dedups (first locator wins)."""
+        rag_store.upsert_pattern(self._pattern())
+        status, _hit = rag_store.upsert_pattern(self._pattern(locator="input[name=user]"))
+        assert status == "exists"
+        assert rag_store.counts_by_type()["learned"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +658,43 @@ class TestMilvusLiteRAGStore:
         top = results[0]
         assert top.action_type == "CLICK"
         assert top.selector == "#checkout"
+
+    def test_upsert_pattern_insert_dedup_hit(self, ml_store: RAGStore) -> None:
+        """AI-035: learned patterns insert once, dedup bumps hit_count."""
+        pattern = LearnedPattern(
+            action_type="FILL",
+            description="username",
+            locator="#user-name",
+            site_hash="abc123",
+        )
+        status, hit = ml_store.upsert_pattern(pattern)
+        assert status == "inserted"
+        assert hit == 1
+
+        status, hit = ml_store.upsert_pattern(pattern)
+        assert status == "exists"
+        assert hit == 2
+
+        # One row total, still searchable
+        assert ml_store.counts_by_type()["learned"] == 1
+        results = ml_store.retrieve("FILL: username", k=5)
+        assert any(r.selector == "#user-name" for r in results)
+
+    def test_upsert_pattern_different_sites_distinct(self, ml_store: RAGStore) -> None:
+        a = LearnedPattern(action_type="FILL", description="username", locator="#u-a", site_hash="aaa")
+        b = LearnedPattern(action_type="FILL", description="username", locator="#u-b", site_hash="bbb")
+        assert ml_store.upsert_pattern(a)[0] == "inserted"
+        assert ml_store.upsert_pattern(b)[0] == "inserted"
+        assert ml_store.counts_by_type()["learned"] == 2
+
+    def test_delete_learned_removes_only_learned(self, ml_store: RAGStore) -> None:
+        ml_store.upsert_pattern(
+            LearnedPattern(action_type="FILL", description="username", locator="#user-name", site_hash="abc123")
+        )
+        ml_store.add_patterns([GoldenPattern(action="FILL", description="password", expected_locator="#password")])
+        assert ml_store.delete_learned() == 1
+        assert ml_store.counts_by_type().get("learned", 0) == 0
+        assert ml_store.counts_by_type()["golden"] == 1
 
 
 # ---------------------------------------------------------------------------

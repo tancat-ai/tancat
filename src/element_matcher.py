@@ -629,6 +629,7 @@ class ElementMatcher:
         excluded_selectors: set[str] | None = None,
         resolved_steps: list[str] | None = None,
         golden_patterns: list | None = None,
+        site_hash: str | None = None,
     ) -> dict[str, str] | None:
         """Return the best element match across the supplied page mapping.
 
@@ -640,6 +641,8 @@ class ElementMatcher:
             excluded_selectors: Selectors to exclude from consideration (B-014).
             resolved_steps: B-020 list of compressed prior step descriptions.
             golden_patterns: Optional RAG RetrievedPattern list for scoring bonus.
+            site_hash: Current site's one-way domain hash (AI-035 Phase 2) —
+                enables the same-site learned-pattern bonus.
         """
         # Pass 0 — exact text match for ASSERT:"exact text"
         pass0_result = self.pass0_exact_text_match(action, description, pages_data)
@@ -693,6 +696,7 @@ class ElementMatcher:
                 description,
                 elements,
                 golden_patterns=golden_patterns,
+                site_hash=site_hash,
             )
             all_ranked.extend(ranked_candidates)
             logger.debug(

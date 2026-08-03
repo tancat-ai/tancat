@@ -76,3 +76,19 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
     else:
         status = "failed"
     tracker.write(status=status)
+
+    # B-036 Phase 3 (AI-035): learn from a fully-passing run. The resolved
+    # (action, description, locator, site) pairs are verified by execution —
+    # feed them to the local RAG store (dedup'd, site-scoped) so the next
+    # generation for the same site resolves faster. Guarded: learning must
+    # never break the test run, and a repeat is a no-op hit bump.
+    if status == "passed":
+        try:
+            from src.rag_learn import learn_from_evidence
+
+            learn_from_evidence(tracker.steps)
+        except Exception:
+            # learning is best-effort — never fail a passing test on it.
+            # A repeat (dedup) is a silent hit bump; a failure means the
+            # next run retries. See docs/plans/AI-035_B036_P3_plan.md §7.
+            pass

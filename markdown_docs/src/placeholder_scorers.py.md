@@ -56,3 +56,20 @@ Optional `list[RetrievedPattern]` kwarg. When non-empty, `_golden_pattern_bonus(
 
 ## Dependencies
 - `src.semantic_matcher`
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Same-site learned-pattern bonus
+- New constant `SAME_SITE_LEARNED_BONUS: int = 5` (next to `GOLDEN_PATTERN_BONUS = 20`).
+- New static `_learned_pattern_bonus(element, patterns, site_hash) -> int`:
+  +5 for a **same-site** learned pattern match (direct; half for substring,
+  scaled by confidence), **0** for cross-site learned or golden sources.
+- `compute_element_score(..., golden_patterns=None, site_hash=None)` gained a
+  `site_hash` kwarg; the learned bonus is added alongside the golden bonus.
+  Without `site_hash` (or with none set), behavior is unchanged — zero bonus.
+
+### Rationale
+Learned patterns are only trusted on the site they were verified on. A
+saucedemo-learned `username → #user-name` must not win ties on a foreign site —
+the +5/+0 split is the main poisoning guard.

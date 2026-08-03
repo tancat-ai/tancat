@@ -32,6 +32,7 @@ Usage::
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -66,12 +67,35 @@ class DocChunk:
 
 
 @dataclass(slots=True)
+class LearnedPattern:
+    """A verified placeholder → selector mapping learned from execution.
+
+    Written back by :func:`src.rag_learn.learn_from_evidence` when a
+    generated test step passes against the live site (B-036 Phase 3).
+    ``site_hash`` is a one-way sha256 of the site domain — no URLs or
+    PII are ever stored (AI-035 privacy design).
+    """
+
+    action_type: str  # CLICK, FILL, ASSERT, GOTO, SELECT
+    description: str  # evidence step label / placeholder description
+    locator: str  # verified locator from the passing step
+    site_hash: str  # sha256(domain), one-way
+    confidence: float = 0.9  # verified by execution, below self-healing's 1.0
+    source: str = "evidence"  # "evidence" (B-036) | "self_healing" (AI-035)
+
+    @property
+    def query_text(self) -> str:
+        """Text used for embedding: action + description (matches GoldenPattern)."""
+        return f"{self.action_type}: {self.description}"
+
+
+@dataclass(slots=True)
 class KnowledgeEntry:
     """Internal entry ready for vector store upsert."""
 
     vector: list[float]
     text: str
-    metadata: dict[str, str]
+    metadata: dict[str, Any]  # Milvus dynamic fields: str/int/float values
 
 
 @dataclass(slots=True)
@@ -79,7 +103,7 @@ class SearchHit:
     """A single search result from the vector store."""
 
     distance: float
-    metadata: dict[str, str]
+    metadata: dict[str, Any]
 
     @property
     def confidence(self) -> float:
@@ -100,8 +124,9 @@ class RetrievedPattern:
     selector: str
     action_type: str
     confidence: float
-    source: str = ""  # "golden" or "doc"
+    source: str = ""  # "golden", "doc", or "learned"
     page: str = ""  # URL fragment for golden patterns
+    site_hash: str = ""  # one-way site domain hash (learned patterns)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +214,23 @@ class VectorStoreBackend(Protocol):
 
         Returns the number of entries removed.
         """
+        ...
+
+    def find_learned(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        """Find an existing learned-pattern row by dedup key.
+
+        Returns the full row (incl. primary key, vector, and metadata) or
+        ``None`` when no row matches ``(action_type, description, site_hash)``.
+        """
+        ...
+
+    def increment_learned_hit(self, row: dict[str, Any]) -> int:
+        """Increment ``hit_count`` on an existing learned row; returns the new count."""
         ...
 
 
@@ -341,6 +383,44 @@ class MilvusLiteBackend:
         # Backward-compat: older Milvus returns the deleted primary keys.
         return len(result)
 
+    def find_learned(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        """Find an existing learned-pattern row by dedup key (Milvus impl).
+
+        Multi-field AND filter over dynamic fields (verified against
+        Milvus-lite 2026-08-03). Returns the full row so the caller can
+        upsert it back with an incremented ``hit_count``.
+        """
+        rows = self._c.query(
+            _COLLECTION_NAME,
+            filter=(
+                "entry_type == 'learned' "
+                f"and action_type == '{action_type}' "
+                f"and description == '{description}' "
+                f"and site_hash == '{site_hash}'"
+            ),
+            output_fields=["*"],
+            limit=1,
+        )
+        return rows[0] if rows else None
+
+    def increment_learned_hit(self, row: dict[str, Any]) -> int:
+        """Increment ``hit_count`` on an existing learned row (Milvus impl).
+
+        Milvus upsert replaces the whole entity, so the full row from
+        ``find_learned`` (which includes the vector) is written back with
+        ``hit_count + 1``. Returns the new count.
+        """
+        current = int(row.get("hit_count", 0))
+        new_hit = current + 1
+        data = {**row, "hit_count": new_hit}
+        self._c.upsert(_COLLECTION_NAME, [data])
+        return new_hit
+
     def clear(self) -> None:
         """Delete all entries (for testing / rebuild).
 
@@ -462,6 +542,7 @@ class RAGStore:
                     confidence=hit.confidence,
                     source=md.get("entry_type", ""),
                     page=md.get("page", ""),
+                    site_hash=md.get("site_hash", ""),
                 )
             )
 
@@ -484,3 +565,43 @@ class RAGStore:
         dedup-free. Returns the number of entries removed.
         """
         return self._backend.delete_learned()
+
+    def upsert_pattern(self, pattern: LearnedPattern) -> tuple[str, int]:
+        """Insert or dedup a learned pattern (AI-035 core, B-036 Phase 3).
+
+        Dedup key: ``(action_type, description, site_hash)``. When a row
+        with the same key already exists, its ``hit_count`` is incremented
+        (no new row — the store stays bounded) and ``("exists", hit_count)``
+        is returned. Otherwise the pattern is embedded and inserted with
+        ``hit_count=1`` and ``("inserted", 1)`` is returned.
+        """
+        existing = self._backend.find_learned(
+            pattern.action_type,
+            pattern.description,
+            pattern.site_hash,
+        )
+        if existing is not None:
+            hit = self._backend.increment_learned_hit(existing)
+            return ("exists", hit)
+
+        vector = self._embedder.embed(pattern.query_text)
+        self._backend.upsert(
+            [
+                KnowledgeEntry(
+                    vector=vector,
+                    text=pattern.query_text,
+                    metadata={
+                        "entry_type": "learned",
+                        "action_type": pattern.action_type,
+                        "description": pattern.description,
+                        "selector": pattern.locator,
+                        "site_hash": pattern.site_hash,
+                        "confidence": float(pattern.confidence),
+                        "source": pattern.source,
+                        "hit_count": 1,
+                        "created_at": time.time(),
+                    },
+                )
+            ]
+        )
+        return ("inserted", 1)

@@ -162,3 +162,44 @@ store.add_docs([DocChunk(...), ...])
 # Retrieval
 results = store.retrieve("Add to cart button", action_type="CLICK", k=5)
 ```
+
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### New dataclass: `LearnedPattern`
+A verified placeholder → selector mapping learned from execution
+(`source="evidence"`, `confidence=0.9`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `action_type` | `str` | CLICK, FILL, ASSERT, GOTO, SELECT |
+| `description` | `str` | evidence step label / placeholder description |
+| `locator` | `str` | verified locator from the passing step |
+| `site_hash` | `str` | one-way sha256(domain) — no URLs/PII stored |
+| `confidence` | `float` | `0.9` (evidence-verified) |
+| `source` | `str` | `"evidence"` \| `"self_healing"` (future) |
+| `query_text` | `property → str` | `"{action_type}: {description}"` — matches golden embedding |
+
+### New method: `RAGStore.upsert_pattern(pattern: LearnedPattern) -> tuple[str, int]`
+Dedup on `(action_type, description, site_hash)`. Existing row → increments
+`hit_count` (no new row), returns `("exists", hit_count)`. New row → embeds +
+inserts with `hit_count=1`, returns `("inserted", 1)`. The store stays bounded
+(one row per fact). Backend support: `find_learned()` (multi-field AND filter
+over Milvus dynamic fields — spike-verified) + `increment_learned_hit()`
+(full-row upsert by pk to preserve the vector).
+
+### New backend methods (Protocol + Milvus + test backends)
+- `counts_by_type() -> dict[str, int]` — per-`entry_type` counts (`--stats`)
+- `delete_learned() -> int` — delete non-golden/doc rows, keep the pack
+  (`--prune-learned`); handles both pymilvus delete return shapes
+- `find_learned(...)` / `increment_learned_hit(...)` — dedup machinery
+
+### `RetrievedPattern.site_hash`
+New field (`str = ""`) — learned patterns carry their site hash through to the
+scorer so same-site bonuses are scoped correctly. Golden patterns keep `""`.
+
+### Type correction
+`KnowledgeEntry.metadata` / `SearchHit.metadata` changed from `dict[str, str]`
+to `dict[str, Any]` — Milvus dynamic fields carry ints/floats (confidence,
+hit_count, created_at).

@@ -31,6 +31,7 @@ from src.pom_helpers import (
     get_pom_instance_name,
     get_pom_method_call,
 )
+from src.rag_learn import domain_from_url, site_hash
 from src.role_mapper import (
     get_effective_role,
     is_display_role,
@@ -900,6 +901,11 @@ class PlaceholderOrchestrator:
 
         # RAG retrieval: fetch golden patterns for scoring bonus
         golden_patterns = self._retrieve_golden_patterns(action, description)
+        # AI-035 Phase 2: scope the learned-pattern bonus to this site.
+        site = None
+        if current_url:
+            domain = domain_from_url(current_url)
+            site = site_hash(domain) if domain else None
 
         matched_element = await self._element_matcher.find_best_element_for_current_page(
             action,
@@ -909,6 +915,7 @@ class PlaceholderOrchestrator:
             excluded_selectors=excluded or None,
             resolved_steps=resolved_steps,
             golden_patterns=golden_patterns or None,
+            site_hash=site,
         )
 
         if matched_element is not None:
