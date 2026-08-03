@@ -140,3 +140,34 @@ def test_remove_consent_overlays_filters_onetrust_class_markup() -> None:
     # Real page content must survive
     assert "/products" in cleaned
     assert "/product_details/1" in cleaned
+
+
+def test_soft_404_detects_spa_bootstrap() -> None:
+    """SPA-hosted sites rewrite the URL after a 4xx — treat as a usable page."""
+    assert (
+        PageScraper._is_soft_404(
+            "https://www.saucedemo.com/inventory.html",
+            "https://www.saucedemo.com/",
+        )
+        is True
+    )
+
+
+def test_soft_404_false_when_url_unchanged() -> None:
+    """A genuine 404 keeps the requested URL — the scrape really failed."""
+    assert (
+        PageScraper._is_soft_404(
+            "https://example.com/missing.html",
+            "https://example.com/missing.html",
+        )
+        is False
+    )
+
+
+def test_soft_404_false_for_empty_final_url() -> None:
+    assert PageScraper._is_soft_404("https://example.com/missing.html", "") is False
+
+
+def test_soft_404_ignores_trailing_slash_differences() -> None:
+    assert PageScraper._is_soft_404("https://example.com/", "https://example.com/") is False
+    assert PageScraper._is_soft_404("https://example.com/foo/", "https://example.com/foo") is False

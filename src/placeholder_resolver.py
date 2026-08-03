@@ -546,7 +546,7 @@ class PlaceholderResolver:
             score = len(desc_words.intersection(page_words))
             if parsed.path in {"", "/"} and {"home", "start", "landing", "store"}.intersection(desc_words):
                 score += 4
-            if "product" in desc_words and {"product", "products", "shop"}.intersection(path_words):
+            if "product" in desc_words and {"product", "products", "shop", "inventory"}.intersection(path_words):
                 score += 4
             if "cart" in desc_words and {"cart", "view", "basket"}.intersection(path_words):
                 score += 4

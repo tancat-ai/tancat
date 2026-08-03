@@ -98,6 +98,12 @@ Behavior:
 
 ## Class: `JourneyScraper`
 
+### Credential-aware start (2026-08-03)
+When a `CredentialProfile` is supplied, the journey logs in at the starting URL (`attempt_login`) before running steps — auth-gated demo sites (saucedemo) previously hit the login wall because the journey never authenticated.
+
+### `_dismiss_modals(page)` — B-015 lesson (2026-08-03)
+Text-based modal dismissal is scoped to modal/dialog containers (`#cartModal, .modal, [role='dialog'], …`). The old global `button:has-text("Continue Shopping")` matched saucedemo's cart-page button and navigated the journey back to inventory — cart.html was never captured.
+
 Scrapes pages by following a user journey step-by-step.
 
 ### Constructor

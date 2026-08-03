@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 
-from src.journey_models import JourneyStep
+from src.journey_models import CredentialProfile, JourneyStep
 from src.journey_scraper import JourneyScraper
 
 
@@ -33,6 +33,17 @@ def run_journey_subprocess_entry() -> int:
     headless = payload.get("headless", True)
     steps_data = payload.get("steps", [])
 
+    # Reconstruct the credential profile — it is serialized in the payload but
+    # was never read back (auth-gated journeys silently ran without a session).
+    credential_profile: CredentialProfile | None = None
+    cred_data = payload.get("credential_profile")
+    if isinstance(cred_data, dict):
+        credential_profile = CredentialProfile(
+            label=str(cred_data.get("label", "")),
+            username=str(cred_data.get("username", "")),
+            password=str(cred_data.get("password", "")),
+        )
+
     # Reconstruct JourneyStep objects from JSON
     steps: list[JourneyStep] = []
     for s in steps_data:
@@ -55,6 +66,7 @@ def run_journey_subprocess_entry() -> int:
         max_retries=max_retries,
         base_backoff_ms=base_backoff_ms,
         headless=bool(headless),
+        credential_profile=credential_profile,
     )
     output = scraper._scrape_journey_sync(steps)
     print(json.dumps(output))

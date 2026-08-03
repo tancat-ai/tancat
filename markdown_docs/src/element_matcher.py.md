@@ -10,6 +10,8 @@
 ## Resolution Passes
 - **Pass 0**: Exact text match (accessible_name, aria_label, text)
 - **Pass 1**: Action-verb-aware substring match (B-012)
+  - **B-024g (2026-08-03):** separator-normalized word-subset fallback for FILL — every description word appearing as a word in the element text matches, so "zip code" → placeholder "Zip/Postal Code" (saucedemo checkout fields)
+  - FILL gate: containers whose accessible_name collides with a field label must not win over the real input
 - **Pass 2**: Structural match (ID, data-test, name attributes + camelCase splitting)
 - **Pass 3**: LLM semantic ranking via `SemanticCandidateRanker`
 
@@ -17,3 +19,4 @@
 - `src/placeholder_orchestrator.py` — consumer
 - `src/semantic_candidate_ranker.py` — Pass 3 LLM ranking
 - `src/placeholder_scorers.py` — scoring functions
+- `src/role_mapper.py` — `normalise_element_text` (now includes placeholder)

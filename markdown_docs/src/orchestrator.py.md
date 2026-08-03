@@ -106,6 +106,7 @@ These allow existing test code to mock directly on orchestrator instance without
 **Phase 5: Resolve Placeholders**
 - Delegates to `PlaceholderOrchestrator` for placeholder resolution
 - Combines static and journey-scraped data
+- **Redirect-duplicate filter (2026-08-03):** after the stateful upgrade, pages whose stateless scrape redirected to another page *and* whose content duplicates that target are dropped — automationexercise serves HTTP 200 + redirect-to-home for guessed routes like `/inventory.html`, whose bogus keys otherwise win ASSERT resolution
 - **RAG (2026-07-21):** When `RAG_ENABLED=1`, `_build_rag_retriever()` creates a `RAGRetriever` wired to `MilvusLiteBackend` + `SentenceTransformerEmbedder`; passed to `PlaceholderOrchestrator` for golden-pattern retrieval during resolution
 
 **Phase 6: Post-Process and Save**

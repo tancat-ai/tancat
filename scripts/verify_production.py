@@ -185,6 +185,7 @@ async def verify_site(
     pom_mode: bool = True,
 ) -> SiteVerification:
     """Run the full verification pipeline for one site."""
+    from src.journey_models import CredentialProfile
     from src.llm_client import LLMClient
     from src.orchestrator import TestOrchestrator
     from src.test_generator import TestGenerator
@@ -210,7 +211,21 @@ async def verify_site(
 
     # --- Gate 2: Pipeline generation ---
     generator = TestGenerator(client=client)
-    orchestrator = TestOrchestrator(generator, pom_mode=pom_mode)
+    # Demo sites gate cart/checkout behind auth (saucedemo's credentials are
+    # printed on its own login page). Without a session the stateful scraper
+    # captures the login wall, not the cart — same defaults as scripts/eval.
+    credential_profile: CredentialProfile | None = None
+    if site_id == "saucedemo":
+        credential_profile = CredentialProfile(
+            label="saucedemo",
+            username=os.environ.get("SAUCEDEMO_USERNAME", "standard_user"),
+            password=os.environ.get("SAUCEDEMO_PASSWORD", "secret_sauce"),
+        )
+    orchestrator = TestOrchestrator(
+        generator,
+        pom_mode=pom_mode,
+        credential_profile=credential_profile,
+    )
 
     try:
         t0 = time.time()

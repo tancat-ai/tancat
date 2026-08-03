@@ -54,7 +54,15 @@ def test_ensure_scraped_falls_back_to_stateless_when_stateful_empty(monkeypatch:
 
     async def fake_stateless(url: str) -> tuple[list[dict[str, str]], str | None, str]:
         calls.append(f"stateless:{url}")
-        return [{"selector": "div", "text": "fallback"}], None, url
+        return (
+            [
+                {"selector": "h1", "text": "fallback heading"},
+                {"selector": "div", "text": "fallback body"},
+                {"selector": "a", "text": "fallback link"},
+            ],
+            None,
+            url,
+        )
 
     monkeypatch.setattr("src.placeholder_orchestrator.StatefulPageScraper", FakeStateful)
 
@@ -66,4 +74,4 @@ def test_ensure_scraped_falls_back_to_stateless_when_stateful_empty(monkeypatch:
 
     assert "stateful:https://example.com/checkout" in calls
     assert "stateless:https://example.com/checkout" in calls
-    assert scraped["https://example.com/checkout"][0]["text"] == "fallback"
+    assert scraped["https://example.com/checkout"][0]["text"] == "fallback heading"

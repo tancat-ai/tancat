@@ -39,6 +39,10 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 
 ### `_scrape_url_sync_result(url) -> ScrapeResult`
 - Full scrape result including screenshot bytes and element bounding boxes
+- **Soft-404 recovery (2026-08-03):** when the navigation response status is >= 400 but the page bootstrapped an SPA (the final URL differs from the requested URL — the GitHub Pages `spa-github-pages` pattern), the scrape proceeds instead of bailing with `HTTP 404`. Genuine 404s (unchanged URL) still bail.
+
+### `_is_soft_404(requested_url, final_url) -> bool`
+- True when a 4xx response still yielded a usable page — the final URL differs from the requested one, meaning an SPA shell JS-redirected to the real view
 
 ### `_extract_elements_from_html(html, base_url) -> list[dict]`
 - Uses BeautifulSoup to parse HTML after removing consent overlays
@@ -73,6 +77,7 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 
 - **Subprocess isolation:** Playwright runs in a separate process to avoid asyncio conflicts with Streamlit/Jupyter event loops
 - **Consent overlay removal:** Cookie banners are stripped before element extraction to prevent hundreds of irrelevant elements
+- **Soft-404 recovery:** saucedemo (SPA on GitHub Pages) serves every `.html` path as HTTP 404 from an app shell that JS-redirects to the real view; the scraper now renders first and judges content, matching what a browser user sees
 - **CDP accessibility tree:** Uses Chrome DevTools Protocol `Accessibility.getFullAXTree` since `page.accessibility.snapshot()` is unavailable in Python Playwright
 - **Vision enrichment:** Screenshots and element boxes enable vision-capable LLMs to enrich element metadata
 

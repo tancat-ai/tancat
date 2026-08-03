@@ -9,6 +9,21 @@ from urllib.parse import urljoin, urlparse
 logger = logging.getLogger(__name__)
 
 
+def is_stateful_cart_checkout_path(path: str) -> bool:
+    """True when a URL path targets a cart/checkout page that needs session state.
+
+    Site-agnostic: matches path tokens rather than an exact per-site vocabulary.
+    automationexercise uses ``/view_cart`` / ``/checkout``; saucedemo uses
+    ``/cart.html`` / ``/checkout-step-one.html``; others use ``/basket``.
+    This mirrors the route vocabulary already used by journey discovery
+    (``src/journey_scraper.py``) so stateful routing can never diverge from it.
+    """
+    if not path:
+        return False
+    lowered = path.lower()
+    return any(token in lowered for token in ("view_cart", "cart", "checkout", "basket"))
+
+
 def normalize_url_path(url: str) -> str:
     """Normalize common LLM-generated URL path variations to real site routes.
 
@@ -77,13 +92,36 @@ def extract_route_concepts(texts: list[str]) -> set[str]:
 
 
 def build_common_path_candidates(seed_urls: list[str], concepts: set[str]) -> list[str]:
-    """URL guessing removed — journey discovery finds all reachable pages.
+    """Return same-domain candidate URLs for story concepts.
 
-    This function is kept as a stub for backwards compatibility but returns
-    an empty list. The journey scraper navigates the site statefully,
-    capturing all pages and elements without guessing URL patterns.
+    Re-enabled 2026-08-03: journey discovery alone cannot traverse SPA sites
+    (e.g. saucedemo) whose navigation uses JS click handlers with no hrefs, so
+    cart/checkout URLs are never discovered and placeholders go unresolved.
+    Concept-driven candidates from the shared route vocabulary (the same one
+    journey discovery uses in ``src/journey_scraper.py``) fill the gap.
+    Candidates are filtered to the seed domain to prevent cross-site
+    hallucination — the original reason URL guessing was removed.
     """
-    return []
+    # Shared route vocabulary — mirrors src/journey_scraper.py keyword_routes
+    concept_paths: dict[str, list[str]] = {
+        "cart": ["/cart.html", "/cart", "/view_cart", "/basket"],
+        "checkout": [
+            "/checkout-step-one.html",
+            "/checkout_step_one",
+            "/checkout.html",
+            "/checkout",
+        ],
+        "products": ["/products", "/inventory.html"],
+    }
+    if not seed_urls or not concepts:
+        return []
+    candidates: list[str] = []
+    for concept in concepts:
+        for path in concept_paths.get(concept.lower(), []):
+            for seed in seed_urls:
+                candidates.append(urljoin(seed, path))
+    allowed = extract_seed_domain(seed_urls)
+    return sorted(set(filter_urls_to_allowed_domain(candidates, allowed)))
 
 
 def heuristic_url_from_description(current_url: str, description: str) -> str | None:

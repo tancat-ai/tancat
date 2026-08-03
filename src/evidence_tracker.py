@@ -93,6 +93,29 @@ class EvidenceTracker:
 
         dismiss_consent_overlays(self.page)
 
+    @staticmethod
+    def _is_modal_close_target(locator: str) -> bool:
+        """True when the locator is a confirmation-modal close control.
+
+        Generated tests emit explicit "close popup / OK / Continue Shopping"
+        steps for added-to-cart modals; the tracker auto-dismisses those same
+        modals before every click. When the modal is already gone, such a step
+        is a satisfied no-op, not a failure.
+        """
+        low = locator.lower()
+        return any(
+            t in low
+            for t in (
+                "close-modal",
+                "close_modal",
+                "close modal",
+                "modal-close",
+                "modal_close",
+                "continue shopping",
+                "btn-success",
+            )
+        )
+
     def _dismiss_ad_overlays(self) -> None:
         """Delegate to central consent dismissal utility (includes ad overlay handling)."""
         from src.browser_utils import dismiss_consent_overlays
@@ -107,15 +130,20 @@ class EvidenceTracker:
         if no modal is visible these selectors won't match and this is a no-op.
         Mirrors the journey scraper's ``_dismiss_modals``.
         """
+        # B-015 lesson: never match generic button text globally — saucedemo's
+        # cart page has a visible "Continue Shopping" button that would get
+        # clicked, navigating the generated test back to inventory. Text-based
+        # dismissal is scoped to modal/dialog containers only.
+        modal_containers = "#cartModal, .modal, [role='dialog'], .modal-dialog, .modal-content"
         dismiss_selectors = [
-            'button:has-text("Continue Shopping")',
+            f"{modal_containers} button:has-text('Continue Shopping')",
+            f"{modal_containers} .continue-shopping",
+            f"{modal_containers} .close",
+            f"{modal_containers} .modal-close",
+            f"{modal_containers} .close-btn",
+            f"{modal_containers} [data-dismiss='modal']",
+            f"{modal_containers} .modal-footer .btn",
             "button.btn-success.close-modal",
-            ".continue-shopping",
-            ".modal .close",
-            ".modal-close",
-            ".close-btn",
-            '[data-dismiss="modal"]',
-            ".modal-footer .btn",
         ]
         for selector in dismiss_selectors:
             try:
@@ -387,10 +415,20 @@ class EvidenceTracker:
                         "The element exists on a different page than the one this step runs on."
                     )
                 if not loc.is_visible():
-                    # Hidden elements (e.g. CSRF token inputs, display:none
-                    # fields) are never click targets. Playwright would wait the
-                    # full 5s timeout and then the fallback chain would burn
-                    # ~29s clicking nothing useful.
+                    # Modal-close targets: the tracker auto-dismisses
+                    # confirmation modals before every click, so a generated
+                    # "close popup / OK" step may find its button already
+                    # hidden. The click's intent (dismiss the modal) is then
+                    # already satisfied — record a no-op instead of failing.
+                    if self._is_modal_close_target(locator):
+                        self._record_step(
+                            "click",
+                            label,
+                            locator=locator,
+                            elapsed_ms=int((time.time() - _t0) * 1000),
+                            element_metadata={"note": "modal already dismissed — no-op"},
+                        )
+                        return
                     raise _LocatorNotFoundError(
                         f"Locator '{locator}' is hidden on current page ({self.page.url}). "
                         "Hidden elements are not clickable — the resolver emitted a "

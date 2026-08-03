@@ -17,7 +17,11 @@ def test_resolve_placeholder_scrapes_current_url_on_demand(monkeypatch: pytest.M
     async def fake_scrape_url(url: str) -> tuple[list[dict[str, str]], str | None, str]:
         calls.append(url)
         return (
-            [{"selector": 'a[href="/products"]', "text": "Products", "href": "https://example.com/products"}],
+            [
+                {"selector": 'a[href="/products"]', "text": "Products", "href": "https://example.com/products"},
+                {"selector": "h1", "text": "Welcome"},
+                {"selector": "nav a", "text": "Home", "href": "https://example.com/"},
+            ],
             None,
             url,
         )

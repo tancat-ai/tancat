@@ -13,7 +13,7 @@ from src.locator_repair import SetupScriptResult, run_codegen_session, translate
 from src.pytest_output_parser import RunResult, TestResult
 from src.self_healing import HealingReport, SelfHealingRunner
 from src.ui.ui_results import _handle_run_tests
-from src.url_utils import normalize_url_path
+from src.url_utils import is_stateful_cart_checkout_path, normalize_url_path
 
 
 def _parse_condition_refs_from_source(source: str) -> dict[str, str]:
@@ -579,7 +579,7 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
     # Detect if we need cart seeding — when we navigate to a cart/checkout page
     # but no prior steps add items, the cart will be empty.
     _target_path = urlparse(normalized_target).path.rstrip("/")
-    _needs_cart_seeding = _target_path in ("/view_cart", "/checkout")
+    _needs_cart_seeding = is_stateful_cart_checkout_path(_target_path)
 
     script_lines = [
         "from playwright.sync_api import sync_playwright",
@@ -628,11 +628,35 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
     # Cart-seeding: add an item to the cart before navigating to a cart/checkout page.
     # Without this, the cart page will be empty and "Proceed to checkout" etc. won't exist.
     if _needs_cart_seeding:
-        _products_url = urljoin(normalized_base, "/products")
+        _product_urls: list[str] = [urljoin(normalized_base, p) for p in ("/products", "/inventory.html")]
         script_lines.extend(
             [
-                f"        print('[setup] Cart seeding: navigating to {_products_url}')",
-                f"        page.goto({_products_url!r})",
+                # Best-effort login for auth-gated demo sites (saucedemo's demo
+                # credentials are printed on its own login page).
+                "        # Best-effort login for auth-gated demo sites (saucedemo)",
+                "        try:",
+                "            _user = page.locator('#user-name, input[name=\"username\"]').first",
+                "            if _user.count() > 0 and _user.is_visible(timeout=500):",
+                "                page.locator('#user-name').fill('standard_user')",
+                "                page.locator('#password').fill('secret_sauce')",
+                "                page.locator('#login-button').first.click()",
+                "                page.wait_for_load_state('networkidle')",
+                "                page.wait_for_timeout(1000)",
+                "        except Exception:",
+                "            pass",
+                "        # Prefer a product route that actually exists (site-agnostic)",
+                f"        _product_urls = {_product_urls!r}",
+                "        _products_url = _product_urls[0]",
+                "        for _cand in _product_urls[1:]:",
+                "            try:",
+                "                _r = page.request.get(_cand)",
+                "                if _r.status < 400:",
+                "                    _products_url = _cand",
+                "                    break",
+                "            except Exception:",
+                "                continue",
+                "        print(f'[setup] Cart seeding: navigating to {_products_url}')",
+                "        page.goto(_products_url)",
                 "        page.wait_for_load_state('networkidle')",
                 "        page.wait_for_timeout(1000)",
                 "        _dismiss_banners(page)",
@@ -678,12 +702,24 @@ def _run_setup_script(base_url: str, target_url: str, steps: list[str]) -> Setup
                 "                    add_btn.click()",
                 "                    page.wait_for_timeout(1500)",
                 "                    added_to_cart = True",
+                "        # Strategy C: direct Add-to-cart on the inventory grid (saucedemo-style)",
+                "        if not added_to_cart:",
+                '            _direct_btn = page.locator(\'button:has-text("Add to cart"), [data-test^="add-to-cart"], .btn_inventory\').first',
+                "            if _direct_btn.count() > 0 and _direct_btn.is_visible(timeout=1000):",
+                "                print('[setup] Strategy C: clicking direct Add to cart')",
+                "                _direct_btn.click()",
+                "                page.wait_for_timeout(1500)",
+                "                added_to_cart = True",
                 "        # Dismiss the confirmation modal / added-to-cart popup",
                 "        if added_to_cart:",
                 "            print('[setup] Product added to cart, dismissing modal')",
                 "            # Wait for confirmation modal",
                 "            page.wait_for_timeout(1000)",
-                "            continue_btn = page.locator('button:has-text(\"Continue Shopping\"), .close-modal, .modal-footer button').first",
+                "            # B-015 lesson: scope dismissal to modal containers — a",
+                "            # visible 'Continue Shopping' button on the cart page itself",
+                "            # (saucedemo) must not be clicked here.",
+                "            _modal_sel = \"#cartModal, .modal, [role='dialog'], .modal-content\"",
+                "            continue_btn = page.locator(f\"{_modal_sel} button:has-text('Continue Shopping'), {_modal_sel} .close-modal, {_modal_sel} .modal-footer button\").first",
                 "            if continue_btn.count() > 0 and continue_btn.is_visible(timeout=2000):",
                 "                continue_btn.click()",
                 "                page.wait_for_timeout(1000)",
