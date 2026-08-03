@@ -110,6 +110,35 @@ Still open from the test-pack item: contract/adversarial/resilience layers,
 `verify_production`/`export_gate` in CI (needs the mock layer), network-test
 relabels beyond what's already marked (none found).
 
+## Follow-up (same session) — B-037: e-commerce mock surfaces resolved
+
+**Result:** eval-006 execution **6/8 → 8/8 passed** (full checkout + payment leg executes against the mock).
+
+**Three code fixes:**
+1. `_assert_empty_state_rejects` (placeholder_scorers) — empty-state text
+   ("Cart is empty!") excluded from content-presence ASSERTs; the B-016
+   negation gate only ran in pass-1, so the scoring path let `#empty_cart` win
+   "product name and price" by default.
+2. `cvc ↔ cvv ↔ cvv2` synonyms (semantic_matcher) — the LLM's "cvc" FILL was
+   unresolvable against the "CVV" field → the whole checkout test skipped.
+3. CSS classes in `_structural_bonus` — `.cart_total_price` matches "price".
+
+**Four mock fixes:** classed cart cells (scraper tag lists exclude table/td),
+`name="cardholder_name"` (was `card_name` — shared word "card" won the pass-1
+tie), route aliases with **302 redirects** (mock_routes.json + mock_server.py)
+so journey/cart-seeding reach cart/checkout with items and URLs stay canonical.
+
+**Remaining static misses (12/16) are LLM skeleton/ranking nondeterminism**
+(the AI-037 class: ASSERTs skeletonized as URL checks, one LLM-picked card
+field) — now cleanly isolated from site variance by the deterministic mock.
+The `card number → #card-name` and `→ #cvv` generation-time races trace to
+scraper label-association nondeterminism; the deterministic in-process
+resolution is correct (`#card-number` 100).
+
+Also learned: on Python 3.14 (PEP 758), `except A, B:` is valid syntax and
+ruff format canonicalizes to it — the B-034 "Python-2 leftover" framing was
+wrong; see earlier note in this doc.
+
 ## Open items (next sessions)
 
 - **B-036** — consumer config architecture (env gates → always-on/UI) + RAG resolution fix chain (bundled golden keys incl. checkout leg, auto-seed, auto-learn)
