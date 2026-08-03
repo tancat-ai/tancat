@@ -76,6 +76,10 @@ screenshots/*
 
 # ── Evidence Sidecars ────────────────────────────────────────────────────────
 evidence/
+# The export-gate golden fixture mirrors a real generated package, whose
+# run-history DB lives in evidence/ — keep that one file tracked (B-032).
+!fixtures/golden_package/evidence/
+!fixtures/golden_package/evidence/run_results.sqlite
 # ── Generated Test Files ──────────────────────────────────────────────────────
 # Ignore all generated test outputs (test packages, reports, parsed cases)
 generated_tests/test_*/

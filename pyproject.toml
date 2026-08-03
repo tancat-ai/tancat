@@ -59,7 +59,7 @@ packages = ["src", "cli"]
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-exclude = ["generated_tests", "scratch", "notebooks", "scripts/debug", "scripts/archive", "scripts/eval/captures", "scripts/eval/captures_graph_final", "scripts/eval/captures_graph_v2", "scripts/eval/captures_linear_final", "scripts/eval/captures_linear_regenerated"]
+exclude = ["generated_tests", "scratch", "notebooks", "fixtures", "scripts/debug", "scripts/archive", "scripts/eval/captures", "scripts/eval/captures_graph_final", "scripts/eval/captures_graph_v2", "scripts/eval/captures_linear_final", "scripts/eval/captures_linear_regenerated"]
 [tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
@@ -76,7 +76,7 @@ ignore = ["E501", "B027"]
 known-first-party = ["src", "cli"]
 [tool.mypy]
 python_version = "3.14"
-exclude = ["generated_tests", "exported_tests", "scripts", "scratch"]
+exclude = ["generated_tests", "exported_tests", "scripts", "scratch", "fixtures"]
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true

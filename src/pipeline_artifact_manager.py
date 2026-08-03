@@ -266,8 +266,9 @@ def _count_run_results(package_root: Path) -> int:
     data, return the count from there. Otherwise fall back to counting
     legacy JSON files.
     """
-    # Check for SQLite database first (AI-012)
-    for db_name in ("playwright_tests.db",):
+    # Check for SQLite database first (AI-012). B-032: the current DB name is
+    # run_results.sqlite; playwright_tests.db is the legacy pre-AI-012 name.
+    for db_name in ("run_results.sqlite", "playwright_tests.db"):
         for db_location in (package_root / "evidence" / db_name, package_root / db_name):
             if db_location.exists():
                 try:

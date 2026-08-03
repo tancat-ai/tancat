@@ -283,3 +283,137 @@ class TestStripEvidenceFromTestCodePomConversion:
         result = strip_evidence_from_test_code(code)
         assert "expect(page.locator('.modal-body')).to_be_visible()" in result
         assert "to_have_url" in result
+
+
+class TestStripEvidenceDecoratorForms:
+    """B-031: @pytest.mark.evidence must be stripped in every emitted form."""
+
+    def test_strips_bare_decorator(self) -> None:
+        code = "@pytest.mark.evidence\ndef test_x(page):\n    pass"
+        result = strip_evidence_from_test_code(code)
+        assert "@pytest.mark.evidence" not in result
+
+    def test_strips_arg_carrying_decorator(self) -> None:
+        """Generated tests carry condition_ref/story_ref args — the old regex
+        only matched the bare form, leaving the arg form to raise
+        PytestUnknownMarkWarning in exports."""
+        code = (
+            "from playwright.sync_api import Page\n"
+            "import pytest\n"
+            '@pytest.mark.evidence(condition_ref="T01", story_ref="S01")\n'
+            "def test_01(page, evidence_tracker):\n"
+            "    page.goto('https://example.com')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "@pytest.mark.evidence" not in result
+        assert "def test_01(page):" in result
+
+    def test_strips_multi_line_decorator(self) -> None:
+        code = (
+            "import pytest\n"
+            "@pytest.mark.evidence(\n"
+            '    condition_ref="T01",\n'
+            '    story_ref="S01",\n'
+            ")\n"
+            "def test_01(page):\n"
+            "    pass\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "@pytest.mark.evidence" not in result
+        assert "def test_01(page):" in result
+
+    def test_strips_whitespace_variant(self) -> None:
+        code = "@ pytest.mark.evidence(condition_ref='T01')\ndef test_x(page):\n    pass"
+        result = strip_evidence_from_test_code(code)
+        assert "@pytest.mark.evidence" not in result
+        assert "@ pytest.mark.evidence" not in result
+        assert "def test_x(page):" in result
+
+
+class TestStripEvidencePreservePomCalls:
+    """B-031: POM-mode export must preserve POM structure."""
+
+    def test_preserve_pom_keeps_imports_and_calls(self) -> None:
+        code = (
+            "from playwright.sync_api import Page, expect\n"
+            "import pytest\n"
+            "from pages.home_page import HomePage\n"
+            "\n"
+            '@pytest.mark.evidence(condition_ref="T01", story_ref="S01")\n'
+            "def test_01(page: Page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    evidence_tracker.navigate('https://example.com/')\n"
+            "    home_page.click('Products', selector='a[href=\"/products\"]')\n"
+        )
+        result = strip_evidence_from_test_code(code, preserve_pom_calls=True)
+        assert "from pages.home_page import HomePage" in result
+        assert "home_page = HomePage(page)" in result
+        assert "home_page.click('Products', selector='a[href=\"/products\"]')" in result
+        assert "@pytest.mark.evidence" not in result
+        assert "evidence_tracker" not in result
+        assert "page.goto('https://example.com/')" in result
+
+    def test_preserve_pom_strips_tracker_param_and_decorator(self) -> None:
+        code = (
+            "@pytest.mark.evidence(condition_ref='T02')\n"
+            "def test_02(page, evidence_tracker):\n"
+            "    cart_page = CartPage(page, evidence_tracker)\n"
+            "    cart_page.click('checkout', selector='#checkout')\n"
+        )
+        result = strip_evidence_from_test_code(code, preserve_pom_calls=True)
+        assert "def test_02(page):" in result
+        assert "cart_page = CartPage(page)" in result
+        assert "evidence_tracker" not in result
+        assert "@pytest.mark.evidence" not in result
+
+
+class TestStripEvidenceAssertFamily:
+    """B-031: the B-020 assert family must not survive into exports."""
+
+    def test_strips_assert_hidden_with_label(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    evidence_tracker.assert_hidden('p.text-center', label='confirmation popup closed')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "evidence_tracker" not in result
+        assert "expect(page.locator('p.text-center')).to_be_hidden()" in result
+
+    def test_strips_assert_hidden_without_label(self) -> None:
+        code = "def test_01(page, evidence_tracker):\n    evidence_tracker.assert_hidden('#popup')\n"
+        result = strip_evidence_from_test_code(code)
+        assert "expect(page.locator('#popup')).to_be_hidden()" in result
+
+    def test_strips_state_asserts(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    evidence_tracker.assert_disabled('#x', label='disabled')\n"
+            "    evidence_tracker.assert_checked('#y', label='checked')\n"
+            "    evidence_tracker.assert_empty('#z', label='empty')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "evidence_tracker" not in result
+        assert "expect(page.locator('#x')).to_be_disabled()" in result
+        assert "expect(page.locator('#y')).to_be_checked()" in result
+        assert "expect(page.locator('#z')).to_be_empty()" in result
+
+    def test_strips_two_arg_asserts(self) -> None:
+        code = (
+            "def test_01(page, evidence_tracker):\n"
+            "    evidence_tracker.assert_text('.title', 'Welcome', label='title text')\n"
+            "    evidence_tracker.assert_count('.item', 3, label='item count')\n"
+        )
+        result = strip_evidence_from_test_code(code)
+        assert "evidence_tracker" not in result
+        assert "expect(page.locator('.title')).to_have_text('Welcome')" in result
+        assert "expect(page.locator('.item')).to_have_count(3)" in result
+
+    def test_strips_assert_hidden_from_pom(self) -> None:
+        code = (
+            "class HomePage:\n"
+            "    def assert_popup_closed(self) -> None:\n"
+            "        self.tracker.assert_hidden('p.text-center', label='popup closed')\n"
+        )
+        result = strip_evidence_from_pom(code)
+        assert "self.tracker" not in result
+        assert "expect(self.page.locator('p.text-center')).to_be_hidden()" in result
