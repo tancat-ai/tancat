@@ -9,6 +9,7 @@ No server process required — ``sqlite3`` is in the Python standard library.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,8 @@ from typing import Any
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult, PersistedTestResult, RunHistory
 from src.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Default database location
@@ -105,7 +108,18 @@ class SQLitePersistence:
     def __init__(self, db_path: Path | None = None) -> None:
         self._db_path = db_path or _DEFAULT_DB_FILE
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._connect_and_schema()
+        except sqlite3.DatabaseError:
+            # B-034: a corrupt database file must not break the app — delete and
+            # recreate it (the evidence index rebuilds from sidecars afterwards).
+            logger.warning("database corrupt at %s — recreating file", self._db_path)
+            self._close_connection()
+            self._delete_db_files()
+            self._connect_and_schema()
 
+    def _connect_and_schema(self) -> None:
+        """Open the connection, apply PRAGMAs and create the schema."""
         self._conn: sqlite3.Connection = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
@@ -114,6 +128,20 @@ class SQLitePersistence:
         self._conn.execute("PRAGMA foreign_keys = ON")
 
         self._create_schema()
+
+    def _close_connection(self) -> None:
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+    def _delete_db_files(self) -> None:
+        """Remove the database file plus WAL/SHM sidecars (best effort)."""
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                Path(str(self._db_path) + suffix).unlink(missing_ok=True)
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Property: expose db_path for wrappers / export tools

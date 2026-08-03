@@ -16,17 +16,20 @@ Typical usage::
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.sqlite_persistence import SQLitePersistence
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +92,85 @@ class EvidenceIndex:
         self._db = db or SQLitePersistence()
         self._conn = self._db._conn  # internal access for direct queries
         self._base_dir: Path | None = None  # set by build_or_refresh
+        self._recovering = False  # guard against recursive recovery (B-034)
+
+    # ------------------------------------------------------------------
+    # B-034: corruption self-healing
+    # ------------------------------------------------------------------
+
+    def _health_ok(self) -> bool:
+        """True when ``PRAGMA integrity_check`` reports an intact database."""
+        try:
+            row = self._conn.execute("PRAGMA integrity_check").fetchone()
+            return bool(row) and row[0] == "ok"
+        except Exception:
+            return False
+
+    def _recover(self) -> None:
+        """Self-heal a corrupt database.
+
+        Ladder: (1) drop + recreate just the ``evidence_index`` table (keeps
+        ``runs``/``test_results`` when the corruption is localised); (2) if the
+        file itself is corrupt, delete it and let ``SQLitePersistence`` recreate
+        the schema from scratch.
+
+        Guard: if the database is already healthy, the triggering error was
+        transient — never drop/recreate a working database.
+        """
+        if self._health_ok():
+            return
+        logger.warning("evidence_index database corrupt — attempting self-heal")
+        try:
+            self._conn.execute("DROP TABLE IF EXISTS evidence_index")
+            self._db._create_schema()  # recreate evidence_index + indexes
+            self._conn.commit()
+        except Exception as exc:
+            logger.warning("table-level recovery failed (%s) — recreating database file", exc)
+        if not self._health_ok():
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            db_path = self._db.db_path
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    Path(str(db_path) + suffix).unlink(missing_ok=True)
+                except Exception:
+                    pass
+            try:
+                self._db = SQLitePersistence(db_path)
+                self._conn = self._db._conn
+            except Exception as exc:
+                logger.error("database recreation failed: %s", exc)
+        logger.info("evidence_index recovery complete — index rebuilds from sidecars")
+
+    def _execute(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Cursor:
+        """Execute with one-shot corruption recovery + retry (B-034)."""
+        try:
+            return self._conn.execute(sql, params)
+        except sqlite3.DatabaseError:
+            if self._recovering:
+                raise
+            self._recovering = True
+            try:
+                self._recover()
+                return self._conn.execute(sql, params)
+            finally:
+                self._recovering = False
+
+    def _commit(self) -> None:
+        """Commit with one-shot corruption recovery + retry (B-034)."""
+        try:
+            self._conn.commit()
+        except sqlite3.DatabaseError:
+            if self._recovering:
+                raise
+            self._recovering = True
+            try:
+                self._recover()
+                self._conn.commit()
+            finally:
+                self._recovering = False
 
     # ------------------------------------------------------------------
     # Build / refresh
@@ -225,7 +307,7 @@ class EvidenceIndex:
         """
         params.append(str(limit))
 
-        rows = self._conn.execute(sql, params).fetchall()
+        rows = self._execute(sql, params).fetchall()
 
         return [
             EvidenceSearchResult(
@@ -249,20 +331,18 @@ class EvidenceIndex:
     def get_filter_options(self) -> EvidenceFilterOptions:
         """Return distinct values for faceted filter dropdowns."""
         statuses = [
-            r[0] for r in self._conn.execute("SELECT DISTINCT status FROM evidence_index ORDER BY status").fetchall()
+            r[0] for r in self._execute("SELECT DISTINCT status FROM evidence_index ORDER BY status").fetchall()
         ]
 
         domains_raw: list[str] = [
             r[0]
-            for r in self._conn.execute(
-                "SELECT DISTINCT page_url FROM evidence_index WHERE page_url IS NOT NULL"
-            ).fetchall()
+            for r in self._execute("SELECT DISTINCT page_url FROM evidence_index WHERE page_url IS NOT NULL").fetchall()
         ]
         domains = sorted({self._extract_domain(u) for u in domains_raw if u})
 
         condition_raw: list[str] = [
             r[0]
-            for r in self._conn.execute(
+            for r in self._execute(
                 "SELECT DISTINCT condition_ref FROM evidence_index "
                 "WHERE condition_ref IS NOT NULL AND condition_ref != '' "
                 "ORDER BY condition_ref"
@@ -272,7 +352,7 @@ class EvidenceIndex:
 
         story_refs = [
             r[0]
-            for r in self._conn.execute(
+            for r in self._execute(
                 "SELECT DISTINCT story_ref FROM evidence_index "
                 "WHERE story_ref IS NOT NULL AND story_ref != '' "
                 "ORDER BY story_ref"
@@ -281,15 +361,15 @@ class EvidenceIndex:
 
         step_types_raw: list[str] = [
             r[0]
-            for r in self._conn.execute(
+            for r in self._execute(
                 "SELECT DISTINCT step_types FROM evidence_index WHERE step_types IS NOT NULL"
             ).fetchall()
         ]
         step_types = sorted({t for raw in step_types_raw for t in raw.split("|") if t})
 
-        total = self._conn.execute("SELECT COUNT(*) FROM evidence_index").fetchone()[0]
+        total = self._execute("SELECT COUNT(*) FROM evidence_index").fetchone()[0]
 
-        last = self._conn.execute("SELECT MAX(indexed_at) FROM evidence_index").fetchone()[0]
+        last = self._execute("SELECT MAX(indexed_at) FROM evidence_index").fetchone()[0]
 
         return EvidenceFilterOptions(
             statuses=statuses,
@@ -350,7 +430,7 @@ class EvidenceIndex:
 
     def _is_stale(self, sidecar_path: str, disk_mtime: float) -> bool:
         """Return ``True`` if the sidecar is new or has changed on disk."""
-        row = self._conn.execute(
+        row = self._execute(
             "SELECT file_mtime FROM evidence_index WHERE sidecar_path = ?",
             (sidecar_path,),
         ).fetchone()
@@ -384,7 +464,7 @@ class EvidenceIndex:
         # Derive test_package from sidecar path (parent's parent)
         test_package = Path(sidecar_path).parts[0] if sidecar_path else ""
 
-        self._conn.execute(
+        self._execute(
             """
             INSERT INTO evidence_index
                 (sidecar_path, test_name, condition_ref, story_ref, status,
@@ -421,7 +501,7 @@ class EvidenceIndex:
                 indexed_at,
             ),
         )
-        self._conn.commit()
+        self._commit()
 
     def _resolve_matched_field(self, query: str, row: sqlite3.Row) -> str:
         """Determine which column(s) matched the search query."""
