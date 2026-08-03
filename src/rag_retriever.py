@@ -26,6 +26,7 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from src.rag_store import RetrievedPattern
@@ -33,12 +34,20 @@ from src.rag_store import RetrievedPattern
 if TYPE_CHECKING:
     from src.rag_store import RAGStore
 
+logger = logging.getLogger(__name__)
+
 
 class RAGRetriever:
     """Retrieval bridge between RAGStore and the resolution pipeline.
 
     When the store is ``None``, every method returns empty/no-op —
     this is the "RAG disabled" path and has zero overhead.
+
+    B-036 Phase 1 (2026-08-03): the retriever is now built by default
+    (always-on). Any failure inside the store or embedder — model
+    download failure, offline machine, corrupt DB — degrades to an
+    empty result list rather than raising, so RAG can never block
+    generation. A warning is logged on the first failure only.
     """
 
     def __init__(self, store: RAGStore | None) -> None:
@@ -48,6 +57,7 @@ class RAGRetriever:
             store: An initialised ``RAGStore`` or ``None`` to disable RAG.
         """
         self._store = store
+        self._warned_failure = False
 
     @property
     def enabled(self) -> bool:
@@ -64,12 +74,28 @@ class RAGRetriever:
     ) -> list[RetrievedPattern]:
         """Retrieve golden patterns and doc chunks for a placeholder.
 
-        Returns an empty list when RAG is disabled or the store is empty.
+        Returns an empty list when RAG is disabled or the store is empty,
+        and when the underlying store or embedder fails (graceful
+        degradation — RAG never blocks generation).
         """
         if self._store is None:
             return []
         query = f"{action_type}: {description}" if action_type else description
-        return self._store.retrieve(query, action_type=action_type, k=k, min_confidence=min_confidence)
+        try:
+            return self._store.retrieve(
+                query,
+                action_type=action_type,
+                k=k,
+                min_confidence=min_confidence,
+            )
+        except Exception:
+            if not self._warned_failure:
+                logger.warning(
+                    "RAG retrieval failed — degrading to no patterns (resolution proceeds without RAG bonus)",
+                    exc_info=True,
+                )
+                self._warned_failure = True
+            return []
 
     def scoring_bonus_for(
         self,

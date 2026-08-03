@@ -368,18 +368,19 @@ writing if code fails syntax check.
 
 ---
 ### B-036 — Consumer config architecture: env-var feature gates don't fit the product
-**Status:** 🆕 new (2026-08-03 CLI review)
+**Status:** 🟡 ready-for-agent — Phases 1–2 shipped (2026-08-03, commit pending); Phases 3–4 remain
 **Priority:** Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers
 **Spec:** `docs/specs/FEATURE_SPEC_B036_consumer_config.md` (2026-08-03) — 4 changes: always-on RAG, bundled golden pack auto-seed, evidence auto-learn (builds on AI-035), settings store + export-time fields. ~3 sessions.
 
 **Principle:** this is a consumer product (Streamlit/CLI). Feature toggles must not require `.env` edits. The product already has the right pattern for API keys (`secure_config.py` — Fernet-encrypted, persisted); the env vars are dev-era leftovers.
 
-**Remaining env-var gates:** `RAG_ENABLED`, `LANGGRAPH_ENABLED` (dead — graph not wired into user-facing path), `OCR_BACKEND`, `PIPELINE_DEBUG` (dev-only, fine), `JIRA_PROJECT_KEY` (should be an export-time UI field).
+**Shipped (Phases 1–2):**
+1. ✅ Always-on RAG with graceful degradation — `_build_rag_retriever()` builds by default; `RAG_ENABLED=0` transitional opt-out; empty store ⇒ no bonus ⇒ identical behavior; store/embedder failure degrades to no-RAG (never blocks generation). `RAGRetriever.retrieve()` hardened with once-only warning.
+2. ✅ Bundled golden pack + auto-seed — `src/rag_bundled.py` ships eval-001..006 golden keys (83 patterns) + curated Playwright docs (27 chunks); first generation run auto-seeds with idempotent marker `evidence/.rag_bundled_seeded.json`; `rag_ingest.py --bundled/--force/--stats/--prune-learned`.
 
-**Consumer-grade replacement for RAG (the resolution fix):**
-1. Always-on with graceful degradation — retriever builds automatically; empty store ⇒ no bonus ⇒ identical behavior to today. No config surface.
-2. Golden patterns ship bundled and auto-seed the store on first run (no manual `rag_ingest.py`). Pairs with mock-site strategy (our keys never decay).
-3. Auto-learn from the consumer's own runs — successful resolutions in evidence feed the store locally.
+**Remaining (Phases 3–4):**
+3. Auto-learn from the consumer's own runs — successful resolutions in evidence feed the store locally (requires AI-035 Phase 1 `rag_learn.py`, `upsert_pattern`, dedup; `learn_from_evidence()` + conftest/teardown hook).
+4. Settings store + field migration — `SettingsStore` on the secure_config pattern; migrate pom_mode/consent/provider/workspace; JIRA key → export UI field; OCR backend setting; remove `LANGGRAPH_ENABLED`.
 
 **Also noted:** sidebar config lives in `st.session_state` — not persisted across app restarts (a separate consumer gap; settings should persist via the secure_config-style store).
 

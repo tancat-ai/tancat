@@ -113,6 +113,17 @@ class InMemoryBackend:
     def clear(self) -> None:
         self._entries.clear()
 
+    def counts_by_type(self) -> dict[str, int]:
+        from collections import Counter
+
+        counter: Counter[str] = Counter(str(meta.get("entry_type", "unknown")) for _vec, meta, _text in self._entries)
+        return dict(counter)
+
+    def delete_learned(self) -> int:
+        before = len(self._entries)
+        self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
+        return before - len(self._entries)
+
     @staticmethod
     def _cosine_sim(a: list[float], b: list[float]) -> float:
         dot = sum(x * y for x, y in zip(a, b, strict=True))
@@ -303,6 +314,45 @@ class TestInMemoryBackend:
         assert results == []
 
 
+class TestCountsByTypeAndDeleteLearned:
+    """B-036 Phase 2: per-type counts and learned-pattern pruning."""
+
+    def _seed(self, fake_backend: InMemoryBackend) -> None:
+        vec = [0.0] * fake_backend.dimension
+        fake_backend.upsert(
+            [
+                KnowledgeEntry(vector=vec, text="g1", metadata={"entry_type": "golden"}),
+                KnowledgeEntry(vector=vec, text="g2", metadata={"entry_type": "golden"}),
+                KnowledgeEntry(vector=vec, text="d1", metadata={"entry_type": "doc"}),
+                KnowledgeEntry(vector=vec, text="l1", metadata={"entry_type": "learned"}),
+                KnowledgeEntry(vector=vec, text="x", metadata={}),
+            ]
+        )
+
+    def test_counts_by_type(self, fake_backend: InMemoryBackend, rag_store: RAGStore) -> None:
+        self._seed(fake_backend)
+        counts = rag_store.counts_by_type()
+        assert counts["golden"] == 2
+        assert counts["doc"] == 1
+        assert counts["learned"] == 1
+        assert counts["unknown"] == 1
+
+    def test_delete_learned_keeps_golden_and_docs(
+        self,
+        fake_backend: InMemoryBackend,
+        rag_store: RAGStore,
+    ) -> None:
+        self._seed(fake_backend)
+        deleted = rag_store.delete_learned()
+        assert deleted == 2  # learned + unknown
+        remaining = rag_store.counts_by_type()
+        assert remaining["golden"] == 2
+        assert remaining["doc"] == 1
+
+    def test_delete_learned_with_nothing_to_prune(self, rag_store: RAGStore) -> None:
+        assert rag_store.delete_learned() == 0
+
+
 # ---------------------------------------------------------------------------
 # RAGStore tests
 # ---------------------------------------------------------------------------
@@ -457,6 +507,45 @@ class TestMilvusLiteBackend:
         backend = MilvusLiteBackend(self.db_path, dimension=16)
         assert backend.upsert([]) == 0
         assert backend.count() == 0
+
+    def test_counts_by_type(self) -> None:
+        """B-036 Phase 2: per-entry_type counts against real Milvus."""
+        backend = MilvusLiteBackend(self.db_path, dimension=16)
+        vec = [0.0] * 15 + [1.0]
+        backend.upsert(
+            [
+                KnowledgeEntry(vector=vec, text="g1", metadata={"entry_type": "golden"}),
+                KnowledgeEntry(vector=vec, text="g2", metadata={"entry_type": "golden"}),
+                KnowledgeEntry(vector=vec, text="d1", metadata={"entry_type": "doc"}),
+                KnowledgeEntry(vector=vec, text="l1", metadata={"entry_type": "learned"}),
+            ]
+        )
+        counts = backend.counts_by_type()
+        assert counts["golden"] == 2
+        assert counts["doc"] == 1
+        assert counts["learned"] == 1
+
+    def test_delete_learned_keeps_golden_and_docs(self) -> None:
+        """B-036 Phase 2: prune learned entries against real Milvus."""
+        backend = MilvusLiteBackend(self.db_path, dimension=16)
+        vec = [0.0] * 15 + [1.0]
+        backend.upsert(
+            [
+                KnowledgeEntry(vector=vec, text="g1", metadata={"entry_type": "golden"}),
+                KnowledgeEntry(vector=vec, text="d1", metadata={"entry_type": "doc"}),
+                KnowledgeEntry(vector=vec, text="l1", metadata={"entry_type": "learned"}),
+            ]
+        )
+        assert backend.delete_learned() == 1
+        assert backend.count() == 2
+        counts = backend.counts_by_type()
+        assert counts.get("learned", 0) == 0
+        assert counts["golden"] == 1
+        assert counts["doc"] == 1
+
+    def test_delete_learned_empty(self) -> None:
+        backend = MilvusLiteBackend(self.db_path, dimension=16)
+        assert backend.delete_learned() == 0
 
 
 class TestMilvusLiteRAGStore:
