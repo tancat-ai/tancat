@@ -8,6 +8,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 |--------|---------|-------|
 | `smoke.py` | Fast pre-commit smoke test (<1s) | Nothing — fully offline |
 | `debug.py` | Unified diagnostic CLI | Varies by command (see below) |
+| `debug_step_through.py` | Step-by-step interactive debugger for generated tests (headed) | Browser + Enter |
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
@@ -65,6 +66,30 @@ python scripts/debug.py pipeline <url> --story "..."              # standard mod
 python scripts/debug.py pom <url> --story "..."                   # POM mode trace
 python scripts/debug.py pom <url> --story "..." --conditions "..."
 ```
+
+---
+
+## debug_step_through.py — Step-By-Step Interactive Test Debugger
+
+Runs the **real generated test functions** in a headed Chromium window and pauses
+after every tracker step, printing the live state that the auto-dismissal logic
+normally hides (add-to-cart modal, FreeCmp consent dialog, Google vignette,
+cart-link count, URL). Use it to watch flaky popup/overlay behavior.
+
+```bash
+# Step through one failing test, interactively (press Enter after each step)
+python scripts/debug_step_through.py generated_tests/test_XXX/test_....py --test test_t10
+
+# Step through an entire package
+python scripts/debug_step_through.py generated_tests/verify_automationexercise_20260803_032242/test_automationexercise.py
+
+# Non-interactive (used by CI / quick dumps)
+python scripts/debug_step_through.py <test_file.py> --auto --headless
+```
+
+**Why it exists:** `EvidenceTracker.click()` silently auto-dismisses consent
+overlays and confirmation modals before every click — invisible in the test
+file. This tool surfaces exactly what the tracker sees at each step.
 
 ---
 

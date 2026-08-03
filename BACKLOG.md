@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-03 (saucedemo checkout cluster: SPA soft-404, credentials, stateful routing, dead-page filters, B-024g fields)
+Last updated: 2026-08-03 (CLI review session: B-029→B-036, export brokenness, evidence gaps, corrupted DB, test pack restructure, mock-site catalog, consumer config architecture)
 
 ---
 
@@ -294,7 +294,159 @@ writing if code fails syntax check.
 
 ---
 
+## 🎯 Test Pack Restructure + Mock-Site Strategy (2026-08-03 CLI review)
+
+**Status:** 🆕 new — proposed; awaiting prioritisation
+
+**Why:** 2,095 green unit tests coexisted with 7 real bugs (B-029→B-035). The suite asserts internal invariants against MagicMocks; the product fails on external contracts (navigation happened?, evidence exists?, export runs?, DB survives?, overlays handled?). The layers that catch real bugs (eval harness, verify_production) are manual-only.
+
+**Structural problems found:**
+1. Unit pyramid on a mock foundation — 101 module files test "what the function returns", not "does the product work".
+2. Bugs enshrined as contracts — `test_click_fast_fails_when_locator_missing_on_page` *asserts* `screenshot is None` (B-033 is tested behaviour).
+3. Network tests mislabeled — `tests/integration/test_pom_mode_end_to_end.py` hits live automationexercise.com with NO slow/integration marker → runs in every default `pytest` AND in CI. Only 2 tests in the whole suite carry the exclusion markers.
+4. Real gates outside CI — eval (static mode is offline!) and verify_production never run in CI.
+5. No adversarial/resilience/contract layers.
+
+**Mock-site strategy (investigated 2026-08-03):**
+- ✅ Strong case to make the mock site the primary test target: deterministic, local, no Google consent/ad stack — closer to a real user's own site (nobody tests their own site against prod ad networks). The overlay race (B-029) can ONLY be tested deterministically with a mock that can inject an overlay on command.
+- ⚠️ Current mock (`generated_tests/mock_insurance_site.html`) is too thin: single-page JS-step form, **0 modals, 0 nav links, 0 multi-page journeys**. Covers form-fill only; none of the navigation/modal/overlay classes that produced B-029/B-030.
+- 🎯 Extend it: multi-page e-commerce mock (home → category → product → cart → checkout) + add-to-cart modal + **optional injectable consent/ad overlay** (query param / server toggle) so tests exercise clean path AND overlay race deterministically.
+- Golden keys against the mock never decay (real-site keys decay — AGENTS.md warns). Mock + static eval could run in CI (localhost, no external network).
+
+**Mock-site catalog — product-range research (2026-08-03, tavily + GitHub verified):**
+
+| Product type | Reference repo(s) | Stack / setup | Exercises | Priority to build |
+|---|---|---|---|---|
+| E-commerce (multi-page) | automationexercise (live, already used); Potion Shop; Practice Software Testing | static / low | nav, add-to-cart modal, cart, checkout — **the B-029/B-030 class** | **1 — build first** |
+| Banking / fintech | `cypress-io/cypress-realworld-app` (5.9k★, TS, active) | React+Express+SQLite / med | auth, transfers, payments, multi-user | 2 |
+| Insurance (multi-step form) | ✅ **already have** (`mock_insurance_site.html`) | static / done | multi-step form, validation | done |
+| Booking / travel | Restful-Booker (React+API); Sunny Meadows B&B | React+API / med | search, date pickers, booking lifecycle | 3 |
+| Healthcare | Spring PetClinic (Java, heavy); lighter patient/appointment form | Java / high → prefer own static | forms, CRUD, appointments | 4 |
+| Enterprise / HR | OrangeHRM (open-source demo) | PHP+MySQL / high → prefer own | org hierarchy, multi-role, admin | 5 |
+| Element / widgets | The Internet (saucelabs/the-internet, static, GH-Pages); LetCode; DemoQA (have) | static / low | auth, alerts, frames, drag-drop, shadow DOM | 6 |
+| Robustness / security | OWASP Juice Shop | Node+docker / med | auth, admin, search, tricky forms | 7 |
+
+**Build rule:** for each row, make OUR OWN minimal self-contained version in a `mock_sites/` catalog (single-file HTML/JS or tiny server, same pattern as the insurance mock) — deterministic, localhost, versioned in-repo (never decays), each covering one distinct product shape. Each mock ships with a user story + golden-key eval dataset so the harness runs across ALL product types. Do NOT depend on third-party demo sites (they decay, go down, or are covered in ads).
+
+**Proposed work items:**
+1. Fix mislabels first: mark all network-touching tests `slow+integration` (default run becomes deterministic).
+2. Split by intent: default `pytest` = mock layer; `-m integration` = network; add `tests/contract/`, `tests/adversarial/`, `tests/resilience/`.
+3. `gate_full.py`: smoke → unit → eval-static (offline, CI-able) → verify_production → export gate. Wire `eval --mode static` into CI Gate 3 today (free offline regression protection).
+4. Expand the mock site per above; move eval golden keys onto it.
+5. Rewrite enshrined-bug tests (B-033/B-029 contract) as fixes land.
+
+---
+
 ## 🔴 Open Bugs
+
+### B-036 — Consumer config architecture: env-var feature gates don't fit the product
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers
+
+**Principle:** this is a consumer product (Streamlit/CLI). Feature toggles must not require `.env` edits. The product already has the right pattern for API keys (`secure_config.py` — Fernet-encrypted, persisted); the env vars are dev-era leftovers.
+
+**Remaining env-var gates:** `RAG_ENABLED`, `LANGGRAPH_ENABLED` (dead — graph not wired into user-facing path), `OCR_BACKEND`, `PIPELINE_DEBUG` (dev-only, fine), `JIRA_PROJECT_KEY` (should be an export-time UI field).
+
+**Consumer-grade replacement for RAG (the resolution fix):**
+1. Always-on with graceful degradation — retriever builds automatically; empty store ⇒ no bonus ⇒ identical behavior to today. No config surface.
+2. Golden patterns ship bundled and auto-seed the store on first run (no manual `rag_ingest.py`). Pairs with mock-site strategy (our keys never decay).
+3. Auto-learn from the consumer's own runs — successful resolutions in evidence feed the store locally.
+
+**Also noted:** sidebar config lives in `st.session_state` — not persisted across app restarts (a separate consumer gap; settings should persist via the secure_config-style store).
+
+---
+
+### B-035 — Evidence sidecar written only at test END; killed/timed-out tests leave orphaned screenshots with no record
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** Medium — evidence silently vanishes for the exact runs that need it (failures)
+
+`tracker.write()` runs once in `generated_tests/conftest.py` teardown; `_record_step` never persists incrementally. If a test process dies mid-run (pytest `--timeout` kill — already the standard in UI/UAT/verify runs — crash, playwright failure), **no `.evidence.json` is written** while intermediate screenshots survive as orphans. The evidence index (`build_or_refresh`) only sees sidecars, so the run is invisible.
+
+**Also in the same layer:**
+- 10 silent `except Exception: pass` blocks in `evidence_tracker.py` — screenshot, diagnosis, and dismissal failures are invisible (no warning recorded anywhere).
+- `report.html` (PipelineReportService) embeds **zero screenshots** (verified: 0 png refs in an Aug 1 report) — evidence exists but reports can't show it.
+- Evidence files accumulate across reruns (old screenshots from prior runs stay in the dir, unreferenced by the current sidecar).
+
+**Proposed fix:** persist sidecar incrementally per step (or at minimum on step failure); warn (not swallow) when screenshots fail; embed screenshots in reports; clean stale evidence on rerun.
+
+---
+
+### B-034 — `evidence/run_results.sqlite` is corrupted — UI evidence page will crash
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** High — live in the working environment right now
+
+`PRAGMA integrity_check` → **"database disk image is malformed" (Tree 10 page 26)**. WAL mode with a 0-byte WAL + 32KB shm; some queries return rows, others throw. DB mtime Aug 3 03:26 (during the overnight verify runs). Likely concurrent writers (Streamlit UI `build_or_refresh(force=True)` + run-result saves) or a killed process mid-write; the corrupted DB has no self-healing — `_upsert_sidecar` has no try/except, so the UI evidence search/refresh raises `DatabaseError` instead of rebuilding.
+
+**Also found:** `except OSError, json.JSONDecodeError:` (×2 in `evidence_index.py`) — Python-2 syntax that Python 3 parses as a tuple-except, so it *works by accident*; lint-level 2to3 leftover.
+
+**Proposed fix:** on `DatabaseError` during build/search, rebuild the DB (drop + recreate + re-index) instead of propagating; add a preflight `integrity_check` with a recovery path; ensure single-writer discipline (WAL checkpointing) or lock around writes.
+
+---
+
+### B-033 — Evidence gaps: failures leave no diagnostic artifacts; clicks never screenshot
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** Medium — evidence is the product's audit trail; a failed step currently records *nothing* visible
+
+**Confirmed from `test_20260803_101815_...` evidence sidecars:**
+- **Failed fast-fail steps have NO screenshot, NO failure_note, NO diagnosis** (`_record_step` skips all three when `fast_fail=True` — contradicts the click() comment "Always screenshot on click failure"). t10 step 6: `screenshot=None, failure_note=None, diagnosis=None`.
+- **Click steps NEVER screenshot** (only navigate + assert do) — the exact step that fails (or burns 30s in the fallback marathon) leaves zero visual trace. 23 PNGs for 13 tests, all navs+asserts.
+- **No per-step URL** — steps don't record `page.url`; only the final URL at `write()`. Reconstructing where a flow diverged requires the error strings.
+- **Storage bloat:** full-page screenshots average **2.4MB each** (54MB evidence dir for one 13-test package).
+- **Misleading fast-fail message**: "The element exists on a different page than the one this step runs on" blames the locator when the real cause is an earlier step's silent non-navigation (t10 step 5 → step 6). No cross-step state check.
+
+**Proposed fix:** screenshot + diagnosis on failed steps (fast-fail included); capture per-step URL; flag clicks whose elapsed >10s or that follow a link without a URL change; consider viewport-size (not full-page) screenshots.
+
+---
+
+### B-032 — Export run-history DB copy orphaned since AI-012 (`playwright_tests.db` never created)
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** Low — silent no-op, no crash
+
+`src/export_service.py` copies `evidence/playwright_tests.db` — **nothing in the repo creates that file**. The SQLite layer writes `evidence/run_results.sqlite` (`sqlite_persistence.py`, `storage.py`). Same orphan name in `src/pipeline_artifact_manager.py:270`. Dead since AI-012 (2026-06-15) swapped JSON-dir export for the SQLite copy but globbed the wrong filename.
+
+**Fix:** copy `run_results.sqlite` (or drop the run-history copy — the README already claims screenshots/diagnostics aren't captured).
+
+---
+
+### B-031 — Export feature produces non-runnable/broken suites; never validated end-to-end
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** High — claimed shipped (UI button + CLI step), but no export has ever been verified by running the exported suite
+
+**Confirmed:**
+- **34 of 35 exports in `exported_tests/` are stubs** (`def test_x(page): pass`) — export ran against empty/stub source packages, no guard.
+- **The one real export (`20260802_181655_...`) is non-importable**: `from pages.home_page import HomePage` with **no `pages/` dir shipped** (POM export globs `pages/po_*.py` but generated pages are `home_page.py`/`cart_page.py` — **glob matches nothing**), plus `HomePage(page, evidence_tracker)` NameError and dead `@pytest.mark.evidence(...)` decorators.
+- Current strip (`eda9809`) fixes the POM→flat conversion (verified on a live package), but `@pytest.mark.evidence(...)` decorators still survive (regex only matches the bare form) → `PytestUnknownMarkWarning`.
+- No end-to-end gate: unlike `verify_production.py` for the main pipeline, nothing exports → runs the exported suite → asserts pass.
+
+**Proposed fix:** export gate script (export flat + POM → `pytest` the exported suite against the live site → assert pass); fix `po_*.py` glob (match generated page names); strip arg-carrying evidence decorators; guard against stub/empty source packages.
+
+---
+
+### B-030 — "Check Out" resolves to wrapper div `#do_action` instead of the real button `.btn.btn-default.check_out`
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** Medium
+
+`{{CLICK:Check Out}}` emitted `#do_action` (a wrapper `<div>`, no href) even though the scraper captured `('proceed to checkout', '.btn.btn-default.check_out')` and `PlaceholderScorer` rates the button **5 vs 0** for "Check Out" (verified directly). Survives into exports. Root cause is in the resolution path feeding element data to the scorer (tag/role/href likely stripped) — investigate why the anchor lost before the wrapper.
+
+---
+
+### B-029 — Tracker records "passed" for clicks that never navigated (ad-overlay swallow) — no post-click URL verification
+**Status:** 🆕 new (2026-08-03 CLI review)
+**Priority:** High — caused all 4 checkout-cluster failures (t10-t13) in `test_20260803_101815_...`
+
+**Symptom:** cart header-link click records `passed` after a **30.5s fallback marathon** with **no navigation**; the next step fast-fails with the misleading "element exists on a different page" error. All 4 failures share the identical signature (step 5 elapsed=30,516ms, status=passed, page still on `category_products/1`).
+
+**Root cause chain (reproduced live, 3×):**
+1. FreeCmp consent dialog (`.fc-consent-root`) + Google `#google_vignette` ad overlay intermittently cover the header and intercept link clicks.
+2. The primary click (5s timeout) always fails → full fallback marathon (~30s: hover → mouseenter → ancestors → force-show JS `el.click()`).
+3. `el.click()` "succeeds" even when Google's click-interceptor swallows the navigation → recorded `passed`, zero URL verification.
+4. Contributing factor: the "Continue Shopping" step no-ops (2-6ms, "modal already dismissed") because the add-to-cart modal is mid-fade — the no-op path returns **before** the dismissal calls, leaving the modal to be handled by the next step's dismissal.
+
+**Also latent:** `_dismiss_confirmation_modals` selector `button.btn-success.close-modal` is the **only unscoped** dismiss selector (B-015 scoped the rest) — hazard on pages with a visible close-modal button that is a real action.
+
+**Proposed fix:** post-click navigation verification in `EvidenceTracker.click` — if the target is an `<a>` with a different-path `href` and the URL hasn't changed ~2s after a "successful" click, re-dismiss overlays and retry once (or `page.goto(href)`); scope `button.btn-success.close-modal` to modal containers.
+
+---
 
 ### B-028 — Journey discovery selects cart nav link for product / add-to-cart actions
 **Status:** ✅ Fixed (2026-08-01, ship-it) — full fix + follow-ups landed
