@@ -4,7 +4,7 @@
 Resolves page keywords to actually discovered URLs from journey scraping. Bridges LLM-generated page keywords (e.g., "cart", "checkout") with real URLs.
 
 ## Metadata
-- **Lines:** 221
+- **Lines:** ~280
 - **Imports:** logging, urllib.parse.urlparse, src.url_utils
 
 ## Classes
@@ -19,7 +19,7 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 | `UrlResolver.resolve(keyword)` | Resolve a keyword to an actual URL |
 | `UrlResolver.get_seed_url()` | Return seed URL as fallback |
 | `UrlResolver.get_all_mappings()` | Return copy of all keyword→URL mappings |
-| `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using 4-tier strategy |
+| `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using multi-tier strategy |
 | `resolve_keywords_to_urls(keywords, scraped_urls, seed_url, concepts)` | Convenience: creates and populates UrlResolver |
 
 ## Matching Strategy (priority order)
@@ -27,6 +27,7 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 2. Direct path segment match: "cart" → `/shop/cart`
 3. Normalized substring: "checkout overview" → `/checkout-overview`
 4. Prefix match: "product" → `/products` (shortest path wins)
+5. **Semantic alias match (2026-08-03):** sites name routes differently from the story vocabulary — "products" matches `/inventory.html` (saucedemo), "cart" matches `/basket`, "login" matches `/signin`. Generic alias groups, no per-site lists.
 
 ## Fallback
-When no scraped URLs available, uses `build_common_path_candidates` from `src.url_utils` to generate common e-commerce paths.
+When no scraped URLs available, uses `build_common_path_candidates` from `src.url_utils` to generate same-domain e-commerce path candidates.

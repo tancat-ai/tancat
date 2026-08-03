@@ -250,6 +250,31 @@ class UrlResolver:
             candidates.sort(key=lambda x: x[0])
             return candidates[0][1]
 
+        # 4b. Semantic alias match — sites name routes differently from the
+        # story vocabulary (saucedemo's product page is /inventory.html).
+        # Generic alias groups avoid per-site lists: any keyword maps to its
+        # page type across sites.
+        alias_groups: dict[str, tuple[str, ...]] = {
+            "products": ("products", "inventory", "shop", "catalog", "category", "store"),
+            "product": ("products", "inventory", "shop", "catalog", "category", "store", "product"),
+            "cart": ("cart", "basket"),
+            "checkout": ("checkout", "order", "payment"),
+            "login": ("login", "signin", "sign-in", "auth"),
+        }
+        for known, aliases in alias_groups.items():
+            if kw_lower != known:
+                continue
+            alias_candidates: list[tuple[int, str]] = []
+            for url in scraped_urls:
+                path = urlparse(url).path.lower().strip("/")
+                if not path:
+                    continue
+                if any(alias in path for alias in aliases):
+                    alias_candidates.append((len(path), url))
+            if alias_candidates:
+                alias_candidates.sort(key=lambda x: x[0])
+                return alias_candidates[0][1]
+
         # 5. Multi-word keyword decomposition: try each significant word
         # against URL path segments. Handles "dress category page" → /category_products/1
         noise = {"the", "a", "an", "page", "link", "button", "on", "to", "and", "or"}

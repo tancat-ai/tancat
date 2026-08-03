@@ -1,7 +1,29 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-02 (semantic layer: page-load assertions, dialog scoping, polarity + CLI quality + eval harness gap)
+Last updated: 2026-08-03 (saucedemo checkout cluster: SPA soft-404, credentials, stateful routing, dead-page filters, B-024g fields)
+
+---
+
+## ✅ Shipped 2026-08-03 — Saucedemo checkout cluster (13/13 gates PASS)
+
+**Session doc:** `docs/sessions/2026-08-03_saucedemo_checkout_cluster.md`
+
+**What shipped** — saucedemo `verify_production` went 10/13 → **13/13 gates, 6/6 tests, stable**; automationexercise 3/7 (HEAD) → 4–5/7:
+- **Soft-404 SPA recovery** (`src/scraper.py`): saucedemo (SPA-on-GitHub-Pages) serves every `.html` path as HTTP 404 + app shell; the stateless scraper bailed on `status >= 400`. Now renders first and judges content via a URL-rewrite signal (`_is_soft_404`).
+- **Credentials reach the pipeline** (`scripts/verify_production.py`): saucedemo demo credentials (env-overridable, mirroring eval) passed to `TestOrchestrator` — without a session the stateful scrape captured the login wall, so the cart had no items and checkout wasn't an option.
+- **Site-agnostic stateful routing** (`src/url_utils.py`): `is_stateful_cart_checkout_path()` replaces the automationexercise-hardcoded `{/view_cart, /checkout}` set; covers `/cart.html`, `/checkout-step-one.html`…
+- **URL candidates re-enabled** (`build_common_path_candidates`): concept-driven, same-domain candidates from the shared route vocabulary — SPA sites have no hrefs for journey discovery, so cart/checkout URLs never existed.
+- **Journey subprocess credential round-trip** (`src/journey_subprocess.py`): the payload serialized `credential_profile` but the child never read it back; plus `JourneyScraper` logs in at the starting URL when a profile is present.
+- **B-015 ghost exorcised (3 places)**: `_dismiss_modals` / `_dismiss_confirmation_modals` / setup script clicked `button:has-text("Continue Shopping")` globally — saucedemo's cart-page button navigated journeys *and tests* back to inventory. Dismissal is now scoped to modal containers; the tracker no-ops modal-close clicks when the modal is already gone.
+- **Dead/redirected page filters**: `_drop_dead_pages` (<3-element SPA shells) + `_drop_redirect_duplicates` (200-redirect-to-home keys, e.g. automationexercise `/inventory.html`) — these polluted keyword/ASSERT resolution.
+- **B-024 class fields**: `normalise_element_text` includes placeholder (saucedemo checkout `#last-name` etc.); B-024g separator-normalized word-subset matching ("zip code" → "Zip/Postal Code").
+- **Navigation-intent fallback**: SPA cart/basket icons have no accessible name — failing cart-navigation descriptions resolve as GOTO to the verified page URL, keeping page context advancing through cart → checkout.
+- **Post-login ASSERT mapping**: "logged in" resolves to inventory/products, not the login page.
+
+**Verification:** full suite 2095 passed / 1 skipped; ruff + mypy clean; smoke 35/35; eval static 100%; `verify_production saucedemo` 13/13 (4 consecutive runs), automationexercise 12/13 (improved from HEAD 12/13 with 3/7 execution).
+
+**Open items (documented in session doc):** automationexercise guest-checkout login gate (story lacks login; the site requires auth to checkout); automationexercise cart-link/assert timing races; `scripts/3d/map` + pre-existing archived debug scripts lack markdown_docs; Windows backslash bug in `ui_run_results` setup-script print line (pre-existing).
 
 ---
 

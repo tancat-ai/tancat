@@ -1,46 +1,61 @@
 {
-  "total": 129,
-  "completed": 129,
+  "total": 142,
+  "completed": 142,
   "pending": 0,
   "files": [
-    {
-      "source": "src/agents/__init__.py",
-      "doc": "markdown_docs/src/agents/__init__.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/state.py",
-      "doc": "markdown_docs/src/agents/state.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/planner.py",
-      "doc": "markdown_docs/src/agents/planner.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/generator.py",
-      "doc": "markdown_docs/src/agents/generator.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/validator.py",
-      "doc": "markdown_docs/src/agents/validator.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/graph.py",
-      "doc": "markdown_docs/src/agents/graph.py.md",
-      "status": "completed"
-    },
     {
       "source": "cli/__init__.py",
       "doc": "markdown_docs/cli/__init__.py.md",
       "status": "completed"
     },
     {
+      "source": "cli/evidence_cli.py",
+      "doc": "markdown_docs/cli/evidence_cli.py.md",
+      "status": "completed"
+    },
+    {
       "source": "cli/main.py",
       "doc": "markdown_docs/cli/main.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/archive/debug_scripts/probe_saucedemo_spa_404.py",
+      "doc": "markdown_docs/scripts/archive/debug_scripts/probe_saucedemo_spa_404.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/archive/debug_scripts/replay_saucedemo_checkout.py",
+      "doc": "markdown_docs/scripts/archive/debug_scripts/replay_saucedemo_checkout.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/archive/debug_scripts/verify_saucedemo_stateful_scrape.py",
+      "doc": "markdown_docs/scripts/archive/debug_scripts/verify_saucedemo_stateful_scrape.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/archive/debug_scripts/verify_saucedemo_upgrade_data.py",
+      "doc": "markdown_docs/scripts/archive/debug_scripts/verify_saucedemo_upgrade_data.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/eval/eval_harness.py",
+      "doc": "markdown_docs/scripts/eval_harness.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/eval/eval_runner.py",
+      "doc": "markdown_docs/scripts/eval_runner.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/rag_ingest.py",
+      "doc": "markdown_docs/scripts/rag_ingest.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/verify_production.py",
+      "doc": "markdown_docs/scripts/verify_production.py.md",
       "status": "completed"
     },
     {
@@ -54,13 +69,83 @@
       "status": "completed"
     },
     {
+      "source": "src/agents/__init__.py",
+      "doc": "markdown_docs/src/agents/__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/director.py",
+      "doc": "markdown_docs/src/agents/director.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/generator.py",
+      "doc": "markdown_docs/src/agents/generator.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/graph.py",
+      "doc": "markdown_docs/src/agents/graph.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/ingestion.py",
+      "doc": "markdown_docs/src/agents/ingestion.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/pipeline_graph.py",
+      "doc": "markdown_docs/src/agents/pipeline_graph.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/pipeline_state.py",
+      "doc": "markdown_docs/src/agents/pipeline_state.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/planner.py",
+      "doc": "markdown_docs/src/agents/planner.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/prompt_safety.py",
+      "doc": "markdown_docs/src/agents/prompt_safety.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/state.py",
+      "doc": "markdown_docs/src/agents/state.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/synthesizer.py",
+      "doc": "markdown_docs/src/agents/synthesizer.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/agents/validator.py",
+      "doc": "markdown_docs/src/agents/validator.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/analyzer.py",
       "doc": "markdown_docs/src/analyzer.py.md",
       "status": "completed"
     },
     {
+      "source": "src/aria_parser.py",
+      "doc": "markdown_docs/src/aria_parser.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/browser_utils.py",
       "doc": "markdown_docs/src/browser_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/cart_seeding_scraper.py",
+      "doc": "markdown_docs/src/cart_seeding_scraper.py.md",
       "status": "completed"
     },
     {
@@ -169,6 +254,21 @@
       "status": "completed"
     },
     {
+      "source": "src/element_matcher.py",
+      "doc": "markdown_docs/src/element_matcher.py.md",
+      "status": "updated-2026-08-03"
+    },
+    {
+      "source": "src/evidence_export.py",
+      "doc": "markdown_docs/src/evidence_export.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/evidence_index.py",
+      "doc": "markdown_docs/src/evidence_index.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/evidence_loader.py",
       "doc": "markdown_docs/src/evidence_loader.py.md",
       "status": "completed"
@@ -186,7 +286,7 @@
     {
       "source": "src/evidence_tracker.py",
       "doc": "markdown_docs/src/evidence_tracker.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/export_service.py",
@@ -244,6 +344,11 @@
       "status": "completed"
     },
     {
+      "source": "src/journey_enrichment.py",
+      "doc": "markdown_docs/src/journey_enrichment.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/journey_executor.py",
       "doc": "markdown_docs/src/journey_executor.py.md",
       "status": "completed"
@@ -256,7 +361,12 @@
     {
       "source": "src/journey_scraper.py",
       "doc": "markdown_docs/src/journey_scraper.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
+    },
+    {
+      "source": "src/journey_subprocess.py",
+      "doc": "markdown_docs/src/journey_subprocess.py.md",
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/llm_client.py",
@@ -299,13 +409,23 @@
       "status": "completed"
     },
     {
+      "source": "src/ocr_backends.py",
+      "doc": "markdown_docs/src/ocr_backends.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/orchestrator.py",
       "doc": "markdown_docs/src/orchestrator.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/page_object_builder.py",
       "doc": "markdown_docs/src/page_object_builder.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/pdf_ingest.py",
+      "doc": "markdown_docs/src/pdf_ingest.py.md",
       "status": "completed"
     },
     {
@@ -336,12 +456,12 @@
     {
       "source": "src/placeholder_orchestrator.py",
       "doc": "markdown_docs/src/placeholder_orchestrator.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/placeholder_resolver.py",
       "doc": "markdown_docs/src/placeholder_resolver.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/placeholder_scorers.py",
@@ -349,8 +469,18 @@
       "status": "completed"
     },
     {
+      "source": "src/pom_helpers.py",
+      "doc": "markdown_docs/src/pom_helpers.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/prerequisite_injector.py",
       "doc": "markdown_docs/src/prerequisite_injector.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/prompt_builder.py",
+      "doc": "markdown_docs/src/prompt_builder.py.md",
       "status": "completed"
     },
     {
@@ -369,6 +499,16 @@
       "status": "completed"
     },
     {
+      "source": "src/rag_retriever.py",
+      "doc": "markdown_docs/src/rag_retriever.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_store.py",
+      "doc": "markdown_docs/src/rag_store.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/report_builder.py",
       "doc": "markdown_docs/src/report_builder.py.md",
       "status": "completed"
@@ -382,6 +522,11 @@
       "source": "src/report_utils.py",
       "doc": "markdown_docs/src/report_utils.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/role_mapper.py",
+      "doc": "markdown_docs/src/role_mapper.py.md",
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/run_history_chart.py",
@@ -406,6 +551,21 @@
     {
       "source": "src/scraper.py",
       "doc": "markdown_docs/src/scraper.py.md",
+      "status": "updated-2026-08-03"
+    },
+    {
+      "source": "src/section_scoper.py",
+      "doc": "markdown_docs/src/section_scoper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/secure_config.py",
+      "doc": "markdown_docs/src/secure_config.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/self_healing.py",
+      "doc": "markdown_docs/src/self_healing.py.md",
       "status": "completed"
     },
     {
@@ -429,6 +589,11 @@
       "status": "completed"
     },
     {
+      "source": "src/skip_manager.py",
+      "doc": "markdown_docs/src/skip_manager.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/spec_analyzer.py",
       "doc": "markdown_docs/src/spec_analyzer.py.md",
       "status": "completed"
@@ -444,6 +609,11 @@
       "status": "completed"
     },
     {
+      "source": "src/storage.py",
+      "doc": "markdown_docs/src/storage.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/test_generator.py",
       "doc": "markdown_docs/src/test_generator.py.md",
       "status": "completed"
@@ -451,6 +621,16 @@
     {
       "source": "src/test_plan.py",
       "doc": "markdown_docs/src/test_plan.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/test_structure_assembler.py",
+      "doc": "markdown_docs/src/test_structure_assembler.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/test_table.py",
+      "doc": "markdown_docs/src/test_table.py.md",
       "status": "completed"
     },
     {
@@ -491,7 +671,7 @@
     {
       "source": "src/ui/ui_run_results.py",
       "doc": "markdown_docs/src/ui/ui_run_results.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/ui/ui_saved_packages.py",
@@ -516,12 +696,12 @@
     {
       "source": "src/url_resolver.py",
       "doc": "markdown_docs/src/url_resolver.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/url_utils.py",
       "doc": "markdown_docs/src/url_utils.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/user_story_parser.py",
@@ -532,122 +712,7 @@
       "source": "src/vision_enricher.py",
       "doc": "markdown_docs/src/vision_enricher.py.md",
       "status": "completed"
-    },
-    {
-      "source": "scripts/eval/eval_harness.py",
-      "doc": "markdown_docs/scripts/eval_harness.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "scripts/eval/eval_runner.py",
-      "doc": "markdown_docs/scripts/eval_runner.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/rag_retriever.py",
-      "doc": "markdown_docs/src/rag_retriever.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/rag_store.py",
-      "doc": "markdown_docs/src/rag_store.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/storage.py",
-      "doc": "markdown_docs/src/storage.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/evidence_export.py",
-      "doc": "markdown_docs/src/evidence_export.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/evidence_index.py",
-      "doc": "markdown_docs/src/evidence_index.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/journey_enrichment.py",
-      "doc": "markdown_docs/src/journey_enrichment.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/journey_subprocess.py",
-      "doc": "markdown_docs/src/journey_subprocess.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/ocr_backends.py",
-      "doc": "markdown_docs/src/ocr_backends.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/pdf_ingest.py",
-      "doc": "markdown_docs/src/pdf_ingest.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/pom_helpers.py",
-      "doc": "markdown_docs/src/pom_helpers.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/role_mapper.py",
-      "doc": "markdown_docs/src/role_mapper.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/skip_manager.py",
-      "doc": "markdown_docs/src/skip_manager.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/cart_seeding_scraper.py",
-      "doc": "markdown_docs/src/cart_seeding_scraper.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/element_matcher.py",
-      "doc": "markdown_docs/src/element_matcher.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/aria_parser.py",
-      "doc": "markdown_docs/src/aria_parser.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/agents/prompt_safety.py",
-      "doc": "markdown_docs/src/agents/prompt_safety.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/section_scoper.py",
-      "doc": "markdown_docs/src/section_scoper.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/secure_config.py",
-      "doc": "markdown_docs/src/secure_config.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/prompt_builder.py",
-      "doc": "markdown_docs/src/prompt_builder.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/test_table.py",
-      "doc": "markdown_docs/src/test_table.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/test_structure_assembler.py",
-      "doc": "markdown_docs/src/test_structure_assembler.py.md",
-      "status": "completed"
     }
   ],
-  "last_updated": "2026-08-01"
+  "last_updated": "2026-08-03 (document-manager sweep: saucedemo checkout cluster)"
 }

@@ -89,10 +89,11 @@ def test_exact_match_prefers_html_route_over_bare_static_guess() -> None:
 
 
 def test_build_mapping_with_concepts_no_scraped_urls() -> None:
-    """Concepts no longer generate fallback candidates — journey scraper is the source of truth.
+    """Concepts generate same-domain fallback candidates when nothing was scraped.
 
-    build_common_path_candidates() was changed to return [] (URL guessing removed).
-    When no scraped URLs are available, keywords cannot be resolved even with concepts.
+    Re-enabled 2026-08-03: SPA sites (saucedemo) expose no hrefs for journey
+    discovery to follow, so concept-driven candidates from the shared route
+    vocabulary fill the gap. Candidates are same-domain only.
     """
     resolver = UrlResolver()
     resolver.build_mapping(
@@ -101,10 +102,12 @@ def test_build_mapping_with_concepts_no_scraped_urls() -> None:
         seed_url="https://www.example.com/",
         concepts=["products", "cart"],
     )
-    # Without scraped URLs, keywords cannot be resolved (common path candidates removed)
-    assert resolver.resolve("products") is None
-    assert resolver.resolve("cart") is None
-    # But home/homepage/login are always mapped to seed_url
+    # Concept candidates are generated (same-domain), so keywords resolve
+    assert resolver.resolve("products") == "https://www.example.com/products"
+    # Sorted candidate order maps "cart" to /cart before /cart.html — both are
+    # same-domain candidates from the shared route vocabulary.
+    assert resolver.resolve("cart") == "https://www.example.com/cart"
+    # home/homepage/login are always mapped to seed_url
     assert resolver.resolve("home") == "https://www.example.com/"
     assert resolver.resolve("homepage") == "https://www.example.com/"
 

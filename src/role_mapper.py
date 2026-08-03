@@ -125,11 +125,19 @@ _TAG_TO_ROLE: dict[str, str] = {
 def normalise_element_text(element: dict[str, str]) -> str:
     """Extract and normalise element text for Pass 1 matching.
 
-    Priority: accessible_name → aria_label → text.
+    Priority: accessible_name → aria_label → text → placeholder.
+    Placeholder is the last resort: many form fields (saucedemo checkout,
+    lv_insurance) have no label/accessible name — only a placeholder like
+    "Last Name" — and must still match descriptions (B-024 class).
     Strips non-ASCII characters (icon fonts), lowercases,
     and strips whitespace.
     """
-    raw = (element.get("accessible_name") or element.get("aria_label") or element.get("text", "")).strip()
+    raw = (
+        element.get("accessible_name")
+        or element.get("aria_label")
+        or element.get("text", "")
+        or element.get("placeholder", "")
+    ).strip()
     return re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
 
 

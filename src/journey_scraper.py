@@ -32,6 +32,7 @@ from typing import Any
 from playwright.sync_api import sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
+from src.form_login_utils import attempt_login
 from src.journey_enrichment import (
     capture_a11y_snapshot_sync,
     capture_element_visibility_sync,
@@ -224,6 +225,11 @@ class JourneyScraper:
                     page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
                     self._dismiss_modals(page)
+                    # Auth-gated sites (saucedemo) redirect to a login page; log in
+                    # with the profile so the journey can reach products/cart pages.
+                    if self._credential_profile:
+                        attempt_login(page, self._credential_profile)
+                        page.wait_for_timeout(500)
                     # Scrape the starting page so elements are available for placeholder resolution.
                     elements = self._scrape_current_page(page, current_url, context)
                     output[current_url] = elements
@@ -1077,15 +1083,20 @@ class JourneyScraper:
         Non-destructive: if no modal is visible, these selectors won't match
         and the dismissal is a no-op.
         """
+        # B-015 lesson: never match generic button text globally — saucedemo's
+        # cart page has a visible "Continue Shopping" button that would get
+        # clicked and navigate the journey back to inventory. Text-based
+        # dismissal is scoped to modal/dialog containers only.
+        modal_containers = "#cartModal, .modal, [role='dialog'], .modal-dialog, .modal-content"
         dismiss_selectors = [
-            'button:has-text("Continue Shopping")',
+            f"{modal_containers} button:has-text('Continue Shopping')",
+            f"{modal_containers} .continue-shopping",
+            f"{modal_containers} .close",
+            f"{modal_containers} .modal-close",
+            f"{modal_containers} .close-btn",
+            f"{modal_containers} [data-dismiss='modal']",
+            f"{modal_containers} .modal-footer .btn",
             "button.btn-success.close-modal",
-            ".continue-shopping",
-            ".modal .close",
-            ".modal-close",
-            ".close-btn",
-            '[data-dismiss="modal"]',
-            ".modal-footer .btn",
         ]
         for selector in dismiss_selectors:
             try:

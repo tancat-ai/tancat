@@ -244,9 +244,13 @@ def test_02_go_to_cart(page: Page):
         conditions="1. Go to cart\n2. Check out",
     )
 
-    # URL guessing has been removed — _build_candidate_urls only returns seed URLs.
-    # Journey discovery finds all reachable pages by navigating statefully.
-    assert discovered == ["https://example.com/"]
+    # Concept-driven candidates ARE generated (re-enabled 2026-08-03), but
+    # strictly same-domain: SPA sites (saucedemo) expose no hrefs for journey
+    # discovery, so candidates from the shared route vocabulary fill the gap
+    # without cross-site hallucination.
+    assert discovered[0] == "https://example.com/"
+    assert all(url.startswith("https://example.com/") for url in discovered)
+    assert "https://example.com/cart" in discovered  # cart concept → /cart candidate
 
 
 def test_run_pipeline_preserves_page_requirements_metadata() -> None:

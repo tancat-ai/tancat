@@ -339,6 +339,18 @@ class ElementMatcher:
                     else:
                         matched = True
 
+                # B-024g: FILL fields often label with separator-heavy placeholders
+                # (saucedemo "Zip/Postal Code"). If every description word appears
+                # as a word in the element text (separators normalized), it's the
+                # field: "zip code" → {zip, code} ⊆ {zip, postal, code}.
+                if not matched and action == "FILL" and len(norm_description.split()) >= 2:
+                    elem_words = set(norm_text.replace("/", " ").replace("-", " ").replace("_", " ").split())
+                    desc_words_clean = set(
+                        norm_description.replace("/", " ").replace("-", " ").replace("_", " ").split()
+                    )
+                    if desc_words_clean and desc_words_clean <= elem_words:
+                        matched = True
+
                 if not matched and key_phrases:
                     for phrase in key_phrases:
                         phrase_words = len(phrase.split())

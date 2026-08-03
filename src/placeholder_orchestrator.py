@@ -51,6 +51,7 @@ from src.url_utils import (
     build_common_path_candidates,
     extract_route_concepts,
     heuristic_url_from_description,
+    is_stateful_cart_checkout_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,6 +138,53 @@ class PlaceholderOrchestrator:
     # Scraping helpers
     # ═════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _drop_redirect_duplicates(
+        scraped_data: dict[str, list[dict[str, Any]]],
+        redirects: dict[str, str],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Remove pages whose scrape redirected to, and duplicated, another page.
+
+        Some sites answer unknown routes with HTTP 200 and a redirect to the
+        home page (automationexercise /inventory.html, /basket). The bogus key
+        then holds home content and can win ASSERT/keyword resolution over the
+        real page. SPA pages that the stateful upgrade re-scraped with their own
+        content are unaffected: their selectors differ from the redirect target.
+        """
+        for url, target in redirects.items():
+            if url not in scraped_data or target not in scraped_data:
+                continue
+            own_selectors = {str(e.get("selector", "")) for e in scraped_data[url] if e.get("selector")}
+            target_selectors = {str(e.get("selector", "")) for e in scraped_data[target] if e.get("selector")}
+            if own_selectors and own_selectors <= target_selectors:
+                logger.info("Dropping redirect duplicate '%s' → '%s'", url, target)
+                del scraped_data[url]
+        return scraped_data
+
+    @staticmethod
+    def _drop_dead_pages(
+        scraped_data: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Remove pages that scraped to a near-empty shell.
+
+        SPA-hosted sites (saucedemo on GitHub Pages) answer every non-existent
+        path with a 2-element 404/app shell; auth-gated redirects render a
+        login stub. Such dead pages pollute keyword/navigation resolution —
+        e.g. ``/basket`` (2 elements) can out-rank ``/cart.html`` (34 elements)
+        in first-match substring logic. Real pages scrape far richer content,
+        so a minimal-element threshold is a safe, site-agnostic signal.
+        """
+        MIN_LIVE_ELEMENTS = 3
+        dead = [url for url, elements in scraped_data.items() if len(elements) < MIN_LIVE_ELEMENTS]
+        for url in dead:
+            logger.info(
+                "Dropping dead page '%s' (%d elements)",
+                url,
+                len(scraped_data[url]),
+            )
+            del scraped_data[url]
+        return scraped_data
+
     async def _ensure_scraped(
         self,
         url: str | None,
@@ -148,7 +196,7 @@ class PlaceholderOrchestrator:
             return
 
         parsed = urlparse(url)
-        is_stateful_target = parsed.path.rstrip("/") in {"/view_cart", "/checkout"}
+        is_stateful_target = is_stateful_cart_checkout_path(parsed.path)
         if is_stateful_target and self._starting_url:
             stateful_scraper = StatefulPageScraper(self._starting_url, credential_profile=self._credential_profile)
             elements = await stateful_scraper.scrape_url(url)
@@ -157,6 +205,12 @@ class PlaceholderOrchestrator:
                 return
 
         elements, error, _final_url = await self.scraper.scrape_url(url)
+        # Skip near-empty SPA 404/login-wall shells — they add noise to
+        # keyword and navigation resolution, never resolution value.
+        if len(elements) < 3:
+            if scraped_errors is not None:
+                scraped_errors[url] = error or f"Only {len(elements)} element(s) — dead page shell"
+            return
         scraped_data[url] = elements
         if error and scraped_errors is not None:
             scraped_errors[url] = error
@@ -176,7 +230,7 @@ class PlaceholderOrchestrator:
         for url in scraped_data:
             parsed = urlparse(url)
             path = parsed.path.rstrip("/")
-            if path in {"/view_cart", "/checkout"}:
+            if is_stateful_cart_checkout_path(path):
                 cart_checkout_targets.append(url)
 
         if cart_checkout_targets:
@@ -204,7 +258,11 @@ class PlaceholderOrchestrator:
             if not products_url:
                 products_url = urljoin(self._starting_url, "/products")
 
-            cart_scraper = CartSeedingScraper(self._starting_url, products_url=products_url)
+            cart_scraper = CartSeedingScraper(
+                self._starting_url,
+                products_url=products_url,
+                credential_profile=self._credential_profile,
+            )
             cart_map = await cart_scraper.scrape_cart_pages(absolute_targets)
 
             for captured_url, candidate in cart_map.items():
@@ -232,7 +290,7 @@ class PlaceholderOrchestrator:
                     existing = scraped_data.get(matched_url, [])
                     candidate_parsed = urlparse(captured_url)
                     candidate_path = candidate_parsed.path.rstrip("/")
-                    if candidate_path in {"/view_cart", "/checkout"}:
+                    if is_stateful_cart_checkout_path(candidate_path):
                         # For cart/checkout pages, ALWAYS prefer cart-seeded data.
                         # An empty cart page may have more elements (promotional content)
                         # than a cart with items, but the seeded data has the correct state
@@ -277,7 +335,7 @@ class PlaceholderOrchestrator:
         for url in scraped_data:
             parsed = urlparse(url)
             path = parsed.path.rstrip("/")
-            if path in {"/view_cart", "/checkout"}:
+            if is_stateful_cart_checkout_path(path):
                 continue
             stateful_targets.append(url)
 
@@ -310,7 +368,7 @@ class PlaceholderOrchestrator:
                         len(candidate),
                     )
 
-        return upgraded
+        return self._drop_dead_pages(upgraded)
 
     @staticmethod
     def _build_scraped_page_records(
@@ -408,6 +466,21 @@ class PlaceholderOrchestrator:
                                 scraped_data,
                                 known_urls=list(scraped_data.keys()),
                             )
+                            # Post-login assertions ("logged in", "login
+                            # successful") must resolve to the page AFTER auth —
+                            # the products/inventory page, not the login page.
+                            if resolved_url and any(
+                                t in description.lower()
+                                for t in ("logged", "login success", "successful login", "authenticated")
+                            ):
+                                for candidate in ("inventory", "products"):
+                                    for url in scraped_data:
+                                        if candidate in url.lower():
+                                            resolved_url = url
+                                            break
+                                    else:
+                                        continue
+                                    break
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
@@ -446,6 +519,29 @@ class PlaceholderOrchestrator:
                         previous_description=last_description,
                         resolved_steps=resolved_steps,
                     )
+
+                    if "pytest.skip" in resolved_value:
+                        # Navigation-intent fallback: SPA sites render cart/basket
+                        # icons without accessible names, so element matching can't
+                        # resolve "cart icon"/"cart link". Navigate to the verified
+                        # page URL instead of skipping — keeps the page context
+                        # advancing through cart → checkout.
+                        if action in {"CLICK", "GOTO"} and self._is_navigation_description(description):
+                            nav_resolved, nav_next, nav_at = await self._resolve_placeholder_for_page(
+                                action="GOTO",
+                                description=description,
+                                current_url=current_url,
+                                scraped_data=scraped_data,
+                                scraped_errors=errors,
+                                previous_selector=last_selector,
+                                previous_description=last_description,
+                                resolved_steps=resolved_steps,
+                            )
+                            if "pytest.skip" not in nav_resolved:
+                                resolved_value = nav_resolved
+                                next_url = nav_next
+                                assertion_type = nav_at
+                                action = "GOTO"
 
                     if "pytest.skip" in resolved_value:
                         journey_unresolved[journey.test_name].append(description)
@@ -751,8 +847,9 @@ class PlaceholderOrchestrator:
                 logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
                 return repr(url_from_resolver), url_from_resolver, None
 
-            # Step 2: Try PlaceholderResolver
-            resolved_url = self.resolver.resolve_url(description, scoped_pages or scraped_data)
+            # Step 2: Try PlaceholderResolver — GOTO navigates anywhere, so
+            # search ALL verified pages, not just the current page's scope.
+            resolved_url = self.resolver.resolve_url(description, scraped_data)
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
@@ -832,8 +929,30 @@ class PlaceholderOrchestrator:
             return selector, next_url, assertion_type
 
         error_msg = f"Locator for '{description}' not found on scraped pages."
-        print(f"[DEBUG] Failed to find '{description}'. Available scraped URLs: {list(scraped_data.keys())}")
+        print(
+            f"[DEBUG] Failed to find '{description}' (current={current_url}, "
+            f"scope={list(pages_to_search.keys())}). Available scraped URLs: {list(scraped_data.keys())}"
+        )
         return f'pytest.skip("{error_msg}")', None, None
+
+    def _is_navigation_description(self, description: str) -> bool:
+        """True when a description means navigating to a page, not clicking an element.
+
+        SPA sites render cart/basket links as icon elements with no accessible
+        name, so text matching can't resolve them. Descriptions like "cart
+        icon", "cart link", "go to cart", "shopping cart" signal navigation
+        intent and can fall back to a verified page URL. Action-verb
+        descriptions ("add to cart", "remove item") are element clicks.
+        """
+        desc = description.lower()
+        if any(verb in desc for verb in ("add", "remove", "delete", "place", "button")):
+            return False
+        # Cart/basket navigations are the target: "cart icon", "cart link",
+        # "shopping cart", "view basket". "Checkout"/"Proceed To Checkout"
+        # are button clicks on the cart page — element matching handles them.
+        nav_terms = ("link", "icon", "go to", "open", "navigate", "view", "cart", "basket")
+        page_targets = ("cart", "basket", "home", "products", "inventory", "login")
+        return any(t in desc for t in nav_terms) and any(t in desc for t in page_targets)
 
     def _retrieve_golden_patterns(
         self,

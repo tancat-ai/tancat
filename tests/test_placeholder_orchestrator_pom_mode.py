@@ -326,3 +326,62 @@ def test_batch_fallback_still_skips_when_element_nowhere() -> None:
 
     result = asyncio.run(run())
     assert "pytest.skip" in result
+
+
+def test_drop_dead_pages_removes_spa_shells() -> None:
+    """2-element SPA 404 shells must not pollute resolution; rich pages survive."""
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    data = {
+        "https://x.com/basket": [{"text": "root"}, {"text": "script"}],  # dead shell
+        "https://x.com/cart.html": [{"text": "a"} for _ in range(34)],  # real
+        "https://x.com/view_cart": [{"text": "x"}, {"text": "y"}],  # dead shell
+    }
+    kept = PlaceholderOrchestrator._drop_dead_pages(data)
+    assert "https://x.com/basket" not in kept
+    assert "https://x.com/view_cart" not in kept
+    assert "https://x.com/cart.html" in kept
+
+
+def test_drop_redirect_duplicates_removes_home_content_under_bogus_keys() -> None:
+    """automationexercise serves 200 + redirect for guessed routes — the bogus
+    key holds home content and must not win resolution. SPA pages the stateful
+    upgrade re-scraped with their own content survive."""
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    data = {
+        "https://ae.com/": [{"selector": "h1"}, {"selector": "nav a"}, {"selector": "footer"}],
+        "https://ae.com/inventory.html": [
+            {"selector": "h1"},
+            {"selector": "nav a"},
+            {"selector": "footer"},
+        ],  # dup of home
+        "https://ae.com/products": [{"selector": ".product-grid"}, {"selector": "h2"}, {"selector": "button"}],
+    }
+    redirects = {
+        "https://ae.com/inventory.html": "https://ae.com/",
+    }
+    kept = PlaceholderOrchestrator._drop_redirect_duplicates(data, redirects)
+    assert "https://ae.com/inventory.html" not in kept
+    assert "https://ae.com/" in kept
+    assert "https://ae.com/products" in kept
+
+
+def test_drop_redirect_duplicates_keeps_spa_stateful_pages() -> None:
+    """Saucedemo's cart.html initially redirects to the login page but the
+    stateful upgrade re-scraped it with cart content — its selectors differ
+    from the login page, so it must survive."""
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    data = {
+        "https://sd.com/": [{"selector": "#user-name"}, {"selector": "#password"}, {"selector": "#login-button"}],
+        "https://sd.com/cart.html": [
+            {"selector": "#checkout"},
+            {"selector": ".cart_item"},
+            {"selector": "#continue-shopping"},
+        ],
+    }
+    redirects = {"https://sd.com/cart.html": "https://sd.com/"}
+    kept = PlaceholderOrchestrator._drop_redirect_duplicates(data, redirects)
+    assert "https://sd.com/cart.html" in kept
+    assert "https://sd.com/" in kept

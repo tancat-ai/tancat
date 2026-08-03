@@ -23,6 +23,12 @@ Converts `{{ACTION:description}}` tokens to human-readable `"Action: description
 ### `_dismiss_consent_overlays()` / `_dismiss_ad_overlays()`
 Delegates to `src.browser_utils.dismiss_consent_overlays`.
 
+### `_dismiss_confirmation_modals()`
+Dismisses added-to-cart confirmation modals before clicks. **B-015 lesson (2026-08-03):** text-based dismissal (`Continue Shopping`, `.close`, …) is scoped to modal/dialog containers (`#cartModal, .modal, [role='dialog'], …`) — a visible "Continue Shopping" button on the cart page itself (saucedemo) must never be clicked here.
+
+### `_is_modal_close_target(locator) -> bool`
+True when a locator is a confirmation-modal close control (close-modal, Continue Shopping, btn-success).
+
 ### `_load_previous_history() -> dict` / `_load_previous_steps() -> list`
 Loads run history and step data from sidecar JSON for incremental counters.
 
@@ -41,8 +47,10 @@ Core recording method. Builds step dict with:
 ### `fill(locator, value, label="")` — Fill form field
 ### `click(locator, label="")` — Click with layered fallback:
 1. Scroll into view + direct click (`.first` to avoid strict-mode)
-2. On visibility/timeout error: dismiss ads → hover-reveal → locator scoring fallback
-3. Fallback success → `"partial_pass"` status with audit trail
+2. Fast-fail: missing/hidden elements raise `_LocatorNotFoundError` immediately (no fallback marathon)
+3. **Modal-close no-op (2026-08-03):** if the target is a modal-close control and the modal is already dismissed (element hidden), the click's intent is satisfied — record a no-op instead of failing (generated "close popup / OK" steps collide with the tracker's pre-click auto-dismiss)
+4. On visibility/timeout error: dismiss ads → hover-reveal → locator scoring fallback
+5. Fallback success → `"partial_pass"` status with audit trail
 ### `assert_visible(locator, label="")` — Wait for visible + screenshot + capture text
 ### `write(status="passed") -> str` — Serialize sidecar JSON, update run history counters, return path
 

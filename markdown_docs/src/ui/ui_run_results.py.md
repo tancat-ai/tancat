@@ -105,3 +105,16 @@ Extracts error details from raw pytest output when `TestResult.error_message` is
 ### `_extract_last_steps_before_failure(source, test_name) -> list[str]` (added 2026-07-20)
 
 Parses test source to find the last completed action steps (Navigate, Click, Fill, Assert) before the failure point. Returns up to 6 steps for context.
+
+### `_run_setup_script(base_url, target_url, steps) -> SetupScriptResult`
+
+Builds and executes a temporary Playwright setup script that replays prerequisite steps and saves browser storage state for the locator-repair codegen session.
+
+**Cart-seeding (2026-08-03):**
+- Triggered via `url_utils.is_stateful_cart_checkout_path` (site-agnostic — covers saucedemo `/cart.html` as well as `/view_cart`/`/checkout`)
+- Best-effort login with saucedemo demo credentials when a login form is present
+- Product-page navigation tries `(/products, /inventory.html)` candidates via HTTP status probe
+- Add-to-cart Strategy C: direct grid button (`button:has-text("Add to cart"), [data-test^="add-to-cart"], .btn_inventory`) for saucedemo-style inventory pages
+- Modal dismissal scoped to modal containers (B-015 lesson — a visible cart-page "Continue Shopping" must not be clicked)
+
+**Known Windows gotcha (pre-existing):** the storage-state print line embeds the temp path without `r''` escaping, so `C:\Users\...` breaks the generated script's parse on Windows.

@@ -442,6 +442,14 @@ class TestOrchestrator:
             url: final_url for url, (_elems, _err, final_url) in raw_scraped_data.items() if url != final_url
         }
 
+        # Drop candidate URLs whose stateless scrape redirected to another page
+        # and whose content duplicates that target (e.g. automationexercise
+        # serves HTTP 200 for /inventory.html but redirects to the home page —
+        # the bogus key then holds home content and wins ASSERT resolution).
+        # Real SPA pages that the stateful upgrade re-scraped with their own
+        # content survive because their selectors differ from the target's.
+        scraped_data = self._placeholder_orchestrator._drop_redirect_duplicates(scraped_data, redirects)
+
         self._debug("phase=scrape done")
 
         # Build keyword → URL mapping from discovered URLs (Phase 3: UrlResolver)

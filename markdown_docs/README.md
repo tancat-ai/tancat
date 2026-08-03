@@ -1,6 +1,6 @@
 # AI-Playwright-Test-Generator — Documentation Index
 
-> Auto-generated documentation sweep — 101 source files across `src/`
+> Auto-generated documentation sweep — 135 source files across `src/`, `cli/`, `scripts/`
 
 ## Global Architecture
 
@@ -95,8 +95,15 @@ Test packages produced by the tool. Each package contains:
 | `src/cli/` | 15 | ✅ Complete |
 | `src/ui/` | 10 | ✅ Complete |
 | `src/llm_providers/` | 1 | ✅ Complete |
-| `scripts/` | 1 | ✅ Complete |
-| `src/` (all) | **109** | **✅ Complete** |
+| `scripts/` (eval + verify_production + archived debug) | 10 | ✅ Complete |
+| `cli/` | 4 | ✅ Complete |
+| **Total** | **135** | **✅ Complete** |
+
+> Updated 2026-08-03 (document-manager sweep): 12 `src/` docs refreshed for the
+> saucedemo checkout cluster fixes (soft-404, stateful routing, dead-page/
+> redirect-duplicate filters, navigation-intent fallback, modal-scoped dismissal,
+> B-024g field matching); new docs for `scripts/verify_production.py`,
+> `cli/evidence_cli.py`, and 4 archived saucedemo debug scripts.
 
 ## Sweep Progress
 

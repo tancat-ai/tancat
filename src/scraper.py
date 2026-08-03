@@ -358,8 +358,17 @@ class PageScraper:
 
                 if response.status >= 400:
                     final_url = page.url
-                    browser.close()
-                    return ScrapeResult(url=url, elements=[], error=f"HTTP {response.status}", final_url=final_url)
+                    # Soft-404 recovery: SPA-hosted sites (e.g. saucedemo on
+                    # GitHub Pages, via the spa-github-pages pattern) answer every
+                    # path with HTTP 404 from an app shell that immediately
+                    # JS-redirects to the real view. The page renders fine — only
+                    # the initial response status is 404. A genuine 404 never
+                    # navigates, so a changed final URL means the SPA bootstrapped
+                    # and the scrape should proceed like the journey scraper does.
+                    if not self._is_soft_404(url, final_url):
+                        browser.close()
+                        return ScrapeResult(url=url, elements=[], error=f"HTTP {response.status}", final_url=final_url)
+                    self._debug(f"Soft-404 for {url} — SPA bootstrapped at {final_url}; continuing scrape")
 
                 final_url = page.url
 
@@ -410,6 +419,17 @@ class PageScraper:
 
         except Exception as e:
             return ScrapeResult(url=url, elements=[], error=str(e), final_url=url)
+
+    @staticmethod
+    def _is_soft_404(requested_url: str, final_url: str) -> bool:
+        """True when a 4xx response still yielded a usable, rendered page.
+
+        SPA-on-static-host sites (the GitHub Pages ``spa-github-pages`` pattern)
+        serve every route as HTTP 404 from an app shell that JS-redirects to the
+        real view, so the final URL differs from the requested one. Genuine 404
+        pages never navigate, so an unchanged URL means the request really failed.
+        """
+        return bool(final_url) and final_url.rstrip("/") != requested_url.rstrip("/")
 
     @staticmethod
     def _attach_element_boxes(
