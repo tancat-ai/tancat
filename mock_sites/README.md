@@ -32,6 +32,7 @@ exercised across as much product range as possible.
 | 5 | Enterprise / HR | 🆕 | `mock_sites/hr/` | org hierarchy, multi-role, admin |
 | 6 | Element / widgets | 🆕 | `mock_sites/widgets/` | auth, alerts, frames, drag-drop, shadow DOM |
 | 7 | Robustness / security | 🆕 | `mock_sites/security/` | auth, admin, tricky forms |
+| 8 | API (non-DOM shape) | 🆕 future (FC-02) | `mock_sites/api/` | OpenAPI stub — endpoints, payloads, auth, status codes; same story→skeleton→evidence loop, no browser |
 
 Reference repos researched 2026-08-03 (sources of inspiration, **not** dependencies):
 
