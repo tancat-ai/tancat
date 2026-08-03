@@ -92,6 +92,20 @@ Re-verified the audit's claim that `tests/integration/test_pom_mode_end_to_end.p
 Note: `.github/workflows/ci.yml` is a protected file (AGENTS.md) — modified per
 explicit instruction to wire eval-static into CI as part of this item.
 
+### CI integration follow-ups (commit 8a44d75 + 210d030)
+- **Sanitizer false positive**: `project_sanitizer` flagged
+  `fixtures/golden_package/test_golden_flow.py` as a misplaced test (it would
+  have been auto-moved into `tests/` and collected+failed there). Added
+  `fixtures` to `SKIP_DIRS` — fixture-data dirs hold test-named files that are
+  data, not collectable tests.
+- **Eval-static CI failure**: `persist_results` opens
+  `evidence/run_results.sqlite`, which does not exist in a fresh checkout
+  (`evidence/` is gitignored) → `sqlite3.OperationalError: unable to open
+  database file`. The pre-commit hook already used `--no-persist`; the CI job
+  now matches. Latent harness robustness note: `persist_results` does not
+  create the parent dir — a future fix could `mkdir(parents=True)` so plain
+  `eval run` works on fresh checkouts.
+
 Still open from the test-pack item: contract/adversarial/resilience layers,
 `verify_production`/`export_gate` in CI (needs the mock layer), network-test
 relabels beyond what's already marked (none found).
