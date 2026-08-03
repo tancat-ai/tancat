@@ -38,6 +38,7 @@ SKIP_DIRS: set[str] = {
     "node_modules",
     ".git",
     "screenshots",
+    "fixtures",  # fixture data (golden export package) — test_*.py here is data, not a collectable test
     "htmlcov",
     "pytest_cache",
     ".mypy_cache",
