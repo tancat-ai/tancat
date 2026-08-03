@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (66) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (20) &mdash; 2026-08-03 12:16 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (66) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (20) &mdash; 2026-08-03 12:59 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (22)</h2>
+    <h2>To Do (17)</h2>
     
     <div class="">
     <div class="card">
@@ -144,27 +144,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L342" target="_blank">BACKLOG.md:342</a></div>
 </div>
 <div class="card">
-    <div class="card-id">B-035</div>
-    <div class="card-title">Evidence sidecar written only at test END; killed/timed-out tests leave orphaned screenshots with no record</div>
-    <div class="card-meta"><span>Medium — evidence silently vanishes for the exact runs that need it (failures)</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L359" target="_blank">BACKLOG.md:359</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-034</div>
-    <div class="card-title">`evidence/run_results.sqlite` is corrupted — UI evidence page will crash</div>
-    <div class="card-meta"><span>High — live in the working environment right now</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L374" target="_blank">BACKLOG.md:374</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-033</div>
-    <div class="card-title">Evidence gaps: failures leave no diagnostic artifacts; clicks never screenshot</div>
-    <div class="card-meta"><span>Medium — evidence is the product&#x27;s audit trail; a failed step currently records *nothing* visible</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L386" target="_blank">BACKLOG.md:386</a></div>
-</div>
-<div class="card">
     <div class="card-id">B-032</div>
     <div class="card-title">Export run-history DB copy orphaned since AI-012 (`playwright_tests.db` never created)</div>
     <div class="card-meta"><span>Low — silent no-op, no crash</span>
@@ -177,20 +156,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>High — claimed shipped (UI button + CLI step), but no export has ever been verified by running the exported suite</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L411" target="_blank">BACKLOG.md:411</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-030</div>
-    <div class="card-title">&quot;Check Out&quot; resolves to wrapper div `#do_action` instead of the real button `.btn.btn-default.check_out`</div>
-    <div class="card-meta"><span>Medium</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L425" target="_blank">BACKLOG.md:425</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-029</div>
-    <div class="card-title">Tracker records &quot;passed&quot; for clicks that never navigated (ad-overlay swallow) — no post-click URL verification</div>
-    <div class="card-meta"><span>High — caused all 4 checkout-cluster failures (t10-t13) in `test_20260803_101815_...`</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L433" target="_blank">BACKLOG.md:433</a></div>
 </div>
 <div class="card">
     <div class="card-id">REF-001</div>
@@ -290,8 +255,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (62)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (62)</button>
+    <h2>Done (67)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (67)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -547,6 +512,41 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L292" target="_blank">BACKLOG.md:292</a></div>
 </div>
 <div class="card">
+    <div class="card-id">B-035</div>
+    <div class="card-title">Evidence sidecar written only at test END; killed/timed-out tests leave orphaned screenshots with no record</div>
+    <div class="card-meta"><span>Medium — evidence silently vanishes for the exact runs that need it (failures)</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L359" target="_blank">BACKLOG.md:359</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-034</div>
+    <div class="card-title">`evidence/run_results.sqlite` is corrupted — UI evidence page will crash</div>
+    <div class="card-meta"><span>High — live in the working environment right now</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L374" target="_blank">BACKLOG.md:374</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-033</div>
+    <div class="card-title">Evidence gaps: failures leave no diagnostic artifacts; clicks never screenshot</div>
+    <div class="card-meta"><span>Medium — evidence is the product&#x27;s audit trail; a failed step currently records *nothing* visible</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L386" target="_blank">BACKLOG.md:386</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-030</div>
+    <div class="card-title">&quot;Check Out&quot; resolves to wrapper div `#do_action` instead of the real button `.btn.btn-default.check_out`</div>
+    <div class="card-meta"><span>Medium</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L425" target="_blank">BACKLOG.md:425</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-029</div>
+    <div class="card-title">Tracker records &quot;passed&quot; for clicks that never navigated (ad-overlay swallow) — no post-click URL verification</div>
+    <div class="card-meta"><span>High — caused all 4 checkout-cluster failures (t10-t13) in `test_20260803_101815_...`</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L433" target="_blank">BACKLOG.md:433</a></div>
+</div>
+<div class="card">
     <div class="card-id">B-028</div>
     <div class="card-title">Journey discovery selects cart nav link for product / add-to-cart actions</div>
     <div class="card-meta"><span>High — cascades: wrong click → missing pages → unresolved placeholders → skips/fails</span>
@@ -700,7 +700,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "62";
+    var count = "67";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
