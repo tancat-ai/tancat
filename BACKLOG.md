@@ -357,7 +357,7 @@ writing if code fails syntax check.
 ---
 
 ### B-035 — Evidence sidecar written only at test END; killed/timed-out tests leave orphaned screenshots with no record
-**Status:** 🛠 implemented (2026-08-03, uncommitted — pending commit + CI) → 🆕 new
+**Status:** ✅ Fixed (2026-08-03, `e1b322d`, CI green)
 **Priority:** Medium — evidence silently vanishes for the exact runs that need it (failures)
 
 `tracker.write()` runs once in `generated_tests/conftest.py` teardown; `_record_step` never persists incrementally. If a test process dies mid-run (pytest `--timeout` kill — already the standard in UI/UAT/verify runs — crash, playwright failure), **no `.evidence.json` is written** while intermediate screenshots survive as orphans. The evidence index (`build_or_refresh`) only sees sidecars, so the run is invisible.
@@ -372,7 +372,7 @@ writing if code fails syntax check.
 ---
 
 ### B-034 — `evidence/run_results.sqlite` is corrupted — UI evidence page will crash
-**Status:** 🛠 implemented (2026-08-03, uncommitted — pending commit + CI) → 🆕 new
+**Status:** ✅ Fixed (2026-08-03, `e1b322d`, CI green)
 **Priority:** High — live in the working environment right now
 
 `PRAGMA integrity_check` → **"database disk image is malformed" (Tree 10 page 26)**. WAL mode with a 0-byte WAL + 32KB shm; some queries return rows, others throw. DB mtime Aug 3 03:26 (during the overnight verify runs). Likely concurrent writers (Streamlit UI `build_or_refresh(force=True)` + run-result saves) or a killed process mid-write; the corrupted DB has no self-healing — `_upsert_sidecar` has no try/except, so the UI evidence search/refresh raises `DatabaseError` instead of rebuilding.
@@ -384,7 +384,7 @@ writing if code fails syntax check.
 ---
 
 ### B-033 — Evidence gaps: failures leave no diagnostic artifacts; clicks never screenshot
-**Status:** 🛠 implemented (2026-08-03, uncommitted — pending commit + CI) → 🆕 new
+**Status:** ✅ Fixed (2026-08-03, `e1b322d`, CI green)
 **Priority:** Medium — evidence is the product's audit trail; a failed step currently records *nothing* visible
 
 **Confirmed from `test_20260803_101815_...` evidence sidecars:**
@@ -423,7 +423,7 @@ writing if code fails syntax check.
 ---
 
 ### B-030 — "Check Out" resolves to wrapper div `#do_action` instead of the real button `.btn.btn-default.check_out`
-**Status:** 🛠 implemented (2026-08-03, uncommitted — pending commit + CI) → 🆕 new
+**Status:** ✅ Fixed (2026-08-03, `e1b322d`, CI green)
 **Priority:** Medium
 
 `{{CLICK:Check Out}}` emitted `#do_action` (a wrapper `<div>`, no href) even though the scraper captured `('proceed to checkout', '.btn.btn-default.check_out')` and `PlaceholderScorer` rates the button **5 vs 0** for "Check Out" (verified directly). Survives into exports. Root cause is in the resolution path feeding element data to the scorer (tag/role/href likely stripped) — investigate why the anchor lost before the wrapper.
@@ -431,7 +431,7 @@ writing if code fails syntax check.
 ---
 
 ### B-029 — Tracker records "passed" for clicks that never navigated (ad-overlay swallow) — no post-click URL verification
-**Status:** 🛠 implemented (2026-08-03, uncommitted — pending commit + CI) → 🆕 new
+**Status:** ✅ Fixed (2026-08-03, `e1b322d`, CI green)
 **Priority:** High — caused all 4 checkout-cluster failures (t10-t13) in `test_20260803_101815_...`
 
 **Symptom:** cart header-link click records `passed` after a **30.5s fallback marathon** with **no navigation**; the next step fast-fails with the misleading "element exists on a different page" error. All 4 failures share the identical signature (step 5 elapsed=30,516ms, status=passed, page still on `category_products/1`).
