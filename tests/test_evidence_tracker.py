@@ -193,8 +193,9 @@ class TestLocatorFallback:
 
 def test_click_fast_fails_when_locator_missing_on_page(tmp_path: Any) -> None:
     """B-028 follow-up: a click on a locator that does not exist on the current
-    page must fail immediately (no fallback marathon) and record a fast-fail
-    step without the expensive screenshot/diagnosis path."""
+    page must fail immediately (no fallback marathon). B-033: fast-fail steps
+    now DO capture a screenshot + failure note — the missing-element error is
+    self-diagnosing, but the visual artifact is the most useful evidence."""
     page_mock = MagicMock()
     # Element not on the page: count() == 0
     page_mock.locator.return_value.first.count.return_value = 0
@@ -209,8 +210,10 @@ def test_click_fast_fails_when_locator_missing_on_page(tmp_path: Any) -> None:
     assert step["type"] == "click"
     assert step["result"]["status"] == "failed"
     assert "not found on current page" in step["result"]["error"]
-    # Fast-fail: no screenshot and no metadata capture on the missing element.
-    assert step["screenshot"] is None
+    # B-033: failed steps must carry a screenshot and a failure note.
+    assert step["screenshot"] is not None
+    assert step["result"]["failure_note"] is not None
+    assert step["url"] == "https://example.com/products"
     # The 5s click must never have been attempted.
     page_mock.locator.return_value.first.click.assert_not_called()
 
@@ -235,3 +238,70 @@ def test_click_missing_locator_does_not_run_fallback(tmp_path: Any) -> None:
 
     mock_hover.assert_not_called()
     mock_fallback.try_fallback.assert_not_called()
+
+
+# ── B-029: post-click navigation verification ───────────────────────────────
+
+
+class _UrlFlipPage:
+    """Minimal stub page: URL flips from start to /cart on the second read.
+
+    Simulates a link click that DOES navigate. All other Playwright surface
+    (locators, evaluate, keyboard) is a permissive MagicMock.
+    """
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    @property
+    def url(self) -> str:
+        self._n += 1
+        return "https://example.com/start" if self._n == 1 else "https://example.com/cart"
+
+    def locator(self, *args: Any, **kwargs: Any) -> Any:
+        return MagicMock()
+
+    evaluate = MagicMock()
+    keyboard = MagicMock()
+
+
+class _StaticPage:
+    """Stub page whose URL never changes — simulates an overlay-swallowed click."""
+
+    url = "https://example.com/start"
+
+    def locator(self, *args: Any, **kwargs: Any) -> Any:
+        return MagicMock()
+
+    evaluate = MagicMock()
+    keyboard = MagicMock()
+
+
+def test_b029_navigation_verified_when_url_changes(tmp_path: Any) -> None:
+
+    tracker = EvidenceTracker(_UrlFlipPage(), "t", evidence_root=Path(tmp_path))
+    # href on a different path + URL changes → no raise, step stays passed.
+    tracker._record_step("click", "Cart", locator='a[href="/cart"]')
+    tracker._verify_click_navigation('a[href="/cart"]', "Cart", {"href": "/cart"}, "https://example.com/start")
+    assert tracker.steps[-1]["result"]["status"] == "passed"
+
+
+def test_b029_same_page_and_non_link_hrefs_skipped(tmp_path: Any) -> None:
+    tracker = EvidenceTracker(_StaticPage(), "t", evidence_root=Path(tmp_path))
+    # Anchor / javascript: / no-href links never require navigation.
+    for href in (None, "", "#section", "javascript:void(0)", "/start"):
+        tracker._verify_click_navigation("x", "Click", {"href": href}, "https://example.com/start")
+
+
+def test_b029_swallowed_click_amended_to_failure(tmp_path: Any) -> None:
+    from src.evidence_tracker import _LocatorNotFoundError
+
+    tracker = EvidenceTracker(_StaticPage(), "t", evidence_root=Path(tmp_path))
+    tracker._record_step("click", "Cart", locator='a[href="/cart"]')
+    with pytest.raises(_LocatorNotFoundError, match="did not navigate"):
+        tracker._verify_click_navigation('a[href="/cart"]', "Cart", {"href": "/cart"}, "https://example.com/start")
+    # The recorded step must be flipped from a false pass to a truthful failure.
+    last = tracker.steps[-1]
+    assert last["result"]["status"] == "failed"
+    assert "did not navigate" in last["result"]["error"]
+    assert last["result"]["failure_note"] is not None

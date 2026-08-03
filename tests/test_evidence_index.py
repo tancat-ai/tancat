@@ -445,3 +445,49 @@ class TestEdgeCases:
         populated_index.build_or_refresh(base_dir=base)
         results = populated_index.search(query="after")
         assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# B-034: corruption self-healing
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptionRecovery:
+    def test_corrupt_db_self_heals_on_search(self, tmp_db: Path) -> None:
+        """A corrupt database file must not crash the index — it self-heals."""
+        from src.evidence_index import EvidenceIndex
+
+        # Seed a healthy DB first, then corrupt the file on disk.
+        db = SQLitePersistence(db_path=tmp_db)
+        idx = EvidenceIndex(db=db)
+        base = tmp_db.parent / "generated_tests"
+        base.mkdir(exist_ok=True)
+        _make_sidecar(
+            base,
+            "test_a[chromium].evidence.json",
+            test_name="test_a[chromium]",
+            status="passed",
+            page_url="https://example.com/",
+        )
+        idx.build_or_refresh(base_dir=base)
+        db._conn.close()
+
+        # Corrupt the database file with garbage.
+        tmp_db.write_bytes(b"this is not a sqlite database at all" * 4)
+
+        # A fresh index over the corrupt file must recover, not raise.
+        db2 = SQLitePersistence(db_path=tmp_db)
+        idx2 = EvidenceIndex(db=db2)
+        idx2.build_or_refresh(base_dir=base)  # should self-heal + re-index
+        results = idx2.search(query="example.com", limit=10)
+        assert any(r.status == "passed" for r in results)
+        assert idx2._health_ok()
+
+    def test_corrupt_db_self_heals_on_filter_options(self, tmp_db: Path) -> None:
+        from src.evidence_index import EvidenceIndex
+
+        tmp_db.write_bytes(b"garbage" * 8)
+        db = SQLitePersistence(db_path=tmp_db)
+        idx = EvidenceIndex(db=db)
+        opts = idx.get_filter_options()
+        assert opts.total_indexed == 0  # recovered empty DB, no crash

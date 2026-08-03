@@ -1,8 +1,10 @@
+import logging
 import re
 import sys
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import Page
 
@@ -11,6 +13,8 @@ from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
 from src.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 
 class _LocatorNotFoundError(RuntimeError):
@@ -143,7 +147,7 @@ class EvidenceTracker:
             f"{modal_containers} .close-btn",
             f"{modal_containers} [data-dismiss='modal']",
             f"{modal_containers} .modal-footer .btn",
-            "button.btn-success.close-modal",
+            f"{modal_containers} button.btn-success.close-modal",
         ]
         for selector in dismiss_selectors:
             try:
@@ -187,9 +191,13 @@ class EvidenceTracker:
 
         element_id = ""
         test_id = ""
+        href = ""
         try:
             element_id = loc.get_attribute("id") or ""
             test_id = loc.get_attribute("data-testid") or ""
+            raw_href = loc.get_attribute("href") or ""
+            # Mock pages return MagicMock here — only keep real strings (B-029).
+            href = raw_href if isinstance(raw_href, str) else ""
         except Exception:
             pass
 
@@ -238,6 +246,7 @@ class EvidenceTracker:
             "tag": tag,
             "element_id": element_id if element_id else None,
             "test_id": test_id if test_id else None,
+            "href": href if href else None,
             "bbox": bbox,
             "viewport_pct": viewport_pct,
         }
@@ -280,15 +289,18 @@ class EvidenceTracker:
                 step_run_count = prev_step.get("result", {}).get("run_count", 0) + 1
 
         screenshot_path = None
-        if take_screenshot and not fast_fail:
+        if take_screenshot:
             screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}.png"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
                 # Take full page screenshot so coordinates relative to frame always match.
                 self.page.screenshot(path=str(screenshot_full_path), full_page=True)
                 screenshot_path = f"evidence/{screenshot_name}"
-            except Exception:
-                pass
+            except Exception as exc:
+                # Evidence collection must never break test execution, but a
+                # missing screenshot should not be silent — it is the most
+                # useful failure artifact (B-033).
+                logger.warning("screenshot capture failed for %s: %s", screenshot_name, exc)
 
         if fast_fail or element_metadata is not None:
             element_data = element_metadata if element_metadata is not None else {}
@@ -305,6 +317,10 @@ class EvidenceTracker:
             except Exception:
                 # Diagnosis is best-effort; don't let it break test execution.
                 failure_note = f"[diagnosis failed: {error[:100]}]"
+        elif error and fast_fail:
+            # Fast-fail errors are self-diagnosing ("not found on current page…")
+            # but must still carry a failure note for the evidence index (B-033).
+            failure_note = str(error)[:300]
 
         # Determine step status — "partial_pass" when fallback was used
         if error:
@@ -337,9 +353,43 @@ class EvidenceTracker:
                 "value": value,
                 "screenshot": screenshot_path,
                 "element": element_data,
+                "url": self._safe_page_url(),  # B-033: per-step URL so flow divergence is traceable
                 "result": result,
             }
         )
+
+        # B-035: persist incrementally so a killed/timed-out process still
+        # leaves evidence. Cheap (small JSON) — write on the first step and on
+        # any failed/partial step; the final write() overwrites with the real
+        # status.
+        if step_idx == 0 or status in ("failed", "partial_pass"):
+            self._persist_sidecar("running")
+
+    def _safe_page_url(self) -> str:
+        try:
+            return str(self.page.url)
+        except Exception:
+            return ""
+
+    def _persist_sidecar(self, status: str) -> None:
+        """Write the current steps + run history to the sidecar JSON.
+
+        Called incrementally by ``_record_step`` (B-035) and finally by
+        ``write()`` with the definitive status.
+        """
+        try:
+            json_content = EvidenceSerializer.serialize(
+                test_name=self.test_name,
+                condition_ref=self.condition_ref,
+                story_ref=self.story_ref,
+                status=status,
+                page_url=self._safe_page_url(),
+                run_history=self.run_history,
+                steps=self.steps,
+            )
+            self.sidecar_path.write_text(json_content, encoding="utf-8")
+        except Exception as exc:
+            logger.warning("incremental evidence persistence failed: %s", exc)
 
     def navigate(self, url: str, label: str = "") -> None:
         """Navigate to a URL and record the navigation.
@@ -439,6 +489,7 @@ class EvidenceTracker:
                     "click",
                     label,
                     locator=locator,
+                    take_screenshot=True,  # B-033: failed steps always carry a screenshot
                     error=str(sys.exc_info()[1]),
                     elapsed_ms=int((time.time() - _t0) * 1000),
                     fast_fail=True,
@@ -454,6 +505,9 @@ class EvidenceTracker:
             # the first try.
             self._dismiss_ad_overlays()
             self._dismiss_confirmation_modals()
+            # B-029: capture the URL BEFORE any click so a swallowed link click
+            # (ad/consent overlay intercepting the navigation) is detectable.
+            original_url = self._safe_page_url()
             # We record metadata BEFORE clicking in case navigation clears it
             el_metadata = self._get_element_metadata(locator)
             try:
@@ -472,6 +526,7 @@ class EvidenceTracker:
                     elapsed_ms=int((time.time() - _t0) * 1000),
                     element_metadata=el_metadata,
                 )
+                self._verify_click_navigation(locator, label, el_metadata, original_url)
                 return
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
@@ -495,6 +550,7 @@ class EvidenceTracker:
                             elapsed_ms=int((time.time() - _t0) * 1000),
                             element_metadata=el_metadata,
                         )
+                        self._verify_click_navigation(locator, label, el_metadata, original_url)
                         return
 
                     # Attempt 3: Locator scoring fallback (new — Tier 2)
@@ -508,6 +564,9 @@ class EvidenceTracker:
                         self._record_step,
                         elapsed_ms=int((time.time() - _t0) * 1000),
                     )
+                    # try_fallback records the step internally; verify it actually
+                    # navigated (B-029) and amend to a failure if it did not.
+                    self._verify_click_navigation(locator, label, el_metadata, original_url)
                 else:
                     raise
         except Exception as e:
@@ -525,6 +584,90 @@ class EvidenceTracker:
                 elapsed_ms=int((time.time() - _t0) * 1000),
             )
             raise
+
+    # ── B-029: post-click navigation verification ────────────────────────────
+
+    def _verify_click_navigation(
+        self,
+        locator: str,
+        label: str,
+        el_metadata: dict[str, Any],
+        original_url: str,
+    ) -> None:
+        """Ensure a "successful" click on a link actually navigated.
+
+        Google's ad stack (FreeCmp consent dialog, ``#google_vignette``) can
+        swallow link clicks: Playwright reports the click as successful (even
+        the JS ``el.click()`` fallback returns without raising) but the URL
+        never changes. The step is then recorded "passed" and the *next* step
+        fails with a misleading "element on a different page" error (B-029).
+
+        When a link click does not navigate, dismiss overlays and retry once.
+        If it still does not navigate, amend the recorded step to a failure
+        instead of leaving a false pass.
+        """
+        href = str(el_metadata.get("href") or "").strip()
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            return  # not a navigation link — nothing to verify
+        try:
+            target = urljoin(original_url, href)
+            if (
+                urlparse(target).path == urlparse(original_url).path
+                and urlparse(target).netloc == urlparse(original_url).netloc
+            ):
+                return  # same-page link (anchor / hash navigation)
+        except Exception:
+            return
+
+        if self._url_changed(original_url, timeout=2.5):
+            return
+
+        # Click succeeded but no navigation — likely swallowed by an overlay.
+        # Dismiss and retry once before declaring failure.
+        self._dismiss_ad_overlays()
+        self._dismiss_confirmation_modals()
+        try:
+            self.page.locator(locator).first.click(timeout=5000)
+        except Exception:
+            pass
+        if self._url_changed(original_url, timeout=2.5):
+            return
+
+        # Still no navigation — amend the recorded step to a truthful failure.
+        self._amend_last_click_to_failure(label, locator, original_url)
+        raise _LocatorNotFoundError(
+            f"Click '{label}' succeeded but the page did not navigate (still on {original_url}). "
+            "The click was likely swallowed by an overlay even after dismissal + retry."
+        )
+
+    def _url_changed(self, original_url: str, timeout: float) -> bool:
+        """Poll for a URL change within *timeout* seconds."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                if self.page.url != original_url:
+                    return True
+            except Exception:
+                return True
+            time.sleep(0.15)
+        return False
+
+    def _amend_last_click_to_failure(self, label: str, locator: str, original_url: str) -> None:
+        """Flip the last recorded passed/partial click step to a truthful failure."""
+        if not self.steps:
+            return
+        last = self.steps[-1]
+        result = last.get("result", {})
+        if last.get("type") != "click" or result.get("status") not in ("passed", "partial_pass"):
+            return
+        error = (
+            f"Click recorded passed but the page did not navigate (stayed on {original_url}). "
+            "Overlay swallow suspected — the click was consumed by an ad/consent overlay."
+        )
+        result["status"] = "failed"
+        result["error"] = error
+        result["failure_note"] = error
+        self._persist_sidecar("running")
 
     def assert_visible(self, locator: str, label: str = "") -> None:
         if not label:
@@ -828,15 +971,5 @@ class EvidenceTracker:
         else:
             self.run_history["failed_runs"] += 1
 
-        json_content = EvidenceSerializer.serialize(
-            test_name=self.test_name,
-            condition_ref=self.condition_ref,
-            story_ref=self.story_ref,
-            status=status,
-            page_url=self.page.url,
-            run_history=self.run_history,
-            steps=self.steps,
-        )
-
-        self.sidecar_path.write_text(json_content, encoding="utf-8")
+        self._persist_sidecar(status)
         return str(self.sidecar_path)

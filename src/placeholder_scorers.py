@@ -436,6 +436,12 @@ class PlaceholderScorer:
         # B-025: Bonus for clickable containers — divs/generic elements with
         # an ID that contain interactive children. These are the intended
         # click targets when the heading child matches text.
+        # B-030: the bonus must stay BELOW the interactive-element bonus
+        # (link/button +3 role +2 href = +5). A wrapper div like
+        # `#do_action` (whose only interactive content is a nested anchor)
+        # must never outrank the real button — clicking the wrapper silently
+        # does nothing. Containers win text-only matches; interactive
+        # elements win when both match.
         _container_roles = {"generic", "group", "region", "article", ""}
         is_container = role in _container_roles or computed_role in _container_roles
         if is_container and element_id:
@@ -443,8 +449,9 @@ class PlaceholderScorer:
             # they have no real DOM id and are not click targets; the bonus
             # must not let them outscore real buttons/radios.
             if not element.get("synthetic_id"):
-                # Container with ID — likely the right click target
-                bonus += 10
+                # Container with ID — modest bonus, below real interactive
+                # elements (B-030: interactive-first ordering).
+                bonus += 3
         return bonus
 
     @staticmethod

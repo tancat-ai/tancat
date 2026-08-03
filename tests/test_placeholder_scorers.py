@@ -595,3 +595,56 @@ def test_pass1_fill_gate_skips_container_with_matching_accessible_name() -> None
     result = matcher.pass1_text_match("FILL", "username", pages_data)
     assert result is not None
     assert result["selector"] == "#user-name"
+
+
+# ── B-030: interactive elements must outrank wrapper containers for CLICK ──
+
+
+class TestB030InteractiveOverContainer:
+    """B-030: \"Check Out\" must resolve to the real button, not a wrapper div.
+
+    The automationexercise cart page has ``.btn.btn-default.check_out`` (an
+    anchor, href=/checkout) inside ``#do_action`` (a wrapper div whose click
+    does nothing). The B-025 container bonus previously gave the wrapper +10,
+    outranking the anchor's +5 — clicking a wrapper div silently does nothing.
+    """
+
+    def test_anchor_beats_wrapper_div_for_checkout(self) -> None:
+        anchor = _element(
+            {
+                "selector": ".btn.btn-default.check_out",
+                "text": "Proceed To Checkout",
+                "role": "link",
+                "tag": "a",
+                "href": "/checkout",
+                "id": "",
+                "is_visible": True,
+            }
+        )
+        wrapper = _element(
+            {
+                "selector": "#do_action",
+                "text": "Proceed To Checkout Register / Login account to proceed on checkout. Continue On Cart",
+                "role": "generic",
+                "tag": "div",
+                "href": "",
+                "id": "do_action",
+                "is_visible": True,
+            }
+        )
+
+        anchor_score = PlaceholderScorer.compute_element_score("CLICK", "Check Out", anchor, anchor["selector"], 0.0)
+        wrapper_score = PlaceholderScorer.compute_element_score("CLICK", "Check Out", wrapper, wrapper["selector"], 0.0)
+
+        assert anchor_score is not None and wrapper_score is not None
+        assert anchor_score > wrapper_score, (
+            f"anchor ({anchor_score}) must outrank wrapper div ({wrapper_score}) for 'Check Out'"
+        )
+
+    def test_container_bonus_stays_below_interactive_bonus(self) -> None:
+        """Regression guard: container-with-ID bonus must never exceed link/button."""
+        container = _element({"role": "generic", "tag": "div", "id": "product-card", "text": "Blue Top"})
+        link = _element({"role": "link", "tag": "a", "href": "/product_details/1", "text": "Blue Top"})
+        container_bonus = PlaceholderScorer._click_role_bonus("CLICK", container)
+        link_bonus = PlaceholderScorer._click_role_bonus("CLICK", link)
+        assert container_bonus < link_bonus
