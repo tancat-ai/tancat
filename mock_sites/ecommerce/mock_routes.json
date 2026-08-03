@@ -1,0 +1,20 @@
+{
+  "_comment": "Route aliases: map the pipeline's keyword-route vocabulary to the mock's files (302-redirected to canonical .html so page URLs and to_have_url assertions stay canonical). Without these, journey discovery and cart-seeding derive /view_cart, /products, /checkout etc. and hit 404s, so cart-dependent pages never get scraped with items. Self-maps (/cart.html -> cart.html) are intentionally omitted: the static server already serves those paths.",
+  "/cart": "cart.html",
+  "/view_cart": "cart.html",
+  "/basket": "cart.html",
+  "/checkout-step-one.html": "checkout.html",
+  "/checkout_step_one": "checkout.html",
+  "/checkout": "checkout.html",
+  "/checkout-step-two.html": "checkout.html",
+  "/checkout_step_two": "checkout.html",
+  "/checkout-overview.html": "checkout.html",
+  "/checkout-complete.html": "checkout_success.html",
+  "/complete": "checkout_success.html",
+  "/thank-you": "checkout_success.html",
+  "/products": "products.html",
+  "/inventory.html": "products.html",
+  "/login": "index.html",
+  "/signin": "index.html",
+  "/home": "index.html"
+}

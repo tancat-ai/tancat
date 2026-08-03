@@ -45,6 +45,11 @@ payment leg included — the eval-002 gap). Captures: `ecommerce_mock_code.py`.
 Measured baseline: static 12/16 (75%), execution 6 passed / 1 failed / 1 skipped
 against the mock. Surfaces deterministically: empty-cart element picked for
 cart-content ASSERTs, and the 'cvc'/skip family — both logged as B-037.
+**B-037 fixed (2026-08-03): execution now 8/8 passed** — empty-state gate,
+cvc↔cvv synonyms, CSS classes in structural matching, classed cart cells,
+`cardholder_name` name attr, and route aliases (`mock_routes.json` +
+302-redirects in the mock server) so journey/cart-seeding reach cart/checkout
+with items and URLs stay canonical.
 
 Reference repos researched 2026-08-03 (sources of inspiration, **not** dependencies):
 

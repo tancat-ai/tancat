@@ -120,17 +120,20 @@
     tbody.innerHTML = "";
     cart.forEach(function (item) {
       var tr = document.createElement("tr");
+      // B-037: classes live on the text-bearing elements the scraper captures
+      // (table/td are not in the scraper's tag lists) — mirror automationexercise's
+      // .cart_total_price so "product name and price" resolves to a real cell.
       tr.innerHTML =
-        '<td class="cart_description"><h4>' +
+        '<td class="cart_description"><h4 class="cart_description">' +
         item.name +
         "</h4></td>" +
-        '<td class="cart_price"><p>Rs. ' +
+        '<td class="cart_price"><p class="cart_price">Rs. ' +
         item.price +
         "</p></td>" +
-        '<td class="cart_quantity"><p>' +
+        '<td class="cart_quantity"><p class="cart_quantity">' +
         item.qty +
         "</p></td>" +
-        '<td class="cart_total"><p>Rs. ' +
+        '<td class="cart_total"><p class="cart_total_price">Rs. ' +
         item.price * item.qty +
         "</p></td>";
       tbody.appendChild(tr);

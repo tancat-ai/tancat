@@ -648,3 +648,55 @@ class TestB030InteractiveOverContainer:
         container_bonus = PlaceholderScorer._click_role_bonus("CLICK", container)
         link_bonus = PlaceholderScorer._click_role_bonus("CLICK", link)
         assert container_bonus < link_bonus
+
+
+class TestB037EmptyStateGate:
+    """B-037: empty-state elements must never satisfy content-presence ASSERTs."""
+
+    def test_empty_cart_rejected_for_product_content(self) -> None:
+        empty = _element(
+            {"selector": "#empty_cart", "text": "Cart is empty! Please add some products.", "role": "p", "tag": "p"}
+        )
+        assert PlaceholderScorer._assert_empty_state_rejects("product name and price", empty) is True
+        score = PlaceholderScorer.compute_element_score(
+            "ASSERT", "product name and price", empty, empty["selector"], 0.0
+        )
+        assert score is None, "empty-cart element must be excluded from content ASSERTs"
+
+    def test_empty_state_allowed_when_description_asks_for_empty(self) -> None:
+        empty = _element(
+            {"selector": "#empty_cart", "text": "Cart is empty! Please add some products.", "role": "p", "tag": "p"}
+        )
+        assert PlaceholderScorer._assert_empty_state_rejects("cart is empty message", empty) is False
+
+    def test_empty_state_rejected_for_price(self) -> None:
+        empty = _element({"selector": "#empty_cart", "text": "There are no items in your basket.", "role": "p"})
+        assert PlaceholderScorer._assert_empty_state_rejects("product price", empty) is True
+
+
+class TestB037ClassStructuralBonus:
+    """B-037: CSS classes participate in structural matching."""
+
+    def test_price_class_matches_price_description(self) -> None:
+        cell = _element(
+            {
+                "selector": "p.cart_total_price",
+                "classes": "cart_total_price",
+                "text": "Rs. 500",
+                "role": "p",
+                "tag": "p",
+            }
+        )
+        bonus = PlaceholderScorer._structural_bonus("ASSERT", "product name and price", cell)
+        assert bonus >= 15, f"class 'cart_total_price' should match 'price' in description (got {bonus})"
+
+    def test_description_class_matches_name_description(self) -> None:
+        cell = _element(
+            {"selector": "h4.cart_description", "classes": "cart_description", "text": "Blue Top", "tag": "h4"}
+        )
+        bonus = PlaceholderScorer._structural_bonus("ASSERT", "cart description", cell)
+        assert bonus >= 15, f"class 'cart_description' should match 'description' (got {bonus})"
+
+    def test_unrelated_class_no_bonus(self) -> None:
+        el = _element({"selector": ".brand", "classes": "brand", "text": "Mock Store", "tag": "span"})
+        assert PlaceholderScorer._structural_bonus("ASSERT", "product name and price", el) == 0

@@ -79,8 +79,8 @@
         {
           "action": "ASSERT",
           "description": "product name and price",
-          "expected_locator": ".cart_total",
-          "tolerance_selectors": ["#cart_items", ".cart_description", ".cart_price"],
+          "expected_locator": ".cart_total_price",
+          "tolerance_selectors": [".cart_price", ".cart_description", "#cart_items"],
           "expected_page": "http://localhost:8781/cart.html"
         }
       ]

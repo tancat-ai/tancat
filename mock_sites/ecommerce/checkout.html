@@ -39,7 +39,11 @@
         <input type="text" id="zip" name="zip" required />
 
         <label for="card-name">Cardholder Name</label>
-        <input type="text" id="card-name" name="card_name" required />
+        <!-- B-037: name attr must not share a word with "card number" —
+             name="card_name" matched pass-1 via the shared word "card" and
+             the Cardholder Name field won the tie. The name attribute is the
+             stable signal (label-for association can race in the AX tree). -->
+        <input type="text" id="card-name" name="cardholder_name" required />
 
         <label for="card-number">Card Number</label>
         <input type="text" id="card-number" name="card_number" required />

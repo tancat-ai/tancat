@@ -160,6 +160,14 @@ class PlaceholderScorer:
                     # interaction) but penalised heavily downstream.
                     pass
 
+        # --- ASSERT empty-state gate (B-037) ---
+        # An element whose text signals emptiness ("Cart is empty!", "no items")
+        # must never satisfy a content-presence assertion ("product name and
+        # price"). The B-016 negation gate only runs in pass-1 text matching;
+        # the scoring path used to let the empty-state marker win by default.
+        if action == "ASSERT" and PlaceholderScorer._assert_empty_state_rejects(description, element):
+            return None
+
         # --- Haystack match (fast path) ---
         haystack = PlaceholderScorer._build_haystack(element).lower()
         normalized_desc = re.sub(r"['\"]", "", description).lower().replace("_", " ")
@@ -299,11 +307,13 @@ class PlaceholderScorer:
         desc_content_words = desc_words - {"click", "tap", "press"} if action == "CLICK" else desc_words
         raw_id = str(element.get("id", ""))
         raw_dt = str(element.get("data_test", ""))
+        raw_classes = str(element.get("classes", ""))
         # Split camelCase BEFORE lowercasing, then normalise delimiters
         id_words = set(SemanticMatcher._split_camel_case(raw_id).replace("_", " ").replace("-", " ").lower().split())
         data_test_words = set(
             SemanticMatcher._split_camel_case(raw_dt).replace("_", " ").replace("-", " ").lower().split()
         )
+        class_words = set(raw_classes.replace("_", " ").replace("-", " ").lower().split())
         # Expand common id abbreviations to their full forms
         _id_expansions: dict[str, set[str]] = {"ref": {"reference"}, "ncd": {"claims", "discount", "bonus"}}
         expanded_id: set[str] = set(id_words)
@@ -316,20 +326,18 @@ class PlaceholderScorer:
             if word in _id_expansions:
                 expanded_dt.update(_id_expansions[word])
         data_test_words = expanded_dt
-        structural_words = data_test_words | id_words
+        # B-037: CSS classes participate in structural matching (cart table
+        # cells carry the price/description words that text alone lacks).
+        structural_words = data_test_words | id_words | class_words
         structural_content = structural_words & desc_content_words
         match_count = len(structural_content)
         if match_count >= 2:
             return 80 + match_count * 5
         if match_count == 1:
-            # Single-word ID match — weaker signal, but still meaningful
-            # (e.g. id=quoteRef matches "quote" in "quote reference number")
+            # Single-word ID/class match — weaker signal, but still meaningful
+            # (e.g. id=quoteRef matches "quote" in "quote reference number",
+            #  class=cart_total_price matches "price" in "product name and price")
             return 15
-        return 0
-        structural_words = data_test_words | id_words
-        structural_content = structural_words & desc_content_words
-        if len(structural_content) >= 2:
-            return 80 + len(structural_content) * 5
         return 0
 
     @staticmethod
@@ -375,6 +383,40 @@ class PlaceholderScorer:
         ):
             return -2
         return 0
+
+    @staticmethod
+    def _assert_empty_state_rejects(description: str, element: dict[str, Any]) -> bool:
+        """True when an empty-state element cannot satisfy a content ASSERT.
+
+        B-037: on the e-commerce mock, ``#empty_cart`` ("Cart is empty! Please
+        add some products.") scored as the top ASSERT candidate for "product
+        name and price" because nothing else matched and the empty marker
+        shares the word "product(s)". Exclude empty-state text when the
+        description signals content presence.
+        """
+        desc_lower = description.lower()
+        text_lower = str(element.get("text", "")).lower()
+        empty_signals = (
+            "is empty",
+            "empty!",
+            "no items",
+            "no products",
+            "no results",
+            "no data",
+            "nothing here",
+            "you have no",
+            "there are no",
+            "0 items",
+        )
+        content_signals = ("product", "price", "item", "cart", "basket", "content", "total", "quantity")
+        if not any(signal in text_lower for signal in empty_signals):
+            return False
+        # The description must ask for content — an explicit "cart is empty"
+        # assertion ("empty" in the description) is legitimately satisfied by
+        # the empty-state element.
+        if "empty" in desc_lower:
+            return False
+        return any(signal in desc_lower for signal in content_signals)
 
     @staticmethod
     def _assertion_candidate_bonus(action: str, element: dict[str, Any]) -> int:
