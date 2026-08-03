@@ -180,6 +180,17 @@ class VectorStoreBackend(Protocol):
     def count(self) -> int: ...
     def clear(self) -> None: ...
 
+    def counts_by_type(self) -> dict[str, int]:
+        """Count stored entries grouped by ``entry_type`` (golden/doc/learned)."""
+        ...
+
+    def delete_learned(self) -> int:
+        """Delete entries that are neither golden nor doc (learned patterns).
+
+        Returns the number of entries removed.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Milvus Lite backend
@@ -290,6 +301,45 @@ class MilvusLiteBackend:
         """Total number of entries in the collection."""
         stats = self._c.get_collection_stats(_COLLECTION_NAME)
         return stats["row_count"]
+
+    def counts_by_type(self) -> dict[str, int]:
+        """Count stored entries grouped by ``entry_type`` metadata.
+
+        B-036 Phase 2: used by ``rag_ingest --stats`` and the bundled-pack
+        diagnostics. Entries without an ``entry_type`` are bucketed as
+        ``unknown``.
+        """
+        from collections import Counter
+
+        rows = self._c.query(
+            _COLLECTION_NAME,
+            filter="",
+            output_fields=["entry_type"],
+            limit=100_000,
+        )
+        counter: Counter[str] = Counter(str(row.get("entry_type", "unknown")) for row in rows)
+        return dict(counter)
+
+    def delete_learned(self) -> int:
+        """Delete non-golden/doc entries (learned patterns).
+
+        Keeps the bundled golden pack and doc chunks intact so a re-seed
+        never duplicates them. Returns the number of entries removed.
+        """
+        rows = self._c.query(
+            _COLLECTION_NAME,
+            filter="",
+            output_fields=["id", "entry_type"],
+            limit=100_000,
+        )
+        ids = [row["id"] for row in rows if str(row.get("entry_type", "")) not in ("golden", "doc")]
+        if not ids:
+            return 0
+        result = self._c.delete(_COLLECTION_NAME, ids=ids)
+        if isinstance(result, dict):
+            return int(result.get("delete_count", len(ids)))
+        # Backward-compat: older Milvus returns the deleted primary keys.
+        return len(result)
 
     def clear(self) -> None:
         """Delete all entries (for testing / rebuild).
@@ -422,3 +472,15 @@ class RAGStore:
     @property
     def is_empty(self) -> bool:
         return self._backend.count() == 0
+
+    def counts_by_type(self) -> dict[str, int]:
+        """Count stored entries grouped by ``entry_type`` (golden/doc/learned)."""
+        return self._backend.counts_by_type()
+
+    def delete_learned(self) -> int:
+        """Delete non-golden/doc entries (learned patterns).
+
+        Keeps golden patterns and doc chunks so re-seeding stays
+        dedup-free. Returns the number of entries removed.
+        """
+        return self._backend.delete_learned()

@@ -251,9 +251,14 @@ Generated test files are written to `generated_tests/` with `scrape_manifest.jso
 
 ### Phase 8: RAG & Document Ingestion (Phase 3 + Phase 1 Foundation)
 
-`rag_store.py` → `rag_retriever.py` → `scripts/rag_ingest.py`
+`rag_store.py` → `rag_retriever.py` → `rag_bundled.py` → `scripts/rag_ingest.py`
 
 The RAG pipeline augments placeholder resolution with retrieval from a vector store (Milvus Lite). Documents are ingested from `docs/rag_corpus/`, chunked, embedded (SentenceTransformer), and stored. At resolution time, `RAGRetriever` queries the store for golden patterns and doc chunks matching the placeholder description, feeding scoring bonuses to `PlaceholderScorer`. RAG improves resolver accuracy by +11.6pp (41.9% → 53.5%).
+
+**B-036 (2026-08-03): RAG is always-on with no configuration surface.**
+- `_build_rag_retriever()` builds the retriever by default; `RAG_ENABLED=0` is a transitional opt-out. Empty store ⇒ no patterns ⇒ no bonus ⇒ identical behavior to the pre-RAG pipeline. Any store/embedder failure degrades silently (never blocks generation).
+- **Bundled golden pack auto-seed**: `src/rag_bundled.py` ships the eval golden keys (`scripts/eval/dataset/eval-*.json`) + curated Playwright docs (`docs/rag_corpus/playwright/`). On the first generation run (orchestrator init), `ensure_bundled_seeded()` seeds the store and writes an idempotent marker (`evidence/.rag_bundled_seeded.json`) — re-runs are a no-op. No manual `rag_ingest.py` needed.
+- Power-user CLI (`scripts/rag_ingest.py`): `--bundled` (re-seed, `--force` to force), `--stats` (per-type counts), `--prune-learned` (drop learned patterns, keep golden/docs; active once learning lands in B-036 Phase 3).
 
 The **Ingestion Agent** (Phase 1) extends this with PDF parsing (Docling/PyMuPDF) for real-world insurance documents. The LV Insurance mock site (`generated_tests/mock_insurance_site.html`) and companion documents provide an end-to-end test domain: 7-step quote flow with underwriting rules validated against ingested product documents.
 

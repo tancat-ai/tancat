@@ -1,7 +1,9 @@
 """Tests for the intelligent pipeline orchestrator."""
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.journey_scraper import CredentialProfile
 from src.orchestrator import TestOrchestrator
@@ -961,3 +963,65 @@ def test_orchestrator_without_credential_profile() -> None:
     orchestrator = TestOrchestrator(generator)
 
     assert orchestrator._credential_profile is None
+
+
+# ---------------------------------------------------------------------------
+# B-036 Phase 1: RAG always-on by default, RAG_ENABLED=0 opts out
+# ---------------------------------------------------------------------------
+
+
+def test_build_rag_retriever_default_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """B-036: with RAG_ENABLED unset, the retriever is built (always-on)."""
+    monkeypatch.delenv("RAG_ENABLED", raising=False)
+    retriever = TestOrchestrator._build_rag_retriever()
+    assert retriever is not None
+
+
+def test_build_rag_retriever_opt_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    """B-036: RAG_ENABLED=0 remains honoured as an opt-out."""
+    monkeypatch.setenv("RAG_ENABLED", "0")
+    assert TestOrchestrator._build_rag_retriever() is None
+
+
+# ---------------------------------------------------------------------------
+# B-036 Phase 2: bundled auto-seed hook
+# ---------------------------------------------------------------------------
+
+
+def test_orchestrator_auto_seeds_bundled_when_rag_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B-036 Phase 2: first-run bundled auto-seed runs when RAG is on."""
+    monkeypatch.delenv("RAG_ENABLED", raising=False)
+    seeded = MagicMock()
+    monkeypatch.setattr("src.rag_bundled.ensure_bundled_seeded", seeded)
+    generator = TestGenerator(output_dir="generated_tests")
+    TestOrchestrator(generator)
+    seeded.assert_called_once()
+
+
+def test_orchestrator_seed_failure_does_not_break_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failing auto-seed degrades: orchestrator construction still succeeds."""
+    monkeypatch.delenv("RAG_ENABLED", raising=False)
+
+    def _boom() -> None:
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr("src.rag_bundled.ensure_bundled_seeded", _boom)
+    generator = TestGenerator(output_dir="generated_tests")
+    orchestrator = TestOrchestrator(generator)
+    assert orchestrator is not None
+
+
+def test_orchestrator_skips_auto_seed_when_rag_opted_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RAG_ENABLED=0 → no retriever → the seed hook is never reached."""
+    monkeypatch.setenv("RAG_ENABLED", "0")
+    seeded = MagicMock()
+    monkeypatch.setattr("src.rag_bundled.ensure_bundled_seeded", seeded)
+    generator = TestGenerator(output_dir="generated_tests")
+    TestOrchestrator(generator)
+    seeded.assert_not_called()

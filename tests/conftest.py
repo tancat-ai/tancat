@@ -1,8 +1,17 @@
 """Pytest configuration and fixtures for test suite."""
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
+
+# B-036 Phase 1: RAG is always-on in production, but unit tests must be
+# hermetic — they must not consult the machine-local vector store
+# (``evidence/rag_store.db``), whose seed state differs between machines
+# (CI has no store; a dev workstation may have a seeded one). Golden-pattern
+# retrieval is exercised explicitly by tests/test_rag_retriever.py and by
+# the eval harness (scripts/eval/), which is the resolution-accuracy gate.
+os.environ.setdefault("RAG_ENABLED", "0")
 
 
 @pytest.fixture

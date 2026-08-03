@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -204,6 +205,44 @@ class TestMain:
         """No args returns early with a zero-count dict (help printed to stdout)."""
         result = main([])
         assert result == {"golden": 0, "docs": 0, "pdfs": 0}
+
+    def test_bundled_flag_calls_seed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 Phase 2: --bundled seeds idempotently (no-op when marked)."""
+        fake = MagicMock(return_value={"status": "skipped", "golden": 0, "docs": 0})
+        monkeypatch.setattr("scripts.rag_ingest.ensure_bundled_seeded", fake)
+        result = main(["--bundled"])
+        bundled = result["bundled"]
+        assert isinstance(bundled, dict)
+        assert bundled["status"] == "skipped"
+        fake.assert_called_once_with(force=False)
+
+    def test_bundled_force_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 Phase 2: --bundled --force re-seeds despite the marker."""
+        fake = MagicMock(return_value={"status": "seeded", "golden": 5, "docs": 3})
+        monkeypatch.setattr("scripts.rag_ingest.ensure_bundled_seeded", fake)
+        result = main(["--bundled", "--force"])
+        bundled = result["bundled"]
+        assert isinstance(bundled, dict)
+        assert bundled["status"] == "seeded"
+        fake.assert_called_once_with(force=True)
+
+    def test_stats_flag_reports_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 Phase 2: --stats shows per-type counts."""
+        fake = MagicMock(return_value={"golden": 67, "doc": 27, "total": 94})
+        monkeypatch.setattr("scripts.rag_ingest.store_stats", fake)
+        result = main(["--stats"])
+        stats = result["stats"]
+        assert isinstance(stats, dict)
+        assert stats["total"] == 94
+        fake.assert_called_once()
+
+    def test_prune_learned_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 Phase 2: --prune-learned removes learned patterns only."""
+        fake = MagicMock(return_value=3)
+        monkeypatch.setattr("scripts.rag_ingest.prune_learned", fake)
+        result = main(["--prune-learned"])
+        assert result["pruned"] == 3
+        fake.assert_called_once()
 
     @pytest.mark.slow
     def test_both_flags_accepted(self) -> None:

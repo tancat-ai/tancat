@@ -70,6 +70,17 @@ class _InMemoryBackend:
     def count(self) -> int:
         return len(self._entries)
 
+    def counts_by_type(self) -> dict[str, int]:
+        from collections import Counter
+
+        counter: Counter[str] = Counter(str(meta.get("entry_type", "unknown")) for _vec, meta, _text in self._entries)
+        return dict(counter)
+
+    def delete_learned(self) -> int:
+        before = len(self._entries)
+        self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
+        return before - len(self._entries)
+
     def clear(self) -> None:
         self._entries.clear()
 
@@ -172,6 +183,23 @@ class TestRAGRetrieverEmptyStore:
     def test_retrieve_returns_empty(self) -> None:
         retriever = _build_retriever([])
         assert retriever.retrieve("anything") == []
+
+
+class TestRAGRetrieverGracefulDegradation:
+    """B-036 Phase 1: a failing store/embedder must never raise."""
+
+    class _BrokenStore:
+        def retrieve(self, *args: object, **kwargs: object) -> list[RetrievedPattern]:
+            raise RuntimeError("embedder model download failed")
+
+    def test_retrieve_degrades_to_empty_on_store_failure(self) -> None:
+        retriever = RAGRetriever(self._BrokenStore())  # type: ignore[arg-type]
+        assert retriever.retrieve("anything", action_type="CLICK") == []
+
+    def test_retrieve_still_degrades_on_repeat_failures(self) -> None:
+        retriever = RAGRetriever(self._BrokenStore())  # type: ignore[arg-type]
+        for _ in range(3):
+            assert retriever.retrieve("anything") == []
 
 
 class TestRAGRetrieverScoring:

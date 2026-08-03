@@ -85,6 +85,20 @@ class TestOrchestrator:
         self._model = model
         # RAG: optionally wire retrieval-augmented scoring
         rag_retriever = self._build_rag_retriever()
+        # B-036 Phase 2: first-run bundled auto-seed (idempotent marker).
+        # Guarded — a failure (offline embedder download, corrupt store)
+        # must never block generation; the resolver simply runs without
+        # the RAG bonus and retries the seed on the next run.
+        if rag_retriever is not None:
+            try:
+                from src.rag_bundled import ensure_bundled_seeded
+
+                ensure_bundled_seeded()
+            except Exception:
+                logger.warning(
+                    "Bundled RAG auto-seed failed — continuing without RAG bonus",
+                    exc_info=True,
+                )
         self._placeholder_orchestrator = PlaceholderOrchestrator(
             starting_url=None,
             credential_profile=self._credential_profile,
@@ -123,21 +137,33 @@ class TestOrchestrator:
 
     @staticmethod
     def _build_rag_retriever() -> Any | None:
-        """Build a RAGRetriever when RAG_ENABLED=1, else return None."""
-        rag_enabled = os.getenv("RAG_ENABLED", "").strip() == "1"
-        if not rag_enabled:
+        """Build a RAGRetriever by default; ``RAG_ENABLED=0`` opts out.
+
+        B-036 Phase 1 (2026-08-03): RAG is always-on for consumers — a
+        missing ``RAG_ENABLED`` means enabled. Graceful degradation keeps
+        behaviour identical to the pre-RAG pipeline: an empty store yields
+        no retrieved patterns (hence no scoring bonus), and any store or
+        embedder failure degrades to no-RAG rather than blocking generation.
+        ``RAG_ENABLED=0`` stays honoured as an opt-out for one release
+        before removal (see docs/specs/FEATURE_SPEC_B036_consumer_config.md).
+        """
+        if os.getenv("RAG_ENABLED", "").strip() == "0":
             return None
         try:
             from src.rag_retriever import RAGRetriever
             from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
             from src.storage import get_storage
 
+            # Lazy embedder + lazy Milvus client: constructing these is cheap.
+            # The ~80 MB embedder model downloads only on the first retrieval
+            # against a NON-empty store; empty stores short-circuit before any
+            # network/model load, so first-run generation never blocks on it.
             embedder = SentenceTransformerEmbedder()
             backend = MilvusLiteBackend(str(get_storage().rag_path()), embedder.dimension)
             store = RAGStore(backend, embedder)
             return RAGRetriever(store)
         except Exception:
-            logger.warning("RAG enabled but failed to initialise — disabling", exc_info=True)
+            logger.warning("RAG failed to initialise — disabling", exc_info=True)
             return None
 
     # Backwards-compatible attributes: these let existing test code assign/mock
