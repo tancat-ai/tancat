@@ -1,0 +1,155 @@
+/* Minimal shared styles for the e-commerce mock. */
+body {
+  margin: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  color: #333;
+  background: #fafafa;
+}
+a {
+  color: #3498db;
+  text-decoration: none;
+}
+header {
+  background: #2c3e50;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header .brand {
+  color: #fff;
+  font-weight: bold;
+  font-size: 20px;
+}
+nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 24px;
+}
+nav a {
+  color: #ecf0f1;
+  font-weight: 600;
+}
+nav li.active a {
+  color: #f39c12;
+}
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+h1 {
+  font-size: 26px;
+  margin-bottom: 16px;
+}
+.title {
+  color: #2c3e50;
+  text-align: center;
+}
+.features_items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+.productinfo {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+}
+.productinfo img {
+  max-width: 100%;
+  height: 140px;
+  object-fit: contain;
+}
+.productinfo .price {
+  color: #e74c3c;
+  font-size: 18px;
+  margin: 8px 0 4px;
+}
+.productinfo p {
+  margin: 4px 0 12px;
+  font-weight: 600;
+}
+.btn {
+  display: inline-block;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  background: #bdc3c7;
+  color: #333;
+}
+.btn-default {
+  background: #95a5a6;
+  color: #fff;
+}
+.btn-success {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-primary {
+  background: #3498db;
+  color: #fff;
+}
+a.btn {
+  text-decoration: none;
+}
+.add-to-cart {
+  display: inline-block;
+  margin-top: 8px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+th,
+td {
+  border: 1px solid #eee;
+  padding: 10px 12px;
+  text-align: left;
+}
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.5);
+}
+.modal-content {
+  background: #fff;
+  max-width: 420px;
+  margin: 15vh auto;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+.modal-title {
+  font-size: 20px;
+  margin-top: 0;
+}
+form label {
+  display: block;
+  margin: 10px 0 4px;
+  font-weight: 600;
+}
+form input,
+form select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+#success-title {
+  color: #27ae60;
+}
+.empty-cart {
+  color: #888;
+  font-style: italic;
+}

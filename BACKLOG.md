@@ -352,6 +352,20 @@ writing if code fails syntax check.
 
 ## 🔴 Open Bugs
 
+### B-037 — E-commerce mock surfaces: empty-cart element resolution + the cvc/skip family
+**Status:** 🆕 new (2026-08-03, e-commerce mock build)
+**Priority:** Medium — the mock now makes both failures deterministic; fixing them lifts eval-006 baseline (12/16 static, 6/8 execution)
+
+**Context:** first measured baseline on `mock_sites/ecommerce/` (eval-006, capture `ecommerce_mock_code.py`): static resolution 12/16 (75%), execution **6 passed / 1 failed / 1 skipped**. The mock reproduces deterministically what the live site only showed as flaky noise:
+
+1. **Cart-content ASSERT resolves to the empty-cart marker.** `test_05_verify_cart_contents` adds a product then asserts `#empty_cart` is visible — the resolver picked the empty-state element (static cart.html scrape shows `#empty_cart`, table rows only exist when seeded) for "product name and price". Class: B-022-adjacent state-dependent resolution, but deterministic on the mock. The resolver should prefer cart-table content elements (`.cart_total`, `#cart_items`) over empty-state markers for cart-content descriptions (negation-aware: "is empty" marker contradicts "product name and price").
+2. **'cvc' FILL unresolved → the whole checkout+payment test skips.** `test_07` emitted `pytest.skip("unresolved placeholders for: 'cvc'")`; 'card number' also confused with the sibling `#card-name`/`#zip` fields. This is the skip family eval-002 never saw (zero checkout/payment golden keys) — now visible via eval-006's checkout leg.
+
+**Also noted (static misses):** 'add to cart confirmation' and 'order success message' were skeletonized as URL/other-element assertions instead of the modal-text/success-text asserts — the AI-037 LLM skeleton nondeterminism class.
+
+**Proposed fix direction:** (1) empty-state negation in ASSERT resolution (prefer content elements over empty markers); (2) card-field disambiguation (pass-1/LLM prefers label-exact match; `card number` → `#card-number`, `cardholder name` → `#card-name`); (3) journey should click Place Order to discover `checkout_success.html` so the success ASSERT resolves in-scope.
+
+---
 ### B-036 — Consumer config architecture: env-var feature gates don't fit the product
 **Status:** 🆕 new (2026-08-03 CLI review)
 **Priority:** Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers

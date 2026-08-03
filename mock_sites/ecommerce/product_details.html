@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Product Details - Mock Store</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Store</span>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="/products.html">Products</a></li>
+        <li><a href="/cart.html">Cart</a></li>
+        <li><a href="/checkout.html">Checkout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">Product Details</h1>
+    <div class="productinfo" style="max-width: 380px; margin: 0 auto;">
+      <img id="product-image" data-label="Blue Top" alt="Blue Top" />
+      <h2 id="product-name" class="price" style="color:#2c3e50;">Blue Top</h2>
+      <p id="product-price" style="color:#e74c3c; font-size: 18px;">Rs. 500</p>
+      <label for="quantity">Quantity:</label>
+      <input type="number" id="quantity" name="quantity" value="1" min="1" max="10"
+        style="width: 80px; display: inline-block; margin: 8px 0 16px;" />
+      <br />
+      <button class="btn btn-default add-to-cart" id="add-to-cart"
+        data-product-id="1" data-name="Blue Top" data-price="500">Add to cart</button>
+      <a href="/cart.html" class="btn btn-primary" style="margin-left: 8px;">View Cart</a>
+    </div>
+  </main>
+
+  <div id="cartModal" class="modal">
+    <div class="modal-content">
+      <h2 class="modal-title w-100">Added!</h2>
+      <p class="text-center">Your product has been added to cart.</p>
+      <button class="btn btn-success close-modal btn-block">Continue Shopping</button>
+      <a href="/cart.html" class="btn btn-default view-cart">View Cart</a>
+    </div>
+  </div>
+
+  <script src="cart.js"></script>
+  <script src="img.js"></script>
+  <script>
+    // Per-product detail: read ?id= and update the page (deterministic).
+    (function () {
+      var PRODUCTS = {
+        1: { name: "Blue Top", price: 500 },
+        2: { name: "Men Tshirt", price: 400 },
+        3: { name: "Stylish Dress", price: 1500 },
+        4: { name: "Winter Jacket", price: 1200 },
+        5: { name: "Summer Hat", price: 300 },
+      };
+      var id = new URLSearchParams(window.location.search).get("id") || "1";
+      var product = PRODUCTS[id] || PRODUCTS[1];
+      document.getElementById("product-name").textContent = product.name;
+      document.getElementById("product-price").textContent = "Rs. " + product.price;
+      document.getElementById("product-image").setAttribute("data-label", product.name);
+      var btn = document.getElementById("add-to-cart");
+      btn.setAttribute("data-product-id", id);
+      btn.setAttribute("data-name", product.name);
+      btn.setAttribute("data-price", String(product.price));
+    })();
+  </script>
+</body>
+</html>
