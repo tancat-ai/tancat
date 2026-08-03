@@ -370,6 +370,7 @@ writing if code fails syntax check.
 ### B-036 — Consumer config architecture: env-var feature gates don't fit the product
 **Status:** 🆕 new (2026-08-03 CLI review)
 **Priority:** Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers
+**Spec:** `docs/specs/FEATURE_SPEC_B036_consumer_config.md` (2026-08-03) — 4 changes: always-on RAG, bundled golden pack auto-seed, evidence auto-learn (builds on AI-035), settings store + export-time fields. ~3 sessions.
 
 **Principle:** this is a consumer product (Streamlit/CLI). Feature toggles must not require `.env` edits. The product already has the right pattern for API keys (`secure_config.py` — Fernet-encrypted, persisted); the env vars are dev-era leftovers.
 
