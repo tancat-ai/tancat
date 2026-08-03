@@ -365,12 +365,16 @@ class PlaceholderResolver:
         description: str,
         page_elements: list[dict[str, Any]],
         golden_patterns: list | None = None,
+        site_hash: str | None = None,
     ) -> list[tuple[int, dict[str, Any]]]:
         """Return scored candidate elements in descending match order.
 
         Args:
             golden_patterns: Optional list of RetrievedPattern from RAG
-                retriever for golden-pattern scoring bonus."""
+                retriever for golden-pattern scoring bonus.
+            site_hash: Current site's one-way domain hash — enables the
+                same-site learned-pattern bonus (AI-035 Phase 2).
+        """
         desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
             return []
@@ -417,6 +421,7 @@ class PlaceholderResolver:
                 selector,
                 self.match_threshold,
                 golden_patterns=golden_patterns,
+                site_hash=site_hash,
             )
             if score is not None:
                 ranked.append((score, element))

@@ -21,6 +21,7 @@ class PlaceholderScorer:
     # retrieved from the RAG vector store.  Sits at the same tier as
     # _vision_enriched_bonus (+20).
     GOLDEN_PATTERN_BONUS: int = 20
+    SAME_SITE_LEARNED_BONUS: int = 5  # AI-035/B-036 Phase 3: verified same-site learned patterns
 
     # Penalty applied to hidden elements for non-ASSERT actions when
     # section scoping is active.  In the real pipeline, pages are scraped
@@ -127,6 +128,7 @@ class PlaceholderScorer:
         selector: str,
         match_threshold: float,
         golden_patterns: list | None = None,
+        site_hash: str | None = None,
     ) -> int | None:
         """Compute a composite score for one candidate element.
 
@@ -137,6 +139,9 @@ class PlaceholderScorer:
             golden_patterns: Optional list of RetrievedPattern from the RAG
                 retriever.  When non-empty, GOLDEN_PATTERN_BONUS is added
                 for elements matching a golden pattern selector.
+            site_hash: Current site's one-way domain hash (AI-035). When set,
+                same-site LEARNED patterns earn SAME_SITE_LEARNED_BONUS;
+                cross-site learned patterns earn nothing.
         """
         lowered = description.replace("_", " ").lower()
         icon_classes = str(element.get("icon_classes", "")).lower()
@@ -214,6 +219,8 @@ class PlaceholderScorer:
         # RAG golden pattern bonus
         if golden_patterns:
             score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns)
+        if site_hash:
+            score += PlaceholderScorer._learned_pattern_bonus(element, golden_patterns, site_hash)
 
         return score if score >= match_threshold else None
 
@@ -685,6 +692,37 @@ class PlaceholderScorer:
                 return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * pattern.confidence)
             if element_selector in pattern.selector or pattern.selector in element_selector:
                 return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.5 * pattern.confidence)
+        return 0
+
+    @staticmethod
+    def _learned_pattern_bonus(
+        element: dict[str, Any],
+        learned_patterns: list | None,
+        site_hash: str | None,
+    ) -> int:
+        """Apply a bonus for same-site learned patterns (AI-035/B-036 Phase 3).
+
+        A learned pattern is only trusted for the site it was verified on:
+        full selector match → +SAME_SITE_LEARNED_BONUS (5) scaled by
+        confidence; substring/tolerance match → half. Cross-site learned
+        patterns get 0 — they could be actively wrong for this site.
+        """
+        if not site_hash or not learned_patterns:
+            return 0
+        element_selector = str(element.get("selector", "")).strip()
+        if not element_selector:
+            return 0
+        for pattern in learned_patterns:
+            if not hasattr(pattern, "selector") or not pattern.selector:
+                continue
+            if not hasattr(pattern, "source") or pattern.source != "learned":
+                continue
+            if getattr(pattern, "site_hash", "") != site_hash:
+                continue
+            if pattern.selector == element_selector:
+                return int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * pattern.confidence)
+            if element_selector in pattern.selector or pattern.selector in element_selector:
+                return int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * 0.5 * pattern.confidence)
         return 0
 
     # ------------------------------------------------------------------

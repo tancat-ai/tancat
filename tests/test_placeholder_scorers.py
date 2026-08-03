@@ -6,6 +6,7 @@ inline logic in PlaceholderResolver.
 """
 
 from src.placeholder_scorers import PlaceholderScorer
+from src.rag_store import RetrievedPattern
 
 # ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -700,3 +701,101 @@ class TestB037ClassStructuralBonus:
     def test_unrelated_class_no_bonus(self) -> None:
         el = _element({"selector": ".brand", "classes": "brand", "text": "Mock Store", "tag": "span"})
         assert PlaceholderScorer._structural_bonus("ASSERT", "product name and price", el) == 0
+
+
+# ── AI-035 / B-036 Phase 3: same-site learned-pattern bonus ──────────────
+
+
+class TestLearnedPatternBonus:
+    """Learned patterns are only trusted on the site they were verified on."""
+
+    @staticmethod
+    def _pattern(
+        selector: str,
+        source: str = "learned",
+        site_hash: str = "abc123",
+        confidence: float = 0.9,
+    ) -> RetrievedPattern:
+        return RetrievedPattern(
+            description="FILL: username",
+            selector=selector,
+            action_type="FILL",
+            confidence=confidence,
+            source=source,
+            site_hash=site_hash,
+        )
+
+    def test_same_site_direct_match(self) -> None:
+        el = _element({"selector": "#user-name"})
+        bonus = PlaceholderScorer._learned_pattern_bonus(
+            el,
+            [self._pattern("#user-name")],
+            site_hash="abc123",
+        )
+        assert bonus == int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * 0.9)
+
+    def test_same_site_substring_match_scaled(self) -> None:
+        el = _element({"selector": "form input#user-name"})
+        bonus = PlaceholderScorer._learned_pattern_bonus(
+            el,
+            [self._pattern("#user-name")],
+            site_hash="abc123",
+        )
+        assert bonus == int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * 0.5 * 0.9)
+
+    def test_cross_site_learned_no_bonus(self) -> None:
+        el = _element({"selector": "#user-name"})
+        bonus = PlaceholderScorer._learned_pattern_bonus(
+            el,
+            [self._pattern("#user-name", site_hash="other-site")],
+            site_hash="abc123",
+        )
+        assert bonus == 0
+
+    def test_no_site_context_no_bonus(self) -> None:
+        el = _element({"selector": "#user-name"})
+        bonus = PlaceholderScorer._learned_pattern_bonus(
+            el,
+            [self._pattern("#user-name")],
+            site_hash=None,
+        )
+        assert bonus == 0
+
+    def test_golden_source_gets_no_learned_bonus(self) -> None:
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._learned_pattern_bonus(
+            el,
+            [self._pattern("#login-button", source="golden")],
+            site_hash="abc123",
+        )
+        assert bonus == 0
+
+    def test_compute_element_score_applies_learned_bonus(self) -> None:
+        el = _element({"selector": "#user-name", "role": "textbox", "tag": "input"})
+        base = PlaceholderScorer.compute_element_score("FILL", "username", el, "#user-name", 0)
+        scored = PlaceholderScorer.compute_element_score(
+            "FILL",
+            "username",
+            el,
+            "#user-name",
+            0,
+            golden_patterns=[self._pattern("#user-name")],
+            site_hash="abc123",
+        )
+        assert base is not None and scored is not None
+        assert scored - base == int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * 0.9)
+
+    def test_compute_element_score_ignores_cross_site_learned(self) -> None:
+        el = _element({"selector": "#user-name", "role": "textbox", "tag": "input"})
+        base = PlaceholderScorer.compute_element_score("FILL", "username", el, "#user-name", 0)
+        scored = PlaceholderScorer.compute_element_score(
+            "FILL",
+            "username",
+            el,
+            "#user-name",
+            0,
+            golden_patterns=[self._pattern("#user-name", site_hash="other-site")],
+            site_hash="abc123",
+        )
+        assert base is not None and scored is not None
+        assert scored == base  # cross-site learned patterns add nothing

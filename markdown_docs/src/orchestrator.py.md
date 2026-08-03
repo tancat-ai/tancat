@@ -185,3 +185,20 @@ With optional:
 - POM mode generates Page Object Models instead of direct Playwright code
 - Debug output controlled by `PIPELINE_DEBUG=1` environment variable
 - **RAG (2026-07-21):** Controlled by `RAG_ENABLED=1` env var. When enabled, golden-pattern retrieval runs during placeholder resolution, feeding `GOLDEN_PATTERN_BONUS` (+20) to element scoring. RAG store must be pre-built via `python scripts/rag_ingest.py --golden --docs`.
+---
+
+## B-036 Update (2026-08-03)
+
+### Always-on RAG (Phase 1)
+`_build_rag_retriever()` no longer requires `RAG_ENABLED=1` — a missing env
+var means **enabled**. `RAG_ENABLED=0` is a transitional opt-out (removed in a
+later release). Empty store ⇒ no patterns ⇒ no bonus ⇒ identical behavior to
+pre-RAG. Any store/embedder failure degrades to no-RAG (never blocks
+generation).
+
+### Bundled auto-seed hook (Phase 2)
+`TestOrchestrator.__init__` calls `src.rag_bundled.ensure_bundled_seeded()`
+when the retriever is built — first-run seed of the bundled golden pack
+(eval-001..006 keys + curated Playwright docs), idempotent via
+`evidence/.rag_bundled_seeded.json`. Guarded: a failure (offline embedder
+download, corrupt store) logs and proceeds without RAG; the seed retries next run.

@@ -1,6 +1,6 @@
 {
-  "total": 142,
-  "completed": 142,
+  "total": 144,
+  "completed": 144,
   "pending": 0,
   "files": [
     {
@@ -466,7 +466,7 @@
     {
       "source": "src/placeholder_scorers.py",
       "doc": "markdown_docs/src/placeholder_scorers.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/pom_helpers.py",
@@ -501,12 +501,12 @@
     {
       "source": "src/rag_retriever.py",
       "doc": "markdown_docs/src/rag_retriever.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/rag_store.py",
       "doc": "markdown_docs/src/rag_store.py.md",
-      "status": "completed"
+      "status": "updated-2026-08-03"
     },
     {
       "source": "src/report_builder.py",
@@ -711,6 +711,16 @@
     {
       "source": "src/vision_enricher.py",
       "doc": "markdown_docs/src/vision_enricher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_bundled.py",
+      "doc": "markdown_docs/src/rag_bundled.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_learn.py",
+      "doc": "markdown_docs/src/rag_learn.py.md",
       "status": "completed"
     }
   ],

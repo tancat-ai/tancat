@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 import pytest
 
@@ -47,7 +48,7 @@ class _FakeEmbedder:
 class _InMemoryBackend:
     def __init__(self, dimension: int) -> None:
         self._dimension = dimension
-        self._entries: list[tuple[list[float], dict[str, str], str]] = []
+        self._entries: list[tuple[list[float], dict[str, Any], str]] = []
 
     @property
     def dimension(self) -> int:
@@ -80,6 +81,35 @@ class _InMemoryBackend:
         before = len(self._entries)
         self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
         return before - len(self._entries)
+
+    def find_learned(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, object] | None:
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned"
+                and meta.get("action_type") == action_type
+                and meta.get("description") == description
+                and meta.get("site_hash") == site_hash
+            ):
+                return dict(meta)
+        return None
+
+    def increment_learned_hit(self, row: dict[str, object]) -> int:
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned"
+                and meta.get("action_type") == row.get("action_type")
+                and meta.get("description") == row.get("description")
+                and meta.get("site_hash") == row.get("site_hash")
+            ):
+                new_hit = int(meta.get("hit_count", 0)) + 1
+                meta["hit_count"] = new_hit
+                return new_hit
+        return 1
 
     def clear(self) -> None:
         self._entries.clear()
@@ -173,6 +203,70 @@ class TestRAGRetrieverEnabled:
     def test_scoring_bonus_empty_patterns(self, retriever: RAGRetriever) -> None:
         bonus = retriever.scoring_bonus_for({"selector": "#btn"}, [])
         assert bonus == 0.0
+
+
+class TestRAGRetrieverLearnedScoring:
+    """AI-035 Phase 2: same-site learned patterns earn +5; cross-site get 0."""
+
+    @staticmethod
+    def _learned(selector: str, site_hash: str = "abc123", confidence: float = 0.9) -> RetrievedPattern:
+        return RetrievedPattern(
+            description="FILL: username",
+            selector=selector,
+            action_type="FILL",
+            confidence=confidence,
+            source="learned",
+            site_hash=site_hash,
+        )
+
+    def test_same_site_direct_match(self) -> None:
+        retriever = RAGRetriever(None)
+        bonus = retriever.scoring_bonus_for(
+            {"selector": "#user-name"},
+            [self._learned("#user-name")],
+            site_hash="abc123",
+        )
+        assert bonus > 0
+        assert bonus < 20  # learned bonus is below the golden +20
+
+    def test_cross_site_learned_no_bonus(self) -> None:
+        retriever = RAGRetriever(None)
+        bonus = retriever.scoring_bonus_for(
+            {"selector": "#user-name"},
+            [self._learned("#user-name", site_hash="other")],
+            site_hash="abc123",
+        )
+        assert bonus == 0.0
+
+    def test_no_site_context_no_bonus(self) -> None:
+        retriever = RAGRetriever(None)
+        bonus = retriever.scoring_bonus_for(
+            {"selector": "#user-name"},
+            [self._learned("#user-name")],
+        )
+        assert bonus == 0.0
+
+    def test_golden_still_wins_over_learned(self) -> None:
+        retriever = RAGRetriever(None)
+        learned = retriever.scoring_bonus_for(
+            {"selector": "#login-button"},
+            [self._learned("#login-button")],
+            site_hash="abc123",
+        )
+        golden = retriever.scoring_bonus_for(
+            {"selector": "#login-button"},
+            [
+                RetrievedPattern(
+                    description="CLICK: login button",
+                    selector="#login-button",
+                    action_type="CLICK",
+                    confidence=0.9,
+                    source="golden",
+                )
+            ],
+            site_hash="abc123",
+        )
+        assert golden > learned
 
 
 class TestRAGRetrieverEmptyStore:
