@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Order Confirmed - Mock Store</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Store</span>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="/products.html">Products</a></li>
+        <li><a href="/cart.html">Cart</a></li>
+        <li><a href="/checkout.html">Checkout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main style="text-align: center; padding-top: 60px;">
+    <h1 id="success-title">Order Placed Successfully!</h1>
+    <p class="text-center">Thank you for your purchase. Your order is on its way.</p>
+    <a href="/index.html" class="btn btn-default">Continue Shopping</a>
+  </main>
+
+  <script src="cart.js"></script>
+  <script>
+    // Fresh session after a completed order — clear the cart.
+    try {
+      localStorage.removeItem("mock_ecommerce_cart");
+    } catch (e) {
+      /* ignore */
+    }
+  </script>
+</body>
+</html>

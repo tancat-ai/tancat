@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Products - Mock Store</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Store</span>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li class="active"><a href="/products.html">Products</a></li>
+        <li><a href="/cart.html">Cart</a></li>
+        <li><a href="/checkout.html">Checkout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">All Products</h1>
+    <div class="features_items">
+      <div class="productinfo">
+        <img data-label="Blue Top" alt="Blue Top" />
+        <h2 class="price">Rs. 500</h2>
+        <p>Blue Top</p>
+        <a href="/product_details.html?id=1" class="btn btn-default">View Product</a>
+        <button class="btn btn-default add-to-cart" data-add-to-cart
+          data-product-id="1" data-name="Blue Top" data-price="500">Add to cart</button>
+      </div>
+      <div class="productinfo">
+        <img data-label="Men Tshirt" alt="Men Tshirt" />
+        <h2 class="price">Rs. 400</h2>
+        <p>Men Tshirt</p>
+        <a href="/product_details.html?id=2" class="btn btn-default">View Product</a>
+        <button class="btn btn-default add-to-cart" data-add-to-cart
+          data-product-id="2" data-name="Men Tshirt" data-price="400">Add to cart</button>
+      </div>
+      <div class="productinfo">
+        <img data-label="Stylish Dress" alt="Stylish Dress" />
+        <h2 class="price">Rs. 1500</h2>
+        <p>Stylish Dress</p>
+        <a href="/product_details.html?id=3" class="btn btn-default">View Product</a>
+        <button class="btn btn-default add-to-cart" data-add-to-cart
+          data-product-id="3" data-name="Stylish Dress" data-price="1500">Add to cart</button>
+      </div>
+      <div class="productinfo">
+        <img data-label="Winter Jacket" alt="Winter Jacket" />
+        <h2 class="price">Rs. 1200</h2>
+        <p>Winter Jacket</p>
+        <a href="/product_details.html?id=4" class="btn btn-default">View Product</a>
+        <button class="btn btn-default add-to-cart" data-add-to-cart
+          data-product-id="4" data-name="Winter Jacket" data-price="1200">Add to cart</button>
+      </div>
+      <div class="productinfo">
+        <img data-label="Summer Hat" alt="Summer Hat" />
+        <h2 class="price">Rs. 300</h2>
+        <p>Summer Hat</p>
+        <a href="/product_details.html?id=5" class="btn btn-default">View Product</a>
+        <button class="btn btn-default add-to-cart" data-add-to-cart
+          data-product-id="5" data-name="Summer Hat" data-price="300">Add to cart</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="cartModal" class="modal">
+    <div class="modal-content">
+      <h2 class="modal-title w-100">Added!</h2>
+      <p class="text-center">Your product has been added to cart.</p>
+      <button class="btn btn-success close-modal btn-block">Continue Shopping</button>
+      <a href="/cart.html" class="btn btn-default view-cart">View Cart</a>
+    </div>
+  </div>
+
+  <script src="cart.js"></script>
+  <script src="img.js"></script>
+</body>
+</html>

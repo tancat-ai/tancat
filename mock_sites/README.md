@@ -25,7 +25,7 @@ exercised across as much product range as possible.
 | # | Product type | Status | Path | Key flows to exercise |
 |---|---|---|---|---|
 | 0 | Insurance (multi-step form) | ✅ have | `generated_tests/mock_insurance_site.html` | multi-step form, validation |
-| 1 | E-commerce (multi-page) | 🆕 build first | `mock_sites/ecommerce/` | home → category → product → add-to-cart **modal** → cart → checkout; **injectable consent/ad overlay** for the B-029 race |
+| 1 | E-commerce (multi-page) | ✅ built 2026-08-03 | `mock_sites/ecommerce/` | home → category → product → add-to-cart **modal** → cart → checkout; **injectable consent/ad overlay** (`?overlay=consent|ad`) for the B-029 race |
 | 2 | Banking / fintech | 🆕 | `mock_sites/banking/` | login, accounts, transfers, payments, multi-user |
 | 3 | Booking / travel | 🆕 | `mock_sites/booking/` | search, date pickers, booking lifecycle |
 | 4 | Healthcare | 🆕 | `mock_sites/healthcare/` | patient intake forms, appointment CRUD |
@@ -33,6 +33,18 @@ exercised across as much product range as possible.
 | 6 | Element / widgets | 🆕 | `mock_sites/widgets/` | auth, alerts, frames, drag-drop, shadow DOM |
 | 7 | Robustness / security | 🆕 | `mock_sites/security/` | auth, admin, tricky forms |
 | 8 | API (non-DOM shape) | 🆕 future (FC-02) | `mock_sites/api/` | OpenAPI stub — endpoints, payloads, auth, status codes; same story→skeleton→evidence loop, no browser |
+
+**E-commerce mock (2026-08-03):** `mock_sites/ecommerce/` — 6 static pages (home,
+products, product details, cart, checkout, success) mirroring automationexercise
+DOM classes (`#cartModal`, `.btn-success.close-modal`, `.check_out`, `.add-to-cart`,
+`#empty_cart`), offline SVG product images, localStorage cart. Every page loads
+`overlay.js`, which injects a FreeCmp-style consent dialog and/or Google-vignette
+ad overlay on `?overlay=consent` / `?overlay=ad` — the B-029 race is reproducible
+on demand. Eval dataset `eval-006` (8 criteria, 16 golden placeholders, checkout/
+payment leg included — the eval-002 gap). Captures: `ecommerce_mock_code.py`.
+Measured baseline: static 12/16 (75%), execution 6 passed / 1 failed / 1 skipped
+against the mock. Surfaces deterministically: empty-cart element picked for
+cart-content ASSERTs, and the 'cvc'/skip family — both logged as B-037.
 
 Reference repos researched 2026-08-03 (sources of inspiration, **not** dependencies):
 

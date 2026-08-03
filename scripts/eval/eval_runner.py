@@ -514,19 +514,37 @@ class EvalRunner:
         return HarnessReport(stories=results)
 
     def _ensure_mock_server(self) -> Any | None:
-        """Auto-start the mock HTTP server if any story needs it (eval-005 / lv_insurance).
+        """Auto-start the mock HTTP server if any story needs it.
+
+        A dataset opts in via ``base_url`` on ``http://localhost:8781`` and an
+        optional ``mock_dir`` field (served as the server root). Legacy
+        datasets without ``mock_dir`` (eval-005 / lv_insurance) keep the
+        repo-root serving behaviour.
 
         Returns a ``MockServer`` instance that auto-stops on exit, or None
         if no mock server is needed.
         """
-        needs_mock = any(f.name.startswith("eval-005") for f in self.dataset_dir.glob("*.json"))
-        if not needs_mock:
+        mock_dir: str | None = None
+        for dataset_file in self.dataset_dir.glob("*.json"):
+            try:
+                data = json.loads(dataset_file.read_text(encoding="utf-8"))
+            except OSError, json.JSONDecodeError:
+                continue
+            base_url = data.get("base_url", "")
+            if "localhost:8781" not in base_url:
+                continue
+            # Prefer the dataset's declared mock_dir; fall back to repo root
+            # (eval-005 legacy behaviour serves generated_tests/mock_insurance_site.html
+            #  from the working directory).
+            mock_dir = data.get("mock_dir") or os.getcwd()
+            break
+        if mock_dir is None:
             return None
 
         from scripts.mock_server import MockServer
 
-        logger.info("Auto-starting mock server for lv_insurance (eval-005)...")
-        return MockServer.start(port=8781, directory=os.getcwd())
+        logger.info("Auto-starting mock server for %s (dir=%s)...", Path(mock_dir).name, mock_dir)
+        return MockServer.start(port=8781, directory=mock_dir)
 
     def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
         """Regenerate code for all stories using the live pipeline.
@@ -673,6 +691,7 @@ class EvalRunner:
             "eval-003": "demoqa",
             "eval-004": "theinternet",
             "eval-005": "lv_insurance",
+            "eval-006": "ecommerce_mock",
         }
         for story_id, code in code_map.items():
             site = site_map.get(story_id, story_id)
@@ -691,6 +710,7 @@ class EvalRunner:
             "eval-003": "demoqa",
             "eval-004": "theinternet",
             "eval-005": "lv_insurance",
+            "eval-006": "ecommerce_mock",
         }
 
         for golden_file in sorted(self.dataset_dir.glob("*.json")):

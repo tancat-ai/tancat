@@ -1,0 +1,175 @@
+{
+  "id": "eval-006",
+  "site": "ecommerce_mock",
+  "base_url": "http://localhost:8781/index.html",
+  "mock_dir": "mock_sites/ecommerce",
+  "title": "Browse products, add to cart, and complete checkout",
+  "user_story": "As a customer, I want to browse products on the store, add them to my cart, proceed to checkout, and place an order.",
+  "conditions": [
+    "1. Navigate to the store home page",
+    "2. On the home page, click the Add to cart button next to a product (e.g. Blue Top)",
+    "3. Verify a confirmation message appears indicating the product was added to cart",
+    "4. Click the Cart link in the header navigation to go to the cart page",
+    "5. Verify the cart page displays the added product with its name and price",
+    "6. Click the Proceed To Checkout button",
+    "7. Fill in the checkout form (name, email, address, city, zip, card details) and place the order",
+    "8. Verify the order success message appears"
+  ],
+  "golden_resolutions": [
+    {
+      "criterion_index": 0,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "home page loaded",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "tolerance_selectors": ["expect(page).to_have_url"],
+          "expected_page": "http://localhost:8781/index.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 1,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Add to cart",
+          "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
+          "tolerance_selectors": [".add-to-cart.btn", "[data-product-id]"],
+          "expected_page": "http://localhost:8781/index.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 2,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "add to cart confirmation",
+          "expected_locator": ".text-center",
+          "tolerance_selectors": [".modal-body", ".modal-title", "#cartModal"],
+          "expected_page": "http://localhost:8781/index.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 3,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Cart link",
+          "expected_locator": "a[href=\"/cart.html\"]",
+          "tolerance_selectors": [".cart"],
+          "expected_page": "http://localhost:8781/index.html"
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+          "tolerance_selectors": ["expect(page).to_have_url", "#cart_items"],
+          "expected_page": "http://localhost:8781/cart.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 4,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_locator": ".cart_total",
+          "tolerance_selectors": ["#cart_items", ".cart_description", ".cart_price"],
+          "expected_page": "http://localhost:8781/cart.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 5,
+      "placeholders": [
+        {
+          "action": "CLICK",
+          "description": "Proceed To Checkout",
+          "expected_locator": "a[href=\"/checkout.html\"]",
+          "tolerance_selectors": ["a.check_out", ".check_out"],
+          "expected_page": "http://localhost:8781/cart.html"
+        },
+        {
+          "action": "ASSERT",
+          "description": "checkout page title",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+          "tolerance_selectors": ["expect(page).to_have_url", "#checkout-form"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 6,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "name",
+          "expected_locator": "#name",
+          "tolerance_selectors": ["input[name=\"name\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_locator": "#email",
+          "tolerance_selectors": ["input[type=\"email\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "FILL",
+          "description": "address",
+          "expected_locator": "#address",
+          "tolerance_selectors": ["input[name=\"address\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "FILL",
+          "description": "city",
+          "expected_locator": "#city",
+          "tolerance_selectors": ["input[name=\"city\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "FILL",
+          "description": "zip code",
+          "expected_locator": "#zip",
+          "tolerance_selectors": ["input[name=\"zip\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "FILL",
+          "description": "card number",
+          "expected_locator": "#card-number",
+          "tolerance_selectors": ["input[name=\"card_number\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        },
+        {
+          "action": "CLICK",
+          "description": "Place Order",
+          "expected_locator": "#place-order",
+          "tolerance_selectors": ["button[type=\"submit\"]"],
+          "expected_page": "http://localhost:8781/checkout.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 7,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "order success message",
+          "expected_locator": "#success-title",
+          "tolerance_selectors": [".text-center", "h1"],
+          "expected_page": "http://localhost:8781/checkout_success.html"
+        }
+      ]
+    }
+  ]
+}

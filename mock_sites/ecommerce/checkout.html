@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Checkout - Mock Store</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Store</span>
+    <nav>
+      <ul>
+        <li><a href="/index.html">Home</a></li>
+        <li><a href="/products.html">Products</a></li>
+        <li><a href="/cart.html">Cart</a></li>
+        <li class="active"><a href="/checkout.html">Checkout</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">Checkout</h1>
+    <div style="max-width: 520px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; border: 1px solid #eee;">
+      <form id="checkout-form">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" required />
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required />
+
+        <label for="address">Address</label>
+        <input type="text" id="address" name="address" required />
+
+        <label for="city">City</label>
+        <input type="text" id="city" name="city" required />
+
+        <label for="zip">Zip / Postal Code</label>
+        <input type="text" id="zip" name="zip" required />
+
+        <label for="card-name">Cardholder Name</label>
+        <input type="text" id="card-name" name="card_name" required />
+
+        <label for="card-number">Card Number</label>
+        <input type="text" id="card-number" name="card_number" required />
+
+        <label for="expiry">Expiry (MM/YY)</label>
+        <input type="text" id="expiry" name="expiry" required />
+
+        <label for="cvv">CVV</label>
+        <input type="text" id="cvv" name="cvv" required />
+
+        <button type="submit" class="btn btn-primary" id="place-order"
+          style="margin-top: 16px; width: 100%;">Place Order</button>
+      </form>
+    </div>
+  </main>
+
+  <script src="cart.js"></script>
+  <script>
+    document.getElementById("checkout-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      // Deterministic success — no backend, no validation beyond required fields.
+      window.location.href = "checkout_success.html";
+    });
+  </script>
+</body>
+</html>
