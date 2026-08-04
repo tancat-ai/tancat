@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
+from src.pytest_output_parser import TestResult
+from src.rag_learn import site_hash
+from src.rag_store import LearnedPattern
 from src.self_healing import (
     AppliedPatch,
     HealingReport,
@@ -1031,3 +1035,182 @@ class TestHealReflectionHistoryTracking:
 
         assert report.attempt_history == {}
         assert report.total_llm_calls == 0
+
+
+# ---------------------------------------------------------------------------
+# AI-035: self-healing → RAG write-back (_learn_from_patch / _evidence_context)
+# ---------------------------------------------------------------------------
+
+
+class TestEvidenceContext:
+    """Recover (steps, base_url) from the evidence sidecar / package manifest."""
+
+    def _sidecar(self, pkg: Path, name: str = "test_foo", locator: str = "#old") -> Path:
+        evidence_dir = pkg / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        sidecar = evidence_dir / f"{name}.evidence.json"
+        sidecar.write_text(
+            json.dumps(
+                {
+                    "page": {"url": "https://example.com/cart"},
+                    "steps": [
+                        {
+                            "type": "click",
+                            "label": "{{CLICK:view cart link}}",
+                            "locator": locator,
+                            "url": "https://example.com/cart",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return sidecar
+
+    def test_reads_sidecar(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        self._sidecar(pkg)
+        steps, url = SelfHealingRunner._evidence_context(pkg / "test_foo.py", "test_foo")
+        assert url == "https://example.com/cart"
+        assert steps[0]["label"] == "{{CLICK:view cart link}}"
+
+    def test_strips_param_suffix(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        self._sidecar(pkg, name="test_foo")
+        steps, url = SelfHealingRunner._evidence_context(pkg / "test_foo.py", "test_foo[chromium]")
+        assert url == "https://example.com/cart"
+        assert len(steps) == 1
+
+    def test_manifest_fallback_when_no_sidecar(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        pkg.mkdir(parents=True, exist_ok=True)
+        (pkg / "scrape_manifest.json").write_text(
+            json.dumps({"starting_url": "https://saucedemo.com/inventory.html"}),
+            encoding="utf-8",
+        )
+        steps, url = SelfHealingRunner._evidence_context(pkg / "test_foo.py", "test_foo")
+        assert steps == []
+        assert url == "https://saucedemo.com/inventory.html"
+
+    def test_missing_returns_empty(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        pkg.mkdir(parents=True, exist_ok=True)
+        steps, url = SelfHealingRunner._evidence_context(pkg / "test_foo.py", "test_foo")
+        assert steps == []
+        assert url == ""
+
+    def test_corrupt_sidecar_returns_empty(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "pkg"
+        evidence_dir = pkg / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "test_foo.evidence.json").write_text("{not-json", encoding="utf-8")
+        steps, url = SelfHealingRunner._evidence_context(pkg / "test_foo.py", "test_foo")
+        assert steps == []
+        assert url == ""
+
+
+class TestLearnFromPatchRunner:
+    """SelfHealingRunner._learn_from_patch — the AI-035 write-back hook."""
+
+    @staticmethod
+    def _patch(
+        strategy: str = "replace_locator",
+        old: str = 'page.locator("#old").click()',
+        new: str = 'page.locator("#new").click()',
+    ) -> AppliedPatch:
+        return AppliedPatch(
+            test_name="test_foo",
+            line_number=2,
+            old_text=old,
+            new_text=new,
+            diagnosis="Wrong locator",
+            strategy=strategy,
+        )
+
+    @staticmethod
+    def _runner(store: MagicMock | None = None) -> SelfHealingRunner:
+        return SelfHealingRunner(llm_client=MagicMock(), rag_store=store)
+
+    @staticmethod
+    def _result() -> TestResult:
+        return TestResult(
+            name="test_foo",
+            status="failed",
+            duration=0.1,
+            error_message="TimeoutError: waiting for locator",
+            file_path="test_foo.py",
+        )
+
+    def _pkg_with_sidecar(self, tmp_path: Path, locator: str = "#old") -> Path:
+        pkg = tmp_path / "pkg"
+        evidence_dir = pkg / "evidence"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        (evidence_dir / "test_foo.evidence.json").write_text(
+            json.dumps(
+                {
+                    "page": {"url": "https://example.com/cart"},
+                    "steps": [
+                        {
+                            "type": "click",
+                            "label": "{{CLICK:view cart link}}",
+                            "locator": locator,
+                            "url": "https://example.com/cart",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        test_file = pkg / "test_foo.py"
+        test_file.write_text("def test_foo(page):\n    page.locator('#old').click()\n", encoding="utf-8")
+        return test_file
+
+    def test_upserts_self_healing_pattern(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        test_file = self._pkg_with_sidecar(tmp_path)
+
+        learned = self._runner(store)._learn_from_patch(test_file, self._result(), self._patch())
+
+        assert learned is True
+        pattern: LearnedPattern = store.upsert_pattern.call_args.args[0]
+        assert pattern.source == "self_healing"
+        assert pattern.confidence == 1.0
+        assert pattern.description == "view cart link"
+        assert pattern.locator == "#new"
+        assert pattern.action_type == "CLICK"
+        assert pattern.site_hash == site_hash("example.com")
+
+    def test_skips_non_locator_strategy(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        test_file = self._pkg_with_sidecar(tmp_path)
+        patch = self._patch(strategy="add_wait", new='page.wait_for_selector("#new")')
+
+        learned = self._runner(store)._learn_from_patch(test_file, self._result(), patch)
+
+        assert learned is False
+        store.upsert_pattern.assert_not_called()
+
+    def test_no_sidecar_returns_false(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        pkg = tmp_path / "pkg"
+        pkg.mkdir(parents=True, exist_ok=True)
+        test_file = pkg / "test_foo.py"
+        test_file.write_text("def test_foo(page):\n    pass\n", encoding="utf-8")
+
+        learned = self._runner(store)._learn_from_patch(test_file, self._result(), self._patch())
+
+        assert learned is False
+        store.upsert_pattern.assert_not_called()
+
+    def test_store_failure_never_breaks_healing(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        store.upsert_pattern.side_effect = RuntimeError("store down")
+        test_file = self._pkg_with_sidecar(tmp_path)
+
+        learned = self._runner(store)._learn_from_patch(test_file, self._result(), self._patch())
+
+        assert learned is False  # swallowed, no exception
+
+    def test_healing_report_learned_defaults_zero(self) -> None:
+        assert HealingReport().learned == 0

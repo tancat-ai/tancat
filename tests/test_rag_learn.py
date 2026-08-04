@@ -8,6 +8,8 @@ from src.rag_learn import (
     _step_to_pattern,
     domain_from_url,
     learn_from_evidence,
+    learn_from_patch,
+    pattern_from_patch,
     site_hash,
 )
 from src.rag_store import LearnedPattern
@@ -135,3 +137,222 @@ class TestLearnFromEvidence:
         )
         learned: LearnedPattern = store.upsert_pattern.call_args.args[0]
         assert learned.site_hash == site_hash("www.saucedemo.com")
+
+
+# ---------------------------------------------------------------------------
+# Self-healing write path (AI-035) — pattern_from_patch / learn_from_patch
+# ---------------------------------------------------------------------------
+
+
+class TestPatternFromPatch:
+    """Patch → LearnedPattern extraction (confidence 1.0, source self_healing)."""
+
+    def test_click_replacement(self) -> None:
+        pattern = pattern_from_patch(
+            'page.locator("#wrong-btn").click()',
+            'page.locator("#add-to-cart").click()',
+            base_url="https://www.saucedemo.com/inventory.html",
+            description="Add to cart",
+        )
+        assert isinstance(pattern, LearnedPattern)
+        assert pattern.action_type == "CLICK"
+        assert pattern.locator == "#add-to-cart"
+        assert pattern.description == "Add to cart"
+        assert pattern.site_hash == site_hash("www.saucedemo.com")
+        assert pattern.confidence == 1.0
+        assert pattern.source == "self_healing"
+
+    def test_fill_replacement(self) -> None:
+        pattern = pattern_from_patch(
+            'page.locator("#user").fill("x")',
+            'page.locator("#user-name").fill("x")',
+            base_url="https://www.saucedemo.com/",
+            description="username",
+        )
+        assert pattern is not None
+        assert pattern.action_type == "FILL"
+        assert pattern.locator == "#user-name"
+
+    def test_assert_replacement(self) -> None:
+        pattern = pattern_from_patch(
+            'expect(page.locator("#msg")).to_be_visible()',
+            'expect(page.locator("#success")).to_be_visible()',
+            base_url="https://example.com/",
+            description="success message",
+        )
+        assert pattern is not None
+        assert pattern.action_type == "ASSERT"
+        assert pattern.locator == "#success"
+
+    def test_select_option_replacement(self) -> None:
+        pattern = pattern_from_patch(
+            'page.locator("#country").select_option("US")',
+            'page.locator("select#country").select_option("US")',
+            base_url="https://example.com/",
+            description="country",
+        )
+        assert pattern is not None
+        assert pattern.action_type == "SELECT"
+
+    def test_non_locator_strategy_returns_none(self) -> None:
+        # add_wait patch — no locator to learn.
+        assert (
+            pattern_from_patch(
+                'page.click("#x")',
+                'page.wait_for_selector("#x")',
+                base_url="https://example.com/",
+                description="x",
+            )
+            is None
+        )
+
+    def test_get_by_role_returns_none(self) -> None:
+        # No .locator("...") string literal to store as a plain selector.
+        assert (
+            pattern_from_patch(
+                'page.get_by_role("button", name="Go").click()',
+                'page.get_by_role("button", name="Submit").click()',
+                base_url="https://example.com/",
+                description="submit",
+            )
+            is None
+        )
+
+    def test_missing_base_url_returns_none(self) -> None:
+        assert (
+            pattern_from_patch(
+                'page.locator("#a").click()',
+                'page.locator("#b").click()',
+                base_url="",
+                description="x",
+            )
+            is None
+        )
+
+    def test_unknown_method_returns_none(self) -> None:
+        assert (
+            pattern_from_patch(
+                'page.locator("#a").hover()',
+                'page.locator("#b").hover()',
+                base_url="https://example.com/",
+                description="x",
+            )
+            is None
+        )
+
+    def test_missing_description_returns_none(self) -> None:
+        assert (
+            pattern_from_patch(
+                'page.locator("#a").click()',
+                'page.locator("#b").click()',
+                base_url="https://example.com/",
+            )
+            is None
+        )
+
+    def test_description_from_placeholder_label(self) -> None:
+        steps = [
+            {
+                "type": "click",
+                "label": "{{CLICK:view cart link}}",
+                "locator": "#wrong-btn",
+                "url": "https://example.com/",
+            },
+            {"type": "click", "label": "Click: add to cart", "locator": "#add-to-cart", "url": "https://example.com/"},
+        ]
+        pattern = pattern_from_patch(
+            'page.locator("#wrong-btn").click()',
+            'page.locator("#add-to-cart").click()',
+            base_url="https://example.com/",
+            evidence_steps=steps,
+        )
+        assert pattern is not None
+        assert pattern.description == "view cart link"
+        assert pattern.locator == "#add-to-cart"
+
+    def test_description_from_natural_label(self) -> None:
+        # Evidence records the locator that ran (and failed): "#wrong".
+        steps = [{"type": "click", "label": "Click: add to cart", "locator": "#wrong", "url": "https://example.com/"}]
+        pattern = pattern_from_patch(
+            'page.locator("#wrong").click()',
+            'page.locator("#cart").click()',
+            base_url="https://example.com/",
+            evidence_steps=steps,
+        )
+        assert pattern is not None
+        assert pattern.description == "add to cart"
+
+    def test_explicit_description_wins_over_evidence(self) -> None:
+        steps = [{"type": "click", "label": "Click: old label", "locator": "#cart", "url": "https://example.com/"}]
+        pattern = pattern_from_patch(
+            'page.locator("#wrong").click()',
+            'page.locator("#cart").click()',
+            base_url="https://example.com/",
+            description="explicit",
+            evidence_steps=steps,
+        )
+        assert pattern is not None
+        assert pattern.description == "explicit"
+
+    def test_no_matching_evidence_step_returns_none(self) -> None:
+        steps = [{"type": "click", "label": "Click: other", "locator": "#other", "url": "https://example.com/"}]
+        assert (
+            pattern_from_patch(
+                'page.locator("#wrong").click()',
+                'page.locator("#cart").click()',
+                base_url="https://example.com/",
+                evidence_steps=steps,
+            )
+            is None
+        )
+
+
+class TestLearnFromPatch:
+    """learn_from_patch — guarded upsert through the store."""
+
+    def test_returns_inserted(self) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        result = learn_from_patch(
+            old_text='page.locator("#a").click()',
+            new_text='page.locator("#b").click()',
+            base_url="https://example.com/",
+            description="x",
+            store=store,
+        )
+        assert result == {"inserted": 1, "exists": 0}
+
+    def test_returns_exists_on_dedup(self) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("exists", 2)
+        result = learn_from_patch(
+            old_text='page.locator("#a").click()',
+            new_text='page.locator("#b").click()',
+            base_url="https://example.com/",
+            description="x",
+            store=store,
+        )
+        assert result == {"inserted": 0, "exists": 1}
+
+    def test_unlearnable_patch_does_not_touch_store(self) -> None:
+        store = MagicMock()
+        result = learn_from_patch(
+            old_text='page.wait_for_selector("#a")',
+            new_text='page.wait_for_selector("#b")',
+            base_url="https://example.com/",
+            store=store,
+        )
+        assert result == {"inserted": 0, "exists": 0}
+        store.upsert_pattern.assert_not_called()
+
+    def test_store_failure_swallowed(self) -> None:
+        store = MagicMock()
+        store.upsert_pattern.side_effect = RuntimeError("store down")
+        result = learn_from_patch(
+            old_text='page.locator("#a").click()',
+            new_text='page.locator("#b").click()',
+            base_url="https://example.com/",
+            description="x",
+            store=store,
+        )
+        assert result == {"inserted": 0, "exists": 0}

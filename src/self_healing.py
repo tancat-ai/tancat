@@ -55,6 +55,9 @@ class HealingReport:
     iterations: int = 0
     patches: list[AppliedPatch] = field(default_factory=list)
     final_results: list[TestResult] = field(default_factory=list)
+    # Locator corrections written back to the RAG store (AI-035 self-healing
+    # write-back). Never breaks healing if learning fails.
+    learned: int = 0
     # Failures that are locator-type but couldn't be auto-fixed — candidates
     # for interactive repair (opens browser, user clicks correct element).
     interactive_repair_candidates: list[dict[str, Any]] = field(default_factory=list)
@@ -136,10 +139,14 @@ class SelfHealingRunner:
         llm_client: LLMClient | None = None,
         max_iterations: int = 3,
         scraped_data: dict[str, list[dict[str, Any]]] | None = None,
+        rag_store: Any | None = None,
     ) -> None:
         self._llm = llm_client or LLMClient()
         self.max_iterations = max_iterations
         self._scraped_data = scraped_data or {}
+        # AI-035: injectable RAG store for the self-healing write-back (tests
+        # pass an in-memory store; production defaults to the real store).
+        self._rag_store = rag_store
 
     # ------------------------------------------------------------------
     # Public API
@@ -227,6 +234,10 @@ class SelfHealingRunner:
                 if self._apply_patch(test_path, test_source, patch):
                     report.patches.append(patch)
                     fixed_this_iteration += 1
+                    # AI-035: a verified locator replacement writes back to the
+                    # RAG store (guarded — learning never breaks healing).
+                    if patch.strategy == "replace_locator" and self._learn_from_patch(test_path, result, patch):
+                        report.learned += 1
                     # Record the attempt for reflection if it fails again
                     per_test_attempts.setdefault(result.name, []).append(
                         {
@@ -530,6 +541,90 @@ Analyze this failure and suggest a fix."""
             diagnosis=diagnosis,
             strategy=strategy,
         )
+
+    # ------------------------------------------------------------------
+    # Internal: AI-035 self-healing → RAG write-back
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _evidence_context(
+        test_path: Path,
+        test_name: str,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """Recover (evidence_steps, base_url) for a failing test, best-effort.
+
+        The evidence sidecar (``<package>/evidence/<test>.evidence.json``)
+        records the resolved steps — labels carry the placeholder descriptions
+        the resolver looks up by, and ``page.url`` scopes the learned pattern
+        to the site domain. Falls back to the package manifest's
+        ``starting_url`` when no sidecar exists. Never raises.
+        """
+        package_dir = test_path.parent
+        candidates = [f"{test_name}.evidence.json"]
+        # pytest param suffixes ("[chromium]") may be missing from the file name.
+        stripped = test_name.split("[", 1)[0]
+        if stripped != test_name:
+            candidates.append(f"{stripped}.evidence.json")
+
+        for name in candidates:
+            for sidecar in (package_dir / "evidence" / name, package_dir / name):
+                try:
+                    if not sidecar.exists():
+                        continue
+                    data = json.loads(sidecar.read_text(encoding="utf-8"))
+                    steps = data.get("steps") if isinstance(data, dict) else None
+                    page = data.get("page") if isinstance(data, dict) else None
+                    url = str((page or {}).get("url", "") or "") if isinstance(page, dict) else ""
+                    return (steps if isinstance(steps, list) else []), url
+                except Exception:
+                    continue
+
+        # Fallback: package scrape/package manifest carries starting_url.
+        for manifest_name in ("scrape_manifest.json", "package_manifest.json"):
+            try:
+                manifest_path = package_dir / manifest_name
+                if not manifest_path.exists():
+                    continue
+                data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                url = str(data.get("starting_url", "") or data.get("base_url", "") or "")
+                if url:
+                    return [], url
+            except Exception:
+                continue
+        return [], ""
+
+    def _learn_from_patch(
+        self,
+        test_path: Path,
+        result: TestResult,
+        patch: AppliedPatch,
+    ) -> bool:
+        """Write a self-healing-corrected locator to the RAG store.
+
+        Returns True when the pattern was upserted (new or dedup'd hit).
+        Best-effort and guarded: a learning failure never breaks healing.
+        Only ``replace_locator`` patches carry a usable corrected selector.
+        """
+        if patch.strategy != "replace_locator":
+            return False
+        try:
+            from src.rag_learn import learn_from_patch as _learn
+
+            evidence_steps, base_url = self._evidence_context(test_path, result.name)
+            outcome = _learn(
+                old_text=patch.old_text,
+                new_text=patch.new_text,
+                base_url=base_url,
+                evidence_steps=evidence_steps,
+                store=self._rag_store,
+            )
+            learned = outcome.get("inserted", 0) + outcome.get("exists", 0) > 0
+            if learned:
+                logger.info("Self-healing wrote pattern for '%s' to RAG store", result.name)
+            return learned
+        except Exception as exc:
+            logger.warning("Self-healing learn-back failed (non-fatal): %s", exc)
+            return False
 
     # ------------------------------------------------------------------
     # Internal: patch application

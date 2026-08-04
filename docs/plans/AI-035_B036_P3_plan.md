@@ -203,12 +203,22 @@ read in a separate process from the run.
   rework — `SidebarConfig.render_settings()` shows RAG store stats
   (`store_stats()`: golden/doc/learned counts) plus a guarded prune button.
   See BACKLOG B-036 / CHANGELOG for the full Phase 4 record.
+- ✅ **AI-035 self-healing write-back (2026-08-04)**: the last deferral landed —
+  `SelfHealingRunner` now calls `learn_from_patch` (src/rag_learn.py) after
+  each successful `replace_locator` patch (`source="self_healing"`,
+  `confidence=1.0`); the placeholder description is recovered from the
+  failing test's evidence sidecar (selector → step label match);
+  `HealingReport.learned` surfaces the count. Self-healing and the learning
+  loop are fully wired.
 
 ---
 
 ## 9. Follow-ups (explicitly out of scope)
 
-- **Self-healing write path** (`_learn_from_patch` in `SelfHealingRunner.heal()`): AI-035's original trigger — `source="self_healing"`, `confidence=1.0`. Needs patch→(description, locator) extraction; ~0.25 session once evidence path is stable.
-- **Streamlit learned-patterns section**: fold into B-036 Phase 4.
+- ~~**Self-healing write path** (`_learn_from_patch` in `SelfHealingRunner.heal()`)~~ —
+  **shipped 2026-08-04**: `src/rag_learn.py` `pattern_from_patch`/`learn_from_patch`
+  (`source="self_healing"`, `confidence=1.0`); description recovered from the
+  evidence sidecar's placeholder label; guarded hook in `SelfHealingRunner`.
+- **Streamlit learned-patterns section**: folded into B-036 Phase 4 (shipped).
 - **Federated sharing (AI-036)**: opt-in, separate feature, explicitly not this work.
 - **`created_at` vs last-seen**: hit_count increments only; if "last seen" reporting is ever wanted, add a `last_seen_at` field at that point.

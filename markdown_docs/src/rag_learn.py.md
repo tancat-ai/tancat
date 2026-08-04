@@ -48,6 +48,20 @@ a fallback-used locator is less certain). Returns
 `{"inserted": N, "exists": M}` where repeats count as hits (store bumps
 `hit_count`). `store` is injectable for tests; defaults to the production store.
 
+### `pattern_from_patch(old_text, new_text, *, base_url, description=None, evidence_steps=None) -> LearnedPattern | None`
+Maps a self-healing locator-replacement patch to a `LearnedPattern`
+(`confidence=1.0`, `source="self_healing"`). Action from the Playwright
+method (`click`→CLICK, `fill`→FILL, `select_option`→SELECT,
+`expect/to_be_/to_have_/assert_`→ASSERT); corrected selector from
+`.locator("...")` (non-locator strategies and `get_by_role` lines return
+`None`). Description falls back to the evidence step whose locator matches
+the OLD selector — its label (`{{CLICK:view cart link}}` or `Click: view
+cart link`) reduces to the placeholder description.
+
+### `learn_from_patch(*, old_text, new_text, base_url, description=None, evidence_steps=None, store=None) -> dict[str, int]`
+Guarded single-patch write (never raises — self-healing must not break if
+learning fails). Returns `{"inserted": 0|1, "exists": 0|1}`.
+
 ## Evidence Step → Pattern Mapping
 
 | Evidence `type` | Action | Notes |
@@ -67,14 +81,19 @@ Confidence is `0.9` (verified by execution, below self-healing's `1.0`);
 
 - `generated_tests/conftest.py` — teardown hook calls `learn_from_evidence`
   after a passing run (guarded: learning never breaks the run)
+- `src/self_healing.py` — `SelfHealingRunner._learn_from_patch` calls
+  `learn_from_patch` after each successful `replace_locator` patch
+  (AI-035 write-back; `source="self_healing"`, `confidence=1.0`)
 - `src/placeholder_orchestrator.py` — imports `site_hash`/`domain_from_url`
   to scope the learned-pattern bonus to the current site
 
 ## Notes
 
-- AI-035's original write trigger (self-healing patches,
-  `source="self_healing"`, `confidence=1.0`) is **not wired yet** — deferred
-  follow-up; the shared machinery (`upsert_pattern`, dedup) is what this
-  module and `RAGStore` provide.
+- ~~AI-035's original write trigger (self-healing patches,
+  `source="self_healing"`, `confidence=1.0`) is **not wired yet**~~ — **shipped
+  2026-08-04**: `pattern_from_patch` / `learn_from_patch` in this module write
+  self-healing-corrected locators back to the store, hooked from
+  `SelfHealingRunner._learn_from_patch` (description recovered from the
+  evidence sidecar's placeholder label, e.g. `{{CLICK:view cart link}}`).
 - A failed learning call is swallowed by the conftest guard and retried on the
   next run (no marker/state to corrupt).

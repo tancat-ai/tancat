@@ -80,12 +80,19 @@ Raises `FileNotFoundError` if test file doesn't exist.
 - `_format_elements_for_prompt(elements) -> str` — formats scraped elements for LLM context
 - `_parse_reviewer_response(response, test_name, test_func) -> AppliedPatch | None` — parses LLM JSON
 - `_apply_patch(test_path, test_source, patch) -> bool` — applies patch to file
+- `_evidence_context(test_path, test_name) -> (steps, base_url)` — reads the
+  failing test's evidence sidecar (step labels + page URL), manifest fallback
+- `_learn_from_patch(test_path, result, patch) -> bool` — AI-035 write-back:
+  after a successful `replace_locator` patch, upserts the corrected locator
+  to the RAG store (`source="self_healing"`, `confidence=1.0`, guarded —
+  learning never breaks healing). Counted in `HealingReport.learned`.
 
 ## Integration Points
 
 - **Streamlit:** `src/ui/ui_run_results.py` — "🩹 Self-Heal Failed Tests" button, healing results display
 - **CLI:** `src/cli/pipeline_runner.py` — `self_heal_cli()` with menu-driven fallback to interactive repair
+- **RAG:** `src/rag_learn.py` — `learn_from_patch` consumes the applied patch (AI-035 self-learning write-back)
 
 ## Tests
 
-`tests/test_self_healing.py` — 28 unit tests covering extraction, formatting, parsing, patching, and integration.
+`tests/test_self_healing.py` — unit tests covering extraction, formatting, parsing, patching, evidence context, and the AI-035 learn-back.
