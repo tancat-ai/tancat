@@ -352,6 +352,21 @@ writing if code fails syntax check.
 
 ## 🔴 Open Bugs
 
+### B-039 — Self-healing blind to its own most common failure mode
+**Status:** ✅ Fixed (2026-08-04, AI-035 write-back Tier-1 verification, CI green)
+**Priority:** High — discovered while live-testing the AI-035 self-healing loop against the e-commerce mock; without this fix the loop can never fix anything.
+
+Two compounding parser/classifier gaps made the self-healing loop pre-screen **every** real generated-test failure as unfixable (it only ever worked against synthetic error strings):
+
+1. **`pytest_output_parser._FAILURE_NAME_RE` rejected `[chromium]`-suffixed failures-block headers** (`^_+ (\w+) _+` stops at `[`) — ALL generated tests run parameterized, so `error_message` was **always empty** → `classify_failure("")` → OTHER → pre-screen skip. Fixed: `^_+ (\S+?) _+` + strip the param suffix before the `results_by_name` lookup (matching `_ERROR_RE`'s existing `split("[")[0]`).
+2. **`failure_classifier` didn't recognize the evidence-tracker fast-fail** — `_LocatorNotFoundError: Locator '...' not found on current page (...)` matched no regex (only Playwright-native "TimeoutError waiting for" did) → classified OTHER → pre-screen skip. Fixed: new `LOCATOR_NOT_FOUND` regexes → `LOCATOR_TIMEOUT` (LLM-reviewable) with locator extraction.
+
+**Verified live:** broken locator → heal → `fixed: 1, learned: 1, remaining: 0`; store gained `CLICK 'Cart link' → a[href="/cart.html"]` with `source=self_healing, confidence=1.0`; re-heal dedups (hit_count 2, one row). +7 tests (2263 total); eval static 95.2%.
+
+**Also noted (not fixed):** `MockServer._start()` does `os.chdir(directory)` on the whole process — any relative path in the calling process breaks after auto-start (eval harness works because its dataset/captures defaults are absolute; `--dataset <relative>` silently yields 0 stories). Fixing = save/restore cwd around the server thread, or resolve paths before chdir.
+
+---
+
 ### B-037 — E-commerce mock surfaces: empty-cart element resolution + the cvc/skip family
 **Status:** ✅ Fixed (2026-08-03, B-037 session, CI green)
 **Priority:** Medium — the mock made both failures deterministic; fixes lift eval-006 execution to 8/8

@@ -194,6 +194,36 @@ class TestPatternFromPatch:
         assert pattern is not None
         assert pattern.action_type == "SELECT"
 
+    def test_evidence_tracker_click_replacement(self) -> None:
+        """Generated tests use evidence_tracker.click(sel, label=...) — the
+        corrected selector is the first quoted argument."""
+        pattern = pattern_from_patch(
+            "evidence_tracker.click('a[href=\"/cartxx.html\"]', label='Cart link')",
+            "evidence_tracker.click('a[href=\"/cart.html\"]', label='Cart link')",
+            base_url="http://localhost:8781/index.html",
+            description="Cart link",
+        )
+        assert isinstance(pattern, LearnedPattern)
+        assert pattern.action_type == "CLICK"
+        assert pattern.locator == 'a[href="/cart.html"]'
+        assert pattern.site_hash == site_hash("localhost")
+
+    def test_evidence_tracker_fill_and_assert(self) -> None:
+        fill = pattern_from_patch(
+            'evidence_tracker.fill("#emai1", "x")',
+            'evidence_tracker.fill("#email", "x")',
+            base_url="https://example.com/",
+            description="email",
+        )
+        assert fill is not None and fill.action_type == "FILL" and fill.locator == "#email"
+        visible = pattern_from_patch(
+            'evidence_tracker.assert_visible("#msgl")',
+            'evidence_tracker.assert_visible("#msg")',
+            base_url="https://example.com/",
+            description="success message",
+        )
+        assert visible is not None and visible.action_type == "ASSERT" and visible.locator == "#msg"
+
     def test_non_locator_strategy_returns_none(self) -> None:
         # add_wait patch — no locator to learn.
         assert (

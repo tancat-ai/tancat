@@ -164,7 +164,7 @@ _ACTION_PREFIX_RE = re.compile(
     r"^(?:click|fill|type|select|assert|enter|press|navigate|goto)\s*:\s*(.+)$",
     re.IGNORECASE,
 )
-_SELECTOR_IN_LOCATOR_RE = re.compile(r"\.locator\(\s*['\"]([^'\"]+)['\"]")
+_SELECTOR_IN_LOCATOR_RE = re.compile(r"\.locator\(\s*(['\"])(.*?)\1")
 
 
 def _action_from_code(line: str) -> str | None:
@@ -179,10 +179,23 @@ def _action_from_code(line: str) -> str | None:
 
 
 def _selector_from_code(line: str) -> str | None:
-    """Extract the selector string from ``page.locator("...")``, or ``None``."""
+    """Extract the selector string from a code line, or ``None``.
+
+    Handles both the raw Playwright API (``page.locator("...")``) and the
+    generated evidence-tracker API (``evidence_tracker.click("...", ...)``,
+    ``.fill("...")``, ``.assert_visible("...")``, ``.select_option("...")``)
+    — the first quoted string argument of the tracked method.
+    """
     match = _SELECTOR_IN_LOCATOR_RE.search(line)
     if match:
-        return match.group(1).strip()
+        return match.group(2).strip()
+    # evidence_tracker.click('a[href="/cart.html"]', label='Cart link')
+    tracker = re.search(
+        r"evidence_tracker\.(?:click|fill|select_option|assert_visible|assert_hidden|assert_text|assert_text_contains|assert_disabled|assert_enabled|assert_checked|assert_count|assert_value)\(\s*(['\"])(.*?)\1",
+        line,
+    )
+    if tracker:
+        return tracker.group(2).strip()
     return None
 
 

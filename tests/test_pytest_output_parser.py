@@ -172,6 +172,28 @@ class TestParsePytestOutput:
         # Error message should contain just the assertion content, not "AssertionError:" prefix
         assert "assert False == True" in error
 
+    def test_error_message_extracted_for_parametrized_name(self) -> None:
+        """Regression: failures-block headers carry a [chromium] param suffix —
+        ALL generated tests are parametrized, so error capture previously
+        never fired and error_message stayed empty."""
+        output = """============================= test session starts =============================
+collected 1 item
+
+generated_tests/test_foo.py::test_04_click[chromium] FAILED [100%]
+
+=================================== FAILURES ===================================
+_________________ test_04_click[chromium] _________________
+    evidence_tracker.click('a[href=\"/cartxx.html\"]', label='Cart link')
+E   src.evidence_tracker._LocatorNotFoundError: Locator 'a[href=\"/cartxx.html\"]' not found on current page (http://localhost:8781/).
+============================= 1 failed in 5.60s =============================="""
+        result = parse_pytest_output(output)
+
+        failed_tests = [r for r in result.results if r.status == "failed"]
+        assert len(failed_tests) == 1
+        assert failed_tests[0].name == "test_04_click"
+        assert "_LocatorNotFoundError" in failed_tests[0].error_message
+        assert 'a[href="/cartxx.html"]' in failed_tests[0].error_message
+
     def test_handles_empty_output(self, empty_output: str) -> None:
         """Test handling of minimal pytest output with no tests."""
         result = parse_pytest_output(empty_output)
