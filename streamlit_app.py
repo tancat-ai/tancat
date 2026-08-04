@@ -137,7 +137,10 @@ if provider_requires_openai_api_key(provider):
 resolved_openai_api_key = resolve_openai_api_key(provider=provider, user_api_key=user_openai_api_key)
 sync_openai_api_key_to_env(provider, resolved_openai_api_key)
 
-provider_base_url = st.sidebar.text_input("Provider Base URL", value=default_provider_url)
+provider_base_url = st.sidebar.text_input(
+    "Provider Base URL",
+    value=str(load_setting("provider_base_url", "") or "") or default_provider_url,
+)
 
 # Propagate user-selected provider to ALL fallback LLMClient() instances
 LLMClient.set_session_provider(provider, provider_base_url)
@@ -153,13 +156,24 @@ except Exception:
 if available_models:
     model_option = st.sidebar.selectbox("Select Model", ["-- Enter manually --"] + available_models)
     if model_option == "-- Enter manually --":
-        model_name = st.sidebar.text_input("Model Name", value=default_model)
+        model_name = st.sidebar.text_input(
+            "Model Name", value=str(load_setting("model_name", "") or "") or default_model
+        )
     else:
         model_name = model_option
 else:
-    model_name = st.sidebar.text_input("Model", value=default_model)
+    model_name = st.sidebar.text_input("Model", value=str(load_setting("model_name", "") or "") or default_model)
 
 LLMClient.set_session_provider(provider, provider_base_url, model_name)
+
+# B-036 Phase 4: persist base URL + model so the full provider selection
+# (not just the provider key) survives restarts.
+_stored_base_url = str(load_setting("provider_base_url", "") or "")
+if provider_base_url != _stored_base_url:
+    save_setting("provider_base_url", provider_base_url)
+_stored_model = str(load_setting("model_name", "") or "")
+if model_name != _stored_model:
+    save_setting("model_name", model_name)
 
 # B-036 Phase 4: persisted Settings panel (OCR backend, workspace, RAG
 # learned-pattern stats). Re-initialises storage immediately when the

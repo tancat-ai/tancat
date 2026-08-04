@@ -398,7 +398,7 @@ Two compounding parser/classifier gaps made the self-healing loop pre-screen **e
 
 **Remaining deferrals:** none — AI-035's self-healing patch write-back (``_learn_from_patch``, ``source="self_healing"``, ``confidence=1.0``) shipped 2026-08-04 in ``src/rag_learn.py`` (``pattern_from_patch``/``learn_from_patch``) + ``SelfHealingRunner`` (guarded hook after each successful ``replace_locator`` patch; description recovered from the evidence sidecar's placeholder label; ``HealingReport.learned`` surfaces the count in CLI + UI). The self-healing lever and the learning loop are now fully wired.
 
-**Also noted:** sidebar config now persists via the SettingsStore (B-036 Phase 4) — the `st.session_state`-only gap is closed.
+**Also noted:** sidebar config now persists via the SettingsStore (B-036 Phase 4) — the `st.session_state`-only gap is closed. Tier-2 walkthrough (2026-08-04) closed the last gap: the Streamlit UI now also persists `provider_base_url` + `model_name` (save-on-change + seed-on-load) — verified live across app restarts (provider/POM/consent/OCR/workspace/model all round-trip via `~/.ai-test-gen/settings.enc`).
 
 ---
 
