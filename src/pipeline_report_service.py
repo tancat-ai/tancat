@@ -33,13 +33,23 @@ class PipelineReportService:
         generated_code: str,
         run_result: RunResult,
         package_dir: str = "",
+        jira_project_key: str = "",
     ) -> PipelineReportBundle:
-        """Return generated report strings and optionally save them into the package."""
+        """Return generated report strings and optionally save them into the package.
+
+        Args:
+            criteria_text: The acceptance criteria lines.
+            generated_code: The generated test code.
+            run_result: Parsed pytest run results.
+            package_dir: Where to save report files (empty = don't save).
+            jira_project_key: Jira project key shown in the Jira report
+                header (B-036 Phase 4 — export-time field; default "").
+        """
         criteria_lines = [line.strip() for line in criteria_text.splitlines() if line.strip()]
         coverage_analysis = build_coverage_analysis(criteria_lines, generated_code)
         coverage_rows = build_report_dicts(coverage_analysis, run_result, package_dir=package_dir)
         local_report = generate_local_report(coverage_rows)
-        jira_report = generate_jira_report(coverage_rows)
+        jira_report = generate_jira_report(coverage_rows, project_key=jira_project_key)
         html_report = generate_html_report(coverage_rows)
 
         local_report_path = ""

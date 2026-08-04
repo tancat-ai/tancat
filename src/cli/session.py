@@ -17,6 +17,7 @@ from src.pipeline_artifact_manager import PackageManifest
 from src.provider_config import get_provider_defaults
 from src.pytest_output_parser import RunResult
 from src.run_result_persistence import PersistedRunResult
+from src.settings_store import load_setting
 from src.spec_analyzer import TestCondition
 from src.test_plan import TestPlan
 from src.test_table import TestTable
@@ -75,6 +76,10 @@ class Session:
     consent_mode: str = "auto-dismiss"
     pom_mode: bool = False
 
+    # Export-time Jira project key (B-036 Phase 4) — feeds Jira test-case
+    # IDs and the Jira report header.
+    jira_project_key: str = "TEST"
+
     # Requirements
     raw_requirements: str = ""
 
@@ -130,10 +135,20 @@ def _session_defaults() -> dict[str, str]:
 
 
 def create_session() -> Session:
-    """Factory: create a Session populated with environment-based defaults."""
+    """Factory: create a Session populated with persisted + environment defaults.
+
+    B-036 Phase 4: persisted SettingsStore values win over env defaults for
+    provider/base-url/model, consent mode, POM mode and the Jira project key,
+    so CLI choices survive across sessions (matching the Streamlit sidebar).
+    """
     defaults = _session_defaults()
+    provider = str(load_setting("provider", "") or defaults["provider"])
+    consent_mode = str(load_setting("consent_mode", "") or "auto-dismiss")
     return Session(
-        provider=defaults["provider"],
-        provider_base_url=defaults["provider_base_url"],
-        model_name=defaults["model_name"],
+        provider=provider,
+        provider_base_url=str(load_setting("provider_base_url", "") or defaults["provider_base_url"]),
+        model_name=str(load_setting("model_name", "") or defaults["model_name"]),
+        consent_mode=consent_mode,
+        pom_mode=bool(load_setting("pom_mode", False)),
+        jira_project_key=str(load_setting("jira_project_key", "") or "TEST"),
     )

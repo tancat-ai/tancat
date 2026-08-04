@@ -29,6 +29,7 @@ if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", 
 from src.journey_scraper import CredentialProfile, JourneyStep
 from src.llm_client import LLMClient
 from src.provider_config import resolve_openai_api_key, sync_openai_api_key_to_env
+from src.settings_store import save_setting, save_settings
 
 from .color import green, yellow
 from .menu_renderer import (
@@ -41,6 +42,7 @@ from .menu_renderer import (
     list_saved_packages,
     print_header,
     print_menu,
+    read_optional,
     select_saved_package,
     show_package_metadata,
 )
@@ -122,6 +124,7 @@ async def interactive_session() -> None:
 
             menu_items.append("Consent Mode")
             menu_items.append("POM Mode")
+            menu_items.append("Jira Project Key")
 
             # Authentication / Journey (AI-009 Phase B)
             auth_label = "Configure Authentication"
@@ -197,6 +200,7 @@ async def interactive_session() -> None:
             # produces visible feedback on the redrawn screen.
             state.append(f"  Consent : {session.consent_mode}")
             state.append(f"  POM Mode : {'ON' if session.pom_mode else 'OFF'}")
+            state.append(f"  Jira : {session.jira_project_key or 'TEST'}")
         if session.plan_confirmed:
             state.append("  Plan : Signed off")
         if session.pipeline_saved_path:
@@ -227,15 +231,32 @@ async def interactive_session() -> None:
             _collect_urls_inline(session)
         elif menu_items[idx] == "Consent Mode":
             session.consent_mode = collect_consent_mode()
+            save_setting("consent_mode", session.consent_mode)  # B-036 Phase 4: persist
             print(green(f"  ✓ Consent mode set to '{session.consent_mode}'"))
             print("  Press Enter to continue...")
             input()
         elif menu_items[idx] == "POM Mode":
             session.pom_mode = not session.pom_mode
+            save_setting("pom_mode", session.pom_mode)  # B-036 Phase 4: persist
             if session.pom_mode:
                 print(green("  POM Mode: ON — generated tests will include Page Object Model artifacts"))
             else:
                 print(yellow("  POM Mode: OFF — generated tests will use inline locators only"))
+            print("  Press Enter to continue...")
+            input()
+        elif menu_items[idx] == "Jira Project Key":
+            new_key = (
+                read_optional(
+                    f"  Jira project key (current: {session.jira_project_key or 'TEST'})",
+                    default=session.jira_project_key or "TEST",
+                )
+                .strip()
+                .upper()
+                or "TEST"
+            )
+            session.jira_project_key = new_key
+            save_setting("jira_project_key", new_key)  # B-036 Phase 4: persist
+            print(green(f"  ✓ Jira project key set to '{new_key}'"))
             print("  Press Enter to continue...")
             input()
         elif "Authentication" in menu_items[idx]:
@@ -311,6 +332,14 @@ def _configure_llm_inline(session: Session) -> None:
     session.provider = provider
     session.provider_base_url = base_url
     session.model_name = model
+    # B-036 Phase 4: persist LLM config so it survives CLI restarts.
+    save_settings(
+        {
+            "provider": provider,
+            "provider_base_url": base_url,
+            "model_name": model,
+        }
+    )
     _apply_session_llm_config(session)
 
 

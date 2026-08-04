@@ -1,7 +1,7 @@
 # FEATURE_SPEC_B036 — Consumer Config Architecture
 
 **Created:** 2026-08-03
-**Status:** Spec
+**Status:** ✅ Shipped (Phases 1–4, 2026-08-03) — all four changes landed; see BACKLOG B-036 and CHANGELOG for the shipped record. §8 Phase 4 implemented as spec'd.
 **Backlog ref:** `## 🔴 Open Bugs` → B-036
 **Depends on:** AI-035 (Self-Learning RAG — spec, not yet implemented), Phase 3 RAG (shipped), secure_config (shipped), mock-site catalog + eval-006 (shipped 2026-08-03)
 

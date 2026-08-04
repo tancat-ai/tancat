@@ -198,6 +198,11 @@ read in a separate process from the run.
 - ⏭ **Session C — lift measurement**: mechanism verified; eval-006 lift ≈ 0 by
   design (golden pack already covers the mock — see §6 finding). Remaining
   golden-uncovered-site measurement is out of scope.
+- ✅ **B-036 Phase 4 (2026-08-03) — Streamlit learned-patterns UI folded in**: the
+  deferred "Learned Patterns" section shipped as part of the Phase 4 settings
+  rework — `SidebarConfig.render_settings()` shows RAG store stats
+  (`store_stats()`: golden/doc/learned counts) plus a guarded prune button.
+  See BACKLOG B-036 / CHANGELOG for the full Phase 4 record.
 
 ---
 

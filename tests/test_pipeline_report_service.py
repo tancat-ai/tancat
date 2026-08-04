@@ -31,10 +31,12 @@ def test_build_reports_returns_strings_and_saved_files(tmp_path: Path) -> None:
         generated_code="def test_01_checkout(page):\n    pass",
         run_result=run_result,
         package_dir=str(tmp_path),
+        jira_project_key="payments",
     )
 
     assert bundle.coverage_rows[0]["status"] == "passed"
     assert "# Test Coverage Report" in bundle.local_report
+    assert "Project: PAYMENTS" in bundle.jira_report
     assert "<!DOCTYPE html>" in bundle.html_report
     assert Path(bundle.local_report_path).exists()
     assert Path(bundle.jira_report_path).exists()

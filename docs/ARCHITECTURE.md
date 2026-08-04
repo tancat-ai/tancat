@@ -260,6 +260,18 @@ The RAG pipeline augments placeholder resolution with retrieval from a vector st
 - **Bundled golden pack auto-seed**: `src/rag_bundled.py` ships the eval golden keys (`scripts/eval/dataset/eval-*.json`) + curated Playwright docs (`docs/rag_corpus/playwright/`). On the first generation run (orchestrator init), `ensure_bundled_seeded()` seeds the store and writes an idempotent marker (`evidence/.rag_bundled_seeded.json`) — re-runs are a no-op. No manual `rag_ingest.py` needed.
 - Power-user CLI (`scripts/rag_ingest.py`): `--bundled` (re-seed, `--force` to force), `--stats` (per-type counts), `--prune-learned` (drop learned patterns, keep golden/docs; active once learning lands in B-036 Phase 3).
 
+### Phase 9: Consumer Settings (B-036 Phase 4)
+
+`settings_store.py` → `secure_config.py` (pattern) → `ui_sidebar.py` / `src/cli/session.py`
+
+**`src/settings_store.py`** persists app settings on the `secure_config` pattern — Fernet-encrypted, machine-keyed `~/.ai-test-gen/settings.enc` (separate file from `config.enc` so API-key storage and settings storage never clobber each other). API: `SettingsStore` class + module-level `load_setting/save_setting/save_settings/get_all_settings/reset_settings`; corruption-tolerant (missing/undecryptable file ⇒ defaults, never crashes).
+
+- **Migrated sidebar state** (consumers set these): `pom_mode`, `consent_mode`, `provider`/`model_name`, `workspace` — Streamlit sidebar (`SidebarConfig.render()`, `render_settings()`) and CLI `Session` (`create_session()` seeds from the store; settings win over env, env is the fallback).
+- **`JIRA_PROJECT_KEY`**: env read removed from `src/config.py` (constant default `TEST`) — export-time field in the Streamlit export panel + CLI menu (`Session.jira_project_key`), feeding `JiraReportGenerator` test-case IDs and a `Project:` header line in the Jira report (`PipelineReportService.build_reports(jira_project_key=...)`).
+- **`OCR_BACKEND`**: persisted setting (default `pymupdf`); the env read in `get_ocr_backend()` is now a fallback only.
+- **`LANGGRAPH_ENABLED`**: removed outright (dead flag) — `--use-graph` is the supported path; `TestGenerator.generate_skeleton(use_graph=...)` replaces the env read.
+- **Streamlit "Learned Patterns" section** (folded in from AI-035 deferral): `SidebarConfig.render_settings()` shows RAG store stats (`store_stats()` — golden/doc/learned counts) with a guarded prune button.
+
 The **Ingestion Agent** (Phase 1) extends this with PDF parsing (Docling/PyMuPDF) for real-world insurance documents. The LV Insurance mock site (`generated_tests/mock_insurance_site.html`) and companion documents provide an end-to-end test domain: 7-step quote flow with underwriting rules validated against ingested product documents.
 
 ---

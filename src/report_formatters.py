@@ -116,12 +116,20 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: str = "") -> str:
+def generate_jira_report(
+    coverage: list[dict[str, Any]],
+    test_execution_date: str = "",
+    project_key: str = "",
+) -> str:
     """Generate markdown report in Jira attachment format.
 
     Args:
         coverage: List of test coverage dictionaries with test_name, status, screenshots, duration
         test_execution_date: Optional ISO date string (e.g., "2026-03-12")
+        project_key: Optional Jira project key (B-036 Phase 4 — export-time
+            field). When non-empty, a ``Project:`` line is included in the
+            header so the exported report shows which Jira project it
+            belongs to.
 
     Returns:
         Markdown formatted report string compatible with Jira attachments
@@ -137,9 +145,10 @@ def generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: st
         "",
         exec_line,
         "",
-        "## Summary",
-        "",
     ]
+    if project_key.strip():
+        lines.extend([f"Project: {project_key.strip().upper()}", ""])
+    lines.extend(["## Summary", ""])
 
     passed_count, failed_count, pending_count, unknown_count = _status_summary(coverage)
 
