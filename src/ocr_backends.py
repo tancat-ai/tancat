@@ -14,13 +14,14 @@ Usage::
 
     from src.ocr_backends import get_ocr_backend
 
-    backend = get_ocr_backend()  # reads OCR_BACKEND env var
+    backend = get_ocr_backend()  # persisted setting > OCR_BACKEND env > pymupdf
     text = backend.parse_pdf("path/to/document.pdf")
 
-Backend selection::
+Backend selection (B-036 Phase 4 — persisted setting wins, env is a
+fallback for the transition window)::
 
-    OCR_BACKEND=pymupdf          # default — fast, offline
-    OCR_BACKEND=unlimited-ocr    # GPU required — vision model
+    pymupdf          # default — fast, offline
+    unlimited-ocr    # GPU required — vision model
 """
 
 from __future__ import annotations
@@ -30,6 +31,8 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
+from src.settings_store import load_setting
 
 logger = logging.getLogger(__name__)
 
@@ -282,17 +285,26 @@ class UnlimitedOCRBackend(OcrBackend):
 def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
     """Return the configured OCR backend.
 
-    Reads ``OCR_BACKEND`` environment variable, or uses the provided
-    ``backend_name``.  Falls back to PyMuPDF if the requested backend
-    is unavailable.
+    Resolution order (B-036 Phase 4):
+
+    1. Explicit ``backend_name`` argument (tests / programmatic use).
+    2. Persisted ``ocr_backend`` setting (SettingsStore).
+    3. ``OCR_BACKEND`` env var — transition-window fallback only.
+    4. ``pymupdf`` default.
+
+    Falls back to PyMuPDF if the requested backend is unavailable.
 
     Args:
-        backend_name: Override for testing.  Reads ``OCR_BACKEND`` env var if None.
+        backend_name: Override for testing.  When None, consults the
+            persisted setting, then the ``OCR_BACKEND`` env var.
 
     Returns:
         A ready-to-use ``OcrBackend`` instance.
     """
-    name = backend_name or os.getenv("OCR_BACKEND", "pymupdf").strip().lower()
+    if backend_name is None:
+        # Settings win; env is honoured only when the setting was never saved.
+        backend_name = load_setting("ocr_backend") or os.getenv("OCR_BACKEND", "pymupdf")
+    name = str(backend_name).strip().lower()
 
     if name in ("unlimited-ocr", "unlimited_ocr"):
         backend = UnlimitedOCRBackend()

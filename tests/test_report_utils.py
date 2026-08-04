@@ -120,6 +120,30 @@ def test_generate_jira_report_with_coverage(sample_coverage: list[dict[str, Any]
     assert "Total Tests: 2 | Passed: 1 | Failed: 1 | Pending: 0 | Unknown: 0" in result
 
 
+def test_generate_jira_report_with_project_key() -> None:
+    """B-036 Phase 4: project key appears in the Jira report header."""
+    sample_data = [
+        {
+            "test_name": "test_one",
+            "status": "passed",
+            "duration": 1.0,
+            "screenshots": [],
+            "error_message": "",
+        }
+    ]
+
+    result = generate_jira_report(sample_data, project_key="payments")
+    assert "Project: PAYMENTS" in result
+    assert result.index("Project: PAYMENTS") < result.index("## Summary")
+
+
+def test_generate_jira_report_omits_project_line_when_empty() -> None:
+    """No project line when the key is empty (default behaviour unchanged)."""
+    result = generate_jira_report([], project_key="")
+    assert "Project:" not in result
+    assert "## Summary" in result
+
+
 def test_generate_html_report_with_coverage(sample_coverage: list[dict[str, Any]]) -> None:
     """HTML report renders properly."""
     result = generate_html_report(sample_coverage)

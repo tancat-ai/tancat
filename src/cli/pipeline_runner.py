@@ -641,6 +641,7 @@ def generate_reports(session: Any) -> None:
             if isinstance(session.pipeline_run_result, RunResult)
             else RunResult(),
             package_dir=str(Path(session.pipeline_saved_path).resolve().parent),
+            jira_project_key=getattr(session, "jira_project_key", "") or "",
         )
         session.pipeline_local_report = bundle.local_report
         session.pipeline_jira_report = bundle.jira_report

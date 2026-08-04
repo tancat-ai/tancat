@@ -7,8 +7,9 @@ full test-generation pipeline and composes ``SkeletonGraph`` as a
 sub-component of the Synthesizer.
 
 Enabled by default when langgraph is installed (``pip install ai-playwright-generator[langgraph]``).
-Set ``LANGGRAPH_ENABLED=0`` to force the single-call linear pipeline.
-Degrades gracefully if langgraph is not available.
+B-036 Phase 4: the ``LANGGRAPH_ENABLED`` env gate was removed — the eval
+harness ``--use-graph`` flag (or ``use_graph=True`` programmatically) is the
+only supported selector. Degrades gracefully if langgraph is not available.
 """
 
 from __future__ import annotations

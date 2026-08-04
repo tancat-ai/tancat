@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 
 
@@ -71,8 +70,12 @@ class Environment(Enum):
         return defaults.get(env)
 
 
-# Jira project configuration - can be overridden via environment variable
-JIRA_PROJECT_KEY: str = os.getenv("JIRA_PROJECT_KEY", "TEST")
+# Jira project configuration (B-036 Phase 4): the value is now a plain
+# default — consumers set it at export time (Streamlit export panel / CLI
+# menu / SettingsStore "jira_project_key"). The env-var read was removed;
+# the constant stays for backwards compatibility (src/cli/config.py re-exports
+# it and src/cli/report_generator.py uses it as its default).
+JIRA_PROJECT_KEY: str = "TEST"
 
 # Screenshot storage configuration
 STORAGE_MODE: str = "filesystem"  # filesystem, s3, base64

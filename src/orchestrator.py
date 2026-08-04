@@ -119,21 +119,23 @@ class TestOrchestrator:
         # The graph is reachable only via ``run_pipeline_via_graph()``, which the
         # eval harness exercises with ``--use-graph`` and which unit tests cover
         # directly. Initialisation here is harmless but unused in normal runs.
-        langgraph_disabled = os.getenv("LANGGRAPH_ENABLED", "").strip() == "0"
-        self._use_graph = not langgraph_disabled
+        # B-036 Phase 4: the ``LANGGRAPH_ENABLED`` env gate was removed — the
+        # graph is always constructed when langgraph is importable (with a
+        # graceful fallback to the linear pipeline); ``--use-graph`` is the
+        # only supported selector for graph mode.
+        self._use_graph = True
         self._pipeline_graph: Any | None = None
-        if self._use_graph:
-            try:
-                from src.agents.pipeline_graph import PipelineGraph
+        try:
+            from src.agents.pipeline_graph import PipelineGraph
 
-                self._pipeline_graph = PipelineGraph(
-                    client=test_generator.client,
-                    rag_retriever=rag_retriever,
-                )
-                logger.info("LangGraph multi-agent pipeline enabled")
-            except Exception:
-                logger.warning("LangGraph failed to initialise — falling back to linear pipeline", exc_info=True)
-                self._use_graph = False
+            self._pipeline_graph = PipelineGraph(
+                client=test_generator.client,
+                rag_retriever=rag_retriever,
+            )
+            logger.info("LangGraph multi-agent pipeline enabled")
+        except Exception:
+            logger.warning("LangGraph failed to initialise — falling back to linear pipeline", exc_info=True)
+            self._use_graph = False
 
     @staticmethod
     def _build_rag_retriever() -> Any | None:

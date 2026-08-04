@@ -29,6 +29,7 @@ from src.provider_config import (
     sync_openai_api_key_to_env,
 )
 from src.pytest_output_parser import RunResult
+from src.settings_store import load_setting, save_setting
 from src.storage import get_storage, init_storage
 from src.test_plan import TestPlan, apply_editor_rows
 from src.test_table import TestTable, table_to_conditions
@@ -39,7 +40,7 @@ from src.ui.ui_requirements import RequirementsInput
 from src.ui.ui_results import ResultsPanel
 from src.ui.ui_run_results import RunResultsDisplay
 from src.ui.ui_saved_packages import SavedPackagePanel
-from src.ui.ui_sidebar import SidebarConfig
+from src.ui.ui_sidebar import SETTING_CONSENT_MODE, SETTING_JIRA_PROJECT_KEY, SETTING_WORKSPACE, SidebarConfig
 from src.ui_pipeline import (
     PipelineSessionState,
     build_test_plan,
@@ -56,7 +57,10 @@ st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.
 
 def _init_session_state() -> None:
     """Initialise session state defaults — called once per module load."""
-    init_storage(workspace=os.environ.get("WORKSPACE", "default"))
+    # B-036 Phase 4: workspace comes from the persisted settings store first,
+    # with the WORKSPACE env var as a dev fallback, then "default".
+    workspace = load_setting(SETTING_WORKSPACE, None) or os.environ.get("WORKSPACE", "default")
+    init_storage(workspace=workspace)
 
     defaults: dict[str, Any] = {
         "pipeline_results": None,
@@ -157,6 +161,14 @@ else:
 
 LLMClient.set_session_provider(provider, provider_base_url, model_name)
 
+# B-036 Phase 4: persisted Settings panel (OCR backend, workspace, RAG
+# learned-pattern stats). Re-initialises storage immediately when the
+# workspace setting changed, so evidence/tests land in the right place.
+_settings = SidebarConfig.render_settings()
+_workspace = str(_settings.get("workspace", "default") or "default")
+if get_storage().workspace != _workspace:
+    init_storage(workspace=_workspace)
+
 # Saved package loader (sidebar slot)
 SavedPackagePanel().render_sidebar()
 
@@ -184,14 +196,24 @@ with st.sidebar.expander("Advanced", expanded=False):
         height=120,
         key="additional_urls",
     )
+    # B-036 Phase 4: consent mode persists through the SettingsStore.
+    _stored_consent = load_setting(SETTING_CONSENT_MODE, "auto-dismiss")
     consent_mode = st.selectbox(
         "Consent Handling",
         ["auto-dismiss", "leave-as-is", "test-consent-flow"],
+        index=["auto-dismiss", "leave-as-is", "test-consent-flow"].index(
+            _stored_consent
+            if _stored_consent in ["auto-dismiss", "leave-as-is", "test-consent-flow"]
+            else "auto-dismiss"
+        ),
+        key="consent_mode",
         help=(
             "Auto-dismiss is best for normal local app testing. "
             "Use the other modes when consent behavior is part of what you want to test."
         ),
     )
+    if consent_mode != _stored_consent:
+        save_setting(SETTING_CONSENT_MODE, consent_mode)
     if st.button("Load baseline (automationexercise.com)", type="secondary"):
         st.session_state._load_baseline_requested = True
         st.rerun()
@@ -585,6 +607,20 @@ def generator_page() -> None:
                 help=("Flat: single test files with inline locators. POM: separate page-object modules."),
                 key="export_mode_selection",
             )
+
+            # B-036 Phase 4: Jira project key is an export-time field —
+            # persisted, default "TEST". It feeds Jira test-case IDs and the
+            # exported Jira report header (``PipelineReportService``).
+            _stored_jira_key = str(load_setting(SETTING_JIRA_PROJECT_KEY, "TEST") or "TEST")
+            jira_project_key = st.text_input(
+                "Jira Project Key",
+                value=_stored_jira_key,
+                max_chars=10,
+                help="Prefix used for Jira test-case IDs and the Jira report header (default TEST).",
+                key="jira_project_key",
+            )
+            if (jira_project_key or "TEST").strip().upper() != _stored_jira_key.strip().upper():
+                save_setting(SETTING_JIRA_PROJECT_KEY, (jira_project_key or "TEST").strip().upper())
 
             if st.button("Export Clean Package", type="primary", key="export_button"):
                 from pathlib import Path

@@ -496,7 +496,9 @@ class EvalRunner:
             results = run_static_validation(self.dataset_dir, code_map, durations)
 
         if persist:
-            pipeline_type = "graph" if (self.use_graph or os.environ.get("LANGGRAPH_ENABLED") == "1") else "linear"
+            # B-036 Phase 4: LANGGRAPH_ENABLED env gate removed — --use-graph
+            # is the only supported selector for graph pipeline runs.
+            pipeline_type = "graph" if self.use_graph else "linear"
             gen_mode = "regenerated" if self.regenerate else "captured"
             rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
             git_commit = _get_git_commit()

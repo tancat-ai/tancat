@@ -47,18 +47,21 @@ class TestGenerator:
         conditions: str,
         target_urls: list[str] | None = None,
         expected_count: int | None = None,
+        use_graph: bool = False,
     ) -> str:
         """Generate placeholder-based skeleton code for the intelligent pipeline.
 
-        When ``LANGGRAPH_ENABLED=1``, delegates to the multi-agent LangGraph
+        When ``use_graph=True``, delegates to the multi-agent LangGraph
         workflow (Planner → Generator → Validator).  Otherwise uses the
         original single-call pipeline.
 
         NOTE (2026-08-01): the LangGraph skeleton workflow is experimental and
         opt-in — the production path is the single-call pipeline. ``langgraph``
         is an optional extra; CI skips graph tests when it is absent.
+        B-036 Phase 4: the ``LANGGRAPH_ENABLED`` env gate was removed — pass
+        ``use_graph=True`` explicitly to select the graph skeleton path.
         """
-        if os.environ.get("LANGGRAPH_ENABLED", "").strip() == "1":
+        if use_graph:
             return await self._generate_skeleton_langgraph(user_story, conditions, target_urls, expected_count)
         return await self._generate_skeleton_single_call(user_story, conditions, target_urls, expected_count)
 
@@ -112,7 +115,7 @@ class TestGenerator:
             raise ImportError(
                 "langgraph package is not installed. "
                 "Install with: uv sync --group langgraph  "
-                "or set LANGGRAPH_ENABLED=0 for single-call mode."
+                "or pass use_graph=False for single-call mode."
             ) from exc
 
         count = expected_count or 0

@@ -74,8 +74,16 @@ class TestExecutionResult:
 class JiraReportGenerator:
     """Generate Jira-compatible test reports."""
 
-    def __init__(self, output_dir: str = "jira_reports"):
+    def __init__(self, output_dir: str = "jira_reports", project_key: str | None = None):
+        """
+        Args:
+            output_dir: Directory to write report files into.
+            project_key: Jira project key used for test-case ID prefixes
+                (B-036 Phase 4 — export-time field; defaults to
+                ``JIRA_PROJECT_KEY``).
+        """
         self.output_dir = output_dir
+        self._project_key = (project_key or JIRA_PROJECT_KEY).upper()
         self.test_cases: list[JiraTestCase] = []
         os.makedirs(output_dir, exist_ok=True)
 
@@ -86,7 +94,7 @@ class JiraReportGenerator:
         screenshot_paths = screenshot_paths or []
 
         # Generate unique key
-        key = f"{JIRA_PROJECT_KEY}-TC-{len(self.test_cases) + 1:04d}".upper()
+        key = f"{self._project_key}-TC-{len(self.test_cases) + 1:04d}".upper()
 
         # Format test steps
         test_steps = self._format_test_steps(analyzed_case)

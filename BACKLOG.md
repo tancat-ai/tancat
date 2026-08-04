@@ -368,22 +368,23 @@ writing if code fails syntax check.
 
 ---
 ### B-036 — Consumer config architecture: env-var feature gates don't fit the product
-**Status:** 🟡 ready-for-agent — Phases 1–3 shipped (2026-08-03, commit pending); Phase 4 + deferrals remain
+**Status:** ✅ Shipped (2026-08-03, Phases 1–4, CI green)
 **Priority:** Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers
 **Spec:** `docs/specs/FEATURE_SPEC_B036_consumer_config.md` (2026-08-03) — 4 changes: always-on RAG, bundled golden pack auto-seed, evidence auto-learn (builds on AI-035), settings store + export-time fields. ~3 sessions.
 
 **Principle:** this is a consumer product (Streamlit/CLI). Feature toggles must not require `.env` edits. The product already has the right pattern for API keys (`secure_config.py` — Fernet-encrypted, persisted); the env vars are dev-era leftovers.
 
-**Shipped (Phases 1–3):**
+**Shipped (Phases 1–4):**
 1. ✅ Always-on RAG with graceful degradation — `_build_rag_retriever()` builds by default; `RAG_ENABLED=0` transitional opt-out; empty store ⇒ no bonus ⇒ identical behavior; store/embedder failure degrades to no-RAG (never blocks generation). `RAGRetriever.retrieve()` hardened with once-only warning.
 2. ✅ Bundled golden pack + auto-seed — `src/rag_bundled.py` ships eval-001..006 golden keys (83 patterns) + curated Playwright docs (27 chunks); first generation run auto-seeds with idempotent marker `evidence/.rag_bundled_seeded.json`; `rag_ingest.py --bundled/--force/--stats/--prune-learned`.
 3. ✅ Evidence auto-learn (AI-035 core + B-036 Phase 3) — `src/rag_learn.py` (`site_hash`, `domain_from_url`, `learn_from_evidence`); `RAGStore.upsert_pattern()` dedup on `(action_type, description, site_hash)` with `hit_count` bump; teardown hook in `generated_tests/conftest.py` learns from passing runs (guarded, batched); site-scoped scoring `SAME_SITE_LEARNED_BONUS=5` (same-site only, cross-site 0) threaded orchestrator → matcher → resolver → scorer. Plan: `docs/plans/AI-035_B036_P3_plan.md`. Live-verified against the e-commerce mock (3 learned patterns, dedup'd); eval static 95.2% unchanged.
 
-**Remaining (Phase 4 + deferrals):**
-4. Settings store + field migration — `SettingsStore` on the secure_config pattern; migrate pom_mode/consent/provider/workspace; JIRA key → export UI field; OCR backend setting; remove `LANGGRAPH_ENABLED`.
-- Deferred from AI-035: self-healing patch write-back (`_learn_from_patch`, `source="self_healing"`, confidence 1.0) — ~0.25 session; Streamlit "Learned Patterns" settings section (fold into Phase 4).
+4. ✅ Settings store + field migration — `src/settings_store.py` (`SettingsStore`, Fernet-encrypted `~/.ai-test-gen/settings.enc` on the secure_config pattern; corruption-tolerant; `load_setting/save_setting/save_settings/get_all_settings/reset_settings`). Migrated sidebar state consumers actually set: `pom_mode`, `consent_mode`, `provider`/`model_name`, `workspace` (Streamlit sidebar + CLI `Session` seeding — settings win, env is fallback). `JIRA_PROJECT_KEY` env read removed from `src/config.py` (constant default `TEST`); export-time UI field in the Streamlit export panel + CLI menu (`Session.jira_project_key`), feeds `JiraReportGenerator` test-case IDs and a `Project:` header line in the Jira report (`PipelineReportService.build_reports(jira_project_key=...)`). `OCR_BACKEND` → persisted setting (default `pymupdf`); env read is now a fallback only. `LANGGRAPH_ENABLED` removed outright (dead flag — `--use-graph` is the supported path; `generate_skeleton(use_graph=...)` parameter replaces the env read). Streamlit "Learned Patterns" section folded in (`SidebarConfig.render_settings()` — RAG store stats via `store_stats()` + prune button). +30 tests (2229 total); eval static 95.2% unchanged.
 
-**Also noted:** sidebar config lives in `st.session_state` — not persisted across app restarts (a separate consumer gap; settings should persist via the secure_config-style store).
+**Remaining deferrals:**
+- Deferred from AI-035: self-healing patch write-back (`_learn_from_patch`, `source="self_healing"`, confidence 1.0) — ~0.25 session. The self-healing lever exists in the product; only the write-back wiring to the RAG store is pending.
+
+**Also noted:** sidebar config now persists via the SettingsStore (B-036 Phase 4) — the `st.session_state`-only gap is closed.
 
 ---
 

@@ -564,6 +564,11 @@
       "status": "completed"
     },
     {
+      "source": "src/settings_store.py",
+      "doc": "markdown_docs/src/settings_store.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/self_healing.py",
       "doc": "markdown_docs/src/self_healing.py.md",
       "status": "completed"

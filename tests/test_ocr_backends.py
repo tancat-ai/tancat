@@ -136,7 +136,15 @@ class TestUnlimitedOCRBackend:
 
 
 class TestGetOcrBackend:
-    """get_ocr_backend() factory with env var and fallback."""
+    """get_ocr_backend() factory with settings store, env var and fallback."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_settings(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 Phase 4: keep the persisted settings store out of these tests."""
+        settings_file = tmp_path / "settings.enc"
+        monkeypatch.setattr("src.settings_store._settings_path", lambda: settings_file)
+        if settings_file.exists():
+            settings_file.unlink()
 
     def test_default_is_pymupdf(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
@@ -171,6 +179,39 @@ class TestGetOcrBackend:
         with patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}):
             backend = get_ocr_backend("pymupdf")
             assert isinstance(backend, PyMuPDFBackend)
+
+    # ---- B-036 Phase 4: persisted setting wins; env is a fallback ----
+
+    def test_persisted_setting_wins_over_env(self) -> None:
+        from src.settings_store import save_setting
+
+        save_setting("ocr_backend", "unlimited-ocr")
+        with patch.dict(os.environ, {"OCR_BACKEND": "pymupdf"}):
+            with (
+                patch("torch.cuda.is_available", return_value=True),
+                patch("transformers.AutoModel", create=True),
+                patch("transformers.AutoTokenizer", create=True),
+            ):
+                backend = get_ocr_backend()
+                assert isinstance(backend, UnlimitedOCRBackend)
+
+    def test_env_is_fallback_when_setting_never_saved(self) -> None:
+        with patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}):
+            with patch("torch.cuda.is_available", return_value=False):
+                backend = get_ocr_backend()
+                assert isinstance(backend, PyMuPDFBackend)  # requested → GPU fails → fallback
+
+    def test_persisted_backend_name_normalised(self) -> None:
+        from src.settings_store import save_setting
+
+        save_setting("ocr_backend", "UNLIMITED_OCR")  # alternate alias
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("transformers.AutoModel", create=True),
+            patch("transformers.AutoTokenizer", create=True),
+        ):
+            backend = get_ocr_backend()
+            assert isinstance(backend, UnlimitedOCRBackend)
 
 
 # ---------------------------------------------------------------------------
