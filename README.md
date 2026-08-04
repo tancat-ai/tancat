@@ -11,6 +11,21 @@ Powered by local LLMs — no cloud API keys needed.
 | License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | Code Quality | [![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://github.com/astral-sh/ruff) |
 
+## Demo
+
+<!--
+  TODO: record the demo asset.
+  1. Record a ~3 min walkthrough on Loom (story in → plan → generate → run → self-heal) and paste the URL below.
+  2. Record a short screen-capture GIF (terminal + browser) and save it to docs/demo/demo.gif.
+  The GIF renders on the repo page — recruiters/clients see it without clicking anything.
+-->
+
+▶️ **Watch the 3-minute walkthrough:** [Loom — AI-Playwright-Test-Generator](https://www.loom.com/share/YOUR_VIDEO_ID_HERE)
+
+![Demo — paste a user story, get running Playwright tests](docs/demo/demo.gif)
+
+*A user story in → a living test plan → generated Playwright tests → executed against a real site, with a self-healed locator along the way.*
+
 ## How It Works
 
 ```
@@ -28,6 +43,8 @@ Executable pytest file (sync format, ready to run)
 ## Key Features
 
 - **AI-Powered Generation** — Natural language stories → pytest sync tests
+- **Self-Learning RAG** — the resolver improves with use: passing runs and self-healed locators teach a local, site-scoped store (no telemetry, no cloud)
+- **Self-Healing** — failed locators are reviewed and repaired automatically, then written back so the next generation resolves correctly
 - **Local LLMs** — Runs entirely offline via llama.cpp, Ollama, or LM Studio
 - **Semantic Scraper** — Three-layer extraction (BS4 + CDP accessibility tree + ARIA snapshot) captures computed accessible names, placeholder text, and container elements that CSS-only scrapers miss
 - **Real Selectors** — Scrapes actual DOM; no selector hallucination
