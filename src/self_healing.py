@@ -13,6 +13,7 @@ Design:
 
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import re
@@ -560,24 +561,37 @@ Analyze this failure and suggest a fix."""
         ``starting_url`` when no sidecar exists. Never raises.
         """
         package_dir = test_path.parent
-        candidates = [f"{test_name}.evidence.json"]
-        # pytest param suffixes ("[chromium]") may be missing from the file name.
-        stripped = test_name.split("[", 1)[0]
-        if stripped != test_name:
-            candidates.append(f"{stripped}.evidence.json")
+        evidence_dir = package_dir / "evidence"
 
-        for name in candidates:
-            for sidecar in (package_dir / "evidence" / name, package_dir / name):
-                try:
-                    if not sidecar.exists():
-                        continue
-                    data = json.loads(sidecar.read_text(encoding="utf-8"))
-                    steps = data.get("steps") if isinstance(data, dict) else None
-                    page = data.get("page") if isinstance(data, dict) else None
-                    url = str((page or {}).get("url", "") or "") if isinstance(page, dict) else ""
-                    return (steps if isinstance(steps, list) else []), url
-                except Exception:
-                    continue
+        def _try_read(sidecar: Path) -> tuple[list[dict[str, Any]], str] | None:
+            try:
+                if not sidecar.exists():
+                    return None
+                data = json.loads(sidecar.read_text(encoding="utf-8"))
+                steps = data.get("steps") if isinstance(data, dict) else None
+                page = data.get("page") if isinstance(data, dict) else None
+                url = str((page or {}).get("url", "") or "") if isinstance(page, dict) else ""
+                return (steps if isinstance(steps, list) else []), url
+            except Exception:
+                return None
+
+        # Exact name first (non-parametrized tests), then the [param] suffix
+        # variant — the sidecar keeps the FULL pytest node name while
+        # ``result.name`` has the suffix stripped by the output parser.
+        stripped = test_name.split("[", 1)[0]
+        for name in (f"{test_name}.evidence.json", f"{stripped}.evidence.json"):
+            for sidecar in (evidence_dir / name, package_dir / name):
+                found = _try_read(sidecar)
+                if found is not None:
+                    return found
+
+        # Glob fallback: test_04_click -> test_04_click[chromium].evidence.json
+        # (escape the prefix — "[chromium]" in a node name would otherwise be
+        # interpreted as a glob character class).
+        for sidecar in sorted(evidence_dir.glob(glob.escape(stripped) + "*.evidence.json")):
+            found = _try_read(sidecar)
+            if found is not None:
+                return found
 
         # Fallback: package scrape/package manifest carries starting_url.
         for manifest_name in ("scrape_manifest.json", "package_manifest.json"):

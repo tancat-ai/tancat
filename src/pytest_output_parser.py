@@ -38,7 +38,10 @@ _SKIPPED_COUNT_RE = re.compile(r"(\d+) skipped")
 _ERROR_COUNT_RE = re.compile(r"(\d+) error(?:s)?")
 _ERROR_RE = re.compile(r"FAILED .+::(\S+) - (.+)")
 _FAILURES_HEADER_RE = re.compile(r"^=+ FAILURES =+")
-_FAILURE_NAME_RE = re.compile(r"^_+ (\w+) _+")
+# Failures-block test header. Must tolerate pytest param suffixes — ALL generated
+# tests run as e.g. ``test_04_navigate_to_cart_page[chromium]``; without this the
+# E-line error capture below never fires and error_message stays empty.
+_FAILURE_NAME_RE = re.compile(r"^_+ (\S+?) _+")
 _ASSERTION_RE = re.compile(r"^(AssertionError|Error|Exception|TimeoutError): (.+)")
 
 # ---------------------------------------------------------------------------
@@ -177,7 +180,9 @@ def parse_pytest_output(raw: str) -> RunResult:
             else:
                 name_match = _FAILURE_NAME_RE.match(line)
                 if name_match:
-                    current_failed_name = name_match.group(1)
+                    # Strip pytest param suffix ("[chromium]") so the name
+                    # matches the results_by_name key (which drops it too).
+                    current_failed_name = name_match.group(1).split("[", 1)[0]
                     continue
 
                 if current_failed_name and current_failed_name in results_by_name:

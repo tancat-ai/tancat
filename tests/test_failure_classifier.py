@@ -116,3 +116,42 @@ def test_extract_locator_nested() -> None:
 def test_extract_locator_not_found() -> None:
     result = _extract_locator("some random error text")
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# EvidenceTracker fast-fail (B-036 Tier-1 discovery): "Locator '...' not found"
+# ---------------------------------------------------------------------------
+
+
+def test_classify_evidence_tracker_not_found() -> None:
+    """EvidenceTracker's fast-fail is a locator problem, not OTHER."""
+    error = (
+        "Locator 'a[href=\"/cartxx.html\"]' not found on current page "
+        "(http://localhost:8781/index.html). The element exists on a "
+        "different page than the one this step runs on."
+    )
+    detail = classify_failure(error)
+    assert detail.category == FailureCategory.LOCATOR_TIMEOUT
+    assert detail.raw_locator == 'a[href="/cartxx.html"]'
+
+
+def test_classify_evidence_tracker_not_found_extracts_locator() -> None:
+    error = "Locator '#submit-btn' not found on current page (http://x/)."
+    detail = classify_failure(error)
+    assert detail.category == FailureCategory.LOCATOR_TIMEOUT
+    assert detail.raw_locator == "#submit-btn"
+
+
+def test_pre_screen_allows_evidence_tracker_not_found() -> None:
+    """The self-healing loop must review (not skip) the fast-fail class."""
+    from src.self_healing import SelfHealingRunner
+
+    error = "Locator '#x' not found on current page (http://localhost:8781/)."
+    detail = classify_failure(error)
+    assert SelfHealingRunner._pre_screen_failure(detail) is True
+
+
+def test_unrelated_not_found_text_stays_other() -> None:
+    """False positives: generic text mentioning 'not found' without a locator."""
+    detail = classify_failure("File not found: missing_asset.png")
+    assert detail.category == FailureCategory.OTHER

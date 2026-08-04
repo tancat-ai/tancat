@@ -69,6 +69,20 @@ _STRICT_VIOLATION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# EvidenceTracker fast-fail: "Locator 'a[href="/cart.html"]' not found on
+# current page (...)" — the product's most common locator failure, raised by
+# ``_LocatorNotFoundError`` instead of a Playwright TimeoutError.
+_LOCATOR_NOT_FOUND_RE = re.compile(
+    r"locator\s+['\"].*?['\"]\s+not\s+found",
+    re.IGNORECASE,
+)
+
+# Extract locator from EvidenceTracker fast-fail: Locator '...' not found
+_LOCATOR_NOT_FOUND_EXTRACT_RE = re.compile(
+    r"locator\s+['\"](.*?)['\"]\s+not\s+found",
+    re.IGNORECASE,
+)
+
 # Assertion error (leading AssertionError)
 _ASSERTION_RE = re.compile(
     r"^(?:assertionerror|assertionerror:)",
@@ -121,6 +135,20 @@ def classify_failure(error_message: str) -> FailureDetail:
         raw_locator = _extract_locator(error_message)
         return FailureDetail(
             category=FailureCategory.STRICT_VIOLATION,
+            raw_locator=raw_locator,
+            failure_url=None,
+            line_number=None,
+            error_message=error_message,
+        )
+
+    # EvidenceTracker fast-fail — "Locator '...' not found on current page"
+    # is a locator problem the LLM reviewer can fix (same class as a timeout).
+    not_found = _LOCATOR_NOT_FOUND_RE.search(error_message)
+    if not_found:
+        match = _LOCATOR_NOT_FOUND_EXTRACT_RE.search(error_message)
+        raw_locator = match.group(1) if match else None
+        return FailureDetail(
+            category=FailureCategory.LOCATOR_TIMEOUT,
             raw_locator=raw_locator,
             failure_url=None,
             line_number=None,
