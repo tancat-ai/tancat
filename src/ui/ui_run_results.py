@@ -1102,6 +1102,8 @@ def _render_self_healing_results(report: HealingReport) -> None:
 
     if report.unfixable > 0:
         st.caption(f"{report.unfixable} failure(s) could not be automatically fixed.")
+    if report.learned > 0:
+        st.caption(f"🧠 {report.learned} corrected locator(s) written back to the RAG store (self-learning).")
 
     if report.patches:
         st.write("**Applied patches:**")

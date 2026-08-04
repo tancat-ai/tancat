@@ -948,6 +948,7 @@ def self_heal_cli(session: Any) -> None:
     print_header("Self-Healing Results")
     print(f"  Failures found : {report.total_failures}")
     print(f"  Fixed          : {green(str(report.fixed))}")
+    print(f"  Learned        : {green(str(report.learned)) if report.learned > 0 else str(report.learned)}")
     print(f"  Remaining      : {red(str(report.remaining)) if report.remaining > 0 else green('0')}")
     print(f"  Unfixable      : {yellow(str(report.unfixable)) if report.unfixable > 0 else '0'}")
     print(f"  Iterations     : {report.iterations}")

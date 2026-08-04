@@ -6,6 +6,10 @@ converts passed evidence steps into :class:`LearnedPattern` entries and writes
 them to the RAG store — deduped on ``(action_type, description, site_hash)`` so
 repeated facts bump ``hit_count`` instead of flooding the store.
 
+``pattern_from_patch`` / ``learn_from_patch`` implement AI-035's *original*
+trigger — the self-healing loop's corrected locator (``confidence=1.0``,
+``source="self_healing"``), wired in ``SelfHealingRunner``.
+
 Privacy (AI-035 §4): only the one-way ``sha256(domain)`` hash is stored — never
 full URLs, story text, credentials, or screenshots. All learning is local.
 """
@@ -14,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from typing import Any
 from urllib.parse import urlparse
 
@@ -130,3 +135,176 @@ def learn_from_evidence(
             exists,
         )
     return {"inserted": inserted, "exists": exists}
+
+
+# ---------------------------------------------------------------------------
+# Self-healing write path (AI-035 original trigger)
+# ---------------------------------------------------------------------------
+# When the self-healing loop fixes a broken locator, the corrected
+# ``(description, locator)`` pair is written back to the store with
+# ``confidence=1.0`` (verified by the repair loop — it re-runs the test)
+# and ``source="self_healing"``. Same dedup + site scoping as the evidence
+# path (B-036 Phase 3).
+
+# Playwright method → resolver action type.
+_CODE_METHOD_TO_ACTION: dict[str, str] = {
+    "click": "CLICK",
+    "fill": "FILL",
+    "press": "CLICK",
+    "check": "CLICK",
+    "uncheck": "CLICK",
+    "select_option": "SELECT",
+}
+
+# Evidence labels arrive as ``{{CLICK:view cart link}}`` (placeholder form) or
+# ``Click: view cart link`` (natural-language form). Both reduce to the
+# placeholder description the resolver looks up by.
+_PLACEHOLDER_LABEL_RE = re.compile(r"\{\{([A-Z_]+):(.*?)\}\}")
+_ACTION_PREFIX_RE = re.compile(
+    r"^(?:click|fill|type|select|assert|enter|press|navigate|goto)\s*:\s*(.+)$",
+    re.IGNORECASE,
+)
+_SELECTOR_IN_LOCATOR_RE = re.compile(r"\.locator\(\s*['\"]([^'\"]+)['\"]")
+
+
+def _action_from_code(line: str) -> str | None:
+    """Map a Playwright code line to a resolver action type, or ``None``."""
+    lowered = line.lower()
+    if any(token in lowered for token in ("expect(", "to_be_", "to_have_", "assert_")):
+        return "ASSERT"
+    for method, action in _CODE_METHOD_TO_ACTION.items():
+        if f".{method}(" in lowered:
+            return action
+    return None
+
+
+def _selector_from_code(line: str) -> str | None:
+    """Extract the selector string from ``page.locator("...")``, or ``None``."""
+    match = _SELECTOR_IN_LOCATOR_RE.search(line)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def _clean_label(label: str) -> str:
+    """Reduce an evidence step label to the placeholder description."""
+    label = label.strip()
+    placeholder = _PLACEHOLDER_LABEL_RE.fullmatch(label)
+    if placeholder:
+        return placeholder.group(2).strip()
+    prefix = _ACTION_PREFIX_RE.match(label)
+    if prefix:
+        return prefix.group(1).strip()
+    return label
+
+
+def _description_from_evidence(
+    old_selector: str | None,
+    evidence_steps: list[dict[str, Any]] | None,
+) -> str | None:
+    """Find the step whose locator matches the OLD (failed) selector.
+
+    The step's label is the anchor: generated tests label steps with the
+    placeholder description (``{{CLICK:view cart link}}``) or a natural
+    description (``Click: view cart link``).
+    """
+    if not old_selector or not evidence_steps:
+        return None
+    for step in evidence_steps:
+        locator = str(step.get("locator", "") or "").strip()
+        if not locator:
+            continue
+        if locator == old_selector or old_selector in locator or locator in old_selector:
+            label = str(step.get("label", "") or "").strip()
+            if label:
+                return _clean_label(label)
+    return None
+
+
+def pattern_from_patch(
+    old_text: str,
+    new_text: str,
+    *,
+    base_url: str,
+    description: str | None = None,
+    evidence_steps: list[dict[str, Any]] | None = None,
+) -> LearnedPattern | None:
+    """Build a learned pattern from a self-healing locator-replacement patch.
+
+    Args:
+        old_text: The original (failed) code line, e.g.
+            ``page.locator("#wrong-btn").click()``.
+        new_text: The corrected line, e.g. ``page.locator("#add-to-cart").click()``.
+        base_url: Any URL of the target site — only its domain is hashed.
+        description: Explicit description (wins over evidence extraction).
+        evidence_steps: Evidence sidecar steps, used to recover the
+            placeholder description anchored to the failed selector.
+
+    Returns:
+        A ``LearnedPattern`` (``confidence=1.0``, ``source="self_healing"``)
+        or ``None`` when the patch is not a locator replacement, no corrected
+        selector is recoverable, no site domain is derivable, or no
+        description anchor is available.
+    """
+    action = _action_from_code(new_text)
+    if action is None:
+        return None
+    locator = _selector_from_code(new_text)
+    if not locator:
+        return None
+    domain = domain_from_url(base_url)
+    if not domain:
+        return None
+    if not description:
+        description = _description_from_evidence(_selector_from_code(old_text), evidence_steps)
+    if not description:
+        return None
+    return LearnedPattern(
+        action_type=action,
+        description=description,
+        locator=locator,
+        site_hash=site_hash(domain),
+        confidence=1.0,
+        source="self_healing",
+    )
+
+
+def learn_from_patch(
+    *,
+    old_text: str,
+    new_text: str,
+    base_url: str,
+    description: str | None = None,
+    evidence_steps: list[dict[str, Any]] | None = None,
+    store: RAGStore | None = None,
+) -> dict[str, int]:
+    """Write one self-healing-corrected locator to the RAG store.
+
+    Never raises — self-healing must not break if learning fails (the same
+    guard as the evidence teardown hook). Returns
+    ``{"inserted": 0|1, "exists": 0|1}`` (``exists`` = dedup'd repeat, hit
+    bumped).
+    """
+    try:
+        pattern = pattern_from_patch(
+            old_text,
+            new_text,
+            base_url=base_url,
+            description=description,
+            evidence_steps=evidence_steps,
+        )
+        if pattern is None:
+            return {"inserted": 0, "exists": 0}
+        store = store or build_default_store()
+        status, _hit = store.upsert_pattern(pattern)
+        logger.info(
+            "Learned self-healing pattern: %s '%s' -> %s (%s)",
+            pattern.action_type,
+            pattern.description,
+            pattern.locator,
+            status,
+        )
+        return {"inserted": 1, "exists": 0} if status == "inserted" else {"inserted": 0, "exists": 1}
+    except Exception as exc:
+        logger.warning("Self-healing pattern learn failed (non-fatal): %s", exc)
+        return {"inserted": 0, "exists": 0}
