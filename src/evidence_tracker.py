@@ -277,7 +277,8 @@ class EvidenceTracker:
                 re-querying the locator. Critical after a click that navigated
                 away — the old locator no longer exists and every un-timed
                 Playwright call would wait the full default timeout (~30s each,
-                ~120s total), hanging the test.
+                ~120s total), hanging the test. Failed steps (error set) also
+                skip re-querying — same hang class (B-041).
         """
         step_idx = len(self.steps)
 
@@ -302,7 +303,14 @@ class EvidenceTracker:
                 # useful failure artifact (B-033).
                 logger.warning("screenshot capture failed for %s: %s", screenshot_name, exc)
 
-        if fast_fail or element_metadata is not None:
+        # Failed steps skip metadata capture (B-041): a failing locator is
+        # missing/hidden/timed-out, and every un-timed Playwright call
+        # (_get_element_metadata: evaluate / get_attribute / bounding_box)
+        # waits the full default timeout (~30s each) on a missing element —
+        # the B-029 hang class. A failed assertion previously burned ~120s
+        # and got killed by pytest-timeout, aborting the whole suite. The
+        # failure note + screenshot carry the diagnostic payload instead.
+        if fast_fail or error or element_metadata is not None:
             element_data = element_metadata if element_metadata is not None else {}
         else:
             element_data = self._get_element_metadata(locator)

@@ -13,6 +13,7 @@ actionable debug information so the developer knows exactly what went wrong.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from playwright.sync_api import Page
@@ -20,6 +21,13 @@ from playwright.sync_api import Page
 from src.locator_scorer import LocatorScorer
 
 logger = logging.getLogger(__name__)
+
+# B-041: cap the total time spent on failure diagnosis. Diagnosis is
+# best-effort evidence enrichment — it must never stall the test the way the
+# B-029 un-timed metadata capture did. Each phase bails early once the budget
+# is consumed, returning partial diagnostics (the dict is pre-populated with
+# all keys, so callers always get the required shape).
+DIAGNOSIS_BUDGET_SECONDS = 8.0
 
 
 class FailureReporter:
@@ -55,6 +63,8 @@ class FailureReporter:
             "error_summary": error[:500] if error else "",
         }
 
+        start = time.monotonic()
+
         try:
             diagnosis["url"] = page.url or ""
         except Exception:
@@ -68,8 +78,16 @@ class FailureReporter:
         # Capture interactive elements categorized by action type
         diagnosis["available_elements"] = cls._categorize_elements(page, step_type)
 
+        if time.monotonic() - start > DIAGNOSIS_BUDGET_SECONDS:
+            logger.warning("Failure diagnosis over budget — returning partial diagnosis")
+            return diagnosis
+
         # Suggest alternative locators
         diagnosis["suggested_locators"] = cls._suggest_locators(page, locator, step_type)
+
+        if time.monotonic() - start > DIAGNOSIS_BUDGET_SECONDS:
+            logger.warning("Failure diagnosis over budget — returning partial diagnosis")
+            return diagnosis
 
         # Capture accessibility snapshot for context
         diagnosis["page_snapshot"] = cls._capture_snapshot(page)

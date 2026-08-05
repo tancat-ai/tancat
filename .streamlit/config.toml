@@ -5,3 +5,12 @@ secondaryBackgroundColor = "#111318"
 textColor = "#e2e8f0"
 primaryColor = "#4ade80"
 font = "monospace"
+
+[server]
+# B-041: keep the file watcher (hot-reload / rerun) but exclude the virtualenv.
+# The always-on RAG loads `transformers` (via sentence-transformers on first
+# embed); the watcher then walks its lazy vision submodules and spams the log
+# with `ModuleNotFoundError: No module named 'torchvision'` tracebacks
+# (cosmetic — Streamlit catches them, but they're huge). Excluding .venv stops
+# the scanning without losing source-file reruns.
+folderWatchBlacklist = [".venv"]

@@ -967,123 +967,6 @@ class RunResultsDisplay:
         RenderDownloads.render()
 
 
-def _render_inline_evidence(run_result: RunResult) -> None:
-    """Render evidence inline + link to the main Evidence Viewer tab."""
-    from src.gantt_utils import safe_read_sidecar
-    from src.report_utils import generate_annotated_journey
-
-    st.divider()
-    st.subheader("📸 Test Evidence")
-
-    saved_path = st.session_state.get("pipeline_saved_path", "")
-    if not saved_path:
-        st.info("No test file path available.")
-        return
-
-    package_dir = Path(saved_path).parent
-    evidence_dir = package_dir / "evidence"
-
-    if not evidence_dir.exists():
-        st.info(f"No evidence found at {evidence_dir}. Run tests to generate evidence.")
-        return
-
-    sidecars = sorted(evidence_dir.glob("*.evidence.json"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not sidecars:
-        st.info("No evidence sidecars found for this test run.")
-        return
-
-    # Filter sidecars to only those for tests that just ran
-    test_names = {result.name for result in run_result.results}
-
-    def extract_test_name(s: Path) -> str:
-        name = s.name
-        if name.endswith(".evidence.json"):
-            name = name[:-14]
-        return name.split("[")[0]
-
-    relevant_sidecars = [s for s in sidecars if extract_test_name(s) in test_names]
-
-    if not relevant_sidecars:
-        st.info("No evidence found for the tests that just ran.")
-        return
-
-    # Sort sidecars to match run result order (using base test name — strip [param] suffix)
-    sorted_sidecars: list[Path] = []
-    for result in run_result.results:
-        base_name = result.name.split("[")[0] if "[" in result.name else result.name
-        for s in relevant_sidecars:
-            sidecar_base = extract_test_name(s)
-            if sidecar_base == base_name or sidecar_base.startswith(base_name) or base_name.startswith(sidecar_base):
-                if s not in sorted_sidecars:
-                    sorted_sidecars.append(s)
-
-    # Also add any remaining sidecars not matched
-    for s in relevant_sidecars:
-        if s not in sorted_sidecars:
-            sorted_sidecars.append(s)
-
-    # Check if user clicked the 📸 button in the results table
-    pre_selected = st.session_state.pop("_select_evidence_test", None)
-    default_idx = 0
-    if pre_selected:
-        for i, s in enumerate(sorted_sidecars):
-            if extract_test_name(s) == pre_selected:
-                default_idx = i
-                break
-
-    # Build friendly labels for the selector
-    sidecar_labels: list[str] = []
-    for s in sorted_sidecars:
-        data = safe_read_sidecar(s)
-        if data is None:
-            sidecar_labels.append(s.stem.replace("[chromium]", ""))
-            continue
-        test_info = data.get("test", {})
-        if not isinstance(test_info, dict):
-            test_info = {}
-        status = str(test_info.get("status", "unknown"))
-        label = s.stem.replace("[chromium]", "")
-        condition_ref = str(test_info.get("condition_ref", ""))
-        if condition_ref:
-            label = f"{condition_ref} — {label}"
-        icon = "✅" if status == "passed" else ("⏭️" if status == "skipped" else "❌")
-        sidecar_labels.append(f"{icon} {label}")
-
-    selected_idx = st.selectbox(
-        "Select test to inspect",
-        options=range(len(sorted_sidecars)),
-        format_func=lambda i: sidecar_labels[i] if i < len(sidecar_labels) else "[unknown]",
-        index=default_idx,
-        key="inline_evidence_selector",
-    )
-    selected = sorted_sidecars[selected_idx]
-
-    try:
-        html = generate_annotated_journey(
-            sidecar_path=selected,
-            title=selected.stem,
-            bug_report_mode=False,
-        )
-        st.html(html)
-
-        # Download button for plain-text bug report
-        text_report = generate_annotated_journey(
-            sidecar_path=selected,
-            title=selected.stem,
-            bug_report_mode=True,
-        )
-        filename = selected.stem.replace("[chromium]", "").strip()
-        st.download_button(
-            label="📥 Download Bug Report",
-            data=text_report,
-            file_name=f"{filename}_bug_report.txt",
-            mime="text/plain",
-            key="inline_download_bug_report",
-        )
-    except Exception as e:
-        st.error(f"Failed to render evidence: {e}")
-
-
 def _render_self_healing_results(report: HealingReport) -> None:
     """Render the self-healing report — what was fixed and what remains."""
     st.divider()
@@ -1137,6 +1020,57 @@ def _render_self_healing_results(report: HealingReport) -> None:
             if st.button("🧹 Clear Healing Results", key="heal_clear"):
                 st.session_state.self_healing_report = None
                 st.rerun()
+
+
+def _failure_context(
+    saved_path: str,
+    test_name: str,
+    run_result: RunResult | None,
+) -> tuple[str, str, int | None]:
+    """Best-effort failure context for the repair flow (B-041).
+
+    Returns (step_label, page_url, line_number):
+    - step_label: the label of the failed step from the evidence sidecar
+    - page_url:   the URL of that step (so the repair browser opens there,
+                  not at the starting URL)
+    - line_number: the failing source line from the pytest raw output
+      (``test_x.py:NN: in test_name``) so the patch lands on the right line
+      instead of line 1 (where ``apply_patch``'s search window missed it).
+    """
+    step_label = ""
+    page_url = ""
+    line_no: int | None = None
+
+    if saved_path:
+        evidence_dir = Path(saved_path).parent / "evidence"
+        if evidence_dir.exists():
+            for sidecar in evidence_dir.glob("*.evidence.json"):
+                if sidecar.name[: -len(".evidence.json")].split("[")[0] != test_name:
+                    continue
+                try:
+                    from src.gantt_utils import safe_read_sidecar
+
+                    data = safe_read_sidecar(sidecar)
+                    if isinstance(data, dict):
+                        steps = data.get("steps") or []
+                        failed = [s for s in steps if (s.get("result") or {}).get("status") == "failed"]
+                        step = failed[-1] if failed else (steps[-1] if steps else None)
+                        if step:
+                            step_label = str(step.get("label") or step.get("type") or "")
+                            page_url = str(step.get("url") or "")
+                except Exception:
+                    pass
+                break
+
+    if run_result and run_result.raw_output:
+        match = re.search(
+            rf"(\S+\.py):(\d+): in {re.escape(test_name)}(?:\[[^\]]+\])?",
+            run_result.raw_output,
+        )
+        if match:
+            line_no = int(match.group(2))
+
+    return step_label, page_url, line_no
 
 
 def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult | None = None) -> None:
@@ -1251,6 +1185,19 @@ def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult
                         st.session_state.repair_status = "waiting"
                         st.session_state.repair_test_name = result.name
                         st.session_state.repair_test_file = result.file_path
+                        # B-041: the classifier never fills in failure_url /
+                        # line_number (both stay None), so the repair browser
+                        # used to open at the starting URL and the patch search
+                        # window missed the failing line. Capture the context
+                        # from the evidence sidecar + pytest output here.
+                        step_label, step_url, line_no = _failure_context(saved_path, result.name, run_result)
+                        st.session_state.repair_step_label = step_label
+                        st.session_state.repair_failure_url = step_url
+                        st.session_state.repair_line_number = line_no
+                        if step_url:
+                            detail.failure_url = step_url
+                        if line_no:
+                            detail.line_number = line_no
                         st.rerun()
 
 
@@ -1270,20 +1217,30 @@ def _render_repair_waiting_panel() -> None:
     """Show the 'waiting' repair panel with explanation and action buttons."""
     detail = st.session_state.get("repair_target")
     test_file = st.session_state.get("repair_test_file", "unknown")
+    test_name = st.session_state.get("repair_test_name", "unknown")
+    step_label = st.session_state.get("repair_step_label", "")
+    failure_url = st.session_state.get("repair_failure_url", "")
 
     st.divider()
     st.subheader("🔧 Locator Repair Mode")
 
     locator_label = detail.raw_locator if detail and detail.raw_locator else "unknown"
+    # B-041: show which test + which step is being repaired (previously the
+    # panel only showed the locator + file, so the user had no idea where in
+    # the test they were).
+    st.write(f"**Test:** `{test_name}`")
     st.write(f"**Failed locator:** `{locator_label}`")
+    if step_label:
+        st.write(f"**Failed step:** `{step_label}`")
     st.write(f"**Test file:** `{test_file}`")
     st.write(f"**Error:** {detail.error_message[:300] if detail else 'Unknown'}")
-
-    st.info(
-        "The browser will open at the page where this test got stuck. "
-        "Click the element you want to use as the locator. "
-        "The test file will be updated automatically."
-    )
+    if failure_url:
+        st.info(f"The browser will open at the page where this step got stuck: `{failure_url}`")
+    else:
+        st.info(
+            "The browser will open at the test's starting URL. Click the element you want to use as the locator. "
+            "The test file will be updated automatically."
+        )
 
     fix_col, cancel_col = st.columns([1, 1])
     with fix_col:
@@ -1303,7 +1260,10 @@ def _render_repair_browser_session() -> None:
 
     detail = st.session_state.get("repair_target")
     base_url = st.session_state.get("starting_url", "") or st.session_state.get("last_starting_url", "")
-    failure_url = detail.failure_url if detail and detail.failure_url else base_url
+    # B-041: prefer the failing step's page URL (captured from the evidence
+    # sidecar when Fix Locator was clicked) over the starting URL, so the
+    # codegen browser opens where the test actually got stuck.
+    failure_url = st.session_state.get("repair_failure_url") or (detail.failure_url if detail else "") or base_url
 
     if not failure_url:
         st.session_state.repair_status = "error"
@@ -1314,10 +1274,15 @@ def _render_repair_browser_session() -> None:
         replacement = run_codegen_session(failure_url, timeout_seconds=120)
 
     if replacement:
+        # B-041: use the real failing line when known so apply_patch's search
+        # window (line_number ± ~10) actually contains the failing locator.
+        # Previously line_number was always 1 (classifier never set it), so the
+        # window missed the call and patches silently failed.
+        line_number = st.session_state.get("repair_line_number") or (detail.line_number if detail else None) or 1
         patch = LocatorPatch(
             original_locator=detail.raw_locator if detail and detail.raw_locator else "",
             repaired_locator=replacement,
-            line_number=detail.line_number if detail and detail.line_number else 1,
+            line_number=line_number,
             test_file=st.session_state.get("repair_test_file", st.session_state.get("pipeline_saved_path", "")),
         )
         try:

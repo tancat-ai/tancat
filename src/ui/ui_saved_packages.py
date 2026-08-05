@@ -99,8 +99,7 @@ class SavedPackagePanel:
         package_root = st.session_state.get("loaded_package_root", "")
         if package_root and Path(package_root).exists():
             if st.sidebar.button("▶️ Re-run Saved Suite", key="rerun_saved_package"):
-                st.session_state.pipeline_saved_path = package_root
-                st.rerun()
+                _rerun_loaded_package(Path(package_root))
 
     def render_main_panel(self) -> bool:
         """Render detailed package info in the main column when a package is loaded."""
@@ -265,3 +264,34 @@ class SavedPackagePanel:
             run_result=st.session_state.get("pipeline_run_result") or RunResult(),
             saved_path=st.session_state.get("pipeline_saved_path", ""),
         )
+
+
+def _rerun_loaded_package(package_root: Path) -> None:
+    """Actually re-run the loaded saved package (B-041).
+
+    The old sidebar handler only set ``pipeline_saved_path`` and reran the app —
+    nothing consumed it, so clicking the button appeared to do nothing. Resolve
+    the package's test file, surface its code (the results section is gated on
+    ``pipeline_results``), then delegate to the proven ``_handle_run_tests``
+    flow so the run table + evidence render.
+    """
+    from src.ui.ui_results import _handle_run_tests
+
+    manifest = st.session_state.get("loaded_package_manifest") or {}
+    test_files = list(manifest.get("generated_test_files") or [])
+    if not test_files and package_root.exists():
+        test_files = [p.name for p in package_root.glob("test_*.py")]
+    if not test_files:
+        st.session_state.run_tests_error = f"No test files found in package: {package_root}"
+        return
+
+    test_file = package_root / test_files[0]
+    st.session_state.pipeline_saved_path = str(test_file)
+    st.session_state.pipeline_manifest_path = str(package_root / "package_manifest.json")
+    try:
+        st.session_state.pipeline_results = test_file.read_text(encoding="utf-8")
+    except OSError:
+        pass
+    st.session_state.pipeline_criteria = str(st.session_state.get("pipeline_criteria") or "")
+    st.session_state.run_tests_error = ""
+    _handle_run_tests()
