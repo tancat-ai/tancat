@@ -113,11 +113,29 @@ if st.session_state.pop("_load_baseline_requested", False):
 # ---------------------------------------------------------------------------
 # Shared sidebar (renders before pages so every page sees the same config)
 # ---------------------------------------------------------------------------
+# B-041: capture the previously-saved provider BEFORE the sidebar saves the
+# newly selected one, so a provider switch below can reset the base URL / model
+# instead of leaking stale values from a different provider.
+_previous_provider = str(load_setting("provider", "") or "")
+
 config = SidebarConfig.render()
 provider = config["provider"]
 pom_mode = config.get("pom_mode", False)
 
 default_provider_url, default_model = get_provider_defaults(provider)
+
+# B-041: a base URL / model persisted under a DIFFERENT provider (e.g.
+# ollama's http://localhost:11434 left over from an earlier session) must
+# never leak into the newly selected provider's fields. On a provider switch,
+# reset to the current provider's defaults; the save-on-change block below
+# then overwrites the stale values in the settings store.
+_provider_switched = bool(_previous_provider) and _previous_provider != provider
+_base_url_value = (
+    default_provider_url
+    if _provider_switched
+    else (str(load_setting("provider_base_url", "") or "") or default_provider_url)
+)
+_model_value = default_model if _provider_switched else (str(load_setting("model_name", "") or "") or default_model)
 
 user_openai_api_key: str | None = None
 if provider_requires_openai_api_key(provider):
@@ -139,7 +157,10 @@ sync_openai_api_key_to_env(provider, resolved_openai_api_key)
 
 provider_base_url = st.sidebar.text_input(
     "Provider Base URL",
-    value=str(load_setting("provider_base_url", "") or "") or default_provider_url,
+    value=_base_url_value,
+    # Key includes the provider so switching providers resets the field —
+    # Streamlit ignores `value` once a widget has session state (B-041).
+    key=f"provider_base_url_{provider}",
 )
 
 # Propagate user-selected provider to ALL fallback LLMClient() instances
@@ -156,13 +177,11 @@ except Exception:
 if available_models:
     model_option = st.sidebar.selectbox("Select Model", ["-- Enter manually --"] + available_models)
     if model_option == "-- Enter manually --":
-        model_name = st.sidebar.text_input(
-            "Model Name", value=str(load_setting("model_name", "") or "") or default_model
-        )
+        model_name = st.sidebar.text_input("Model Name", value=_model_value, key=f"model_name_{provider}")
     else:
         model_name = model_option
 else:
-    model_name = st.sidebar.text_input("Model", value=str(load_setting("model_name", "") or "") or default_model)
+    model_name = st.sidebar.text_input("Model", value=_model_value, key=f"model_name_{provider}")
 
 LLMClient.set_session_provider(provider, provider_base_url, model_name)
 

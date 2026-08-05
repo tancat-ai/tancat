@@ -53,6 +53,31 @@ def test_evidence_tracker_click_failure_takes_screenshot(tmp_path: Any) -> None:
     assert tracker.steps[-1]["screenshot"] is not None
 
 
+def test_failed_step_skips_metadata_capture(tmp_path: Any) -> None:
+    """B-041: failed steps must not run the un-timed locator metadata capture.
+
+    A failing locator (e.g. an assertion on an element that never appears) made
+    _get_element_metadata's un-timed evaluate/get_attribute/bounding_box calls
+    wait the full 30s default each (~120s) — pytest-timeout then killed the
+    whole suite, leaving later tests unrecorded. Failed steps now record {}.
+    """
+    page_mock = MagicMock()
+    page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element not visible")
+    tracker = EvidenceTracker(page_mock, "test_assert_fail", evidence_root=Path(tmp_path))
+
+    with pytest.raises(TimeoutError):
+        tracker.assert_visible("h2.heading")
+
+    step = tracker.steps[-1]
+    assert step["result"]["status"] == "failed"
+    assert step["result"]["error"] == "element not visible"
+    # Metadata capture must be skipped — no locator-level calls beyond wait_for.
+    loc = page_mock.locator.return_value.first
+    assert loc.evaluate.call_count == 0
+    assert loc.get_attribute.call_count == 0
+    assert loc.bounding_box.call_count == 0
+
+
 def test_evidence_tracker_click_attempts_scroll_into_view_before_click(tmp_path: Any) -> None:
     page_mock = MagicMock()
     # First count() call = the click target (exists); subsequent calls are the

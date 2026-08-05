@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,28 @@ from src.test_table import TestTable, TestTableExpander, build_table
 
 # Backwards-compatible alias used by streamlit_app and tests.
 _get_provider_defaults = get_provider_defaults
+
+
+# ---------------------------------------------------------------------------
+# Non-code output detection (B-041)
+# ---------------------------------------------------------------------------
+
+
+def _looks_like_non_code_output(code: str) -> bool:
+    """Return True when *code* looks like a JSON/dict blob, not Python.
+
+    A mis-configured provider/model occasionally answers the skeleton prompt
+    with a structured JSON snippet (e.g. ``{"test": "test_t01_..."}``) instead
+    of Python. The old flow surfaced this as a cryptic save-time SyntaxError
+    ("Line 11: unexpected indent"); callers use this to raise a clear error.
+    """
+    stripped = code.lstrip()
+    if not stripped:
+        return False
+    if stripped[:1] in ("{", "["):
+        return True
+    # JSON-object member lines like  "test": "test_t01..."
+    return bool(re.search(r'(?m)^\s*"[^"]+\s*":', code))
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +268,16 @@ async def run_pipeline(
     # Validate generated code
     syntax_error = validate_python_syntax(final_code)
     if syntax_error:
+        # B-041: if the LLM answered with a JSON/plain-text blob instead of
+        # code, the raw SyntaxError ("Line 11: unexpected indent") is cryptic.
+        # Surface the likely cause — a mis-configured provider/model — instead.
+        if _looks_like_non_code_output(final_code):
+            raise ValueError(
+                "The LLM returned a JSON/plain-text response instead of Python code. "
+                "Check the Provider Base URL and Model in the sidebar — the request "
+                "may be hitting the wrong server (e.g. Ollama on :11434 instead of "
+                "the configured local OpenAI-compatible server)."
+            )
         # Debug: store failing code lines in session state for UI display
         lines = final_code.splitlines()
         debug_lines: list[str] = []

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from src.failure_reporter import FailureReporter
@@ -211,3 +212,39 @@ class TestFailureReporter:
         assert "Main Form" in text
         assert "Submit Button" in text
         assert "button" in text
+
+    def test_diagnose_failure_bails_early_when_over_budget(self, monkeypatch: Any) -> None:
+        """B-041: diagnosis must stop once the time budget is exceeded.
+
+        A slow/busy page must never stall test execution while failure evidence
+        is being collected — after the budget the remaining phases are skipped
+        and a partial diagnosis (all required keys, pre-populated) is returned.
+        """
+        import time as _time
+
+        mock_page = MagicMock()
+        mock_page.url = "http://example.com"
+        mock_page.title.return_value = "Example"
+        real = _time.monotonic
+        calls = {"n": 0}
+
+        def fake_monotonic() -> float:
+            calls["n"] += 1
+            # First call = the start timestamp; every later call is 100s past it.
+            return real() if calls["n"] == 1 else real() + 100.0
+
+        monkeypatch.setattr("src.failure_reporter.time.monotonic", fake_monotonic)
+
+        diagnosis = FailureReporter.diagnose_failure(
+            mock_page,
+            locator="#x",
+            step_type="click",
+            error="boom",
+        )
+
+        assert diagnosis["error_summary"] == "boom"
+        # _categorize_elements ran (one AX snapshot + one fallback evaluate), but
+        # the post-budget phases (_suggest_locators -> evaluate, _capture_snapshot
+        # -> AX snapshot) must have been skipped.
+        assert mock_page.accessibility.snapshot.call_count == 1
+        assert mock_page.evaluate.call_count == 1
