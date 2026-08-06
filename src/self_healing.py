@@ -16,6 +16,7 @@ from __future__ import annotations
 import glob
 import json
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -67,6 +68,9 @@ class HealingReport:
     attempt_history: dict[str, list[dict[str, str]]] = field(default_factory=dict)
     # Total LLM calls made (for cost monitoring across iterations).
     total_llm_calls: int = 0
+    # Set when the self-heal test run produced no results (timeout or
+    # collection failure) — distinct from "all tests passed".
+    run_error: str = ""
 
     @property
     def all_fixed(self) -> bool:
@@ -145,6 +149,9 @@ class SelfHealingRunner:
         self._llm = llm_client or LLMClient()
         self.max_iterations = max_iterations
         self._scraped_data = scraped_data or {}
+        # Tests whose LLM reviewer call failed (e.g. provider not configured)
+        # — surfaced on the report instead of silently counting as unfixable.
+        self._llm_failures: list[str] = []
         # AI-035: injectable RAG store for the self-healing write-back (tests
         # pass an in-memory store; production defaults to the real store).
         self._rag_store = rag_store
@@ -177,6 +184,15 @@ class SelfHealingRunner:
                 on_progress(msg)
 
         test_path = Path(test_file)
+        if test_path.is_dir():
+            # saved_path may be a package DIRECTORY (sidebar package load /
+            # Run Generated Tests set pipeline_saved_path to the package root).
+            # Resolve to the package's test file; read_text on a directory
+            # raises PermissionError on Windows.
+            candidates = sorted(test_path.glob("test_*.py"))
+            if not candidates:
+                raise FileNotFoundError(f"No test_*.py files in package: {test_file}")
+            test_path = candidates[0]
         if not test_path.exists():
             raise FileNotFoundError(f"Test file not found: {test_file}")
 
@@ -193,6 +209,17 @@ class SelfHealingRunner:
             failed = [r for r in run_result.results if r.status == "failed"]
 
             if not failed:
+                if not run_result.results:
+                    # No results at all — pytest timed out or failed to
+                    # collect. This is NOT "all tests pass"; report it.
+                    # Keep any failure count already recorded in earlier
+                    # iterations; only first-iteration empty runs have 0.
+                    _progress("Test run produced no results (timeout or collection error).")
+                    report.iterations = iteration
+                    report.final_results = run_result.results
+                    report.attempt_history = dict(per_test_attempts)
+                    report.run_error = f"Self-heal test run produced no results — {run_result.raw_output[:200]}"
+                    return report
                 _progress("All tests pass — healing complete!")
                 report.total_failures = report.total_failures or 0
                 report.iterations = iteration
@@ -276,6 +303,11 @@ class SelfHealingRunner:
         report.iterations = iteration
         report.final_results = final_run.results
         report.attempt_history = dict(per_test_attempts)
+        if self._llm_failures:
+            report.run_error = (
+                f"LLM reviewer unavailable for {len(self._llm_failures)} failure(s) "
+                f"({', '.join(self._llm_failures)}) — check the LLM Provider / Base URL in the sidebar."
+            )
         return report
 
     # ------------------------------------------------------------------
@@ -290,6 +322,11 @@ class SelfHealingRunner:
         """Run pytest on a test file (optionally specific tests) and return parsed results."""
         import subprocess
         import sys
+
+        # Mirror PipelineRunService's timeout (PIPELINE_TEST_TIMEOUT, default
+        # 600s). A hardcoded 300s here silently times out suites that take
+        # longer, which then masquerades as "no failures" (empty RunResult).
+        timeout_secs = int(os.environ.get("PIPELINE_TEST_TIMEOUT", "600"))
 
         cmd = [
             sys.executable,
@@ -313,12 +350,12 @@ class SelfHealingRunner:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=timeout_secs,
                 cwd=str(test_path.parent.parent),  # repo root
             )
             output = proc.stdout + "\n" + proc.stderr
         except subprocess.TimeoutExpired:
-            return RunResult(results=[], raw_output="pytest timed out after 300s")
+            return RunResult(results=[], raw_output=f"pytest timed out after {timeout_secs}s")
 
         return parse_pytest_output(output)
 
@@ -440,6 +477,7 @@ Analyze this failure and suggest a fix."""
             return self._parse_reviewer_response(response, result.name, test_func)
         except Exception as e:
             logger.warning("LLM reviewer failed: %s", e)
+            self._llm_failures.append(result.name)
             return None
 
     @staticmethod

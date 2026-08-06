@@ -939,7 +939,6 @@ class RunResultsDisplay:
                         "Ref": ref,
                         "Test": tr.name,
                         "Runtime": runtime,
-                        "Evidence": "📸",
                     }
                 )
             st.dataframe(test_rows, width="stretch", hide_index=True)
@@ -982,6 +981,13 @@ def _render_self_healing_results(report: HealingReport) -> None:
         delta_color="inverse",
     )
     col4.metric("Iterations", report.iterations)
+
+    if report.run_error:
+        st.error(report.run_error)
+        if st.button("🧹 Clear", key="heal_clear_error"):
+            st.session_state.self_healing_report = None
+            st.rerun()
+        return
 
     if report.unfixable > 0:
         st.caption(f"{report.unfixable} failure(s) could not be automatically fixed.")

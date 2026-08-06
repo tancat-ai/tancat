@@ -1,7 +1,45 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-03 (export gate session: B-031 + B-032 fixed — runnable exports + export gate)
+Last updated: 2026-08-06 (Run & Fix restructure + report/self-heal/evidence fixes)
+
+---
+
+## ✅ Shipped 2026-08-06 — Run & Fix restructure, report fixes, self-heal fixes, evidence improvements
+
+**Session highlights** — the app went from 2 pages to a 3-page workflow (Test Generator / Run & Fix / Evidence & Reports), and a cluster of run-results, report, and self-healing bugs were fixed. Full suite 2288 passed; ruff + mypy clean; eval static 95.2%.
+
+**Page restructure:**
+- **Run & Fix page** — results/repair/evidence/export moved out of Test Generator; empty-state with handoff; sidebar-loaded packages surface immediately (hydration).
+- **Export panel** moved to Run & Fix; `build_report_bundle` now dir-aware (`saved_path` may be a package directory — reports were landing in `generated_tests/`).
+- **Last-package auto-restore** (`SETTING_LAST_PACKAGE`) — the loaded suite survives page reloads / session resets instead of blanking to "No current suite loaded".
+- **Package dropdown labels** — readable date/site/story instead of raw `test_YYYYMMDD_<slug>` names.
+
+**Run results / reports:**
+- **B-044 (reload-safe RunResult)** — Streamlit's module watcher reloads `src` modules mid-session, creating a new `RunResult` class; stored instances then failed `isinstance` and the results/evidence silently vanished ("results disappeared" bugs). New `is_run_result()` duck-type check (`TypeGuard`) replaces all 12 `isinstance` gates.
+- **Real per-test durations in reports** — sidecars now write `duration_s` (was hardcoded 0.00).
+- **Report titles** — "6. 6. [T06]" double-index removed (criterion enumeration stripped; report formats add their own index).
+- **HTML report embeds failed-step screenshots** (base64) — passing galleries stay on the Evidence page (full-page PNGs ~3.4MB each would bloat the report).
+- **Re-run Failed merge** — `merge_rerun_results()` keeps passing tests in the table; a failed-only rerun no longer drops them.
+
+**Evidence:**
+- **Click-success screenshots** — every passing click step now captures evidence (was failures-only); verified T07 evidence 4/9 → 9/9 steps.
+- **Evidence UI** — screenshots render inline per step (📸 marker + image), not an unlabeled strip.
+- **Image-wait before screenshots** — product grids no longer captured mid-load (blank images read as spurious defects); verified stddev 10.9 → 31.0 on the dress-category shot.
+- **This-run evidence gating** — stale sidecars from previous sessions no longer show as "this run" (gated on a real session run).
+
+**Self-healing:**
+- **Timeout 300s → 600s** (`PIPELINE_TEST_TIMEOUT`) — suites longer than 300s silently timed out and reported "0 failures / nothing to heal" while real failures sat in the table.
+- **Package-directory resolution** — `heal()` crashed (`PermissionError`) when `saved_path` is a package directory; resolves to the test file.
+- **Empty-results ≠ all-pass** — a no-results run surfaces `run_error` instead of "✅ All tests pass".
+- **LLM-unavailability surfaced** — if the LLM reviewer fails (provider not configured), the report names the tests instead of silently marking unfixable.
+
+**Pipeline / generation:**
+- **POM dedup** — `deduplicate_pom_lines()` in `pom_helpers.py` (wired into the orchestrator) removes the LLM skeleton's duplicated POM imports/instantiations (was `home_page` ×3 per test).
+- **Living Test Plan UX** — `Reviewed` moved far from the headerless delete checkboxes, delete-row caption added, flagged-condition warning + tooltip.
+- **`SETTING_MODEL_NAME`** wired into `streamlit_app.py` (persistence existed via literal key; constant now used).
+
+**Open bugs added:** B-042 (locator-repair patch dedents to module scope — collection crash) and B-043 (dropdown run counts report 0 despite real history) — both still open.
 
 ---
 
@@ -351,6 +389,26 @@ writing if code fails syntax check.
 ---
 
 ## 🔴 Open Bugs
+
+### B-042 — Locator-repair patch dedents the replacement line to module scope (collection crash)
+**Status:** 🟡 ready-for-agent (discovered + reproduced 2026-08-06; workaround applied by hand)
+**Priority:** High — every "🔧 Fix Locator" patch can silently break the whole suite at COLLECTION time
+
+`apply_patch` in `src/locator_repair.py` rebuilds the patched line from regex groups (`before_quote` + locator + `after_quote`) that **exclude the line's leading indentation**, then writes it back at column 0. When the patched line is inside a test function, the replacement lands at module scope → `NameError: name 'evidence_tracker' is not defined` → the module fails to import → 1 error, 0 tests. Reproduction (live, 2026-08-06): a Fix-Locator repair of T11 in `test_20260805_181339...` wrote `evidence_tracker.assert_visible(...)` dedented to column 0; pytest then collected 0/14 tests.
+
+**Fix:** preserve the original line's leading whitespace in the reconstruction (`lines[line_idx]` indent must carry into `new_line`), plus a regression test that applies a patch inside a function body and asserts the result still compiles.
+
+---
+
+### B-043 — Sidebar package dropdown reports 0 runs when real run history exists
+**Status:** 🟡 ready-for-agent (discovered 2026-08-06)
+**Priority:** Medium — the dropdown's run count actively misleads
+
+`find_existing_packages` refreshes `run_results_count`/`last_run_at` from `package_manifest.json`, but those fields count a different artifact than actual test runs: the dropdown showed `(1 test, 0 runs)` for a package whose real history (`run_result_persistence`) held **13 runs / 85 passed / 28 failed** (verified via the loaded-package sidebar summary). Manifest fields are only updated when a run persists results in the way the manifest expects; evidence-bearing runs (sidecars + screenshots) don't bump them.
+
+**Fix options:** (a) compute dropdown run counts from `run_result_persistence.load_all_run_results` (already called on load), or (b) update the manifest fields wherever run results are persisted. Add a regression test asserting the dropdown label uses real run history.
+
+---
 
 ### B-039 — Self-healing blind to its own most common failure mode
 **Status:** ✅ Fixed (2026-08-04, AI-035 write-back Tier-1 verification, CI green)

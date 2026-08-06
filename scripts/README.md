@@ -217,6 +217,7 @@ These remain as specialized tools for specific scenarios:
 | `debug_cli_interactive.py` | CLI interactive walkthrough debugger |
 | `debug_saucedemo_inventory.py` | Scrape SauceDemo inventory + test resolution |
 | `debug_saucedemo_login.py` | Login to SauceDemo → scrape inventory → test resolution |
+| `cdp_attach.py` | Attach to a CDP-enabled browser (port 9222) and dump the accessibility tree of the Streamlit tab — co-working bridge (`tabs` / `ax` / `eval`) |
 
 ---
 

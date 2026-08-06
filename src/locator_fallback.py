@@ -165,6 +165,7 @@ class LocatorFallback:
                     label,
                     locator=primary_locator,
                     fallback_used=True,
+                    take_screenshot=True,
                     fallback_chain=fallback_chain
                     + [
                         {

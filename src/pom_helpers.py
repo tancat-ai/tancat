@@ -8,6 +8,7 @@ placeholder tokens into POM method calls.
 from __future__ import annotations
 
 import logging
+import re
 
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, ScrapedPage
@@ -17,6 +18,64 @@ logger = logging.getLogger(__name__)
 # R-004: Minimum elements for a useful page object.
 # Pages with very few elements are usually 404s, empty states, or noise.
 MIN_PAGE_OBJECT_ELEMENTS = 3
+
+_INSTANTIATION_RE = re.compile(
+    r"^(\s*)([A-Za-z_]\w*)\s*=\s*[A-Za-z_]\w*Page\((?:page)(?:\s*,\s*evidence_tracker)?\)\s*$"
+)
+
+
+def deduplicate_pom_lines(code: str) -> str:
+    """Remove duplicated POM imports and per-test page-object instantiations.
+
+    The LLM skeleton frequently emits its own page-object import + instantiation
+    block (often with duplicate lines — e.g. ``home_page`` instantiated three
+    times), and the pipeline then injects the canonical block on top. Neither
+    the "skip if present" injection guards nor the structural re-serialiser
+    deduplicate, so duplicates leak into the final file. This pass:
+
+    - keeps the first occurrence of each module-level import line;
+    - keeps the first instantiation of each instance variable per test
+      function (``var = Class(page, evidence_tracker)`` or legacy
+      ``var = Class(page)``).
+    """
+    lines = code.splitlines()
+    out: list[str] = []
+    seen_imports: set[str] = set()
+    seen_instances: set[str] = set()
+    in_function = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("def "):
+            in_function = True
+            seen_instances = set()
+        elif stripped and line[:1] not in (" ", "\t") and not stripped.startswith(("#", "@")):
+            # A module-level statement (import, constant, ...) ends any
+            # previous function body.
+            in_function = False
+
+        if not in_function and (stripped.startswith("from ") or stripped.startswith("import ")):
+            norm = re.sub(r"\s+", " ", stripped)
+            if norm in seen_imports:
+                continue
+            seen_imports.add(norm)
+            out.append(line)
+            continue
+
+        if in_function:
+            m = _INSTANTIATION_RE.match(line)
+            if m:
+                var = m.group(2)
+                if var in seen_instances:
+                    continue
+                seen_instances.add(var)
+                out.append(line)
+                continue
+
+        out.append(line)
+
+    return "\n".join(out)
+
 
 _page_object_builder = PageObjectBuilder()
 
