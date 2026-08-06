@@ -344,7 +344,11 @@ def build_report_bundle(
     saved_path: str,
 ) -> PipelineReportBundle:
     """Build report artifacts for the current pipeline run."""
-    package_dir = str(Path(saved_path).resolve().parent)
+    # saved_path may be a test FILE or a package DIRECTORY (sidebar package
+    # load / Re-run Saved Suite) — the report must land INSIDE the package,
+    # not in its parent (generated_tests/).
+    saved = Path(saved_path).resolve()
+    package_dir = str(saved if saved.is_dir() else saved.parent)
     return PipelineReportService().build_reports(
         criteria_text=criteria_text,
         generated_code=generated_code,

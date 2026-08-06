@@ -22,6 +22,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/ui/ui_results.py` | `ResultsPanel` — renders final code, skeleton, and scrape summary tabs. |
 | `src/ui/ui_evidence.py` | `EvidenceViewer` — annotated screenshots, Gantt charts, heatmaps, run history. |
 | `src/ui/ui_run_results.py` | `RunResultsDisplay` — test run results with failure classification and locator repair buttons. |
+| `src/ui/ui_run_comparison.py` | `RunComparison` — pick a package + two runs on Evidence & Reports; per-test status deltas (Changed/Fixed/Regressed). |
 | `src/ui/ui_downloads.py` | `RenderDownloads` — report download buttons (manifest, local/Jira/HTML reports). |
 | `src/ui/ui_saved_packages.py` | `SavedPackagePanel` — sidebar and main panel for loading saved test packages (AI-026). |
 | `src/ui/ui_sidebar.py` | `SidebarConfig` — configuration sidebar (provider selection, POM mode toggle). Uses `provider_config.py` for unified provider config. |

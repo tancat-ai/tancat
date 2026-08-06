@@ -2,15 +2,83 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import streamlit as st
 
+from src.pipeline_artifact_manager import PackageManifest
 from src.pytest_output_parser import RunResult
 from src.storage import get_storage
 from src.ui.shared import store_run_report
+
+
+def _fmt_dt(dt: datetime) -> str:
+    """Format a datetime as e.g. 'Aug 5, 18:13' (portable, no %-d)."""
+    return f"{dt.strftime('%b')} {dt.day}, {dt.strftime('%H:%M')}"
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _format_package_label(pkg: PackageManifest) -> str:
+    """Build a human-readable dropdown label from a package manifest.
+
+    The bare package name (``test_YYYYMMDD_HHMMSS_<story-slug>``) is
+    ambiguous — many packages share the same slug and differ only by
+    timestamp. Surface the manifest fields users actually need to pick
+    the right package: readable date, site, story snippet, run count.
+    """
+    # Readable date from created_at (ISO-8601), falling back to the name
+    created = ""
+    if pkg.created_at:
+        try:
+            created = _fmt_dt(datetime.fromisoformat(pkg.created_at.replace("Z", "+00:00")))
+        except ValueError:
+            created = ""
+    if not created:
+        m = re.search(r"_(\d{8})_(\d{6})", pkg.package_name)
+        if m:
+            try:
+                created = _fmt_dt(datetime.strptime(f"{m.group(1)}_{m.group(2)}", "%Y%m%d_%H%M%S"))
+            except ValueError:
+                created = ""
+
+    # Site host from starting_url
+    site = ""
+    if pkg.starting_url:
+        try:
+            netloc = urlparse(pkg.starting_url).netloc
+            site = netloc.split("@")[-1]  # strip any userinfo
+        except ValueError:
+            site = ""
+
+    # Story snippet
+    story = (pkg.source_story or "").strip()
+    if story:
+        story = story[:64] + ("…" if len(story) > 64 else "")
+
+    # Last run info (when persisted)
+    last_run = ""
+    if pkg.last_run_at:
+        try:
+            last_run = f" · last run {_fmt_dt(datetime.fromisoformat(pkg.last_run_at.replace('Z', '+00:00')))}"
+        except ValueError:
+            last_run = f" · last run {pkg.last_run_at}"
+
+    header = f"📦 {created or pkg.package_name}"
+    if site:
+        header += f" · {site}"
+    line2 = f"   {story}" if story else ""
+    tests = len(pkg.generated_test_files)
+    runs = pkg.run_results_count
+    line3 = f"   ({_plural(tests, 'test')} · {_plural(runs, 'run')}){last_run}"
+    return "\n".join(part for part in (header, line2, line3) if part)
 
 
 class SavedPackagePanel:
@@ -32,12 +100,7 @@ class SavedPackagePanel:
             st.sidebar.info("No saved packages found in `generated_tests/`.")
             return
 
-        labels: list[str] = []
-        for pkg in packages:
-            runs = pkg.run_results_count
-            tests = len(pkg.generated_test_files)
-            label = f"{pkg.package_name}\n  ({tests} tests, {runs} runs)"
-            labels.append(label)
+        labels = [_format_package_label(pkg) for pkg in packages]
 
         selected_index = st.sidebar.selectbox(
             "Load package",
@@ -50,6 +113,11 @@ class SavedPackagePanel:
             chosen = packages[selected_index]
             st.session_state.loaded_package_manifest = chosen.to_dict()
             st.session_state.loaded_package_root = str(self._generated_tests_dir / chosen.package_name)
+            # Persist so a fresh session auto-restores this package on Run & Fix.
+            from src.settings_store import save_setting
+            from src.ui.ui_sidebar import SETTING_LAST_PACKAGE
+
+            save_setting(SETTING_LAST_PACKAGE, chosen.package_name)
 
             package_root = self._generated_tests_dir / chosen.package_name
             all_runs = load_all_run_results(package_root)
@@ -228,7 +296,7 @@ class SavedPackagePanel:
             st.rerun()
 
     def _handle_rerun_failed_only(self, package_root: str, previous_run: Any | None) -> None:
-        from src.pipeline_run_service import PipelineRunService
+        from src.pipeline_run_service import PipelineRunService, merge_rerun_results
 
         st.session_state.pipeline_saved_path = package_root
         previous = None
@@ -242,7 +310,12 @@ class SavedPackagePanel:
                     rerun_failed_only=True,
                     previous_run=previous,
                 )
-                st.session_state.pipeline_run_result = execution_result.run_result
+                # Merge so the table keeps passing tests (a failed-only run
+                # alone would drop them from the view).
+                if previous is not None and execution_result.run_result.results:
+                    st.session_state.pipeline_run_result = merge_rerun_results(previous, execution_result.run_result)
+                else:
+                    st.session_state.pipeline_run_result = execution_result.run_result
                 st.session_state.pipeline_run_output = execution_result.display_output
                 st.session_state.pipeline_run_command = " ".join(execution_result.command)
                 st.session_state.pipeline_run_return_code = execution_result.return_code

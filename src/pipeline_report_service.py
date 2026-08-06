@@ -50,7 +50,12 @@ class PipelineReportService:
         coverage_rows = build_report_dicts(coverage_analysis, run_result, package_dir=package_dir)
         local_report = generate_local_report(coverage_rows)
         jira_report = generate_jira_report(coverage_rows, project_key=jira_project_key)
-        html_report = generate_html_report(coverage_rows)
+        # Embed failed-step screenshots (base64) so the HTML report carries
+        # diagnostic images without depending on the evidence folder. Passing
+        # tests' full screenshot galleries stay on the Evidence & Reports page
+        # — embedding everything would bloat the HTML (full-page PNGs ~3.4MB).
+        screenshots_dir = Path(package_dir) if package_dir else None
+        html_report = generate_html_report(coverage_rows, screenshots_dir=screenshots_dir)
 
         local_report_path = ""
         jira_report_path = ""

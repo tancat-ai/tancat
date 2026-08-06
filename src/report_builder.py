@@ -11,6 +11,7 @@ alternative locators, available page elements, and screenshot paths).
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Any
 
 from src.coverage_utils import RequirementCoverage
@@ -20,7 +21,7 @@ from src.evidence_loader import (
     load_evidence_for_package,
     match_evidence_to_test,
 )
-from src.pytest_output_parser import RunResult, TestResult
+from src.pytest_output_parser import RunResult, TestResult, is_run_result
 
 
 def escape_html(text: str) -> str:
@@ -85,7 +86,7 @@ def build_report_dicts(
 
     # Build run result lookup
     run_map: dict[str, TestResult] = {}
-    if run_result is not None and isinstance(run_result, RunResult):
+    if run_result is not None and is_run_result(run_result):
         for tr in run_result.results:
             if isinstance(tr, TestResult):
                 run_map[tr.name] = tr
@@ -100,12 +101,15 @@ def build_report_dicts(
         # Handle both RequirementCoverage objects and dicts
         if isinstance(req, RequirementCoverage):
             tc_id = req.id
-            description = req.description
+            # The criterion text carries its own enumeration ("6. [T06] …") and
+            # every report format prepends its own index ("{idx}. …"), so strip
+            # the leading "N. " to avoid "6. 6. [T06] …" duplication.
+            description = re.sub(r"^\d+\.\s+", "", req.description)
             cov_status = req.status
             linked_tests = req.linked_tests
         elif isinstance(req, dict):
             tc_id = str(req.get("id", req.get("tc_id", "")))
-            description = str(req.get("description", req.get("test_name", "unknown")))
+            description = re.sub(r"^\d+\.\s+", "", str(req.get("description", req.get("test_name", "unknown"))))
             cov_status = str(req.get("status", "unknown"))
             _lt = req.get("linked_tests", req.get("test_name"))
             linked_tests = list(_lt) if _lt is not None else []  # type: ignore[no-redef]

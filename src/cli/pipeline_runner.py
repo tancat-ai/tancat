@@ -23,7 +23,7 @@ from src.pipeline_artifact_manager import find_existing_packages
 from src.pipeline_models import ExportMode
 from src.pipeline_report_service import PipelineReportService
 from src.pipeline_run_service import PipelineRunService
-from src.pytest_output_parser import RunResult
+from src.pytest_output_parser import RunResult, is_run_result
 from src.run_result_persistence import load_all_run_results
 from src.spec_analyzer import TestCondition
 from src.storage import get_storage
@@ -609,7 +609,7 @@ def display_run_results(session: Any) -> None:
     summary showing recent trends, flaky tests, and run comparison.
     """
     run_result = session.pipeline_run_result
-    if not isinstance(run_result, RunResult):
+    if not is_run_result(run_result):
         print(yellow("  No test results to display."))
         return
 
@@ -637,9 +637,7 @@ def generate_reports(session: Any) -> None:
         bundle = PipelineReportService().build_reports(
             criteria_text=session.pipeline_criteria,
             generated_code=session.pipeline_results,
-            run_result=session.pipeline_run_result
-            if isinstance(session.pipeline_run_result, RunResult)
-            else RunResult(),
+            run_result=session.pipeline_run_result if is_run_result(session.pipeline_run_result) else RunResult(),
             package_dir=str(Path(session.pipeline_saved_path).resolve().parent),
             jira_project_key=getattr(session, "jira_project_key", "") or "",
         )
@@ -789,7 +787,7 @@ def generate_bug_report(session: Any) -> None:
     from src.cli.evidence_generator import BugEvidenceGenerator
 
     run_result = session.pipeline_run_result
-    if not isinstance(run_result, RunResult) or not run_result.results:
+    if not is_run_result(run_result) or not run_result.results:
         print(yellow("  No test results to generate a bug report for. Run tests first."))
         return
 
@@ -827,7 +825,7 @@ def repair_locator_cli(session: Any) -> None:
     from src.locator_repair import LocatorPatch, apply_patch_to_file, run_codegen_session
 
     run_result = session.pipeline_run_result
-    if not isinstance(run_result, RunResult) or not run_result.results:
+    if not is_run_result(run_result) or not run_result.results:
         print(yellow("  No test results available. Run tests first."))
         return
 
@@ -923,7 +921,7 @@ def self_heal_cli(session: Any) -> None:
         return
 
     run_result = getattr(session, "pipeline_run_result", None)
-    if isinstance(run_result, RunResult):
+    if is_run_result(run_result):
         failed_count = sum(1 for r in run_result.results if r.status == "failed")
         if failed_count == 0:
             print(green("  All tests pass — nothing to heal."))
@@ -1142,7 +1140,7 @@ def run_saved_test_from_package(
             print(f"  Command: {session.pipeline_run_command}")
         print()
 
-        if isinstance(session.pipeline_run_result, RunResult):
+        if is_run_result(session.pipeline_run_result):
             render_run_results(session.pipeline_run_result, show_raw=False)
 
             # Run history summary (AI-011 Phase 4)

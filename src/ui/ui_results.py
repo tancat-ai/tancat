@@ -69,10 +69,10 @@ class ResultsPanel:
                 _handle_rerun_failed()
 
         with bug_report_col:
-            from src.pytest_output_parser import RunResult
+            from src.pytest_output_parser import is_run_result
 
             run_result = st.session_state.get("pipeline_run_result")
-            has_failures = isinstance(run_result, RunResult) and any(
+            has_failures = is_run_result(run_result) and any(
                 r.status in ("failed", "error") for r in run_result.results
             )
             if st.button("Generate Bug Report", disabled=not has_failures):
@@ -88,10 +88,10 @@ class ResultsPanel:
 def _handle_generate_bug_report() -> None:
     """Handle the 'Generate Bug Report' button click."""
     from src.cli.evidence_generator import BugEvidenceGenerator
-    from src.pytest_output_parser import RunResult
+    from src.pytest_output_parser import is_run_result
 
     run_result = st.session_state.get("pipeline_run_result")
-    if not isinstance(run_result, RunResult):
+    if not is_run_result(run_result):
         st.error("No test results available. Run tests first.")
         return
 
@@ -146,7 +146,7 @@ def _handle_run_tests() -> None:
 
 def _handle_rerun_failed() -> None:
     """Handle the 'Re-run Failed Only' button click."""
-    from src.pipeline_run_service import PipelineRunService
+    from src.pipeline_run_service import PipelineRunService, merge_rerun_results
 
     previous_run_result = st.session_state.pipeline_run_result
     st.session_state.run_tests_error = ""
@@ -157,7 +157,15 @@ def _handle_rerun_failed() -> None:
                 rerun_failed_only=True,
                 previous_run=previous_run_result,
             )
-            st.session_state.pipeline_run_result = execution_result.run_result
+            # Merge so the table keeps the passing tests and only the re-run
+            # tests take their new outcome (a failed-only run alone would drop
+            # the passes from the view).
+            if previous_run_result is not None and execution_result.run_result.results:
+                st.session_state.pipeline_run_result = merge_rerun_results(
+                    previous_run_result, execution_result.run_result
+                )
+            else:
+                st.session_state.pipeline_run_result = execution_result.run_result
             st.session_state.pipeline_run_output = execution_result.display_output
             st.session_state.pipeline_run_command = " ".join(execution_result.command)
             st.session_state.pipeline_run_return_code = execution_result.return_code

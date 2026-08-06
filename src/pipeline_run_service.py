@@ -8,9 +8,38 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.pytest_output_parser import RunResult, format_pytest_output_for_display, parse_pytest_output
+from src.pytest_output_parser import RunResult, TestResult, format_pytest_output_for_display, parse_pytest_output
 from src.run_result_persistence import persist_run_result
 from src.run_utils import build_pytest_run_command, get_failed_nodeids
+
+
+def merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult:
+    """Merge a failed-only rerun into the previous full run result.
+
+    A "Re-run Failed Only" run only exercises the previously-failed tests, so
+    its result alone would drop the passing tests from the table. Merge it
+    back into the previous run: non-re-run tests keep their prior result and
+    re-run tests take the new outcome, preserving order.
+    """
+    rerun_map = {r.name: r for r in rerun.results}
+    merged_results: list[TestResult] = []
+    seen: set[str] = set()
+    for r in previous.results:
+        merged_results.append(rerun_map.get(r.name, r))
+        seen.add(r.name)
+    for r in rerun.results:
+        if r.name not in seen:
+            merged_results.append(r)
+    return RunResult(
+        results=merged_results,
+        total=len(merged_results),
+        passed=sum(1 for r in merged_results if r.status == "passed"),
+        failed=sum(1 for r in merged_results if r.status == "failed"),
+        skipped=sum(1 for r in merged_results if r.status == "skipped"),
+        errors=sum(1 for r in merged_results if r.status == "error"),
+        duration=rerun.duration,
+        raw_output=rerun.raw_output,
+    )
 
 
 @dataclass(frozen=True)

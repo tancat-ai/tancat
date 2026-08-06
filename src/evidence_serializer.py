@@ -22,6 +22,7 @@ class EvidenceSerializer:
         page_url: str,
         run_history: dict[str, int],
         steps: list[dict[str, Any]],
+        duration_s: float = 0.0,
     ) -> str:
         """Return JSON payload for an evidence sidecar."""
         return json.dumps(
@@ -32,6 +33,7 @@ class EvidenceSerializer:
                     "condition_ref": condition_ref,
                     "story_ref": story_ref,
                     "status": status,
+                    "duration_s": round(duration_s, 3),
                 },
                 "page": {"url": page_url},
                 "run_history": run_history,

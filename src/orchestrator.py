@@ -23,6 +23,7 @@ from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
+from src.pom_helpers import deduplicate_pom_lines
 from src.prerequisite_injector import PrerequisiteInjector
 from src.prompt_builder import PromptBuilder, build_single_condition_prompt
 from src.prompt_utils import (
@@ -563,6 +564,11 @@ class TestOrchestrator:
         self._debug("phase=structure_assembly start")
         final_code = rebuild_test_structure(final_code)
         self._debug("phase=structure_assembly done")
+
+        # Dedupe POM imports/instantiations — the LLM skeleton frequently
+        # emits its own (often duplicated) page-object block on top of the
+        # canonical one injected above, and nothing else removes the dups.
+        final_code = deduplicate_pom_lines(final_code)
 
         unresolved = [line.strip() for line in final_code.splitlines() if "pytest.skip(" in line]
         self.last_result = PipelineRunResult(

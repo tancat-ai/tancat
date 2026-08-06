@@ -16,6 +16,9 @@ SETTING_CONSENT_MODE = "consent_mode"
 SETTING_PROVIDER = "provider"
 SETTING_MODEL_NAME = "model_name"
 SETTING_WORKSPACE = "workspace"
+# Last package loaded via the sidebar — auto-restored on fresh sessions so a
+# page reload / reconnect (or a session reset) does not blank Run & Fix.
+SETTING_LAST_PACKAGE = "last_package"
 SETTING_OCR_BACKEND = "ocr_backend"
 SETTING_JIRA_PROJECT_KEY = "jira_project_key"
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import TypeGuard
 
 # ---------------------------------------------------------------------------
 # Regex patterns — matched against raw pytest -v output lines
@@ -74,6 +75,17 @@ class RunResult:
     errors: int = 0
     duration: float = 0.0
     raw_output: str = ""
+
+
+def is_run_result(obj: object) -> TypeGuard[RunResult]:
+    """Reload-safe check for :class:`RunResult` instances.
+
+    Streamlit's file watcher can reload this module mid-session (e.g. after a
+    code edit), which creates a NEW class object. ``isinstance`` then fails
+    for instances created before the reload, silently hiding run results that
+    are still valid. Duck-type on the shape instead.
+    """
+    return type(obj).__name__ == "RunResult" and hasattr(obj, "results") and hasattr(obj, "total")
 
 
 # ---------------------------------------------------------------------------

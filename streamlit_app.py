@@ -1,7 +1,8 @@
 """Streamlit UI for the intelligent scraping pipeline.
 
 Multi-page layout:
-  - Test Generator  — requirements → plan → pipeline → results → export
+  - Test Generator — requirements → plan → pipeline → export
+  - Run & Fix — run the current suite, repair locators, review this run's evidence
   - Evidence & Reports — evidence viewer, Gantt, heatmap, run history, saved packages
 """
 
@@ -28,7 +29,7 @@ from src.provider_config import (
     resolve_openai_api_key,
     sync_openai_api_key_to_env,
 )
-from src.pytest_output_parser import RunResult
+from src.pytest_output_parser import is_run_result
 from src.settings_store import load_setting, save_setting
 from src.storage import get_storage, init_storage
 from src.test_plan import TestPlan, apply_editor_rows
@@ -38,9 +39,17 @@ from src.ui.ui_evidence import EvidenceViewer
 from src.ui.ui_journey import render_credential_profiles, render_journey_builder
 from src.ui.ui_requirements import RequirementsInput
 from src.ui.ui_results import ResultsPanel
+from src.ui.ui_run_comparison import RunComparison
 from src.ui.ui_run_results import RunResultsDisplay
 from src.ui.ui_saved_packages import SavedPackagePanel
-from src.ui.ui_sidebar import SETTING_CONSENT_MODE, SETTING_JIRA_PROJECT_KEY, SETTING_WORKSPACE, SidebarConfig
+from src.ui.ui_sidebar import (
+    SETTING_CONSENT_MODE,
+    SETTING_JIRA_PROJECT_KEY,
+    SETTING_LAST_PACKAGE,
+    SETTING_MODEL_NAME,
+    SETTING_WORKSPACE,
+    SidebarConfig,
+)
 from src.ui_pipeline import (
     PipelineSessionState,
     build_test_plan,
@@ -135,7 +144,9 @@ _base_url_value = (
     if _provider_switched
     else (str(load_setting("provider_base_url", "") or "") or default_provider_url)
 )
-_model_value = default_model if _provider_switched else (str(load_setting("model_name", "") or "") or default_model)
+_model_value = (
+    default_model if _provider_switched else (str(load_setting(SETTING_MODEL_NAME, "") or "") or default_model)
+)
 
 user_openai_api_key: str | None = None
 if provider_requires_openai_api_key(provider):
@@ -190,9 +201,9 @@ LLMClient.set_session_provider(provider, provider_base_url, model_name)
 _stored_base_url = str(load_setting("provider_base_url", "") or "")
 if provider_base_url != _stored_base_url:
     save_setting("provider_base_url", provider_base_url)
-_stored_model = str(load_setting("model_name", "") or "")
+_stored_model = str(load_setting(SETTING_MODEL_NAME, "") or "")
 if model_name != _stored_model:
-    save_setting("model_name", model_name)
+    save_setting(SETTING_MODEL_NAME, model_name)
 
 # B-036 Phase 4: persisted Settings panel (OCR backend, workspace, RAG
 # learned-pattern stats). Re-initialises storage immediately when the
@@ -344,6 +355,13 @@ def generator_page() -> None:
                     st.write(f"Story Ref: `{current_plan.story_ref}`")
                     st.write(f"Conditions reviewed: `{reviewed_count}/{total_count}`")
                     st.write(f"Status: `{status_text}`")
+                    flagged_ids_sorted = sorted(c.id for c in current_plan.conditions if c.flagged)
+                    if flagged_ids_sorted:
+                        st.warning(
+                            f"⚑ Flagged: {len(flagged_ids_sorted)} condition(s) "
+                            f"({', '.join(flagged_ids_sorted)}) — ambiguous/exploratory; "
+                            "review the expected outcome before signing off."
+                        )
                 else:
                     st.write("Build the plan to review AI-derived conditions before generation.")
 
@@ -382,17 +400,39 @@ def generator_page() -> None:
                         "text": st.column_config.TextColumn("Condition"),
                         "expected": st.column_config.TextColumn("Expected"),
                         "source": st.column_config.TextColumn("Source"),
-                        "flagged": st.column_config.CheckboxColumn("Flagged"),
+                        "flagged": st.column_config.CheckboxColumn(
+                            "Flagged",
+                            help="Needs attention — ambiguity/exploratory conditions are auto-flagged "
+                            "by the analyzer; tick to flag manually.",
+                        ),
                         "src": st.column_config.SelectboxColumn(
                             "Source Kind",
                             options=["ai", "manual", "automation"],
                         ),
                     },
+                    # Reviewed sits last so the row-header delete checkboxes
+                    # (far left, headerless) never abut another checkbox column.
+                    column_order=[
+                        "id",
+                        "tests",
+                        "type",
+                        "intent",
+                        "text",
+                        "expected",
+                        "source",
+                        "flagged",
+                        "reviewed",
+                    ],
                 )
                 if hasattr(edited_rows_raw, "to_dict"):  # type: ignore[attr-defined]
                     edited_rows = edited_rows_raw.to_dict("records")  # type: ignore[attr-defined]
                 else:
                     edited_rows = list(edited_rows_raw)
+
+                st.caption(
+                    "Checkboxes on the far left select rows for deletion "
+                    "(or use the 'Delete row(s)' button) — the **Reviewed** tick (far right) approves a condition."
+                )
 
                 plan_action_col, signoff_col = st.columns([3, 2])
                 with plan_action_col:
@@ -441,7 +481,7 @@ def generator_page() -> None:
         ):
             st.caption(
                 "Expand each condition into concrete test rows. One skeleton will be generated "
-                "per confirmed row — edit or split rows before generation (AI-034)."
+                "per confirmed row — edit or split rows before generation."
             )
 
             build_table_col, table_state_col = st.columns([1, 2])
@@ -628,9 +668,166 @@ def generator_page() -> None:
 
     if st.session_state.pipeline_error:
         st.error(st.session_state.pipeline_error)
+    # ------------------------------------------------------------------
+    # Scraper warnings / errors
+    # ------------------------------------------------------------------
+    if st.session_state.get("pipeline_scraper_warnings"):
+        for warning in st.session_state.pipeline_scraper_warnings:
+            st.warning(f"⚠️ Scraper: {warning}")
+
+    if st.session_state.get("pipeline_scraper_errors"):
+        for error in st.session_state.pipeline_scraper_errors:
+            st.error(f"❌ Scraper: {error}")
+
+    if st.session_state.get("pipeline_journey_captured_count"):
+        st.success(f"✅ Captured context from {st.session_state.pipeline_journey_captured_count} pages")
 
     # ------------------------------------------------------------------
-    # Export panel
+    # Handoff to Run & Fix
+    # ------------------------------------------------------------------
+    if st.session_state.get("pipeline_results"):
+        st.success("Suite generated — move to **▶️ Run & Fix** to execute it, repair locators, and review evidence.")
+        if st.button("▶️ Go to Run & Fix", type="primary"):
+            st.switch_page(_PAGE_RUN_FIX)
+
+
+def _render_run_evidence(package_root: str) -> None:
+    """Render this run's evidence (sidecars + screenshots) for the current package.
+
+    The sidecars are written fresh on every test run, so the files present in
+    ``<package>/evidence/`` are by construction the current run's evidence.
+    Screenshot paths inside the sidecar steps reference this run's PNGs.
+    """
+    pkg = Path(package_root)
+    if pkg.is_file():
+        pkg = pkg.parent
+    evidence_dir = pkg / "evidence"
+    if not evidence_dir.exists():
+        return
+    sidecars = sorted(evidence_dir.glob("*.evidence.json"))
+    if not sidecars:
+        return
+
+    st.divider()
+    with st.expander(f"📸 Evidence — this run ({len(sidecars)} tests)", expanded=False):
+        for sidecar in sidecars:
+            from src.gantt_utils import safe_read_sidecar
+
+            data = safe_read_sidecar(sidecar)
+            if not data:
+                continue
+            test_meta = data.get("test") or {}
+            test_name = str(test_meta.get("name", sidecar.stem))
+            status = str(test_meta.get("status", "unknown"))
+            icon = {"passed": "✅", "failed": "❌", "skipped": "⏭️"}.get(status, "⏳")
+            steps = data.get("steps") or []
+            screenshots: list[Path] = []
+            for s in steps:
+                shot = s.get("screenshot")
+                if shot:
+                    candidate = evidence_dir / Path(str(shot)).name
+                    if candidate.exists():
+                        screenshots.append(candidate)
+            with st.expander(f"{icon} {test_name}", expanded=False):
+                st.caption(f"Status: {status} · Steps: {len(steps)} · Screenshots: {len(screenshots)}")
+                for s in steps:
+                    r = s.get("result") or {}
+                    label = str(s.get("label") or s.get("type") or "?")
+                    step_status = str(r.get("status") or "?")
+                    mark = {"passed": "✅", "failed": "❌"}.get(step_status, "⏳")
+                    shot = s.get("screenshot")
+                    has_shot = bool(shot and (evidence_dir / Path(str(shot)).name).exists())
+                    st.write(f"{mark} {label}{' 📸' if has_shot else ''}")
+                    if has_shot:
+                        st.image(str(evidence_dir / Path(str(shot)).name), width="stretch")
+
+
+# ---------------------------------------------------------------------------
+# Page: Run & Fix
+# ---------------------------------------------------------------------------
+def run_fix_page() -> None:
+    """Run & Fix page — execute the current suite, repair failures, review evidence."""
+    st.title("▶️ Run & Fix")
+    st.caption("Run the current suite, fix failing/skipped tests, and review this run's evidence.")
+
+    # A package loaded from the sidebar should surface here without forcing a
+    # re-run first — hydrate the pipeline state from the loaded manifest.
+    loaded_manifest = st.session_state.get("loaded_package_manifest")
+    if not loaded_manifest:
+        # Auto-restore the last-loaded package (persisted in the settings
+        # store) so a fresh session / page reload does not blank the page.
+        from src.pipeline_artifact_manager import find_existing_packages
+
+        _last = str(load_setting(SETTING_LAST_PACKAGE, "") or "")
+        if _last:
+            for _pkg in find_existing_packages(get_storage().generated_tests_dir()):
+                if _pkg.package_name == _last:
+                    st.session_state.loaded_package_manifest = _pkg.to_dict()
+                    st.session_state.loaded_package_root = str(get_storage().generated_tests_dir() / _last)
+                    loaded_manifest = st.session_state.get("loaded_package_manifest")
+                    break
+    if not st.session_state.get("pipeline_results") and loaded_manifest:
+        loaded_root = st.session_state.get("loaded_package_root", "")
+        if loaded_root and Path(loaded_root).exists():
+            test_files = list(loaded_manifest.get("generated_test_files") or [])
+            test_paths = [Path(loaded_root) / f for f in test_files]
+            test_paths = [tp for tp in test_paths if tp.exists()] or sorted(Path(loaded_root).glob("test_*.py"))
+            if test_paths:
+                st.session_state.pipeline_saved_path = str(loaded_root)
+                st.session_state.pipeline_manifest_path = str(Path(loaded_root) / "package_manifest.json")
+                st.session_state.pipeline_results = "\n".join(tp.read_text(encoding="utf-8") for tp in test_paths)
+                save_setting(SETTING_LAST_PACKAGE, loaded_manifest.get("package_name", ""))
+                # Hydrate criteria too — reports and the coverage traceability
+                # table build rows from pipeline_criteria, which is empty when
+                # a package is loaded without generating in this session.
+                if not st.session_state.get("pipeline_criteria"):
+                    from src.ui_pipeline import parse_requirements_text
+
+                    _story = str(loaded_manifest.get("source_story") or "")
+                    _, _criteria = parse_requirements_text(_story)
+                    st.session_state.pipeline_criteria = _criteria
+
+    has_suite = bool(
+        st.session_state.get("pipeline_results")
+        or st.session_state.get("pipeline_saved_path")
+        or is_run_result(st.session_state.get("pipeline_run_result"))
+    )
+    if not has_suite:
+        st.info(
+            "No current suite loaded. Generate tests on the **Test Generator** page, "
+            "or load a saved package from the sidebar."
+        )
+        if st.button("🧪 Go to Test Generator", type="primary"):
+            st.switch_page(_PAGE_GENERATOR)
+        return
+
+    # ------------------------------------------------------------------
+    # Results display (moved from the Test Generator page)
+    # ------------------------------------------------------------------
+    if st.session_state.get("pipeline_results"):
+        st.divider()
+        ResultsPanel.render_tabs(
+            results=st.session_state.pipeline_results,
+            skeleton=st.session_state.pipeline_skeleton,
+            saved_path=st.session_state.pipeline_saved_path,
+            manifest_path=st.session_state.pipeline_manifest_path,
+        )
+        ResultsPanel.render_run_section()
+
+    run_result = st.session_state.get("pipeline_run_result")
+    if is_run_result(run_result):
+        RunResultsDisplay.render(run_result)
+
+    # This-run evidence — gated on a run actually happening in this session,
+    # so the page never shows stale sidecars from a previous session/run as
+    # "this run" (sidecars persist on disk across sessions).
+    if is_run_result(st.session_state.get("pipeline_run_result")):
+        _run_evidence_root = st.session_state.get("pipeline_saved_path") or st.session_state.get("loaded_package_root")
+        if _run_evidence_root:
+            _render_run_evidence(str(_run_evidence_root))
+
+    # ------------------------------------------------------------------
+    # Export panel (lives here so you export the package you can see)
     # ------------------------------------------------------------------
     if st.session_state.pipeline_saved_path:
         with st.expander("📦 Export Test Package", expanded=False):
@@ -656,8 +853,6 @@ def generator_page() -> None:
                 save_setting(SETTING_JIRA_PROJECT_KEY, (jira_project_key or "TEST").strip().upper())
 
             if st.button("Export Clean Package", type="primary", key="export_button"):
-                from pathlib import Path
-
                 from src.export_service import export_clean_suite
                 from src.pipeline_models import ExportMode
 
@@ -693,48 +888,17 @@ def generator_page() -> None:
             if export_result and not st.session_state.get("export_button_pressed"):
                 st.info(f"Last export: `{export_result.export_dir}` — {len(export_result.test_files)} test(s)")
 
-    # ------------------------------------------------------------------
-    # Scraper warnings / errors
-    # ------------------------------------------------------------------
-    if st.session_state.get("pipeline_scraper_warnings"):
-        for warning in st.session_state.pipeline_scraper_warnings:
-            st.warning(f"⚠️ Scraper: {warning}")
-
-    if st.session_state.get("pipeline_scraper_errors"):
-        for error in st.session_state.pipeline_scraper_errors:
-            st.error(f"❌ Scraper: {error}")
-
-    if st.session_state.get("pipeline_journey_captured_count"):
-        st.success(f"✅ Captured context from {st.session_state.pipeline_journey_captured_count} pages")
-
-    # ------------------------------------------------------------------
-    # Results display
-    # ------------------------------------------------------------------
-    if st.session_state.pipeline_results:
+    if st.session_state.get("pipeline_bug_report"):
         st.divider()
-        ResultsPanel.render_tabs(
-            results=st.session_state.pipeline_results,
-            skeleton=st.session_state.pipeline_skeleton,
-            saved_path=st.session_state.pipeline_saved_path,
-            manifest_path=st.session_state.pipeline_manifest_path,
-        )
-        ResultsPanel.render_run_section()
-
-        run_result = st.session_state.pipeline_run_result
-        if isinstance(run_result, RunResult):
-            RunResultsDisplay.render(run_result)
-
-        if st.session_state.get("pipeline_bug_report"):
-            st.divider()
-            st.subheader("Bug Report")
-            st.code(st.session_state.pipeline_bug_report, language="text")
-            if st.session_state.get("pipeline_bug_report_path"):
-                st.download_button(
-                    label="Download Bug Report",
-                    data=st.session_state.pipeline_bug_report,
-                    file_name="bug_report.txt",
-                    mime="text/plain",
-                )
+        st.subheader("Bug Report")
+        st.code(st.session_state.pipeline_bug_report, language="text")
+        if st.session_state.get("pipeline_bug_report_path"):
+            st.download_button(
+                label="Download Bug Report",
+                data=st.session_state.pipeline_bug_report,
+                file_name="bug_report.txt",
+                mime="text/plain",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -751,14 +915,15 @@ def evidence_page() -> None:
     base_dir = get_storage().generated_tests_dir()
     EvidenceViewer(base_dir).render()
 
+    RunComparison().render()
+
 
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-pg = st.navigation(
-    [
-        st.Page(generator_page, title="Test Generator", icon="🧪"),
-        st.Page(evidence_page, title="Evidence & Reports", icon="📊"),
-    ]
-)
+_PAGE_GENERATOR = st.Page(generator_page, title="Test Generator", icon="🧪")
+_PAGE_RUN_FIX = st.Page(run_fix_page, title="Run & Fix", icon="▶️")
+_PAGE_EVIDENCE = st.Page(evidence_page, title="Evidence & Reports", icon="📊")
+
+pg = st.navigation([_PAGE_GENERATOR, _PAGE_RUN_FIX, _PAGE_EVIDENCE])
 pg.run()

@@ -294,6 +294,27 @@ class EvidenceTracker:
             screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}.png"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
+                # Evidence must reflect the settled page. Product grids use
+                # lazy-loaded images, so a screenshot taken the instant an
+                # assert returns shows blank/broken images — a spurious
+                # "missing image" defect in the evidence. Wait (bounded) for
+                # in-flight images to finish before capturing; never block
+                # the suite (capped at 4s, errors ignored).
+                try:
+                    self.page.evaluate(
+                        """() => Promise.race([
+                            Promise.all(Array.from(document.images).map(
+                                img => img.complete ? Promise.resolve()
+                                    : new Promise(res => {
+                                        img.addEventListener('load', res, { once: true });
+                                        img.addEventListener('error', res, { once: true });
+                                    })
+                            )),
+                            new Promise(res => setTimeout(res, 4000)),
+                        ])"""
+                    )
+                except Exception:
+                    pass
                 # Take full page screenshot so coordinates relative to frame always match.
                 self.page.screenshot(path=str(screenshot_full_path), full_page=True)
                 screenshot_path = f"evidence/{screenshot_name}"
@@ -394,6 +415,7 @@ class EvidenceTracker:
                 page_url=self._safe_page_url(),
                 run_history=self.run_history,
                 steps=self.steps,
+                duration_s=time.time() - self.start_time,
             )
             self.sidecar_path.write_text(json_content, encoding="utf-8")
         except Exception as exc:
@@ -414,6 +436,10 @@ class EvidenceTracker:
             self.page.goto(url)
             self._dismiss_consent_overlays()
             self._dismiss_ad_overlays()
+            # Short settle so the evidence shot captures a rendered page, not
+            # the mid-load flash (images get their own bounded wait in
+            # ``_record_step``).
+            self.page.wait_for_timeout(500)
             self._record_step(
                 "navigate", label, value=url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
             )
@@ -527,10 +553,14 @@ class EvidenceTracker:
             # Attempt 1: Direct click
             try:
                 loc.click(timeout=5000)
+                # Clicks capture evidence on success too — without it, a
+                # passing click step (especially one that navigates, e.g.
+                # "Proceed To Checkout") leaves no trace in the run evidence.
                 self._record_step(
                     "click",
                     label,
                     locator=locator,
+                    take_screenshot=True,
                     elapsed_ms=int((time.time() - _t0) * 1000),
                     element_metadata=el_metadata,
                 )
@@ -555,6 +585,7 @@ class EvidenceTracker:
                             "click",
                             label,
                             locator=locator,
+                            take_screenshot=True,
                             elapsed_ms=int((time.time() - _t0) * 1000),
                             element_metadata=el_metadata,
                         )
