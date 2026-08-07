@@ -64,3 +64,10 @@ Translate a generated test step line into Playwright setup script lines.
 ### `run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None` (function)
 
 Launch headed Playwright codegen and capture the first locator from the recorded script.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `apply_patch`
+- `_find_locator_action_line(source: str, line_number: int, original_locator: str) -> tuple[int, str]` (function) — Return (0-based index, raw_line) for the line containing *original_locator*.

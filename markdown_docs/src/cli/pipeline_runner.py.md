@@ -125,3 +125,18 @@ Generate static Gantt & heatmap HTML reports from evidence data.
 ### `bundle_evidence_zip(session: Any) -> None` (function)
 
 Create a zip archive of all evidence files for the current session.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (5 items). Grouped under the public function that uses them:
+
+### `build_test_plan`
+- `_display_conditions_table(plan: Any) -> None` (function) — Print a formatted table of all conditions in the plan.
+- `_edit_condition_interactive(session: Any) -> None` (function) — Let the user pick a condition by ID and edit its fields.
+
+### `build_test_table_interactive`
+- `_display_test_rows_table(table: Any) -> None` (function) — Print a formatted table of all test rows.
+- `_edit_test_row_interactive(session: Any) -> None` (function) — Let the user pick a test row by ID and edit its fields.
+
+### `run_pipeline`
+- `_select_conditions_for_generation(session: Any) -> list[TestCondition]` (function) — Choose generation conditions: confirmed test rows first, then plan conditions.

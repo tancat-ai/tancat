@@ -46,3 +46,10 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `FailureDetail` (class)
 
 Structured detail for a single test failure.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `classify_failure`
+- `_extract_locator(error_message: str) -> str | None` (function) — Extract the locator string from a Playwright error message.

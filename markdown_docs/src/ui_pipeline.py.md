@@ -42,3 +42,10 @@ Expand a reviewed plan into a Test Table (one row per test scenario).
 ### `test_table_rows(table: TestTable) -> list[dict[str, object]]` (function)
 
 Return editable table rows for the current test table.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `run_pipeline`
+- `_looks_like_non_code_output(code: str) -> bool` (function) — Return True when *code* looks like a JSON/dict blob, not Python.

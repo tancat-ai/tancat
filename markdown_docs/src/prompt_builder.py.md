@@ -49,3 +49,10 @@ Per-condition skeleton-fragment prompt. `conditions_block` is pre-joined by the 
 - `src/prompt_utils.py` — legacy prompt builders (kept for back-compat + equivalence tests)
 - `tests/test_prompt_builder.py` — 13 tests (byte-identity, brace survival, truncation, audit metadata)
 - `scripts/eval/uat_tstring_prototype.py` — repeatable A/B UAT (legacy vs t-string paths)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `PromptBuilder`
+- `_make_transform(expr: str) -> Callable[[Any], str]` (function) — Build a per-field transform for expression *expr*.

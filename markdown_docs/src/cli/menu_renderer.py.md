@@ -123,3 +123,13 @@ Displays package metadata from `package_manifest.json`.
 ### `open_file(path) -> None`
 
 Opens a file using the system default application (`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `configure_llm`
+- `_default_model(provider: str) -> str` (function) — (no docstring)
+
+### Internal utilities
+- `_next_selected() -> int` (function) — Return and increment the default selected index for the next menu.

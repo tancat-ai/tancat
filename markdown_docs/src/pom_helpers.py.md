@@ -23,3 +23,10 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `deduplicate_pom_lines(code: str) -> str` (function)
 
 Remove duplicated POM imports and per-test page-object instantiations.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `get_pom_method_call`
+- `_selector_literal(value: str) -> str` (function) — Return *value* as a Python string literal.

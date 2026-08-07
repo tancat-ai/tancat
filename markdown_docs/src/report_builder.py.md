@@ -45,3 +45,14 @@ Escape HTML special characters for safe embedding in HTML documents.
 ### `build_report_dicts(coverage_analysis: dict | None, run_result: RunResult | None, package_dir: str = '') -> list[dict]` (function)
 
 Convert RequirementCoverage + RunResult to the dict format used by report_utils.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `build_report_dicts`
+- `_find_matching_run_result(run_map: dict[str, TestResult], test_name: str) -> TestResult | None` (function) — Find run result by exact, prefix, or de-parameterized test name.
+- `_status_icon(status: str) -> str` (function) — Return icon for a row status.
+
+### Internal utilities
+- `_status_summary(coverage: list[dict[str, Any]]) -> tuple[int, int, int, int]` (function) — Return passed, failed, pending, unknown counts.

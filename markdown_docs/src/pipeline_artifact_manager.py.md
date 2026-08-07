@@ -227,3 +227,16 @@ Both modules write to the same package directory but manage different concerns. 
 - Thread-safe for single-writer scenarios (typical for test pipeline)
 - No file locking — not designed for concurrent writers
 - `MANIFEST_FILENAME` constant (`"package_manifest.json"`) is exported for consumers
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (5 items). Grouped under the public function that uses them:
+
+### `load_package_manifest`
+- `_load_from_file(filepath: Path) -> PackageManifest` (function) — Parse a JSON manifest file.
+- `_reconstruct_manifest(package_root: Path) -> PackageManifest` (function) — Build a minimal ``PackageManifest`` from on-disk artefacts.
+
+### Internal utilities
+- `_count_run_results(package_root: Path) -> int` (function) — Count run results. Prefers SQLite DB, falls back to JSON file count.
+- `_db_run_stats_for_package(package_root: Path) -> tuple[int, str]` (function) — Return ``(run_count, last_run_at)`` for *package_root* from the workspace DB.
+- `_scan_page_object_files(package_root: Path) -> list[str]` (function) — Return relative page-object file names under ``pages/``.

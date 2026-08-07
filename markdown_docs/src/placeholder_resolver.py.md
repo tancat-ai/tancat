@@ -44,3 +44,10 @@ gained a `site_hash` kwarg, forwarded to
 `PlaceholderScorer.compute_element_score(..., site_hash=site_hash)` — enables
 the same-site learned-pattern bonus (+5, AI-035 Phase 2). Callers that don't
 pass it get identical behavior (bonus only applies when a site hash is present).
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_css_escape_id(value: str) -> str` (function) — Escape a raw ID value for safe use in a CSS #id selector.

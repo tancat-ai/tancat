@@ -49,3 +49,11 @@ Builds the same chart type but reads directly from SQLite via `_get_db()`, using
 - **Pure function design**: No I/O or side effects — returns Plotly `go.Figure` objects consumed by `st.plotly_chart()` or `fig.show()`.
 - **Two entry points**: In-memory (`build_run_history_chart`) vs. SQL-backed (`build_chart_from_db`) to handle different data volume scenarios.
 - **Empty state handling**: Both functions return a placeholder figure with "No run history available" text when no data exists.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `build_run_history_chart`
+- `_health_color(pass_rate: float) -> str` (function) — Return marker colour based on pass-rate threshold.
+- `_health_label(pass_rate: float) -> str` (function) — Short text description of health level.

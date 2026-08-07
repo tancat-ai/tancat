@@ -205,3 +205,16 @@ JSON structure:
 - Thread-safe for single-writer scenarios (typical for test pipeline)
 - No locking for concurrent writers — not designed for parallel persistence
 - `flaky_tests` field on `PersistedRunResult` is computed on load, not persisted
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `load_run_result`
+- `_legacy_load_json(filepath: Path) -> PersistedRunResult` (function) — Load a legacy JSON run result file.
+
+### `persist_run_result`
+- `_get_db() -> SQLitePersistence` (function) — Return the global SQLitePersistence singleton (lazy init).
+
+### Internal utilities
+- `_reset_db() -> None` (function) — Reset the global DB singleton. Used in tests for isolation.

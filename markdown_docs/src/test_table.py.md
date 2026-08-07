@@ -59,3 +59,10 @@ skeleton function (Phase 3 hook via `table_to_conditions()`).
   (unconfirmed rows skipped); rows removed by the tester simply don't generate.
 - **Frozen dataclasses + `__test__ = False`**: immutable value objects that
   pytest does not collect; `replace()`-based immutability like `TestPlan`.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `single_row_for_condition`
+- `_infer_action_from_intent(intent: str) -> TestAction` (function) — Return a deterministic default action for a condition intent (fallback path).
