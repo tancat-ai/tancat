@@ -14,3 +14,12 @@ Page Object Model artifact generation. Extracted from `placeholder_orchestrator.
 ## Related
 - `src/placeholder_orchestrator.py` — consumer
 - `src/page_object_builder.py` — `PageObjectBuilder` class
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `deduplicate_pom_lines(code: str) -> str` (function)
+
+Remove duplicated POM imports and per-test page-object instantiations.

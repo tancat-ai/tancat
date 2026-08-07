@@ -436,3 +436,12 @@ The default strategy list starts with exact and fill-specific matches, then appl
 - `PageStateAssertStrategy.URL_SIGNAL = "url"` — returned instead of `False` for page-state descriptions
 - `IntentMatcher.match()` and `matches()` return types extended to `bool | str`
 - When `"url"` is returned, the orchestrator routes to `resolve_url()` for `expect(page).to_have_url(...)` assertions
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `VagueSectionAssertStrategy` (class)
+
+Handle vague ASSERT descriptions about page sections/areas.

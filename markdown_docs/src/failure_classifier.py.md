@@ -38,3 +38,11 @@ Aggregated failure summary: total_passed, total_failed, category_counts, top_cat
 
 ## Dependencies
 - None — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `FailureDetail` (class)
+
+Structured detail for a single test failure.

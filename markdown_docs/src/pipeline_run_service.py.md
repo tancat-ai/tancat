@@ -36,3 +36,11 @@ Structured result for one generated-package pytest execution.
 ## Depended On By
 
 `orchestrator.py`, `ui_pipeline.py`, `cli/pipeline_runner.py`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult` (function)
+
+Merge a failed-only rerun into the previous full run result.

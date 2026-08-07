@@ -30,3 +30,15 @@ Pipeline execution helpers for Streamlit UI — business logic only (no renderin
 
 ## Dependencies
 - `src.code_validator`, `src.orchestrator`, `src.spec_analyzer`, `src.test_generator`, `src.test_plan`, `src.pipeline_*` services
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `build_test_table(plan: TestPlan, provider: str, provider_base_url: str, model_name: str) -> TestTable` (function)
+
+Expand a reviewed plan into a Test Table (one row per test scenario).
+
+### `test_table_rows(table: TestTable) -> list[dict[str, object]]` (function)
+
+Return editable table rows for the current test table.

@@ -31,3 +31,12 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 
 ## Fallback
 When no scraped URLs available, uses `build_common_path_candidates` from `src.url_utils` to generate same-domain e-commerce path candidates.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `normalize_url(url: str) -> str` (function)
+
+Return a canonical URL — root http(s) URLs get a trailing slash.

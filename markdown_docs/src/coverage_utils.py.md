@@ -39,3 +39,19 @@ Converts coverage data to UI-friendly display rows.
 
 ## Dependencies
 - None — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `build_requirement_coverages(acceptance_criteria_lines: list[str], generated_code: str) -> list[RequirementCoverage]` (function)
+
+Build RequirementCoverage objects from criteria and generated test code.
+
+### `build_coverage_analysis(acceptance_criteria_lines: list[str], generated_code: str) -> dict[str, list[RequirementCoverage]]` (function)
+
+Return the coverage analysis dict used by UIs and report builders.
+
+### `build_coverage_display_rows(requirements: list[RequirementCoverage], run_results: Sequence[CoverageRunResult] | None = None) -> list[CoverageDisplayRow]` (function)
+
+Build display-ready rows from RequirementCoverage objects.

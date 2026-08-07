@@ -33,3 +33,19 @@ Extracts test duration from pytest result line (e.g., `0.42s`).
 
 ## Dependencies
 - None from `src/` — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `RunResult` (class)
+
+Aggregated result for a full pytest run.
+
+### `is_run_result(obj: object) -> TypeGuard[RunResult]` (function)
+
+Reload-safe check for :class:`RunResult` instances.
+
+### `format_pytest_output_for_display(raw: str, max_lines: int = 80) -> str` (function)
+
+Return a concise, high-signal pytest output snippet for UI display.

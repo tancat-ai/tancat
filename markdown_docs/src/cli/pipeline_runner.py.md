@@ -100,3 +100,28 @@ Discovers and loads an existing package. Populates session with manifest, run re
 Automated self-healing via CLI. Runs `SelfHealingRunner.heal()` on the saved test file, displays fix counts and per-patch diffs. If failures remain after healing, offers to re-run tests or try interactive locator repair (`repair_locator_cli`).
 
 Phase 2 of the ML Engineering roadmap — see `src/self_healing.py`.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 5 items):
+
+### `build_test_table_interactive(session: Any) -> None` (function)
+
+Expand the signed-off plan into concrete test rows for review.
+
+### `parse_target_urls(base_url: str, urls_input: str) -> list[str]` (function)
+
+*(no docstring)*
+
+### `generate_bug_report(session: Any) -> None` (function)
+
+Generate a bug report from the last test run's failures.
+
+### `generate_evidence_html(session: Any) -> None` (function)
+
+Generate static Gantt & heatmap HTML reports from evidence data.
+
+### `bundle_evidence_zip(session: Any) -> None` (function)
+
+Create a zip archive of all evidence files for the current session.

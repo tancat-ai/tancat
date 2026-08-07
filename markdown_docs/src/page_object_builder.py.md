@@ -47,3 +47,11 @@ class LoginPage:
 ## Depended On By
 
 - `src/orchestrator.py` — writes POM code to generated test file
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `PageObjectBuilder` (class)
+
+Convert scraped pages into deterministic Playwright page object modules.

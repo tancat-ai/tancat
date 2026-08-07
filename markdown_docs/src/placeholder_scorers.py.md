@@ -73,3 +73,12 @@ Optional `list[RetrievedPattern]` kwarg. When non-empty, `_golden_pattern_bonus(
 Learned patterns are only trusted on the site they were verified on. A
 saucedemo-learned `username → #user-name` must not win ties on a foreign site —
 the +5/+0 split is the main poisoning guard.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `PlaceholderScorer` (class)
+
+Stateless scoring utilities for placeholder candidate ranking.

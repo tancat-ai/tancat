@@ -1,6 +1,6 @@
 {
-  "total": 144,
-  "completed": 144,
+  "total": 146,
+  "completed": 146,
   "pending": 0,
   "files": [
     {
@@ -726,6 +726,11 @@
     {
       "source": "src/rag_learn.py",
       "doc": "markdown_docs/src/rag_learn.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/ui/ui_run_comparison.py",
+      "doc": "markdown_docs/src/ui/ui_run_comparison.py.md",
       "status": "completed"
     }
   ],

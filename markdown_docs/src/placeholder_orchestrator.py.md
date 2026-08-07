@@ -144,3 +144,12 @@ as `site_hash` into `ElementMatcher.find_best_element_for_current_page(...)` →
 `PlaceholderResolver.rank_candidates(...)` → `PlaceholderScorer.compute_element_score(...)`.
 Learned patterns from the same site earn +5; cross-site earned 0. Golden
 patterns are unaffected (+20 anywhere).
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `polarity_assertion_type(description: str) -> str | None` (function)
+
+Return ``"toBeHidden"`` for negative-state ASSERT descriptions, else None.

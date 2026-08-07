@@ -57,3 +57,11 @@ Parses skeleton code produced by the LLM to extract `{{ACTION:description}}` pla
 
 - `src/orchestrator.py` — parses skeletons after LLM generation
 - `src/code_validator.py` — uses `validate_skeleton()`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `SkeletonParser` (class)
+
+Extract placeholders and required URLs from generated skeletons.

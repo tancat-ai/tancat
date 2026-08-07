@@ -31,3 +31,12 @@ gained a `site_hash` kwarg, forwarded to
 `PlaceholderResolver.rank_candidates(..., site_hash=site_hash)` — enables the
 same-site learned-pattern bonus (+5, AI-035 Phase 2). Optional; absent → no
 learned bonus (unchanged behavior).
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `select_page_loaded_candidate(candidates: list[dict[str, str]], description: str = '') -> dict[str, str] | None` (function)
+
+Pick a stable visible page element for generic "page loaded" assertions.

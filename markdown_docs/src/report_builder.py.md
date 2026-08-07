@@ -33,3 +33,15 @@ Groups failures by error type and returns classification counts.
 
 ## Dependencies
 - `src.pytest_output_parser`, `src.evidence_loader`, `src.failure_classifier`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `escape_html(text: str) -> str` (function)
+
+Escape HTML special characters for safe embedding in HTML documents.
+
+### `build_report_dicts(coverage_analysis: dict | None, run_result: RunResult | None, package_dir: str = '') -> list[dict]` (function)
+
+Convert RequirementCoverage + RunResult to the dict format used by report_utils.
