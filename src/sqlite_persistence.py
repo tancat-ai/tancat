@@ -105,14 +105,21 @@ class SQLitePersistence:
         Defaults to ``evidence/run_results.sqlite``.
     """
 
-    def __init__(self, db_path: Path | None = None) -> None:
+    def __init__(self, db_path: Path | None = None, busy_timeout_ms: int = 30000) -> None:
         self._db_path = db_path or _DEFAULT_DB_FILE
+        self._busy_timeout_ms = busy_timeout_ms
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._connect_and_schema()
+        except sqlite3.OperationalError:
+            # Transient (e.g. "database is locked" when xdist workers / the
+            # Streamlit+CLI pair open the same DB at once). Never destructive —
+            # surface the error instead of deleting a healthy database file.
+            raise
         except sqlite3.DatabaseError:
-            # B-034: a corrupt database file must not break the app — delete and
-            # recreate it (the evidence index rebuilds from sidecars afterwards).
+            # B-034: a genuinely corrupt database file ("file is not a
+            # database"/malformed) must not break the app — delete and recreate
+            # it (the evidence index rebuilds from sidecars afterwards).
             logger.warning("database corrupt at %s — recreating file", self._db_path)
             self._close_connection()
             self._delete_db_files()
@@ -124,6 +131,11 @@ class SQLitePersistence:
         self._conn.row_factory = sqlite3.Row
 
         # PRAGMA configuration — WAL for concurrency, FK enforcement for CASCADE
+        # busy_timeout: concurrent opens (parallel pytest workers, Streamlit +
+        # CLI, export + run) wait for each other's locks instead of failing with
+        # "database is locked". Without it the corruption-recovery path above
+        # would mistake a transient lock for corruption and delete the file.
+        self._conn.execute(f"PRAGMA busy_timeout = {int(self._busy_timeout_ms)}")
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA foreign_keys = ON")
 
