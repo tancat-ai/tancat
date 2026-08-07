@@ -115,7 +115,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (70) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (25) &mdash; 2026-08-06 23:20 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (70) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (25) &mdash; 2026-08-07 07:56 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
@@ -249,7 +249,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column progress">
-    <h2>In Progress (4)</h2>
+    <h2>In Progress (2)</h2>
     
     <div class="">
     <div class="card">
@@ -258,20 +258,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium (deferred)</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L609" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:609</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-042</div>
-    <div class="card-title">Locator-repair patch dedents the replacement line to module scope (collection crash)</div>
-    <div class="card-meta"><span>High — every &quot;🔧 Fix Locator&quot; patch can silently break the whole suite at COLLECTION time</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L393" target="_blank">BACKLOG.md:393</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-043</div>
-    <div class="card-title">Sidebar package dropdown reports 0 runs when real run history exists</div>
-    <div class="card-meta"><span>Medium — the dropdown&#x27;s run count actively misleads</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L403" target="_blank">BACKLOG.md:403</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-038</div>
@@ -283,8 +269,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (72)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (72)</button>
+    <h2>Done (74)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (74)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -540,6 +526,20 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L343" target="_blank">BACKLOG.md:343</a></div>
 </div>
 <div class="card">
+    <div class="card-id">B-042</div>
+    <div class="card-title">Locator-repair patch dedents the replacement line to module scope (collection crash)</div>
+    <div class="card-meta"><span>High — every &quot;🔧 Fix Locator&quot; patch can silently break the whole suite at COLLECTION time</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L393" target="_blank">BACKLOG.md:393</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-043</div>
+    <div class="card-title">Sidebar package dropdown reports 0 runs when real run history exists</div>
+    <div class="card-meta"><span>Medium — the dropdown&#x27;s run count actively misleads</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L403" target="_blank">BACKLOG.md:403</a></div>
+</div>
+<div class="card">
     <div class="card-id">B-039</div>
     <div class="card-title">Self-healing blind to its own most common failure mode</div>
     <div class="card-meta"><span>High — discovered while live-testing the AI-035 self-healing loop against the e-commerce mock; without this fix the loop can never fix anything.</span>
@@ -763,7 +763,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "72";
+    var count = "74";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
