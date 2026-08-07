@@ -1,4 +1,56 @@
 ﻿
+# `cli/evidence_cli.py` — Evidence CLI (AI-028)
+
+## Purpose
+Command-line interface for evidence search, inspection, rerun, and export. Lets users find evidence files (by query/status), drill into a result's details, rerun the matching tests, and export to CSV/JUnit XML/NDJSON.
+
+## Usage
+```bash
+python -m cli.evidence_cli search --query "cart" --status failed --verbose
+python -m cli.evidence_cli detail 3                      # drill into result #3 from last search
+python -m cli.evidence_cli search --query "cart" --status failed --rerun
+python -m cli.evidence_cli export --format csv --status failed -o evidence.csv
+```
+
+## Commands
+| Command | Description |
+|---------|-------------|
+| `search` | Query the evidence index (`src.evidence_index.EvidenceIndex`) with `--query`, `--status`, `--condition`, `--story` filters; `--verbose` shows timestamps; `--rerun` re-executes the matching tests |
+| `detail <n>` | Show full step details for result #N from the last search (locator, assertion type, timing, screenshots) |
+| `export` | Export filtered results via `src.evidence_export` (`csv` / `junit-xml` / `ndjson`) |
+
+## Key Logic
+- Index built/refreshed on demand via `EvidenceIndex.build_or_refresh()`
+- Search results persisted to a temp sidecar so `detail` can drill into the last search
+- `--rerun` executes the source test files with pytest in a subprocess
+- Timestamp formatting for human-readable output
+
+## Related
+- `src/evidence_index.py` — evidence index
+- `src/evidence_export.py` — export formats
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (9 items). Grouped under the public function that uses them:
+
+### `main`
+- `_cmd_detail(args: argparse.Namespace) -> None` (function) — Show detailed evidence for a result from the last search.
+- `_cmd_export(args: argparse.Namespace) -> None` (function) — Export evidence to CSV, NDJSON, or JUnit XML.
+- `_cmd_search(args: argparse.Namespace) -> None` (function) — Search evidence sidecars and print results as a table.
+
+### Internal utilities
+- `_build_index() -> EvidenceIndex` (function) — Build or refresh the evidence index.
+- `_format_timestamp(iso_str: str) -> str` (function) — Convert ISO-8601 to a human-readable local timestamp.
+- `_load_last_results() -> list[dict]` (function) — Load the last search results from the temp file.
+- `_print_search_table(results: list, verbose: bool = False) -> None` (function) — Print search results as a numbered table.
+- `_rerun_tests(results: list) -> None` (function) — Rerun pytest on the test packages that produced the search results.
+- `_save_last_results(results: list) -> None` (function) — Save search results to a temp file for cross-command reference.
+
+
+
+
+
+
 # `cli/main.py`
 
 ## High-Level Purpose
@@ -8,7 +60,7 @@ This file is a **backwards-compatible shim** that serves as a legacy entry point
 ## File Content (verbatim)
 
 ```python
-"""Backwards-compatible shim â€” CLI entry point moved to src.cli.main."""
+"""Backwards-compatible shim — CLI entry point moved to src.cli.main."""
 
 import sys
 
@@ -47,12 +99,12 @@ if __name__ == "__main__":
 
 ## Dependencies
 
-- `src.cli.main` â€” The actual CLI implementation.
+- `src.cli.main` — The actual CLI implementation.
 
 ## Related Files
 
-- `src/cli/main.py` â€” The real CLI entry point.
-- `launch_cli.sh` â€” Shell script that launches the CLI.
+- `src/cli/main.py` — The real CLI entry point.
+- `launch_cli.sh` — Shell script that launches the CLI.
 
 
 
@@ -62,7 +114,7 @@ if __name__ == "__main__":
 
 ## High-Level Purpose
 
-This file is the **package initializer** for the `cli` package. Its sole responsibility is to **force UTF-8 encoding on stdout and stderr** before any other module in the package is imported. This is a critical bootstrapping step for the CLI's retro-styled terminal UI, which relies on box-drawing Unicode characters (e.g., â”Œ, â”€, â”) that cannot be represented in the Windows default cp1252 encoding.
+This file is the **package initializer** for the `cli` package. Its sole responsibility is to **force UTF-8 encoding on stdout and stderr** before any other module in the package is imported. This is a critical bootstrapping step for the CLI's retro-styled terminal UI, which relies on box-drawing Unicode characters (e.g., ┌, ─, ┐) that cannot be represented in the Windows default cp1252 encoding.
 
 The file is designed to be imported **first** when the CLI is launched via `python -m cli.main`, ensuring the encoding fix is in place before `retro_ui` or `menu_renderer` are loaded.
 
@@ -72,8 +124,8 @@ The file is designed to be imported **first** when the CLI is launched via `pyth
 
 | Module | Alias | Purpose |
 |--------|-------|---------|
-| `io`   | â€”     | Provides `TextIOWrapper` for re-wrapping stdout/stderr with UTF-8 encoding. |
-| `sys`  | â€”     | Provides access to `sys.stdout`, `sys.stderr`, and `sys.stdout.encoding`. |
+| `io`   | —     | Provides `TextIOWrapper` for re-wrapping stdout/stderr with UTF-8 encoding. |
+| `sys`  | —     | Provides access to `sys.stdout`, `sys.stderr`, and `sys.stdout.encoding`. |
 
 ---
 
@@ -94,8 +146,8 @@ The file contains **no classes** and **no function definitions**. All logic runs
    sys.stdout = io.TextIOWrapper(open(sys.stdout.fileno(), "wb"), encoding="utf-8", write_through=True)
    sys.stderr = io.TextIOWrapper(open(sys.stderr.fileno(), "wb"), encoding="utf-8", write_through=True)
    ```
-   - `open(sys.stdout.fileno(), "wb")` â€” re-opens the underlying raw file descriptor in binary-write mode.
-   - `io.TextIOWrapper(..., encoding="utf-8", write_through=True)` â€” wraps the binary stream in a UTF-8 text layer. `write_through=True` flushes immediately on every write, avoiding buffering issues.
+   - `open(sys.stdout.fileno(), "wb")` — re-opens the underlying raw file descriptor in binary-write mode.
+   - `io.TextIOWrapper(..., encoding="utf-8", write_through=True)` — wraps the binary stream in a UTF-8 text layer. `write_through=True` flushes immediately on every write, avoiding buffering issues.
 
 3. **Fallback on failure**  
    `except (OSError, io.UnsupportedOperation):`  
@@ -128,7 +180,77 @@ There are **no classes** and **no functions** defined in this file. The entire m
 
 | Element | Kind | Signature / Description |
 |---------|------|------------------------|
-| (module-level) | Guard + re-wire | `if sys.stdout.encoding not in ("UTF-8", "UTF8", "CP65001"):` â†’ re-wrap stdout/stderr with UTF-8 `TextIOWrapper` |
+| (module-level) | Guard + re-wire | `if sys.stdout.encoding not in ("UTF-8", "UTF8", "CP65001"):` → re-wrap stdout/stderr with UTF-8 `TextIOWrapper` |
+
+
+
+
+
+
+# `scripts/archive/debug_scripts/probe_saucedemo_spa_404.py` — SPA Soft-404 Probe (one-off)
+
+## Purpose
+Measured saucedemo's SPA-on-GitHub-Pages soft-404 behavior (2026-08-03, the saucedemo checkout investigation). Answered: what status `page.goto()` reports for `.html` paths, whether the SPA bootstraps after networkidle, and whether waiting changes the rendered state.
+
+## Key Findings (archived)
+- `/inventory.html` etc. → `goto` status 404, but the SPA boots (title "Swag Labs") and the URL is rewritten — the returned `Response` still reports 404
+- `/?/inventory.html` → status 200, same final state
+- Grounded the `PageScraper._is_soft_404` recovery fix in `src/scraper.py`
+
+## Related
+- `src/scraper.py` — soft-404 recovery
+- Archived alongside `replay_saucedemo_checkout.py`, `verify_saucedemo_stateful_scrape.py`, `verify_saucedemo_upgrade_data.py`
+
+
+
+
+
+
+# `scripts/archive/debug_scripts/replay_saucedemo_checkout.py` — Checkout Sequence Replay (one-off)
+
+## Purpose
+Replayed the saucedemo checkout test's placeholder sequence (login → add to cart → cart icon → checkout button → first/last/zip → continue) against the REAL scraped data, printing `current_url` + matched element per step.
+
+## Key Findings (archived)
+- Confirmed the resolution chain works when scoped to the right page (cart.html → `#checkout` → checkout-step-one → `#first-name`/`#last-name`)
+- Exposed the navigation-intent gap: `cart icon` had no accessible name, so element matching failed and the page context never advanced past inventory — the fix was the navigation-intent GOTO fallback in `src/placeholder_orchestrator.py`
+
+## Related
+- `src/placeholder_orchestrator.py` — `_is_navigation_description` + nav fallback
+
+
+
+
+
+
+# `scripts/archive/debug_scripts/verify_saucedemo_stateful_scrape.py` — Stateful Scrape Validation (one-off)
+
+## Purpose
+Validated `StatefulPageScraper` + cart seeding against saucedemo's SPA routing (2026-08-03). Confirmed that with demo credentials the stateful scraper (which ignores response status and seeds the cart first) extracts real cart/checkout elements — `cart.html` has the Checkout button, step-one has Continue, step-two has Finish. Without credentials it captures the "Epic sadface" login wall.
+
+Supports `--no-creds` to simulate the production path (no credential profile).
+
+## Related
+- `src/stateful_scraper.py` — `_seed_cart_session`
+- `src/journey_models.py` — `CredentialProfile`
+
+
+
+
+
+
+# `scripts/archive/debug_scripts/verify_saucedemo_upgrade_data.py` — Upgrade Data Dump (one-off)
+
+## Purpose
+Replicated the orchestrator's scrape + `_upgrade_stateful_pages` phase for saucedemo and dumped per-URL element counts + checkout-relevant elements (2026-08-03).
+
+## Key Findings (archived)
+- Post-upgrade data is correct: `cart.html` 34 elements (Checkout ✓), `checkout-step-one.html` 29 (Continue ✓); dead candidate URLs (`/basket`, `/view_cart`, …) are 2-element shells
+- Proved the resolution problem was keyword/navigation URL selection (dead shells winning), not scrape data — grounding the dead-page filter + redirect-duplicate filter
+
+## Related
+- `src/placeholder_orchestrator.py` — `_drop_dead_pages`, `_drop_redirect_duplicates`
+
 
 
 
@@ -163,6 +285,7 @@ To measure RAG improvements:
 1. **Baseline**: `RAG_ENABLED=0 python scripts/eval/eval_harness.py run --mode static --regenerate`
 2. **RAG Test**: `RAG_ENABLED=1 python scripts/eval/eval_harness.py run --mode static --regenerate`
 3. **Analysis**: `python scripts/eval/eval_harness.py compare`
+
 
 
 
@@ -207,24 +330,25 @@ In `full` mode, the runner not only validates locators (static) but also execute
 
 
 
+
 # `scripts/rag_ingest.py`
 
 ## High-Level Purpose
 
-RAG Ingestion CLI â€” builds or rebuilds the RAG vector store from two knowledge sources:
+RAG Ingestion CLI — builds or rebuilds the RAG vector store from two knowledge sources:
 
-1. **Golden patterns** from `scripts/eval/dataset/` â€” verified placeholder â†’ selector mappings (4 sites, 43 placeholders)
-2. **Playwright documentation** from `docs/rag_corpus/playwright/` â€” curated markdown files chunked by heading
+1. **Golden patterns** from `scripts/eval/dataset/` — verified placeholder → selector mappings (4 sites, 43 placeholders)
+2. **Playwright documentation** from `docs/rag_corpus/playwright/` — curated markdown files chunked by heading
 
 The store file is written to `<workspace>/evidence/rag_store.db` via `get_storage().rag_path()`.
 
-**Runs fully offline** â€” no LLM or browser needed. SentenceTransformer downloads the embedding model on first use (~80 MB, cached by Hugging Face).
+**Runs fully offline** — no LLM or browser needed. SentenceTransformer downloads the embedding model on first use (~80 MB, cached by Hugging Face).
 
 ## Module Metadata
 
 - **Lines:** ~270
 - **Imports:** `argparse`, `json`, `logging`, `re`, `pathlib.Path`, `src.rag_store`, `src.storage`
-- **Spec:** `docs/specs/FEATURE_SPEC_phase3_rag.md` Â§3c
+- **Spec:** `docs/specs/FEATURE_SPEC_phase3_rag.md` §3c
 - **Shipped:** 2026-07-21
 
 ## CLI Usage
@@ -238,7 +362,7 @@ python scripts/rag_ingest.py --docs               # Docs only
 ## Key Functions
 
 ### `load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]`
-Parse golden eval dataset JSON files (`eval-*.json`) into `GoldenPattern` entries. Each dataset file contains `golden_resolutions` â€” a list of criterion-level objects, each with a `placeholders` array containing `action`, `description`, `expected_locator`, `tolerance_selectors`, and `expected_page`.
+Parse golden eval dataset JSON files (`eval-*.json`) into `GoldenPattern` entries. Each dataset file contains `golden_resolutions` — a list of criterion-level objects, each with a `placeholders` array containing `action`, `description`, `expected_locator`, `tolerance_selectors`, and `expected_page`.
 
 ### `chunk_markdown_file(filepath: Path) -> list[DocChunk]`
 Split a markdown file into chunks at `##` heading boundaries. Each chunk targets ~500 tokens with ~50 tokens of overlap between consecutive chunks. The heading path (doc title + section headings) is stored as metadata for prompt citations.
@@ -246,7 +370,7 @@ Split a markdown file into chunks at `##` heading boundaries. Each chunk targets
 **Chunking strategy:**
 - Split on `##` heading boundaries
 - Skip bare `# Title` lines (no useful retrieval signal beyond subsequent sections)
-- Sections â‰¤ target tokens: use as-is
+- Sections ≤ target tokens: use as-is
 - Larger sections: split further at paragraph boundaries (`\n\n+`)
 - Overlap: keep last ~50 tokens worth of text between consecutive chunks
 
@@ -267,26 +391,64 @@ CLI entry point. Parses args, loads data, calls `rebuild_store()`. Returns count
 | `CHUNK_TARGET_TOKENS` | `500` | Target size per chunk |
 | `CHUNK_OVERLAP_TOKENS` | `50` | Overlap between consecutive chunks |
 
-`_estimate_tokens(text)` returns `max(1, len(text) // CHARS_PER_TOKEN)` â€” fast, offline character-based estimate.
+`_estimate_tokens(text)` returns `max(1, len(text) // CHARS_PER_TOKEN)` — fast, offline character-based estimate.
 
 ## Key Design Decisions
 
 - **Fully offline:** No network calls at runtime (model download cached by Hugging Face)
-- **Deterministic rebuild:** Deletes existing store before rebuild â€” no incremental updates (store is small enough for full rebuild)
-- **Path resolution relative to repo root:** `Path(__file__).resolve().parent.parent` â€” works regardless of CWD
-- **Store location:** `get_storage().rag_path()` â€” workspace-aware via AI-029
+- **Deterministic rebuild:** Deletes existing store before rebuild — no incremental updates (store is small enough for full rebuild)
+- **Path resolution relative to repo root:** `Path(__file__).resolve().parent.parent` — works regardless of CWD
+- **Store location:** `get_storage().rag_path()` — workspace-aware via AI-029
 
 ## Dependencies
 
-- `src.rag_store` â€” `RAGStore`, `MilvusLiteBackend`, `SentenceTransformerEmbedder`, data classes
-- `src.storage.get_storage()` â€” workspace-aware path resolution
-- `scripts/eval/dataset/` â€” golden pattern JSON files
-- `docs/rag_corpus/playwright/` â€” curated markdown doc files
+- `src.rag_store` — `RAGStore`, `MilvusLiteBackend`, `SentenceTransformerEmbedder`, data classes
+- `src.storage.get_storage()` — workspace-aware path resolution
+- `scripts/eval/dataset/` — golden pattern JSON files
+- `docs/rag_corpus/playwright/` — curated markdown doc files
 
 ## Depended On By
 
 - Manual/automated setup step (run once after repo clone or after golden dataset updates)
-- `tests/test_rag_ingest.py` â€” 15 unit tests
+- `tests/test_rag_ingest.py` — 15 unit tests
+
+
+
+
+
+
+# `scripts/verify_production.py` — Production Verification
+
+## Purpose
+End-to-end product verification: runs the full generation → resolution → execution → evidence pipeline against known demo sites and emits a PASS/FAIL verdict via gate checks. The single source of truth for "does the product work?" (AGENTS.md §12).
+
+## Usage
+```bash
+python scripts/verify_production.py saucedemo          # one site
+python scripts/verify_production.py --all-sites        # saucedemo + automationexercise
+python scripts/verify_production.py --flat             # flat mode (default is POM)
+```
+
+## Sites
+| site | URL | Story |
+|------|-----|-------|
+| `saucedemo` | https://www.saucedemo.com | login → add to cart → checkout (5+ tests) |
+| `automationexercise` | https://automationexercise.com | browse → add to cart → checkout (5+ tests) |
+
+## Gates (13 per site)
+LLM connected → Pipeline generation → No unresolved placeholders → Test function count → Evidence tracker calls → `@pytest.mark.evidence` decorators → POM imports → Pipeline unresolved → Execution (runs the generated tests) → Evidence JSON → Evidence steps → (verdict).
+
+## Key Logic
+- **Credentials (2026-08-03):** saucedemo gets a `CredentialProfile` (env-overridable `SAUCEDEMO_USERNAME`/`SAUCEDEMO_PASSWORD`, default `standard_user`/`secret_sauce`, matching `scripts/eval/eval_resolver.py`) passed to `TestOrchestrator` — without it the stateful scraper captures the login wall, not the cart
+- LLM provider from `LLM_PROVIDER` env (defaults to the `.env` openai-local config); avoids auto-detect which can pick the wrong provider when LM Studio is shared
+- Generates tests to `generated_tests/verify_<site>_<timestamp>/`, executes with a generated conftest (evidence tracker fixture), and validates evidence JSON + step counts
+- Failed runs are kept on disk for debugging (`[KEPT]`)
+
+## Related
+- `src/orchestrator.py` — `TestOrchestrator.run_pipeline()`
+- `src/llm_client.py` — LLM client
+- `scripts/eval/eval_harness.py` — static resolution accuracy (pre-commit quality gate)
+
 
 
 
@@ -296,7 +458,7 @@ CLI entry point. Parses args, loads data, calls `rebuild_store()`. Returns count
 
 ## Purpose
 
-QA Director Agent â€” routes test criteria, assigns priority, chains prerequisites, and flags ambiguities for human review. Takes the `StoryAnalysis` from the Ingestion Agent and produces a prioritised list of `Criterion` objects ready for the Script Synthesizer.
+QA Director Agent — routes test criteria, assigns priority, chains prerequisites, and flags ambiguities for human review. Takes the `StoryAnalysis` from the Ingestion Agent and produces a prioritised list of `Criterion` objects ready for the Script Synthesizer.
 
 ## Key Class: `QADirectorAgent`
 
@@ -309,7 +471,7 @@ QADirectorAgent(client=None)
 |---|---|---|
 | `client` | `LLMClient \| None` | Reserved for future LLM-based prioritisation |
 
-### `__call__(state: PipelineState) â†’ dict`
+### `__call__(state: PipelineState) → dict`
 
 LangGraph node interface. Returns a dict with:
 
@@ -337,7 +499,8 @@ Conditions with type `ambiguity` or `exploratory` are flagged `needs_clarificati
 
 
 
-# src/agents/generator.py â€” GeneratorAgent
+
+# src/agents/generator.py — GeneratorAgent
 
 ## Overview
 
@@ -355,9 +518,9 @@ Returns `{"skeleton_code": "import pytest\\n...", "validation_errors": []}`.
 
 ## Prompt Strategy
 
-- **System prompt:** ~25 lines â€” critical requirements (pytest sync format, double-brace placeholders only, no real selectors), placeholder format specification, example output.
+- **System prompt:** ~25 lines — critical requirements (pytest sync format, double-brace placeholders only, no real selectors), placeholder format specification, example output.
 - **User prompt:** Template with user story, test plan (or conditions fallback), and exact test count.
-- **Fallback:** When `state.test_plan` is empty, generator uses `state.conditions` directly â€” handles single-call compatibility.
+- **Fallback:** When `state.test_plan` is empty, generator uses `state.conditions` directly — handles single-call compatibility.
 
 ## Input/Output
 
@@ -369,14 +532,15 @@ Returns `{"skeleton_code": "import pytest\\n...", "validation_errors": []}`.
 
 ## Notes
 
-- `validation_errors` is reset to `[]` on each generation â€” the Validator re-evaluates from scratch.
+- `validation_errors` is reset to `[]` on each generation — the Validator re-evaluates from scratch.
 - Real `LLMClient.generate()` handles code extraction and whitespace normalisation; the agent just passes through.
 
 
 
 
 
-# src/agents/graph.py â€” SkeletonGraph
+
+# src/agents/graph.py — SkeletonGraph
 
 ## Overview
 
@@ -385,9 +549,9 @@ LangGraph `StateGraph` wiring for the multi-agent skeleton generation pipeline.
 ## Graph Topology
 
 ```
-[Planner] â†’ [Generator] â†’ [Validator]
-                          â†–_________â†™ (retry loop, max 2)
-                              â†“ (pass)
+[Planner] → [Generator] → [Validator]
+                          ↖_________↙ (retry loop, max 2)
+                              ↓ (pass)
                          [Return skeleton]
 ```
 
@@ -414,19 +578,19 @@ Returns `{"skeleton_code": str, "test_plan": str, "validation_errors": list[str]
 
 | Node | Class | Type | Description |
 |------|-------|------|-------------|
-| `plan` | `PlannerAgent` | async | Story â†’ test plan Markdown |
-| `generate` | `GeneratorAgent` | async | Plan â†’ skeleton code |
+| `plan` | `PlannerAgent` | async | Story → test plan Markdown |
+| `generate` | `GeneratorAgent` | async | Plan → skeleton code |
 | `validate` | `ValidatorAgent` | sync | Check skeleton, report errors |
 
 ## Routing
 
 `_should_retry(state)` is the conditional edge from `validate`:
-- **`"generate"`** â€” when `validation_errors` is non-empty AND `retry_count <= max_retries`
-- **`END`** â€” when no errors OR retries exhausted
+- **`"generate"`** — when `validation_errors` is non-empty AND `retry_count <= max_retries`
+- **`END`** — when no errors OR retries exhausted
 
 ## Integration
 
-Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED=1`. The `LLMClient` is injected at `__init__` â€” agents share the same provider/model configuration. All LLM calls happen within `asyncio.run()` via `graph.ainvoke()`.
+Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED=1`. The `LLMClient` is injected at `__init__` — agents share the same provider/model configuration. All LLM calls happen within `asyncio.run()` via `graph.ainvoke()`.
 
 ## Dependencies
 
@@ -438,11 +602,12 @@ Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED
 
 
 
+
 # `src/agents/ingestion.py`
 
 ## Purpose
 
-Ingestion Agent â€” analyses raw user story text into structured `StoryAnalysis`. Wraps the existing `SpecAnalyzer` for deterministic criteria extraction (handles numbered lists, comma-separated concerns, and LLM fallback for unstructured text). Optionally queries the RAG vector store for domain-specific pattern enrichment.
+Ingestion Agent — analyses raw user story text into structured `StoryAnalysis`. Wraps the existing `SpecAnalyzer` for deterministic criteria extraction (handles numbered lists, comma-separated concerns, and LLM fallback for unstructured text). Optionally queries the RAG vector store for domain-specific pattern enrichment.
 
 ## Key Class: `IngestionAgent`
 
@@ -454,9 +619,9 @@ IngestionAgent(client, rag_retriever=None)
 | Param | Type | Description |
 |---|---|---|
 | `client` | `LLMClient` | LLM client passed to `SpecAnalyzer` |
-| `rag_retriever` | `RAGRetriever \| None` | Optional â€” queries RAG for domain vocabulary |
+| `rag_retriever` | `RAGRetriever \| None` | Optional — queries RAG for domain vocabulary |
 
-### `__call__(state: PipelineState) â†’ dict`
+### `__call__(state: PipelineState) → dict`
 
 LangGraph node interface. Analyses `state.user_story` and returns a dict with:
 
@@ -466,7 +631,7 @@ LangGraph node interface. Analyses `state.user_story` and returns a dict with:
 ### Processing pipeline
 1. Run `SpecAnalyzer.analyze()` for criteria extraction
 2. Query RAG for domain patterns (best-effort, non-blocking)
-3. Map `SpecAnalyzer.TestCondition` â†’ pipeline `Criterion`
+3. Map `SpecAnalyzer.TestCondition` → pipeline `Criterion`
 4. Detect source format (numbered, gherkin, free-form)
 
 ## Dependencies
@@ -478,11 +643,12 @@ LangGraph node interface. Analyses `state.user_story` and returns a dict with:
 
 
 
+
 # `src/agents/pipeline_graph.py`
 
 ## Purpose
 
-Full-pipeline LangGraph `StateGraph` â€” orchestrates the complete test-generation flow through four nodes: Ingestion â†’ QA Director â†’ Script Synthesizer â†’ Postprocessor. Composes the existing `SkeletonGraph` as a sub-component of the Synthesizer node.
+Full-pipeline LangGraph `StateGraph` — orchestrates the complete test-generation flow through four nodes: Ingestion → QA Director → Script Synthesizer → Postprocessor. Composes the existing `SkeletonGraph` as a sub-component of the Synthesizer node.
 
 ## Key Class: `PipelineGraph`
 
@@ -493,39 +659,49 @@ PipelineGraph(client=None, rag_retriever=None, enable_checkpoint=True)
 
 | Param | Type | Description |
 |---|---|---|
-| `client` | `LLMClient \| None` | LLM client shared across agents. None â†’ mock agents |
+| `client` | `LLMClient \| None` | LLM client shared across agents. None → mock agents |
 | `rag_retriever` | `RAGRetriever \| None` | Optional RAG retriever for domain enrichment |
 | `enable_checkpoint` | `bool` | If True, pause after QA Director for human review |
 
 ### Methods
 
-- **`async run(user_story, base_url, ...)`** â†’ `PipelineState`: Execute full graph. With `auto_confirm=True`, runs to completion. Without it, pauses at human checkpoint.
-- **`async resume_after_checkpoint(state, confirmed_conditions)`** â†’ `PipelineState`: Resume a paused graph with tester-confirmed conditions.
-- **`compiled_graph`** â†’ `CompiledStateGraph`: Expose the compiled graph for testing.
+- **`async run(user_story, base_url, ...)`** → `PipelineState`: Execute full graph. With `auto_confirm=True`, runs to completion. Without it, pauses at human checkpoint.
+- **`async resume_after_checkpoint(state, confirmed_conditions)`** → `PipelineState`: Resume a paused graph with tester-confirmed conditions.
+- **`compiled_graph`** → `CompiledStateGraph`: Expose the compiled graph for testing.
 
 ## Graph Structure
 
 ```
-ingest â†’ plan â†’ [human checkpoint] â†’ synthesize â‡„ postprocess â†’ END
+ingest → plan → [human checkpoint] → synthesize ⇄ postprocess → END
 ```
 
 ### Nodes
-| Node | Agent | Input â†’ Output |
+| Node | Agent | Input → Output |
 |---|---|---|
-| `ingest` | `IngestionAgent` | user_story â†’ StoryAnalysis |
-| `plan` | `QADirectorAgent` | StoryAnalysis â†’ test_conditions |
-| `synthesize` | `ScriptSynthesizerAgent` | test_conditions â†’ test_code |
-| `postprocess` | (inline) | test_code â†’ validated + errors |
+| `ingest` | `IngestionAgent` | user_story → StoryAnalysis |
+| `plan` | `QADirectorAgent` | StoryAnalysis → test_conditions |
+| `synthesize` | `ScriptSynthesizerAgent` | test_conditions → test_code |
+| `postprocess` | (inline) | test_code → validated + errors |
 
 ### Conditional Edges
-- **After plan:** `auto_confirm` or `plan_confirmed` â†’ synthesize; else â†’ END (pause)
-- **After synthesize:** errors + retries left â†’ retry synthesize; else â†’ postprocess
+- **After plan:** `auto_confirm` or `plan_confirmed` → synthesize; else → END (pause)
+- **After synthesize:** errors + retries left → retry synthesize; else → postprocess
 
 ## Dependencies
 
-- `langgraph` (optional â€” graph degrades gracefully if not installed)
+- `langgraph` (optional — graph degrades gracefully if not installed)
 - `src.agents.ingestion`, `src.agents.director`, `src.agents.synthesizer`
 - `src.agents.pipeline_state`
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `PipelineGraph`
+- `_after_qa_director(state: PipelineState) -> str` (function) — Route after QA Director: checkpoint, then route by persona.
+- `_after_synthesizer(state: PipelineState) -> str` (function) — Route after Synthesizer: retry on failure, or proceed.
+- `_route_entry(state: PipelineState) -> str` (function) — Route the entry point: document mode goes through parsing first.
+
 
 
 
@@ -577,14 +753,36 @@ Key fields:
 - `typing.Any`
 
 
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 4 items):
+
+### `DataSchemaChange` (class)
+
+A single data schema modification extracted from a spec document.
+
+### `ChangeDelta` (class)
+
+A single change extracted from a spec document.
+
+### `ImpactMap` (class)
+
+Cross-reference of changes to affected test areas.
+
+### `ConsolidatedReport` (class)
+
+Final output of the document-driven pipeline.
 
 
 
-# src/agents/planner.py â€” PlannerAgent
+
+
+
+# src/agents/planner.py — PlannerAgent
 
 ## Overview
 
-LangGraph node: parses user story + acceptance criteria into a structured test plan (Markdown). This node does NOT write code â€” it outputs step descriptions tagged with action types (GOTO, CLICK, FILL, ASSERT).
+LangGraph node: parses user story + acceptance criteria into a structured test plan (Markdown). This node does NOT write code — it outputs step descriptions tagged with action types (GOTO, CLICK, FILL, ASSERT).
 
 ## API
 
@@ -598,9 +796,9 @@ Returns `{"test_plan": "## Test Plan\\n### test_01_..."}`.
 
 ## Prompt Strategy
 
-- **System prompt:** ~30 lines of structured instructions â€” output format specification, prerequisite step rules, short description discipline.
+- **System prompt:** ~30 lines of structured instructions — output format specification, prerequisite step rules, short description discipline.
 - **User prompt:** Template with user story, prepared conditions, and exact test count.
-- **Separation of concerns:** The planner outputs Markdown, not code. This is a smaller, more focused task than generating code directly â€” reduces hallucination.
+- **Separation of concerns:** The planner outputs Markdown, not code. This is a smaller, more focused task than generating code directly — reduces hallucination.
 
 ## Input/Output
 
@@ -619,7 +817,36 @@ Returns `{"test_plan": "## Test Plan\\n### test_01_..."}`.
 
 
 
-# src/agents/state.py â€” WorkflowState
+
+# `src/agents/prompt_safety.py` — Safe Prompt Construction
+
+## Purpose
+Wraps dynamic user input in XML tags using Python t-strings (PEP 750) to prevent prompt injection and help the LLM distinguish developer-written structure from user-provided data.
+
+## Function: `safe_prompt(template: str) -> str`
+Wraps each template variable in `<variable_name>...</variable_name>` XML tags. Uses `string.Template`-style interpolation with `t` prefix.
+
+## Usage
+```python
+from src.agents.prompt_safety import safe_prompt
+
+prompt = safe_prompt(
+    t"""<task>Generate tests for:</task>
+<user_input>{user_story}</user_input>"""
+)
+```
+
+## Related
+- `src/agents/planner.py` — consumer
+- `src/agents/generator.py` — consumer
+- PEP 750 — Template Strings (t-strings)
+
+
+
+
+
+
+# src/agents/state.py — WorkflowState
 
 ## Overview
 
@@ -642,9 +869,10 @@ Pydantic `BaseModel` defining the serialisable workflow state passed between Lan
 
 ## Design Notes
 
-- **Serialisable:** No non-trivial objects â€” only primitives, strings, and lists. LLMClient is injected at the graph level, not in state.
+- **Serialisable:** No non-trivial objects — only primitives, strings, and lists. LLMClient is injected at the graph level, not in state.
 - **Retry semantics:** `retry_count` is incremented by the Validator on failure and preserved on success (never reset). The conditional edge routes to END when `retry_count > max_retries`.
 - **Fallback fields:** `raw_dom_snapshot` reserved for future vision model input (Phase 1d synergy).
+
 
 
 
@@ -654,7 +882,7 @@ Pydantic `BaseModel` defining the serialisable workflow state passed between Lan
 
 ## Purpose
 
-Script Synthesizer Agent â€” test conditions â†’ pytest skeleton code. Wraps the existing `SkeletonGraph` (Planner â†’ Generator â†’ Validator retry loop) for skeleton generation. When no LLM client is available, produces a placeholder skeleton with `{{GOTO}}`/`{{ASSERT}}` placeholders.
+Script Synthesizer Agent — test conditions → pytest skeleton code. Wraps the existing `SkeletonGraph` (Planner → Generator → Validator retry loop) for skeleton generation. When no LLM client is available, produces a placeholder skeleton with `{{GOTO}}`/`{{ASSERT}}` placeholders.
 
 ## Key Class: `ScriptSynthesizerAgent`
 
@@ -667,7 +895,7 @@ ScriptSynthesizerAgent(client=None)
 |---|---|---|
 | `client` | `LLMClient \| None` | If provided, builds `SkeletonGraph` for real generation |
 
-### `__call__(state: PipelineState) â†’ dict`
+### `__call__(state: PipelineState) → dict`
 
 LangGraph node interface. Returns a dict with:
 
@@ -676,10 +904,10 @@ LangGraph node interface. Returns a dict with:
 - `retry_count`: reset to 0 on success
 
 ### Generation paths
-1. **LLM path** (client provided): Calls `SkeletonGraph.run()` with conditions text â†’ Planner â†’ Generator â†’ Validator â†’ returns skeleton code
+1. **LLM path** (client provided): Calls `SkeletonGraph.run()` with conditions text → Planner → Generator → Validator → returns skeleton code
 2. **Fallback path** (no client): Produces minimal skeleton:
-   - `happy_path` conditions â†’ `{{GOTO:home}}` + `{{ASSERT:description}}`
-   - Other types â†’ `pytest.skip('type: description â€” TODO')`
+   - `happy_path` conditions → `{{GOTO:home}}` + `{{ASSERT:description}}`
+   - Other types → `pytest.skip('type: description — TODO')`
 
 ### Placeholder skeleton format
 ```python
@@ -692,20 +920,21 @@ def test_tc01_01(page: Page, evidence_tracker):
 
 ## Dependencies
 
-- `src.agents.graph.SkeletonGraph` (Planner â†’ Generator â†’ Validator)
+- `src.agents.graph.SkeletonGraph` (Planner → Generator → Validator)
 - `src.agents.pipeline_state` (data types)
 
 
 
 
 
-# src/agents/validator.py â€” ValidatorAgent
+
+# src/agents/validator.py — ValidatorAgent
 
 ## Overview
 
 LangGraph node: inspects the Generator's skeleton output and reports violations. Synchronous (no LLM calls). Three checks:
 
-1. **Forbidden locators:** Reuses `SkeletonValidator` â€” catches CSS selectors, XPath, `page.locator()` with real selectors.
+1. **Forbidden locators:** Reuses `SkeletonValidator` — catches CSS selectors, XPath, `page.locator()` with real selectors.
 2. **Placeholder count:** Ensures skeleton contains at least one placeholder.
 3. **Journey count match:** Parses test functions and compares count against `expected_test_count`.
 
@@ -725,35 +954,36 @@ Returns:
 
 - `retry_count` is **incremented** on each failure, **preserved** on success.
 - The graph's conditional edge (`_should_retry`) routes back to Generator when `validation_errors` is non-empty and `retry_count <= max_retries`.
-- On success, `retry_count` reflects the total number of retries used â€” useful for monitoring.
+- On success, `retry_count` reflects the total number of retries used — useful for monitoring.
 
 ## Dependencies
 
 - `SkeletonValidator` from `src.skeleton_validator`
 - `SkeletonParser` from `src.skeleton_parser`
-- No LLM â€” purely deterministic pattern matching
+- No LLM — purely deterministic pattern matching
 
 
 
 
 
-# src/agents/__init__.py â€” Package Init
+
+# src/agents/__init__.py — Package Init
 
 ## Overview
 
-Package init for the LangGraph multi-agent pipeline system (Phase 1a-c). Lazy-imports agent modules to avoid hard dependency on langgraph. Degrades gracefully when langgraph is not installed â€” the linear pipeline continues working normally.
+Package init for the LangGraph multi-agent pipeline system (Phase 1a-c). Lazy-imports agent modules to avoid hard dependency on langgraph. Degrades gracefully when langgraph is not installed — the linear pipeline continues working normally.
 
 Enabled by default when langgraph is available (`pip install ai-playwright-generator[langgraph]`). Set `LANGGRAPH_ENABLED=0` to force single-call linear mode.
 
 ## Public API
 
-- `PipelineGraph` â€” Full multi-agent graph: Ingestion â†’ QA Director â†’ Script Synthesizer â†’ Postprocessor
-- `SkeletonGraph` â€” Skeleton-generation sub-graph: Planner â†’ Generator â†’ Validator (retry loop)
-- `PipelineState`, `Criterion`, `StoryAnalysis` â€” Dataclass state types for the full pipeline
-- `WorkflowState` â€” Pydantic state model for the skeleton-generation sub-phase
-- `IngestionAgent` â€” Story analysis + RAG enrichment
-- `QADirectorAgent` â€” Priority assignment + prerequisite chaining
-- `ScriptSynthesizerAgent` â€” Skeleton code generation
+- `PipelineGraph` — Full multi-agent graph: Ingestion → QA Director → Script Synthesizer → Postprocessor
+- `SkeletonGraph` — Skeleton-generation sub-graph: Planner → Generator → Validator (retry loop)
+- `PipelineState`, `Criterion`, `StoryAnalysis` — Dataclass state types for the full pipeline
+- `WorkflowState` — Pydantic state model for the skeleton-generation sub-phase
+- `IngestionAgent` — Story analysis + RAG enrichment
+- `QADirectorAgent` — Priority assignment + prerequisite chaining
+- `ScriptSynthesizerAgent` — Skeleton code generation
 
 ## Usage
 
@@ -771,13 +1001,21 @@ print(result.test_code)
 
 ## Dependencies
 
-- `langgraph>=1.2.9` (optional â€” lazy import, degrades if not installed)
+- `langgraph>=1.2.9` (optional — lazy import, degrades if not installed)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_lazy_import(name: str) -> Any` (function) — Lazy-import a module that depends on optional langgraph.
 
 
 
 
 
-# `src/cli/color.py` â€” ANSI Colour Helpers
+
+# `src/cli/color.py` — ANSI Colour Helpers
 
 ## Purpose
 
@@ -803,21 +1041,22 @@ Wraps text with `\033[{code}m{text}\033[0m` only when stdout is a TTY.
 
 | Function | ANSI Code | Usage |
 |----------|-----------|-------|
-| `phosphor_green(text)` | `100` | Bright green â€” selected/highlighted menu items |
-| `dim_green(text)` | `2;32` | Dim/half-bright green â€” non-selected items |
-| `inverse_green(text)` | `7;32` | Inverse video â€” green background, black text â€” the `>` cursor |
-| `phosphor_reset()` | â€” | Returns `\033[0m` reset code as standalone string |
+| `phosphor_green(text)` | `100` | Bright green — selected/highlighted menu items |
+| `dim_green(text)` | `2;32` | Dim/half-bright green — non-selected items |
+| `inverse_green(text)` | `7;32` | Inverse video — green background, black text — the `>` cursor |
+| `phosphor_reset()` | — | Returns `\033[0m` reset code as standalone string |
 
 ## Design Patterns
 
-- **Conditional formatting**: All colours are no-ops when piped â€” prevents ANSI codes in redirected output.
+- **Conditional formatting**: All colours are no-ops when piped — prevents ANSI codes in redirected output.
 - **Retro terminal aesthetic**: Phosphor colours match the CHOICE-style retro UI in `retro_ui.py`.
 
 
 
 
 
-# `src/cli/config.py` â€” CLI Config Re-exports
+
+# `src/cli/config.py` — CLI Config Re-exports
 
 ## Purpose
 
@@ -836,13 +1075,14 @@ Backwards-compatible re-export layer. All enums and defaults are defined in `src
 
 ## Design Patterns
 
-- **Alias module**: Zero logic â€” pure re-exports to maintain import compatibility during refactoring.
+- **Alias module**: Zero logic — pure re-exports to maintain import compatibility during refactoring.
 
 
 
 
 
-# `src/cli/evidence_generator.py` â€” Evidence Generator
+
+# `src/cli/evidence_generator.py` — Evidence Generator
 
 ## Purpose
 
@@ -860,9 +1100,9 @@ Handles screenshot capture and evidence generation for test execution verificati
 | `capture_stage` | `str` | Stage label (`entry`, `step`, `outcome`, `bug`) |
 | `description` | `str` | Human-readable description |
 | `file_size` | `int` | Bytes |
-| `dimensions` | `tuple[int, int]` | Width Ã— height (from PIL, `(0,0)` if unavailable) |
+| `dimensions` | `tuple[int, int]` | Width × height (from PIL, `(0,0)` if unavailable) |
 
-- `to_dict() -> dict` â€” Serialises metadata to a plain dict.
+- `to_dict() -> dict` — Serialises metadata to a plain dict.
 
 ### `EvidenceCollection`
 
@@ -873,7 +1113,7 @@ Handles screenshot capture and evidence generation for test execution verificati
 | `console_logs` | `list[dict]` | Console log entries |
 | `network_requests` | `list[dict]` | Network request captures |
 
-- `to_dict() -> dict` â€” Full serialisation including collection timestamp.
+- `to_dict() -> dict` — Full serialisation including collection timestamp.
 
 ## Classes
 
@@ -954,11 +1194,11 @@ Writes a plain-text bug report with all captured evidence.
 
 ### `capture_screenshot(page, test_case, capture_stage="step") -> str | None`
 
-Convenience wrapper â€” creates an `EvidenceGenerator` and captures a single screenshot.
+Convenience wrapper — creates an `EvidenceGenerator` and captures a single screenshot.
 
 ### `generate_test_evidence(test_cases, output_path) -> str`
 
-Convenience wrapper â€” creates a visual HTML report.
+Convenience wrapper — creates a visual HTML report.
 
 ## Dependencies
 
@@ -971,7 +1211,8 @@ Convenience wrapper â€” creates a visual HTML report.
 
 
 
-# `src/cli/input_parser.py` â€” Multi-Format Input Parser
+
+# `src/cli/input_parser.py` — Multi-Format Input Parser
 
 ## Purpose
 
@@ -983,16 +1224,16 @@ Intelligent parsing of various input formats into standardised `TestCase` object
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `title` | `str` | â€” | Test case title |
-| `description` | `str` | â€” | Full description |
+| `title` | `str` | — | Test case title |
+| `description` | `str` | — | Full description |
 | `preconditions` | `list[str]` | `[]` | Prerequisites |
 | `test_data` | `dict` | `{}` | Test data inputs |
 | `expected_outcome` | `str` | `""` | Expected result |
 | `test_type` | `str` | `"functional"` | `happy_path`, `validation`, `error_handling`, `edge_case` |
 | `priority` | `str` | `"medium"` | `high`, `medium`, `low` |
 
-- `to_dict() -> dict` â€” Serialises with `created_at` timestamp.
-- `to_prompt() -> str` â€” Converts to LLM-friendly prompt string.
+- `to_dict() -> dict` — Serialises with `created_at` timestamp.
+- `to_prompt() -> str` — Converts to LLM-friendly prompt string.
 
 ### `ParsedInput`
 
@@ -1003,8 +1244,8 @@ Intelligent parsing of various input formats into standardised `TestCase` object
 | `raw_input` | `str` | Original text |
 | `metadata` | `dict` | Confidence, detection method, timestamp |
 
-- `to_dict() -> dict` â€” Serialises with raw input sample (truncated to 200 chars).
-- `save_to_json(output_path) -> str` â€” Writes to JSON file.
+- `to_dict() -> dict` — Serialises with raw input sample (truncated to 200 chars).
+- `save_to_json(output_path) -> str` — Writes to JSON file.
 
 ## Classes
 
@@ -1045,7 +1286,7 @@ Extracts metadata (issue key, summary), then generates `TestCase` objects from a
 - **validation**: "empty", "missing", "null"
 - **functional**: default
 
-Priority from keywords: "required"/"must" â†’ high, "should" â†’ medium, else â†’ low.
+Priority from keywords: "required"/"must" → high, "should" → medium, else → low.
 
 ### `GherkinParser`
 
@@ -1053,7 +1294,7 @@ Parses Gherkin/BDD format.
 
 #### `parse(text) -> list[TestCase]`
 
-Extracts `Scenario:` blocks, splits steps into `Given`/`When`/`Then` groups. Maps `Given` â†’ preconditions, `Then` â†’ expected outcome.
+Extracts `Scenario:` blocks, splits steps into `Given`/`When`/`Then` groups. Maps `Given` → preconditions, `Then` → expected outcome.
 
 ### `BulletParser`
 
@@ -1065,7 +1306,7 @@ Extracts lines starting with `-`, `*`, or `1.`. Uses same keyword heuristics as 
 
 ### `InputParser`
 
-Main orchestrator â€” multi-format parser with auto-detection.
+Main orchestrator — multi-format parser with auto-detection.
 
 #### `__init__(detection_method=DetectionMode.AUTO)`
 
@@ -1075,7 +1316,7 @@ Routes to appropriate parser based on auto-detection or explicit override.
 
 #### `parse_json(json_str) -> ParsedInput`
 
-Parses JSON strings â€” handles both list and dict formats (including wrapper `{"test_cases": [...]}`).
+Parses JSON strings — handles both list and dict formats (including wrapper `{"test_cases": [...]}`).
 
 #### `parse_and_save(text, output_dir=None) -> str`
 
@@ -1099,7 +1340,8 @@ Parses and saves to timestamped JSON file in `EVIDENCE_DIR` or custom directory.
 
 
 
-# `src/cli/main.py` â€” CLI Interactive Entry Point
+
+# `src/cli/main.py` — CLI Interactive Entry Point
 
 ## Purpose
 
@@ -1176,14 +1418,14 @@ Each menu item has a corresponding `_..._inline` function that calls the appropr
 
 ### `cmd_generate(args, parser) -> int`
 
-Legacy parameter-based command. Parses input â†’ runs analysis â†’ generates tests â†’ evidence â†’ reports.
+Legacy parameter-based command. Parses input → runs analysis → generates tests → evidence → reports.
 
 ### `main() -> int`
 
 Entry point with `argparse`:
-- No arguments â†’ `interactive_session()` (default)
-- `generate` subcommand â†’ legacy parameter-based generation
-- `test` subcommand â†’ placeholder for test suite
+- No arguments → `interactive_session()` (default)
+- `generate` subcommand → legacy parameter-based generation
+- `test` subcommand → placeholder for test suite
 
 ## Legacy Functions
 
@@ -1196,7 +1438,7 @@ Entry point with `argparse`:
 
 ## Architecture
 
-- **Slim orchestrator**: Main loop is purely routing â€” all logic lives in `menu_renderer` and `pipeline_runner`.
+- **Slim orchestrator**: Main loop is purely routing — all logic lives in `menu_renderer` and `pipeline_runner`.
 - **UTF-8 handling**: Dual encoding fix (module-level + `__init__` import) for Windows Git Bash.
 - **Context-sensitive menu**: Items appear/disappear based on `Session` state flags.
 
@@ -1204,7 +1446,8 @@ Entry point with `argparse`:
 
 
 
-# `src/cli/menu_renderer.py` â€” CLI Menu Rendering and Input Helpers
+
+# `src/cli/menu_renderer.py` — CLI Menu Rendering and Input Helpers
 
 ## Purpose
 
@@ -1216,7 +1459,7 @@ Renders a CHOICE-inspired retro terminal UI: green-on-black phosphor aesthetic w
 
 #### `_running_in_git_bash() -> bool`
 
-Checks `terminal_adapter.terminal.running_in_git_bash()`. In Git Bash, `msvcrt` functions don't work â€” must use `select`-based fallback.
+Checks `terminal_adapter.terminal.running_in_git_bash()`. In Git Bash, `msvcrt` functions don't work — must use `select`-based fallback.
 
 ### Input Drain Functions
 
@@ -1330,15 +1573,26 @@ Displays package metadata from `package_manifest.json`.
 
 Opens a file using the system default application (`os.startfile` on Windows, `open` on macOS, `xdg-open` on Linux).
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `configure_llm`
+- `_default_model(provider: str) -> str` (function) — (no docstring)
+
+### Internal utilities
+- `_next_selected() -> int` (function) — Return and increment the default selected index for the next menu.
 
 
 
 
-# `src/cli/pipeline_runner.py` â€” CLI Pipeline Execution
+
+
+# `src/cli/pipeline_runner.py` — CLI Pipeline Execution
 
 ## Purpose
 
-Handles pipeline execution, test running, and report generation for the CLI. Extracted from `cli/main.py` for easier debugging â€” pure extraction, no refactoring.
+Handles pipeline execution, test running, and report generation for the CLI. Extracted from `cli/main.py` for easier debugging — pure extraction, no refactoring.
 
 ## Export
 
@@ -1435,13 +1689,54 @@ Discovers and loads an existing package. Populates session with manifest, run re
 
 Automated self-healing via CLI. Runs `SelfHealingRunner.heal()` on the saved test file, displays fix counts and per-patch diffs. If failures remain after healing, offers to re-run tests or try interactive locator repair (`repair_locator_cli`).
 
-Phase 2 of the ML Engineering roadmap â€” see `src/self_healing.py`.
+Phase 2 of the ML Engineering roadmap — see `src/self_healing.py`.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 5 items):
+
+### `build_test_table_interactive(session: Any) -> None` (function)
+
+Expand the signed-off plan into concrete test rows for review.
+
+### `parse_target_urls(base_url: str, urls_input: str) -> list[str]` (function)
+
+*(no docstring)*
+
+### `generate_bug_report(session: Any) -> None` (function)
+
+Generate a bug report from the last test run's failures.
+
+### `generate_evidence_html(session: Any) -> None` (function)
+
+Generate static Gantt & heatmap HTML reports from evidence data.
+
+### `bundle_evidence_zip(session: Any) -> None` (function)
+
+Create a zip archive of all evidence files for the current session.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (5 items). Grouped under the public function that uses them:
+
+### `build_test_plan`
+- `_display_conditions_table(plan: Any) -> None` (function) — Print a formatted table of all conditions in the plan.
+- `_edit_condition_interactive(session: Any) -> None` (function) — Let the user pick a condition by ID and edit its fields.
+
+### `build_test_table_interactive`
+- `_display_test_rows_table(table: Any) -> None` (function) — Print a formatted table of all test rows.
+- `_edit_test_row_interactive(session: Any) -> None` (function) — Let the user pick a test row by ID and edit its fields.
+
+### `run_pipeline`
+- `_select_conditions_for_generation(session: Any) -> list[TestCondition]` (function) — Choose generation conditions: confirmed test rows first, then plan conditions.
 
 
 
 
 
-# `src/cli/report_generator.py` â€” Report Generator
+
+# `src/cli/report_generator.py` — Report Generator
 
 ## Purpose
 
@@ -1463,7 +1758,7 @@ Generates test execution reports in multiple formats: Confluence-compatible HTML
 | `attachments` | `list[str]` | File attachments |
 | `custom_fields` | `dict` | Extra metadata (e.g., `failure_reason`) |
 
-- `to_dict() -> dict` â€” Serialises for JSON output.
+- `to_dict() -> dict` — Serialises for JSON output.
 
 ### `TestExecutionResult`
 
@@ -1520,11 +1815,12 @@ Routes to format-specific output:
 
 
 
-# `src/cli/retro_ui.py` â€” CHOICE-Style Retro Terminal UI
+
+# `src/cli/retro_ui.py` — CHOICE-Style Retro Terminal UI
 
 ## Purpose
 
-Renders green-on-black, box-drawing menus reminiscent of the classic CHOICE mainframe menu system. Cross-platform using ANSI escape codes â€” no curses dependency.
+Renders green-on-black, box-drawing menus reminiscent of the classic CHOICE mainframe menu system. Cross-platform using ANSI escape codes — no curses dependency.
 
 ## Screen Management
 
@@ -1535,13 +1831,13 @@ Renders green-on-black, box-drawing menus reminiscent of the classic CHOICE main
 | `hide_cursor()` | Hides terminal cursor (`\033[?25l`) |
 | `show_cursor()` | Shows terminal cursor (`\033[?25h`) |
 
-All functions detect TTY vs pipe â€” non-TTY output uses fallback separators for CI readability.
+All functions detect TTY vs pipe — non-TTY output uses fallback separators for CI readability.
 
 ## Box Drawing
 
 ### `_BoxChars` dataclass
 
-Unicode box-drawing characters: `â”Œ`, `â”`, `â””`, `â”˜`, `â”€`, `â”‚`, `â”¤`, `â”œ`, `â”¬`, `â”´`, `â”¼`.
+Unicode box-drawing characters: `┌`, `┐`, `└`, `┘`, `─`, `│`, `┤`, `├`, `┬`, `┴`, `┼`.
 
 ### `_color_line(line, bright=False) -> str`
 
@@ -1573,10 +1869,10 @@ Strips ANSI escapes and returns visible character length.
 
 Renders a CHOICE-style header box with title and optional subtitle:
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  AI PLAYWRIGHT TEST GENERATOR                              â”‚
-â”‚  Generate Playwright tests from user stories with AI       â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+┌─────────────────────────────────────────────────────────────┐
+│  AI PLAYWRIGHT TEST GENERATOR                              │
+│  Generate Playwright tests from user stories with AI       │
+├─────────────────────────────────────────────────────────────┤
 ```
 
 ### `render_menu(items, selected=0, group_labels=None) -> None`
@@ -1593,7 +1889,7 @@ Renders a bottom shortcut bar with `[key]label` pairs, truncated to fit terminal
 
 ### `render_separator() -> None`
 
-Horizontal rule inside a box: `â”‚â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”‚`
+Horizontal rule inside a box: `│─────────────────────────────────────│`
 
 ### `render_status_bar(message, shortcuts=None) -> None`
 
@@ -1613,7 +1909,8 @@ Like `prompt_input` but rejects empty values with a retry loop.
 
 
 
-# `src/cli/run_results_display.py` â€” Structured Run Results Display
+
+# `src/cli/run_results_display.py` — Structured Run Results Display
 
 ## Purpose
 
@@ -1629,7 +1926,7 @@ Returns a coloured status badge: `[PASS]` (green), `[FAIL]` (red), `[ERROR]` (re
 
 Single-line coloured summary:
 ```
-âœ… Run Results: âœ… 5 passed, 1 failed, 0 errors, 2 skipped in 12.34s
+✅ Run Results: ✅ 5 passed, 1 failed, 0 errors, 2 skipped in 12.34s
 ```
 
 Uses `phosphor_green` for the overall badge when all tests pass.
@@ -1639,13 +1936,13 @@ Uses `phosphor_green` for the overall badge when all tests pass.
 ASCII table of per-test results:
 ```
   STATUS   TEST NAME                                DUR
-  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  ──────────────────────────────────────────────────────
   [PASS]   test_01_navigate_to_home                0.45s
   [FAIL]   test_02_login_with_valid_credentials     1.23s
            AssertionError: Expected "Welcome" to be visible...
 ```
 
-- Dynamic column width (clamped 40â€“80 chars)
+- Dynamic column width (clamped 40–80 chars)
 - Failed tests show truncated error messages (3 lines max)
 
 ### `render_failure_details(run: RunResult) -> None`
@@ -1653,7 +1950,7 @@ ASCII table of per-test results:
 Classified failure details using `classify_failure()`:
 ```
   Failure Classification:
-  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  ─────────────────────────────────────
   [1] test_02_login_with_valid_credentials
       Category:  locator_timeout
       Locator:   `input[name="email"]`
@@ -1678,7 +1975,7 @@ Prints raw pytest output. If `expanded=False`, prompts user with `[y/N]` first.
 
 ### `render_run_results(run: RunResult, show_raw=False) -> None`
 
-Combined display: metrics â†’ table â†’ failure details â†’ optional raw output.
+Combined display: metrics → table → failure details → optional raw output.
 
 ### `render_run_history_summary() -> None`
 
@@ -1688,7 +1985,8 @@ Displays run history using `format_full_history_summary()` from `src.run_history
 
 
 
-# `src/cli/session.py` â€” CLI Session State Management
+
+# `src/cli/session.py` — CLI Session State Management
 
 ## Purpose
 
@@ -1802,7 +2100,8 @@ Factory that creates a `Session` populated with environment-based defaults.
 
 
 
-# `src/cli/terminal_adapter.py` â€” Terminal Abstraction
+
+# `src/cli/terminal_adapter.py` — Terminal Abstraction
 
 ## Purpose
 
@@ -1812,7 +2111,7 @@ Centralises TTY/PTY handling for key reading and buffer flushing. Provides a sin
 
 ### `running_in_git_bash() -> bool`
 
-Detects Git Bash (MINGW64) via `MSYSTEM` or `MSYS_WINVERSION` environment variables. In Git Bash, `msvcrt` functions don't work â€” must use `select`-based fallback.
+Detects Git Bash (MINGW64) via `MSYSTEM` or `MSYS_WINVERSION` environment variables. In Git Bash, `msvcrt` functions don't work — must use `select`-based fallback.
 
 ### `flush() -> None`
 
@@ -1824,11 +2123,11 @@ Platform-aware single keypress reader:
 
 **Windows (native):**
 - Uses `msvcrt.getwch()`
-- Detects arrow keys via `\x00`/`\xe0` prefix + `H` (Up â†’ `^`) / `P` (Down â†’ `v`)
+- Detects arrow keys via `\x00`/`\xe0` prefix + `H` (Up → `^`) / `P` (Down → `v`)
 - Falls back to `sys.stdin.read(1)`
 
 **Git Bash:**
-- Uses `_read_key_git_bash()` â€” threaded `select`-based byte-level read
+- Uses `_read_key_git_bash()` — threaded `select`-based byte-level read
 - Fast path: direct `sys.stdin.readline()` (works for StringIO tests and piped input)
 - Slow path: background thread with `os.read()` and 0.5s select timeout, 3s total timeout
 
@@ -1839,10 +2138,10 @@ Threaded key reader for Git Bash. Collects bytes from stdin, handles escape sequ
 ### `_normalize_git_bash_input(raw: str) -> str`
 
 Normalises raw input:
-- `\r`, `\n`, `\r\n` â†’ `\r`
-- `\x1b[A` â†’ `^` (Up arrow)
-- `\x1b[B` â†’ `v` (Down arrow)
-- `\x1bOA` / `\x1bOB` â†’ `^` / `v` (alternate arrow key sequences)
+- `\r`, `\n`, `\r\n` → `\r`
+- `\x1b[A` → `^` (Up arrow)
+- `\x1b[B` → `v` (Down arrow)
+- `\x1bOA` / `\x1bOB` → `^` / `v` (alternate arrow key sequences)
 
 ## Module-Level Instance
 
@@ -1856,7 +2155,8 @@ Singleton used by `menu_renderer.py`. Can be replaced via `set_terminal_adapter(
 
 
 
-# `src/cli/testing_terminal.py` â€” Testing Terminal Adapter
+
+# `src/cli/testing_terminal.py` — Testing Terminal Adapter
 
 ## Purpose
 
@@ -1870,7 +2170,7 @@ Extends `TerminalAdapter` with a simple string queue.
 
 | Parameter | Description |
 |-----------|-------------|
-| `inputs` | Iterable of strings â€” `read_key()` returns them in order |
+| `inputs` | Iterable of strings — `read_key()` returns them in order |
 | `git_bash` | If `True`, simulates Git Bash environment |
 
 ### `read_key() -> str`
@@ -1905,11 +2205,12 @@ set_terminal_adapter(adapter)
 
 
 
-# `src/cli/test_case_orchestrator.py` â€” Test Case Orchestrator
+
+# `src/cli/test_case_orchestrator.py` — Test Case Orchestrator
 
 ## Purpose
 
-Manages orchestration of test generation workflow: parsing â†’ analysis â†’ dependency ordering â†’ file generation. Uses the same pipeline as the Streamlit app (`src.orchestrator.TestOrchestrator`) for feature parity.
+Manages orchestration of test generation workflow: parsing → analysis → dependency ordering → file generation. Uses the same pipeline as the Streamlit app (`src.orchestrator.TestOrchestrator`) for feature parity.
 
 ## Data Class: `TestOrchestrationResult`
 
@@ -1919,7 +2220,7 @@ Manages orchestration of test generation workflow: parsing â†’ analysis â�
 | `summary` | `dict` | Orchestration summary |
 | `errors` | `list[str]` | Error messages |
 
-- `to_dict() -> dict` â€” Serialises with timestamp.
+- `to_dict() -> dict` — Serialises with timestamp.
 
 ## Class: `TestCaseOrchestrator`
 
@@ -1929,7 +2230,7 @@ Initialises with a `KeywordAnalyzer` instance.
 
 ### `process(raw_input, explicit_format=None, url=None, output_dir="generated_tests") -> TestOrchestrationResult`
 
-Full pipeline: parse â†’ analyze â†’ order â†’ generate. Accepts raw text input.
+Full pipeline: parse → analyze → order → generate. Accepts raw text input.
 
 ### `process_parsed(parsed, url=None, output_dir="generated_tests") -> TestOrchestrationResult`
 
@@ -1946,7 +2247,7 @@ Runs `KeywordAnalyzer.analyze()` on each test case in the parsed input.
 Topological sort by dependencies:
 1. Cases with no dependencies first
 2. Then cases whose dependencies are satisfied
-3. Within same level: ordered by complexity (low â†’ high)
+3. Within same level: ordered by complexity (low → high)
 
 #### `_check_dependencies_satisfied(case, completed_ids) -> bool`
 
@@ -1954,7 +2255,7 @@ Checks if `AnalyzedTestCase.dependencies` are met.
 
 #### `_complexity_score(complexity: str) -> int`
 
-Maps `"low" â†’ 1`, `"medium" â†’ 2`, `"high" â†’ 3`.
+Maps `"low" → 1`, `"medium" → 2`, `"high" → 3`.
 
 #### `_generate_test_files(cases, url, output_dir, raw_requirements) -> list[str]`
 
@@ -1981,11 +2282,11 @@ Generates a single test method from an `AnalyzedTestCase`.
 #### `_generate_steps_from_description(case) -> list[str]`
 
 Keyword-based step generation:
-- "navigate"/"go to"/"open" â†’ `page.goto()`
-- "login"/"sign in" â†’ fill credentials + click login
-- "form"/"fill" â†’ `page.fill()` for suggested data
-- "click"/"submit" â†’ `page.click()`
-- "search" â†’ fill + click search
+- "navigate"/"go to"/"open" → `page.goto()`
+- "login"/"sign in" → fill credentials + click login
+- "form"/"fill" → `page.fill()` for suggested data
+- "click"/"submit" → `page.click()`
+- "search" → fill + click search
 
 #### `_sanitize_name(name) -> str`
 
@@ -2003,7 +2304,8 @@ Creates orchestration summary with counts, file names, complexity distribution, 
 
 
 
-# `src/cli/__init__.py` â€” CLI Module Entry Point
+
+# `src/cli/__init__.py` — CLI Module Entry Point
 
 ## Purpose
 
@@ -2011,7 +2313,7 @@ UTF-8 encoding fix for Windows Git Bash (MINGW64). This file is imported **first
 
 ## Problem Solved
 
-On Windows Git Bash, `sys.stdout.encoding` defaults to `cp1252`, which cannot encode box-drawing characters (`â”Œ`, `â”€`, `â”`, etc.) used by the retro UI (`src/cli/retro_ui.py`) and menu renderer.
+On Windows Git Bash, `sys.stdout.encoding` defaults to `cp1252`, which cannot encode box-drawing characters (`┌`, `─`, `┐`, etc.) used by the retro UI (`src/cli/retro_ui.py`) and menu renderer.
 
 ## Mechanism
 
@@ -2023,6 +2325,7 @@ Catches `OSError` / `io.UnsupportedOperation` silently when stdout is already a 
 
 - Must be imported before `retro_ui` or `menu_renderer`.
 - No-ops on native Linux/macOS environments (already UTF-8).
+
 
 
 
@@ -2272,11 +2575,20 @@ __all__ = [
 - Local OpenAI-compatible servers may return 401 for `/v1/models` (treated as success in local mode)
 - Provider auto-detection uses 2-second timeouts for fast failure
 
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `generation_max_tokens() -> int` (function)
+
+Return the per-call generation token cap.
 
 
 
 
-# `src/ui/shared.py` â€” Shared UI Constants and Helpers
+
+
+# `src/ui/shared.py` — Shared UI Constants and Helpers
 
 ## Purpose
 
@@ -2313,7 +2625,8 @@ Builds and stores the report bundle after a test run:
 
 
 
-# `src/ui/ui_downloads.py` â€” Report Download Buttons
+
+# `src/ui/ui_downloads.py` — Report Download Buttons
 
 ## Purpose
 
@@ -2340,7 +2653,8 @@ Also displays report file paths as `st.caption` when available.
 
 
 
-# `src/ui/ui_evidence.py` â€” Evidence Viewer
+
+# `src/ui/ui_evidence.py` — Evidence Viewer
 
 ## Purpose
 
@@ -2414,13 +2728,22 @@ Filters runs by test package scope. Returns all runs when scope is `"All"`.
 
 ### `_render_run_comparison(comparison) -> None`
 
-Renders improved (âœ“), regressed (âœ—), and new failures (âš ) lists.
+Renders improved (✓), regressed (✗), and new failures (⚠) lists.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `EvidenceViewer`
+- `_format_indexed_at(iso_string: str) -> str` (function) — Format an ISO-8601 timestamp — always show date + time.
+- `_short_package_name(raw: str) -> str` (function) — Turn a long auto-generated package dir name into something readable.
 
 
 
 
 
-# `src/ui/ui_journey.py` â€” Credential Profiles and Journey Builder UI
+
+# `src/ui/ui_journey.py` — Credential Profiles and Journey Builder UI
 
 ## Purpose
 
@@ -2444,7 +2767,7 @@ Renders the authentication section (expander) with:
 - Active profile selector (dropdown)
 - Returns `CredentialProfile` for the active profile, or `None` if disabled
 
-Credentials stored in `st.session_state` only â€” never persisted to disk.
+Credentials stored in `st.session_state` only — never persisted to disk.
 
 ### `render_journey_builder(additional_urls: list[str]) -> list[JourneyStep] | None`
 
@@ -2471,13 +2794,14 @@ Converts a URL list into `goto` + `capture` step pairs.
 
 ### `_dict_to_journey_step(d) -> JourneyStep`
 
-Converts a session state dict to `JourneyStep`. Maps UI action names: `goto` â†’ `navigate`.
+Converts a session state dict to `JourneyStep`. Maps UI action names: `goto` → `navigate`.
 
 
 
 
 
-# `src/ui/ui_requirements.py` â€” Requirements Input Panel
+
+# `src/ui/ui_requirements.py` — Requirements Input Panel
 
 ## Purpose
 
@@ -2508,7 +2832,8 @@ Returns `(input_mode, raw_text, base_url, urls_input)`.
 
 
 
-# `src/ui/ui_results.py` â€” Results Display Panel and Run Handlers
+
+# `src/ui/ui_results.py` — Results Display Panel and Run Handlers
 
 ## Purpose
 
@@ -2550,11 +2875,70 @@ Handles the "Re-run Failed Only" button:
 
 Delegates to `src.ui.shared.store_run_report()` with current session state values.
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `ResultsPanel`
+- `_handle_generate_bug_report() -> None` (function) — Handle the 'Generate Bug Report' button click.
 
 
 
 
-# `src/ui/ui_run_results.py` â€” Run Results Display, Failure Classification, and Locator Repair
+
+
+# `src/ui/ui_run_comparison.py` — Run Comparison View
+
+## Purpose
+
+Streamlit component (Evidence & Reports page) that lets a user pick a package and two of its persisted runs, then shows per-test status deltas (Changed / Fixed / Regressed) so regression and fix history are visible without opening raw sidecars.
+
+## Class: `RunComparison`
+
+### `__init__()`
+
+Initialises with the workspace `generated_tests/` directory via `get_storage()`.
+
+### `render() -> None`
+
+Renders the "🔀 Compare Runs" section:
+
+1. Lists packages via `find_existing_packages()`; a `selectbox` picks one.
+2. Loads **all** persisted runs (`load_all_run_results()` ignores its directory arg) and filters by `test_package` suffix match against the selected package name (Windows-path tolerant).
+3. Requires ≥ 2 runs for the package, else shows an info hint to run the suite from Run & Fix.
+4. Two run pickers (`Run A` / `Run B`, newest-first labels) and a per-test delta table:
+   - `_delta_icon(sa, sb)` classifies each test as `=` unchanged, `⬆ fixed` (now passed), `⬇ regressed` (now failed), `↔ changed` (any other status flip)
+   - counts by delta type (`fixed` / `regressed` / `changed`) shown as summary metrics
+
+## Helper Functions
+
+### `_run_label(run: PersistedRunResult) -> str`
+
+Human-readable run label from the ISO-8601 `run_id` (e.g. `08-06 14:30 · 9✓ 2✗ ⏭ / 12`), including pass/fail/skip/total counts.
+
+### `_status_label(run: PersistedRunResult) -> str`
+
+Short status summary string for a run used in the delta table header.
+
+## Integration Points
+
+| Consumer | Integration |
+|----------|-------------|
+| `src/ui/ui_results.py` / Run & Fix page | Renders the comparison panel on the Evidence & Reports page |
+| `src/pipeline_artifact_manager.py` | `find_existing_packages()` supplies the package list |
+| `src/run_result_persistence.py` | `load_all_run_results()` supplies persisted runs |
+
+## Design Notes
+
+- **Filtering is in-memory, not SQL** — `load_all_run_results` ignores its `directory` argument, so runs are filtered by `test_package` suffix in Python (documented in the source, B-043 adjacent).
+- Pure Streamlit rendering — no testable business logic lives here (per AGENTS.md, logic belongs in `src/` testable modules).
+
+
+
+
+
+
+# `src/ui/ui_run_results.py` — Run Results Display, Failure Classification, and Locator Repair
 
 ## Purpose
 
@@ -2577,7 +2961,7 @@ Full run results display:
 9. **Downloads**: Report download buttons via `RenderDownloads.render()`
 
 **Added 2026-07-20:**
-- Self-healing integration: "ðŸ©¹ Self-Heal Failed Tests" button + healing results
+- Self-healing integration: "🩹 Self-Heal Failed Tests" button + healing results
 - Failed test expanders with error preview, completed steps, full traceback
 - Test results table includes Ref column (condition_ref from @pytest.mark.evidence)
 - Pytest Output expander opens on any failure (was: only collection errors)
@@ -2598,21 +2982,21 @@ Per-test results table with repair buttons:
 
 | Status | Display |
 |--------|---------|
-| Passed | âœ… icon |
-| Failed | âŒ icon + error caption + repair button (if locator failure) |
-| Skipped | â­ï¸ icon |
+| Passed | ✅ icon |
+| Failed | ❌ icon + error caption + repair button (if locator failure) |
+| Skipped | ⏭️ icon |
 
 **Repair button logic:**
-- `LOCATOR_TIMEOUT` / `STRICT_VIOLATION`: Shows ðŸ”§ Fix locator button â†’ opens repair panel
+- `LOCATOR_TIMEOUT` / `STRICT_VIOLATION`: Shows 🔧 Fix locator button → opens repair panel
 - `ASSERTION_FAILURE`: Shows info caption (no repair)
 - `NAVIGATION_ERROR`: Shows info caption (no repair)
 
 ### `_render_repair_panel() -> None`
 
 Dispatcher based on `st.session_state.repair_status`:
-- `"waiting"` â†’ `_render_repair_waiting_panel()`
-- `"browser_requested"` â†’ `_render_repair_browser_session()`
-- `"patched"` / `"error"` â†’ `_render_repair_result_panel()`
+- `"waiting"` → `_render_repair_waiting_panel()`
+- `"browser_requested"` → `_render_repair_browser_session()`
+- `"patched"` / `"error"` → `_render_repair_result_panel()`
 
 ### `_render_repair_waiting_panel() -> None`
 
@@ -2638,16 +3022,16 @@ Shows success/error message with:
 Renders self-healing report after automated repair:
 - Metrics: Failures, Fixed, Remaining, Iterations (4 columns)
 - Per-patch expanders with diagnosis and diff display
-- "ðŸŽ‰ All failures fixed" success or warning for remaining failures
-- "ðŸ”„ Re-run Tests" and "ðŸ§¹ Clear Healing Results" buttons
+- "🎉 All failures fixed" success or warning for remaining failures
+- "🔄 Re-run Tests" and "🧹 Clear Healing Results" buttons
 
 ### `_render_failed_tests_repair(results, run_result=None) -> None` (updated 2026-07-20)
 
 Shows expanders for every failed test with:
 - Error preview extracted from pytest output or raw output
-- **Steps completed before failure** â€” parsed from test source
+- **Steps completed before failure** — parsed from test source
 - Full error output in collapsible sub-expander
-- "ðŸ”§ Fix Locator" button for locator-classified failures
+- "🔧 Fix Locator" button for locator-classified failures
 - Self-healing button at top of section when failures exist
 
 ### `_parse_condition_refs_from_source(source: str) -> dict[str, str]` (added 2026-07-20)
@@ -2662,11 +3046,46 @@ Extracts error details from raw pytest output when `TestResult.error_message` is
 
 Parses test source to find the last completed action steps (Navigate, Click, Fill, Assert) before the failure point. Returns up to 6 steps for context.
 
+### `_run_setup_script(base_url, target_url, steps) -> SetupScriptResult`
+
+Builds and executes a temporary Playwright setup script that replays prerequisite steps and saves browser storage state for the locator-repair codegen session.
+
+**Cart-seeding (2026-08-03):**
+- Triggered via `url_utils.is_stateful_cart_checkout_path` (site-agnostic — covers saucedemo `/cart.html` as well as `/view_cart`/`/checkout`)
+- Best-effort login with saucedemo demo credentials when a login form is present
+- Product-page navigation tries `(/products, /inventory.html)` candidates via HTTP status probe
+- Add-to-cart Strategy C: direct grid button (`button:has-text("Add to cart"), [data-test^="add-to-cart"], .btn_inventory`) for saucedemo-style inventory pages
+- Modal dismissal scoped to modal containers (B-015 lesson — a visible cart-page "Continue Shopping" must not be clicked)
+
+**Known Windows gotcha (pre-existing):** the storage-state print line embeds the temp path without `r''` escaping, so `C:\Users\...` breaks the generated script's parse on Windows.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (13 items). Grouped under the public function that uses them:
+
+### `RunResultsDisplay`
+- `_get_generated_code_for_coverage() -> str` (function) — Get generated test code for coverage analysis.
+- `_read_test_code_from_path(saved_path: str) -> str` (function) — Read test code from a saved test file or package directory.
+- `_render_skip_repair_panel() -> None` (function) — Render the skip repair panel — opens codegen and replaces pytest.skip() with a real action.
+- `_render_skipped_tests_info(results: list[TestResult]) -> None` (function) — Render information about skipped tests, showing why they were skipped.
+
+### Internal utilities
+- `_extract_all_steps_before_test(source: str, test_name: str) -> list[str]` (function) — Extract all action steps from all tests before the given test.
+- `_extract_code_lines_before_skip(source: str, test_name: str, skip_line: int) -> list[str]` (function) — Extract the actual code lines before the pytest.skip() line for display.
+- `_extract_steps_before_skip(source: str, test_name: str, skip_line: int) -> list[str]` (function) — Extract the action steps (clicks, fills, etc.) before the pytest.skip() line.
+- `_failure_context(saved_path: str, test_name: str, run_result: RunResult | None) -> tuple[str, str, int | None]` (function) — Best-effort failure context for the repair flow (B-041).
+- `_find_skip_line_number(source: str, test_name: str) -> int | None` (function) — Find the line number (1-based) of the pytest.skip() in a test function.
+- `_find_url_before_skip(source: str, test_name: str, skip_line: int) -> str | None` (function) — Find the URL the test navigates to before the pytest.skip() line.
+- `_render_skip_repair_capture() -> None` (function) — Run codegen and capture the locator, then replace pytest.skip() in the test file.
+- `_render_skip_repair_result() -> None` (function) — Show the skip repair result.
+- `_render_skip_repair_waiting() -> None` (function) — Show explanation before opening the browser for skipped test fix.
 
 
 
 
-# `src/ui/ui_saved_packages.py` â€” Saved Package Loader (AI-026)
+
+
+# `src/ui/ui_saved_packages.py` — Saved Package Loader (AI-026)
 
 ## Purpose
 
@@ -2727,11 +3146,20 @@ Loads the most recent run result from the package directory.
 
 Delegates to `src.ui.shared.store_run_report()`.
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `SavedPackagePanel`
+- `_format_package_label(pkg: PackageManifest) -> str` (function) — Build a human-readable dropdown label from a package manifest.
+- `_rerun_loaded_package(package_root: Path) -> None` (function) — Actually re-run the loaded saved package (B-041).
 
 
 
 
-# `src/ui/ui_sidebar.py` â€” Sidebar Configuration Panel
+
+
+# `src/ui/ui_sidebar.py` — Sidebar Configuration Panel
 
 ## Purpose
 
@@ -2758,28 +3186,37 @@ Renders the configuration sidebar:
 
 **POM Mode:** When enabled, generates tests using Page Object Model classes with evidence-aware locators. Stored in `st.session_state.pom_mode`.
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `SidebarConfig`
+- `_saved_index(options: tuple[str, ...], stored_value: str, default: str) -> int` (function) — Return the selectbox index for *stored_value* (falling back to *default*).
 
 
 
 
-# `src/ui/__init__.py` â€” Streamlit UI Module
+
+
+# `src/ui/__init__.py` — Streamlit UI Module
 
 ## Purpose
 
-Package marker for the Streamlit UI rendering modules. Contains no logic â€” signals that `src/ui/` is a Python package.
+Package marker for the Streamlit UI rendering modules. Contains no logic — signals that `src/ui/` is a Python package.
 
 ## Contents
 
 Empty module. Submodules:
-- `shared.py` â€” Shared constants and helpers
-- `ui_downloads.py` â€” Report download buttons
-- `ui_evidence.py` â€” Evidence viewer (screenshots, Gantt, heatmaps, run history)
-- `ui_journey.py` â€” Journey builder UI
-- `ui_requirements.py` â€” Requirements input panel
-- `ui_results.py` â€” Results display panel
-- `ui_run_results.py` â€” Run results display
-- `ui_saved_packages.py` â€” Saved package management UI
-- `ui_sidebar.py` â€” Sidebar configuration
+- `shared.py` — Shared constants and helpers
+- `ui_downloads.py` — Report download buttons
+- `ui_evidence.py` — Evidence viewer (screenshots, Gantt, heatmaps, run history)
+- `ui_journey.py` — Journey builder UI
+- `ui_requirements.py` — Requirements input panel
+- `ui_results.py` — Results display panel
+- `ui_run_results.py` — Run results display
+- `ui_saved_packages.py` — Saved package management UI
+- `ui_sidebar.py` — Sidebar configuration
+
 
 
 
@@ -2791,12 +3228,12 @@ Empty module. Submodules:
 
 Enriches scraped DOM element records with computed accessibility names from the browser's accessibility tree (`page.accessibility.snapshot()`). Merges computed names (derived from ARIA relationships like `aria-labelledby`, `aria-describedby`, parent label context, SVG `<title>` children, and implicit roles) back into element records produced by `PageScraper` so that `PlaceholderResolver` has additional text signals for matching placeholders like `{{CLICK:View Cart}}` against elements whose accessible name differs from raw HTML attributes.
 
-**Key Design Principle:** Enrichment is additive-only â€” it never removes or overwrites existing data.
+**Key Design Principle:** Enrichment is additive-only — it never removes or overwrites existing data.
 
 ## Module Metadata
 
 - **Lines:** 411
-- **`__test__ = False`** â€” excluded from pytest collection
+- **`__test__ = False`** — excluded from pytest collection
 - **Imports:** `logging`, `typing.Any`
 
 ## Class: `AccessibilityEnricher`
@@ -2819,9 +3256,9 @@ Transforms CDP `Accessibility.getFullAXTree` result into the format expected by 
 
 #### `enrich(elements: list[dict[str, Any]], a11y_tree: dict[str, Any]) -> list[dict[str, Any]]`
 Main entry point. Merges computed accessible names from a11y tree into scraped elements using three matching strategies (priority order):
-1. **Role + name** â€” match element text+role against a11y node name+role
-2. **href** â€” match link elements by href value in a11y properties
-3. **Document-order** â€” fallback positional matching
+1. **Role + name** — match element text+role against a11y node name+role
+2. **href** — match link elements by href value in a11y properties
+3. **Document-order** — fallback positional matching
 
 Returns the same element list mutated in-place.
 
@@ -2841,7 +3278,7 @@ Strategy 1: match by element text against a11y node computed name, with role com
 Strategy 3: match link elements by exact href, then partial path comparison.
 
 #### `_match_by_document_order(element, a11y_nodes, used_indices) -> dict[str, Any] | None`
-Strategy 2: fallback â€” find first unused a11y node whose name overlaps with element text or selector.
+Strategy 2: fallback — find first unused a11y node whose name overlaps with element text or selector.
 
 #### `_apply_enrichment(element: dict[str, Any], a11y_node: dict[str, Any]) -> None`
 Applies computed fields from matched a11y node to scraped element:
@@ -3297,58 +3734,47 @@ Produces keys:
 
 
 
-# `src/aria_parser.py`
 
-## High-Level Purpose
+# `src/aria_parser.py` — ARIA Snapshot Parser (AI-032)
 
-Parses Playwright's `page.aria_snapshot(boxes=True)` YAML output into standard element dicts for the scraping pipeline (B-032). Replaces the need for manual accessible_name enrichment â€” the ARIA tree provides computed accessible names, roles, placeholders, values, URLs, and bounding boxes directly from the browser's accessibility engine.
+## Purpose
+Converts Playwright's `page.aria_snapshot(boxes=True)` YAML output into the same element dict format used by the rest of the pipeline. Handles all ARIA roles with computed accessible names, placeholders, values, URLs, and bounding boxes.
 
-## Module Metadata
+## Key Features
+- Parses YAML into structured element dicts
+- Handles: heading, textbox, combobox, button, radio, checkbox, link, group, and more
+- Computes accessible names from ARIA attributes
+- Extracts bounding boxes for visual enrichment
+- 33 unit tests
 
-- **Lines:** 330
-- **Key imports:** `re`, `typing`
-- **Project imports:** None (self-contained)
-- **Tests:** `tests/test_aria_parser.py` (33 tests)
+## Related
+- `src/scraper.py` — three-layer hybrid scraper (BS4 + CDP + ARIA snapshot)
+- `src/accessibility_enricher.py` — CDP `getFullAXTree` enrichment
 
-## Public API
 
-### `parse_aria_snapshot(yaml_text: str) -> list[dict[str, Any]]`
+## Recent API Additions
 
-Main entry point. Parses the YAML output from `page.aria_snapshot(boxes=True)` into a flat list of element dicts in depth-first order. Each element dict matches the format produced by `PageScraper._extract_elements_from_html()` (BS4-based).
+Symbols present in the source but not covered above (refresh pass, 1 items):
 
-**Returns**: List of element dicts with fields: `selector`, `text`, `role`, `computed_role`, `accessible_name`, `href`, `placeholder`, `value`, `is_visible`, `_bbox`, `_parent`, `_has_children`.
+### `parse_aria_snapshot(yaml_text: str) -> list[dict[str, Any]]` (function)
 
-## YAML Grammar Handled
+Parse Playwright's aria_snapshot() YAML into element dicts.
 
-| Pattern | ARIA Role | Example |
-|---------|-----------|---------|
-| `- heading "name" [level=N] [box=x,y,w,h]` | heading | Page/section titles |
-| `- textbox "name" [box=x,y,w,h]:` | textbox | Input fields with optional children |
-| `- combobox "name" [box=x,y,w,h]:` | combobox | Select dropdowns with option children |
-| `- button "name" [box=x,y,w,h]` | button | Clickable buttons |
-| `- radio "name" [box=x,y,w,h]` | radio | Radio buttons (accessible name from label) |
-| `- checkbox "name" [box=x,y,w,h]` | checkbox | Checkboxes (accessible name from label) |
-| `- link "name" [box=x,y,w,h]:` | link | Anchor elements with `/url:` child |
-| `- group "name" [box=x,y,w,h]:` | group | Container elements with nested children |
-| `- text: content` | text | Plain text nodes |
-| `- paragraph [box=x,y,w,h]: text` | paragraph | Text blocks with content after colon |
+## How It Works (Internals)
 
-### Child Properties
+Private `_`-helpers — the module's real logic (7 items). Grouped under the public function that uses them:
 
-| Property | Target | Meaning |
-|----------|--------|---------|
-| `- /placeholder: value` | textbox | Input placeholder text |
-| `- /url: href` | link | Link destination URL |
-| `- text: value` | textbox/combobox | Current input value |
-| `- /checked:` | checkbox/radio | Checked state flag |
-| `- /selected:` | option | Selected state flag |
+### `parse_aria_snapshot`
+- `_apply_child_property(stripped: str, parent: dict[str, Any] | None) -> None` (function) — Apply a child property line to its parent element.
+- `_build_element(role: str, ar_role: str, name: str, text: str, attrs: dict[str, str] | None, has_children: bool) -> dict[str, Any]` (function) — Build an element dict in the standard scraper format.
+- `_is_child_property(stripped: str) -> bool` (function) — Check if line is a child property (/placeholder:, /url:, /checked:, /selected:).
+- `_line_indent(line: str) -> int` (function) — Return the indentation level (2 spaces = 1 level).
+- `_parse_aria_line(stripped: str) -> dict[str, Any] | None` (function) — Parse a single ARIA YAML line into an element dict.
 
-## Architecture Notes
+### Internal utilities
+- `_build_selector(role: str, name: str, attrs: dict[str, str]) -> str` (function) — Build a best-effort CSS selector from ARIA role and name.
+- `_parse_box(box_str: str) -> dict[str, float] | None` (function) — Parse '[box=x,y,w,h]' style bounding box.
 
-- **Indentation-aware**: Tracks nesting depth (2 spaces per level) for parent-child relationships via `_parent` references.
-- **Self-contained**: No external dependencies beyond stdlib `re`. Used by `PageScraper._extract_elements_from_aria()`.
-- **Form control value handling**: `text:` children of textbox/combobox are applied as `value` on the parent, not as standalone elements.
-- **Selector format**: Produces role-based selectors like `heading[name="Create Account"]` â€” compatible with `page.getByRole()`.
 
 
 
@@ -3563,59 +3989,21 @@ Each dismissal attempt is wrapped in broad exception handling. The design favors
 
 
 
-# `src/cart_seeding_scraper.py`
 
-## High-Level Purpose
+# `src/cart_seeding_scraper.py` — Cart-Seeding Scraper (B-022)
 
-`cart_seeding_scraper.py` provides a specialized journey scraper that ensures the cart has items before scraping cart/checkout pages. Extends `JourneyScraper` to follow a product-selection â†’ add-to-cart â†’ dismiss-modal journey, then navigates to target cart/checkout URLs for scraping.
+## Purpose
+Ensures the cart has items before scraping cart/checkout pages. Extracted from `journey_scraper.py`. Extends `JourneyScraper` for the "seed cart then scrape" workflow.
 
-Added **2026-07-20 (B-022):** Switched from hardcoded selectors to dynamic element discovery via `_discover_selector()`, making it site-agnostic. The cart seeder now works across different e-commerce sites without site-specific CSS selectors.
+## Class: `CartSeedingScraper(JourneyScraper)`
+- Uses dynamic element discovery via `_discover_selector()` instead of hardcoded selectors
+- Product URL detection: scrapes category/product URLs from existing data
+- Prefers cart-seeded data over static scrapes for `/view_cart` and `/checkout` pages
 
-## Dependencies
+## Related
+- `src/journey_scraper.py` — parent class
+- `src/orchestrator.py` — `_upgrade_stateful_pages()` integration
 
-- `JourneyScraper` from `src.journey_scraper` â€” base class for stateful journey scraping
-- `JourneyStep` from `src.journey_models` â€” step definition for journey actions
-- `PRODUCT_SELECTORS`, `ADD_TO_CART_SELECTORS`, `CONTINUE_SHOPPING_SELECTORS` from `src.form_detector` â€” kept for test compatibility, no longer used by `scrape_cart_pages()`
-
-## Classes
-
-### `CartSeedingScraper(JourneyScraper)`
-
-Specialized journey scraper for cart-dependent pages.
-
-**Class-level constants (test compatibility):**
-- `PRODUCT_SELECTORS: list[str]`
-- `ADD_TO_CART_SELECTORS: list[str]`
-- `CONTINUE_SHOPPING_SELECTORS: list[str]`
-
-#### `__init__(self, starting_url: str, products_url: str | None = None, **kwargs: Any) -> None`
-
-Args:
-- `starting_url`: Home page URL for session establishment.
-- `products_url`: Optional products page URL. Defaults to `urljoin(home_url, "/products")`.
-
-#### `scrape_cart_pages(self, cart_urls: list[str]) -> dict[str, list[dict[str, Any]]]`
-
-Seeds the cart (add item â†’ dismiss confirmation), then scrapes each target URL.
-
-**B-022 change:** Uses dynamic element discovery â€” no hardcoded selectors. Steps:
-1. Navigate to products page
-2. Click on a product (dynamic discovery via `_discover_selector()`)
-3. Click "Add to cart" (dynamic discovery)
-4. Capture confirmation popup state
-5. Dismiss confirmation modal (dynamic discovery)
-6. Wait for modal animation
-7. Navigate to and scrape each target cart/checkout URL
-
-Returns `dict[str, list[dict[str, Any]]]` mapping URLs to scraped elements.
-
-#### `_derive_products_url(home_url: str) -> str` (static)
-
-Derives products page URL: `urljoin(home_url, "/products")`
-
-#### `_ensure_full_url(url: str) -> str` (static)
-
-Ensures URL is absolute. Relative URLs are handled by `JourneyScraper._navigate_to()`.
 
 
 
@@ -4064,6 +4452,7 @@ The module itself has no filesystem, network, subprocess, or runtime test side e
 
 
 
+
 # `src/code_postprocessor.py`
 
 ## High-Level Purpose
@@ -4308,8 +4697,20 @@ Key behavior:
 
 ## B-021 + B-022 Changes (2026-07-20)
 
-- `_normalize_test_function_names(code)` â€” renames purely descriptive test names to include condition_ref number (e.g., `test_view_cart` â†’ `test_tc01_05_view_cart`). Tests already numbered are left unchanged.
-- `replace_token_in_line()` â€” passes through `expect(...)` expressions as-is (URL assertions from B-021) instead of wrapping in `evidence_tracker.*()` calls.
+- `_normalize_test_function_names(code)` — renames purely descriptive test names to include condition_ref number (e.g., `test_view_cart` → `test_tc01_05_view_cart`). Tests already numbered are left unchanged.
+- `replace_token_in_line()` — passes through `expect(...)` expressions as-is (URL assertions from B-021) instead of wrapping in `evidence_tracker.*()` calls.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `normalise_generated_code`
+- `_strip_module_level_statements(code: str) -> str` (function) — Remove stray executable statements at module scope (LLM leaks).
+
+### `strip_evidence_from_test_code`
+- `_strip_evidence_decorators(code: str) -> str` (function) — Remove ``@pytest.mark.evidence`` decorators in all emitted forms.
+- `_strip_tracker_asserts(code: str, tracker: str, page_expr: str) -> str` (function) — Convert ``tracker.assert_*`` calls to Playwright ``expect()`` assertions.
+
 
 
 
@@ -4334,7 +4735,7 @@ Uses `ast.parse()` to validate Python syntax. Returns `None` if valid, or a desc
 ### `validate_test_function(code: str) -> str | None`
 Extended validation for test functions:
 1. Runs `validate_python_syntax()` first
-2. Walks AST to detect `async def` (not allowed â€” must use sync pytest format)
+2. Walks AST to detect `async def` (not allowed — must use sync pytest format)
 3. Validates test function naming convention (`test_` prefix)
 
 ### `validate_generated_locator_quality(code: str) -> str | None`
@@ -4342,13 +4743,13 @@ Detects known flaky/invalid Playwright patterns. Returns `None` if all checks pa
 
 | Anti-pattern | Error |
 |--------------|-------|
-| `.should_be_visible()` | Not valid in Playwright Python â€” use `expect(locator).to_be_visible()` |
+| `.should_be_visible()` | Not valid in Playwright Python — use `expect(locator).to_be_visible()` |
 | `get_by_role('link')` without name | Ambiguous in strict mode |
-| `page.locator("button")` â€” bare tag selectors | Too broad â€” use specific locators |
+| `page.locator("button")` — bare tag selectors | Too broad — use specific locators |
 | `page.wait_for_load_state().status` | Returns `None`, not a response object |
 | `to_have_url_containing()` / `to_have_title_containing()` | Invalid assertion methods |
 | `expect(...)` without importing `expect` | Missing import |
-| `expect(page.title())` / `expect(page.url())` | Not valid â€” use `expect(page).to_have_title(...)` |
+| `expect(page.title())` / `expect(page.url())` | Not valid — use `expect(page).to_have_title(...)` |
 | `expect(page).to_be_connected()` | Not a valid Playwright assertion |
 | `re.compile(...)` without `import re` | Missing import |
 | `screenshot` custom helpers/marks | Project-specific markers not available |
@@ -4358,12 +4759,12 @@ Detects known flaky/invalid Playwright patterns. Returns `None` if all checks pa
 | `not_to_have_url(...)` | Weak negative-only assertions |
 
 ## Key Design Decisions
-- **AST-based validation** â€” uses `ast.parse()` for reliable syntax checking
-- **Pattern-based quality checks** â€” regex-based detection of known LLM hallucination patterns
-- **Fail-fast** â€” returns first error found; does not accumulate multiple errors
+- **AST-based validation** — uses `ast.parse()` for reliable syntax checking
+- **Pattern-based quality checks** — regex-based detection of known LLM hallucination patterns
+- **Fail-fast** — returns first error found; does not accumulate multiple errors
 
 ## Dependencies
-- No project-internal dependencies â€” standalone validation module
+- No project-internal dependencies — standalone validation module
 
 
 
@@ -4592,6 +4993,7 @@ Importing this module reads the `JIRA_PROJECT_KEY` environment variable once thr
 
 
 
+
 # `src/coverage_utils.py`
 
 ## High-Level Purpose
@@ -4621,7 +5023,7 @@ Display-compatible coverage row for UI tables.
 Extracts pytest-style test function names from Python source using regex.
 
 ### `compute_coverage(criteria: list[str], code: str, run_results: Sequence[CoverageRunResult] | None) -> list[RequirementCoverage]`
-Maps criteria to test names by number-based matching (TC-001 â†’ test_01_*) then keyword fallback.
+Maps criteria to test names by number-based matching (TC-001 → test_01_*) then keyword fallback.
 
 ### `coverage_to_display_rows(coverage: list[RequirementCoverage]) -> list[CoverageDisplayRow]`
 Converts coverage data to UI-friendly display rows.
@@ -4629,10 +5031,39 @@ Converts coverage data to UI-friendly display rows.
 ## Key Design Decisions
 - Number-based matching before keyword fallback prevents false positives
 - Protocol-based interface for run results enables duck typing
-- Zero external dependencies â€” pure computation
+- Zero external dependencies — pure computation
 
 ## Dependencies
-- None â€” stdlib only
+- None — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `build_requirement_coverages(acceptance_criteria_lines: list[str], generated_code: str) -> list[RequirementCoverage]` (function)
+
+Build RequirementCoverage objects from criteria and generated test code.
+
+### `build_coverage_analysis(acceptance_criteria_lines: list[str], generated_code: str) -> dict[str, list[RequirementCoverage]]` (function)
+
+Return the coverage analysis dict used by UIs and report builders.
+
+### `build_coverage_display_rows(requirements: list[RequirementCoverage], run_results: Sequence[CoverageRunResult] | None = None) -> list[CoverageDisplayRow]` (function)
+
+Build display-ready rows from RequirementCoverage objects.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `build_coverage_display_rows`
+- `_get_base_test_name(name: str) -> str` (function) — Strip browser markers and path separators to get the core test name.
+- `_result_icon(status: str) -> str` (function) — Return a visual status marker for test execution result.
+- `_status_emoji(status: str) -> str` (function) — Return a visual status marker for requirement coverage status.
+
+### `build_requirement_coverages`
+- `_extract_criterion_number(test_name: str) -> int | None` (function) — Extract the criterion number from a test function name.
+
 
 
 
@@ -4653,14 +5084,14 @@ Enriches scraped DOM elements with visual and contextual metadata (icon detectio
 | Method | Description |
 |--------|-------------|
 | `enrich_element(element, html_snippet, parent_classes)` | Returns enriched element dict with `is_icon`, `icon_classes`, `icon_unicode`, `is_decorative`, `is_hover_reveal`, `parent_text`, `aria_icon_label`, `visual_description` |
-| `enrich_batch(elements, html_snippets)` | Batch version; maps index â†’ html_snippet |
+| `enrich_batch(elements, html_snippets)` | Batch version; maps index → html_snippet |
 | `get_hover_reveal_selectors(elements)` | Extracts selectors for hover-reveal elements |
 | `_detect_icon(element)` | Detects icon from class names (Font Awesome, Material, custom) |
 | `_extract_parent_text(html_snippet)` | Uses BeautifulSoup to extract surrounding text |
 | `_build_visual_description(element)` | Generates human-readable visual summary |
 
 ## Key Design Decisions
-- Classmethod-only â€” no instance state needed
+- Classmethod-only — no instance state needed
 - Lazy import of BeautifulSoup to avoid hard dependency
 - Enriches at scrape-time to avoid runtime overhead
 
@@ -4672,104 +5103,117 @@ Enriches scraped DOM elements with visual and contextual metadata (icon detectio
 
 
 
-# `src/element_matcher.py`
+# `src/element_matcher.py` — Multi-Pass Element Matching Engine
 
-## High-Level Purpose
-
-Multi-pass element matching engine for placeholder resolution. Extracted from `placeholder_orchestrator.py`. Implements a 4-pass resolution pipeline (Pass 0â€“3) for matching placeholder descriptions to scraped DOM elements, plus LLM-based semantic ASSERT resolution (B-020).
-
-**Recent accuracy improvements (B-024/B-025, 2026-07-23):**
-- Pass1 word-ratio relax: Short descriptions like "scheme" now match long element text like "Select scheme..."
-- Pass1 heading skip: For CLICK actions, heading elements (h1-h6) are skipped â€” headings are display elements, not click targets
-- Pass1 id/name prefix: For FILL actions, description words that prefix element id/name are matched (e.g. "overnight" â†’ id="overnightLocation")
-- Pass1 word-boundary: Single-word containment now checks word boundaries (prevents "year" âŠ† "(years)" false positives)
-
-## Module Metadata
-
-- **Lines:** ~780
-- **Imports:** `re`, `logging`, `typing`, `src.intent_matcher`, `src.locator_builder`, `src.placeholder_resolver`, `src.role_mapper`, `src.semantic_candidate_ranker`, `src.semantic_matcher`
-- **Extracted from:** `placeholder_orchestrator.py`
-
-## Constants
-
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `TEXT_BEARING_ROLES` | `{heading, paragraph, text, status, alert, region, article, listitem, cell, columnheader, rowheader}` | ARIA roles for ASSERT text matching (B-016) |
-| `TEXT_BEARING_TAGS` | `{h1-h6, p, span, label, li, td, th}` | HTML tags for ASSERT text matching |
-| `MIN_SCORE_FOR_TEXT_FALLBACK` | `5` | Minimum score threshold for text fallback when no LLM selection available (B-020) |
+## Purpose
+4-pass resolution pipeline (Pass 0–3) for matching placeholder descriptions to scraped DOM elements. Extracted from `placeholder_orchestrator.py`. Includes LLM-based semantic ASSERT resolution (B-020).
 
 ## Class: `ElementMatcher`
+- `find_best_element_for_current_page(action, description, elements, ...) -> str | None` — single placeholder resolution
+- `find_best_elements_batch(requests: list[dict]) -> list[dict]` — batched resolution (Pass 0-2 per request, Pass 3 in one LLM call)
 
-### `__init__(self, resolver: PlaceholderResolver, generator: AsyncGeneratorLike | None = None)`
-- `resolver`: PlaceholderResolver instance for text matching and ranking
-- `generator`: B-020 LLM generator for semantic candidate ranking (nullable)
+## Resolution Passes
+- **Pass 0**: Exact text match (accessible_name, aria_label, text)
+- **Pass 1**: Action-verb-aware substring match (B-012)
+  - **B-024g (2026-08-03):** separator-normalized word-subset fallback for FILL — every description word appearing as a word in the element text matches, so "zip code" → placeholder "Zip/Postal Code" (saucedemo checkout fields)
+  - FILL gate: containers whose accessible_name collides with a field label must not win over the real input
+- **Pass 2**: Structural match (ID, data-test, name attributes + camelCase splitting)
+- **Pass 3**: LLM semantic ranking via `SemanticCandidateRanker`
 
-### Resolution Pipeline
+## Related
+- `src/placeholder_orchestrator.py` — consumer
+- `src/semantic_candidate_ranker.py` — Pass 3 LLM ranking
+- `src/placeholder_scorers.py` — scoring functions
+- `src/role_mapper.py` — `normalise_element_text` (now includes placeholder)
 
-**Pass 0 â€” Exact text match:**
-- `pass0_exact_text_match(action, description, pages_data) -> dict | None`
-- For ASSERT descriptions wrapped in quotes (`ASSERT:"exact text here"`) â€” strips quotes and does literal string equality against element text
-- Bypasses all scoring and LLM calls for the simple "verify text is X" case
+---
 
-**Pass 1 â€” Text match:**
-- `pass1_text_match(action, description, pages_data) -> dict | None`
-- Fast text match for CLICK/FILL â€” returns first element whose normalised text is contained in the description
-- ASSERT tokens for page state fall through to scoring path
-- Minimum element text length of 3 characters
-- R-001: Key phrase extraction for verbose descriptions (quoted phrases, context boundary words)
+## AI-035 / B-036 Update (2026-08-03)
 
-**Pass 1b â€” ASSERT text match:**
-- `pass1_assert_text_match(action, description, pages_data) -> dict | None`
-- ASSERT-specific text matching against elements with `TEXT_BEARING_ROLES` or `TEXT_BEARING_TAGS`
-- B-016: Filters to display/text roles only
+### `site_hash` parameter
+`find_best_element_for_current_page(..., golden_patterns=None, site_hash=None)`
+gained a `site_hash` kwarg, forwarded to
+`PlaceholderResolver.rank_candidates(..., site_hash=site_hash)` — enables the
+same-site learned-pattern bonus (+5, AI-035 Phase 2). Optional; absent → no
+learned bonus (unchanged behavior).
 
-**Pass 2 â€” Structural match:**
-- `pass2_structural_match(action, description, pages_data, excluded_selectors=None) -> dict | None`
-- Structural attribute match (id, data-test, aria-label, name, class)
-- Falls back to text-bearing elements for ASSERT when no structural match found
 
-**Pass 3 â€” Scoring + LLM:**
-- `async find_best_element_for_current_page(action, description, pages_data, *, excluded_selectors=None, current_url="", resolved_context=None, golden_patterns=None) -> tuple[dict | None, float, str]`
-- **Main entry point** â€” orchestrates all passes + scoring
-- Returns `(element, score, source)` where source identifies which pass resolved the match
-- **RAG (2026-07-21):** Accepts optional `golden_patterns` from `RAGRetriever` â€” forwarded to `PlaceholderScorer.compute_element_score()` for bonus
-- `_resolve_assert_semantically(action, description, candidates, current_url, resolved_context)` â€” LLM-based semantic ASSERT resolution (B-020)
+## Recent API Additions
 
-## Module-Level Functions
+Symbols present in the source but not covered above (refresh pass, 1 items):
 
-### `_is_excluded(element, excluded_selectors) -> bool`
-Check if element's selector is in the excluded set.
+### `select_page_loaded_candidate(candidates: list[dict[str, str]], description: str = '') -> dict[str, str] | None` (function)
 
-### `_validate_text_match(element, description) -> bool`
-Validate that text match element has at least some text content.
+Pick a stable visible page element for generic "page loaded" assertions.
 
-### `_log_resolve_pass(element, action, description, pass_name, score=0)`
-Standardised logging for resolution results.
+## How It Works (Internals)
 
-### `select_page_loaded_candidate(candidates) -> dict | None`
-Select the best candidate from page-loaded detection results.
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
 
-## Key Design Decisions
+### `ElementMatcher`
+- `_is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool` (function) — Check if an element should be excluded from consideration.
+- `_log_resolve_pass(pass_number: int, pass_name: str, description: str, element: dict[str, str] | None) -> None` (function) — (no docstring)
+- `_validate_text_match(element: dict[str, str] | None, description: str, resolver: PlaceholderResolver) -> dict[str, str] | None` (function) — Validate that the element's visible text plausibly matches the description.
 
-- **4-pass pipeline:** Early passes (0-2) are fast/cheap; Pass 3 (scoring + LLM) is the expensive fallback
-- **Pass ordering:** exact text â†’ fast text â†’ structural â†’ scoring/LLM
-- **B-020:** LLM semantic ranking for ASSERT resolution when generator is provided
-- **B-016:** ASSERT text matching filters to display roles (heading, paragraph, text, etc.)
-- **RAG integration:** `golden_patterns` kwarg flows through `find_best_element_for_current_page()` â†’ `PlaceholderScorer.compute_element_score()` â€” zero behaviour change when `None`
 
-## Dependencies
 
-- `src.placeholder_resolver.PlaceholderResolver` â€” text matching and ranking
-- `src.semantic_candidate_ranker.SemanticCandidateRanker` â€” LLM-based ranking
-- `src.semantic_matcher.SemanticMatcher` â€” semantic text matching
-- `src.intent_matcher.SemanticFillStrategy` â€” fill strategy detection
-- `src.locator_builder.build_robust_locator` â€” locator construction
-- `src.role_mapper` â€” role classification utilities
 
-## Depended On By
 
-- `src/placeholder_orchestrator.py` â€” calls `find_best_element_for_current_page()` with golden_patterns
-- `tests/test_element_matcher.py` â€” unit tests
+
+# `src/evidence_export.py` — Evidence Export (AI-028)
+
+## Purpose
+CSV, NDJSON, and JUnit XML exporters for evidence data. All exporters consume the same filter parameters as `EvidenceIndex.search()`, ensuring consistent filtering across all export formats.
+
+## Functions
+- `export_csv(index: EvidenceIndex, ...) -> str` — CSV export with filter support
+- `export_ndjson(index: EvidenceIndex, ...) -> str` — NDJSON (newline-delimited JSON) export
+- `export_junit_xml(index: EvidenceIndex, ...) -> str` — JUnit XML for CI/CD integration
+
+## Related
+- `src/evidence_index.py` — SQLite-backed search index
+- `scripts/eval/eval_runner.py` — eval harness consumer
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `export_junit_xml`
+- `_classname_from_url(url: str) -> str` (function) — Derive a JUnit ``classname`` from a page URL.
+- `_first_step_error(sidecar: dict | None) -> str` (function) — Extract the first step error message from a sidecar.
+
+
+
+
+
+
+# `src/evidence_index.py` — Evidence Index (AI-028)
+
+## Purpose
+SQLite-backed search, filter, and export metadata index. Indexes `.evidence.json` sidecar metadata into the existing `evidence/run_results.sqlite` database. Powers the in-tool search UI, faceted filters, and CSV/NDJSON/JUnit exports.
+
+## Class: `EvidenceIndex`
+- `__init__(db_path: str | Path)` — open/create SQLite connection
+- `search(query: str, status: str | None, url: str | None, ...) -> list[dict]` — full-text search via SQL LIKE
+- `refresh() -> int` — incremental re-index of changed sidecars (mtime-based)
+
+## Related
+- `src/evidence_export.py` — export formats
+- `src/sqlite_persistence.py` — shared SQLite infrastructure (AI-012)
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `EvidenceSearchResult` (class)
+
+A single evidence sidecar returned by :meth:`EvidenceIndex.search`.
+
+### `EvidenceFilterOptions` (class)
+
+Distinct values available for faceted filter dropdowns.
+
 
 
 
@@ -4787,7 +5231,7 @@ Loads evidence JSON from generated test packages. Evidence files are written by 
 ## Functions
 | Function | Description |
 |----------|-------------|
-| `load_evidence_for_package(package_dir)` | Scans `<package_dir>/evidence/` for `*.evidence.json`; returns dict mapping test name â†’ evidence |
+| `load_evidence_for_package(package_dir)` | Scans `<package_dir>/evidence/` for `*.evidence.json`; returns dict mapping test name → evidence |
 | `get_failure_diagnostics(evidence)` | Extracts failure diagnostics: failed steps, page URL, title, duration |
 | `get_screenshot_paths(evidence)` | Returns screenshot paths from failed steps |
 | `match_evidence_to_test(evidence_map, test_name)` | Finds matching evidence via exact, prefix, and parameterized name matching |
@@ -4795,7 +5239,7 @@ Loads evidence JSON from generated test packages. Evidence files are written by 
 ## Key Logic
 - Evidence files keyed by filename stem
 - Failed steps filtered by result status
-- Matching tries: exact name â†’ test name prefix â†’ parameterized pattern
+- Matching tries: exact name → test name prefix → parameterized pattern
 - Returns None gracefully when no evidence found
 
 
@@ -4842,6 +5286,37 @@ Aggregated evidence from a test package: test_files, entries, failures, total_du
 - `src.report_builder.escape_html`
 - stdlib for everything else
 
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `EvidenceFile` (class)
+
+Represents a single evidence sidecar file.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (12 items). Grouped under the public function that uses them:
+
+### `generate_annotated_journey`
+- `_build_bug_report_text(sidecar_path: Path, sidecar: dict[str, Any], image_data_uri: str = '', title: str = '') -> str` (function) — Build a plain-text bug report from the evidence sidecar.
+- `_build_step_row_html(step: dict[str, Any], idx: int) -> str` (function) — Render a single step as a compact timeline row.
+- `_empty_result(msg: str, bug_report_mode: bool) -> str` (function) — (no docstring)
+- `_find_best_screenshot(steps: list[dict[str, Any]]) -> str` (function) — Find the most informative screenshot from steps (prefer failure or last assertion).
+- `_is_failed_step(step: dict[str, Any]) -> bool` (function) — Check if a step resulted in a failure.
+
+### `generate_annotated_screenshot`
+- `_prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]` (function) — Return steps with labels normalized for UI rendering.
+- `_safe_embed_image_data_uri(image_path: Path) -> str | None` (function) — (no docstring)
+- `_safe_read_json(path: Path) -> dict[str, Any] | None` (function) — (no docstring)
+
+### Internal utilities
+- `_clean_evidence_label(label: str) -> str` (function) — Convert raw placeholder-token labels into cleaner user-facing text.
+- `_format_label(label: str, matched_text: str | None = None, truncate: int = 80) -> str` (function) — Format a step label with optional matched text for user display.
+- `_normalise_url(url: str) -> str` (function) — Normalise URLs for matching across redirects and trailing slashes.
+- `_step_type_key(step: dict[str, Any]) -> str` (function) — (no docstring)
+
+
 
 
 
@@ -4871,7 +5346,7 @@ Serialization utilities for evidence sidecar JSON files. Handles writing and rea
 
 ## Key Logic
 - Schema version tracked as constant ("1.0")
-- All methods are @staticmethod â€” no instance state needed
+- All methods are @staticmethod — no instance state needed
 - JSON output uses 2-space indent, UTF-8 encoding
 - Validates presence of schema_version, test, and steps keys
 
@@ -4883,7 +5358,7 @@ Serialization utilities for evidence sidecar JSON files. Handles writing and rea
 
 ## High-Level Purpose
 
-Runtime evidence tracker â€” records each test step (navigate, click, fill, assert) with screenshots, element metadata, timing, and failure diagnostics. Writes per-test sidecar JSON files for evidence-based reporting.
+Runtime evidence tracker — records each test step (navigate, click, fill, assert) with screenshots, element metadata, timing, and failure diagnostics. Writes per-test sidecar JSON files for evidence-based reporting.
 
 ## Module Metadata
 
@@ -4904,6 +5379,12 @@ Converts `{{ACTION:description}}` tokens to human-readable `"Action: description
 ### `_dismiss_consent_overlays()` / `_dismiss_ad_overlays()`
 Delegates to `src.browser_utils.dismiss_consent_overlays`.
 
+### `_dismiss_confirmation_modals()`
+Dismisses added-to-cart confirmation modals before clicks. **B-015 lesson (2026-08-03):** text-based dismissal (`Continue Shopping`, `.close`, …) is scoped to modal/dialog containers (`#cartModal, .modal, [role='dialog'], …`) — a visible "Continue Shopping" button on the cart page itself (saucedemo) must never be clicked here.
+
+### `_is_modal_close_target(locator) -> bool`
+True when a locator is a confirmation-modal close control (close-modal, Continue Shopping, btn-success).
+
 ### `_load_previous_history() -> dict` / `_load_previous_steps() -> list`
 Loads run history and step data from sidecar JSON for incremental counters.
 
@@ -4918,14 +5399,16 @@ Core recording method. Builds step dict with:
 - Failure diagnosis via `FailureReporter.diagnose_failure()` on error
 - Status: `"passed"`, `"partial_pass"` (when fallback used), `"failed"`
 
-### `navigate(url, label="")` â€” Navigate + dismiss overlays + screenshot
-### `fill(locator, value, label="")` â€” Fill form field
-### `click(locator, label="")` â€” Click with layered fallback:
+### `navigate(url, label="")` — Navigate + dismiss overlays + screenshot
+### `fill(locator, value, label="")` — Fill form field
+### `click(locator, label="")` — Click with layered fallback:
 1. Scroll into view + direct click (`.first` to avoid strict-mode)
-2. On visibility/timeout error: dismiss ads â†’ hover-reveal â†’ locator scoring fallback
-3. Fallback success â†’ `"partial_pass"` status with audit trail
-### `assert_visible(locator, label="")` â€” Wait for visible + screenshot + capture text
-### `write(status="passed") -> str` â€” Serialize sidecar JSON, update run history counters, return path
+2. Fast-fail: missing/hidden elements raise `_LocatorNotFoundError` immediately (no fallback marathon)
+3. **Modal-close no-op (2026-08-03):** if the target is a modal-close control and the modal is already dismissed (element hidden), the click's intent is satisfied — record a no-op instead of failing (generated "close popup / OK" steps collide with the tracker's pre-click auto-dismiss)
+4. On visibility/timeout error: dismiss ads → hover-reveal → locator scoring fallback
+5. Fallback success → `"partial_pass"` status with audit trail
+### `assert_visible(locator, label="")` — Wait for visible + screenshot + capture text
+### `write(status="passed") -> str` — Serialize sidecar JSON, update run history counters, return path
 
 ## Dependencies
 
@@ -5223,6 +5706,19 @@ It does not run exported tests, invoke Playwright, or call an LLM.
 - WAL and SHM companion files are copied when present.
 - Generated support files use UTF-8 encoding.
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `export_clean_suite`
+- `_find_sqlite_db(source: Path) -> Path | None` (function) — Locate the package run-history SQLite DB (current or legacy name).
+- `_guard_stub_source(source: Path) -> None` (function) — Raise ValueError when the source package has nothing runnable to export.
+
+### Internal utilities
+- `_count_stub_functions(source: Path) -> tuple[int, int]` (function) — Return ``(stub_test_count, total_test_count)`` across ``test_*.py`` files.
+- `_is_stub_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool` (function) — Return True when a test function body contains no real test logic.
+
+
 
 
 
@@ -5263,10 +5759,26 @@ Aggregated failure summary: total_passed, total_failed, category_counts, top_cat
 ## Key Design Decisions
 - Keyword-based heuristics (no ML dependency)
 - Categories align with strict-mode pytest errors
-- Stateless pure functions â€” easy to test and compose
+- Stateless pure functions — easy to test and compose
 
 ## Dependencies
-- None â€” stdlib only
+- None — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `FailureDetail` (class)
+
+Structured detail for a single test failure.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `classify_failure`
+- `_extract_locator(error_message: str) -> str | None` (function) — Extract the locator string from a Playwright error message.
+
 
 
 
@@ -5275,7 +5787,7 @@ Aggregated failure summary: total_passed, total_failed, category_counts, top_cat
 # `src/failure_reporter.py`
 
 ## Purpose
-Generates self-diagnosing failure evidence for failed Playwright test steps. Captures diagnostic context (page state, available elements, suggested alternatives) without auto-recovering â€” tests still fail, but with actionable debug info.
+Generates self-diagnosing failure evidence for failed Playwright test steps. Captures diagnostic context (page state, available elements, suggested alternatives) without auto-recovering — tests still fail, but with actionable debug info.
 
 ## Metadata
 - **Lines:** 468
@@ -5326,7 +5838,7 @@ File operation helpers for the Playwright test generator. Handles saving generat
 
 ## Key Logic
 - Filename format: `test_YYYYMMDD_HHMMSS_<slug>.py`
-- Syntax validation via `validate_python_syntax` before saving â€” rejects invalid Python
+- Syntax validation via `validate_python_syntax` before saving — rejects invalid Python
 - Newline fix uses regex lookbehind: inserts `\n` before `import ` or `from ` when preceded by non-whitespace
 - Rename handles collisions by appending timestamp
 - Enforces `test_` prefix and strips `.py` extension
@@ -5585,6 +6097,7 @@ The implementation favors transparent, deterministic heuristics:
 
 
 
+
 # `src/form_login_utils.py`
 
 ## High-Level Purpose
@@ -5827,6 +6340,7 @@ No classes are defined in this module.
 
 
 
+
 # `src/gantt_utils.py`
 
 ## Purpose
@@ -5849,7 +6363,7 @@ Builds Gantt-style timelines from EvidenceTracker sidecars (.evidence.json). Vis
 ## Functions
 | Function | Description |
 |----------|-------------|
-| `safe_read_sidecar(path)` | Reads JSON sidecar file â€” returns None if missing or invalid |
+| `safe_read_sidecar(path)` | Reads JSON sidecar file — returns None if missing or invalid |
 | `load_gantt_entries(evidence_dir)` | Loads all *.evidence.json from directory into GanttEntry list |
 | `build_gantt_summary_sentences(entries, total_expected)` | Returns (fastest, slowest, coverage) summary tuple |
 | `group_gantt_entries(entries, mode, condition_meta)` | Groups entries by condition_type/sprint/source with stable sorting |
@@ -5890,7 +6404,7 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 ## Constants
 | Constant | Description |
 |----------|-------------|
-| `CONFIDENCE_COLORS` | Maps ConfidenceLevel to hex colors (greenâ†’light greenâ†’yellowâ†’redâ†’secondary bg) |
+| `CONFIDENCE_COLORS` | Maps ConfidenceLevel to hex colors (green→light green→yellow→red→secondary bg) |
 | `_STATUS_COLORS` | passed=green, partial_pass=yellow, failed=red, skipped=gray |
 | `_EVIDENCE_STEP_COLORS` | navigate=pink, fill=green, click=blue, assertion=brown |
 
@@ -5898,8 +6412,8 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 | Function | Description |
 |----------|-------------|
 | `_normalise_url(url)` | Normalizes URLs: lowercases scheme/netloc, strips trailing slashes |
-| `_safe_read_json(path)` | Reads JSON file â€” returns None if missing or invalid |
-| `_safe_embed_image_data_uri(image_path)` | Reads image file â†’ base64 data URI with correct MIME type |
+| `_safe_read_json(path)` | Reads JSON file — returns None if missing or invalid |
+| `_safe_embed_image_data_uri(image_path)` | Reads image file → base64 data URI with correct MIME type |
 | `_extract_confirmed_ids(test_plan_state, story_ref)` | Extracts confirmed condition IDs from test plan state |
 | `build_story_confidence(evidence_dir, test_plan_state)` | Aggregates .evidence.json into StoryConfidence list per story |
 | `build_confidence_heatmap(stories)` | Builds Plotly treemap for story confidence levels |
@@ -5910,7 +6424,7 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 
 ### Story Confidence Aggregation
 - Groups sidecars by `story_ref`, counts passed/failed/skipped per condition
-- Confidence ladder: failed>0 â†’ gap_open_question; no sidecars â†’ partial_pending; all confirmed â†’ tester_confirmed; else â†’ ai_covered_unreviewed
+- Confidence ladder: failed>0 → gap_open_question; no sidecars → partial_pending; all confirmed → tester_confirmed; else → ai_covered_unreviewed
 - `confirmed_ids` from test_plan_state can be global set or per-story mapping
 
 ### Confidence Heatmap (Plotly)
@@ -5938,7 +6452,7 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 # `src/hover_click_utils.py`
 
 ## Purpose
-Hover-reveal click strategies for hidden elements. Handles elements hidden via CSS (display:none, visibility:hidden, opacity:0) that only become visible on parent mouseenter events â€” common in e-commerce product grids and navigation menus.
+Hover-reveal click strategies for hidden elements. Handles elements hidden via CSS (display:none, visibility:hidden, opacity:0) that only become visible on parent mouseenter events — common in e-commerce product grids and navigation menus.
 
 ## Metadata
 - **Lines:** 208
@@ -5947,7 +6461,7 @@ Hover-reveal click strategies for hidden elements. Handles elements hidden via C
 ## Functions
 | Function | Description |
 |----------|-------------|
-| `try_hover_and_click(page, loc, locator)` | Public entry â€” attempts 5 progressive hover strategies, returns True on first success |
+| `try_hover_and_click(page, loc, locator)` | Public entry — attempts 5 progressive hover strategies, returns True on first success |
 | `_attempt_hover_then_click(loc)` | Strategy 1: hover element directly, then click |
 | `_attempt_mouseenter_then_click(loc)` | Strategy 2: dispatch mouseenter via JS, then click |
 | `_attempt_ancestors_mouseenter(page, locator, loc)` | Strategy 3: dispatch mouseenter on all ancestors up to BODY, then click |
@@ -5956,15 +6470,15 @@ Hover-reveal click strategies for hidden elements. Handles elements hidden via C
 | `_try_click(loc)` | Helper: attempts loc.click(timeout=5000), returns True/False |
 
 ## Strategy Chain (executed in order)
-1. **Direct hover** â€” `loc.hover(timeout=2000)` then click
-2. **JS mouseenter** â€” dispatch `MouseEvent('mouseenter', bubbles=true)` on target, then click
-3. **Ancestor mouseenter** â€” walk `parentElement` chain to BODY, dispatch mouseenter on each, then click
-4. **Parent category hover** â€” finds visible sibling A/LI elements, dispatches mouseenter, checks if target becomes visible
-5. **Force-show** â€” walks up ancestors, forces `display:block`, `visibility:visible`, `opacity:1` with `!important`, removes hidden/collapse/invisible CSS classes, calls `el.click()` directly
+1. **Direct hover** — `loc.hover(timeout=2000)` then click
+2. **JS mouseenter** — dispatch `MouseEvent('mouseenter', bubbles=true)` on target, then click
+3. **Ancestor mouseenter** — walk `parentElement` chain to BODY, dispatch mouseenter on each, then click
+4. **Parent category hover** — finds visible sibling A/LI elements, dispatches mouseenter, checks if target becomes visible
+5. **Force-show** — walks up ancestors, forces `display:block`, `visibility:visible`, `opacity:1` with `!important`, removes hidden/collapse/invisible CSS classes, calls `el.click()` directly
 
 ## Key Patterns
-- All strategies are non-blocking â€” exceptions caught silently, returns False on failure
-- Strategy 4 targets automationexercise.com-style sidebar menus (Womenâ†’Dress pattern)
+- All strategies are non-blocking — exceptions caught silently, returns False on failure
+- Strategy 4 targets automationexercise.com-style sidebar menus (Women→Dress pattern)
 - Strategy 5 is last resort: modifies DOM styles with `!important` override
 - `_try_click` uses 5s timeout for the final click attempt
 
@@ -6407,9 +6921,19 @@ The default strategy list starts with exact and fill-specific matches, then appl
 ## B-021 Changes (2026-07-20)
 
 - `IntentStrategy.match()` return type extended: `bool | str | None` (was `bool | None`)
-- `PageStateAssertStrategy.URL_SIGNAL = "url"` â€” returned instead of `False` for page-state descriptions
+- `PageStateAssertStrategy.URL_SIGNAL = "url"` — returned instead of `False` for page-state descriptions
 - `IntentMatcher.match()` and `matches()` return types extended to `bool | str`
 - When `"url"` is returned, the orchestrator routes to `resolve_url()` for `expect(page).to_have_url(...)` assertions
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `VagueSectionAssertStrategy` (class)
+
+Handle vague ASSERT descriptions about page sections/areas.
+
 
 
 
@@ -6455,13 +6979,32 @@ Returns `True` if the page contains CAPTCHA iframes or elements. Detects:
 | `_CAPTCHA_ELEMENT_PATTERN` | CAPTCHA element text patterns |
 
 ## Design Notes
-- All functions are pure (no side effects) â€” easy to test in isolation
+- All functions are pure (no side effects) — easy to test in isolation
 - Regex patterns are pre-compiled at module level for performance
 - Extracted from `journey_scraper.py` during refactoring to separate auth detection concerns from DOM scraping
 
 ## Related Files
-- `src/journey_scraper.py` â€” consumer of these detection helpers
-- `src/state_tracker.py` â€” DOM state tracking used during journey scraping
+- `src/journey_scraper.py` — consumer of these detection helpers
+- `src/state_tracker.py` — DOM state tracking used during journey scraping
+
+
+
+
+
+# `src/journey_enrichment.py` — Journey Enrichment Helpers
+
+## Purpose
+DOM enrichment helpers for journey scraping. Extracted from `journey_scraper.py`. Reused by both `JourneyScraper` and `journey_executor` to ensure consistent enrichment pipeline (visibility checks + accessibility snapshot via CDP).
+
+## Functions
+- `capture_element_visibility_sync(page, elements: list[dict]) -> list[dict]` — annotate elements with `is_visible` via Playwright's `locator().is_visible()`
+- `capture_a11y_snapshot_sync(context, page) -> str | None` — capture CDP accessibility tree snapshot
+
+## Related
+- `src/journey_scraper.py` — primary consumer
+- `src/journey_executor.py` — secondary consumer
+- `src/accessibility_enricher.py` — A11y tree enrichment
+
 
 
 
@@ -6823,6 +7366,7 @@ This module defines no classes. It coordinates imported model classes and datacl
 
 
 
+
 # `src/journey_models.py`
 
 ## High-Level Purpose
@@ -7152,6 +7696,7 @@ Scraped element collections use `list[dict[str, Any]]`. This preserves flexibili
 
 
 
+
 # `src/journey_scraper.py`
 
 ## High-Level Purpose
@@ -7251,6 +7796,12 @@ Behavior:
 - Prints JSON output to stdout.
 
 ## Class: `JourneyScraper`
+
+### Credential-aware start (2026-08-03)
+When a `CredentialProfile` is supplied, the journey logs in at the starting URL (`attempt_login`) before running steps — auth-gated demo sites (saucedemo) previously hit the login wall because the journey never authenticated.
+
+### `_dismiss_modals(page)` — B-015 lesson (2026-08-03)
+Text-based modal dismissal is scoped to modal/dialog containers (`#cartModal, .modal, [role='dialog'], …`). The old global `button:has-text("Continue Shopping")` matched saucedemo's cart-page button and navigated the journey back to inventory — cart.html was never captured.
 
 Scrapes pages by following a user journey step-by-step.
 
@@ -7784,11 +8335,31 @@ Public diagnostic accessors expose skipped steps and locator warnings.
 
 ## B-023 Changes (2026-07-20)
 
-- Added `_dismiss_modals(page)` static method â€” dismisses confirmation modals/popups before click steps
+- Added `_dismiss_modals(page)` static method — dismisses confirmation modals/popups before click steps
 - Tries 8 common modal-dismiss selectors ("Continue Shopping", close buttons, modal footers)
-- Non-destructive: if no modal is visible, selectors won't match â†’ no-op
+- Non-destructive: if no modal is visible, selectors won't match → no-op
 - Called alongside `_dismiss_consent_overlays()` before every click step and after navigation
 - Eliminates "intercepts pointer events" errors when cart modals block navigation link clicks
+
+
+
+
+
+
+# `src/journey_subprocess.py` — Journey Subprocess Entry Point
+
+## Purpose
+Runs the synchronous Playwright journey in a clean subprocess to avoid Windows asyncio nested-loop issues. Extracted from `journey_scraper.py`.
+
+## Functions
+- `run_journey_subprocess_entry() -> int` — deserializes steps **and credential profile** from stdin JSON, reconstructs `JourneyStep`/`CredentialProfile`, runs `JourneyScraper._scrape_journey_sync()`, outputs scraped pages as JSON to stdout
+
+## Key Logic
+- **Credential round-trip (2026-08-03):** the payload always serialized `credential_profile` but the subprocess never read it back — auth-gated journeys silently ran without a session (saucedemo hit the login wall). The entry point now reconstructs `CredentialProfile` from `payload["credential_profile"]` and passes it to `JourneyScraper`.
+
+## Related
+- `src/journey_scraper.py` — `_scrape_journey_via_subprocess()` spawns this
+
 
 
 
@@ -7838,8 +8409,8 @@ Provider-agnostic LLM client that wraps the `src.llm_providers` module. Provides
 
 | Method | Description |
 |--------|-------------|
-| `generate(prompt, timeout=600, system_prompt=None) -> str` | Async generation â€” used by intelligent pipeline |
-| `generate_test(prompt, timeout=300, system_prompt=None) -> str` | Sync generation â€” retained for tests/utilities |
+| `generate(prompt, timeout=600, system_prompt=None) -> str` | Async generation — used by intelligent pipeline |
+| `generate_test(prompt, timeout=300, system_prompt=None) -> str` | Sync generation — retained for tests/utilities |
 | `generate_tests(acceptance_criteria, timeout=300) -> dict` | Generate from list of criteria, returns code + metadata |
 | `create_vision_completion(image_base64, prompt) -> str` | Vision-capable completion for image+text prompts |
 | `list_models(timeout=30) -> list[str]` | List models from current provider |
@@ -7864,32 +8435,41 @@ Provider-agnostic LLM client that wraps the `src.llm_providers` module. Provides
 
 ## Environment Variables
 
-- `OLLAMA_MODEL` â€” override default Ollama model
-- `LM_STUDIO_MODEL` â€” override default LM Studio model
-- `OPENAI_MODEL` â€” override default OpenAI model
-- `OPENAI_API_KEY` â€” required for cloud OpenAI provider
-- `PIPELINE_DEBUG=1` â€” enable debug logging
+- `OLLAMA_MODEL` — override default Ollama model
+- `LM_STUDIO_MODEL` — override default LM Studio model
+- `OPENAI_MODEL` — override default OpenAI model
+- `OPENAI_API_KEY` — required for cloud OpenAI provider
+- `PIPELINE_DEBUG=1` — enable debug logging
 
 ## Dependencies
 
-- `src.llm_providers` â€” provider implementations (Ollama, LM Studio, OpenAI)
-- `asyncio` â€” async generation support
-- `re` â€” code extraction from LLM responses
+- `src.llm_providers` — provider implementations (Ollama, LM Studio, OpenAI)
+- `asyncio` — async generation support
+- `re` — code extraction from LLM responses
 
 ## Depended On By
 
-- `src/orchestrator.py` â€” pipeline orchestration
-- `src/test_generator.py` â€” skeleton generation
-- `src/placeholder_orchestrator.py` â€” placeholder resolution
-- CLI/Streamlit UI â€” provider selection and session management
+- `src/orchestrator.py` — pipeline orchestration
+- `src/test_generator.py` — skeleton generation
+- `src/placeholder_orchestrator.py` — placeholder resolution
+- CLI/Streamlit UI — provider selection and session management
 
 ## Notes
 
 - Uses `httpx` (via `llm_providers`) instead of `requests`
-- No longer uses `dotenv` â€” environment loading handled elsewhere
+- No longer uses `dotenv` — environment loading handled elsewhere
 - Session provider state is class-level, shared across all instances
 - Vision completion uses base64-encoded PNG images
 - Code extraction handles markdown fences, `<channel|>` tags, and
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `create_llm_client(provider_name: str | None = None, model: str | None = None) -> LLMClient` (function)
+
+Create an LLMClient instance.
+
 
 
 
@@ -7934,13 +8514,13 @@ Wrapper for LLM generation results. Allows callers to handle success and failure
 
 ## Design Notes
 - `LLMErrorType` extends `StrEnum` (Python 3.11+) for JSON-serializable enum values
-- Simple, focused module â€” no business logic, just data structures
+- Simple, focused module — no business logic, just data structures
 - Used by `llm_client.py` to return structured results instead of raising exceptions
 - Enables graceful error handling in the pipeline without crash-on-failure
 
 ## Related Files
-- `src/llm_client.py` â€” primary consumer; wraps LLM responses in `LLMResult`
-- `src/orchestrator.py` â€” handles `LLMResult.error` for fallback behavior
+- `src/llm_client.py` — primary consumer; wraps LLM responses in `LLMResult`
+- `src/orchestrator.py` — handles `LLMResult.error` for fallback behavior
 
 
 
@@ -7965,12 +8545,12 @@ Removes lines that look like LLM reasoning/thinking text. LLMs sometimes output 
 ### `_is_llm_reasoning_line(line: str) -> bool` (private)
 Returns `True` if the line looks like LLM reasoning text rather than Python code. Uses a multi-stage detection pipeline:
 
-1. **Empty line check** â€” blank lines are never reasoning
-2. **Python keyword whitelist** â€” lines starting with valid Python constructs are preserved (def, class, import, from, return, if, else, for, while, try, except, assert, page., self., etc.)
-3. **Reasoning prefix match** â€” lines starting with known reasoning prefixes (Wait, Note, Actually, Hmm, Okay, Sure, Let's, I will, Self-Correction, etc.)
-4. **Comment-pattern match** â€” `# Word,` style reasoning comments
-5. **Bullet-pattern match** â€” `- Actually`, `- I will`, numbered reasoning bullets
-6. **Heuristic fallback** â€” short lines (<80 chars) starting with `CapitalizedWord,` that aren't variable assignments
+1. **Empty line check** — blank lines are never reasoning
+2. **Python keyword whitelist** — lines starting with valid Python constructs are preserved (def, class, import, from, return, if, else, for, while, try, except, assert, page., self., etc.)
+3. **Reasoning prefix match** — lines starting with known reasoning prefixes (Wait, Note, Actually, Hmm, Okay, Sure, Let's, I will, Self-Correction, etc.)
+4. **Comment-pattern match** — `# Word,` style reasoning comments
+5. **Bullet-pattern match** — `- Actually`, `- I will`, numbered reasoning bullets
+6. **Heuristic fallback** — short lines (<80 chars) starting with `CapitalizedWord,` that aren't variable assignments
 
 ## Detection Patterns
 | Pattern Group | Examples |
@@ -7981,13 +8561,22 @@ Returns `True` if the line looks like LLM reasoning text rather than Python code
 
 ## Design Notes
 - Extracted from `code_postprocessor.py` for independent testing
-- Line-by-line processing â€” no state carried between lines
+- Line-by-line processing — no state carried between lines
 - Python keyword whitelist includes runtime objects (`page.`, `self.`, `evidence_tracker`) to avoid false positives
 - Heuristic for short natural-language lines catches edge cases not covered by prefixes
 
 ## Related Files
-- `src/code_postprocessor.py` â€” consumer; calls `strip_llm_reasoning()` as a post-processing step
-- `src/code_normalizer.py` â€” sibling post-processing module (newline normalization)
+- `src/code_postprocessor.py` — consumer; calls `strip_llm_reasoning()` as a post-processing step
+- `src/code_normalizer.py` — sibling post-processing module (newline normalization)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_is_long_conversational_comment(stripped: str, comment_content: str) -> bool` (function) — Return True if a long comment (>100 chars) reads like reasoning prose.
+- `_is_structural_reasoning_line(stripped: str) -> bool` (function) — Return True if the line matches a structural reasoning pattern.
+
 
 
 
@@ -8018,18 +8607,18 @@ Build a robust Playwright locator from scraped element metadata. Prefers stable,
 5. Tag + :has-text (e.g. `a:has-text("Add to cart")`)
 6. Role + :has-text (e.g. `button:has-text("Submit")`)
 7. Aria-label based (e.g. `[aria-label="Submit"]`)
-8. `None` â€” falls back to raw selector
+8. `None` — falls back to raw selector
 
 Strips common UI framework class prefixes (`btn-`, `fa-`, `fas`, `far`, `bi-`, `mdi-`, `icon-`, `css-`) that add no semantic value.
 
-**Args:** `element` â€” Dict with keys: `tag`, `text`, `role`, `selector`, `id`, `aria_label`, `classes`, `href`.
+**Args:** `element` — Dict with keys: `tag`, `text`, `role`, `selector`, `id`, `aria_label`, `classes`, `href`.
 **Returns:** Robust locator string, or `None` if nothing stable can be built.
 
 ### `build_selector_relaxed(description: str, page_elements: list[dict]) -> str | None`
 
 Build a selector with relaxed matching criteria. Used as fallback when strict selector build fails. Tokenizes the description and scores elements by token overlap across text, attributes, and role. Uses 0.2 confidence threshold (vs 0.3 strict).
 
-**Args:** `description` â€” Human-readable target description; `page_elements` â€” Element metadata from scraper.
+**Args:** `description` — Human-readable target description; `page_elements` — Element metadata from scraper.
 **Returns:** Relaxed locator string, or `None` if no element meets threshold.
 
 ### `_css_escape_id(value: str) -> str`
@@ -8075,14 +8664,14 @@ Controlled locator fallback with scoring and audit trail. When a primary locator
 
 Build a list of locator candidates from the current page DOM. Uses JavaScript to extract candidate selectors (id, testid, name, aria-label, role, classes, text) for the same element or similar elements.
 
-**Args:** `primary_locator` â€” Original selector that failed; `el_metadata` â€” Element metadata; `page` â€” Playwright Page.
+**Args:** `primary_locator` — Original selector that failed; `el_metadata` — Element metadata; `page` — Playwright Page.
 **Returns:** List of candidate dicts with `selector` and `element` keys.
 
 ### `try_fallback(loc, primary_locator, label, el_metadata, primary_error, page, record_step, max_fallbacks=2, elapsed_ms=0) -> None`
 
 Try higher-scoring locator alternatives when the primary locator fails. Builds candidates, scores them, and tries top `max_fallbacks` in score-descending order. Records full fallback chain with scores and confidence levels.
 
-**Args:** `loc` â€” Playwright locator; `primary_locator` â€” Failed selector; `label` â€” Step label; `el_metadata` â€” Element metadata; `primary_error` â€” Exception; `page` â€” Playwright Page; `record_step` â€” Step recorder callable; `max_fallbacks` â€” Max candidates to try (default 2).
+**Args:** `loc` — Playwright locator; `primary_locator` — Failed selector; `label` — Step label; `el_metadata` — Element metadata; `primary_error` — Exception; `page` — Playwright Page; `record_step` — Step recorder callable; `max_fallbacks` — Max candidates to try (default 2).
 **Raises:** The primary error is re-raised after all fallbacks fail.
 
 ## Dependencies
@@ -8101,11 +8690,11 @@ Runtime test execution (generated tests with fallback support)
 
 ## High-Level Purpose
 
-Surgical replacement of a broken locator in a generated test file. Replaces only the locator string while preserving the surrounding action (`.click()`, `.fill()`, etc.). Design-time only â€” not used at test runtime.
+Surgical replacement of a broken locator in a generated test file. Replaces only the locator string while preserving the surrounding action (`.click()`, `.fill()`, etc.). Design-time only — not used at test runtime.
 
 ## Module Metadata
 
-- **Lines:** 151
+- **Lines:** 475
 - **Imports:** `re`, `dataclasses`, `pathlib.Path`
 
 ## Data Classes
@@ -8113,10 +8702,10 @@ Surgical replacement of a broken locator in a generated test file. Replaces only
 ### `LocatorPatch`
 
 Describes a single locator replacement.
-- `original_locator: str` â€” The broken locator string from the error
-- `repaired_locator: str` â€” The corrected locator (e.g., from codegen)
-- `line_number: int` â€” 1-based line in the generated test to patch
-- `test_file: str | Path` â€” Path to the generated test file
+- `original_locator: str` — The broken locator string from the error
+- `repaired_locator: str` — The corrected locator (e.g., from codegen)
+- `line_number: int` — 1-based line in the generated test to patch
+- `test_file: str | Path` — Path to the generated test file
 
 ### `LocatorRepairError(Exception)`
 
@@ -8127,6 +8716,10 @@ Raised when the target locator could not be found on the expected line.
 ### `apply_patch(patch: LocatorPatch) -> str`
 
 Apply a locator patch to the test source and return the patched source. Finds the line containing `original_locator`, replaces only the locator string inside `.locator("...")`, preserves the action. Searches +/- 10 lines around reported line number since Playwright error lines don't always match the locator call line.
+
+**B-042 hardening:**
+- The reconstruction re-applies the original line's leading indentation, so a patched line inside a test function can never be dedented to module scope (which broke collection with `NameError` / 1 error, 0 tests).
+- An empty `original_locator` (which would match every line in the search window and then mangle the file via `str.replace("", …)`) raises `LocatorRepairError` instead.
 
 ### `apply_patch_to_file(patch: LocatorPatch) -> None`
 
@@ -8143,6 +8736,30 @@ None (stdlib only).
 ## Depended On By
 
 Test repair workflows, CI auto-fix pipelines
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `SetupScriptResult` (class)
+
+Result of running prerequisite steps before a codegen session.
+
+### `translate_setup_step_to_python(step: str) -> list[str]` (function)
+
+Translate a generated test step line into Playwright setup script lines.
+
+### `run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None` (function)
+
+Launch headed Playwright codegen and capture the first locator from the recorded script.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `apply_patch`
+- `_find_locator_action_line(source: str, line_number: int, original_locator: str) -> tuple[int, str]` (function) — Return (0-based index, raw_line) for the line containing *original_locator*.
+
 
 
 
@@ -8191,9 +8808,59 @@ Return the top N fallback candidates that score higher than the failed locator.
 - NOT used by design-time `placeholder_resolver.py` (uses `placeholder_scorers.py` instead)
 
 ## Related Files
-- `src/locator_fallback.py` â€” consumes scores for runtime fallback selection
-- `src/failure_reporter.py` â€” uses scores for diagnostic alternatives
-- `src/placeholder_scorers.py` â€” sibling scoring module for design-time resolution (separate concern)
+- `src/locator_fallback.py` — consumes scores for runtime fallback selection
+- `src/failure_reporter.py` — uses scores for diagnostic alternatives
+- `src/placeholder_scorers.py` — sibling scoring module for design-time resolution (separate concern)
+
+
+
+
+
+# `src/ocr_backends.py` — OCR Backend Adapter (Phase 1i)
+
+## Purpose
+
+Pluggable backend interface for PDF → text conversion in the document parsing pipeline node. Provides two backends selectable via the `OCR_BACKEND` environment variable.
+
+## Architecture
+
+```
+OcrBackend (ABC)
+├── PyMuPDFBackend      ← default, CPU, zero deps
+└── UnlimitedOCRBackend ← GPU, 3B vision model (Baidu)
+```
+
+## Classes
+
+### `OcrBackend` (ABC)
+Abstract interface with three methods:
+
+- `parse_pdf(path: str | Path) -> str` — convert PDF to plain text
+- `parse_markdown(path: str | Path) -> str` — read Markdown directly
+- `name: str` (property) — human-readable backend name
+- `available: bool` (property) — whether this backend works in current environment
+
+### `PyMuPDFBackend`
+Default CPU backend. Delegates to `src/pdf_ingest.ingest_pdf()` for PDFs (heading detection, table extraction, chunking). Reads Markdown files directly.
+
+### `UnlimitedOCRBackend`
+GPU-accelerated backend using Baidu's `baidu/Unlimited-OCR` 3B vision-language model. Renders PDF pages to 300 DPI PNGs via PyMuPDF, then feeds to `model.infer_multi()` for single-pass multi-page OCR. Supports CUDA and ROCm (via HIP). Model is lazily loaded on first `parse_pdf()` call (~6 GB download from Hugging Face).
+
+Key methods:
+- `_ensure_model() -> None` — lazy-load tokenizer + model, detects bfloat16/float16
+- `parse_pdf(path) -> str` — render → OCR → collect `.mmd`/`.txt` output
+- `_collect_output_text(output_dir) -> str` — static; prefers `.mmd`, falls back to `.txt`
+
+## Factory
+
+### `get_ocr_backend(backend_name: str | None = None) -> OcrBackend`
+Reads `OCR_BACKEND` env var. Falls back to `PyMuPDFBackend` if requested backend is unavailable (e.g., no GPU). Explicit `backend_name` argument overrides env var.
+
+## Related
+- `src/pdf_ingest.py` — PyMuPDF pipeline used by the default backend
+- `src/agents/pipeline_graph.py` — `_parse_document()` node calls `get_ocr_backend()`
+- Phase 1i spec: `docs/specs/FEATURE_SPEC_phase1_multi_agent.md` §9
+
 
 
 
@@ -8205,7 +8872,7 @@ Return the top N fallback candidates that score higher than the failed locator.
 
 Primary intelligent generation pipeline for the Streamlit app. Coordinates the full skeleton-first test generation workflow: parses user stories into test conditions, generates skeleton code with placeholders, scrapes target URLs for DOM metadata, resolves placeholders to real selectors, post-processes code, and saves output.
 
-**Phase 1c (2026-07-26):** Now supports dual-path execution â€” linear pipeline (default fallback) and multi-agent `PipelineGraph` (default when langgraph installed). `LANGGRAPH_ENABLED=0` forces linear mode. See `run_pipeline_via_graph()` and `resume_graph()` for the graph path.
+**Phase 1c (2026-07-26):** Now supports dual-path execution — linear pipeline (default fallback) and multi-agent `PipelineGraph` (default when langgraph installed). `LANGGRAPH_ENABLED=0` forces linear mode. See `run_pipeline_via_graph()` and `resume_graph()` for the graph path.
 
 ## Module Metadata
 
@@ -8263,15 +8930,15 @@ Captured metadata for the most recent pipeline run.
 - **RAG (2026-07-21):** `_build_rag_retriever()` constructs `RAGRetriever` when `RAG_ENABLED=1` env var is set; passed to `PlaceholderOrchestrator` via `rag_retriever` kwarg
 
 ### Backwards-Compatible Properties
-- `resolver` â†’ delegates to `PlaceholderOrchestrator.resolver`
-- `scraper` â†’ delegates to `PlaceholderOrchestrator.scraper`
-- `page_object_builder` â†’ delegates to `PlaceholderOrchestrator.page_object_builder`
-- `semantic_ranker` â†’ delegates to `PlaceholderOrchestrator.semantic_ranker`
+- `resolver` → delegates to `PlaceholderOrchestrator.resolver`
+- `scraper` → delegates to `PlaceholderOrchestrator.scraper`
+- `page_object_builder` → delegates to `PlaceholderOrchestrator.page_object_builder`
+- `semantic_ranker` → delegates to `PlaceholderOrchestrator.semantic_ranker`
 
 These allow existing test code to mock directly on orchestrator instance without reaching into `_placeholder_orchestrator`.
 
 ### `run_pipeline(user_story, conditions, target_urls=None, consent_mode="auto-dismiss", reviewed_conditions=None) -> str`
-- **Main entry point** â€” async pipeline execution
+- **Main entry point** — async pipeline execution
 - Sets starting URL from target_urls
 - Updates placeholder orchestrator with starting URL
 - Returns final generated code as string
@@ -8307,6 +8974,7 @@ These allow existing test code to mock directly on orchestrator instance without
 **Phase 5: Resolve Placeholders**
 - Delegates to `PlaceholderOrchestrator` for placeholder resolution
 - Combines static and journey-scraped data
+- **Redirect-duplicate filter (2026-08-03):** after the stateful upgrade, pages whose stateless scrape redirected to another page *and* whose content duplicates that target are dropped — automationexercise serves HTTP 200 + redirect-to-home for guessed routes like `/inventory.html`, whose bogus keys otherwise win ASSERT resolution
 - **RAG (2026-07-21):** When `RAG_ENABLED=1`, `_build_rag_retriever()` creates a `RAGRetriever` wired to `MilvusLiteBackend` + `SentenceTransformerEmbedder`; passed to `PlaceholderOrchestrator` for golden-pattern retrieval during resolution
 
 **Phase 6: Post-Process and Save**
@@ -8336,7 +9004,7 @@ These allow existing test code to mock directly on orchestrator instance without
 - URL guessing via common path patterns using `url_utils`
 
 ### `_build_rag_retriever() -> RAGRetriever | None` (static, 2026-07-21)
-- Checks `RAG_ENABLED` env var â€” returns `None` when not set or `"0"`
+- Checks `RAG_ENABLED` env var — returns `None` when not set or `"0"`
 - Constructs `MilvusLiteBackend` at `get_storage().rag_path()` + `SentenceTransformerEmbedder` + `RAGStore`
 - Returns `RAGRetriever(store)` when store is non-empty, `None` otherwise
 - Graceful degradation: any import/init error logs a warning and returns `None`
@@ -8347,7 +9015,7 @@ These allow existing test code to mock directly on orchestrator instance without
 ## Key Data Flow
 
 ```
-User Story â†’ Conditions â†’ Skeleton (placeholders) â†’ DOM Scraped â†’ Resolved Code â†’ Saved Test
+User Story → Conditions → Skeleton (placeholders) → DOM Scraped → Resolved Code → Saved Test
 ```
 
 With optional:
@@ -8357,24 +9025,24 @@ With optional:
 
 ## Dependencies
 
-- `src.test_generator.TestGenerator` â€” LLM code generation
-- `src.skeleton_parser.SkeletonParser` â€” skeleton parsing & normalization
-- `src.skeleton_validator.SkeletonValidator` â€” validates no hallucinated selectors
-- `src.placeholder_orchestrator.PlaceholderOrchestrator` â€” resolves {{TOKEN}} to real selectors
-- `src.journey_scraper.JourneyScraper` â€” stateful DOM scraping
-- `src.scraper.PageScraper, scrape_with_enrichment` â€” static scraping with vision enrichment
-- `src.semantic_candidate_ranker.SemanticCandidateRanker` â€” semantic ranking of candidates
-- `src.page_object_builder.PageObjectBuilder` â€” POM generation
-- `src.prompt_utils.*` â€” prompt building
-- `src.code_postprocessor.normalise_generated_code` â€” post-processing
-- `src.url_utils.build_common_path_candidates, extract_route_concepts` â€” URL discovery
-- `src.test_plan.review_and_fix_conditions` â€” condition parsing via LLM
+- `src.test_generator.TestGenerator` — LLM code generation
+- `src.skeleton_parser.SkeletonParser` — skeleton parsing & normalization
+- `src.skeleton_validator.SkeletonValidator` — validates no hallucinated selectors
+- `src.placeholder_orchestrator.PlaceholderOrchestrator` — resolves {{TOKEN}} to real selectors
+- `src.journey_scraper.JourneyScraper` — stateful DOM scraping
+- `src.scraper.PageScraper, scrape_with_enrichment` — static scraping with vision enrichment
+- `src.semantic_candidate_ranker.SemanticCandidateRanker` — semantic ranking of candidates
+- `src.page_object_builder.PageObjectBuilder` — POM generation
+- `src.prompt_utils.*` — prompt building
+- `src.code_postprocessor.normalise_generated_code` — post-processing
+- `src.url_utils.build_common_path_candidates, extract_route_concepts` — URL discovery
+- `src.test_plan.review_and_fix_conditions` — condition parsing via LLM
 
 ## Depended On By
 
-- `src/ui_pipeline.py` â€” Streamlit UI calls `run_pipeline()`
-- `cli/pipeline_runner.py` â€” CLI calls `run_pipeline()`
-- `tests/test_orchestrator*.py` â€” unit tests
+- `src/ui_pipeline.py` — Streamlit UI calls `run_pipeline()`
+- `cli/pipeline_runner.py` — CLI calls `run_pipeline()`
+- `tests/test_orchestrator*.py` — unit tests
 
 ## Notes
 
@@ -8385,6 +9053,24 @@ With optional:
 - POM mode generates Page Object Models instead of direct Playwright code
 - Debug output controlled by `PIPELINE_DEBUG=1` environment variable
 - **RAG (2026-07-21):** Controlled by `RAG_ENABLED=1` env var. When enabled, golden-pattern retrieval runs during placeholder resolution, feeding `GOLDEN_PATTERN_BONUS` (+20) to element scoring. RAG store must be pre-built via `python scripts/rag_ingest.py --golden --docs`.
+---
+
+## B-036 Update (2026-08-03)
+
+### Always-on RAG (Phase 1)
+`_build_rag_retriever()` no longer requires `RAG_ENABLED=1` — a missing env
+var means **enabled**. `RAG_ENABLED=0` is a transitional opt-out (removed in a
+later release). Empty store ⇒ no patterns ⇒ no bonus ⇒ identical behavior to
+pre-RAG. Any store/embedder failure degrades to no-RAG (never blocks
+generation).
+
+### Bundled auto-seed hook (Phase 2)
+`TestOrchestrator.__init__` calls `src.rag_bundled.ensure_bundled_seeded()`
+when the retriever is built — first-run seed of the bundled golden pack
+(eval-001..006 keys + curated Playwright docs), idempotent via
+`evidence/.rag_bundled_seeded.json`. Guarded: a failure (offline embedder
+download, corrupt store) logs and proceeds without RAG; the seed retries next run.
+
 
 
 
@@ -8430,26 +9116,74 @@ class LoginPage:
 |--------|---------|-------------|
 | `build_pom_code(journeys, page_urls)` | `str` | Generate full POM class code |
 | `_extract_unique_locators(journey)` | `dict[str, str]` | Deduplicated locator map per page |
-| `_generate_class_name(url)` | `str` | URL â†’ PascalCase class name |
+| `_generate_class_name(url)` | `str` | URL → PascalCase class name |
 
 ## Dependencies
 
-- `src.pipeline_models` â€” `TestJourney`, `TestStep`
+- `src.pipeline_models` — `TestJourney`, `TestStep`
 
 ## Depended On By
 
-- `src/orchestrator.py` â€” writes POM code to generated test file
+- `src/orchestrator.py` — writes POM code to generated test file
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `PageObjectBuilder` (class)
+
+Convert scraped pages into deterministic Playwright page object modules.
 
 
 
 
 
-# `src/pipeline_artifact_manager.py` â€” Package Artifact Manager
+
+# `src/pdf_ingest.py` — PDF Ingestion Pipeline (AI-030)
+
+## Purpose
+Extracts text, headings, and tables from PDFs into `DocChunk` objects for RAG ingestion. Uses PyMuPDF (fitz) for text extraction.
+
+## Features
+- Heading detection via font-size threshold (no bookmarks required)
+- Table extraction as Markdown (kept whole, never split)
+- Image-only pages skipped with log warning
+- Chunking on heading boundaries with configurable token target
+
+## Functions
+- `ingest_pdf(path: Path) -> list[DocChunk]` — extract single PDF
+- `ingest_pdf_directory(directory: Path) -> list[DocChunk]` — extract all PDFs in directory
+
+## Related
+- `src/rag_store.py` — `DocChunk` consumer
+- `scripts/rag_ingest.py` — CLI entry point with `--pdfs` flag
+- `src/ocr_backends.py` — `PyMuPDFBackend` delegates to this
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (6 items). Grouped under the public function that uses them:
+
+### `ingest_pdf`
+- `_chunk_text(text: str, source: str, doc_title: str) -> list[DocChunk]` (function) — Split extracted text into DocChunks.
+- `_extract_page_text_with_headings(page: fitz.Page) -> str` (function) — Extract page text and inject heading markers.
+- `_extract_tables_page(page: fitz.Page) -> list[str]` (function) — Extract tables from a page as markdown strings.
+- `_import_fitz() -> type[fitz]` (function) — Lazy-import PyMuPDF.  Raises ImportError with install instructions if absent.
+
+### Internal utilities
+- `_extract_headings(page: fitz.Page) -> list[tuple[float, str]]` (function) — Return heading candidates sorted by vertical position (y coordinate).
+- `_is_table_section(text: str) -> bool` (function) — Check if a section is primarily a markdown table.
+
+
+
+
+
+
+# `src/pipeline_artifact_manager.py` — Package Artifact Manager
 
 **Module:** Persist and load generated test package metadata  
 **Created:** 2026-06-02  
 **Status:** Stable  
-**Feature:** AI-026 â€” Persist Generated Tests (Step 1)
+**Feature:** AI-026 — Persist Generated Tests (Step 1)
 
 ---
 
@@ -8459,7 +9193,7 @@ Provides package-level metadata persistence for generated test suites. Complemen
 
 Each generated package in `generated_tests/` receives a `package_manifest.json` file describing the suite. The module discovers existing packages, loads their manifests, and reconstructs minimal metadata for legacy packages that predate this feature.
 
-No Streamlit imports â€” fully unit-testable in isolation. Shared between CLI and Streamlit UI.
+No Streamlit imports — fully unit-testable in isolation. Shared between CLI and Streamlit UI.
 
 ---
 
@@ -8500,8 +9234,8 @@ Core dataclass representing a single generated test package. Maps directly to `p
 | `last_run_at` | `str` | ISO-8601 timestamp of last pytest run |
 
 **Methods:**
-- `to_dict() -> dict[str, Any]` â€” Serialize to plain dict (uses `dataclasses.asdict`)
-- `from_dict(data: dict[str, Any]) -> PackageManifest` â€” Class method; constructs from dict with defaults for missing fields
+- `to_dict() -> dict[str, Any]` — Serialize to plain dict (uses `dataclasses.asdict`)
+- `from_dict(data: dict[str, Any]) -> PackageManifest` — Class method; constructs from dict with defaults for missing fields
 
 ---
 
@@ -8530,15 +9264,15 @@ Each generated package stores metadata as:
 
 ```
 generated_tests/<package_name>/
-â”œâ”€â”€ test_*.py
-â”œâ”€â”€ conftest.py
-â”œâ”€â”€ page_objects/
-â”‚   â””â”€â”€ po_*.py
-â”œâ”€â”€ scrape_manifest.json         # existing â€” written by pipeline_writer.py
-â”œâ”€â”€ package_manifest.json        # THIS module â€” package metadata
-â”œâ”€â”€ run_results_*.json           # existing â€” written by run_result_persistence.py
-â””â”€â”€ evidence/
-    â””â”€â”€ screenshot_*.png
+├── test_*.py
+├── conftest.py
+├── page_objects/
+│   └── po_*.py
+├── scrape_manifest.json         # existing — written by pipeline_writer.py
+├── package_manifest.json        # THIS module — package metadata
+├── run_results_*.json           # existing — written by run_result_persistence.py
+└── evidence/
+    └── screenshot_*.png
 ```
 
 **`package_manifest.json` example:**
@@ -8574,12 +9308,14 @@ generated_tests/<package_name>/
 
 `find_existing_packages()` uses a two-phase discovery:
 
-1. **Canonical scan** â€” Look for directories containing `package_manifest.json`. Load via `load_package_manifest()`.
-2. **Legacy reconstruction** â€” For directories without a manifest but with `test_*.py` files, reconstruct a minimal manifest from disk.
+1. **Canonical scan** — Look for directories containing `package_manifest.json`. Load via `load_package_manifest()`.
+2. **Legacy reconstruction** — For directories without a manifest but with `test_*.py` files, reconstruct a minimal manifest from disk.
 
 **Excluded directories:** `__pycache__`, `.git`, and any directory without test files or a manifest.
 
 **Sort order:** `created_at` descending (newest first).
+
+**Run-count reconciliation (B-043):** both paths call `_refresh_run_stats()` so `run_results_count`/`last_run_at` reflect real run history, not stale manifest fields. Source-of-truth order: (1) workspace SQLite run-history DB via `run_stats_by_package()` — matches the package dir and any path beneath it, Windows-case-normalised; (2) legacy per-package JSON/SQLite counting; (3) the manifest's own persisted values (CLI bumps via `update_last_run_at`).
 
 ---
 
@@ -8600,8 +9336,8 @@ When `reconstruct=True` and no `package_manifest.json` exists, the module scans 
 | `scrape_manifest_path` | `"scrape_manifest.json"` if file exists, else `""` |
 | `reports` | `[]` |
 | `evidence_paths` | `[]` |
-| `run_results_count` | Count of `run_results_*.json` files |
-| `last_run_at` | `""` |
+| `run_results_count` | Count of `run_results_*.json` files, then reconciled against the run-history DB (`_refresh_run_stats`) |
+| `last_run_at` | `""`, then set from the run-history DB when rows exist (B-043) |
 
 ---
 
@@ -8612,7 +9348,7 @@ When `reconstruct=True` and no `package_manifest.json` exists, the module scans 
 | `src/pipeline_writer.py` (Step 3) | Will call `save_package_manifest()` after writing test files |
 | `cli/main.py` (Step 4) | Will call `find_existing_packages()` for "Load Existing" menu |
 | `streamlit_app.py` via `ui_renderers.py` (Step 5) | Will call `find_existing_packages()` for "Load Saved Package" sidebar |
-| `src/run_result_persistence.py` | Complementary module â€” handles run outcomes; `update_last_run_at()` bridges the two |
+| `src/run_result_persistence.py` | Complementary module — handles run outcomes; `update_last_run_at()` bridges the two |
 
 ---
 
@@ -8623,7 +9359,7 @@ When `reconstruct=True` and no `package_manifest.json` exists, the module scans 
 | `run_result_persistence.py` | Pytest run outcomes (pass/fail/skip per test, retry tracking, flakiness) |
 | `pipeline_artifact_manager.py` | Package metadata (user story, provider/model, report paths, evidence paths) |
 
-Both modules write to the same package directory but manage different concerns. `update_last_run_at()` in this module provides a bridge, updating manifest metadata when a new pytest run completes.
+Both modules write to the same package directory but manage different concerns. `update_last_run_at()` in this module provides a bridge, updating manifest metadata when a new pytest run completes; `run_stats_by_package()` (run_result_persistence) feeds run counts/last-run back into `find_existing_packages` for the sidebar/CLI dropdowns (B-043).
 
 ---
 
@@ -8631,9 +9367,9 @@ Both modules write to the same package directory but manage different concerns. 
 
 | Decision | Rationale |
 |----------|-----------|
-| JSON over database | Consistent with `scrape_manifest.json` and `run_results_*.json` â€” no new dependencies |
+| JSON over database | Consistent with `scrape_manifest.json` and `run_results_*.json` — no new dependencies |
 | `reconstruct` flag on `load_package_manifest` | Keeps backward compatibility with legacy packages without requiring migration |
-| Manifest lives in package root | Co-located with test files, scrape manifest, and run results â€” single source of truth per package |
+| Manifest lives in package root | Co-located with test files, scrape manifest, and run results — single source of truth per package |
 | `find_existing_packages` returns manifests, not paths | Consumers get structured data immediately, not raw paths to parse |
 | Discovery prefers canonical over reconstructed | Ensures accurate metadata when available, falls back gracefully |
 
@@ -8650,6 +9386,7 @@ Both modules write to the same package directory but manage different concerns. 
 - Package name populated from parent directory
 - find_existing_packages with canonical manifests
 - Legacy package discovery (no manifest, test files only)
+- **B-043:** dropdown run counts reflect the DB (2 persisted runs → count 2 + last_run); test-file-path `test_package` values match the package; manifest-only counts survive when the DB has no rows
 - Non-package directories skipped
 - Canonical manifest preferred over reconstruction
 - Reconstruct from package root
@@ -8666,10 +9403,24 @@ Both modules write to the same package directory but manage different concerns. 
 
 ## Notes
 
-- Module is fully synchronous â€” no async I/O
+- Module is fully synchronous — no async I/O
 - Thread-safe for single-writer scenarios (typical for test pipeline)
-- No file locking â€” not designed for concurrent writers
+- No file locking — not designed for concurrent writers
 - `MANIFEST_FILENAME` constant (`"package_manifest.json"`) is exported for consumers
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (5 items). Grouped under the public function that uses them:
+
+### `load_package_manifest`
+- `_load_from_file(filepath: Path) -> PackageManifest` (function) — Parse a JSON manifest file.
+- `_reconstruct_manifest(package_root: Path) -> PackageManifest` (function) — Build a minimal ``PackageManifest`` from on-disk artefacts.
+
+### Internal utilities
+- `_count_run_results(package_root: Path) -> int` (function) — Count run results. Prefers SQLite DB, falls back to JSON file count.
+- `_db_run_stats_for_package(package_root: Path) -> tuple[int, str]` (function) — Return ``(run_count, last_run_at)`` for *package_root* from the workspace DB.
+- `_scan_page_object_files(package_root: Path) -> list[str]` (function) — Return relative page-object file names under ``pages/``.
+
 
 
 
@@ -8687,29 +9438,29 @@ created: "2026-05-30"
 
 ## High-Level Purpose
 
-Core data structures that flow through the skeleton-first pipeline: skeleton generation â†’ placeholder extraction â†’ DOM scraping â†’ placeholder resolution â†’ code generation.
+Core data structures that flow through the skeleton-first pipeline: skeleton generation → placeholder extraction → DOM scraping → placeholder resolution → code generation.
 
 ## Key Data Models
 
 ### `PlaceholderUse`
 A single `{{ACTION:description}}` token found in skeleton code.
-- `action`: str â€” CLICK, FILL, GOTO, URL, ASSERT
-- `description`: str â€” human-readable element description
-- `token`: str â€” full placeholder string e.g. `{{CLICK:Login button}}`
-- `line_number`: int â€” line in generated code
-- `raw_line`: str â€” full source line containing placeholder
+- `action`: str — CLICK, FILL, GOTO, URL, ASSERT
+- `description`: str — human-readable element description
+- `token`: str — full placeholder string e.g. `{{CLICK:Login button}}`
+- `line_number`: int — line in generated code
+- `raw_line`: str — full source line containing placeholder
 
 ### `PageRequirement`
 A page the test needs to navigate to (from PAGES_NEEDED block).
-- `keyword`: str â€” short keyword e.g. "cart", "checkout"
-- `description`: str â€” parenthetical description from skeleton
+- `keyword`: str — short keyword e.g. "cart", "checkout"
+- `description`: str — parenthetical description from skeleton
 
 ### `TestJourney`
 Structured representation of one generated test function.
-- `test_name`: str â€” function name e.g. "test_01_login"
-- `start_line`, `end_line`: int â€” code boundaries
-- `page_object_names`: list[str] â€” page objects referenced
-- `steps`: list[TestStep] â€” ordered steps with placeholders
+- `test_name`: str — function name e.g. "test_01_login"
+- `start_line`, `end_line`: int — code boundaries
+- `page_object_names`: list[str] — page objects referenced
+- `steps`: list[TestStep] — ordered steps with placeholders
 
 ### `TestStep`
 A single executable line within a test function.
@@ -8723,10 +9474,35 @@ A single executable line within a test function.
 
 ## Depended On By
 
-- `src/skeleton_parser.py` â€” populates models
-- `src/placeholder_orchestrator.py` â€” consumes PlaceholderUse
-- `src/orchestrator.py` â€” orchestrates pipeline using all models
-- `src/page_object_builder.py` â€” uses TestJourney
+- `src/skeleton_parser.py` — populates models
+- `src/placeholder_orchestrator.py` — consumes PlaceholderUse
+- `src/orchestrator.py` — orchestrates pipeline using all models
+- `src/page_object_builder.py` — uses TestJourney
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 5 items):
+
+### `ExportMode` (class)
+
+Controls how exported test files are produced.
+
+### `ScrapedPage` (class)
+
+Metadata for one scraped page used by the pipeline.
+
+### `GeneratedPageObject` (class)
+
+A page object module generated from scraped page data.
+
+### `ManifestRecord` (class)
+
+One unresolved or informational record written into the pipeline manifest.
+
+### `PipelineArtifactSet` (class)
+
+The structured output package produced by one pipeline run.
+
 
 
 
@@ -8747,13 +9523,13 @@ Build report artifacts for generated pipeline test packages. Orchestrates covera
 
 ### `PipelineReportBundle` (frozen)
 Report content and saved paths for one pipeline run.
-- `coverage_rows: list[dict]` â€” Per-criterion coverage rows
-- `local_report: str` â€” Local markdown report
-- `jira_report: str` â€” Jira markdown report
-- `html_report: str` â€” HTML report
-- `local_report_path: str` â€” Absolute path to saved local report (empty if no package_dir)
-- `jira_report_path: str` â€” Absolute path to saved Jira report
-- `html_report_path: str` â€” Absolute path to saved HTML report
+- `coverage_rows: list[dict]` — Per-criterion coverage rows
+- `local_report: str` — Local markdown report
+- `jira_report: str` — Jira markdown report
+- `html_report: str` — HTML report
+- `local_report_path: str` — Absolute path to saved local report (empty if no package_dir)
+- `jira_report_path: str` — Absolute path to saved Jira report
+- `html_report_path: str` — Absolute path to saved HTML report
 
 ## Class: `PipelineReportService`
 
@@ -8794,10 +9570,10 @@ Execute saved generated test packages via pytest and parse their output. Handles
 
 ### `PipelineExecutionResult` (frozen)
 Structured result for one generated-package pytest execution.
-- `command: list[str]` â€” Full command executed
-- `run_result: RunResult` â€” Parsed pytest results (pass/fail/skip per test)
-- `display_output: str` â€” Formatted pytest output for display
-- `return_code: int` â€” Process exit code
+- `command: list[str]` — Full command executed
+- `run_result: RunResult` — Parsed pytest results (pass/fail/skip per test)
+- `display_output: str` — Formatted pytest output for display
+- `return_code: int` — Process exit code
 
 ## Class: `PipelineRunService`
 
@@ -8817,6 +9593,15 @@ Structured result for one generated-package pytest execution.
 ## Depended On By
 
 `orchestrator.py`, `ui_pipeline.py`, `cli/pipeline_runner.py`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult` (function)
+
+Merge a failed-only rerun into the previous full run result.
+
 
 
 
@@ -8840,7 +9625,7 @@ Sets output directory for artifact packages.
 
 ### `write_run_artifacts(run_result, story_text, base_url="", provider_name="", model_name="", additional_urls=[]) -> PipelineArtifactSet`
 Main entry point. Writes one structured artifact package:
-1. Validates generated code syntax â€” raises `ValueError` if invalid
+1. Validates generated code syntax — raises `ValueError` if invalid
 2. Creates package directory with timestamp + story slug
 3. Creates `pages/` subdirectory with `__init__.py`
 4. Writes page object modules to `pages/`
@@ -8930,17 +9715,20 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - `credential_profile`: Credentials for stateful scraping (authenticated flows)
 - `pom_mode`: When True, generate tests using evidence-aware POM classes instead of flat `evidence_tracker` calls
 - `generator`: LLM generator for semantic candidate ranking (B-020). When None, ASSERT resolution falls back to mechanical `toBeVisible`
-- `rag_retriever`: Optional `RAGRetriever` for golden-pattern scoring (Phase 3 RAG, 2026-07-21). When None, RAG is disabled â€” zero behaviour change.
+- `rag_retriever`: Optional `RAGRetriever` for golden-pattern scoring (Phase 3 RAG, 2026-07-21). When None, RAG is disabled — zero behaviour change.
 
 ### Properties
 - `pom_mode(self) -> bool`: Whether POM-mode output is enabled
-- `rag_retriever` â†’ stored as `self._rag_retriever`; accessed via `_retrieve_golden_patterns()`
+- `rag_retriever` → stored as `self._rag_retriever`; accessed via `_retrieve_golden_patterns()`
 
 ### Key Methods
 
 #### Scraping & State Management
-- `_ensure_scraped(url, scraped_data, scraped_errors=None)`: Scrape URL once and cache into scraped_data
-- `_upgrade_stateful_pages(scraped_data) -> dict`: Replace stateless scrapes with session-backed scrapes for cart/checkout pages
+- `_ensure_scraped(url, scraped_data, scraped_errors=None)`: Scrape URL once and cache into scraped_data — drops near-empty SPA 404/login-wall shells (<3 elements)
+- `_upgrade_stateful_pages(scraped_data) -> dict`: Replace stateless scrapes with session-backed scrapes for cart/checkout pages; ends with `_drop_dead_pages` (removes <3-element shells)
+- `_drop_dead_pages(scraped_data)`: Remove near-empty shells (SPA 404 pages, login walls) that pollute resolution
+- `_drop_redirect_duplicates(scraped_data, redirects)`: Remove pages whose stateless scrape redirected to another page AND whose content duplicates that target (automationexercise serves 200 + redirect-to-home for guessed routes)
+- `_is_navigation_description(description) -> bool`: True for cart/basket navigation descriptions ("cart icon", "shopping cart") — excludes action verbs (add/remove) and "button" targets
 - `_build_scraped_page_records(pages_to_scrape, scraped_data, scraped_errors=None, redirects=None) -> list[ScrapedPage]`: Build typed scraped-page records in journey order
 
 #### Page Object Model (POM) Helpers
@@ -8952,10 +9740,10 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - `_get_pom_method_call(action, description, resolved_selector, pom_instance_name, fill_value="") -> str | None`: Generate POM method call (CLICK/FILL only; ASSERT/GOTO remain direct)
 
 #### RAG Retrieval (Phase 3, 2026-07-21)
-- `_retrieve_golden_patterns(action, description) -> list | None`: Queries `RAGRetriever` for golden patterns matching the placeholder. Returns None when RAG is disabled or no patterns found above confidence threshold. Called before `find_best_element_for_current_page()` â€” results are forwarded as `golden_patterns` kwarg.
+- `_retrieve_golden_patterns(action, description) -> list | None`: Queries `RAGRetriever` for golden patterns matching the placeholder. Returns None when RAG is disabled or no patterns found above confidence threshold. Called before `find_best_element_for_current_page()` — results are forwarded as `golden_patterns` kwarg.
 
 #### Placeholder Resolution
-- `_replace_placeholders_sequentially(skeleton_code, journeys, page_requirements, seed_urls, scraped_data, scraped_errors=None) -> str`: Main resolution method â€” resolves placeholders step-by-step while tracking active page
+- `_replace_placeholders_sequentially(skeleton_code, journeys, page_requirements, seed_urls, scraped_data, scraped_errors=None) -> str`: Main resolution method — resolves placeholders step-by-step while tracking active page
   - Phase 1: Resolve placeholders inside test functions with journey context
   - Phase 2: Resolve remaining placeholders using fallback context
   - Phase 3: Apply line-level replacements (supports POM mode)
@@ -8985,10 +9773,20 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - GOTO/URL remain as direct `page.goto()` calls
 
 ### Stateful Scraping
-- **Cart/checkout pages**: Uses `CartSeedingScraper` for session-backed scraping
+- **Cart/checkout pages**: Uses `CartSeedingScraper` for session-backed scraping — now passed `credential_profile` (2026-08-03) so auth-gated sites (saucedemo) can seed the cart
+- **Stateful routing (2026-08-03):** cart/checkout detection uses `url_utils.is_stateful_cart_checkout_path` (site-agnostic tokens) instead of the hardcoded `{/view_cart, /checkout}` set
 - **Stateful re-scrape**: Re-scrapes pages that returned 0 elements
 - **Journey execution**: Supports authenticated flows via `execute_journey()`
 - **URL matching**: Matches on both domain and path to avoid mixing data from different sites
+
+### Navigation-Intent Fallback (2026-08-03)
+SPA sites render cart/basket links as icon elements with no accessible name, so text matching can't resolve "cart icon"/"shopping cart". When element matching fails on a cart/basket navigation description, the pipeline re-resolves it as a GOTO to the verified page URL — keeping the page context advancing through cart → checkout.
+
+### Post-Login ASSERT Mapping (2026-08-03)
+Page-state assertions mentioning "logged in"/"login successful" resolve to the post-auth page (inventory/products) instead of the login page itself.
+
+### GOTO Resolution Scope (2026-08-03)
+GOTO/URL placeholders resolve against ALL verified pages (not just the current page's scope) — navigation is global, so dead shells or scoped pages can't hijack it.
 
 ### ASSERT Resolution (B-014, B-016, B-020)
 - **B-014**: Excludes last interactive selector from ASSERT candidates
@@ -8997,24 +9795,24 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 
 ## Dependencies
 
-- `src.code_postprocessor.replace_token_in_line` â€” token replacement logic
-- `src.journey_scraper.CartSeedingScraper, execute_journey` â€” cart seeding and journey execution
-- `src.locator_builder.build_robust_locator` â€” locator construction
-- `src.page_object_builder.PageObjectBuilder` â€” POM generation
-- `src.pipeline_models.*` â€” data models
-- `src.placeholder_resolver.PlaceholderResolver` â€” core placeholder resolution
-- `src.scraper.PageScraper` â€” static scraping
-- `src.semantic_candidate_ranker.SemanticCandidateRanker` â€” LLM-assisted ranking
-- `src.semantic_matcher.SemanticMatcher` â€” semantic matching
-- `src.stateful_scraper.StatefulPageScraper` â€” stateful scraping
-- `src.url_inference.infer_next_page_url` â€” URL inference
-- `src.url_resolver.UrlResolver` â€” URL resolution
-- `src.url_utils.*` â€” URL utilities
+- `src.code_postprocessor.replace_token_in_line` — token replacement logic
+- `src.journey_scraper.CartSeedingScraper, execute_journey` — cart seeding and journey execution
+- `src.locator_builder.build_robust_locator` — locator construction
+- `src.page_object_builder.PageObjectBuilder` — POM generation
+- `src.pipeline_models.*` — data models
+- `src.placeholder_resolver.PlaceholderResolver` — core placeholder resolution
+- `src.scraper.PageScraper` — static scraping
+- `src.semantic_candidate_ranker.SemanticCandidateRanker` — LLM-assisted ranking
+- `src.semantic_matcher.SemanticMatcher` — semantic matching
+- `src.stateful_scraper.StatefulPageScraper` — stateful scraping
+- `src.url_inference.infer_next_page_url` — URL inference
+- `src.url_resolver.UrlResolver` — URL resolution
+- `src.url_utils.*` — URL utilities
 
 ## Depended On By
 
-- `src/orchestrator.py` â€” core pipeline orchestration
-- `src/ui_pipeline.py` â€” Streamlit UI pipeline execution
+- `src/orchestrator.py` — core pipeline orchestration
+- `src/ui_pipeline.py` — Streamlit UI pipeline execution
 
 ## Notes
 
@@ -9023,11 +9821,33 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 - Supports both legacy flat mode and modern POM mode
 - Handles complex stateful scraping scenarios (cart, checkout, authentication)
 - B-014/B-016/B-020 improvements for ASSERT resolution quality
-- **B-021 (2026-07-20):** `_is_page_state_assertion()` + URL assertion routing â†’ `expect(page).to_have_url(...)`
+- **B-021 (2026-07-20):** `_is_page_state_assertion()` + URL assertion routing → `expect(page).to_have_url(...)`
 - **B-022 (2026-07-20):** Cart-seeding upgrade now always prefers seeded data for `/view_cart` and `/checkout`; product URL detection from scraped data
 - **B-023 (2026-07-20):** Modal dismissal integrated via `JourneyScraper._dismiss_modals()`
-- **Phase 3 RAG (2026-07-21):** `rag_retriever` kwarg + `_retrieve_golden_patterns()` â†’ golden patterns flow into `ElementMatcher.find_best_element_for_current_page()` â†’ `PlaceholderScorer.compute_element_score()` for +GOLDEN_PATTERN_BONUS
+- **2026-08-03 (saucedemo checkout cluster):** soft-404 dead-page filter, redirect-duplicate filter, navigation-intent GOTO fallback, post-login ASSERT mapping, site-agnostic stateful routing, CartSeedingScraper credentials
+- **Phase 3 RAG (2026-07-21):** `rag_retriever` kwarg + `_retrieve_golden_patterns()` → golden patterns flow into `ElementMatcher.find_best_element_for_current_page()` → `PlaceholderScorer.compute_element_score()` for +GOLDEN_PATTERN_BONUS
 - Consolidated skip logic reduces noise in generated tests
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Site-scoped learned-pattern bonus
+`_resolve_placeholder()` now computes the current site's hash from
+`current_url` (`src.rag_learn.site_hash(domain_from_url(...))`) and threads it
+as `site_hash` into `ElementMatcher.find_best_element_for_current_page(...)` →
+`PlaceholderResolver.rank_candidates(...)` → `PlaceholderScorer.compute_element_score(...)`.
+Learned patterns from the same site earn +5; cross-site earned 0. Golden
+patterns are unaffected (+20 anywhere).
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `polarity_assertion_type(description: str) -> str | None` (function)
+
+Return ``"toBeHidden"`` for negative-state ASSERT descriptions, else None.
+
 
 
 
@@ -9039,9 +9859,9 @@ Coordinates placeholder resolution, scraping, and page artifact generation. Tran
 Core placeholder resolution engine that matches `{{TOKEN:description}}` tokens against scraped DOM candidates using semantic matching, confidence scoring, and page-context validation.
 
 ## Module Metadata
-- **Lines:** ~520
+- **Lines:** ~530
 - **Imports:** `re`, `logging`, `dataclasses`, `typing`, `src.semantic_matcher`, `src.placeholder_scorers`, `src.page_context_tracker`
-- **RAG update:** 2026-07-21 â€” `golden_patterns` optional kwarg on `rank_candidates()`
+- **RAG update:** 2026-07-21 — `golden_patterns` optional kwarg on `rank_candidates()`
 
 ## Classes
 
@@ -9054,26 +9874,39 @@ Main resolution class.
 |--------|-------------|
 | `resolve(code: str, pages: list[PageData]) -> list[PlaceholderContext]` | Finds all placeholder tokens and resolves each against page candidates |
 | `resolve_single(token: str, candidates: list[Element]) -> ScoreResult` | Resolves one token against candidate elements |
+| `resolve_url(description, pages_data, known_urls=None)` | Resolve navigation placeholders to the best matching scraped URL (direct URL → known_urls substring → discovered hrefs → semantic word scoring) |
 | `_find_candidates(token: str, pages: list[PageData]) -> list[Element]` | Scrapes matching elements across pages |
 | `_apply_page_context(token: str, candidates: list[Element]) -> list[Element]` | Filters candidates by page-context rules |
 | `rank_candidates(candidates, description, *, golden_patterns=None)` | Scores and ranks candidates; `golden_patterns` (Phase 3 RAG) adds bonus for golden pattern matches |
-
-## Functions
-
-### `resolve_placeholders(code: str, pages: list[PageData]) -> tuple[str, list[PlaceholderContext]]`
-Top-level function â€” returns resolved code and context list.
-
-### `extract_placeholders(code: str) -> list[PlaceholderContext]`
-Regex-based extraction of `{{TOKEN:description}}` patterns.
 
 ## Key Design Decisions
 - Token-only placeholders in skeleton phase (no real selectors)
 - Page-context validation prevents cross-page mismatches
 - Confidence threshold gate before accepting a match
-- **RAG golden_patterns (2026-07-21):** Optional kwarg passed through to `PlaceholderScorer.compute_element_score()` â€” advisory bonus, zero behaviour change when None
+- `resolve_url` scoring gives +4 bonuses for product/cart/checkout path words; the product bonus set includes `inventory` (2026-08-03) so saucedemo's `/inventory.html` wins "products page loaded" style resolutions
+- **RAG golden_patterns (2026-07-21):** Optional kwarg passed through to `PlaceholderScorer.compute_element_score()` — advisory bonus, zero behaviour change when None
 
 ## Dependencies
 - `src.semantic_matcher`, `src.placeholder_scorers`, `src.page_context_tracker`
+
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### `site_hash` parameter
+`rank_candidates(action, description, page_elements, golden_patterns=None, site_hash=None)`
+gained a `site_hash` kwarg, forwarded to
+`PlaceholderScorer.compute_element_score(..., site_hash=site_hash)` — enables
+the same-site learned-pattern bonus (+5, AI-035 Phase 2). Callers that don't
+pass it get identical behavior (bonus only applies when a site hash is present).
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_css_escape_id(value: str) -> str` (function) — Escape a raw ID value for safe use in a CSS #id selector.
+
 
 
 
@@ -9082,13 +9915,13 @@ Regex-based extraction of `{{TOKEN:description}}` patterns.
 # `src/placeholder_scorers.py`
 
 ## High-Level Purpose
-Composite scoring engine for placeholder resolution â€” provides individual testable scoring functions that evaluate candidate elements against placeholder descriptions.
+Composite scoring engine for placeholder resolution — provides individual testable scoring functions that evaluate candidate elements against placeholder descriptions.
 
 ## Module Metadata
 - **Lines:** ~570
 - **Imports:** `re`, `math`, `dataclasses`, `typing`, `src.semantic_matcher`
-- **RAG updates:** 2026-07-21 â€” `GOLDEN_PATTERN_BONUS` constant, `_golden_pattern_bonus()` method, optional `golden_patterns` parameter on `compute_element_score()`
-- **B-025 updates:** 2026-07-23 â€” Heading penalty (-20) in `_click_role_bonus()` for CLICK on elements with heading role and no ID. Container bonus (+10) for generic/group/region elements with an ID.
+- **RAG updates:** 2026-07-21 — `GOLDEN_PATTERN_BONUS` constant, `_golden_pattern_bonus()` method, optional `golden_patterns` parameter on `compute_element_score()`
+- **B-025 updates:** 2026-07-23 — Heading penalty (-20) in `_click_role_bonus()` for CLICK on elements with heading role and no ID. Container bonus (+10) for generic/group/region elements with an ID.
 
 ## Classes
 
@@ -9101,7 +9934,7 @@ Individual score components: attribute_score, text_score, specificity_bonus, etc
 ## Functions
 
 ### `aggregate_score(candidates: list[Element], description: str) -> list[ScoreResult]`
-Main entry â€” scores all candidates, returns sorted list.
+Main entry — scores all candidates, returns sorted list.
 
 ### `score_attribute_match(element: Element, description: str) -> float`
 Scores based on attribute overlap (id, name, class, data-*).
@@ -9122,21 +9955,86 @@ Module-level constant matching `_vision_enriched_bonus` (+20). Strong enough to 
 
 ### `_golden_pattern_bonus(element, golden_patterns) -> int`
 Static method. Evaluates whether an element's selector matches any retrieved golden pattern:
-- **Direct selector match:** `+GOLDEN_PATTERN_BONUS Ã— pattern.confidence`
-- **Tolerance/substring match:** `+GOLDEN_PATTERN_BONUS Ã— 0.5 Ã— pattern.confidence`
+- **Direct selector match:** `+GOLDEN_PATTERN_BONUS × pattern.confidence`
+- **Tolerance/substring match:** `+GOLDEN_PATTERN_BONUS × 0.5 × pattern.confidence`
 - **No match:** `0`
 
-### `compute_element_score()` â€” `golden_patterns` parameter
+### `compute_element_score()` — `golden_patterns` parameter
 Optional `list[RetrievedPattern]` kwarg. When non-empty, `_golden_pattern_bonus()` is called and the result added to the element's total score.
 
 ## Key Design Decisions
-- Composable scoring functions â€” each testable in isolation
+- Composable scoring functions — each testable in isolation
 - Weighted sum model with configurable weights
 - Locator type hierarchy mirrors strict-mode reliability
-- Golden pattern bonus is advisory â€” zero behaviour change when patterns list is empty/None
+- Golden pattern bonus is advisory — zero behaviour change when patterns list is empty/None
 
 ## Dependencies
 - `src.semantic_matcher`
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Same-site learned-pattern bonus
+- New constant `SAME_SITE_LEARNED_BONUS: int = 5` (next to `GOLDEN_PATTERN_BONUS = 20`).
+- New static `_learned_pattern_bonus(element, patterns, site_hash) -> int`:
+  +5 for a **same-site** learned pattern match (direct; half for substring,
+  scaled by confidence), **0** for cross-site learned or golden sources.
+- `compute_element_score(..., golden_patterns=None, site_hash=None)` gained a
+  `site_hash` kwarg; the learned bonus is added alongside the golden bonus.
+  Without `site_hash` (or with none set), behavior is unchanged — zero bonus.
+
+### Rationale
+Learned patterns are only trusted on the site they were verified on. A
+saucedemo-learned `username → #user-name` must not win ties on a foreign site —
+the +5/+0 split is the main poisoning guard.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `PlaceholderScorer` (class)
+
+Stateless scoring utilities for placeholder candidate ranking.
+
+
+
+
+
+
+# `src/pom_helpers.py` — POM-Mode Code Generation Helpers
+
+## Purpose
+Page Object Model artifact generation. Extracted from `placeholder_orchestrator.py`. Handles import statements, instantiation lines, and converting placeholder tokens into POM method calls.
+
+## Functions
+- `build_page_object_artifacts(...) -> list[dict]` — generate POM classes from scraped pages
+- `build_pom_url_map(...) -> dict[str, str]` — URL → class name mapping
+- `build_pom_imports(pom_classes: list[dict]) -> str` — import statements
+- `build_pom_instantiation(pom_classes: list[dict]) -> str` — instantiation code
+- `get_pom_instance_name(url: str, url_map: dict) -> str` — URL → instance variable name
+- `get_pom_method_call(placeholder, url_map, ...) -> str` — placeholder → method call
+
+## Related
+- `src/placeholder_orchestrator.py` — consumer
+- `src/page_object_builder.py` — `PageObjectBuilder` class
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `deduplicate_pom_lines(code: str) -> str` (function)
+
+Remove duplicated POM imports and per-test page-object instantiations.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `get_pom_method_call`
+- `_selector_literal(value: str) -> str` (function) — Return *value* as a Python string literal.
+
 
 
 
@@ -9176,7 +10074,88 @@ Generates login prerequisite block.
 - No modification of test function signature
 
 ## Dependencies
-- None from `src/` â€” stdlib only
+- None from `src/` — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `PrerequisiteStep` (class)
+
+A resolved step extracted from a prerequisite test.
+
+### `InjectionPlan` (class)
+
+Describes what needs to be injected into a test.
+
+### `PrerequisiteInjector` (class)
+
+Detect dependency chains and inject prerequisite steps.
+
+
+
+
+
+
+# prompt_builder.py
+
+## Purpose
+PEP 750 t-string (Python 3.14) based prompt assembly for LLM calls. Separates trusted static prompt structure from untrusted interpolated values so rendering can apply per-field safety transforms (truncation, sanitation) and record exactly what was sent to the LLM as a structured audit entry. LangChain-parallel: templates are declared in code at compile time (no runtime template parsing); `PromptBuilder.render()` is the `.format()` step with transforms and metadata instead of blind substitution.
+
+## Location
+`src/prompt_builder.py`
+
+## Dependencies
+- `string.templatelib` (stdlib, Python 3.14+) — `Template`, `Interpolation`
+- `dataclasses`, `collections.abc`, `typing` (stdlib)
+
+## Module Constants
+- `TRUNCATION_LIMITS: dict[str, int]` — per-expression character limits (e.g. `user_story` 8000, `conditions` 15000, `known_urls_block` 4000). Keys are the source expression of each interpolation.
+
+## Public API
+
+### `truncate(text: str, limit: int) -> str`
+Truncate text to `limit` chars with a `\n... (truncated)` suffix marker.
+
+### `class PromptBuilder`
+Renders a `Template` with per-field transforms.
+- `__init__(template: Template, *, transforms: Mapping[str, Callable[[Any], str]] | None = None)` — optional caller-supplied transform overrides keyed by expression name.
+- `render() -> RenderedPrompt` — iterates the template; `str` parts pass through (trusted static), `Interpolation` parts are transformed by expression name (unknown expressions fall back to `str()`).
+
+### `@dataclass RenderedPrompt`
+- `text: str` — final prompt string for the LLM.
+- `fields: dict[str, Any]` — raw (pre-transform) values by expression.
+- `truncated: list[str]` — expressions truncated during render.
+- `parts: list[tuple[str, Any]]` — ordered `("static" | "field", value)` split for audit/debug.
+- `to_log_entry() -> dict` — JSON-serialisable audit entry (prompt length, fields, truncated, static parts, field order).
+
+### `build_skeleton_prompt(*, user_story, conditions, known_urls_block, expected_count=None) -> Template`
+Phase 1 skeleton-generation prompt as a t-string. Rendered output is byte-identical to legacy `get_skeleton_prompt_template(expected_count=...).format(...)`. Double-brace `{{CLICK:...}}` placeholders render as literal `{CLICK:...}` (t-strings escape `{{` like f-strings).
+
+### `build_single_condition_prompt(*, user_story, conditions_block, known_urls_block, target_condition_ref, target_condition_text, target_condition_expected) -> Template`
+Per-condition skeleton-fragment prompt. `conditions_block` is pre-joined by the caller. Normalises placeholder examples to single-brace `{CLICK:...}` (the legacy function sent literal double braces — parser accepts both).
+
+## Design Notes
+- Interpolations are eagerly evaluated (like f-strings) but kept structurally separate from static text — the renderer decides how to combine them.
+- Transforms are keyed by `Interpolation.expression` — the source expression string is the field name, free of charge.
+- No `Template.__str__` — rendering is always explicit via `PromptBuilder` (feature, not friction).
+- Do NOT mix `t"" f""` implicit concatenation (known PEP 750 footgun — silently reintroduces injection risk).
+- Callers log `logger.debug("llm_call=... fields=%s", rendered.to_log_entry())` — the LLM gets the text, the audit store gets the metadata.
+
+## Related Files
+- `src/test_generator.py` — `_generate_skeleton_single_call` renders via `build_skeleton_prompt` + `PromptBuilder`
+- `src/orchestrator.py` — `_generate_single_condition_fragment` renders via `build_single_condition_prompt` + `PromptBuilder`
+- `src/prompt_utils.py` — legacy prompt builders (kept for back-compat + equivalence tests)
+- `tests/test_prompt_builder.py` — 13 tests (byte-identity, brace survival, truncation, audit metadata)
+- `scripts/eval/uat_tstring_prototype.py` — repeatable A/B UAT (legacy vs t-string paths)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `PromptBuilder`
+- `_make_transform(expr: str) -> Callable[[Any], str]` (function) — Build a per-field transform for expression *expr*.
+
 
 
 
@@ -9213,11 +10192,44 @@ Appends allowed placeholder types and usage rules to a prompt.
 ## Dependencies
 - `src.pipeline_models`
 
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 7 items):
+
+### `count_conditions(conditions: str) -> int` (function)
+
+Return the number of numbered criteria in the conditions text.
+
+### `prepare_conditions_for_generation(conditions: str) -> str` (function)
+
+Prepare conditions text for LLM generation by ensuring proper numbering.
+
+### `build_retry_conditions(conditions: str, expected_count: int) -> str` (function)
+
+Format conditions for a retry with a strict count requirement.
+
+### `build_single_condition_skeleton_prompt(user_story: str, known_urls_block: str, ordered_conditions: list[str], target_condition_ref: str, target_condition_text: str, target_condition_expected: str, target_condition_intent: str | None) -> str` (function)
+
+Build a prompt for generating a single test function fragment.
+
+### `get_skeleton_prompt_template(expected_count: int | None = None) -> str` (function)
+
+Return a template for Phase 1 skeleton-generation prompt.
+
+### `get_streamlit_system_prompt_template() -> str` (function)
+
+Return the system prompt for the Streamlit UI.
+
+### `build_page_context_prompt_block(page_context: str) -> str` (function)
+
+Format the scraped page context for inclusion in an LLM prompt.
 
 
 
 
-# `src/provider_config.py` â€” Shared LLM Provider Configuration
+
+
+# `src/provider_config.py` — Shared LLM Provider Configuration
 
 ## Purpose
 
@@ -9258,12 +10270,13 @@ Resolves the effective OpenAI API key from:
 
 ### `sync_openai_api_key_to_env(provider: str, api_key: str | None) -> None`
 
-Applies a session-scoped OpenAI API key to `os.environ["OPENAI_API_KEY"]`. Never writes to disk â€” purely in-process.
+Applies a session-scoped OpenAI API key to `os.environ["OPENAI_API_KEY"]`. Never writes to disk — purely in-process.
 
 ## Design Patterns
 
 - **Configuration centralisation**: Single source of truth for provider defaults, consumed by both UI and CLI code paths.
 - **No side effects for non-OpenAI providers**: `resolve_openai_api_key` returns `None` early for local providers, avoiding unnecessary env lookups.
+
 
 
 
@@ -9289,7 +10302,7 @@ Aggregate: total, passed, failed, skipped, errors list.
 ## Functions
 
 ### `parse_pytest_output(output: str) -> SuiteSummary`
-Main parser â€” processes full pytest text output into structured results.
+Main parser — processes full pytest text output into structured results.
 
 ### `extract_failure_details(output: str) -> list[dict]`
 Extracts per-test failure details: traceback, error type, error message.
@@ -9298,12 +10311,254 @@ Extracts per-test failure details: traceback, error type, error message.
 Extracts test duration from pytest result line (e.g., `0.42s`).
 
 ## Key Design Decisions
-- Regex-based parsing â€” no dependency on pytest internal APIs
+- Regex-based parsing — no dependency on pytest internal APIs
 - Handles both verbose and quiet pytest output formats
 - Error classification by type (TimeoutError, NoTimeout, etc.)
 
 ## Dependencies
-- None from `src/` â€” stdlib only
+- None from `src/` — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `RunResult` (class)
+
+Aggregated result for a full pytest run.
+
+### `is_run_result(obj: object) -> TypeGuard[RunResult]` (function)
+
+Reload-safe check for :class:`RunResult` instances.
+
+### `format_pytest_output_for_display(raw: str, max_lines: int = 80) -> str` (function)
+
+Return a concise, high-signal pytest output snippet for UI display.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `parse_pytest_output`
+- `_parse_duration(value: str | None, unit: str | None = None) -> float` (function) — Parse a duration value with optional unit to seconds.
+
+
+
+
+
+
+# `src/rag_bundled.py`
+
+## High-Level Purpose
+
+Ships the **bundled golden pack** with the product and auto-seeds it into the
+RAG store on first run (B-036 Phase 2) — so consumers never run
+`rag_ingest.py` by hand. Also provides the canonical dataset/docs loaders and
+the store-diagnostics helpers (`--stats`, `--prune-learned`).
+
+This module is the home of the bundled-pack loading logic; `scripts/rag_ingest.py`
+re-exports `load_golden_patterns`, `load_docs`, and `chunk_markdown_file` from
+it for its power-user CLI.
+
+## Module Metadata
+
+- **Lines:** ~380
+- **Imports:** `json`, `logging`, `re`, `time`, `collections.Counter`, `pathlib.Path`, `src.rag_store`, `src.storage`
+- **Spec:** `docs/specs/FEATURE_SPEC_B036_consumer_config.md` §4/§8-Phase-2
+- **Shipped:** 2026-08-03 (B-036 Phase 2)
+
+## Key Concepts
+
+### The bundled golden pack
+- **Golden patterns**: all keys from `scripts/eval/dataset/eval-*.json`
+  (eval-001..006, 83 patterns incl. both mock sites — mock keys never decay).
+- **Doc chunks**: curated Playwright docs from `docs/rag_corpus/playwright/`
+  (27 chunks, heading-chunked at `##` boundaries).
+
+### First-run auto-seed (idempotent)
+`ensure_bundled_seeded()` runs automatically from `TestOrchestrator.__init__`
+(when the retriever is built) and via `rag_ingest.py --bundled`. A versioned
+marker file at `evidence/.rag_bundled_seeded.json` makes re-runs a no-op.
+
+## Functions
+
+### Loaders (moved from `scripts/rag_ingest.py`)
+
+| Function | Signature | Returns | Purpose |
+|----------|-----------|---------|---------|
+| `load_golden_patterns` | `(dataset_dir: Path)` | `list[GoldenPattern]` | Parse eval dataset JSONs → golden patterns |
+| `build_bundled_patterns` | `(repo_root: Path \| None = None)` | `list[GoldenPattern]` | Load the shipped eval-001..006 pack |
+| `chunk_markdown_file` | `(filepath: Path)` | `list[DocChunk]` | Split markdown at `##` headings (~500 tokens, 50 overlap) |
+| `load_docs` | `(docs_dir: Path)` | `list[DocChunk]` | Load + chunk all `*.md` in a dir |
+| `build_bundled_docs` | `(repo_root: Path \| None = None)` | `list[DocChunk]` | Load the shipped Playwright corpus |
+| `bundled_dataset_dir` / `bundled_docs_dir` | `(repo_root=None)` | `Path` | Resolve pack source dirs |
+
+### Seed + diagnostics
+
+| Function | Signature | Returns | Purpose |
+|----------|-----------|---------|---------|
+| `bundled_marker_path` | `(storage=None)` | `Path` | Marker path in the evidence dir |
+| `build_default_store` | `()` | `RAGStore` | Production store (lazy embedder + lazy Milvus client) |
+| `ensure_bundled_seeded` | `(store=None, *, marker_path=None, force=False)` | `dict[str, object]` | Idempotent seed → `{"status": "skipped"\|"seeded"\|"marked", "golden": N, "docs": M}` |
+| `store_stats` | `(store=None)` | `dict[str, int]` | Per-`entry_type` counts + `total` |
+| `prune_learned` | `(store=None)` | `int` | Delete learned patterns, keep golden/docs |
+
+## Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `BUNDLED_PACK_VERSION` | `1` | Bump when the shipped set changes; recorded in the marker |
+| `_MARKER_FILENAME` | `".rag_bundled_seeded.json"` | Marker file name |
+| `CHUNK_TARGET_TOKENS` / `CHUNK_OVERLAP_TOKENS` | `500` / `50` | Doc chunking parameters |
+
+## Seed State Machine
+
+- **`skipped`** — marker present (and not `force`): steady state for every run after the first.
+- **`seeded`** — store was empty: bundled pack added, marker written. With `force`, re-adds even to a populated store (documented duplication; harmless to scoring — a direct match returns once).
+- **`marked`** — store already populated (e.g. manual `--golden` ingest): marker written, nothing added.
+
+Failures **propagate** to the caller — the orchestrator wraps the seed in a
+try/except so RAG can never block generation, and a failed seed retries on the
+next run (marker not written).
+
+## Depended On By
+
+- `src/orchestrator.py` — first-run auto-seed hook
+- `scripts/rag_ingest.py` — re-exports loaders; `--bundled/--force/--stats/--prune-learned`
+- `src/rag_learn.py` — `build_default_store()` reuse
+
+## Notes
+
+- Loaders were moved here from `scripts/rag_ingest.py` (B-036 Phase 2) so
+  testable logic lives in `src/` per project convention.
+- Milvus dynamic-field queries (`counts_by_type`, `delete_learned`) were
+  verified against Milvus-lite before shipping.
+- `--prune-learned` is a no-op today (no learned patterns yet) — it ships so
+  consumers have the reset lever before AI-035 learning lands.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `ensure_bundled_seeded`
+- `_write_marker(marker_path: Path) -> None` (function) — (no docstring)
+
+
+
+
+
+
+# `src/rag_learn.py`
+
+## High-Level Purpose
+
+The **self-learning RAG write path** (AI-035 core + B-036 Phase 3 trigger).
+When a generated test step **passes** against the live site, the resolved
+`(action, description, locator, site)` pair is verified — `learn_from_evidence`
+converts passed evidence steps into `LearnedPattern` entries and writes them to
+the RAG store, deduped on `(action_type, description, site_hash)`.
+
+```
+generated test step passes (evidence status=passed)
+    └─ learn_from_evidence(steps)
+        └─ _step_to_pattern(step)   # type/label/locator/url → LearnedPattern
+        └─ RAGStore.upsert_pattern()  # dedup: repeat bumps hit_count, no new row
+    → next generation for the same site retrieves it → +SAME_SITE_LEARNED_BONUS
+```
+
+**Privacy (AI-035 §4):** only the one-way `sha256(domain)` hash is stored —
+never full URLs, story text, credentials, or screenshots. All learning is local.
+
+## Module Metadata
+
+- **Lines:** ~135
+- **Imports:** `hashlib`, `logging`, `urllib.parse`, `src.rag_bundled`, `src.rag_store`
+- **Specs:** `docs/specs/FEATURE_SPEC_AI035_self_learning_rag.md`, `docs/specs/FEATURE_SPEC_B036_consumer_config.md` §5/§8-Phase-3
+- **Shipped:** 2026-08-03
+
+## Functions
+
+### `site_hash(domain: str) -> str`
+One-way sha256 hex of a site domain (first 16 chars). Deterministic and
+case-insensitive; the domain can never be recovered from the hash.
+
+### `domain_from_url(url: str) -> str`
+Host (no port, lowercase) from a URL, or `""` when absent/unparseable.
+`https://www.saucedemo.com:8080/x.html` → `www.saucedemo.com`.
+
+### `_step_to_pattern(step: dict[str, Any]) -> LearnedPattern | None`
+Maps one evidence step to a `LearnedPattern`. Returns `None` (skipped) when the
+step has no action mapping (`navigate`/unknown), no label or locator
+(URL/state assertions), or no page URL (no site to scope to).
+
+### `learn_from_evidence(steps: list[dict[str, Any]], *, store: RAGStore | None = None) -> dict[str, int]`
+Batched write (one call per test file teardown). Only steps with
+`result.status == "passed"` are learned (`partial_pass`/failed are skipped —
+a fallback-used locator is less certain). Returns
+`{"inserted": N, "exists": M}` where repeats count as hits (store bumps
+`hit_count`). `store` is injectable for tests; defaults to the production store.
+
+### `pattern_from_patch(old_text, new_text, *, base_url, description=None, evidence_steps=None) -> LearnedPattern | None`
+Maps a self-healing locator-replacement patch to a `LearnedPattern`
+(`confidence=1.0`, `source="self_healing"`). Action from the Playwright
+method (`click`→CLICK, `fill`→FILL, `select_option`→SELECT,
+`expect/to_be_/to_have_/assert_`→ASSERT); corrected selector from
+`.locator("...")` (non-locator strategies and `get_by_role` lines return
+`None`). Description falls back to the evidence step whose locator matches
+the OLD selector — its label (`{{CLICK:view cart link}}` or `Click: view
+cart link`) reduces to the placeholder description.
+
+### `learn_from_patch(*, old_text, new_text, base_url, description=None, evidence_steps=None, store=None) -> dict[str, int]`
+Guarded single-patch write (never raises — self-healing must not break if
+learning fails). Returns `{"inserted": 0|1, "exists": 0|1}`.
+
+## Evidence Step → Pattern Mapping
+
+| Evidence `type` | Action | Notes |
+|-----------------|--------|-------|
+| `fill` | `FILL` | locator required |
+| `click` | `CLICK` | locator required |
+| `assertion` | `ASSERT` | locator required |
+| `select` | `SELECT` | locator required |
+| `navigate` | — | skipped (no locator; URL step) |
+| anything else | — | skipped (unknown) |
+
+`label` → `description`, `locator` → `selector`, `url`'s domain → `site_hash`.
+Confidence is `0.9` (verified by execution, below self-healing's `1.0`);
+`source` is `"evidence"`.
+
+## Depended On By
+
+- `generated_tests/conftest.py` — teardown hook calls `learn_from_evidence`
+  after a passing run (guarded: learning never breaks the run)
+- `src/self_healing.py` — `SelfHealingRunner._learn_from_patch` calls
+  `learn_from_patch` after each successful `replace_locator` patch
+  (AI-035 write-back; `source="self_healing"`, `confidence=1.0`)
+- `src/placeholder_orchestrator.py` — imports `site_hash`/`domain_from_url`
+  to scope the learned-pattern bonus to the current site
+
+## Notes
+
+- ~~AI-035's original write trigger (self-healing patches,
+  `source="self_healing"`, `confidence=1.0`) is **not wired yet**~~ — **shipped
+  2026-08-04**: `pattern_from_patch` / `learn_from_patch` in this module write
+  self-healing-corrected locators back to the store, hooked from
+  `SelfHealingRunner._learn_from_patch` (description recovered from the
+  evidence sidecar's placeholder label, e.g. `{{CLICK:view cart link}}`).
+- A failed learning call is swallowed by the conftest guard and retried on the
+  next run (no marker/state to corrupt).
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `pattern_from_patch`
+- `_action_from_code(line: str) -> str | None` (function) — Map a Playwright code line to a resolver action type, or ``None``.
+- `_description_from_evidence(old_selector: str | None, evidence_steps: list[dict[str, Any]] | None) -> str | None` (function) — Find the step whose locator matches the OLD (failed) selector.
+- `_selector_from_code(line: str) -> str | None` (function) — Extract the selector string from a code line, or ``None``.
+
+### Internal utilities
+- `_clean_label(label: str) -> str` (function) — Reduce an evidence step label to the placeholder description.
+
 
 
 
@@ -9315,13 +10570,13 @@ Extracts test duration from pytest result line (e.g., `0.42s`).
 
 Bridges `RAGStore` into the placeholder resolution pipeline. Provides a resolver-friendly API: takes a placeholder description + action type, queries the vector store, returns `RetrievedPattern` objects. The `scoring_bonus_for()` method evaluates whether a DOM element matches a retrieved golden pattern (by selector overlap), returning the bonus amount to add to the element's score.
 
-When the store is `None` (RAG disabled), every method returns empty/no-op â€” zero overhead.
+When the store is `None` (RAG disabled), every method returns empty/no-op — zero overhead.
 
 ## Module Metadata
 
 - **Lines:** ~100
 - **Imports:** `typing.TYPE_CHECKING`, `src.rag_store.RetrievedPattern`, `src.placeholder_scorers.PlaceholderScorer`
-- **Spec:** `docs/specs/FEATURE_SPEC_phase3_rag.md` Â§3b
+- **Spec:** `docs/specs/FEATURE_SPEC_phase3_rag.md` §3b
 - **Shipped:** 2026-07-21
 
 ## Class: `RAGRetriever`
@@ -9329,7 +10584,7 @@ When the store is `None` (RAG disabled), every method returns empty/no-op â€�
 ### `__init__(self, store: RAGStore | None) -> None`
 Initialise with an optional `RAGStore`. Pass `None` to disable RAG.
 
-### `enabled` (property) â†’ `bool`
+### `enabled` (property) → `bool`
 Whether RAG is enabled (store is not `None` and not empty).
 
 ### `retrieve(description, *, action_type="", k=5, min_confidence=0.6) -> list[RetrievedPattern]`
@@ -9340,28 +10595,28 @@ Compute a scoring bonus for an element based on golden pattern overlap:
 
 | Match type | Bonus |
 |---|---|
-| **Direct selector match** | `GOLDEN_PATTERN_BONUS (20) Ã— pattern.confidence` |
-| **Tolerance/substring match** | `GOLDEN_PATTERN_BONUS (20) Ã— 0.5 Ã— pattern.confidence` |
+| **Direct selector match** | `GOLDEN_PATTERN_BONUS (20) × pattern.confidence` |
+| **Tolerance/substring match** | `GOLDEN_PATTERN_BONUS (20) × 0.5 × pattern.confidence` |
 | **No match / doc-only patterns** | `0.0` |
 
 Only considers patterns with `source == "golden"`. The bonus is designed to tip the scale between similarly-scored candidates (e.g. two elements scoring ~25 each) without overriding strong structural matches (+80) or visibility penalties (-40).
 
 ## Key Design Decisions
 
-- **Null-object pattern:** When `store is None`, all methods return empty/no-op â€” the resolver doesn't need to check `enabled` before calling.
-- **Selector-based matching:** `scoring_bonus_for()` compares the element's CSS selector against golden pattern selectors (exact and substring). Does not re-embed â€” fast enough for per-candidate evaluation.
-- **Bonus magnitude +20:** Mirrors `_vision_enriched_bonus` â€” strong enough to break ties but won't override structural/id matches. Tunable via `PlaceholderScorer.GOLDEN_PATTERN_BONUS`.
+- **Null-object pattern:** When `store is None`, all methods return empty/no-op — the resolver doesn't need to check `enabled` before calling.
+- **Selector-based matching:** `scoring_bonus_for()` compares the element's CSS selector against golden pattern selectors (exact and substring). Does not re-embed — fast enough for per-candidate evaluation.
+- **Bonus magnitude +20:** Mirrors `_vision_enriched_bonus` — strong enough to break ties but won't override structural/id matches. Tunable via `PlaceholderScorer.GOLDEN_PATTERN_BONUS`.
 
 ## Dependencies
 
-- `src.rag_store.RAGStore`, `src.rag_store.RetrievedPattern` â€” storage and data models
-- `src.placeholder_scorers.PlaceholderScorer.GOLDEN_PATTERN_BONUS` â€” bonus constant
+- `src.rag_store.RAGStore`, `src.rag_store.RetrievedPattern` — storage and data models
+- `src.placeholder_scorers.PlaceholderScorer.GOLDEN_PATTERN_BONUS` — bonus constant
 
 ## Depended On By
 
-- `src/placeholder_orchestrator.py` â€” calls `retrieve()` + passes patterns to resolver
-- `src/orchestrator.py` â€” calls `_build_rag_retriever()` to construct
-- `tests/test_rag_retriever.py` â€” 16 unit tests
+- `src/placeholder_orchestrator.py` — calls `retrieve()` + passes patterns to resolver
+- `src/orchestrator.py` — calls `_build_rag_retriever()` to construct
+- `tests/test_rag_retriever.py` — 16 unit tests
 
 ## Usage
 
@@ -9380,6 +10635,31 @@ for elem in candidates:
     bonus = retriever.scoring_bonus_for(elem, patterns)
 ```
 
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### Graceful degradation (B-036 Phase 1)
+The retriever is now built **by default** (always-on). `retrieve()` wraps the
+store/embedder call in try/except: any failure (offline model download, corrupt
+DB) degrades to an empty list — RAG can never block generation. A warning is
+logged once per retriever, not per resolution.
+
+### Learned-pattern scoring (AI-035 Phase 2 / B-036 Phase 3)
+`scoring_bonus_for(element, patterns, site_hash="")` now handles learned
+patterns:
+
+| Pattern source | Match | Bonus |
+|----------------|-------|-------|
+| `golden` | direct / substring | `GOLDEN_PATTERN_BONUS` (20) / half |
+| `learned` + same `site_hash` | direct / substring | `SAME_SITE_LEARNED_BONUS` (5) / half |
+| `learned` + different `site_hash` | — | `0` (could be wrong here — never boost) |
+
+Cross-site learned patterns are returned by retrieval (no hard filter) but
+earn zero bonus — the anti-poisoning guard. Golden patterns stay unscoped
+(+20 anywhere) to preserve the shipped baseline.
+
+
 
 
 
@@ -9388,9 +10668,9 @@ for elem in candidates:
 
 ## High-Level Purpose
 
-RAG (Retrieval-Augmented Generation) vector store for placeholder resolution. Indexes verified locator patterns (golden patterns from the eval dataset) and Playwright documentation chunks. At resolution time, the placeholder description is embedded and used to retrieve similar patterns â€” feeding a scoring bonus to `PlaceholderScorer` and augmenting the LLM disambiguation prompt.
+RAG (Retrieval-Augmented Generation) vector store for placeholder resolution. Indexes verified locator patterns (golden patterns from the eval dataset) and Playwright documentation chunks. At resolution time, the placeholder description is embedded and used to retrieve similar patterns — feeding a scoring bonus to `PlaceholderScorer` and augmenting the LLM disambiguation prompt.
 
-All retrieval is **advisory**: an empty or missing store behaves as if disabled â€” the pipeline works identically to pre-RAG.
+All retrieval is **advisory**: an empty or missing store behaves as if disabled — the pipeline works identically to pre-RAG.
 
 ## Module Metadata
 
@@ -9403,14 +10683,14 @@ All retrieval is **advisory**: an empty or missing store behaves as if disabled 
 
 ```
 RAGStore
-  â”œâ”€ EmbeddingProvider (SentenceTransformerEmbedder)
-  â””â”€ VectorStoreBackend (MilvusLiteBackend)
+  ├─ EmbeddingProvider (SentenceTransformerEmbedder)
+  └─ VectorStoreBackend (MilvusLiteBackend)
 ```
 
 ## Dataclasses
 
 ### `GoldenPattern`
-A verified placeholder â†’ selector mapping from the eval dataset.
+A verified placeholder → selector mapping from the eval dataset.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -9419,7 +10699,7 @@ A verified placeholder â†’ selector mapping from the eval dataset.
 | `expected_locator` | `str` | e.g. "button.add-to-cart" |
 | `tolerance_selectors` | `list[str]` | Acceptable alternative selectors |
 | `expected_page` | `str` | URL fragment the pattern was verified on |
-| `query_text` | `property â†’ str` | `"{action}: {description}"` â€” used for embedding |
+| `query_text` | `property → str` | `"{action}: {description}"` — used for embedding |
 
 ### `DocChunk`
 A chunk of Playwright documentation (or other domain text).
@@ -9440,7 +10720,7 @@ A single search result from the vector store.
 |----------------|------|-------------|
 | `distance` | `float` | Cosine similarity value |
 | `metadata` | `dict[str, str]` | Stored entity metadata |
-| `confidence` | `property â†’ float` | `distance` clamped to [0.0, 1.0] |
+| `confidence` | `property → float` | `distance` clamped to [0.0, 1.0] |
 
 ### `RetrievedPattern`
 A retrieval result returned to the resolver/retriever.
@@ -9450,26 +10730,26 @@ A retrieval result returned to the resolver/retriever.
 | `description` | `str` | Original query or matched text |
 | `selector` | `str` | Matched locator (golden patterns) or empty (docs) |
 | `action_type` | `str` | Action type from metadata |
-| `confidence` | `float` | Similarity score (0.0â€“1.0) |
+| `confidence` | `float` | Similarity score (0.0–1.0) |
 | `source` | `str` | `"golden"` or `"doc"` |
 | `page` | `str` | URL fragment for golden patterns |
 
 ## Protocols
 
 ### `EmbeddingProvider`
-Protocol for text â†’ vector embedding.
-- `dimension: int` â€” vector dimension (384 for all-MiniLM-L6-v2)
-- `embed(text: str) -> list[float]` â€” single text embedding
-- `embed_batch(texts: list[str]) -> list[list[float]]` â€” batch embedding
+Protocol for text → vector embedding.
+- `dimension: int` — vector dimension (384 for all-MiniLM-L6-v2)
+- `embed(text: str) -> list[float]` — single text embedding
+- `embed_batch(texts: list[str]) -> list[list[float]]` — batch embedding
 
 ### `VectorStoreBackend`
 Protocol for vector store backends. MilvusLiteBackend is the v1 implementation. The protocol makes swapping to ChromaDB / hosted Milvus a one-file change in Phase 6 (SaaS).
 
-- `dimension: int` â€” vector dimension
-- `upsert(entries: list[KnowledgeEntry]) -> int` â€” insert entries, returns count
-- `search(query_vector: list[float], k: int) -> list[SearchHit]` â€” top-k similarity search
-- `count() -> int` â€” total entries
-- `clear() -> None` â€” delete all entries (test/rebuild)
+- `dimension: int` — vector dimension
+- `upsert(entries: list[KnowledgeEntry]) -> int` — insert entries, returns count
+- `search(query_vector: list[float], k: int) -> list[SearchHit]` — top-k similarity search
+- `count() -> int` — total entries
+- `clear() -> None` — delete all entries (test/rebuild)
 
 ## Classes
 
@@ -9483,7 +10763,7 @@ def embed_batch(self, texts: list[str]) -> list[list[float]]: ...
 ```
 
 ### `MilvusLiteBackend`
-Vector store backend backed by Milvus Lite (embedded, in-process). Stores data at `db_path` (a `.db` file). Single-writer â€” safe for dev/CLI/single-process Streamlit. For multi-worker SaaS (Phase 6), swap to ChromaDB server or hosted Milvus.
+Vector store backend backed by Milvus Lite (embedded, in-process). Stores data at `db_path` (a `.db` file). Single-writer — safe for dev/CLI/single-process Streamlit. For multi-worker SaaS (Phase 6), swap to ChromaDB server or hosted Milvus.
 
 ```python
 def __init__(self, db_path: str, dimension: int) -> None: ...
@@ -9495,7 +10775,7 @@ def clear(self) -> None: ...
 
 **Lazy init:** Client and collection are created on first access. Collection uses `IVF_FLAT` index with `COSINE` metric and `nlist=128`. Auto-ID primary key on `INT64`. Dynamic fields enabled for flexible metadata.
 
-**Note:** Explicit `flush()` after insert is deliberately omitted â€” it triggers a known milvus-lite race condition on Windows (`manifest.json.tmp` already exists). Search triggers auto-flush instead.
+**Note:** Explicit `flush()` after insert is deliberately omitted — it triggers a known milvus-lite race condition on Windows (`manifest.json.tmp` already exists). Search triggers auto-flush instead.
 
 ### `RAGStore`
 High-level retrieval store: embeds text and delegates to a vector backend.
@@ -9514,22 +10794,22 @@ def retrieve(
 ## Key Design Decisions
 
 - **Milvus Lite for v1:** Embedded, in-process, no server needed. Protocol abstraction guarantees swap path to ChromaDB/hosted Milvus for Phase 6 SaaS.
-- **sentence-transformers for embeddings:** `all-MiniLM-L6-v2` (384-dim, ~80MB, CPU-only) â€” no GPU contention with LM Studio (see AGENTS.md Â§12 VRAM note).
+- **sentence-transformers for embeddings:** `all-MiniLM-L6-v2` (384-dim, ~80MB, CPU-only) — no GPU contention with LM Studio (see AGENTS.md §12 VRAM note).
 - **COSINE metric:** Used by both Milvus and in-memory test backend for consistency.
-- **Advisory retrieval:** Store absence/emptiness is not an error â€” pipeline degrades gracefully to pre-RAG behaviour.
-- **Two knowledge sources:** Golden patterns (verified locators) and doc chunks (domain guidance) â€” stored with `entry_type` metadata for downstream filtering.
+- **Advisory retrieval:** Store absence/emptiness is not an error — pipeline degrades gracefully to pre-RAG behaviour.
+- **Two knowledge sources:** Golden patterns (verified locators) and doc chunks (domain guidance) — stored with `entry_type` metadata for downstream filtering.
 
 ## Dependencies
 
-- `pymilvus` â€” Milvus Lite client
-- `sentence_transformers` â€” embedding model
-- `src.storage.get_storage()` â€” workspace-aware `rag_path()`
+- `pymilvus` — Milvus Lite client
+- `sentence_transformers` — embedding model
+- `src.storage.get_storage()` — workspace-aware `rag_path()`
 
 ## Depended On By
 
-- `src/rag_retriever.py` â€” bridge to resolution pipeline
-- `scripts/rag_ingest.py` â€” ingestion CLI (build/rebuild store)
-- `tests/test_rag_store.py` â€” 35 unit tests
+- `src/rag_retriever.py` — bridge to resolution pipeline
+- `scripts/rag_ingest.py` — ingestion CLI (build/rebuild store)
+- `tests/test_rag_store.py` — 35 unit tests
 
 ## Usage
 
@@ -9549,6 +10829,48 @@ store.add_docs([DocChunk(...), ...])
 results = store.retrieve("Add to cart button", action_type="CLICK", k=5)
 ```
 
+---
+
+## AI-035 / B-036 Update (2026-08-03)
+
+### New dataclass: `LearnedPattern`
+A verified placeholder → selector mapping learned from execution
+(`source="evidence"`, `confidence=0.9`).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `action_type` | `str` | CLICK, FILL, ASSERT, GOTO, SELECT |
+| `description` | `str` | evidence step label / placeholder description |
+| `locator` | `str` | verified locator from the passing step |
+| `site_hash` | `str` | one-way sha256(domain) — no URLs/PII stored |
+| `confidence` | `float` | `0.9` (evidence-verified) |
+| `source` | `str` | `"evidence"` \| `"self_healing"` (future) |
+| `query_text` | `property → str` | `"{action_type}: {description}"` — matches golden embedding |
+
+### New method: `RAGStore.upsert_pattern(pattern: LearnedPattern) -> tuple[str, int]`
+Dedup on `(action_type, description, site_hash)`. Existing row → increments
+`hit_count` (no new row), returns `("exists", hit_count)`. New row → embeds +
+inserts with `hit_count=1`, returns `("inserted", 1)`. The store stays bounded
+(one row per fact). Backend support: `find_learned()` (multi-field AND filter
+over Milvus dynamic fields — spike-verified) + `increment_learned_hit()`
+(full-row upsert by pk to preserve the vector).
+
+### New backend methods (Protocol + Milvus + test backends)
+- `counts_by_type() -> dict[str, int]` — per-`entry_type` counts (`--stats`)
+- `delete_learned() -> int` — delete non-golden/doc rows, keep the pack
+  (`--prune-learned`); handles both pymilvus delete return shapes
+- `find_learned(...)` / `increment_learned_hit(...)` — dedup machinery
+
+### `RetrievedPattern.site_hash`
+New field (`str = ""`) — learned patterns carry their site hash through to the
+scorer so same-site bonuses are scoped correctly. Golden patterns keep `""`.
+
+### Type correction
+`KnowledgeEntry.metadata` / `SearchHit.metadata` changed from `dict[str, str]`
+to `dict[str, Any]` — Milvus dynamic fields carry ints/floats (confidence,
+hit_count, created_at).
+
+
 
 
 
@@ -9560,19 +10882,19 @@ This directory contains per-module documentation for all 66 source files in `src
 ## How to Read These Docs
 
 Each `<module_name>.py.md` file covers:
-- **Purpose** â€” what the module does in one sentence
-- **Dependencies** â€” other modules it imports
-- **Module Constants** â€” top-level enums, Literal types, defaults
-- **Public API** â€” classes, methods, and standalone functions with signatures
-- **Design Notes** â€” patterns, gotchas, and architectural decisions
-- **Related Files** â€” modules that depend on or are depended upon
+- **Purpose** — what the module does in one sentence
+- **Dependencies** — other modules it imports
+- **Module Constants** — top-level enums, Literal types, defaults
+- **Public API** — classes, methods, and standalone functions with signatures
+- **Design Notes** — patterns, gotchas, and architectural decisions
+- **Related Files** — modules that depend on or are depended upon
 
 ## Module Index (66 files)
 
 ### Pipeline Core (5)
 | Doc | Module |
 |-----|--------|
-| [orchestrator.py.md](./orchestrator.py.md) | Core pipeline orchestration â€” skeleton-first test generation |
+| [orchestrator.py.md](./orchestrator.py.md) | Core pipeline orchestration — skeleton-first test generation |
 | [pipeline_models.py.md](./pipeline_models.py.md) | Data models for pipeline (JourneyPage, Skeleton, etc.) |
 | [pipeline_writer.py.md](./pipeline_writer.py.md) | Writes generated test files to disk |
 | [pipeline_run_service.py.md](./pipeline_run_service.py.md) | Pipeline execution service |
@@ -9581,7 +10903,7 @@ Each `<module_name>.py.md` file covers:
 ### Scraper Chain (6)
 | Doc | Module |
 |-----|--------|
-| [scraper.py.md](./scraper.py.md) | DOM metadata scraper â€” extracts locatable elements |
+| [scraper.py.md](./scraper.py.md) | DOM metadata scraper — extracts locatable elements |
 | [journey_scraper.py.md](./journey_scraper.py.md) | Journey-aware stateful scraping across page navigations |
 | [stateful_scraper.py.md](./stateful_scraper.py.md) | State-aware scraping fallback for placeholder orchestrator |
 | [state_tracker.py.md](./state_tracker.py.md) | DOM state tracking across page transitions |
@@ -9685,9 +11007,10 @@ Each `<module_name>.py.md` file covers:
 
 ## Generation Info
 - **Generated:** 2026-05-30
-- **Updated:** 2026-06-08 â€” added `export_service.py`
+- **Updated:** 2026-06-08 — added `export_service.py`
 - **Total modules:** 67
 - **Status:** Complete
+
 
 
 
@@ -9713,7 +11036,7 @@ Single test entry: test_id, status, duration, evidence_data, failure_note, scree
 ## Functions
 
 ### `build_report(suite_summary: SuiteSummary, test_dir: str) -> ReportData`
-Main builder â€” merges pytest results with evidence JSON sidecar data.
+Main builder — merges pytest results with evidence JSON sidecar data.
 
 ### `merge_evidence(test_id: str, evidence: dict) -> TestReportEntry`
 Merges runtime evidence (failure_note, diagnosis, screenshots) into test entry.
@@ -9723,11 +11046,35 @@ Groups failures by error type and returns classification counts.
 
 ## Key Design Decisions
 - Evidence loading deferred until report build time (lazy)
-- Report data is format-agnostic â€” formatters handle rendering
+- Report data is format-agnostic — formatters handle rendering
 - Failure classification uses error type hierarchy
 
 ## Dependencies
 - `src.pytest_output_parser`, `src.evidence_loader`, `src.failure_classifier`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `escape_html(text: str) -> str` (function)
+
+Escape HTML special characters for safe embedding in HTML documents.
+
+### `build_report_dicts(coverage_analysis: dict | None, run_result: RunResult | None, package_dir: str = '') -> list[dict]` (function)
+
+Convert RequirementCoverage + RunResult to the dict format used by report_utils.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `build_report_dicts`
+- `_find_matching_run_result(run_map: dict[str, TestResult], test_name: str) -> TestResult | None` (function) — Find run result by exact, prefix, or de-parameterized test name.
+- `_status_icon(status: str) -> str` (function) — Return icon for a row status.
+
+### Internal utilities
+- `_status_summary(coverage: list[dict[str, Any]]) -> tuple[int, int, int, int]` (function) — Return passed, failed, pending, unknown counts.
+
 
 
 
@@ -9742,8 +11089,8 @@ Renders test execution reports in three output formats: local Markdown, Jira Mar
 `src/report_formatters.py`
 
 ## Dependencies
-- `src.report_builder` â€” consumes report dicts built by pipeline_report_service
-- `src.evidence_loader` â€” loads evidence JSON for diagnostics enrichment
+- `src.report_builder` — consumes report dicts built by pipeline_report_service
+- `src.evidence_loader` — loads evidence JSON for diagnostics enrichment
 
 ## Public API
 
@@ -9763,9 +11110,26 @@ Generate an HTML report with embedded base64 screenshots for self-contained view
 - Jira formatter uses Jira wiki markup conventions
 
 ## Related Files
-- `src/report_builder.py` â€” produces report dicts consumed by formatters
-- `src/evidence_loader.py` â€” provides evidence data for diagnostics
-- `src/pipeline_report_service.py` â€” orchestrates report generation pipeline
+- `src/report_builder.py` — produces report dicts consumed by formatters
+- `src/evidence_loader.py` — provides evidence data for diagnostics
+- `src/pipeline_report_service.py` — orchestrates report generation pipeline
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `generate_local_report(coverage: list[dict[str, Any]]) -> str` (function)
+
+Generate markdown report with relative screenshot paths.
+
+### `generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: str = '', project_key: str = '') -> str` (function)
+
+Generate markdown report in Jira attachment format.
+
+### `generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path | None = None) -> str` (function)
+
+Generate self-contained HTML report with base64 embedded screenshots.
+
 
 
 
@@ -9774,7 +11138,7 @@ Generate an HTML report with embedded base64 screenshots for self-contained view
 # report_utils.py
 
 ## Purpose
-Shared utility functions for report generation â€” path resolution, file I/O, and evidence data merging used across report builder and formatters.
+Shared utility functions for report generation — path resolution, file I/O, and evidence data merging used across report builder and formatters.
 
 ## Location
 `src/report_utils.py`
@@ -9794,29 +11158,57 @@ Load evidence JSON from a test package directory. Returns `None` when no evidenc
 Merge evidence data (failure notes, screenshots, diagnoses) into a report dict, producing an enriched report ready for formatting.
 
 ### `format_test_status(passed: bool) -> str`
-Return a human-readable status label ("âœ… PASSED" / "âŒ FAILED").
+Return a human-readable status label ("✅ PASSED" / "❌ FAILED").
 
 ## Design Notes
-- Pure utility functions â€” no side effects except `ensure_screenshot_dir`
+- Pure utility functions — no side effects except `ensure_screenshot_dir`
 - Used by both `report_builder.py` and `report_formatters.py`
 - Evidence merging preserves existing report fields while adding diagnostics keys
 
 ## Related Files
-- `src/report_builder.py` â€” uses utilities for evidence merging
-- `src/report_formatters.py` â€” uses utilities for status formatting
-- `src/evidence_loader.py` â€” sibling evidence module
+- `src/report_builder.py` — uses utilities for evidence merging
+- `src/report_formatters.py` — uses utilities for status formatting
+- `src/evidence_loader.py` — sibling evidence module
 
 
 
 
 
-# `src/run_history_chart.py` â€” Plotly Figure Factory for Run History
+# `src/role_mapper.py` — ARIA Role Mapping (B-016)
+
+## Purpose
+ARIA role mapping and display-role filtering for ASSERT resolution. Extracted from `placeholder_orchestrator.py`. Provides HTML-tag-to-ARIA-role mapping and utilities for identifying display (non-interactive) elements.
+
+## Constants
+- `DISPLAY_ROLES: frozenset[str]` — roles considered display-only (heading, paragraph, text, status, region, listitem, cell, generic)
+- `_TAG_TO_ROLE: dict[str, str]` — HTML tag → default ARIA role mapping
+
+## Functions
+- `is_display_role(element: dict) -> bool` — check if element has a display role
+- `normalise_element_text(element: dict) -> str` — extract/normalize element text for Pass 1 matching
+- `get_effective_role(element: dict) -> str` — resolve computed_role vs raw role
+
+## Key Logic
+- `normalise_element_text` priority: `accessible_name → aria_label → text → placeholder` (2026-08-03: placeholder added as last resort — many form fields, e.g. saucedemo checkout / lv_insurance, have no label or accessible name, only a placeholder like "Last Name")
+- Strips non-ASCII characters (icon fonts), lowercases, strips whitespace
+
+## Related
+- `src/placeholder_orchestrator.py` — consumer
+- `src/intent_matcher.py` — intent-based element filtering
+- `src/element_matcher.py` — Pass 1 text matching uses `normalise_element_text`
+
+
+
+
+
+
+# `src/run_history_chart.py` — Plotly Figure Factory for Run History
 
 ## Purpose
 
 Pure Plotly figure builder with no Streamlit or CLI dependencies. Consumes `PersistedRunResult` objects from `src.run_result_persistence` and produces stacked bar charts with pass-rate line overlay and flaky-test markers.
 
-Also provides `build_chart_from_db()` for direct SQLite-backed chart building using SQL aggregation queries â€” avoids loading all objects into memory.
+Also provides `build_chart_from_db()` for direct SQLite-backed chart building using SQL aggregation queries — avoids loading all objects into memory.
 
 ## Constants
 
@@ -9847,8 +11239,8 @@ Builds a stacked bar chart from an in-memory list of run results.
 **Chart elements:**
 - X-axis: run timestamp (chronological, oldest-first)
 - Primary Y-axis: stacked bars (pass/fail/skip/error counts)
-- Secondary Y-axis: pass rate % line overlay (0â€“100)
-- Flaky markers (`â—`): placed above bars for runs containing tests that passed in some runs and failed in others
+- Secondary Y-axis: pass rate % line overlay (0–100)
+- Flaky markers (`❗`): placed above bars for runs containing tests that passed in some runs and failed in others
 
 **Flaky detection logic:** A test is flaky if `"passed" in statuses` AND any status is `"failed"` or `"error"`.
 
@@ -9858,15 +11250,24 @@ Builds the same chart type but reads directly from SQLite via `_get_db()`, using
 
 ## Architecture
 
-- **Pure function design**: No I/O or side effects â€” returns Plotly `go.Figure` objects consumed by `st.plotly_chart()` or `fig.show()`.
+- **Pure function design**: No I/O or side effects — returns Plotly `go.Figure` objects consumed by `st.plotly_chart()` or `fig.show()`.
 - **Two entry points**: In-memory (`build_run_history_chart`) vs. SQL-backed (`build_chart_from_db`) to handle different data volume scenarios.
 - **Empty state handling**: Both functions return a placeholder figure with "No run history available" text when no data exists.
 
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `build_run_history_chart`
+- `_health_color(pass_rate: float) -> str` (function) — Return marker colour based on pass-rate threshold.
+- `_health_label(pass_rate: float) -> str` (function) — Short text description of health level.
 
 
 
 
-# `src/run_history_cli.py` â€” CLI Run History Formatter
+
+
+# `src/run_history_cli.py` — CLI Run History Formatter
 
 ## Purpose
 
@@ -9910,10 +11311,10 @@ Returns an ASCII table of flaky tests with pass/fail counts and flakiness percen
 Returns an ASCII summary comparing two consecutive runs.
 
 **Sections:**
-- Pass rate delta (`old% â†’ new% (Â±Î”%)`)
-- Improved tests (âœ“)
-- Regressed tests (âœ—)
-- New failures (âš )
+- Pass rate delta (`old% → new% (±Δ%)`)
+- Improved tests (✓)
+- Regressed tests (✗)
+- New failures (⚠)
 
 Returns "insufficient data (need 2+ runs)" when comparison is `None`.
 
@@ -9930,18 +11331,19 @@ Converts ISO timestamp to `"YYYY-MM-DD HH:MM"` format.
 
 ### `_truncate(text: str, max_width: int) -> str`
 
-Truncates text with ellipsis (`â€¦`) when exceeding `max_width`.
+Truncates text with ellipsis (`…`) when exceeding `max_width`.
 
 ## Design Patterns
 
-- **Formatter pattern**: Pure string-building functions with no I/O â€” returns formatted strings for consumption by any CLI renderer.
+- **Formatter pattern**: Pure string-building functions with no I/O — returns formatted strings for consumption by any CLI renderer.
 - **Composable design**: Individual formatters can be used independently or combined via `format_full_history_summary`.
 
 
 
 
 
-# `src/run_result_persistence.py` â€” Run Result Persistence
+
+# `src/run_result_persistence.py` — Run Result Persistence
 
 **Module:** Persist run results to disk for historical comparison and flaky-test tracking  
 **Created:** 2026-06-02  
@@ -9953,7 +11355,7 @@ Truncates text with ellipsis (`â€¦`) when exceeding `max_width`.
 
 Provides thin JSON persistence for `RunResult` objects so that consecutive pytest runs can be compared over time. Stored artifacts live under `evidence/run_results/` as one file per run, named by ISO-8601 timestamp.
 
-No Streamlit imports â€” fully unit-testable in isolation.
+No Streamlit imports — fully unit-testable in isolation.
 
 ---
 
@@ -10012,7 +11414,7 @@ Aggregated statistics across multiple persisted runs.
 | `total_failed` | `int` | Cumulative failed count |
 | `total_skipped` | `int` | Cumulative skipped count |
 | `total_errors` | `int` | Cumulative error count |
-| `test_flakiness` | `dict[str, dict[str, int]]` | Maps test name â†’ `{"passed": N, "failed": N, "skipped": N, "error": N}` |
+| `test_flakiness` | `dict[str, dict[str, int]]` | Maps test name → `{"passed": N, "failed": N, "skipped": N, "error": N}` |
 
 ### `RunComparison`
 
@@ -10038,6 +11440,7 @@ Side-by-side comparison of two runs.
 | `load_run_result` | `(filepath: Path) -> PersistedRunResult` | Load a single persisted run result from disk. |
 | `list_run_results` | `(directory: Path \| None = None) -> list[Path]` | Return sorted list of persisted run-result file paths (oldest first). |
 | `load_all_run_results` | `(directory: Path \| None = None) -> list[PersistedRunResult]` | Load every persisted run result (oldest first). |
+| `run_stats_by_package` | `() -> dict[str, tuple[int, str]]` | Return `{test_package: (run_count, last_run_at)}` across persisted runs — lets package dropdowns reconcile counts with real run history (B-043). |
 
 ### History & Flakiness Analysis
 
@@ -10069,10 +11472,10 @@ Each persisted run is stored as a JSON file in `evidence/run_results/`:
 
 ```
 evidence/
-  â””â”€â”€ run_results/
-      â”œâ”€â”€ run_2026-06-02T18-30-00-000000.json
-      â”œâ”€â”€ run_2026-06-02T19-15-30-000000.json
-      â””â”€â”€ ...
+  └── run_results/
+      ├── run_2026-06-02T18-30-00-000000.json
+      ├── run_2026-06-02T19-15-30-000000.json
+      └── ...
 ```
 
 Filename format: `run_{iso_timestamp}.json` where colons are replaced with hyphens for Windows compatibility.
@@ -10143,10 +11546,24 @@ JSON structure:
 
 ## Notes
 
-- Module is fully synchronous â€” no async I/O
+- Module is fully synchronous — no async I/O
 - Thread-safe for single-writer scenarios (typical for test pipeline)
-- No locking for concurrent writers â€” not designed for parallel persistence
+- No locking for concurrent writers — not designed for parallel persistence
 - `flaky_tests` field on `PersistedRunResult` is computed on load, not persisted
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `load_run_result`
+- `_legacy_load_json(filepath: Path) -> PersistedRunResult` (function) — Load a legacy JSON run result file.
+
+### `persist_run_result`
+- `_get_db() -> SQLitePersistence` (function) — Return the global SQLitePersistence singleton (lazy init).
+
+### Internal utilities
+- `_reset_db() -> None` (function) — Reset the global DB singleton. Used in tests for isolation.
+
 
 
 
@@ -10155,7 +11572,7 @@ JSON structure:
 # run_utils.py
 
 ## Purpose
-Pytest command utilities â€” builds pytest CLI commands, parses raw pytest output to extract failed test node IDs, and defines the `RunTestRecord` protocol for test execution results.
+Pytest command utilities — builds pytest CLI commands, parses raw pytest output to extract failed test node IDs, and defines the `RunTestRecord` protocol for test execution results.
 
 ## Location
 `src/run_utils.py`
@@ -10179,15 +11596,15 @@ Legacy name for `get_failed_nodeids`. Parses raw pytest output using regex to fi
 Build a pytest CLI command list suitable for `subprocess.run()`. Supports parallel execution (`-n auto`), verbose mode, and test selection via failed node IDs.
 
 ## Design Notes
-- All functions are pure â€” no side effects
+- All functions are pure — no side effects
 - Regex-based parsing for pytest output is fragile but sufficient for controlled CI environments
 - `build_pytest_run_command` returns a list for safe subprocess invocation (no shell injection)
 - Used by pipeline runner and CLI to execute generated tests
 
 ## Related Files
-- `src/orchestrator.py` â€” uses run utilities for test execution
-- `cli/pipeline_runner.py` â€” builds pytest commands for CLI runs
-- `src/pytest_output_parser.py` â€” sibling output parsing module
+- `src/orchestrator.py` — uses run utilities for test execution
+- `cli/pipeline_runner.py` — builds pytest commands for CLI runs
+- `src/pytest_output_parser.py` — sibling output parsing module
 
 
 
@@ -10199,9 +11616,9 @@ Build a pytest CLI command list suitable for `subprocess.run()`. Supports parall
 
 Three-layer hybrid DOM scraper (B-032) that combines BS4 HTML parsing, CDP accessibility tree enrichment, and Playwright's `aria_snapshot(boxes=True)` to capture elements with complete semantic metadata. Default: all three layers active; set `SCRAPER_BACKEND=bs4` for BS4-only.
 
-**Layer 1 â€” BS4**: CSS selectors, `id`, `data-test`, `classes`, `href` from static HTML.
-**Layer 2 â€” CDP `getFullAXTree`**: Computed `accessible_name`, `computed_role` from the full accessibility tree (including hidden elements).
-**Layer 3 â€” ARIA snapshot**: `placeholder`, `value`, bounding boxes, container groups from the visible rendered state.
+**Layer 1 — BS4**: CSS selectors, `id`, `data-test`, `classes`, `href` from static HTML.
+**Layer 2 — CDP `getFullAXTree`**: Computed `accessible_name`, `computed_role` from the full accessibility tree (including hidden elements).
+**Layer 3 — ARIA snapshot**: `placeholder`, `value`, bounding boxes, container groups from the visible rendered state.
 
 Uses a headless Chromium browser to render JavaScript, extract elements, capture accessibility trees, and record screenshots with bounding boxes. Runs scraping in a subprocess to avoid asyncio event loop conflicts on Windows.
 
@@ -10221,7 +11638,7 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 - Configures timeout, stores last scrape results
 
 ### `scrape_url(url) -> tuple[list[dict], str|None, str]`
-- **Public async API** â€” delegates to `_scrape_url_via_subprocess()`
+- **Public async API** — delegates to `_scrape_url_via_subprocess()`
 - Returns: (elements_list, error_message, final_url)
 
 ### `_scrape_url_via_subprocess(url)` 
@@ -10234,6 +11651,10 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 
 ### `_scrape_url_sync_result(url) -> ScrapeResult`
 - Full scrape result including screenshot bytes and element bounding boxes
+- **Soft-404 recovery (2026-08-03):** when the navigation response status is >= 400 but the page bootstrapped an SPA (the final URL differs from the requested URL — the GitHub Pages `spa-github-pages` pattern), the scrape proceeds instead of bailing with `HTTP 404`. Genuine 404s (unchanged URL) still bail.
+
+### `_is_soft_404(requested_url, final_url) -> bool`
+- True when a 4xx response still yielded a usable page — the final URL differs from the requested one, meaning an SPA shell JS-redirected to the real view
 
 ### `_extract_elements_from_html(html, base_url) -> list[dict]`
 - Uses BeautifulSoup to parse HTML after removing consent overlays
@@ -10268,22 +11689,129 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 
 - **Subprocess isolation:** Playwright runs in a separate process to avoid asyncio conflicts with Streamlit/Jupyter event loops
 - **Consent overlay removal:** Cookie banners are stripped before element extraction to prevent hundreds of irrelevant elements
+- **Soft-404 recovery:** saucedemo (SPA on GitHub Pages) serves every `.html` path as HTTP 404 from an app shell that JS-redirects to the real view; the scraper now renders first and judges content, matching what a browser user sees
 - **CDP accessibility tree:** Uses Chrome DevTools Protocol `Accessibility.getFullAXTree` since `page.accessibility.snapshot()` is unavailable in Python Playwright
 - **Vision enrichment:** Screenshots and element boxes enable vision-capable LLMs to enrich element metadata
 
 ## Dependencies
 
-- `playwright.sync_api` â€” browser automation
-- `bs4.BeautifulSoup` â€” HTML parsing
-- `src.accessibility_enricher` â€” merges CDP accessibility data into elements
-- `src.element_enricher` â€” adds visual/contextual metadata
-- `src.vision_enricher` â€” optional vision-based enrichment
+- `playwright.sync_api` — browser automation
+- `bs4.BeautifulSoup` — HTML parsing
+- `src.accessibility_enricher` — merges CDP accessibility data into elements
+- `src.element_enricher` — adds visual/contextual metadata
+- `src.vision_enricher` — optional vision-based enrichment
 
 ## Depended On By
 
-- `src/journey_scraper.py` â€” uses PageScraper for initial page scrapes
-- `src/placeholder_orchestrator.py` â€” fallback scraper
-- `src/orchestrator.py` â€” calls via JourneyScraper
+- `src/journey_scraper.py` — uses PageScraper for initial page scrapes
+- `src/placeholder_orchestrator.py` — fallback scraper
+- `src/orchestrator.py` — calls via JourneyScraper
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `PageScraper`
+- `_find_aria_match(bs4_text: str, bs4_role: str, aria_by_text: dict[str, list[tuple[int, dict[str, Any]]]], used: set[int]) -> tuple[int, dict[str, Any]] | None` (function) — Find the best ARIA element matching a BS4 element.
+- `_merge_aria_into_bs4(bs4: dict[str, Any], aria: dict[str, Any]) -> None` (function) — Copy ARIA semantics into a BS4 element (never overwrite existing).
+
+### `capture_page_screenshot`
+- `_normalise_locator_bbox(bbox: Any) -> dict[str, float] | None` (function) — Return a numeric bbox dict when Playwright reports a visible region.
+- `_selector_from_locator(locator: Any, index: int) -> str` (function) — Build a best-effort selector for a live Playwright locator.
+
+
+
+
+
+
+# `src/section_scoper.py` — Section Scoper
+
+## Purpose
+Scopes element extraction to specific page sections. Helps the scraper focus on relevant content areas and avoid noise from headers, footers, and navigation.
+
+## Related
+- `src/scraper.py` — `PageScraper` consumer
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `detect_sections(elements: list[dict[str, Any]]) -> list[Section]` (function)
+
+Detect page sections from heading elements.
+
+### `scope_elements(description: str, all_elements: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str | None]` (function)
+
+Filter elements to the section referenced in a placeholder description.
+
+### `build_element_to_section_map(elements: list[dict[str, Any]]) -> dict[int, str]` (function)
+
+Build a mapping from element index to section name.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `scope_elements`
+- `_extract_section_hint(description: str) -> str | None` (function) — Extract a section hint from a placeholder description.
+- `_match_section_hint(hint: str, sections: list[Section]) -> str | None` (function) — Match a normalised hint against detected section names.
+
+### Internal utilities
+- `_normalise_name(name: str) -> str` (function) — Normalise a section name for comparison.
+
+
+
+
+
+
+# `src/secure_config.py` — Secure Configuration
+
+## Purpose
+Secure configuration management for credentials and API keys. Provides encrypted storage and retrieval of sensitive configuration values.
+
+## Related
+- `src/config.py` — general configuration
+- `src/provider_config.py` — LLM provider configuration
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 5 items):
+
+### `save_key(provider: str, key: str) -> None` (function)
+
+Save an API key for *provider* to encrypted local storage.
+
+### `load_key(provider: str) -> str | None` (function)
+
+Load an API key for *provider* from encrypted local storage.
+
+### `delete_key(provider: str) -> None` (function)
+
+Delete a stored API key for *provider*.
+
+### `list_stored_providers() -> list[str]` (function)
+
+Return a list of provider keys that have stored API keys.
+
+### `resolve_key(provider: str) -> str | None` (function)
+
+Resolve an API key by checking (in priority order):
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (5 items). Grouped under the public function that uses them:
+
+### `save_key`
+- `_get_fernet() -> Any` (function) — Return a Fernet instance for encryption/decryption.
+- `_load_config() -> dict[str, Any]` (function) — Load the decrypted config dictionary from disk.
+- `_save_config(config: dict[str, Any]) -> None` (function) — Encrypt and write the config dictionary to disk.
+
+### Internal utilities
+- `_config_dir() -> Path` (function) — Return the config directory, creating it if needed.
+- `_derive_key() -> bytes` (function) — Derive an encryption key from machine-specific identifiers.
+
 
 
 
@@ -10293,16 +11821,16 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 
 ## High-Level Purpose
 
-`self_healing.py` implements Phase 2 of the ML Engineering roadmap â€” automated test repair using an LLM reviewer. When generated Playwright tests fail, this module runs a reflection loop: execute tests â†’ classify failures â†’ feed context to LLM â†’ apply suggested patches â†’ re-run failed tests. Repeats up to a configurable maximum iteration count.
+`self_healing.py` implements Phase 2 of the ML Engineering roadmap — automated test repair using an LLM reviewer. When generated Playwright tests fail, this module runs a reflection loop: execute tests → classify failures → feed context to LLM → apply suggested patches → re-run failed tests. Repeats up to a configurable maximum iteration count.
 
 Created **2026-07-20**.
 
 ## Dependencies
 
-- `src.failure_classifier` â€” `classify_failure()`, `FailureDetail`
-- `src.llm_client` â€” `LLMClient` for reviewer LLM calls
-- `src.pytest_output_parser` â€” `parse_pytest_output()`, `RunResult`, `TestResult`
-- `json`, `re`, `subprocess` â€” stdlib
+- `src.failure_classifier` — `classify_failure()`, `FailureDetail`
+- `src.llm_client` — `LLMClient` for reviewer LLM calls
+- `src.pytest_output_parser` — `parse_pytest_output()`, `RunResult`, `TestResult`
+- `json`, `re`, `subprocess` — stdlib
 
 ## Data Types
 
@@ -10311,30 +11839,30 @@ Created **2026-07-20**.
 Records a single code change applied during healing.
 
 Fields:
-- `test_name: str` â€” test function name
-- `line_number: int` â€” approximate line in test file
-- `old_text: str` â€” original code line
-- `new_text: str` â€” replacement code line
-- `diagnosis: str` â€” LLM's explanation of the failure
-- `strategy: str` â€” one of `"replace_locator"`, `"add_navigation"`, `"add_wait"`, `"skip_test"`
+- `test_name: str` — test function name
+- `line_number: int` — approximate line in test file
+- `old_text: str` — original code line
+- `new_text: str` — replacement code line
+- `diagnosis: str` — LLM's explanation of the failure
+- `strategy: str` — one of `"replace_locator"`, `"add_navigation"`, `"add_wait"`, `"skip_test"`
 
 ### `HealingReport`
 
 Result of a self-healing run.
 
 Fields:
-- `total_failures: int` â€” initial failure count
-- `fixed: int` â€” how many were fixed
-- `remaining: int` â€” still failing after max iterations
-- `unfixable: int` â€” classified as not automatically fixable
-- `iterations: int` â€” how many loops ran
-- `patches: list[AppliedPatch]` â€” all applied patches
-- `final_results: list[TestResult]` â€” last test run results
-- `all_fixed: bool` (property) â€” True when remaining == 0 and total > 0
+- `total_failures: int` — initial failure count
+- `fixed: int` — how many were fixed
+- `remaining: int` — still failing after max iterations
+- `unfixable: int` — classified as not automatically fixable
+- `iterations: int` — how many loops ran
+- `patches: list[AppliedPatch]` — all applied patches
+- `final_results: list[TestResult]` — last test run results
+- `all_fixed: bool` (property) — True when remaining == 0 and total > 0
 
 ### `REVIEWER_SYSTEM_PROMPT: str`
 
-Module-level constant â€” the system prompt sent to the LLM reviewer. Instructs the LLM to analyze failures and return structured JSON with `fixable`, `diagnosis`, `strategy`, `old_line`, `new_line`, and `confidence` fields.
+Module-level constant — the system prompt sent to the LLM reviewer. Instructs the LLM to analyze failures and return structured JSON with `fixable`, `diagnosis`, `strategy`, `old_line`, `new_line`, and `confidence` fields.
 
 ## Classes
 
@@ -10365,21 +11893,29 @@ Raises `FileNotFoundError` if test file doesn't exist.
 
 #### Internal Methods
 
-- `_run_pytest(test_path, test_names) -> RunResult` â€” runs pytest via subprocess
-- `_review_and_suggest(result, detail, test_source) -> AppliedPatch | None` â€” sends context to LLM
-- `_extract_test_function(source, test_name) -> str | None` â€” extracts single test from file
-- `_format_elements_for_prompt(elements) -> str` â€” formats scraped elements for LLM context
-- `_parse_reviewer_response(response, test_name, test_func) -> AppliedPatch | None` â€” parses LLM JSON
-- `_apply_patch(test_path, test_source, patch) -> bool` â€” applies patch to file
+- `_run_pytest(test_path, test_names) -> RunResult` — runs pytest via subprocess
+- `_review_and_suggest(result, detail, test_source) -> AppliedPatch | None` — sends context to LLM
+- `_extract_test_function(source, test_name) -> str | None` — extracts single test from file
+- `_format_elements_for_prompt(elements) -> str` — formats scraped elements for LLM context
+- `_parse_reviewer_response(response, test_name, test_func) -> AppliedPatch | None` — parses LLM JSON
+- `_apply_patch(test_path, test_source, patch) -> bool` — applies patch to file
+- `_evidence_context(test_path, test_name) -> (steps, base_url)` — reads the
+  failing test's evidence sidecar (step labels + page URL), manifest fallback
+- `_learn_from_patch(test_path, result, patch) -> bool` — AI-035 write-back:
+  after a successful `replace_locator` patch, upserts the corrected locator
+  to the RAG store (`source="self_healing"`, `confidence=1.0`, guarded —
+  learning never breaks healing). Counted in `HealingReport.learned`.
 
 ## Integration Points
 
-- **Streamlit:** `src/ui/ui_run_results.py` â€” "ðŸ©¹ Self-Heal Failed Tests" button, healing results display
-- **CLI:** `src/cli/pipeline_runner.py` â€” `self_heal_cli()` with menu-driven fallback to interactive repair
+- **Streamlit:** `src/ui/ui_run_results.py` — "🩹 Self-Heal Failed Tests" button, healing results display
+- **CLI:** `src/cli/pipeline_runner.py` — `self_heal_cli()` with menu-driven fallback to interactive repair
+- **RAG:** `src/rag_learn.py` — `learn_from_patch` consumes the applied patch (AI-035 self-learning write-back)
 
 ## Tests
 
-`tests/test_self_healing.py` â€” 28 unit tests covering extraction, formatting, parsing, patching, and integration.
+`tests/test_self_healing.py` — unit tests covering extraction, formatting, parsing, patching, evidence context, and the AI-035 learn-back.
+
 
 
 
@@ -10394,14 +11930,14 @@ Context candidate prioritization engine for placeholder resolution. Scores and r
 `src/semantic_candidate_ranker.py`
 
 ## Dependencies
-- `src.semantic_matcher` â€” token-based semantic similarity scoring
+- `src.semantic_matcher` — token-based semantic similarity scoring
 - `dataclasses` (standard library)
 - `logging` (standard library)
 
 ## Module Constants
-- `TEXT_MATCH_WEIGHT: float` â€” Weight for text-content overlap score
-- `ATTRIBUTE_MATCH_WEIGHT: float` â€” Weight for attribute-based similarity
-- `POSITION_PENALTY: float` â€” Penalty for elements deep in the DOM tree
+- `TEXT_MATCH_WEIGHT: float` — Weight for text-content overlap score
+- `ATTRIBUTE_MATCH_WEIGHT: float` — Weight for attribute-based similarity
+- `POSITION_PENALTY: float` — Penalty for elements deep in the DOM tree
 
 ## Public API
 
@@ -10421,9 +11957,22 @@ Apply a small bonus for shallow DOM elements (preferred for stability).
 - Used by `placeholder_orchestrator.py` during candidate selection phase
 
 ## Related Files
-- `src/semantic_matcher.py` â€” provides low-level token similarity used by ranker
-- `src/placeholder_orchestrator.py` â€” consumer of ranked candidates
-- `src/placeholder_resolver.py` â€” sibling resolution module
+- `src/semantic_matcher.py` — provides low-level token similarity used by ranker
+- `src/placeholder_orchestrator.py` — consumer of ranked candidates
+- `src/placeholder_resolver.py` — sibling resolution module
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `AsyncGeneratorLike` (class)
+
+Minimal protocol for async text generation used by the ranker.
+
+### `SemanticCandidateRanker` (class)
+
+Use an LLM to rank a tiny candidate list without inventing selectors.
+
 
 
 
@@ -10442,8 +11991,8 @@ Token-based semantic similarity scoring extracted from placeholder_resolver. Com
 - `string` (standard library)
 
 ## Module Constants
-- `STOP_WORDS: set[str]` â€” Common English stop words removed before token comparison
-- `MIN_TOKEN_LENGTH: int` â€” Minimum token length (2) to ignore single characters
+- `STOP_WORDS: set[str]` — Common English stop words removed before token comparison
+- `MIN_TOKEN_LENGTH: int` — Minimum token length (2) to ignore single characters
 
 ## Public API
 
@@ -10460,15 +12009,128 @@ Compute Jaccard-like similarity between description tokens and element text toke
 Convenience wrapper that returns `True` when `semantic_similarity` meets or exceeds the threshold.
 
 ## Design Notes
-- Pure functions â€” no side effects, fully testable
+- Pure functions — no side effects, fully testable
 - Token-based approach avoids expensive NLP dependencies
 - Threshold of 0.3 is the default; callers can adjust for stricter/looser matching
 - Used by both `semantic_candidate_ranker.py` and `placeholder_resolver.py`
 
 ## Related Files
-- `src/semantic_candidate_ranker.py` â€” uses similarity scoring for candidate ranking
-- `src/placeholder_resolver.py` â€” parent module from which this was extracted
-- `src/intent_matcher.py` â€” sibling matching module for placeholder intent classification
+- `src/semantic_candidate_ranker.py` — uses similarity scoring for candidate ranking
+- `src/placeholder_resolver.py` — parent module from which this was extracted
+- `src/intent_matcher.py` — sibling matching module for placeholder intent classification
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `SemanticMatcher` (class)
+
+Token-based semantic similarity for placeholder matching.
+
+
+
+
+
+
+# `src/settings_store.py` — Persisted Application Settings
+
+## High-Level Purpose
+
+**Consumer-grade settings that survive app restarts** (B-036 Phase 4). The
+product's feature toggles must not require `.env` edits — this module is the
+persistence layer that replaces dev-era env-var gates with a persisted,
+encrypted store on the same pattern as `src/secure_config.py` (Fernet,
+machine-derived key, corruption-tolerant).
+
+```
+Streamlit sidebar / CLI menu (user sets a value)
+    └─ save_setting(key, value)
+        └─ _load_settings() + update + _save_settings()
+            └─ Fernet-encrypt → ~/.ai-test-gen/settings.enc
+    └─ load_setting(key, default)   # decrypts fresh on every read
+        └─ Streamlit sidebar init / CLI Session seeding / OCR backend / Jira key
+```
+
+Settings live in **their own file** (`settings.enc`) rather than inside
+`config.enc` — both modules persist the whole dict they loaded, so sharing one
+file would silently drop whichever was written second.
+
+**Migration targets:** `pom_mode`, `consent_mode`, `provider`/`model_name`,
+`workspace`, `ocr_backend`, `jira_project_key`.
+
+## Module Metadata
+
+- **Lines:** ~190
+- **Imports:** `json`, `logging`, `os`, `pathlib.Path`, `typing.Any`, `src.secure_config`
+- **Spec:** `docs/specs/FEATURE_SPEC_B036_consumer_config.md` §6 (Change 4) / §7 removal matrix
+- **Shipped:** 2026-08-03 (B-036 Phase 4)
+
+## Constants
+
+### `DEFAULT_SETTINGS: dict[str, Any]`
+Documented defaults for every migrated setting (`pom_mode=False`,
+`consent_mode="auto-dismiss"`, `provider=""`, `model_name=""`,
+`workspace="default"`, `ocr_backend="pymupdf"`, `jira_project_key="TEST"`).
+Used by the UI as fallbacks — **not merged into the stored dict**, so callers
+can distinguish "never set" from "set to the default" (that distinction powers
+the `OCR_BACKEND` env fallback during the transition window).
+
+## Class
+
+### `SettingsStore`
+Encrypted, persisted key-value store. Stateless — every read decrypts the file
+fresh (tiny), so tests and callers can monkeypatch `_settings_path` and see
+live results.
+
+| Method | Behaviour |
+|--------|-----------|
+| `get(key, default=None)` | Saved value, or `default` when never saved |
+| `set(key, value)` | Persist one key/value pair (best-effort, logs + swallows write failures) |
+| `update(mapping)` | Persist several pairs in one write |
+| `delete(key)` | Remove a saved setting (no-op when absent) |
+| `get_all()` | All saved settings (never-saved keys omitted) |
+| `reset()` | Delete the settings file — next read returns defaults |
+
+## Module-level functions (mirror `secure_config.save_key`/`load_key`)
+
+- `load_setting(key, default=None)` — read one setting (never raises; missing/
+  corrupt file ⇒ `default`)
+- `save_setting(key, value)` — persist one setting
+- `save_settings(mapping)` — persist several settings in one encrypted write
+- `get_all_settings()` — all persisted settings
+- `reset_settings()` — delete the store (tests / "reset to defaults")
+
+## Internal helpers
+
+- `_settings_path()` — `~/.ai-test-gen/settings.enc` (creates the config dir;
+  monkeypatch target for tests)
+- `_load_settings()` — decrypt + parse; `{}` on missing file, undecryptable
+  content (e.g. key derivation changed), or non-dict JSON
+- `_save_settings(data)` — encrypt + write; `chmod 600` on Unix
+
+## Depended On By
+
+- `src/ocr_backends.py` — `get_ocr_backend()` reads the persisted
+  `ocr_backend` setting first; env is now a fallback
+- `src/ui/ui_sidebar.py` — `SidebarConfig.render()` persists `provider`/
+  `pom_mode`; `render_settings()` edits `ocr_backend`/`workspace` and shows RAG
+  store stats
+- `streamlit_app.py` — workspace init, consent-mode persistence, export-panel
+  Jira project key field
+- `src/cli/session.py` — `create_session()` seeds provider/model/consent/POM/
+  Jira key from the store (settings win, env is fallback)
+- `src/cli/main.py` — Consent/POM/Jira menu items persist to the store
+
+## Notes
+
+- Settings are **not secrets** — they're encrypted for consistency with
+  `secure_config`, not because they need hiding.
+- Write failures (e.g. `cryptography` unavailable, disk error) are logged and
+  swallowed: the in-session value still applies, mirroring B-036's graceful
+  degradation philosophy.
+- `JIRA_PROJECT_KEY` env read was removed from `src/config.py` (constant
+  default `TEST`); `LANGGRAPH_ENABLED` was removed outright (dead flag).
+
 
 
 
@@ -10491,15 +12153,15 @@ Parses skeleton code produced by the LLM to extract `{{ACTION:description}}` pla
 ## Key Patterns
 
 - **Placeholder regex:** `\{\{(CLICK|FILL|GOTO|URL|ASSERT):([^}]+)\}\}`
-- **Single-brace placeholder:** `(?<!\{)\{ACTION:(.+)\}(?!\})` â€” repaired to double-brace
+- **Single-brace placeholder:** `(?<!\{)\{ACTION:(.+)\}(?!\})` — repaired to double-brace
 - **Test definition:** `^\s*def\s+(test_\w+)\s*\(`
-- **Page reference:** `#\s*[-*]?\s*(\w+)(?:\s+(?:\((.*?)\)|â€”\s*(.*?)))?\s*$`
+- **Page reference:** `#\s*[-*]?\s*(\w+)(?:\s+(?:\((.*?)\)|—\s*(.*?)))?\s*$`
 
 ## Methods
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `normalise_placeholder_actions(code)` | `str` | Repairs single-brace â†’ double-brace, maps synonyms (ADDâ†’CLICK, VERIFYâ†’ASSERT, etc.) |
+| `normalise_placeholder_actions(code)` | `str` | Repairs single-brace → double-brace, maps synonyms (ADD→CLICK, VERIFY→ASSERT, etc.) |
 | `parse_placeholders(code)` | `list[tuple[str,str]]` | All (action, description) pairs |
 | `parse_placeholder_uses(code)` | `list[PlaceholderUse]` | PlaceholderUses with line numbers |
 | `parse_pages_needed(code)` | `list[tuple[str,str]]` | PAGES_NEEDED keywords (DEPRECATED) |
@@ -10511,10 +12173,10 @@ Parses skeleton code produced by the LLM to extract `{{ACTION:description}}` pla
 
 ## Synonym Mapping
 
-- NAVIGATE/GO/OPEN/VISIT â†’ GOTO
-- ADD/REMOVE/DELETE/SUBMIT/PRESS/TAP/SELECT/CHOOSE â†’ CLICK
-- VERIFY/CHECK/CONFIRM/ENSURE â†’ ASSERT
-- TYPE/ENTER â†’ FILL
+- NAVIGATE/GO/OPEN/VISIT → GOTO
+- ADD/REMOVE/DELETE/SUBMIT/PRESS/TAP/SELECT/CHOOSE → CLICK
+- VERIFY/CHECK/CONFIRM/ENSURE → ASSERT
+- TYPE/ENTER → FILL
 
 ## Validation Checks
 
@@ -10527,12 +12189,21 @@ Parses skeleton code produced by the LLM to extract `{{ACTION:description}}` pla
 
 ## Dependencies
 
-- `src.pipeline_models` â€” `PageRequirement`, `PlaceholderUse`, `TestJourney`, `TestStep`
+- `src.pipeline_models` — `PageRequirement`, `PlaceholderUse`, `TestJourney`, `TestStep`
 
 ## Depended On By
 
-- `src/orchestrator.py` â€” parses skeletons after LLM generation
-- `src/code_validator.py` â€” uses `validate_skeleton()`
+- `src/orchestrator.py` — parses skeletons after LLM generation
+- `src/code_validator.py` — uses `validate_skeleton()`
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `SkeletonParser` (class)
+
+Extract placeholders and required URLs from generated skeletons.
+
 
 
 
@@ -10554,9 +12225,9 @@ Validates skeleton output for forbidden patterns (CSS selectors, XPath, etc.). E
 
 ### `SkeletonValidationResult` (dataclass)
 Result of validating a skeleton for forbidden patterns.
-- `is_valid: bool` â€” Whether the skeleton passes validation
-- `violations: list[str]` â€” List of violation descriptions found
-- `suggestion: str` â€” Human-readable suggestion for fixing violations
+- `is_valid: bool` — Whether the skeleton passes validation
+- `violations: list[str]` — List of violation descriptions found
+- `suggestion: str` — Human-readable suggestion for fixing violations
 
 ### `SkeletonValidator.validate(skeleton_code: str) -> SkeletonValidationResult`
 Validate skeleton code for forbidden locator patterns. Scans each line for CSS class selectors, CSS ID selectors, CSS attribute selectors, XPath expressions, CSS descendant combinators, `page.locator()` with real selectors, and `get_by_role/get_by_text/get_by_label` with literal arguments. Skips comment lines, import lines, placeholder lines, and URL contexts (avoids false positives on `https://`).
@@ -10568,9 +12239,27 @@ Validate skeleton code for forbidden locator patterns. Scans each line for CSS c
 - Enforces the two-phase skeleton-first pipeline: Phase 1 = placeholders only, Phase 2 = real selectors
 
 ## Related Files
-- `src/skeleton_parser.py` â€” sibling module that parses skeleton structure
-- `src/test_generator.py` â€” uses validator before accepting skeleton output
-- `src/placeholder_resolver.py` â€” Phase 2 resolver that substitutes real selectors
+- `src/skeleton_parser.py` — sibling module that parses skeleton structure
+- `src/test_generator.py` — uses validator before accepting skeleton output
+- `src/placeholder_resolver.py` — Phase 2 resolver that substitutes real selectors
+
+
+
+
+
+# `src/skip_manager.py` — Skip Insertion Helpers
+
+## Purpose
+Code cleanup and skip-insertion helpers for placeholder resolution. Extracted from `placeholder_orchestrator.py`. Handles removing raw placeholder lines, old per-placeholder skip lines, and inserting consolidated `pytest.skip()` calls.
+
+## Functions
+- `insert_consolidated_skips(code: str, unresolved: list[str]) -> str` — insert single pytest.skip for all unresolved placeholders
+- `remove_raw_placeholder_lines(code: str) -> str` — strip unresolved {{PLACEHOLDER}} lines
+- `remove_old_placeholder_skips(code: str) -> str` — remove stale per-placeholder skip lines
+
+## Related
+- `src/placeholder_orchestrator.py` — consumer
+
 
 
 
@@ -10585,29 +12274,29 @@ Derives `TestCondition` objects from a test specification by analyzing feature s
 `src/spec_analyzer.py`
 
 ## Dependencies
-- `src.llm_client` â€” LLMClient for spec analysis when no explicit criteria exist
+- `src.llm_client` — LLMClient for spec analysis when no explicit criteria exist
 
 ## Module Constants
-- `ConditionType` â€” Literal type: `"happy_path" | "boundary" | "negative" | "exploratory" | "regression" | "ambiguity"`
-- `ConditionSrc` â€” Literal type: `"ai" | "manual" | "automation"`
-- `ConditionIntent` â€” Literal type: `"element_presence" | "element_behavior" | "state_assertion" | "journey_step" | "journey_outcome"`
+- `ConditionType` — Literal type: `"happy_path" | "boundary" | "negative" | "exploratory" | "regression" | "ambiguity"`
+- `ConditionSrc` — Literal type: `"ai" | "manual" | "automation"`
+- `ConditionIntent` — Literal type: `"element_presence" | "element_behavior" | "state_assertion" | "journey_step" | "journey_outcome"`
 
 ## Public API
 
 ### `infer_condition_intent(text: str) -> ConditionIntent`
-Heuristic function that infers the best-fit intent category from condition text using keyword phrase matching. Priority order: journey_step phrases â†’ journey_outcome phrases â†’ state_assertion phrases â†’ element_presence â†’ element_behavior â†’ defaults to journey_step.
+Heuristic function that infers the best-fit intent category from condition text using keyword phrase matching. Priority order: journey_step phrases → journey_outcome phrases → state_assertion phrases → element_presence → element_behavior → defaults to journey_step.
 
 ### `TestCondition` (dataclass)
 A single verifiable condition derived from spec analysis.
-- `id: str` â€” Unique identifier (e.g., "BC01.02")
-- `type: ConditionType` â€” Category of condition
-- `text: str` â€” Plain English description
-- `expected: str` â€” Expected result
-- `source: str` â€” Spec clause that drove this condition
-- `flagged: bool` â€” True if type is "ambiguity"
-- `src: ConditionSrc` â€” Origin ("ai", "manual", "automation")
-- `intent: ConditionIntent` â€” Inferred intent category
-- `to_dict() -> dict` â€” Returns dict representation
+- `id: str` — Unique identifier (e.g., "BC01.02")
+- `type: ConditionType` — Category of condition
+- `text: str` — Plain English description
+- `expected: str` — Expected result
+- `source: str` — Spec clause that drove this condition
+- `flagged: bool` — True if type is "ambiguity"
+- `src: ConditionSrc` — Origin ("ai", "manual", "automation")
+- `intent: ConditionIntent` — Inferred intent category
+- `to_dict() -> dict` — Returns dict representation
 
 ### `SpecAnalyzer.__init__(llm_client: LLMClient | None = None)`
 Initialize with an LLM client (creates default if not provided).
@@ -10619,28 +12308,28 @@ Analyze spec text and return list of test conditions. Prefers deterministic pars
 Extract numbered acceptance criteria lines from spec text. Handles common headings ("## Acceptance Criteria", "Acceptance Criteria:") and parses `N. criterion` format.
 
 ## Design Notes
-- Two-mode design: explicit criteria â†’ deterministic mapping, free-form spec â†’ LLM analysis
+- Two-mode design: explicit criteria → deterministic mapping, free-form spec → LLM analysis
 - LLM output parsing includes JSON repair for common mistakes (trailing commas, unquoted keys, single quotes, raw newlines)
 - Fallback parsing extracts individual `{...}` objects when the overall JSON array is malformed
 - `__test__ = False` on TestCondition prevents pytest from collecting it as a test
 - System prompt enforces strict JSON output with no markdown fences
 
 ## Related Files
-- `src/test_plan.py` â€” consumes TestCondition objects for test planning
-- `src/llm_client.py` â€” LLM interface used for spec analysis
-- `src/orchestrator.py` â€” orchestrator may use spec analysis results
+- `src/test_plan.py` — consumes TestCondition objects for test planning
+- `src/llm_client.py` — LLM interface used for spec analysis
+- `src/orchestrator.py` — orchestrator may use spec analysis results
 
 
 
 
 
-# `src/sqlite_persistence.py` â€” SQLite Persistence Layer
+# `src/sqlite_persistence.py` — SQLite Persistence Layer
 
 ## Purpose
 
-SQLite-backed persistence for run results, replacing the JSON-based persistence layer. Designed as a drop-in replacement â€” all public API methods mirror signatures in `run_result_persistence.py` so the wrapper layer can delegate transparently.
+SQLite-backed persistence for run results, replacing the JSON-based persistence layer. Designed as a drop-in replacement — all public API methods mirror signatures in `run_result_persistence.py` so the wrapper layer can delegate transparently.
 
-Uses `sqlite3` from the Python standard library â€” no external server or dependencies required.
+Uses `sqlite3` from the Python standard library — no external server or dependencies required.
 
 ## Constants
 
@@ -10652,19 +12341,19 @@ Uses `sqlite3` from the Python standard library â€” no external server or d
 ## Schema
 
 ### `runs` table
-- `run_id` (TEXT, PRIMARY KEY) â€” ISO-8601 timestamp
-- `test_package` (TEXT) â€” test package name
+- `run_id` (TEXT, PRIMARY KEY) — ISO-8601 timestamp
+- `test_package` (TEXT) — test package name
 - `total`, `passed`, `failed`, `skipped`, `errors` (INTEGER)
-- `duration` (REAL) â€” total run duration in seconds
-- `raw_output` (TEXT) â€” full pytest output
-- `created_at` (TEXT) â€” ISO-8601 creation timestamp
+- `duration` (REAL) — total run duration in seconds
+- `raw_output` (TEXT) — full pytest output
+- `created_at` (TEXT) — ISO-8601 creation timestamp
 
 ### `test_results` table
 - `id` (INTEGER, AUTOINCREMENT PRIMARY KEY)
-- `run_id` (TEXT, FK â†’ runs.run_id, CASCADE DELETE)
-- `name` (TEXT) â€” test function name
-- `status` (TEXT) â€” "passed", "failed", "skipped", "error"
-- `duration` (REAL) â€” individual test duration
+- `run_id` (TEXT, FK → runs.run_id, CASCADE DELETE)
+- `name` (TEXT) — test function name
+- `status` (TEXT) — "passed", "failed", "skipped", "error"
+- `duration` (REAL) — individual test duration
 - `error_message` (TEXT)
 - `file_path` (TEXT)
 
@@ -10679,14 +12368,16 @@ Uses `sqlite3` from the Python standard library â€” no external server or d
 ### Constructor
 
 ```python
-SQLitePersistence(db_path: Path | None = None) -> None
+SQLitePersistence(db_path: Path | None = None, busy_timeout_ms: int = 30000) -> None
 ```
 
-Initialises the database connection with WAL journal mode and foreign key enforcement. Creates the schema automatically.
+Initialises the database connection with WAL journal mode, foreign key enforcement, and a 30s `busy_timeout` so concurrent opens (parallel pytest workers, Streamlit + CLI, export + run) serialize instead of failing with "database is locked". Creates the schema automatically.
+
+**Corruption vs. lock handling:** a genuinely corrupt file ("file is not a database"/malformed) is deleted and rebuilt (B-034 — the evidence index rebuilds from sidecars); a transient lock (`OperationalError`) is re-raised and **never** deletes the file.
 
 ### Property
 
-- `db_path: Path` â€” Path to the SQLite database file.
+- `db_path: Path` — Path to the SQLite database file.
 
 ### Methods
 
@@ -10706,13 +12397,17 @@ Returns sorted list of run_ids (oldest first).
 
 Loads every persisted run (oldest first).
 
+#### `run_stats_by_package() -> dict[str, tuple[int, str]]`
+
+Returns `{test_package: (run_count, last_run_at)}` aggregated in a single `GROUP BY test_package` pass. Lets package-level UI (sidebar dropdown run counts/labels) reconcile against real run history cheaply (B-043).
+
 #### `compute_run_history() -> RunHistory`
 
-Aggregates stats directly from SQL â€” total runs, pass/fail/skip/error counts, and per-test flakiness using `GROUP BY`.
+Aggregates stats directly from SQL — total runs, pass/fail/skip/error counts, and per-test flakiness using `GROUP BY`.
 
 #### `get_flaky_tests(min_runs: int = 2) -> list[tuple[str, dict[str, int]]]`
 
-Detects flaky tests using SQL `GROUP BY` + `HAVING`. A test is flaky when it has both passes and failures/errors across â‰¥ `min_runs` observations. Results sorted by flakiness ratio (descending).
+Detects flaky tests using SQL `GROUP BY` + `HAVING`. A test is flaky when it has both passes and failures/errors across ≥ `min_runs` observations. Results sorted by flakiness ratio (descending).
 
 #### `query_test_history(test_name_pattern: str = "%", status: str | None = None, date_from: str | None = None, date_to: str | None = None, include_flaky: bool = False) -> list[dict[str, Any]]`
 
@@ -10732,9 +12427,12 @@ Connection management and context-manager protocol support.
 
 ## Design Patterns
 
-- **WAL journal mode**: Enables concurrent reads while writes happen â€” no table locks during chart rendering.
+- **WAL journal mode**: Enables concurrent reads while writes happen — no table locks during chart rendering.
+- **`busy_timeout` (30s)**: Concurrent writers/opener wait for each other instead of raising "database is locked" — parallel xdist workers and Streamlit+CLI overlap are safe.
+- **Non-destructive lock handling**: transient `OperationalError` (locked) re-raises; only genuine `DatabaseError` (corruption) triggers the delete-and-rebuild recovery — a healthy database is never deleted on contention.
 - **FK CASCADE**: Deleting a `run` automatically removes all child `test_results` rows.
 - **Drop-in replacement**: Mirrors `run_result_persistence.py` signatures for transparent delegation.
+
 
 
 
@@ -10771,12 +12469,28 @@ Fallback scraper that maintains DOM state awareness across page interactions. Tr
 
 ## Dependencies
 
-- `src.scraper.PageScraper` â€” base scraping
-- `src.state_tracker.StateTracker` â€” state persistence
+- `src.scraper.PageScraper` — base scraping
+- `src.state_tracker.StateTracker` — state persistence
 
 ## Depended On By
 
-- `src/placeholder_orchestrator.py` â€” fallback when journey_scraper unavailable
+- `src/placeholder_orchestrator.py` — fallback when journey_scraper unavailable
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `StatefulPageScraper` (class)
+
+Scrape pages using a Playwright browser context with a cart session.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_run_subprocess_entry() -> int` (function) — Entry point for the subprocess-backed stateful scrape.
+
 
 
 
@@ -10788,7 +12502,7 @@ Fallback scraper that maintains DOM state awareness across page interactions. Tr
 
 Workspace-isolated storage abstraction. Centralises all path construction so no module in the project constructs `Path("generated_tests")` or `Path("evidence")` directly. The default workspace (`"default"`) mirrors the current repo-root layout for backwards compatibility; named workspaces isolate data under a subdirectory.
 
-Enables future cloud storage backends (S3, GCS, Azure Blob) without changing consumer code â€” they just need to satisfy the `StorageBackend` Protocol.
+Enables future cloud storage backends (S3, GCS, Azure Blob) without changing consumer code — they just need to satisfy the `StorageBackend` Protocol.
 
 ## Module Metadata
 
@@ -10812,7 +12526,7 @@ class StorageBackend(Protocol):
     def ensure_dirs(self) -> None: ...
 ```
 
-All path methods return `Path` objects â€” no string construction in consumers.
+All path methods return `Path` objects — no string construction in consumers.
 
 ### Path methods
 
@@ -10847,12 +12561,12 @@ def __init__(self, root: Path | None = None, workspace: str = "default") -> None
     rag_store.db
 ```
 
-`ensure_dirs()` creates the workspace directory structure if it doesn't exist â€” called automatically during `__init__`.
+`ensure_dirs()` creates the workspace directory structure if it doesn't exist — called automatically during `__init__`.
 
 ## Singleton Management
 
 ### `get_storage() -> StorageBackend`
-Return the global storage singleton. Lazily creates a `LocalStorageBackend` with `workspace="default"` on first call â€” safe to call from any module without worrying about startup ordering.
+Return the global storage singleton. Lazily creates a `LocalStorageBackend` with `workspace="default"` on first call — safe to call from any module without worrying about startup ordering.
 
 ### `init_storage(root=None, workspace="default") -> StorageBackend`
 Initialise (or re-initialise) the storage singleton. Call once at application startup:
@@ -10860,25 +12574,25 @@ Initialise (or re-initialise) the storage singleton. Call once at application st
 - **CLI:** `init_storage(workspace=args.workspace)`
 
 ### `reset_storage() -> None`
-Reset the singleton â€” used in test teardown for isolation.
+Reset the singleton — used in test teardown for isolation.
 
 ## Key Design Decisions
 
-- **Protocol-first:** `StorageBackend` is a `Protocol`, not an ABC â€” structural subtyping means backends don't need to inherit, only satisfy the interface.
-- **Default workspace = repo root:** Backwards compatibility â€” all existing code that used `Path("generated_tests")` maps seamlessly.
-- **Lazy singleton:** No explicit initialisation required â€” consumers call `get_storage()` and get a functional backend immediately.
+- **Protocol-first:** `StorageBackend` is a `Protocol`, not an ABC — structural subtyping means backends don't need to inherit, only satisfy the interface.
+- **Default workspace = repo root:** Backwards compatibility — all existing code that used `Path("generated_tests")` maps seamlessly.
+- **Lazy singleton:** No explicit initialisation required — consumers call `get_storage()` and get a functional backend immediately.
 - **`rag_path()` added 2026-07-21:** Returns path for the RAG vector store DB (`rag_store.db`), part of Phase 3 RAG integration.
 
 ## Dependencies
 
-- `pathlib.Path` â€” stdlib only
-- `pyproject.toml` â€” used to auto-detect repo root
+- `pathlib.Path` — stdlib only
+- `pyproject.toml` — used to auto-detect repo root
 
 ## Depended On By
 
 - **~15 consumer files** migrated from hardcoded `Path("generated_tests")` / `Path("evidence")`
-- `src/rag_store.py` â€” uses `rag_path()` for vector store location
-- `src/orchestrator.py` â€” uses `rag_path()` when building RAG retriever
+- `src/rag_store.py` — uses `rag_path()` for vector store location
+- `src/orchestrator.py` — uses `rag_path()` when building RAG retriever
 - CI gate: `rg 'Path\("generated_tests"\)' -- '*.py'` must return zero results
 
 ## Notes
@@ -10891,6 +12605,7 @@ Reset the singleton â€” used in test teardown for isolation.
 
 
 
+
 # `src/test_generator.py`
 
 ## High-Level Purpose
@@ -10898,7 +12613,7 @@ Reset the singleton â€” used in test teardown for isolation.
 Generates placeholder-based pytest skeleton code for the intelligent pipeline. Supports two modes:
 
 - **Single-call** (`LANGGRAPH_ENABLED=0`, default): One LLM call with full user story + conditions.
-- **LangGraph** (`LANGGRAPH_ENABLED=1`): Multi-agent Planner â†’ Generator â†’ Validator workflow with retry loop.
+- **LangGraph** (`LANGGRAPH_ENABLED=1`): Multi-agent Planner → Generator → Validator workflow with retry loop.
 
 ## Class: `TestGenerator`
 
@@ -10914,15 +12629,15 @@ Generates placeholder-based pytest skeleton code for the intelligent pipeline. S
 - Dispatches to LangGraph or single-call path based on `LANGGRAPH_ENABLED` env var
 - Returns skeleton code with `{{ACTION:description}}` placeholder tokens
 
-### `_generate_skeleton_single_call(...)` â€” Private
+### `_generate_skeleton_single_call(...)` — Private
 
 - Original single-call pipeline: builds prompt via `get_skeleton_prompt_template()`, calls LLM
 - Returns raw skeleton code
 
-### `_generate_skeleton_langgraph(...)` â€” Private
+### `_generate_skeleton_langgraph(...)` — Private
 
 - Creates `SkeletonGraph` with the configured `LLMClient`
-- Runs the full Planner â†’ Generator â†’ Validator workflow
+- Runs the full Planner → Generator → Validator workflow
 - Imports `langgraph` lazily; raises helpful `ImportError` if not installed
 - Raises `RuntimeError` if all retries exhausted with no skeleton code
 
@@ -10934,16 +12649,17 @@ Generates placeholder-based pytest skeleton code for the intelligent pipeline. S
 
 ## Depended On By
 
-- `src/orchestrator.py` â€” core pipeline orchestration
-- `src/ui_pipeline.py` â€” Streamlit UI pipeline execution
-- `src/cli/test_case_orchestrator.py` â€” CLI orchestration
+- `src/orchestrator.py` — core pipeline orchestration
+- `src/ui_pipeline.py` — Streamlit UI pipeline execution
+- `src/cli/test_case_orchestrator.py` — CLI orchestration
 
 ## Design Notes
 
-- **Safe default:** `LANGGRAPH_ENABLED=0` â€” zero risk, existing behaviour preserved
+- **Safe default:** `LANGGRAPH_ENABLED=0` — zero risk, existing behaviour preserved
 - **Optional dependency:** `langgraph` is not required for normal operation
 - **Import guard:** Lazy import with helpful error message if langgraph missing
-- **Shared client:** Both paths use the same `LLMClient` instance â€” consistent provider/model across all LLM calls
+- **Shared client:** Both paths use the same `LLMClient` instance — consistent provider/model across all LLM calls
+
 
 
 
@@ -10976,10 +12692,184 @@ Living test plan models and helpers for tester review/sign-off before test gener
 
 
 
+# `src/test_structure_assembler.py`
+
+## High-Level Purpose
+
+`test_structure_assembler.py` rebuilds a generated Playwright test file from its
+parsed journey model so that the pipeline — not the LLM — owns the file
+structure. LLM skeletons occasionally leak bare executable statements
+(`home_page.click(...)`) or dangling decorators OUTSIDE any test function;
+those reference fixtures that don't exist at module scope and crash pytest at
+COLLECTION time, before any test runs. Sanitizing each leak pattern after the
+fact is whack-a-mole; this module instead re-emits only the structural parts
+the pipeline controls, making module-level leaks structurally impossible.
+
+The pipeline owns: the header (imports, module constants, module-level helper
+`def`/`class` blocks) and, per test, the `@pytest.mark.evidence` decorator plus
+the `def` shell. The LLM text only supplies test names, `condition_ref` /
+`story_ref` values, and the function body lines (already resolved upstream).
+
+The per-test shell is built with a PEP 750 **t-string** — the decorator and
+signature literal text is plain, and the interpolated values are structured
+parts, so no `\n` escapes or quote-juggling are needed.
+
+## Module Dependencies
+
+- `re`: extracts `condition_ref` / `story_ref` values from decorator lines.
+- `typing.Any`: type hint for the t-string `Template` object in `_render`.
+- `.skeleton_parser.SkeletonParser`: parses the generated code into
+  `TestJourney` objects (test name, line range, body lines).
+
+## Classes
+
+This module defines no classes.
+
+## Public Functions
+
+### `rebuild_test_structure(code: str) -> str`
+
+Rebuilds the test file from the parsed journey model.
+
+Parameters:
+
+- `code: str`: The fully resolved generated test code (after placeholder
+  resolution, evidence-marker injection and normalisation).
+
+Returns:
+
+- `str`: The rebuilt file. Returns the input unchanged when no test functions
+  are found (safe fallback — nothing to rebuild).
+
+Key behavior:
+
+- Header (everything before the first test function) is preserved verbatim
+  except module-level executable statements and dangling decorators, which are
+  dropped by construction.
+- Each test function is re-emitted with a canonical t-string shell (decorator +
+  `def test_<name>(page: Page, evidence_tracker):`); body lines are taken
+  verbatim from the resolved code.
+- `condition_ref` / `story_ref` are extracted from the decorator lines directly
+  above the `def` (the journey block can extend into the next test's decorator,
+  so the whole block is never scanned for refs).
+- Decorators and `def` lines written by the LLM inside a block are dropped (the
+  assembler re-emits them), while POM instantiation lines, resolved steps,
+  `pytest.skip` calls and comments are preserved.
+
+## Private Helpers
+
+### `_render(tpl: Any) -> str`
+
+Interleaves `Template.strings` + `Template.interpolations` into plain text.
+PEP 750 t-strings produce a `Template` whose `values` only contains the
+evaluated interpolations; the literal text lives in `strings`, so reassembly
+must interleave the two.
+
+### `_build_shell(condition_ref: str, story_ref: str, test_name: str) -> str`
+
+Returns the pipeline-owned decorator + `def` shell for one test, built with a
+t-string. Interpolation expressions evaluate at the literal site (like
+f-strings), so the values are passed as parameters.
+
+### `_is_module_constant(line: str) -> bool`
+
+True when a module-level line is a constant assignment (`NAME = value` with no
+call in the left-hand side) — such lines are preserved in the header.
+
+## Architectural Notes
+
+- Wired into `TestOrchestrator.run_pipeline()` as the final structural pass,
+  immediately after `normalise_generated_code()`.
+- Complements `code_postprocessor._strip_module_level_statements()` (a
+  line-based sanitizer) — the assembler makes the same leaks impossible by
+  construction rather than by deletion.
+- The journey model comes from `SkeletonParser.parse_test_journeys()`, whose
+  `test_definition_pattern` matches `def` lines only — hence the walk-up that
+  collects decorator lines sitting just above each `def`.
+
+
+
+
+
+
+# `src/test_table.py`
+
+## Purpose
+Test Table (AI-034) — LLM expansion of Living Test Plan conditions into concrete
+test rows. Sits between the Living Test Plan and skeleton generation: each
+condition may describe several distinct test scenarios (e.g. "filters — A-Z, Z-A,
+price low-high, price high-low" describes four); the LLM expands it into one
+`TestRow` per scenario so the tester sees — and can refine — exactly what will be
+generated before skeleton code exists. Each confirmed row produces exactly one
+skeleton function (Phase 3 hook via `table_to_conditions()`).
+
+## Metadata
+- **Lines:** 449
+- **Imports:** json, re, dataclasses, collections.abc, typing, src.llm_client, src.spec_analyzer
+
+## Classes
+- **`TestRow`** (frozen dataclass): One concrete test scenario expanded from a
+  condition. Fields: `id` ("T01"), `condition_ref` ("TC01.03"), `intent`,
+  `expected_action` (SELECT|CLICK|FILL|ASSERT|NAVIGATE), `expected_target`,
+  `row_index`. `to_dict()` / `from_dict()` round-trip for session-state/editor use.
+- **`TestTable`** (frozen dataclass): Tester-reviewable collection of rows with
+  CRUD (`add_row`, `remove_row`, `update_row`), confirmation (`confirm`,
+  `confirm_condition`), and counting (`rows_for_condition`, `tests_count_for` —
+  feeds the LTP "Tests" column).
+- **`TestTableExpander`**: LLM expansion engine. `expand_condition()` /
+  `expand_conditions()` produce rows via `LLMClient.generate_test` with a
+  JSON-schema SYSTEM_PROMPT (fences/trailing-comma/unquoted-key repair included).
+  **Resilient by design**: any LLM failure degrades to one deterministic row per
+  condition (`single_row_for_condition`) instead of raising — the pipeline never
+  breaks because the LLM is down. Hard cap: `DEFAULT_MAX_ROWS_PER_CONDITION = 10`.
+
+## Functions
+| Function | Description |
+|----------|-------------|
+| `normalize_action(raw)` | Normalizes free-text action to a valid `TestAction` literal (aliases: select→SELECT, verify→ASSERT, …) |
+| `single_row_for_condition(condition)` | Deterministic 1-row fallback; action inferred from condition intent |
+| `table_to_conditions(table, confirmed_only=True)` | Converts (confirmed) rows → `TestCondition`s — one skeleton per row (id=row.id, text=intent+target) |
+| `build_table(conditions, expander)` | Expand conditions and build a `TestTable` with sequential row ids |
+| `apply_editor_rows(table, rows)` | Returns a table updated from editable table rows (mirrors `test_plan.apply_editor_rows`) |
+| `next_row_id(rows, prefix="T")` | Next sequential test row id (T01, T02, …) |
+
+## Dependencies
+- `src.llm_client` (LLMClient — provider-agnostic generation)
+- `src.spec_analyzer` (TestCondition, infer_condition_intent)
+
+## Consumers
+- `src/ui_pipeline.py` — `build_test_table()`, `plan_rows_from_plan(plan, test_table)` (Tests column), `test_table_rows(table)` (editor rows)
+- `streamlit_app.py` — 🧪 Test Table editor expander (data_editor + confirm-all)
+- `src/cli/pipeline_runner.py` — "Expand into Test Rows" menu flow (`build_test_table_interactive`), `_select_conditions_for_generation()`
+- `src/orchestrator.py` / `src/test_generator.py` — via `reviewed_conditions` (rows → conditions feed the per-condition skeleton generator)
+
+## Key Design Decisions
+- **LLM-first, deterministic fallback**: expansion is LLM-driven (semantic
+  splitting of concerns); the 1-row-per-condition fallback guarantees no
+  regression for atomic conditions and no hard failure when the LLM is down.
+- **Cap 10 rows/condition** (`DEFAULT_MAX_ROWS_PER_CONDITION`) guards against
+  LLM over-generation; tester can merge/split/remove rows in the editors.
+- **Confirmed-only generation**: only `confirmed_row_ids` produce skeletons
+  (unconfirmed rows skipped); rows removed by the tester simply don't generate.
+- **Frozen dataclasses + `__test__ = False`**: immutable value objects that
+  pytest does not collect; `replace()`-based immutability like `TestPlan`.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `single_row_for_condition`
+- `_infer_action_from_intent(intent: str) -> TestAction` (function) — Return a deterministic default action for a condition intent (fallback path).
+
+
+
+
+
+
 # `src/ui_pipeline.py`
 
 ## Purpose
-Pipeline execution helpers for Streamlit UI â€” business logic only (no rendering). Extracted from streamlit_app for testability.
+Pipeline execution helpers for Streamlit UI — business logic only (no rendering). Extracted from streamlit_app for testability.
 
 ## Metadata
 - **Lines:** 341
@@ -11009,6 +12899,53 @@ Pipeline execution helpers for Streamlit UI â€” business logic only (no ren
 ## Dependencies
 - `src.code_validator`, `src.orchestrator`, `src.spec_analyzer`, `src.test_generator`, `src.test_plan`, `src.pipeline_*` services
 
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `build_test_table(plan: TestPlan, provider: str, provider_base_url: str, model_name: str) -> TestTable` (function)
+
+Expand a reviewed plan into a Test Table (one row per test scenario).
+
+### `test_table_rows(table: TestTable) -> list[dict[str, object]]` (function)
+
+Return editable table rows for the current test table.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `run_pipeline`
+- `_looks_like_non_code_output(code: str) -> bool` (function) — Return True when *code* looks like a JSON/dict blob, not Python.
+
+
+
+
+
+
+# `src/ui/ui_run_comparison.py`
+
+## Purpose
+Run comparison view on the Evidence & Reports page — pick a package and two persisted runs, and see per-test status deltas (Changed / Fixed / Regressed). Uses `run_result_persistence` data; added 2026-08-06.
+
+## Metadata
+- **Lines:** ~110
+- **Imports:** re, streamlit, src.pipeline_artifact_manager, src.run_result_persistence, src.storage
+
+## Classes
+- **`RunComparison`**: renders the package selector, Run A / Run B pickers, the delta table, and summary metrics. Filters runs by package (`load_all_run_results` ignores its directory argument).
+
+## Functions
+| Function | Description |
+|----------|-------------|
+| `_run_label(run)` | Human-readable run label (date/time · passed/failed counts) |
+| `_delta_icon(sa, sb)` | Status delta: `=` unchanged, `⬆ fixed`, `⬇ regressed`, `↔ changed` |
+| `_status_label(run)` | Short `passed✓/failed✗` label for the table columns |
+
+## Notes
+- Runs must be **persisted** (UI-driven runs via Run & Fix persist; raw CLI pytest runs do not) — the view says so when a package has fewer than two runs.
+
+
 
 
 
@@ -11026,14 +12963,14 @@ URL transition inference for journey-aware placeholder resolution. Infers next p
 | Function | Description |
 |----------|-------------|
 | `infer_next_page_url(action, description, matched_element, scraped_data, current_url)` | Main entry: infers next page after a resolved step |
-| `_infer_click_transition_url(description, matched_element, scraped_data, current_url)` | Infers common transitions (loginâ†’inventory, checkoutâ†’step-two, etc.) |
+| `_infer_click_transition_url(description, matched_element, scraped_data, current_url)` | Infers common transitions (login→inventory, checkout→step-two, etc.) |
 | `_find_discovered_url(scraped_data, preferred_terms)` | Returns best scraped URL matching preferred terms |
 
 ## Key Logic
-- CLICK with href â†’ returns href (resolved against current_url if relative)
-- CLICK without href â†’ uses keyword matching on description/selector/id to infer transitions
-- Add to cart clicks â†’ returns None (stays on same page)
-- Navigation clicks (cart, checkout, home) â†’ falls back to PlaceholderResolver.resolve_url
+- CLICK with href → returns href (resolved against current_url if relative)
+- CLICK without href → uses keyword matching on description/selector/id to infer transitions
+- Add to cart clicks → returns None (stays on same page)
+- Navigation clicks (cart, checkout, home) → falls back to PlaceholderResolver.resolve_url
 
 ## Dependencies
 - `src.placeholder_resolver` (conditional import for resolve_url fallback)
@@ -11048,13 +12985,13 @@ URL transition inference for journey-aware placeholder resolution. Infers next p
 Resolves page keywords to actually discovered URLs from journey scraping. Bridges LLM-generated page keywords (e.g., "cart", "checkout") with real URLs.
 
 ## Metadata
-- **Lines:** 221
+- **Lines:** ~280
 - **Imports:** logging, urllib.parse.urlparse, src.url_utils
 
 ## Classes
 | Class | Description |
 |-------|-------------|
-| `UrlResolver` | Builds keywordâ†’URL mapping from journey scraping results |
+| `UrlResolver` | Builds keyword→URL mapping from journey scraping results |
 
 ## Functions
 | Function | Description |
@@ -11062,18 +12999,29 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 | `UrlResolver.build_mapping(keywords, scraped_urls, seed_url, concepts)` | Match keywords to discovered URLs |
 | `UrlResolver.resolve(keyword)` | Resolve a keyword to an actual URL |
 | `UrlResolver.get_seed_url()` | Return seed URL as fallback |
-| `UrlResolver.get_all_mappings()` | Return copy of all keywordâ†’URL mappings |
-| `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using 4-tier strategy |
+| `UrlResolver.get_all_mappings()` | Return copy of all keyword→URL mappings |
+| `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using multi-tier strategy |
 | `resolve_keywords_to_urls(keywords, scraped_urls, seed_url, concepts)` | Convenience: creates and populates UrlResolver |
 
 ## Matching Strategy (priority order)
-1. Exact path match: "cart" â†’ `/cart`
-2. Direct path segment match: "cart" â†’ `/shop/cart`
-3. Normalized substring: "checkout overview" â†’ `/checkout-overview`
-4. Prefix match: "product" â†’ `/products` (shortest path wins)
+1. Exact path match: "cart" → `/cart`
+2. Direct path segment match: "cart" → `/shop/cart`
+3. Normalized substring: "checkout overview" → `/checkout-overview`
+4. Prefix match: "product" → `/products` (shortest path wins)
+5. **Semantic alias match (2026-08-03):** sites name routes differently from the story vocabulary — "products" matches `/inventory.html` (saucedemo), "cart" matches `/basket`, "login" matches `/signin`. Generic alias groups, no per-site lists.
 
 ## Fallback
-When no scraped URLs available, uses `build_common_path_candidates` from `src.url_utils` to generate common e-commerce paths.
+When no scraped URLs available, uses `build_common_path_candidates` from `src.url_utils` to generate same-domain e-commerce path candidates.
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `normalize_url(url: str) -> str` (function)
+
+Return a canonical URL — root http(s) URLs get a trailing slash.
+
 
 
 
@@ -11085,23 +13033,31 @@ When no scraped URLs available, uses `build_common_path_candidates` from `src.ur
 Pure URL manipulation helpers extracted from TestOrchestrator. Validates domains, filters to allowed domains, extracts route concepts, and provides URL fallback guesses.
 
 ## Metadata
-- **Lines:** 87
-- **Imports:** logging, urllib.parse (urljoin, urlparse)
+- **Lines:** ~140
+- **Imports:** logging, re, urllib.parse (urljoin, urlparse)
 
 ## Functions
 | Function | Description |
 |----------|-------------|
+| `is_stateful_cart_checkout_path(path)` | Site-agnostic predicate: True when a URL path is a cart/checkout page needing session state (matches `view_cart`, `cart`, `checkout`, `basket` tokens — covers automationexercise `/view_cart` and saucedemo `/cart.html`) |
+| `normalize_url_path(url)` | Normalize LLM-generated URL path variations to real routes |
 | `extract_seed_domain(seed_urls)` | Extract normalized domain strings from seed URLs |
 | `filter_urls_to_allowed_domain(urls, allowed_domains)` | Keep only URLs matching allowed domains or subdomains |
 | `extract_route_concepts(texts)` | Extract e-commerce concepts (home, products, cart, checkout) from text |
-| `build_common_path_candidates(seed_urls, concepts)` | Stub â€” returns empty list (journey scraper replaces guessing) |
+| `build_common_path_candidates(seed_urls, concepts)` | **Re-enabled 2026-08-03**: same-domain candidate URLs for story concepts (SPA sites expose no hrefs for journey discovery) — mirrors journey_scraper's route vocabulary |
 | `heuristic_url_from_description(current_url, description)` | Best-effort URL guess from description keywords |
 
 ## Key Logic
+- `is_stateful_cart_checkout_path` is the single source of truth for stateful/cart-seeding routing — used by `placeholder_orchestrator` and `ui_run_results` (no per-site path lists)
+- `build_common_path_candidates` was a stub (URL guessing removed in June); re-enabled because SPA sites (saucedemo) have no hrefs for journey discovery — candidates are concept-driven and filtered to the seed domain to prevent cross-site hallucination
 - Domain validation allows exact match or subdomain match
-- Route concepts extracted via keyword presence: "product"/"shop" â†’ products, "cart"/"basket" â†’ cart, "checkout"/"payment" â†’ checkout
-- `build_common_path_candidates` is deprecated â€” journey scraper replaces URL guessing
-- `heuristic_url_from_description` maps keywords to common paths: productsâ†’`/products`, cartâ†’`/view_cart`, checkoutâ†’`/checkout`
+- Route concepts extracted via keyword presence: "product"/"shop" → products, "cart"/"basket" → cart, "checkout"/"payment" → checkout
+- `heuristic_url_from_description` maps keywords to common paths: products→`/products`, cart→`/view_cart`, checkout→`/checkout`
+
+## Related
+- `src/placeholder_orchestrator.py`, `src/orchestrator.py` — stateful routing + URL candidates
+- `src/ui/ui_run_results.py` — cart-seeding detection for the repair setup script
+
 
 
 
@@ -11127,20 +13083,20 @@ Parses user story text into structured `FeatureSpecification` with user story an
 ## Functions
 | Function | Description |
 |----------|-------------|
-| `FeatureParser.parse(text)` | Parse raw text â†’ ParseResult with FeatureSpecification |
+| `FeatureParser.parse(text)` | Parse raw text → ParseResult with FeatureSpecification |
 | `FeatureParser.build_requirement_model(spec)` | Build RequirementModel from specification |
 | `FeatureParser._clean_criterion(stripped)` | Remove bullets, numbers, "Total: N criteria" markers |
 
 ## Parsing Strategy
 1. Detect section headings (STORY_HEADINGS / CRITERIA_HEADINGS) with variable whitespace
 2. Collect lines under active section into user_story or acceptance_criteria
-3. Fallback: no headings found â†’ collect all meaningful lines as story
-4. `_clean_criterion` strips bullets (`-`, `*`, `â€¢`), numbered lists, and "(Total: N criteria)"
+3. Fallback: no headings found → collect all meaningful lines as story
+4. `_clean_criterion` strips bullets (`-`, `*`, `•`), numbered lists, and "(Total: N criteria)"
 
 ## RequirementModel Sources
-- `acceptance_criteria` â€” explicit AC section found
-- `derived_from_story` â€” story lines used (skip "As a..." wrapper)
-- `story_fallback` â€” single story line as sole requirement
+- `acceptance_criteria` — explicit AC section found
+- `derived_from_story` — story lines used (skip "As a..." wrapper)
+- `story_fallback` — single story line as sole requirement
 
 
 
@@ -11149,7 +13105,7 @@ Parses user story text into structured `FeatureSpecification` with user story an
 # `src/vision_enricher.py`
 
 ## Purpose
-Vision-based element enrichment service. Uses vision-capable LLMs to analyze cropped element screenshots and return structured text metadata (product_name, price, visual_label) for improved placeholder resolution. Vision is a metadata enricher, not a matcher â€” text-based resolver always does matching.
+Vision-based element enrichment service. Uses vision-capable LLMs to analyze cropped element screenshots and return structured text metadata (product_name, price, visual_label) for improved placeholder resolution. Vision is a metadata enricher, not a matcher — text-based resolver always does matching.
 
 ## Metadata
 - **Lines:** 307
@@ -11170,15 +13126,15 @@ Vision-based element enrichment service. Uses vision-capable LLMs to analyze cro
 |--------|-------------|
 | `is_vision_capable(provider, model)` | Detect vision support by matching model name against known patterns |
 | `crop_element_from_screenshot(screenshot_bytes, bbox, padding=2)` | Crop element from full-page screenshot using bounding box |
-| `enrich_elements(elements, screenshot_bytes, provider, model, timeout=60)` | Main enrichment pipeline: crop â†’ vision LLM â†’ parse â†’ merge metadata |
+| `enrich_elements(elements, screenshot_bytes, provider, model, timeout=60)` | Main enrichment pipeline: crop → vision LLM → parse → merge metadata |
 | `_build_vision_prompt(element)` | Build prompt asking vision LLM for structured JSON metadata |
 | `_parse_enrichment_response(response_text)` | Parse vision LLM response: JSON first, then regex fallback |
 
 ## Enrichment Flow
-1. Check `is_vision_capable` â€” skip if no vision model
-2. For each element with `_bbox`: crop from screenshot â†’ base64 encode
+1. Check `is_vision_capable` — skip if no vision model
+2. For each element with `_bbox`: crop from screenshot → base64 encode
 3. Call `LLMClient.create_vision_completion()` with cropped image + prompt
-4. Parse structured response â†’ merge into element dict
+4. Parse structured response → merge into element dict
 5. Set `_enriched=True` on success, `_enriched=False` + `_enrichment_error` on failure
 
 ## Design Principles
@@ -11191,7 +13147,7 @@ Vision-based element enrichment service. Uses vision-capable LLMs to analyze cro
 
 
 
-# `src/__init__.py` â€” Structural Summary
+# `src/__init__.py` — Structural Summary
 
 ## High-Level Purpose
 
@@ -11237,8 +13193,8 @@ This file serves as the package initializer for the `src` package within the **A
 
 ## Related Files (inferred from project structure)
 
-- `src/` â€” sibling modules within the same package (e.g., `src/stateful_scraper.py`, `src/playwright_manager.py`, etc.) are the actual carriers of logic for the Playwright test generator.
-- `pyproject.toml` or `setup.py` â€” likely contains the package's metadata (name, version, dependencies) that this `__init__.py` does not duplicate.
+- `src/` — sibling modules within the same package (e.g., `src/stateful_scraper.py`, `src/playwright_manager.py`, etc.) are the actual carriers of logic for the Playwright test generator.
+- `pyproject.toml` or `setup.py` — likely contains the package's metadata (name, version, dependencies) that this `__init__.py` does not duplicate.
 
 ## Summary
 
@@ -11248,9 +13204,10 @@ This file serves as the package initializer for the `src` package within the **A
 
 
 
-# AI-Playwright-Test-Generator â€” Documentation Index
 
-> Auto-generated documentation sweep â€” 101 source files across `src/`
+# AI-Playwright-Test-Generator — Documentation Index
+
+> Auto-generated documentation sweep — 135 source files across `src/`, `cli/`, `scripts/`
 
 ## Global Architecture
 
@@ -11278,7 +13235,7 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 
 | Module | Role |
 |--------|------|
-| `src/cli/main.py` | Slim orchestrator â€” menu loop and routing |
+| `src/cli/main.py` | Slim orchestrator — menu loop and routing |
 | `src/cli/session.py` | Session state dataclass with factory |
 | `src/cli/menu_renderer.py` | Retro menu rendering and all input prompts |
 | `src/cli/retro_ui.py` | CHOICE-style box-drawing and colour primitives |
@@ -11315,34 +13272,45 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 | **Persistence** | `run_result_persistence.py`, `sqlite_persistence.py`, `run_history_chart.py`, `run_history_cli.py` | SQLite-backed run history and charting |
 | **Visualisation** | `gantt_utils.py`, `heatmap_utils.py`, `coverage_utils.py`, `run_history_chart.py` | Gantt charts, heatmaps, coverage analysis |
 | **Infrastructure** | `config.py`, `file_utils.py`, `storage.py` | Configuration constants, file utilities, workspace-isolated storage |
-| **RAG (Phase 3)** | `rag_store.py`, `rag_retriever.py` | Retrieval-augmented resolution â€” vector store (Milvus Lite) + golden pattern retrieval for scoring bonus |
+| **RAG (Phase 3)** | `rag_store.py`, `rag_retriever.py` | Retrieval-augmented resolution — vector store (Milvus Lite) + golden pattern retrieval for scoring bonus |
 
 ### Test Plan (`src/test_plan.py`)
 
 Living test plan with sign-off workflow. Conditions derived from acceptance criteria, reviewed by tester, then signed off before generation is unlocked.
 
+### Test Table (`src/test_table.py`)
+
+AI-034 — LLM expansion of plan conditions into concrete test rows (one row per scenario). Tester reviews/edits/confirms rows before one skeleton function per row is generated. Editors in both Streamlit (🧪 Test Table) and CLI ("Expand into Test Rows").
+
 ### Tests (`tests/`)
 
-Unit tests for all core modules â€” validates the tool itself, not the tests it generates.
+Unit tests for all core modules — validates the tool itself, not the tests it generates.
 
 ### Generated Output (`generated_tests/`)
 
 Test packages produced by the tool. Each package contains:
-- `package_manifest.json` â€” Metadata and artifact listing
-- `test_xxx.py` â€” Generated Playwright test files
-- `evidence/*.evidence.json` â€” Sidecar evidence files with screenshots and step traces
+- `package_manifest.json` — Metadata and artifact listing
+- `test_xxx.py` — Generated Playwright test files
+- `evidence/*.evidence.json` — Sidecar evidence files with screenshots and step traces
 
 ## Documentation Coverage
 
 | Directory | Files | Status |
 |-----------|-------|--------|
-| `src/` (root) | 61 | âœ… Complete |
-| `src/agents/` | 5 | âœ… Complete |
-| `src/cli/` | 15 | âœ… Complete |
-| `src/ui/` | 10 | âœ… Complete |
-| `src/llm_providers/` | 1 | âœ… Complete |
-| `scripts/` | 1 | âœ… Complete |
-| `src/` (all) | **109** | **âœ… Complete** |
+| `src/` (root) | 61 | ✅ Complete |
+| `src/agents/` | 5 | ✅ Complete |
+| `src/cli/` | 15 | ✅ Complete |
+| `src/ui/` | 10 | ✅ Complete |
+| `src/llm_providers/` | 1 | ✅ Complete |
+| `scripts/` (eval + verify_production + archived debug) | 10 | ✅ Complete |
+| `cli/` | 4 | ✅ Complete |
+| **Total** | **135** | **✅ Complete** |
+
+> Updated 2026-08-03 (document-manager sweep): 12 `src/` docs refreshed for the
+> saucedemo checkout cluster fixes (soft-404, stateful routing, dead-page/
+> redirect-duplicate filters, navigation-intent fallback, modal-scoped dismissal,
+> B-024g field matching); new docs for `scripts/verify_production.py`,
+> `cli/evidence_cli.py`, and 4 archived saucedemo debug scripts.
 
 ## Sweep Progress
 
@@ -11351,7 +13319,8 @@ See `markdown_docs/.sweep_progress.json` for per-file completion status.
 ---
 
 *Generated: 2026-07-08*  
-*Updated: 2026-07-23 â€” Phase 1c LangGraph agents (state, planner, generator, validator, graph)*
+*Updated: 2026-07-23 — Phase 1c LangGraph agents (state, planner, generator, validator, graph)*
+
 
 
 
