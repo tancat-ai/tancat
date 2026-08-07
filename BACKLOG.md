@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-06 (Run & Fix restructure + report/self-heal/evidence fixes)
+Last updated: 2026-08-07 (B-042 locator-repair indent fix + B-043 real run-history dropdown counts)
 
 ---
 
@@ -391,22 +391,22 @@ writing if code fails syntax check.
 ## 🔴 Open Bugs
 
 ### B-042 — Locator-repair patch dedents the replacement line to module scope (collection crash)
-**Status:** 🟡 ready-for-agent (discovered + reproduced 2026-08-06; workaround applied by hand)
+**Status:** ✅ Fixed (2026-08-07, `0951ec0`, CI pending)
 **Priority:** High — every "🔧 Fix Locator" patch can silently break the whole suite at COLLECTION time
 
 `apply_patch` in `src/locator_repair.py` rebuilds the patched line from regex groups (`before_quote` + locator + `after_quote`) that **exclude the line's leading indentation**, then writes it back at column 0. When the patched line is inside a test function, the replacement lands at module scope → `NameError: name 'evidence_tracker' is not defined` → the module fails to import → 1 error, 0 tests. Reproduction (live, 2026-08-06): a Fix-Locator repair of T11 in `test_20260805_181339...` wrote `evidence_tracker.assert_visible(...)` dedented to column 0; pytest then collected 0/14 tests.
 
-**Fix:** preserve the original line's leading whitespace in the reconstruction (`lines[line_idx]` indent must carry into `new_line`), plus a regression test that applies a patch inside a function body and asserts the result still compiles.
+**Fix shipped:** the reconstruction now explicitly re-applies the original line's leading whitespace (`indent` + `before_quote.lstrip()`) in the regex path, so a patched line inside a function body can never land at module scope. Also hardened: an **empty `original_locator`** (previously matched *every* line in the search window, then `.replace("", …)` mangled the whole file) now raises `LocatorRepairError`. Regression tests: patch inside a function body (regex path + evidence-tracker fallback path) still compiles via `ast.parse`; empty-original raises.
 
 ---
 
 ### B-043 — Sidebar package dropdown reports 0 runs when real run history exists
-**Status:** 🟡 ready-for-agent (discovered 2026-08-06)
+**Status:** ✅ Fixed (2026-08-07, `0951ec0`, CI pending)
 **Priority:** Medium — the dropdown's run count actively misleads
 
 `find_existing_packages` refreshes `run_results_count`/`last_run_at` from `package_manifest.json`, but those fields count a different artifact than actual test runs: the dropdown showed `(1 test, 0 runs)` for a package whose real history (`run_result_persistence`) held **13 runs / 85 passed / 28 failed** (verified via the loaded-package sidebar summary). Manifest fields are only updated when a run persists results in the way the manifest expects; evidence-bearing runs (sidecars + screenshots) don't bump them.
 
-**Fix options:** (a) compute dropdown run counts from `run_result_persistence.load_all_run_results` (already called on load), or (b) update the manifest fields wherever run results are persisted. Add a regression test asserting the dropdown label uses real run history.
+**Fix shipped (option a):** `find_existing_packages`/`_reconstruct_manifest` now reconcile run fields through `_refresh_run_stats()`: workspace SQLite run-history DB first (`run_stats_by_package()` — one `GROUP BY test_package` pass, exposed via `run_result_persistence`; matches the package dir and any path beneath it, Windows-case-normalised) → legacy per-package JSON/SQLite counting → the manifest's own values (CLI bumps via `update_last_run_at`). Regression tests: DB-persisted runs appear in the dropdown count + last-run; test-file-path recording matches the package; manifest-only counts survive when the DB has no rows.
 
 ---
 
