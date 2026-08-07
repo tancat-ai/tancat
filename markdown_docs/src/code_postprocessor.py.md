@@ -244,3 +244,14 @@ Key behavior:
 
 - `_normalize_test_function_names(code)` — renames purely descriptive test names to include condition_ref number (e.g., `test_view_cart` → `test_tc01_05_view_cart`). Tests already numbered are left unchanged.
 - `replace_token_in_line()` — passes through `expect(...)` expressions as-is (URL assertions from B-021) instead of wrapping in `evidence_tracker.*()` calls.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `normalise_generated_code`
+- `_strip_module_level_statements(code: str) -> str` (function) — Remove stray executable statements at module scope (LLM leaks).
+
+### `strip_evidence_from_test_code`
+- `_strip_evidence_decorators(code: str) -> str` (function) — Remove ``@pytest.mark.evidence`` decorators in all emitted forms.
+- `_strip_tracker_asserts(code: str, tracker: str, page_expr: str) -> str` (function) — Convert ``tracker.assert_*`` calls to Playwright ``expect()`` assertions.

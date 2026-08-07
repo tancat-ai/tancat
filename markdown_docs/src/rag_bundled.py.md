@@ -86,3 +86,10 @@ next run (marker not written).
   verified against Milvus-lite before shipping.
 - `--prune-learned` is a no-op today (no learned patterns yet) — it ships so
   consumers have the reset lever before AI-035 learning lands.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `ensure_bundled_seeded`
+- `_write_marker(marker_path: Path) -> None` (function) — (no docstring)

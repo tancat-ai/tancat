@@ -46,3 +46,12 @@ ingest → plan → [human checkpoint] → synthesize ⇄ postprocess → END
 - `langgraph` (optional — graph degrades gracefully if not installed)
 - `src.agents.ingestion`, `src.agents.director`, `src.agents.synthesizer`
 - `src.agents.pipeline_state`
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `PipelineGraph`
+- `_after_qa_director(state: PipelineState) -> str` (function) — Route after QA Director: checkpoint, then route by persona.
+- `_after_synthesizer(state: PipelineState) -> str` (function) — Route after Synthesizer: retry on failure, or proceed.
+- `_route_entry(state: PipelineState) -> str` (function) — Route the entry point: document mode goes through parsing first.

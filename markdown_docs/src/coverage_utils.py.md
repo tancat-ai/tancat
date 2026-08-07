@@ -55,3 +55,15 @@ Return the coverage analysis dict used by UIs and report builders.
 ### `build_coverage_display_rows(requirements: list[RequirementCoverage], run_results: Sequence[CoverageRunResult] | None = None) -> list[CoverageDisplayRow]` (function)
 
 Build display-ready rows from RequirementCoverage objects.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `build_coverage_display_rows`
+- `_get_base_test_name(name: str) -> str` (function) — Strip browser markers and path separators to get the core test name.
+- `_result_icon(status: str) -> str` (function) — Return a visual status marker for test execution result.
+- `_status_emoji(status: str) -> str` (function) — Return a visual status marker for requirement coverage status.
+
+### `build_requirement_coverages`
+- `_extract_criterion_number(test_name: str) -> int | None` (function) — Extract the criterion number from a test function name.

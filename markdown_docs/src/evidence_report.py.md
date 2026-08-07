@@ -45,3 +45,25 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `EvidenceFile` (class)
 
 Represents a single evidence sidecar file.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (12 items). Grouped under the public function that uses them:
+
+### `generate_annotated_journey`
+- `_build_bug_report_text(sidecar_path: Path, sidecar: dict[str, Any], image_data_uri: str = '', title: str = '') -> str` (function) — Build a plain-text bug report from the evidence sidecar.
+- `_build_step_row_html(step: dict[str, Any], idx: int) -> str` (function) — Render a single step as a compact timeline row.
+- `_empty_result(msg: str, bug_report_mode: bool) -> str` (function) — (no docstring)
+- `_find_best_screenshot(steps: list[dict[str, Any]]) -> str` (function) — Find the most informative screenshot from steps (prefer failure or last assertion).
+- `_is_failed_step(step: dict[str, Any]) -> bool` (function) — Check if a step resulted in a failure.
+
+### `generate_annotated_screenshot`
+- `_prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]` (function) — Return steps with labels normalized for UI rendering.
+- `_safe_embed_image_data_uri(image_path: Path) -> str | None` (function) — (no docstring)
+- `_safe_read_json(path: Path) -> dict[str, Any] | None` (function) — (no docstring)
+
+### Internal utilities
+- `_clean_evidence_label(label: str) -> str` (function) — Convert raw placeholder-token labels into cleaner user-facing text.
+- `_format_label(label: str, matched_text: str | None = None, truncate: int = 80) -> str` (function) — Format a step label with optional matched text for user display.
+- `_normalise_url(url: str) -> str` (function) — Normalise URLs for matching across redirects and trailing slashes.
+- `_step_type_key(step: dict[str, Any]) -> str` (function) — (no docstring)

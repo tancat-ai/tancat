@@ -39,3 +39,10 @@ Handles the "Re-run Failed Only" button:
 ### `_store_run_report() -> None`
 
 Delegates to `src.ui.shared.store_run_report()` with current session state values.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `ResultsPanel`
+- `_handle_generate_bug_report() -> None` (function) — Handle the 'Generate Bug Report' button click.

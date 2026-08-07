@@ -33,3 +33,10 @@ print(result.test_code)
 ## Dependencies
 
 - `langgraph>=1.2.9` (optional — lazy import, degrades if not installed)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_lazy_import(name: str) -> Any` (function) — Lazy-import a module that depends on optional langgraph.

@@ -22,3 +22,14 @@ Filter elements to the section referenced in a placeholder description.
 ### `build_element_to_section_map(elements: list[dict[str, Any]]) -> dict[int, str]` (function)
 
 Build a mapping from element index to section name.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `scope_elements`
+- `_extract_section_hint(description: str) -> str | None` (function) — Extract a section hint from a placeholder description.
+- `_match_section_hint(hint: str, sections: list[Section]) -> str | None` (function) — Match a normalised hint against detected section names.
+
+### Internal utilities
+- `_normalise_name(name: str) -> str` (function) — Normalise a section name for comparison.

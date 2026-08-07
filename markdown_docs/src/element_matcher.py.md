@@ -40,3 +40,12 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `select_page_loaded_candidate(candidates: list[dict[str, str]], description: str = '') -> dict[str, str] | None` (function)
 
 Pick a stable visible page element for generic "page loaded" assertions.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:
+
+### `ElementMatcher`
+- `_is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool` (function) — Check if an element should be excluded from consideration.
+- `_log_resolve_pass(pass_number: int, pass_name: str, description: str, element: dict[str, str] | None) -> None` (function) — (no docstring)
+- `_validate_text_match(element: dict[str, str] | None, description: str, resolver: PlaceholderResolver) -> dict[str, str] | None` (function) — Validate that the element's visible text plausibly matches the description.

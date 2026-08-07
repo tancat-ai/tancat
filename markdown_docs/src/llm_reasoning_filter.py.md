@@ -40,3 +40,11 @@ Returns `True` if the line looks like LLM reasoning text rather than Python code
 ## Related Files
 - `src/code_postprocessor.py` — consumer; calls `strip_llm_reasoning()` as a post-processing step
 - `src/code_normalizer.py` — sibling post-processing module (newline normalization)
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_is_long_conversational_comment(stripped: str, comment_content: str) -> bool` (function) — Return True if a long comment (>100 chars) reads like reasoning prose.
+- `_is_structural_reasoning_line(stripped: str) -> bool` (function) — Return True if the line matches a structural reasoning pattern.

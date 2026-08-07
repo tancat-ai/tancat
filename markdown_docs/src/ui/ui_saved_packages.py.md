@@ -58,3 +58,11 @@ Loads the most recent run result from the package directory.
 ### `_store_run_report() -> None`
 
 Delegates to `src.ui.shared.store_run_report()`.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `SavedPackagePanel`
+- `_format_package_label(pkg: PackageManifest) -> str` (function) — Build a human-readable dropdown label from a package manifest.
+- `_rerun_loaded_package(package_root: Path) -> None` (function) — Actually re-run the loaded saved package (B-041).

@@ -73,3 +73,11 @@ Filters runs by test package scope. Returns all runs when scope is `"All"`.
 ### `_render_run_comparison(comparison) -> None`
 
 Renders improved (✓), regressed (✗), and new failures (⚠) lists.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (2 items). Grouped under the public function that uses them:
+
+### `EvidenceViewer`
+- `_format_indexed_at(iso_string: str) -> str` (function) — Format an ISO-8601 timestamp — always show date + time.
+- `_short_package_name(raw: str) -> str` (function) — Turn a long auto-generated package dir name into something readable.

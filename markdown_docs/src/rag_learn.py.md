@@ -97,3 +97,15 @@ Confidence is `0.9` (verified by execution, below self-healing's `1.0`);
   evidence sidecar's placeholder label, e.g. `{{CLICK:view cart link}}`).
 - A failed learning call is swallowed by the conftest guard and retried on the
   next run (no marker/state to corrupt).
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `pattern_from_patch`
+- `_action_from_code(line: str) -> str | None` (function) — Map a Playwright code line to a resolver action type, or ``None``.
+- `_description_from_evidence(old_selector: str | None, evidence_steps: list[dict[str, Any]] | None) -> str | None` (function) — Find the step whose locator matches the OLD (failed) selector.
+- `_selector_from_code(line: str) -> str | None` (function) — Extract the selector string from a code line, or ``None``.
+
+### Internal utilities
+- `_clean_label(label: str) -> str` (function) — Reduce an evidence step label to the placeholder description.

@@ -94,3 +94,15 @@ Fields: `url`, `elements`, `title`, `html_snippet`, `error`, `final_url`, `a11y_
 - `src/journey_scraper.py` — uses PageScraper for initial page scrapes
 - `src/placeholder_orchestrator.py` — fallback scraper
 - `src/orchestrator.py` — calls via JourneyScraper
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `PageScraper`
+- `_find_aria_match(bs4_text: str, bs4_role: str, aria_by_text: dict[str, list[tuple[int, dict[str, Any]]]], used: set[int]) -> tuple[int, dict[str, Any]] | None` (function) — Find the best ARIA element matching a BS4 element.
+- `_merge_aria_into_bs4(bs4: dict[str, Any], aria: dict[str, Any]) -> None` (function) — Copy ARIA semantics into a BS4 element (never overwrite existing).
+
+### `capture_page_screenshot`
+- `_normalise_locator_bbox(bbox: Any) -> dict[str, float] | None` (function) — Return a numeric bbox dict when Playwright reports a visible region.
+- `_selector_from_locator(locator: Any, index: int) -> str` (function) — Build a best-effort selector for a live Playwright locator.

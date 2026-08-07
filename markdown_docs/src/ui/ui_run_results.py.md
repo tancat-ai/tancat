@@ -118,3 +118,24 @@ Builds and executes a temporary Playwright setup script that replays prerequisit
 - Modal dismissal scoped to modal containers (B-015 lesson — a visible cart-page "Continue Shopping" must not be clicked)
 
 **Known Windows gotcha (pre-existing):** the storage-state print line embeds the temp path without `r''` escaping, so `C:\Users\...` breaks the generated script's parse on Windows.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (13 items). Grouped under the public function that uses them:
+
+### `RunResultsDisplay`
+- `_get_generated_code_for_coverage() -> str` (function) — Get generated test code for coverage analysis.
+- `_read_test_code_from_path(saved_path: str) -> str` (function) — Read test code from a saved test file or package directory.
+- `_render_skip_repair_panel() -> None` (function) — Render the skip repair panel — opens codegen and replaces pytest.skip() with a real action.
+- `_render_skipped_tests_info(results: list[TestResult]) -> None` (function) — Render information about skipped tests, showing why they were skipped.
+
+### Internal utilities
+- `_extract_all_steps_before_test(source: str, test_name: str) -> list[str]` (function) — Extract all action steps from all tests before the given test.
+- `_extract_code_lines_before_skip(source: str, test_name: str, skip_line: int) -> list[str]` (function) — Extract the actual code lines before the pytest.skip() line for display.
+- `_extract_steps_before_skip(source: str, test_name: str, skip_line: int) -> list[str]` (function) — Extract the action steps (clicks, fills, etc.) before the pytest.skip() line.
+- `_failure_context(saved_path: str, test_name: str, run_result: RunResult | None) -> tuple[str, str, int | None]` (function) — Best-effort failure context for the repair flow (B-041).
+- `_find_skip_line_number(source: str, test_name: str) -> int | None` (function) — Find the line number (1-based) of the pytest.skip() in a test function.
+- `_find_url_before_skip(source: str, test_name: str, skip_line: int) -> str | None` (function) — Find the URL the test navigates to before the pytest.skip() line.
+- `_render_skip_repair_capture() -> None` (function) — Run codegen and capture the locator, then replace pytest.skip() in the test file.
+- `_render_skip_repair_result() -> None` (function) — Show the skip repair result.
+- `_render_skip_repair_waiting() -> None` (function) — Show explanation before opening the browser for skipped test fix.

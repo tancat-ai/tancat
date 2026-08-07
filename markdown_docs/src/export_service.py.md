@@ -277,3 +277,15 @@ It does not run exported tests, invoke Playwright, or call an LLM.
 - SQLite evidence databases are searched in both `source / "evidence"` and the package root.
 - WAL and SHM companion files are copied when present.
 - Generated support files use UTF-8 encoding.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (4 items). Grouped under the public function that uses them:
+
+### `export_clean_suite`
+- `_find_sqlite_db(source: Path) -> Path | None` (function) — Locate the package run-history SQLite DB (current or legacy name).
+- `_guard_stub_source(source: Path) -> None` (function) — Raise ValueError when the source package has nothing runnable to export.
+
+### Internal utilities
+- `_count_stub_functions(source: Path) -> tuple[int, int]` (function) — Return ``(stub_test_count, total_test_count)`` across ``test_*.py`` files.
+- `_is_stub_function(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool` (function) — Return True when a test function body contains no real test logic.

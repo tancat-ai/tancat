@@ -43,3 +43,10 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `StatefulPageScraper` (class)
 
 Scrape pages using a Playwright browser context with a cart session.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### Internal utilities
+- `_run_subprocess_entry() -> int` (function) — Entry point for the subprocess-backed stateful scrape.

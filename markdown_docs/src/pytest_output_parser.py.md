@@ -49,3 +49,10 @@ Reload-safe check for :class:`RunResult` instances.
 ### `format_pytest_output_for_display(raw: str, max_lines: int = 80) -> str` (function)
 
 Return a concise, high-signal pytest output snippet for UI display.
+
+## How It Works (Internals)
+
+Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:
+
+### `parse_pytest_output`
+- `_parse_duration(value: str | None, unit: str | None = None) -> float` (function) — Parse a duration value with optional unit to seconds.
