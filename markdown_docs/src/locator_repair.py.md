@@ -6,7 +6,7 @@ Surgical replacement of a broken locator in a generated test file. Replaces only
 
 ## Module Metadata
 
-- **Lines:** 151
+- **Lines:** 475
 - **Imports:** `re`, `dataclasses`, `pathlib.Path`
 
 ## Data Classes
@@ -28,6 +28,10 @@ Raised when the target locator could not be found on the expected line.
 ### `apply_patch(patch: LocatorPatch) -> str`
 
 Apply a locator patch to the test source and return the patched source. Finds the line containing `original_locator`, replaces only the locator string inside `.locator("...")`, preserves the action. Searches +/- 10 lines around reported line number since Playwright error lines don't always match the locator call line.
+
+**B-042 hardening:**
+- The reconstruction re-applies the original line's leading indentation, so a patched line inside a test function can never be dedented to module scope (which broke collection with `NameError` / 1 error, 0 tests).
+- An empty `original_locator` (which would match every line in the search window and then mangle the file via `str.replace("", …)`) raises `LocatorRepairError` instead.
 
 ### `apply_patch_to_file(patch: LocatorPatch) -> None`
 

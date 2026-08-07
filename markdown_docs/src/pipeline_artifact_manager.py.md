@@ -135,6 +135,8 @@ generated_tests/<package_name>/
 
 **Sort order:** `created_at` descending (newest first).
 
+**Run-count reconciliation (B-043):** both paths call `_refresh_run_stats()` so `run_results_count`/`last_run_at` reflect real run history, not stale manifest fields. Source-of-truth order: (1) workspace SQLite run-history DB via `run_stats_by_package()` — matches the package dir and any path beneath it, Windows-case-normalised; (2) legacy per-package JSON/SQLite counting; (3) the manifest's own persisted values (CLI bumps via `update_last_run_at`).
+
 ---
 
 ## Legacy Package Reconstruction
@@ -154,8 +156,8 @@ When `reconstruct=True` and no `package_manifest.json` exists, the module scans 
 | `scrape_manifest_path` | `"scrape_manifest.json"` if file exists, else `""` |
 | `reports` | `[]` |
 | `evidence_paths` | `[]` |
-| `run_results_count` | Count of `run_results_*.json` files |
-| `last_run_at` | `""` |
+| `run_results_count` | Count of `run_results_*.json` files, then reconciled against the run-history DB (`_refresh_run_stats`) |
+| `last_run_at` | `""`, then set from the run-history DB when rows exist (B-043) |
 
 ---
 
@@ -177,7 +179,7 @@ When `reconstruct=True` and no `package_manifest.json` exists, the module scans 
 | `run_result_persistence.py` | Pytest run outcomes (pass/fail/skip per test, retry tracking, flakiness) |
 | `pipeline_artifact_manager.py` | Package metadata (user story, provider/model, report paths, evidence paths) |
 
-Both modules write to the same package directory but manage different concerns. `update_last_run_at()` in this module provides a bridge, updating manifest metadata when a new pytest run completes.
+Both modules write to the same package directory but manage different concerns. `update_last_run_at()` in this module provides a bridge, updating manifest metadata when a new pytest run completes; `run_stats_by_package()` (run_result_persistence) feeds run counts/last-run back into `find_existing_packages` for the sidebar/CLI dropdowns (B-043).
 
 ---
 
@@ -204,6 +206,7 @@ Both modules write to the same package directory but manage different concerns. 
 - Package name populated from parent directory
 - find_existing_packages with canonical manifests
 - Legacy package discovery (no manifest, test files only)
+- **B-043:** dropdown run counts reflect the DB (2 persisted runs → count 2 + last_run); test-file-path `test_package` values match the package; manifest-only counts survive when the DB has no rows
 - Non-package directories skipped
 - Canonical manifest preferred over reconstruction
 - Reconstruct from package root

@@ -43,10 +43,12 @@ Uses `sqlite3` from the Python standard library — no external server or depend
 ### Constructor
 
 ```python
-SQLitePersistence(db_path: Path | None = None) -> None
+SQLitePersistence(db_path: Path | None = None, busy_timeout_ms: int = 30000) -> None
 ```
 
-Initialises the database connection with WAL journal mode and foreign key enforcement. Creates the schema automatically.
+Initialises the database connection with WAL journal mode, foreign key enforcement, and a 30s `busy_timeout` so concurrent opens (parallel pytest workers, Streamlit + CLI, export + run) serialize instead of failing with "database is locked". Creates the schema automatically.
+
+**Corruption vs. lock handling:** a genuinely corrupt file ("file is not a database"/malformed) is deleted and rebuilt (B-034 — the evidence index rebuilds from sidecars); a transient lock (`OperationalError`) is re-raised and **never** deletes the file.
 
 ### Property
 
@@ -69,6 +71,10 @@ Returns sorted list of run_ids (oldest first).
 #### `load_all_run_results() -> list[PersistedRunResult]`
 
 Loads every persisted run (oldest first).
+
+#### `run_stats_by_package() -> dict[str, tuple[int, str]]`
+
+Returns `{test_package: (run_count, last_run_at)}` aggregated in a single `GROUP BY test_package` pass. Lets package-level UI (sidebar dropdown run counts/labels) reconcile against real run history cheaply (B-043).
 
 #### `compute_run_history() -> RunHistory`
 
@@ -97,5 +103,7 @@ Connection management and context-manager protocol support.
 ## Design Patterns
 
 - **WAL journal mode**: Enables concurrent reads while writes happen — no table locks during chart rendering.
+- **`busy_timeout` (30s)**: Concurrent writers/opener wait for each other instead of raising "database is locked" — parallel xdist workers and Streamlit+CLI overlap are safe.
+- **Non-destructive lock handling**: transient `OperationalError` (locked) re-raises; only genuine `DatabaseError` (corruption) triggers the delete-and-rebuild recovery — a healthy database is never deleted on contention.
 - **FK CASCADE**: Deleting a `run` automatically removes all child `test_results` rows.
 - **Drop-in replacement**: Mirrors `run_result_persistence.py` signatures for transparent delegation.
