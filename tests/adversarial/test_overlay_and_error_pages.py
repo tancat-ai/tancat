@@ -79,11 +79,14 @@ def test_banking_mock_injects_consent_overlay_on_demand() -> None:
 
     from scripts.mock_server import MockServer
 
-    with MockServer.start(port=8781, directory="mock_sites/banking"):
+    # Distinct port (8782) — the contract layer binds 8781 (dataset convention)
+    # and CI runs files in parallel xdist workers; a shared port would race
+    # with "Address already in use". Ports only need to be unique per file.
+    with MockServer.start(port=8782, directory="mock_sites/banking"):
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto("http://localhost:8781/index.html?overlay=consent")
+            page.goto("http://localhost:8782/index.html?overlay=consent")
             page.wait_for_selector("#consent-root", timeout=5000)
             assert page.locator(".fc-consent-root").count() == 1
             browser.close()
@@ -95,11 +98,11 @@ def test_banking_mock_clean_path_has_no_overlay() -> None:
 
     from scripts.mock_server import MockServer
 
-    with MockServer.start(port=8781, directory="mock_sites/banking"):
+    with MockServer.start(port=8782, directory="mock_sites/banking"):
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page()
-            page.goto("http://localhost:8781/index.html")
+            page.goto("http://localhost:8782/index.html")
             page.wait_for_timeout(500)
             assert page.locator("#consent-root").count() == 0
             assert page.locator("#google_vignette").count() == 0
