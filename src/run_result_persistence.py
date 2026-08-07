@@ -188,6 +188,16 @@ def load_all_run_results(directory: Path | None = None) -> list[PersistedRunResu
     return _get_db().load_all_run_results()
 
 
+def run_stats_by_package() -> dict[str, tuple[int, str]]:
+    """Return ``{test_package: (run_count, last_run_at)}`` across persisted runs.
+
+    Used to reconcile package-level run counts/labels with the real run
+    history (B-043): the manifest fields are only bumped by CLI runs, while
+    evidence-bearing UI runs persist here and never touch the manifest.
+    """
+    return _get_db().run_stats_by_package()
+
+
 # ---------------------------------------------------------------------------
 # History & flakiness analysis
 # ---------------------------------------------------------------------------

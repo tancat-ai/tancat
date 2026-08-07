@@ -291,6 +291,25 @@ class SQLitePersistence:
                 results.append(run)
         return results
 
+    def run_stats_by_package(self) -> dict[str, tuple[int, str]]:
+        """Return ``{test_package: (run_count, last_run_at)}`` across all runs.
+
+        Aggregated in a single SQL pass so package-level UI (dropdown labels,
+        run counts) can reconcile against real run history cheaply, instead of
+        loading every run plus its test results (B-043: manifest fields drift
+        from the actually-persisted runs).
+        """
+        rows = self._conn.execute(
+            """
+            SELECT test_package,
+                   COUNT(*)        AS cnt,
+                   MAX(created_at) AS last_run_at
+            FROM runs
+            GROUP BY test_package
+            """
+        ).fetchall()
+        return {row["test_package"]: (row["cnt"], row["last_run_at"] or "") for row in rows}
+
     # ------------------------------------------------------------------
     # History — compute using SQL aggregation
     # ------------------------------------------------------------------

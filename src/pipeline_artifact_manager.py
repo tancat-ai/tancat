@@ -10,6 +10,7 @@ No Streamlit imports — fully unit-testable in isolation.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -171,8 +172,10 @@ def find_existing_packages(base_dir: Path) -> list[PackageManifest]:
         canonical = entry / MANIFEST_FILENAME
         if canonical.exists():
             loaded = _load_from_file(canonical)
-            # Refresh dynamic fields
-            loaded.run_results_count = _count_run_results(entry)
+            # Refresh dynamic fields (B-043): prefer the real run-history DB —
+            # per-package JSON/SQLite counting misses evidence-bearing runs and
+            # the manifest fields are only bumped by CLI runs.
+            _refresh_run_stats(loaded, entry)
             manifests.append(loaded)
         elif _looks_like_package(entry):
             manifests.append(_reconstruct_manifest(entry))
@@ -219,7 +222,7 @@ def _reconstruct_manifest(package_root: Path) -> PackageManifest:
 
     run_count = _count_run_results(package_root)
 
-    return PackageManifest(
+    manifest = PackageManifest(
         package_name=package_root.name,
         created_at=created_at,
         source_story="unknown",
@@ -235,6 +238,10 @@ def _reconstruct_manifest(package_root: Path) -> PackageManifest:
         run_results_count=run_count,
         last_run_at="",
     )
+    # B-043: reconcile against the real run-history DB when it has rows for
+    # this package (legacy packages may have been run through the UI since).
+    _refresh_run_stats(manifest, package_root)
+    return manifest
 
 
 def _looks_like_package(directory: Path) -> bool:
@@ -257,6 +264,57 @@ def _scan_page_object_files(package_root: Path) -> list[str]:
     if not pages_dir.is_dir():
         return []
     return sorted(str(f.relative_to(package_root)) for f in pages_dir.glob("*.py") if not f.name.startswith("__"))
+
+
+def _refresh_run_stats(manifest: PackageManifest, package_root: Path) -> None:
+    """Reconcile a manifest's run fields against real run history (B-043).
+
+    Source of truth order:
+
+    1. Workspace SQLite run-history DB (UI runs persist here with a
+       ``test_package`` value matching the package directory; the manifest
+       fields never see them, so the dropdown showed ``0 runs``).
+    2. Legacy per-package JSON / per-package SQLite counting (pre-DB runs).
+    3. The manifest's own persisted values (CLI runs bump these via
+       ``update_last_run_at`` and never write to the DB).
+    """
+    db_count, db_last = _db_run_stats_for_package(package_root)
+    legacy_count = _count_run_results(package_root)
+    if db_count > 0:
+        manifest.run_results_count = db_count
+        if db_last and db_last > manifest.last_run_at:
+            manifest.last_run_at = db_last
+    elif legacy_count > 0:
+        manifest.run_results_count = legacy_count
+
+
+def _db_run_stats_for_package(package_root: Path) -> tuple[int, str]:
+    """Return ``(run_count, last_run_at)`` for *package_root* from the workspace DB.
+
+    Matches persisted ``test_package`` values against the resolved package
+    directory, and against any path beneath it (some callers record the test
+    *file* path instead of the directory). Returns ``(0, "")`` when the DB is
+    unavailable or holds no rows for this package.
+    """
+    try:
+        from src.run_result_persistence import run_stats_by_package
+
+        stats = run_stats_by_package()
+    except Exception:
+        # DB unavailable / corrupt — degrade to legacy counting only.
+        return (0, "")
+
+    pkg_dir = os.path.normcase(os.path.abspath(str(package_root)))
+    prefix = pkg_dir + os.sep
+    total = 0
+    last_run = ""
+    for test_package, (count, last) in stats.items():
+        norm = os.path.normcase(os.path.abspath(test_package))
+        if norm == pkg_dir or norm.startswith(prefix):
+            total += count
+            if last and (not last_run or last > last_run):
+                last_run = last
+    return (total, last_run)
 
 
 def _count_run_results(package_root: Path) -> int:

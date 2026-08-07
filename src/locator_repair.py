@@ -332,21 +332,38 @@ def apply_patch(patch: LocatorPatch) -> str:
     test_path = Path(patch.test_file)
     source = test_path.read_text(encoding="utf-8")
 
+    # B-042: an empty original_locator would match *every* line in the search
+    # window and then .replace("", ...) would mangle the whole line — reject it.
+    if not patch.original_locator:
+        raise LocatorRepairError(
+            line_number=patch.line_number,
+            expected_locator="",
+            actual_line="(empty original_locator — nothing to patch)",
+        )
+
     (line_idx, raw_line) = _find_locator_action_line(
         source,
         patch.line_number,
         patch.original_locator,
     )
 
+    # B-042: carry the original line's leading indentation into the
+    # reconstruction. The regex groups below only cover the statement itself;
+    # writing it back without the indent dedents a patched line inside a test
+    # function to module scope, breaking collection (NameError / 1 error, 0
+    # tests). The fallback replace path preserves the rest of the line, but the
+    # regex path rebuilds from groups — so re-apply the indent explicitly.
+    indent = raw_line[: len(raw_line) - len(raw_line.lstrip())]
+
     # Try to match the .locator(...) pattern and replace only the locator string
     match = _LOCATOR_ACTION_SPLIT.search(raw_line)
     if match:
-        before_quote = match.group(1)  # e.g. 'page.locator('
+        before_quote = match.group(1).lstrip()  # e.g. 'page.locator(' (indent stripped)
         quote_char = match.group(2)  # '"' or "'"
         _old_locator = match.group(3)  # discarded — we trust the patch
         after_quote = match.group(4)  # e.g. ').click()'
-        # Reconstruct with the repaired locator
-        new_line = f"{before_quote}{quote_char}{patch.repaired_locator}{quote_char}{after_quote}"
+        # Reconstruct with the repaired locator, preserving the line's indent
+        new_line = f"{indent}{before_quote}{quote_char}{patch.repaired_locator}{quote_char}{after_quote}"
     else:
         # Fallback: simple string replace for the original_locator on this line
         new_line = raw_line.replace(patch.original_locator, patch.repaired_locator)
