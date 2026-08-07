@@ -42,6 +42,48 @@ TEXT_BEARING_ROLES = {
 
 TEXT_BEARING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "li", "td", "th"}
 
+# B-045: Descriptions that name a clickable role must not fast-match a
+# different role's element. Maps description role words → scraped roles.
+# Only strong role words gate ("button", "link") — "icon" is used loosely
+# ("cart icon" often refers to a link) and would exclude the real target.
+# Submit-intent verbs ("pay", "submit", "place"...) also gate toward the
+# form's submit control: a header nav link ("Pay Bills") must not win a
+# "Pay Bill" description purely by substring overlap.
+_NAMED_ROLE_MAP: dict[str, set[str]] = {
+    "button": {"button", "submit"},
+    "link": {"a", "link"},
+    "submit": {"button", "submit"},
+}
+
+# Verbs that describe submitting a form (as opposed to navigating to a page).
+_SUBMIT_INTENT_VERBS: tuple[str, ...] = ("submit", "place", "pay", "register", "send", "confirm")
+
+
+def _named_role_in_description(norm_description: str) -> str | None:
+    """Return the single named clickable role in a description, if any.
+
+    ``"pay bill button"`` → ``"button"``; ``"cart link"`` → ``"link"``;
+    ``"add to cart"`` → ``None`` (no role word). Only the FIRST role word
+    found is used — descriptions rarely name more than one role, and a
+    specific role gate beats a vague one.
+
+    Submit-intent verbs also gate to the submit control — but only when the
+    description is NOT a navigation phrase ("go to", "navigate", "open",
+    "page", "link"), which target a nav link instead.
+    """
+    for role_word in ("button", "link"):
+        if role_word in norm_description:
+            return role_word
+    is_navigation = any(
+        term in norm_description for term in ("go to", "navigate", "open", "page", "link", "menu", "tab")
+    )
+    if not is_navigation:
+        for verb in _SUBMIT_INTENT_VERBS:
+            if verb in norm_description:
+                return "submit"
+    return None
+
+
 # B-020: Minimum score for text fallback when no LLM selection is available.
 MIN_SCORE_FOR_TEXT_FALLBACK = 5
 
@@ -272,6 +314,35 @@ class ElementMatcher:
         desc_words = set(norm_description.split())
         has_action_verb = bool(desc_words & PlaceholderResolver.ACTION_VERBS)
 
+        # B-045: exact-text pre-sweep — when an element's normalized text is
+        # EXACTLY the description, it wins over substring matches regardless
+        # of DOM order. "Pay Bills" (nav link) must beat the "Pay Bill"
+        # submit button for a "Pay Bills" click, and vice versa — exact
+        # equality is the strongest signal of intent.
+        for elements in pages_data.values():
+            for element in elements:
+                if element.get("synthetic_id"):
+                    continue
+                if action == "FILL" and not _is_fillable(element):
+                    continue
+                norm_text = normalise_element_text(element)
+                if not norm_text or norm_text != norm_description:
+                    continue
+                _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
+                role = str(element.get("role", "")).strip().lower()
+                computed = str(element.get("computed_role", "")).strip().lower()
+                if action == "CLICK" and (role in _heading_roles or computed in _heading_roles):
+                    continue
+                # No role gate here: exact text equality is the strongest
+                # intent signal and already disambiguates "Pay Bills" (nav)
+                # from "Pay Bill" (submit button) without needing role hints.
+                if has_action_verb:
+                    text_words = set(norm_text.split())
+                    action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
+                    if not (text_words & action_words_in_desc):
+                        continue
+                return element
+
         # R-001: Extract key phrases from verbose descriptions.
         key_phrases: list[str] = []
         quoted_phrases = re.findall(r'["\']([^"\']+)["\']', norm_description)
@@ -407,6 +478,21 @@ class ElementMatcher:
                         computed = str(element.get("computed_role", "")).strip().lower()
                         if role in _heading_roles or computed in _heading_roles:
                             continue  # Skip this heading, try next element
+                    # B-045: When the description names a role ("button",
+                    # "link", "icon"), Pass 1 must respect it — a header nav
+                    # link ("Pay Bills") text-matches "pay bill button" and
+                    # appears earlier in the DOM than the real submit button
+                    # ("Pay Bill"), so DOM-order fast-matching picked the
+                    # nav link and the click never navigated. Elements whose
+                    # role disagrees with the named role are skipped here;
+                    # if no role-named element matches, we fall through to
+                    # scoring which applies its own role bonus.
+                    if action == "CLICK":
+                        desc_role = _named_role_in_description(norm_description)
+                        if desc_role is not None:
+                            el_role = role or computed
+                            if el_role != desc_role:
+                                continue
                     if has_action_verb:
                         text_words = set(norm_text.split())
                         action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
@@ -584,6 +670,10 @@ class ElementMatcher:
             return None
 
         structural_fields = ("id", "data_test", "aria_label", "accessible_name", "name")
+        # B-045: same role gate as Pass 1 — a description that names a role
+        # ("pay bill button") must not structurally fast-match a different
+        # role's element (header nav link) before scoring runs.
+        named_role = _named_role_in_description(description.lower()) if action == "CLICK" else None
 
         for elements in pages_data.values():
             for element in elements:
@@ -597,6 +687,13 @@ class ElementMatcher:
                     str(element.get("role", "")).lower() == "hidden" or element.get("is_visible") is False
                 ):
                     continue
+                if named_role is not None:
+                    el_role = (
+                        str(element.get("role", "")).strip().lower()
+                        or str(element.get("computed_role", "")).strip().lower()
+                    )
+                    if el_role not in _NAMED_ROLE_MAP[named_role]:
+                        continue
                 for field in structural_fields:
                     raw = str(element.get(field, "")).strip()
                     if len(raw) < 2:

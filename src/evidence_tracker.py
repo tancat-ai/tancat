@@ -459,13 +459,72 @@ class EvidenceTracker:
             label = f"Fill {locator} with '{value}'"
         _t0 = time.time()
         try:
-            self.page.locator(locator).fill(value)
+            # B-045: native <select> elements reject .fill() ("Element is not an
+            # <input>, <textarea> or [contenteditable]"). The banking mock is the
+            # first golden target with native selects (from/to account, payee);
+            # detect the tag and route to .select_option() so the generated test
+            # passes instead of erroring at runtime.
+            tag = self._locator_tag(locator)
+            if tag == "select":
+                self._select_option(locator, value)
+            else:
+                self.page.locator(locator).fill(value)
             self._record_step("fill", label, locator=locator, value=value, elapsed_ms=int((time.time() - _t0) * 1000))
         except Exception as e:
             self._record_step(
                 "fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000)
             )
             raise
+
+    def _select_option(self, locator: str, value: str) -> None:
+        """Select an option on a native <select>, robust to value/label mismatch.
+
+        LLM fill values are nondeterministic ("Electric Company") and rarely
+        equal the option's ``value`` attribute ("electric") or its exact label
+        ("City Electric Company"). Try, in order:
+          1. exact option value
+          2. exact option label
+          3. first option whose label CONTAINS the requested value
+             (case-insensitive) — the closest real-world match.
+        """
+        locator_obj = self.page.locator(locator)
+        try:
+            locator_obj.select_option(value)
+            return
+        except Exception:
+            pass
+        try:
+            locator_obj.select_option(label=value)
+            return
+        except Exception:
+            pass
+        # Substring match over option labels via evaluate (returns the value).
+        needle = value.strip().lower()
+        matched_value = locator_obj.evaluate(
+            """(sel, needle) => {
+                const opts = Array.from(sel.options);
+                const hit = opts.find(o => o.text.toLowerCase().includes(needle));
+                return hit ? hit.value : null;
+            }""",
+            needle,
+        )
+        if matched_value is None:
+            # Surface the real error from the first attempt.
+            locator_obj.select_option(value)
+        locator_obj.select_option(matched_value)
+
+    def _locator_tag(self, locator: str) -> str:
+        """Return the resolved element's tag name for a locator, or empty.
+
+        Uses Playwright's own engine to inspect the first matching element —
+        cheap, and avoids a CSS tag parse that would misread compound
+        selectors. Empty on any error (locator resolves to nothing yet,
+        evaluation fails, etc.) so the caller falls back to plain .fill().
+        """
+        try:
+            return str(self.page.locator(locator).evaluate("el => el.tagName").lower())
+        except Exception:
+            return ""
 
     def click(self, locator: str, label: str = "") -> None:
         """Click an element, with layered fallback strategies.

@@ -330,3 +330,71 @@ def test_b029_swallowed_click_amended_to_failure(tmp_path: Any) -> None:
     assert last["result"]["status"] == "failed"
     assert "did not navigate" in last["result"]["error"]
     assert last["result"]["failure_note"] is not None
+
+
+def test_fill_select_uses_select_option_when_tag_is_select(tmp_path: Any) -> None:
+    """B-044: a native <select> rejects .fill(); the tracker must route to
+    .select_option(). Regression: banking mock payee/from-account selects
+    made the generated tests fail at runtime (Playwright "Element is not an
+    <input>, <textarea> or [contenteditable]")."""
+    page_mock = MagicMock()
+    locator_mock = MagicMock()
+    locator_mock.evaluate.return_value = "SELECT"
+    page_mock.locator.return_value = locator_mock
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+
+    tracker.fill("#payee", "Electric Company")
+
+    locator_mock.select_option.assert_called_once_with("Electric Company")
+    locator_mock.fill.assert_not_called()
+    assert tracker.steps[-1]["type"] == "fill"
+    assert tracker.steps[-1]["result"]["status"] == "passed"
+
+
+def test_fill_select_falls_back_to_substring_option_label(tmp_path: Any) -> None:
+    """B-044: when the fill value matches no option value/label exactly, select
+    the first option whose label contains the requested text ("Electric
+    Company" vs option "City Electric Company")."""
+    page_mock = MagicMock()
+    locator_mock = MagicMock()
+    # tag=SELECT; exact value fails; exact label fails; substring matches
+    # option with value="electric".
+    locator_mock.evaluate.side_effect = ["SELECT", "electric"]
+    locator_mock.select_option.side_effect = [Exception("no exact value"), Exception("no exact label"), None]
+    page_mock.locator.return_value = locator_mock
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+
+    tracker.fill("#payee", "Electric Company")
+
+    assert locator_mock.select_option.call_count == 3
+    # Substring pass selected by resolved value.
+    assert locator_mock.select_option.call_args_list[-1] == (("electric",),)
+
+
+def test_fill_plain_input_uses_fill_not_select_option(tmp_path: Any) -> None:
+    """B-044: non-select elements must keep using .fill() (no behavior change)."""
+    page_mock = MagicMock()
+    locator_mock = MagicMock()
+    locator_mock.evaluate.return_value = "INPUT"
+    page_mock.locator.return_value = locator_mock
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+
+    tracker.fill("#amount", "100")
+
+    locator_mock.fill.assert_called_once_with("100")
+    locator_mock.select_option.assert_not_called()
+
+
+def test_fill_select_evaluate_failure_falls_back_to_fill(tmp_path: Any) -> None:
+    """B-044: if the tag probe fails (element not present yet), fall back to
+    plain .fill() so the original error path is unchanged."""
+    page_mock = MagicMock()
+    locator_mock = MagicMock()
+    locator_mock.evaluate.side_effect = Exception("no element")
+    page_mock.locator.return_value = locator_mock
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+
+    tracker.fill("#maybe-late", "x")
+
+    locator_mock.fill.assert_called_once_with("x")
+    locator_mock.select_option.assert_not_called()

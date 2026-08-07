@@ -26,7 +26,7 @@ exercised across as much product range as possible.
 |---|---|---|---|---|
 | 0 | Insurance (multi-step form) | ✅ have | `generated_tests/mock_insurance_site.html` | multi-step form, validation |
 | 1 | E-commerce (multi-page) | ✅ built 2026-08-03 | `mock_sites/ecommerce/` | home → category → product → add-to-cart **modal** → cart → checkout; **injectable consent/ad overlay** (`?overlay=consent|ad`) for the B-029 race |
-| 2 | Banking / fintech | 🆕 | `mock_sites/banking/` | login, accounts, transfers, payments, multi-user |
+| 2 | Banking / fintech | ✅ built 2026-08-07 | `mock_sites/banking/` | login, accounts, transfers, payments, multi-user |
 | 3 | Booking / travel | 🆕 | `mock_sites/booking/` | search, date pickers, booking lifecycle |
 | 4 | Healthcare | 🆕 | `mock_sites/healthcare/` | patient intake forms, appointment CRUD |
 | 5 | Enterprise / HR | 🆕 | `mock_sites/hr/` | org hierarchy, multi-role, admin |
@@ -50,6 +50,23 @@ cvc↔cvv synonyms, CSS classes in structural matching, classed cart cells,
 `cardholder_name` name attr, and route aliases (`mock_routes.json` +
 302-redirects in the mock server) so journey/cart-seeding reach cart/checkout
 with items and URLs stay canonical.
+
+**Banking mock (2026-08-07):** `mock_sites/banking/` — 7 static pages (sign-in,
+dashboard, account detail, transfer, transfer success, pay bills, payment
+success) covering the auth/transfer/payments/multi-user shape, localStorage
+session (deterministic demo auth — any non-empty credentials sign in),
+localStorage-backed balances/transactions, pre-filled payment date so
+journeys can submit, injectable `?overlay=consent|ad` (B-029 race), and route
+aliases (`/accounts`, `/transfer`, `/pay-bill`, `/payment-success`…) so
+discovery reaches every page. Eval dataset `eval-007` (8 criteria, 13 golden
+placeholders, login+balances+transfer+payment legs). Captures:
+`banking_mock_code.py`. **Measured baseline: static 13/13 (100%), execution
+8/8 passed against the mock** (login → dashboard → transfer → success →
+pay bill → payment success, with session-gate redirect verified). Surfaces
+(and fixes landed) the B-045 cluster: HTTP-404 pages surviving the dead-page
+drop, login-transition vocabulary being ecommerce-only, submit-success page
+transitions missing, role-worded descriptions fast-matching nav links, and
+`fill()` failing on native `<select>` elements.
 
 Reference repos researched 2026-08-03 (sources of inspiration, **not** dependencies):
 

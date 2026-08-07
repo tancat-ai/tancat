@@ -125,7 +125,9 @@ class TestGenerateTestMethod:
         assert "empty" in str(exc_info.value).lower()
 
     @patch("src.llm_client.auto_detect_provider")
-    def test_generate_test_calls_api_correctly(self, mock_auto_detect_provider: MagicMock) -> None:
+    def test_generate_test_calls_api_correctly(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Verify API call is made with correct payload."""
         # Mock the provider
         mock_provider = MagicMock()
@@ -134,8 +136,23 @@ class TestGenerateTestMethod:
         mock_provider.complete.return_value = ChatCompletion(content="test code", model="qwen3.5:35b")
         mock_auto_detect_provider.return_value = mock_provider
 
-        client = LLMClient()
-        _ = client.generate_test("test scenario")
+        # Hermetic: (1) cli.main's module-level load_dotenv() loads .env
+        # (OLLAMA_MODEL=qwen3.5:9b) into os.environ once any CLI test imports
+        # it in the same xdist worker, overriding the mocked ollama default
+        # (qwen2.5:7b); (2) a leaked class-level _session_provider/_session_model
+        # bypasses the auto_detect_provider mock. Both make this otherwise-
+        # pure test hit the live LLM. Drop the env var + reset session state.
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        LLMClient._session_provider = None
+        LLMClient._session_base_url = None
+        LLMClient._session_model = None
+        try:
+            client = LLMClient()
+            _ = client.generate_test("test scenario")
+        finally:
+            LLMClient._session_provider = None
+            LLMClient._session_base_url = None
+            LLMClient._session_model = None
 
         # Verify the provider's complete method was called
         mock_provider.complete.assert_called_once()
