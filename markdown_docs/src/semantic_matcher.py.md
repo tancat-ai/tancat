@@ -38,3 +38,11 @@ Convenience wrapper that returns `True` when `semantic_similarity` meets or exce
 - `src/semantic_candidate_ranker.py` — uses similarity scoring for candidate ranking
 - `src/placeholder_resolver.py` — parent module from which this was extracted
 - `src/intent_matcher.py` — sibling matching module for placeholder intent classification
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `SemanticMatcher` (class)
+
+Token-based semantic similarity for placeholder matching.

@@ -48,3 +48,19 @@ None (stdlib only).
 ## Depended On By
 
 Test repair workflows, CI auto-fix pipelines
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `SetupScriptResult` (class)
+
+Result of running prerequisite steps before a codegen session.
+
+### `translate_setup_step_to_python(step: str) -> list[str]` (function)
+
+Translate a generated test step line into Playwright setup script lines.
+
+### `run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None` (function)
+
+Launch headed Playwright codegen and capture the first locator from the recorded script.

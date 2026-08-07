@@ -13,3 +13,12 @@ Converts Playwright's `page.aria_snapshot(boxes=True)` YAML output into the same
 ## Related
 - `src/scraper.py` — three-layer hybrid scraper (BS4 + CDP + ARIA snapshot)
 - `src/accessibility_enricher.py` — CDP `getFullAXTree` enrichment
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `parse_aria_snapshot(yaml_text: str) -> list[dict[str, Any]]` (function)
+
+Parse Playwright's aria_snapshot() YAML into element dicts.

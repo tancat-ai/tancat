@@ -37,3 +37,15 @@ Apply a small bonus for shallow DOM elements (preferred for stability).
 - `src/semantic_matcher.py` — provides low-level token similarity used by ranker
 - `src/placeholder_orchestrator.py` — consumer of ranked candidates
 - `src/placeholder_resolver.py` — sibling resolution module
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `AsyncGeneratorLike` (class)
+
+Minimal protocol for async text generation used by the ranker.
+
+### `SemanticCandidateRanker` (class)
+
+Use an LLM to rank a tiny candidate list without inventing selectors.

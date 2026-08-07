@@ -94,3 +94,11 @@ Provider-agnostic LLM client that wraps the `src.llm_providers` module. Provides
 - Session provider state is class-level, shared across all instances
 - Vision completion uses base64-encoded PNG images
 - Code extraction handles markdown fences, `<channel|>` tags, and
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `create_llm_client(provider_name: str | None = None, model: str | None = None) -> LLMClient` (function)
+
+Create an LLMClient instance.

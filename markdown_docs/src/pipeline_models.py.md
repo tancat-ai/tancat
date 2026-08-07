@@ -50,3 +50,27 @@ A single executable line within a test function.
 - `src/placeholder_orchestrator.py` — consumes PlaceholderUse
 - `src/orchestrator.py` — orchestrates pipeline using all models
 - `src/page_object_builder.py` — uses TestJourney
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 5 items):
+
+### `ExportMode` (class)
+
+Controls how exported test files are produced.
+
+### `ScrapedPage` (class)
+
+Metadata for one scraped page used by the pipeline.
+
+### `GeneratedPageObject` (class)
+
+A page object module generated from scraped page data.
+
+### `ManifestRecord` (class)
+
+One unresolved or informational record written into the pipeline manifest.
+
+### `PipelineArtifactSet` (class)
+
+The structured output package produced by one pipeline run.

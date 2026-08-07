@@ -42,3 +42,24 @@ Key fields:
 
 - `dataclasses` (stdlib)
 - `typing.Any`
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 4 items):
+
+### `DataSchemaChange` (class)
+
+A single data schema modification extracted from a spec document.
+
+### `ChangeDelta` (class)
+
+A single change extracted from a spec document.
+
+### `ImpactMap` (class)
+
+Cross-reference of changes to affected test areas.
+
+### `ConsolidatedReport` (class)
+
+Final output of the document-driven pipeline.

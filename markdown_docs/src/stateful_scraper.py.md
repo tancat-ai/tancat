@@ -35,3 +35,11 @@ Fallback scraper that maintains DOM state awareness across page interactions. Tr
 ## Depended On By
 
 - `src/placeholder_orchestrator.py` — fallback when journey_scraper unavailable
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `StatefulPageScraper` (class)
+
+Scrape pages using a Playwright browser context with a cart session.

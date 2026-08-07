@@ -241,3 +241,11 @@ __all__ = [
 - Token usage tracking is optional and depends on provider response format
 - Local OpenAI-compatible servers may return 401 for `/v1/models` (treated as success in local mode)
 - Provider auto-detection uses 2-second timeouts for fast failure
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `generation_max_tokens() -> int` (function)
+
+Return the per-call generation token cap.

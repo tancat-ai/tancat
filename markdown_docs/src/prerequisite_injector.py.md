@@ -33,3 +33,19 @@ Generates login prerequisite block.
 
 ## Dependencies
 - None from `src/` — stdlib only
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `PrerequisiteStep` (class)
+
+A resolved step extracted from a prerequisite test.
+
+### `InjectionPlan` (class)
+
+Describes what needs to be injected into a test.
+
+### `PrerequisiteInjector` (class)
+
+Detect dependency chains and inject prerequisite steps.

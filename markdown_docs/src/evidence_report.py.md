@@ -37,3 +37,11 @@ Aggregated evidence from a test package: test_files, entries, failures, total_du
 ## Dependencies
 - `src.report_builder.escape_html`
 - stdlib for everything else
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 1 items):
+
+### `EvidenceFile` (class)
+
+Represents a single evidence sidecar file.

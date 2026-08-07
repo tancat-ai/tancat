@@ -31,3 +31,19 @@ Generate an HTML report with embedded base64 screenshots for self-contained view
 - `src/report_builder.py` — produces report dicts consumed by formatters
 - `src/evidence_loader.py` — provides evidence data for diagnostics
 - `src/pipeline_report_service.py` — orchestrates report generation pipeline
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 3 items):
+
+### `generate_local_report(coverage: list[dict[str, Any]]) -> str` (function)
+
+Generate markdown report with relative screenshot paths.
+
+### `generate_jira_report(coverage: list[dict[str, Any]], test_execution_date: str = '', project_key: str = '') -> str` (function)
+
+Generate markdown report in Jira attachment format.
+
+### `generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path | None = None) -> str` (function)
+
+Generate self-contained HTML report with base64 embedded screenshots.

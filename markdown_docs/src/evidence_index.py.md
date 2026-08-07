@@ -11,3 +11,16 @@ SQLite-backed search, filter, and export metadata index. Indexes `.evidence.json
 ## Related
 - `src/evidence_export.py` — export formats
 - `src/sqlite_persistence.py` — shared SQLite infrastructure (AI-012)
+
+
+## Recent API Additions
+
+Symbols present in the source but not covered above (refresh pass, 2 items):
+
+### `EvidenceSearchResult` (class)
+
+A single evidence sidecar returned by :meth:`EvidenceIndex.search`.
+
+### `EvidenceFilterOptions` (class)
+
+Distinct values available for faceted filter dropdowns.
