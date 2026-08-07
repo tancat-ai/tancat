@@ -95,6 +95,7 @@ Side-by-side comparison of two runs.
 | `load_run_result` | `(filepath: Path) -> PersistedRunResult` | Load a single persisted run result from disk. |
 | `list_run_results` | `(directory: Path \| None = None) -> list[Path]` | Return sorted list of persisted run-result file paths (oldest first). |
 | `load_all_run_results` | `(directory: Path \| None = None) -> list[PersistedRunResult]` | Load every persisted run result (oldest first). |
+| `run_stats_by_package` | `() -> dict[str, tuple[int, str]]` | Return `{test_package: (run_count, last_run_at)}` across persisted runs — lets package dropdowns reconcile counts with real run history (B-043). |
 
 ### History & Flakiness Analysis
 
