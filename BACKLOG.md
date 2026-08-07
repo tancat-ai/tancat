@@ -1303,7 +1303,7 @@ The resolver's token-matching pipeline lacks insurance-specific vocabulary.
 
 ## 🆕 AI-038 — Unlimited OCR ROCm/AMD Compatibility Test
 
-**Status:** 🟡 ready-for-agent  
+**Status:** 👤 DEFERRED 2026-08-07 — blocked by ROCm-on-Windows Python ABI ceiling; revisit when AMD ships ROCm torch for py≥3.13 or the project drops to 3.12
 **Priority:** Low — future enhancement  
 **Spec:** `src/ocr_backends.py` (Phase 1i)  
 **Estimated sessions:** 0.5
@@ -1313,14 +1313,82 @@ The resolver's token-matching pipeline lacks insurance-specific vocabulary.
 built (`OCR_BACKEND=unlimited-ocr`), but the model uses `trust_remote_code=True`
 which may contain CUDA-specific kernels that fail on ROCm/HIP.
 
-**Steps:**
-1. Install ROCm PyTorch (replace current `torch 2.13.0+cpu`)
+**Investigation 2026-08-07 — root cause found, feature deferred:**
+1. **AMD installer silently skips the GPU stack on this laptop.** Its own log
+   (`AMDInstallManager/Logs/CommonLibrary_Install.log_2026-8-7_8_26_42.log`) shows
+   `DEBUG_ISHALOBOX registry key not found. Assuming not a HaloBox` — the
+   Ryzen AI MAX+ 395 / Radeon 8060S is Strix Halo, but the installer's
+   HaloBox detection failed, so it downloaded the ROCm/torch wheels
+   (7.2.0.dev0, May 2026) and then **installed nothing**.
+2. **No ROCm torch exists for Python 3.14 on Windows — this is the hard wall.**
+   Verified across every source: the AMD Windows wheel repo
+   (`repo.radeon.com/rocm/windows/rocm-rel-7.2.1`, Feb 2026 — fresher than the
+   installer's 7.2.0) ships only `torch-2.9.1+rocm7.2.1-cp312-cp312-win_amd64.whl`;
+   pytorch.org's ROCm index resolves no torch for 3.14; and the project venv is
+   Python 3.14.5. PyTorch proper supports 3.14 (CPU + CUDA cp314 wheels exist),
+   but **AMD's Windows ROCm wheels cap at cp312**. The OCR backend runs
+   in-process (`get_ocr_backend()` in `src/agents/pipeline_graph.py`), so even a
+   3.12 side-env install would need a subprocess bridge to be usable.
+3. **Verdict per the item's own step 4** ("document limitation, keep PyMuPDF as
+   default"): documented. PyMuPDF remains the OCR default; `unlimited-ocr` stays
+   opt-in. Revisit when (a) AMD ships ROCm Windows wheels for py≥3.13, or (b) a
+   3.12 side-env + subprocess OCR bridge is wanted, or (c) the Qwen-3.8-27B
+   training work (below) already builds a 3.12/ROCm side-env worth reusing.
+
+**Unblocking note (2026-08-07):** the fresh ROCm 7.2.1 wheels are available at
+`repo.radeon.com/rocm/windows/rocm-rel-7.2.1/` for a Python 3.12 env. If the
+Qwen training effort creates a dedicated 3.12 + ROCm environment, the same env
+can run Unlimited-OCR via a subprocess bridge — the two deferrals share one
+unblock.
+
+**Steps (when unblocked):**
+1. Install ROCm PyTorch 7.2.1 into a Python 3.12 env (replace `torch 2.13.0+cpu`)
 2. Run `OCR_BACKEND=unlimited-ocr` against sample PDFs
 3. If the model loads and infers successfully → enable as default for document
    mode when GPU is available
 4. If custom CUDA kernels fail → document limitation, keep PyMuPDF as default
 
-**Blocked by:** Need ROCm PyTorch build installed on host machine
+**Blocked by:** ROCm torch for Windows requires Python ≤3.12; project venv is 3.14
+
+---
+
+## 🆕 AI-040 — Fine-Tuning Dataset Generation Tooling (SEED WORK — model not yet trained)
+
+**Status:** 🟡 ready-for-agent (tooling shipped 2026-08-07; training itself is a separate follow-up)
+**Priority:** Medium — enables the Qwen training effort referenced by AI-038
+**Spec:** `scripts/build_finetune_dataset.py`, `scripts/synthesize_stories.py`, `training_data/`
+
+**What:** Two scripts + a seed corpus that convert the pipeline's own artifacts into
+instruction-tuning datasets for Unsloth Studio (or any SFT trainer):
+
+- `build_finetune_dataset.py` — extracts (story → skeleton) Alpaca rows from
+  `generated_tests/*/scrape_manifest.json` + the eval datasets, and (placeholder →
+  locator) rows from eval golden keys. Emits `playwright_skeleton_alpaca.jsonl`
+  and `playwright_resolution_alpaca.jsonl`.
+- `synthesize_stories.py` — LLM-synthesizes new stories per eval site (anchored to a
+  real element inventory so no hallucinations), runs the offline Phase-1 skeleton
+  generator, validates through the same gates production uses
+  (`normalise_placeholder_actions` → `validate_skeleton` → criteria-count check),
+  and merges passing rows. `--mode linear|graph|both` (graph is deterministic,
+  temp=0 — run once; linear is stochastic — rerun for diversity).
+
+**Dataset state (2026-08-07):** 172 skeleton rows (22 generated + 7 eval + 143
+synthetic), 90 resolution rows. Verified: ruff ✓, mypy ✓, pytest 2329 passed.
+
+**Why it matters:** the 90 resolution pairs target AGENTS.md §13's open issue
+(ASSERT placeholder resolution, 79.1% eval baseline) — a small LoRA on that set is
+the fastest measurable pipeline win. The skeleton set is seed capital for a
+story→code model. Both are input to the Qwen training effort AI-038 references.
+
+**Blocker found while building (2026-08-07):** llama-server was launched with
+`--ctx-size 156072` (156K context) — KV cache alone ~25 GB pinned against the
+48 GB Strix Halo UMA, causing `vk::Queue::submit: ErrorOutOfDeviceMemory` on long
+decodes. Relaunched at `--ctx-size 9072`; server healthy, suite green.
+
+**Next steps (follow-up items):**
+1. Train resolution LoRA on the 90 rows; validate via `eval_harness.py compare`
+2. Grow skeleton set to 200+ via `synthesize_stories.py --count N --mode both`
+3. Decide where the fine-tuned model plugs into the pipeline (skeleton vs resolver)
 
 ---
 
