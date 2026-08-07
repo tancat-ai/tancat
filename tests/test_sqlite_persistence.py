@@ -6,6 +6,7 @@ aggregation, delete-old-runs, context-manager protocol, and edge cases.
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from collections.abc import Generator
 from pathlib import Path
@@ -416,6 +417,51 @@ class TestEdgeCases:
         assert not tmp_db.exists()
         SQLitePersistence(db_path=tmp_db)
         assert tmp_db.exists()
+
+    def test_genuine_corruption_rebuilds_database(self, tmp_db: Path) -> None:
+        """B-034 preserved: a malformed file is rebuilt, not kept broken."""
+        tmp_db.write_bytes(b"this is not a sqlite database at all" * 10)
+        persistence = SQLitePersistence(db_path=tmp_db)
+        try:
+            # The file must now be a valid database with the schema present.
+            conn = sqlite3.connect(str(tmp_db))
+            try:
+                table = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'").fetchone()
+                assert table is not None
+            finally:
+                conn.close()
+        finally:
+            persistence.close()
+
+    def test_locked_db_raises_and_never_deletes(self, tmp_db: Path) -> None:
+        """A transient write-lock must surface, never delete the database.
+
+        Parallel xdist workers open the same workspace DB concurrently; the
+        corruption-recovery path previously treated ``database is locked``
+        (an OperationalError, a DatabaseError subclass) as corruption and
+        DELETED the shared file. With busy_timeout + the split exception
+        handling, a locked write surfaces as ``OperationalError`` and the
+        file survives.
+        """
+        SQLitePersistence(db_path=tmp_db).close()  # create a valid DB first
+        blocker = sqlite3.connect(str(tmp_db))
+        blocker.execute("BEGIN IMMEDIATE")  # hold the write lock
+        contender: SQLitePersistence | None = None
+        try:
+            contender = SQLitePersistence(db_path=tmp_db, busy_timeout_ms=200)
+            with pytest.raises(sqlite3.OperationalError):
+                contender.persist_run_result(RunResult(total=1, passed=1), test_package="x")
+        finally:
+            if contender is not None:
+                contender.close()
+            blocker.close()
+        assert tmp_db.exists(), "locked DB must not be deleted"
+        # And it must still be a valid database afterwards.
+        conn = sqlite3.connect(str(tmp_db))
+        try:
+            conn.execute("SELECT COUNT(*) FROM runs").fetchone()
+        finally:
+            conn.close()
 
 
 # ---------------------------------------------------------------------------

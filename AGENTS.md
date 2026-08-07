@@ -99,8 +99,9 @@ bash launch_dev.sh         # UI + mock insurance site
 bash launch_cli.sh         # Interactive CLI
 
 # Tests
-pytest -q --tb=short       # Single-process (parallel crashes with 1300+ tests)
-pytest -v                  # Single-process with output
+pytest -q --tb=short       # Default -n 4 from pytest.ini — the tested sweet spot
+                            #   (-n 8 crashes on Windows; -n 1 for single-process)
+pytest -v                  # Default -n 4 with output
 # UAT
 python scripts/uat.py --all-sites --save results.json  # Needs LM Studio running on :8080
 ```
