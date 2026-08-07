@@ -12,6 +12,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
 | `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
+| `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
 | `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |

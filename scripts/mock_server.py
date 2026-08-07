@@ -26,7 +26,6 @@ from __future__ import annotations
 import http.server
 import json
 import logging
-import os
 import socketserver
 import sys
 import threading
@@ -37,7 +36,20 @@ logger = logging.getLogger(__name__)
 
 
 class _RobustRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Request handler that silences client-disconnect noise."""
+    """Request handler that silences client-disconnect noise.
+
+    Serves from ``SERVE_DIRECTORY`` (set per-server by :class:`MockServer`)
+    via the ``directory`` kwarg — no process-wide ``os.chdir`` needed, so the
+    caller's working directory is never mutated (B-039 note: the old chdir
+    broke relative paths for any caller, e.g. a second server start or
+    ``--dataset <relative>`` after auto-start).
+    """
+
+    SERVE_DIRECTORY: str = "."
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("directory", self.SERVE_DIRECTORY)
+        super().__init__(*args, **kwargs)
 
     def handle(self) -> None:
         try:
@@ -146,7 +158,12 @@ class MockServer:
         if self._httpd is not None:
             return  # already running
 
-        os.chdir(self.directory)
+        # B-039 note fix: serve from ``self.directory`` via the handler's
+        # ``directory`` kwarg instead of ``os.chdir`` — the old chdir mutated
+        # the calling process's cwd and broke relative paths for callers that
+        # started the server then used relative paths (eval ``--dataset``,
+        # or a second MockServer.start in the same process).
+        _RobustRequestHandler.SERVE_DIRECTORY = self.directory
         # Per-mock route aliases (mock_routes.json in the served directory)
         # so the pipeline's keyword-route vocabulary resolves to real files.
         routes = self._load_routes()

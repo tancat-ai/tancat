@@ -1,0 +1,247 @@
+/* Minimal shared styles for the banking mock. */
+body {
+  margin: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  color: #333;
+  background: #fafafa;
+}
+a {
+  color: #3498db;
+  text-decoration: none;
+}
+header {
+  background: #2c3e50;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header .brand {
+  color: #fff;
+  font-weight: bold;
+  font-size: 20px;
+}
+nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 24px;
+}
+nav a {
+  color: #ecf0f1;
+  font-weight: 600;
+}
+nav li.active a {
+  color: #f39c12;
+}
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+h1 {
+  font-size: 26px;
+  margin-bottom: 16px;
+}
+.title {
+  color: #2c3e50;
+  text-align: center;
+}
+.features_items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+}
+.productinfo {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 16px;
+  text-align: center;
+}
+.productinfo img {
+  max-width: 100%;
+  height: 140px;
+  object-fit: contain;
+}
+.productinfo .price {
+  color: #e74c3c;
+  font-size: 18px;
+  margin: 8px 0 4px;
+}
+.productinfo p {
+  margin: 4px 0 12px;
+  font-weight: 600;
+}
+.btn {
+  display: inline-block;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  background: #bdc3c7;
+  color: #333;
+}
+.btn-default {
+  background: #95a5a6;
+  color: #fff;
+}
+.btn-success {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-primary {
+  background: #3498db;
+  color: #fff;
+}
+a.btn {
+  text-decoration: none;
+}
+.add-to-cart {
+  display: inline-block;
+  margin-top: 8px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+th,
+td {
+  border: 1px solid #eee;
+  padding: 10px 12px;
+  text-align: left;
+}
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.5);
+}
+.modal-content {
+  background: #fff;
+  max-width: 420px;
+  margin: 15vh auto;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+.modal-title {
+  font-size: 20px;
+  margin-top: 0;
+}
+form label {
+  display: block;
+  margin: 10px 0 4px;
+  font-weight: 600;
+}
+form input,
+form select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+#success-title {
+  color: #27ae60;
+}
+.empty-cart {
+  color: #888;
+  font-style: italic;
+}
+
+/* ---- banking-specific ---- */
+.account-card {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 0 auto 16px;
+  max-width: 640px;
+  text-align: center;
+}
+.account-card .account_name {
+  margin: 0 0 4px;
+  color: #2c3e50;
+}
+.account-card .account_number {
+  color: #7f8c8d;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+.account-card .account_balance {
+  font-size: 22px;
+  font-weight: bold;
+  color: #27ae60;
+  margin: 0 0 12px;
+}
+.view-account {
+  display: inline-block;
+}
+.transaction-row {
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.transaction-row p {
+  margin: 0;
+}
+.transaction_description {
+  font-weight: 600;
+  color: #2c3e50;
+}
+.transaction_amount {
+  color: #27ae60;
+  font-weight: bold;
+}
+.transaction_date {
+  color: #7f8c8d;
+  font-size: 13px;
+}
+.section-title {
+  color: #2c3e50;
+  font-size: 18px;
+}
+label {
+  display: block;
+  margin: 12px 0 4px;
+  font-weight: 600;
+  font-size: 14px;
+}
+input,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.btn-primary {
+  background: #3498db;
+  color: #fff;
+}
+.btn-success {
+  background: #27ae60;
+  color: #fff;
+}
+.btn-default {
+  background: #ecf0f1;
+  color: #2c3e50;
+}

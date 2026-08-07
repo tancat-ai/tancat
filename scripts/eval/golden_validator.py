@@ -185,6 +185,14 @@ def _normalize_locator(locator: str) -> str:
     if id_match:
         return f'[id="{id_match.group(1)}"]'
 
+    # B-044: strip a leading tag prefix from class selectors — the resolver
+    # emits tag-prefixed robust locators (``p.account_balance``, ``button.btn``)
+    # while goldens hold the bare class (``.account_balance``). Both target the
+    # same element; the banking mock surfaced the mismatch (eval-007).
+    class_match = re.match(r"^[a-zA-Z][\w-]*((?:\.[\w-]+)+)$", locator)
+    if class_match and locator.count(".") >= 1:
+        return class_match.group(1)
+
     # Quote-agnostic attribute extraction (normalize ' to " first).
     locator = locator.replace("'", '"')
     attr_matches = re.findall(r'\[([\w-]+)="([^"]+)"\]', locator)

@@ -277,9 +277,11 @@ class PlaceholderScorer:
             "tel",
             "number",
             "spinbutton",
+            "date",
+            "time",
         }
         fillable_tags = {"input", "textarea", "select"}
-        input_types = {"text", "search", "email", "password", "tel", "url", "number"}
+        input_types = {"text", "search", "email", "password", "tel", "url", "number", "date", "time"}
         if role in fillable_roles:
             return True
         if tag in fillable_tags:
@@ -444,6 +446,18 @@ class PlaceholderScorer:
             bonus += 1
         if "button" in description.lower() and role in {"button", "submit"}:
             bonus += 1
+        # B-045: submit-intent descriptions ("submit payment", "place order",
+        # "pay bill") must favor the role=submit button over a field whose
+        # label happens to share a word with the description (a "Payment Date"
+        # input won "submit payment" purely on the shared word "payment").
+        # The submit verb is the strongest signal that the target is the
+        # form's submit control, not a text-bearing field.
+        lowered = description.lower()
+        if any(verb in lowered for verb in ("submit", "place", "pay", "register", "send", "confirm")) and role in {
+            "button",
+            "submit",
+        }:
+            bonus += 10
         return bonus
 
     @staticmethod
@@ -469,6 +483,14 @@ class PlaceholderScorer:
             bonus += 2
         if not text and not href and "data-" in selector:
             bonus -= 4
+        # B-045: form inputs (date/time/text/number fields) are not click
+        # targets — a submit-intent description ("submit payment") must not
+        # resolve to the "Payment Date" input purely because its label shares
+        # a word with the description. Penalise fillable elements for CLICK
+        # so the role=submit button wins (it already gets the interactive
+        # role bonus +3 and the submit-verb bonus).
+        if PlaceholderScorer._is_fillable(element):
+            bonus -= 12
         # B-025: Headings are display elements, not click targets.
         # When a div.container has an h4 child with matching text,
         # the heading wins scoring because it has the text. Penalise

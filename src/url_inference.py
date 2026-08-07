@@ -67,7 +67,14 @@ def _infer_click_transition_url(
     haystack = " ".join([desc_lower, selector_lower, id_lower, data_test_lower])
 
     if "login" in haystack:
-        return _find_discovered_url(scraped_data, ("inventory", "products"))
+        # Post-login landing pages vary by site shape: e-commerce lands on
+        # inventory/products; banking lands on dashboard/accounts; portals on
+        # home/overview. Site-agnostic union — the mock catalog (banking
+        # mock eval-007) exposed the ecommerce-only vocabulary here.
+        return _find_discovered_url(
+            scraped_data,
+            ("inventory", "products", "dashboard", "accounts", "home", "overview"),
+        )
 
     if "checkout" in haystack:
         return _find_discovered_url(
@@ -85,6 +92,21 @@ def _infer_click_transition_url(
         return _find_discovered_url(
             scraped_data,
             ("checkout-complete", "complete", "thank"),
+        )
+
+    # Generic submit-success transitions (banking mock eval-007 surface):
+    # transfer/payment forms submit without hrefs, so the resolver never
+    # advances past the form page and success-message asserts resolve
+    # against the form's own elements (submit button / error paragraph).
+    if "transfer" in haystack:
+        return _find_discovered_url(
+            scraped_data,
+            ("transfer_success", "success", "thank"),
+        )
+    if any(term in haystack for term in ("pay", "payment", "submit")):
+        return _find_discovered_url(
+            scraped_data,
+            ("payment_success", "success", "thank"),
         )
 
     return None

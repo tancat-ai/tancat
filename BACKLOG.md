@@ -347,7 +347,13 @@ writing if code fails syntax check.
 
 ## 🎯 Test Pack Restructure + Mock-Site Strategy (2026-08-03 CLI review)
 
-**Status:** 🆕 new — proposed; awaiting prioritisation
+**Status:** ✅ COMPLETE 2026-08-07 — all 5 work items shipped (mock catalog, test-pack split, gate_full, enshrined-bug rewrites)
+
+**Work item 2 (test-pack split, 2026-08-07):** new `tests/contract/` (6 tests — mock artifact/schema/import/route/behaviour contracts against the banking+ecommerce mocks), `tests/adversarial/` (7 tests — 404-page pollution B-045, overlay injection B-029, broken-locator B-033, modal scoping B-015), `tests/resilience/` (6 tests — corrupt DB B-034, reload-safe RunResult B-044, sidecar-without-teardown B-035, concurrent opens, corrupt settings). Default pytest already routes to the offline layer via `-m "not slow and not integration"`; the new layers run in CI (Gate 3 `test` job). Also fixed the long-noted B-039 `MockServer._start()` `os.chdir` bug — the server now serves via the handler's `directory` kwarg and never mutates the caller's cwd (relative-path callers / second server starts no longer break).
+
+**Work item 3 (gate_full.py, 2026-08-07):** `scripts/gate_full.py` — one-command chain smoke → unit pytest → eval-static → verify_production → export_gate, exit non-zero on first failure; `--offline` (gates 1-3, CI-able), `--skip N`, `--pytest-args`. Verified: offline mode 3/3 gates pass.
+
+**Work item 5 (enshrined-bug rewrites, 2026-08-07):** audit confirmed both named examples were already rewritten as their fixes landed — B-033 (`screenshot is None` → asserts `is not None` + `failure_note`) and B-029 (asserts post-click navigation verification + failure amendment, `test_b029_*` ×3); grep for `screenshot is None` across `tests/` is empty. No further rewrites needed.
 
 **Why:** 2,095 green unit tests coexisted with 7 real bugs (B-029→B-035). The suite asserts internal invariants against MagicMocks; the product fails on external contracts (navigation happened?, evidence exists?, export runs?, DB survives?, overlays handled?). The layers that catch real bugs (eval harness, verify_production) are manual-only.
 
@@ -389,6 +395,23 @@ writing if code fails syntax check.
 ---
 
 ## 🔴 Open Bugs
+
+### B-045 — Banking mock surfaces: 404-page pollution, ecommerce-only login/success transitions, role-worded nav fast-matches, fill-on-select
+**Status:** ✅ Fixed (2026-08-07, banking mock session)
+**Priority:** High — 5 site-agnostic pipeline gaps the banking mock made deterministic
+
+The banking mock (priority 2 in the mock catalog, eval-007) surfaced a cluster of pipeline gaps that live sites only show as flaky noise:
+1. **HTTP-404 pages survived `_drop_dead_pages`** — the stdlib server's 404 body scrapes to ~5 elements (above the 3-element threshold), so concept-candidate URLs (`/products`, `/cart.html`, `/checkout` — ecommerce vocabulary generated for any story mentioning payment/order) stayed in the scrape and their "Error code: 404" text won keyword/ASSERT matching. Fixed: `_is_error_page()` content-based drop (2+ markers) in `src/placeholder_orchestrator.py`.
+2. **Login-transition vocabulary was ecommerce-only** — `_infer_click_transition_url` mapped a login click to `inventory`/`products`, so a banking journey never advanced past the sign-in page and every downstream placeholder stayed scoped to it. Fixed: site-agnostic landing vocabulary (`inventory/products/dashboard/accounts/home/overview`) in `src/url_inference.py`.
+3. **No submit-success page transitions** — transfer/payment forms submit without hrefs, so the resolver stayed on the form page and success-message asserts resolved against the form's own elements (submit button / error paragraph). Fixed: `transfer`→`transfer_success`, `pay/payment/submit`→`payment_success` transitions. Also fixed a branch-order bug where "submit payment" hit the transfer branch first.
+4. **Role-worded descriptions fast-matched nav links** — "pay bill button" matched the header nav link "Pay Bills" (earlier in DOM) in Pass 1/2 text matching before scoring could prefer the real `#pay-bill` submit button. Fixed: `_named_role_in_description()` gates Pass 1/2 to the named role; exact-text pre-sweep so "Pay Bills" (nav) vs "Pay Bill" (button) disambiguate by exact equality; submit-intent verb bonus + fillable-element CLICK penalty in `src/placeholder_scorers.py`.
+5. **`fill()` on native `<select>` crashed at runtime** — Playwright rejects `.fill()` on `<select>` ("Element is not an <input>, <textarea> or [contenteditable]"); the LLM's fill value ("Electric Company") also rarely equals the option `value` ("electric"). Fixed: `EvidenceTracker.fill()` probes the tag and routes to `select_option()`, with exact-value → exact-label → substring-of-option-label fallbacks.
+
+**Also fixed (golden validator):** `_normalize_locator()` now strips a leading tag from class selectors (`p.account_balance` ≡ `.account_balance`) — lifted eval-006 from 12/16 to 14/16 and eval-007 to 13/13 (100%).
+
+**Verified:** eval static overall 95.2% → **97.9%**; eval-007 13/13 static + **8/8 execution** against the mock (login → dashboard → transfer → success → pay bill → payment success, session gate verified); full suite 2309 passed (1 environmental flake in test_llm_client under parallel workers — passes in isolation); ruff + mypy clean.
+
+---
 
 ### B-042 — Locator-repair patch dedents the replacement line to module scope (collection crash)
 **Status:** ✅ Fixed (2026-08-07, `0951ec0`, CI pending)

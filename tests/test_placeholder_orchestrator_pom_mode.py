@@ -343,6 +343,48 @@ def test_drop_dead_pages_removes_spa_shells() -> None:
     assert "https://x.com/cart.html" in kept
 
 
+def test_drop_dead_pages_removes_http_error_pages() -> None:
+    """Stdlib 404 bodies scrape to ~5 elements (above the dead-shell threshold)
+    but their content is entirely error text — they must not pollute resolution.
+    B-044 banking-mock surface: concept-candidate routes (/products, /checkout)
+    served 404 by the mock, and the "Error code: 404" text won ASSERT matching.
+    """
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    # Exact scrape of SimpleHTTPRequestHandler's 404 body (5 elements).
+    error_page = [
+        {"selector": "title", "text": "Error response"},
+        {"selector": "h1", "text": "Error response"},
+        {"selector": "p", "text": "Error code: 404"},
+        {"selector": "p", "text": "Message: File not found."},
+        {"selector": "p", "text": "Error code explanation: 404 - Nothing matches the given URI."},
+    ]
+    data = {
+        "http://localhost:8781/products": error_page,
+        "http://localhost:8781/dashboard.html": [
+            {"selector": "h1.title", "text": "Your Accounts"},
+            {"selector": "a#transfer-link", "text": "Transfer Money"},
+            {"selector": "p.account_balance", "text": "$2,450.00"},
+        ],
+    }
+    kept = PlaceholderOrchestrator._drop_dead_pages(data)
+    assert "http://localhost:8781/products" not in kept
+    assert "http://localhost:8781/dashboard.html" in kept
+
+
+def test_is_error_page_requires_two_markers_to_avoid_false_positive() -> None:
+    """A real page mentioning "file not found" once in body copy must survive."""
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    assert PlaceholderOrchestrator._is_error_page([{"text": "File not found"}, {"text": "try the search box"}]) is False
+    assert (
+        PlaceholderOrchestrator._is_error_page(
+            [{"text": "Error code: 404"}, {"text": "Nothing matches the given URI."}]
+        )
+        is True
+    )
+
+
 def test_drop_redirect_duplicates_removes_home_content_under_bogus_keys() -> None:
     """automationexercise serves 200 + redirect for guessed routes — the bogus
     key holds home content and must not win resolution. SPA pages the stateful

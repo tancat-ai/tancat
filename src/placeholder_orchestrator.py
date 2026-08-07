@@ -162,6 +162,38 @@ class PlaceholderOrchestrator:
                 del scraped_data[url]
         return scraped_data
 
+    # HTTP error-page markers from stdlib servers (http.server.SimpleHTTPRequestHandler
+    # and friends). Real pages never contain these strings; a page whose scraped text
+    # is dominated by them is a 404 error page, not a live page. Site-agnostic —
+    # covers any mock/live site served by a stdlib or similarly-worded server.
+    _ERROR_PAGE_SIGNALS: tuple[str, ...] = (
+        "error code: 404",
+        "nothing matches the given uri",
+        "file not found",
+        "error response",
+        "404 not found",
+    )
+
+    @staticmethod
+    def _is_error_page(elements: list[dict[str, Any]]) -> bool:
+        """True when scraped elements are an HTTP error page (404/500 body).
+
+        The stateless/stateful scrapers fetch unknown routes before the
+        resolver sees them (concept-driven candidate URLs). A stdlib 404 page
+        scrapes to ~5 elements — above the dead-page element threshold — so its
+        "Error code: 404" text can win keyword/ASSERT matching over the real
+        page's content. Detect the error body by its distinctive markers.
+        """
+        if not elements:
+            return False
+        texts = " ".join(str(el.get("text", "")) for el in elements).lower()
+        if not texts.strip():
+            return False
+        # Require at least two distinct markers to avoid false positives on a
+        # real page that mentions "file not found" once in body copy.
+        hits = sum(1 for signal in PlaceholderOrchestrator._ERROR_PAGE_SIGNALS if signal in texts)
+        return hits >= 2
+
     @staticmethod
     def _drop_dead_pages(
         scraped_data: dict[str, list[dict[str, Any]]],
@@ -174,12 +206,28 @@ class PlaceholderOrchestrator:
         e.g. ``/basket`` (2 elements) can out-rank ``/cart.html`` (34 elements)
         in first-match substring logic. Real pages scrape far richer content,
         so a minimal-element threshold is a safe, site-agnostic signal.
+
+        Also drops HTTP error pages (stdlib 404 bodies) whose element count is
+        above the threshold but whose content is entirely error text — these
+        are concept-candidate URLs that 404ed (B-045 banking-mock surface).
         """
         MIN_LIVE_ELEMENTS = 3
         dead = [url for url, elements in scraped_data.items() if len(elements) < MIN_LIVE_ELEMENTS]
         for url in dead:
             logger.info(
                 "Dropping dead page '%s' (%d elements)",
+                url,
+                len(scraped_data[url]),
+            )
+            del scraped_data[url]
+        # Error-page content drop: catches 404 bodies that pass the element
+        # threshold (stdlib error pages scrape to ~5 elements).
+        error_pages = [
+            url for url, elements in scraped_data.items() if PlaceholderOrchestrator._is_error_page(elements)
+        ]
+        for url in error_pages:
+            logger.info(
+                "Dropping error page '%s' (%d elements, HTTP error markers)",
                 url,
                 len(scraped_data[url]),
             )
@@ -1041,6 +1089,7 @@ class PlaceholderOrchestrator:
             "confirmation page",
             "dress products page",
             "page is loaded",
+            "page loaded",
             "page loads",
             "page is visible",
             "page displays",

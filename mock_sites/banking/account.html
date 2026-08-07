@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Account Details - Mock Bank</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Bank</span>
+    <nav>
+      <ul>
+        <li><a href="/dashboard.html">Accounts</a></li>
+        <li><a href="/transfer.html">Transfer</a></li>
+        <li><a href="/payments.html">Pay Bills</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">Account Details</h1>
+    <div id="account-detail">
+      <!-- Rendered by banking.js -->
+    </div>
+
+    <div id="transactions-list" style="max-width: 640px; margin: 0 auto;">
+      <h2 class="section-title">Recent Transactions</h2>
+      <!-- Rendered by banking.js -->
+    </div>
+
+    <div style="max-width: 640px; margin: 24px auto; text-align: center;">
+      <a href="/transfer.html" class="btn btn-primary" id="transfer-link">Transfer Money</a>
+    </div>
+  </main>
+
+  <script src="banking.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      if (!MockBank.requireSignIn()) {
+        return;
+      }
+      var params = new URLSearchParams(window.location.search);
+      var accountId = params.get("id") || "checking";
+      var account = MockBank.accountById(accountId);
+      if (!account) {
+        document.getElementById("account-detail").innerHTML =
+          '<p class="text-center">Account not found.</p>';
+        return;
+      }
+
+      var detail = document.getElementById("account-detail");
+      detail.innerHTML =
+        '<div class="account-card" data-account-id="' + account.id + '">' +
+        '<h3 class="account_name">' + account.name + "</h3>" +
+        '<p class="account_number">Account #' + account.number + "</p>" +
+        '<p class="account_balance">$' + account.balance.toFixed(2) + "</p>" +
+        "</div>";
+
+      var list = document.getElementById("transactions-list");
+      var txs = MockBank.transactionsFor(account.id);
+      if (!txs.length) {
+        list.insertAdjacentHTML(
+          "beforeend",
+          '<p id="empty-transactions" class="text-center">No recent transactions.</p>'
+        );
+        return;
+      }
+      txs.forEach(function (tx) {
+        var div = document.createElement("div");
+        div.className = "transaction-row";
+        div.innerHTML =
+          '<p class="transaction_description">' + tx.description + "</p>" +
+          '<p class="transaction_amount">' + (tx.amount < 0 ? "-$" : "+$") +
+          Math.abs(tx.amount).toFixed(2) + "</p>" +
+          '<p class="transaction_date">' + tx.date + "</p>";
+        list.appendChild(div);
+      });
+    })();
+  </script>
+</body>
+</html>

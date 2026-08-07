@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Accounts - Mock Bank</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Bank</span>
+    <nav>
+      <ul>
+        <li class="active"><a href="/dashboard.html">Accounts</a></li>
+        <li><a href="/transfer.html">Transfer</a></li>
+        <li><a href="/payments.html">Pay Bills</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">Your Accounts</h1>
+    <p id="welcome-message" class="text-center"></p>
+
+    <div id="accounts-list">
+      <!-- Rendered by banking.js from localStorage-backed account state -->
+    </div>
+
+    <div style="max-width: 640px; margin: 24px auto; text-align: center;">
+      <a href="/transfer.html" class="btn btn-primary" id="transfer-link">Transfer Money</a>
+      <a href="/payments.html" class="btn btn-default" id="pay-bill-link">Pay a Bill</a>
+    </div>
+  </main>
+
+  <script src="banking.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      if (!MockBank.requireSignIn()) {
+        return;
+      }
+      var user = MockBank.currentUser();
+      document.getElementById("welcome-message").textContent =
+        "Welcome back, " + user + ". Here are your current balances.";
+
+      var list = document.getElementById("accounts-list");
+      MockBank.accounts().forEach(function (account) {
+        var card = document.createElement("div");
+        card.className = "account-card";
+        card.setAttribute("data-account-id", account.id);
+        // B-037 lesson: classed text-bearing elements (h3/p) instead of bare
+        // table cells — the scraper's tag lists include heading/paragraph.
+        var html =
+          '<h3 class="account_name">' + account.name + "</h3>" +
+          '<p class="account_number">Account #' + account.number + "</p>" +
+          '<p class="account_balance">$' + account.balance.toFixed(2) + "</p>" +
+          '<a href="/account.html?id=' + account.id +
+          '" class="btn btn-default view-account">View Details</a>';
+        card.innerHTML = html;
+        list.appendChild(card);
+      });
+    })();
+  </script>
+</body>
+</html>

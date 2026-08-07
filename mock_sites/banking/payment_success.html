@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Payment Sent - Mock Bank</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Bank</span>
+    <nav>
+      <ul>
+        <li><a href="/dashboard.html">Accounts</a></li>
+        <li><a href="/transfer.html">Transfer</a></li>
+        <li><a href="/payments.html">Pay Bills</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main style="text-align: center; padding-top: 60px;">
+    <h1 id="payment-success-title">Payment Sent</h1>
+    <p id="payment-success-message" class="text-center"></p>
+    <a href="/dashboard.html" class="btn btn-primary" id="back-to-accounts">Back to Accounts</a>
+  </main>
+
+  <script src="banking.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      var params = new URLSearchParams(window.location.search);
+      var amount = params.get("amount") || "0.00";
+      document.getElementById("payment-success-message").textContent =
+        "Your payment of $" + amount + " was sent successfully.";
+    })();
+  </script>
+</body>
+</html>

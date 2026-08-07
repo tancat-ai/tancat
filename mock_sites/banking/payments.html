@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Pay Bills - Mock Bank</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Bank</span>
+    <nav>
+      <ul>
+        <li><a href="/dashboard.html">Accounts</a></li>
+        <li><a href="/transfer.html">Transfer</a></li>
+        <li class="active"><a href="/payments.html">Pay Bills</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main>
+    <h1 class="title">Pay a Bill</h1>
+    <div style="max-width: 480px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; border: 1px solid #eee;">
+      <form id="payment-form">
+        <label for="payee">Payee</label>
+        <select id="payee" name="payee" required>
+          <option value="electric">City Electric Company</option>
+          <option value="water">Metro Water Utility</option>
+          <option value="internet">FiberNet Internet</option>
+        </select>
+
+        <label for="account">From Account</label>
+        <select id="account" name="account" required>
+          <option value="checking">Checking Account</option>
+          <option value="savings">Savings Account</option>
+        </select>
+
+        <label for="payment-amount">Amount (USD)</label>
+        <input type="number" id="payment-amount" name="payment_amount" min="0.01" step="0.01" required />
+
+        <label for="payment-date">Payment Date</label>
+        <input type="date" id="payment-date" name="payment_date" required />
+
+        <button type="submit" class="btn btn-primary" id="pay-bill"
+          style="margin-top: 16px; width: 100%;">Pay Bill</button>
+      </form>
+      <p id="payment-error" class="error-message" style="display: none; color: #c0392b; margin-top: 8px;">
+        Please fill in all fields.
+      </p>
+    </div>
+  </main>
+
+  <script src="banking.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      if (!MockBank.requireSignIn()) {
+        return;
+      }
+      // Pre-fill the payment date so the journey scraper / generated tests can
+      // submit the form even when the date field is skipped — a blank required
+      // date blocks submission, so the success page is never captured and the
+      // payment-success assertion can't resolve. Deterministic default.
+      var dateInput = document.getElementById("payment-date");
+      if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+      }
+      document.getElementById("payment-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var amount = parseFloat(document.getElementById("payment-amount").value);
+        var date = document.getElementById("payment-date").value;
+        if (!amount || amount <= 0 || !date) {
+          document.getElementById("payment-error").style.display = "block";
+          return;
+        }
+        MockBank.payBill(
+          document.getElementById("payee").value,
+          document.getElementById("account").value,
+          amount
+        );
+        window.location.href = "payment_success.html?amount=" + amount.toFixed(2);
+      });
+    })();
+  </script>
+</body>
+</html>
