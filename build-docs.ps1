@@ -12,7 +12,9 @@ Get-ChildItem -Path "$SourceDir\*.md" -Recurse | ForEach-Object {
     $RelativePath = $_.FullName.Replace((Get-Location).Path, "").TrimStart("\")
     
     "";
-    Get-Content $_.FullName;
+    # -Raw + -Encoding UTF8: read whole file as UTF-8 (default Get-Content reads
+    # as ANSI on Windows PowerShell 5.1, which mangles em-dashes into "â€”")
+    Get-Content $_.FullName -Raw -Encoding UTF8;
     "`n`n`n"
 } | Out-File -FilePath $OutputFile -Encoding utf8
 
