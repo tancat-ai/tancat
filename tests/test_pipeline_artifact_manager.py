@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from src.pipeline_artifact_manager import (
     MANIFEST_FILENAME,
@@ -14,6 +15,7 @@ from src.pipeline_artifact_manager import (
     save_package_manifest,
     update_last_run_at,
 )
+from src.pytest_output_parser import RunResult, TestResult
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -383,3 +385,132 @@ class TestRunResultsCounting:
 
         manifest = load_package_manifest(pkg_dir, reconstruct=True)
         assert manifest.run_results_count == 1
+
+
+# ---------------------------------------------------------------------------
+# B-043 — package run counts must reflect real run history
+# ---------------------------------------------------------------------------
+
+
+class TestRunHistoryReconciliation:
+    """B-043: the sidebar/CLI package dropdown reported ``0 runs`` while real
+    run history (persisted to the workspace SQLite DB with a ``test_package``
+    value matching the package directory) held many runs. The manifest fields
+    are only bumped by CLI runs; evidence-bearing UI runs never touch them, so
+    ``find_existing_packages`` must reconcile against the DB.
+    """
+
+    @staticmethod
+    def _make_run() -> RunResult:
+        return RunResult(
+            results=[
+                TestResult(
+                    name="test_01",
+                    status="passed",
+                    duration=0.1,
+                    error_message="",
+                    file_path="test_01.py",
+                )
+            ],
+            total=1,
+            passed=1,
+            failed=0,
+            skipped=0,
+            errors=0,
+            duration=0.1,
+            raw_output="",
+        )
+
+    def test_find_existing_packages_counts_db_runs_for_package(self, tmp_path: Path) -> None:
+        import src.sqlite_persistence as sqlite_mod
+        from src.run_result_persistence import _reset_db, persist_run_result
+
+        db_path = tmp_path / "run_results.sqlite"
+        _reset_db()  # drop any singleton from earlier tests
+        with patch.object(sqlite_mod, "_DEFAULT_DB_FILE", db_path):
+            try:
+                base = tmp_path / "generated_tests"
+                pkg_dir = base / "test_pkg"
+                pkg_dir.mkdir(parents=True)
+                (pkg_dir / "test_01.py").write_text("def test_01(page): pass\n", encoding="utf-8")
+                save_package_manifest(
+                    pkg_dir,
+                    _make_manifest(
+                        package_name="test_pkg",
+                        generated_test_files=["test_01.py"],
+                    ),
+                )
+
+                # Simulate UI runs: persisted to the DB, never bumped in the
+                # manifest (mirrors src/ui/shared.py store_run_report).
+                run = self._make_run()
+                persist_run_result(run, test_package=str(pkg_dir.resolve()))
+                persist_run_result(run, test_package=str(pkg_dir.resolve()))
+
+                packages = find_existing_packages(base)
+                assert len(packages) == 1
+                assert packages[0].run_results_count == 2
+                assert packages[0].last_run_at  # derived from DB MAX(created_at)
+            finally:
+                _reset_db()
+
+    def test_find_existing_packages_matches_test_file_path(self, tmp_path: Path) -> None:
+        """Some callers record the test *file* path; the package must still match."""
+        import src.sqlite_persistence as sqlite_mod
+        from src.run_result_persistence import _reset_db, persist_run_result
+
+        db_path = tmp_path / "run_results.sqlite"
+        _reset_db()
+        with patch.object(sqlite_mod, "_DEFAULT_DB_FILE", db_path):
+            try:
+                base = tmp_path / "generated_tests"
+                pkg_dir = base / "test_pkg"
+                pkg_dir.mkdir(parents=True)
+                test_file = pkg_dir / "test_01.py"
+                test_file.write_text("def test_01(page): pass\n", encoding="utf-8")
+                save_package_manifest(
+                    pkg_dir,
+                    _make_manifest(
+                        package_name="test_pkg",
+                        generated_test_files=["test_01.py"],
+                    ),
+                )
+
+                # pipeline_run_service passes the saved *file* path.
+                persist_run_result(self._make_run(), test_package=str(test_file.resolve()))
+
+                packages = find_existing_packages(base)
+                assert len(packages) == 1
+                assert packages[0].run_results_count == 1
+            finally:
+                _reset_db()
+
+    def test_find_existing_packages_keeps_manifest_count_without_db_runs(self, tmp_path: Path) -> None:
+        """CLI-only runs bump the manifest; keep that when the DB has no rows."""
+        import src.sqlite_persistence as sqlite_mod
+        from src.run_result_persistence import _reset_db
+
+        db_path = tmp_path / "run_results.sqlite"
+        _reset_db()
+        with patch.object(sqlite_mod, "_DEFAULT_DB_FILE", db_path):
+            try:
+                base = tmp_path / "generated_tests"
+                pkg_dir = base / "test_pkg"
+                pkg_dir.mkdir(parents=True)
+                (pkg_dir / "test_01.py").write_text("def test_01(page): pass\n", encoding="utf-8")
+                save_package_manifest(
+                    pkg_dir,
+                    _make_manifest(
+                        package_name="test_pkg",
+                        generated_test_files=["test_01.py"],
+                        run_results_count=3,
+                        last_run_at="2026-08-01T10:00:00+00:00",
+                    ),
+                )
+
+                packages = find_existing_packages(base)
+                assert len(packages) == 1
+                assert packages[0].run_results_count == 3
+                assert packages[0].last_run_at == "2026-08-01T10:00:00+00:00"
+            finally:
+                _reset_db()

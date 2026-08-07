@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import ast
 import tempfile
 from pathlib import Path
 from textwrap import dedent
+
+import pytest
 
 from src.locator_repair import (
     LocatorPatch,
@@ -217,5 +220,87 @@ def test_apply_patch_multiline_test() -> None:
         assert "#first" in lines[2]
         assert "[name='input']" in lines[3]
         assert "#third" in lines[4]
+    finally:
+        tmp.unlink()
+
+
+# -- B-042: patched lines must keep their indentation --
+
+
+def test_apply_patch_preserves_indent_inside_function_body() -> None:
+    """B-042: a .locator(...) patch inside a function body must stay indented.
+
+    The regex reconstruction only covers the statement itself; without
+    re-applying the line's leading whitespace the replacement lands at module
+    scope and the module fails to import (1 error, 0 tests collected).
+    """
+    source = dedent("""\
+        def test_11(page, evidence_tracker):
+            evidence_tracker.navigate("https://example.com/")
+            page.locator("#old-locator").click()
+        """)
+    tmp = _make_temp_test(source)
+    try:
+        patch = LocatorPatch(
+            original_locator="#old-locator",
+            repaired_locator="button.btn.close-modal",
+            line_number=3,
+            test_file=tmp,
+        )
+        result = apply_patch(patch)
+        patched = [ln for ln in result.splitlines() if "button.btn.close-modal" in ln]
+        assert len(patched) == 1
+        assert patched[0].startswith("    page.locator("), "patched line lost its indentation: " + repr(patched[0])
+        ast.parse(result)  # must still compile
+    finally:
+        tmp.unlink()
+
+
+def test_apply_patch_preserves_indent_evidence_tracker_line() -> None:
+    """B-042: fallback-replace path also keeps the statement's indentation."""
+    source = dedent("""\
+        def test_11(page, evidence_tracker):
+            evidence_tracker.navigate("https://example.com/")
+            evidence_tracker.assert_visible("#old-locator", label="popup closed")
+        """)
+    tmp = _make_temp_test(source)
+    try:
+        patch = LocatorPatch(
+            original_locator="#old-locator",
+            repaired_locator="button.btn.close-modal",
+            line_number=3,
+            test_file=tmp,
+        )
+        result = apply_patch(patch)
+        patched = [ln for ln in result.splitlines() if "button.btn.close-modal" in ln]
+        assert len(patched) == 1
+        assert patched[0].startswith("    evidence_tracker.assert_visible("), (
+            "patched line lost its indentation: " + repr(patched[0])
+        )
+        ast.parse(result)  # must still compile
+    finally:
+        tmp.unlink()
+
+
+def test_apply_patch_raises_on_empty_original_locator() -> None:
+    """B-042: an empty original_locator must not mangle the file.
+
+    Previously ``""`` matched every line in the search window and
+    ``str.replace("", ...)`` inserted the replacement between every character.
+    """
+    source = dedent("""\
+        def test_example(page):
+            page.locator("#target").click()
+        """)
+    tmp = _make_temp_test(source)
+    try:
+        patch = LocatorPatch(
+            original_locator="",
+            repaired_locator="#fixed",
+            line_number=1,
+            test_file=tmp,
+        )
+        with pytest.raises(LocatorRepairError):
+            apply_patch(patch)
     finally:
         tmp.unlink()
