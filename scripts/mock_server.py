@@ -158,20 +158,18 @@ class MockServer:
         if self._httpd is not None:
             return  # already running
 
-        # B-039 note fix: serve from ``self.directory`` via the handler's
-        # ``directory`` kwarg instead of ``os.chdir`` — the old chdir mutated
-        # the calling process's cwd and broke relative paths for callers that
-        # started the server then used relative paths (eval ``--dataset``,
-        # or a second MockServer.start in the same process).
-        _RobustRequestHandler.SERVE_DIRECTORY = self.directory
-        # Per-mock route aliases (mock_routes.json in the served directory)
-        # so the pipeline's keyword-route vocabulary resolves to real files.
         routes = self._load_routes()
-        if routes:
-            _RouteAwareHandler.ROUTES = routes
-            handler_class: type[http.server.SimpleHTTPRequestHandler] = _RouteAwareHandler
-        else:
-            handler_class = _RobustRequestHandler
+        # Per-server handler class: SERVE_DIRECTORY and ROUTES must be scoped
+        # to THIS server. Sharing them as base-class attributes means the last
+        # server started in a process overwrites the directory for every
+        # server — multi-mock runs (synthesize_stories resolve_and_learn)
+        # served the wrong site on every port (e.g. banking's port returned
+        # ecommerce HTML), contaminating resolutions and training data.
+        handler_class: type[http.server.SimpleHTTPRequestHandler] = type(
+            "MockServerHandler",
+            (_RouteAwareHandler if routes else _RobustRequestHandler,),
+            {"SERVE_DIRECTORY": self.directory, "ROUTES": routes or {}},
+        )
         self._httpd = _ThreadingServer(("0.0.0.0", self.port), handler_class)
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()

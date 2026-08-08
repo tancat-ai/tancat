@@ -72,14 +72,14 @@ class LearnedPattern:
 
     Written back by :func:`src.rag_learn.learn_from_evidence` when a
     generated test step passes against the live site (B-036 Phase 3).
-    ``site_hash`` is a one-way sha256 of the site domain — no URLs or
-    PII are ever stored (AI-035 privacy design).
+    ``site_hash`` is a one-way sha256 of the site identity (``host[:port]``,
+    B-047) — no URLs or PII are ever stored (AI-035 privacy design).
     """
 
     action_type: str  # CLICK, FILL, ASSERT, GOTO, SELECT
     description: str  # evidence step label / placeholder description
     locator: str  # verified locator from the passing step
-    site_hash: str  # sha256(domain), one-way
+    site_hash: str  # sha256(host[:port]), one-way
     confidence: float = 0.9  # verified by execution, below self-healing's 1.0
     source: str = "evidence"  # "evidence" (B-036) | "self_healing" (AI-035)
 
@@ -126,7 +126,7 @@ class RetrievedPattern:
     confidence: float
     source: str = ""  # "golden", "doc", or "learned"
     page: str = ""  # URL fragment for golden patterns
-    site_hash: str = ""  # one-way site domain hash (learned patterns)
+    site_hash: str = ""  # one-way site identity hash (learned patterns)
 
 
 # ---------------------------------------------------------------------------

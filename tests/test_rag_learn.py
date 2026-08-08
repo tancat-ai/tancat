@@ -25,6 +25,14 @@ class TestSiteHash:
     def test_different_domains_differ(self) -> None:
         assert site_hash("saucedemo.com") != site_hash("automationexercise.com")
 
+    def test_mock_ports_hash_distinctly(self) -> None:
+        """B-047: banking:8782, ecommerce:8783, lv_insurance:8781 must each
+        scope learned patterns independently."""
+        assert site_hash("localhost:8782") != site_hash("localhost:8783")
+        assert site_hash("localhost:8782") != site_hash("localhost:8781")
+        assert site_hash("localhost:8783") != site_hash("localhost:8781")
+        assert site_hash("localhost:8781") != site_hash("localhost")
+
     def test_one_way(self) -> None:
         digest = site_hash("saucedemo.com")
         assert "saucedemo" not in digest
@@ -35,11 +43,19 @@ class TestDomainFromUrl:
     def test_plain(self) -> None:
         assert domain_from_url("https://www.saucedemo.com/inventory.html") == "www.saucedemo.com"
 
-    def test_strips_port(self) -> None:
-        assert domain_from_url("http://localhost:8781/generated_tests/mock.html") == "localhost"
+    def test_keeps_port_for_mock_sites(self) -> None:
+        """B-047: the port is part of the site identity — localhost mocks on
+        different ports must not collapse into one ``localhost`` bucket."""
+        assert domain_from_url("http://localhost:8781/generated_tests/mock.html") == "localhost:8781"
 
     def test_lowercases(self) -> None:
         assert domain_from_url("https://EXAMPLE.COM/") == "example.com"
+
+    def test_plain_explicit_port_kept(self) -> None:
+        assert domain_from_url("https://www.saucedemo.com:8080/inventory.html") == "www.saucedemo.com:8080"
+
+    def test_strips_userinfo(self) -> None:
+        assert domain_from_url("https://user:pass@example.com:8782/index.html") == "example.com:8782"
 
     def test_empty(self) -> None:
         assert domain_from_url("") == ""
@@ -94,6 +110,23 @@ class TestStepToPattern:
 
     def test_unknown_type_skipped(self) -> None:
         assert _step_to_pattern(_step(step_type="hover")) is None
+
+    def test_concurrent_mocks_scope_independently(self) -> None:
+        """B-047 regression: the 3 mock sites (banking:8782, ecommerce:8783,
+        lv_insurance:8781) must produce distinct site hashes so learned
+        patterns never earn SAME_SITE_LEARNED_BONUS cross-mock."""
+        banking = _step_to_pattern(
+            _step(label="login", locator="#login-button", url="http://localhost:8782/index.html")
+        )
+        ecommerce = _step_to_pattern(
+            _step(label="login", locator="#login-button", url="http://localhost:8783/index.html")
+        )
+        lv_insurance = _step_to_pattern(
+            _step(label="login", locator="#login-button", url="http://localhost:8781/index.html")
+        )
+        assert banking is not None and ecommerce is not None and lv_insurance is not None
+        hashes = {banking.site_hash, ecommerce.site_hash, lv_insurance.site_hash}
+        assert len(hashes) == 3
 
 
 class TestLearnFromEvidence:
@@ -206,7 +239,7 @@ class TestPatternFromPatch:
         assert isinstance(pattern, LearnedPattern)
         assert pattern.action_type == "CLICK"
         assert pattern.locator == 'a[href="/cart.html"]'
-        assert pattern.site_hash == site_hash("localhost")
+        assert pattern.site_hash == site_hash("localhost:8781")
 
     def test_evidence_tracker_fill_and_assert(self) -> None:
         fill = pattern_from_patch(

@@ -147,3 +147,35 @@ def test_banking_mock_serves_all_pages() -> None:
         ):
             with urllib.request.urlopen(f"http://localhost:8781{path}", timeout=5) as resp:
                 assert resp.status == 200, f"{path} -> {resp.status}"
+
+
+def test_multi_mock_servers_serve_own_directories() -> None:
+    """Regression: multiple MockServers in one process must each serve their
+    own directory. Previously SERVE_DIRECTORY/ROUTES were base-class
+    attributes, so the last-started server's directory was served on EVERY
+    port — resolve_and_learn's 3-mock run resolved banking/lv stories
+    against ecommerce HTML, contaminating resolutions and the fine-tuning
+    dataset."""
+    import urllib.request
+
+    from scripts.mock_server import MockServer
+
+    servers = [
+        MockServer.start(port=8791, directory="mock_sites/banking"),
+        MockServer.start(port=8792, directory="mock_sites/ecommerce"),
+    ]
+    try:
+        banking = urllib.request.urlopen("http://localhost:8791/index.html", timeout=5).read().decode("utf-8", "ignore")
+        ecommerce = (
+            urllib.request.urlopen("http://localhost:8792/index.html", timeout=5).read().decode("utf-8", "ignore")
+        )
+    finally:
+        for server in servers:
+            server.stop()
+
+    # Banking index has login/transfer vocabulary; ecommerce index has the
+    # product grid — neither site's content may leak onto the other's port.
+    assert "login-button" in banking or "Transfer Money" in banking
+    assert "Stylish Dress" not in banking, "ecommerce content leaked onto banking port"
+    assert "Featured Items" in ecommerce
+    assert "login-button" not in ecommerce, "banking content leaked onto ecommerce port"

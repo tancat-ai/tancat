@@ -41,24 +41,36 @@ _STEP_TYPE_TO_ACTION = {
 _LEARNED_STATUS = "passed"
 
 
-def site_hash(domain: str) -> str:
-    """One-way sha256 hash of a site domain (hex, first 16 chars).
+def site_hash(site_identity: str) -> str:
+    """One-way sha256 hash of a site identity (hex, first 16 chars).
 
-    Deterministic for the same domain (case-insensitive), not reversible —
-    the domain can never be recovered from the hash.
+    The identity is ``host`` or ``host:port`` (case-insensitive) — see
+    ``domain_from_url``. Deterministic for the same identity, not reversible:
+    the identity can never be recovered from the hash.
+
+    B-047: a port-qualified identity (``localhost:8782``) hashes separately
+    from ``localhost:8783``, so concurrent mock sites learn site-correct
+    patterns instead of collapsing into one shared ``localhost`` bucket.
     """
-    return hashlib.sha256(domain.strip().lower().encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(site_identity.strip().lower().encode("utf-8")).hexdigest()[:16]
 
 
 def domain_from_url(url: str) -> str:
-    """Extract the host (no port, lowercase) from a URL, or ``""``.
+    """Extract the site identity — ``host[:port]``, lowercase — or ``""``.
 
-    ``https://www.saucedemo.com:8080/inventory.html`` → ``www.saucedemo.com``
+    The port is kept (B-047) so localhost mock sites scope independently:
+    ``http://localhost:8781/generated_tests/mock.html`` → ``localhost:8781``.
+    Real sites with no explicit port are unchanged:
+    ``https://www.saucedemo.com/inventory.html`` → ``www.saucedemo.com``.
+    Userinfo (``user:pass@``) is stripped before returning.
     """
     if not url:
         return ""
     try:
-        return urlparse(url).netloc.split(":")[0].lower()
+        netloc = urlparse(url).netloc
+        if "@" in netloc:
+            netloc = netloc.rsplit("@", 1)[-1]
+        return netloc.lower()
     except ValueError:
         return ""
 
@@ -248,7 +260,7 @@ def pattern_from_patch(
         old_text: The original (failed) code line, e.g.
             ``page.locator("#wrong-btn").click()``.
         new_text: The corrected line, e.g. ``page.locator("#add-to-cart").click()``.
-        base_url: Any URL of the target site — only its domain is hashed.
+        base_url: Any URL of the target site — only its host[:port] is hashed.
         description: Explicit description (wins over evidence extraction).
         evidence_steps: Evidence sidecar steps, used to recover the
             placeholder description anchored to the failed selector.
@@ -256,7 +268,7 @@ def pattern_from_patch(
     Returns:
         A ``LearnedPattern`` (``confidence=1.0``, ``source="self_healing"``)
         or ``None`` when the patch is not a locator replacement, no corrected
-        selector is recoverable, no site domain is derivable, or no
+        selector is recoverable, no site identity is derivable, or no
         description anchor is available.
     """
     action = _action_from_code(new_text)
