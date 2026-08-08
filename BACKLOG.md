@@ -1414,10 +1414,25 @@ classes with their own `SERVE_DIRECTORY`/`ROUTES`. Regression test:
 appended (122 total, 0 cross-site leaks, verified by selector-marker scan).
 Purged 26 inert `site_hash=sha256("localhost")` learned patterns from the RAG
 store (they could never match post-fix; store now 83 golden + 27 doc + 5
-learned, all correct). **Known follow-up:** `learn_from_evidence` inside the
-pytest subprocess silently no-ops while the parent process holds the Milvus
-store open (file-lock contention) — documented best-effort behaviour; worth a
-dedicated fix if RAG growth during resolve-and-learn matters.
+learned, all correct). **Known follow-up (evidence-backed 2026-08-09):
+`learn_from_evidence` inside the pytest subprocess cannot open the Milvus
+store while the resolve-and-learn parent holds it.** Controlled A/B proved:
+(1) fresh process → subprocess learning works (inserted=1); (2) parent opens
+store, `del` + `gc.collect()`, then subprocess → `DataDirLockedError: another
+process holds the lock on evidence/rag_store.db` — the Milvus-lite lock is
+held for the parent's ENTIRE lifetime, so EVERY subprocess hook in a
+resolve-and-learn run fails silently (the conftest try/except swallows it).
+The orchestrator opens the store on the first RAG-on pass (retriever
+retrieve), so RAG-off passes are also blocked for the rest of the process.
+Observed: learned count 27 → 27 across the 2026-08-08 3-mock re-run despite
+27 passing tests; an instrumented single-file run (no holder) learned OK and
+hit-bumped an existing pattern (hits 1→2). The historical 17→27 growth
+therefore most plausibly came from uncontended execution phases (UAT / eval
+`--run` / verify_production — processes that run pytest without a concurrent
+store-holding parent), not from resolve-and-learn subprocess hooks. Fix
+candidate: parent-side sweep of `evidence/*.evidence.json` sidecars after each
+site's executions (parent calls `learn_from_evidence` itself — no lock
+contention), ~30 lines in `scripts/synthesize_stories.py`.
 
 **Next steps (follow-up items):**
 1. Train resolution LoRA on the 90 rows; validate via `eval_harness.py compare`
