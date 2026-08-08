@@ -1372,8 +1372,11 @@ instruction-tuning datasets for Unsloth Studio (or any SFT trainer):
   and merges passing rows. `--mode linear|graph|both` (graph is deterministic,
   temp=0 — run once; linear is stochastic — rerun for diversity).
 
-**Dataset state (2026-08-07):** 172 skeleton rows (22 generated + 7 eval + 143
-synthetic), 90 resolution rows. Verified: ruff ✓, mypy ✓, pytest 2329 passed.
+**Dataset state (2026-08-08):** 172 skeleton rows (22 generated + 7 eval + 143
+synthetic), 90 resolution rows, **112 resolved-code rows** (story → resolved
+test code, all 7 sites, 3464 evidence calls — from the `--resolve-and-learn`
+full combo run: mocks × RAG on+off 56 passed / 6 failed, live × RAG on
+20 passed / 23 failed). Verified: ruff ✓, mypy ✓, pytest ✓.
 
 **Why it matters:** the 90 resolution pairs target AGENTS.md §13's open issue
 (ASSERT placeholder resolution, 79.1% eval baseline) — a small LoRA on that set is
@@ -1385,10 +1388,25 @@ story→code model. Both are input to the Qwen training effort AI-038 references
 48 GB Strix Halo UMA, causing `vk::Queue::submit: ErrorOutOfDeviceMemory` on long
 decodes. Relaunched at `--ctx-size 9072`; server healthy, suite green.
 
+**B-047 found 2026-08-08 (multi-mock site_hash collision — pre-existing, protected code):**
+`domain_from_url()` in `src/rag_learn.py` strips the port, so all localhost mock
+sites (banking:8782, ecommerce:8783, lv_insurance:8781) share one `site_hash`.
+Consequence: learned patterns from one mock earn SAME_SITE_LEARNED_BONUS on the
+others, and golden patterns (site_hash="", +20 bonus) resolve cross-site — e.g.
+banking story 5 resolved ecommerce selectors (`#name`, `a[href="/products.html"]`,
+`p:has-text("Stylish Dress")`) instead of banking's (`#user-name`, `#login-button`).
+First exposed by `--resolve-and-learn` running 3 mocks concurrently (real sites
+have distinct domains so never collided). Fix candidate: include port in the
+hashed identity (or hash `netloc` not just host) — banking/ecommerce/lv then
+scope independently. Affects `src/rag_learn.py`, `src/rag_store.py`, golden
+selector matching in `src/rag_retriever.py`. **Do not edit without explicit
+instruction (protected RAG modules).**
+
 **Next steps (follow-up items):**
 1. Train resolution LoRA on the 90 rows; validate via `eval_harness.py compare`
 2. Grow skeleton set to 200+ via `synthesize_stories.py --count N --mode both`
 3. Decide where the fine-tuned model plugs into the pipeline (skeleton vs resolver)
+4. (B-047) port-aware site_hash so multi-mock runs learn site-correct patterns
 
 ---
 
