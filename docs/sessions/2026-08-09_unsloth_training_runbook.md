@@ -157,6 +157,14 @@ staging file, already merged into the main skeleton file.
 - **bnb-4bit 27B doesn't exist yet** — check HF periodically; when it lands it
   will be the ideal AMD-trainable quant (no 55GB full download needed).
 
+## 8b. Fallback: cloud training (AMD doc)
+
+If local training ever hits a wall (VRAM, download, instability), Unsloth's
+AMD doc points at **AMD Developer Cloud** (one-click MI300X notebooks, 192GB
+VRAM) and the **AMD AI Developer Program** (free credits). Same unsloth
+notebooks, swap in the AMD cloud URL. The corpus + baseline transfer directly
+— only the compute moves.
+
 ---
 
 ## 9. Related commits
