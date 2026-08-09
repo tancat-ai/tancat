@@ -222,6 +222,12 @@ Each test must be self-contained. If a test depends on earlier criteria
 being completed first (e.g., you must log in before adding items to cart),
 include those prerequisite steps at the start of the test function.
 
+=== DO NOT INVENT AUTH ===
+Only include login/sign-in steps ({{FILL:username...}}, {{FILL:password...}},
+{{CLICK:Login}}) IF the acceptance criteria explicitly reference logging in,
+a username, a password, or credentials. Most stories are guest flows — do
+NOT add login steps for a story that never mentions authentication.
+
 === JOURNEY STRUCTURE (MANDATORY) ===
 1. Every step must appear on the page it belongs to. Follow the story order:
    fill ALL fields on the current page BEFORE navigating (Next) to the next page.
@@ -241,17 +247,15 @@ from playwright.sync_api import Page
 def test_01_example(page, evidence_tracker):
     {{GOTO:home}}
     {{ASSERT:home page loaded}}
-    {{FILL:username:admin}}
-    {{CLICK:submit button}}
-    {{ASSERT:welcome message}}
+    {{CLICK:add to cart button}}
+    {{ASSERT:cart badge updated}}
 
 @pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
 def test_02_example(page, evidence_tracker):
     {{GOTO:home}}
-    {{FILL:username:admin}}
-    {{CLICK:submit button}}
     {{CLICK:add to cart button}}
-    {{ASSERT:cart badge updated}}
+    {{GOTO:cart}}
+    {{ASSERT:item in cart}}
 
 === USER STORY ===
 {user_story}
