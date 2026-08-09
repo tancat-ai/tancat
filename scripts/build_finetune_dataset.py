@@ -49,6 +49,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 GENERATED_TESTS_DIR = PROJECT_ROOT / "generated_tests"
+TRAINING_DIR = PROJECT_ROOT / "training_data"
 EVAL_DATASET_DIR = PROJECT_ROOT / "scripts" / "eval" / "dataset"
 
 #: Static prefix reused from the production skeleton prompt (Phase 1).
@@ -211,6 +212,52 @@ def dedupe(examples: list[dict[str, str]]) -> list[dict[str, str]]:
     return out
 
 
+#: Sites that genuinely have a login flow — used by the hallucinated-login
+#: filter to keep auth steps only where they belong.
+_LOGIN_SITES: set[str] = {"saucedemo", "automationexercise", "theinternet", "banking_mock"}
+_LOGIN_MARKERS: tuple[str, ...] = (
+    "standard_user",
+    "secret_sauce",
+    "{{FILL:username",
+    "{{FILL:password",
+    "{{CLICK:Login",
+)
+
+
+def _row_site(row: dict[str, str]) -> str:
+    """Extract the site name from a row's instruction, or "" if unknown."""
+    for marker in ("site '", 'site "'):
+        if marker in row.get("instruction", ""):
+            after = row["instruction"].split(marker, 1)[1]
+            return after.split("'")[0] if marker.endswith("'") else after.split('"')[0]
+    return ""
+
+
+def is_hallucinated_login_row(row: dict[str, str]) -> bool:
+    """True when a row contains login steps on a site that has no login page.
+
+    The LLM frequently invents `standard_user`/`secret_sauce` login steps for
+    guest-flow sites (ecommerce, lv_insurance, demoqa). Those rows can never
+    resolve — they poison the training set with impossible steps.
+    """
+    site = _row_site(row)
+    if site in _LOGIN_SITES:
+        return False  # auth belongs here
+    text = row.get("output", "")
+    return any(marker in text for marker in _LOGIN_MARKERS)
+
+
+def filter_file(path: Path, *, drop_hallucinated_login: bool, in_place: bool = False) -> tuple[int, int]:
+    """Filter a JSONL dataset; returns (original, kept)."""
+    if not path.exists():
+        return 0, 0
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    kept = [r for r in rows if not (drop_hallucinated_login and is_hallucinated_login_row(r))]
+    if in_place and len(kept) != len(rows):
+        write_jsonl(kept, path)
+    return len(rows), len(kept)
+
+
 def write_jsonl(examples: list[dict[str, str]], out_path: Path) -> None:
     """Write examples to a JSONL file (one JSON object per line)."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -322,7 +369,25 @@ def main() -> None:
     )
     parser.add_argument("--no-eval", action="store_true", help="Skip eval datasets (generated_tests only)")
     parser.add_argument("--stats", action="store_true", help="Print dataset statistics")
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Filter existing training JSONL files in-place: drop hallucinated-login "
+        "rows (login steps on sites with no auth, e.g. standard_user on ecommerce). "
+        "Safe to run anytime; prints a before/after summary.",
+    )
     args = parser.parse_args()
+
+    if args.clean:
+        for fname in (
+            "playwright_skeleton_alpaca.jsonl",
+            "playwright_resolved_alpaca.jsonl",
+            "synthetic_skeletons_alpaca.jsonl",
+        ):
+            before, after = filter_file(TRAINING_DIR / fname, drop_hallucinated_login=True, in_place=True)
+            if before:
+                print(f"{fname}: {before} -> {after} (dropped {before - after} hallucinated-login rows)")
+        return
 
     if args.resolutions and args.out == str(PROJECT_ROOT / "training_data" / "playwright_skeleton_alpaca.jsonl"):
         args.out = str(PROJECT_ROOT / "training_data" / "playwright_resolution_alpaca.jsonl")
