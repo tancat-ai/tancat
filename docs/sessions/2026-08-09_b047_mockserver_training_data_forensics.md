@@ -26,8 +26,8 @@ actually trustworthy. They were not — for two independent reasons.
 `MockServer._start()` set **base-class attributes**:
 
 ```python
-_RobustRequestHandler.SERVE_DIRECTORY = self.directory   # class attr!
-_RouteAwareHandler.ROUTES = routes                       # class attr!
+_RobustRequestHandler.SERVE_DIRECTORY = self.directory  # class attr!
+_RouteAwareHandler.ROUTES = routes  # class attr!
 ```
 
 When `resolve_and_learn` starts 3 mock servers in one process (root on 8781,
@@ -38,7 +38,7 @@ start, **every port serves the last-started directory**.
 ### Empirical proof (run 2026-08-08)
 
 ```python
-dirs = sorted([root, root/"mock_sites"/"banking", root/"mock_sites"/"ecommerce"])
+dirs = sorted([root, root / "mock_sites" / "banking", root / "mock_sites" / "ecommerce"])
 # start order: root→8781, banking→8782, ecommerce→8783
 for p in (8781, 8782, 8783):
     body = GET(f"http://localhost:{p}/index.html")
