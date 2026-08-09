@@ -200,15 +200,62 @@ contention, same dedup/site-scoping. ~30 lines + a test.
 
 ---
 
-## 6. Current repo state
+## 6. What was completed this session (2026-08-08/09)
+
+**Bugs found & fixed:**
+- **B-047 port-aware `site_hash`** — `src/rag_learn.py` `domain_from_url()` now returns
+  `host[:port]` (userinfo stripped); learn + resolve paths both route through it.
+  Real sites (no port) unchanged. Regression tests:
+  `test_concurrent_mocks_scope_independently`, `test_mock_ports_hash_distinctly`,
+  `test_keeps_port_for_mock_sites`, `test_plain_explicit_port_kept`, `test_strips_userinfo`.
+- **MockServer class-attribute leak** — `scripts/mock_server.py` per-server handler
+  subclass (own `SERVE_DIRECTORY`/`ROUTES`). Regression test:
+  `test_multi_mock_servers_serve_own_directories`.
+- **Empirical proof of both** — 3-port server isolation test (pre-fix: all ports served
+  ecommerce; post-fix: 8781→lv, 8782→banking, 8783→ecommerce).
+
+**Training-data cleanup & regeneration (the user's original question):**
+- Purged 42 contaminated resolved rows (banking_mock 25 + lv_insurance 17) from
+  `training_data/playwright_resolved_alpaca.jsonl` (backup preserved in git history).
+- Re-ran `resolve_and_learn --rag-both` for the 3 mocks with both fixes
+  (~2.5 h background run): **52 new site-correct rows appended → 122 total,
+  0 cross-site leaks** (verified by selector-marker scan of every row).
+- New banking rows: `#user-name`/`#password`/`#login-button`, 0 skips. lv rows: real
+  lv selectors. Honest pass rates (banking 4/18, ecommerce 21/24, lv 2/18) — lower
+  than the previous session's inflated numbers because tests now run against real content.
+- RAG store: purged 26 inert `sha256("localhost")` learned patterns; added correct
+  `localhost:8782` patterns. Final: 83 golden + 27 doc + 5 learned.
+- One-off rerun utility committed: `scripts/rerun_mock_resolve_learn.py`.
+
+**Verification gates (all green):**
+- `smoke.py` 35/35 · `ruff` clean · `mypy src/ cli/` clean
+- Full `pytest`: **2334 passed, 1 skipped**
+- `eval_harness.py run --mode static`: **97.9% resolution accuracy** (baseline match)
+- Pre-commit: ruff, ruff-format, mypy, Eval Accuracy Gate, Kanban Freshness — all passed
+- **CI: 9/9 jobs green on `0565271`** (Smoke, Ruff, MyPy, PyTest+Coverage, Eval Static,
+  Kanban, Graph, Docs, Sanitizer)
+
+**Evidence experiments (the RAG lock question):**
+- Controlled A/B: subprocess learning works uncontended; fails with
+  `DataDirLockedError` while a parent holds the store — and `del` + `gc.collect()`
+  do NOT release the process-lifetime lock (§5).
+- Instrumented conftest proved the hook works when uncontended (hit-bump 1→2).
+- Corrected the 17→27 attribution in BACKLOG (uncontended phases, not resolve-and-learn hooks).
+
+**Deferred (by user request):** the parent-side evidence-sidecar sweep fix
+(§5 fix candidate) — documented, not implemented.
+
+## 7. Current repo state
 
 - `0565271` — `fix(rag): port-aware site_hash + MockServer multi-server isolation (B-047)` (code + data cleanup + rerun utility)
 - `9865b03` — `docs(backlog): evidence-backed diagnosis of RAG learning lock contention (B-047)`
+- `1dcc198` — `docs: B-047 forensics report — training-data contamination + RAG lock contention evidence` (this document)
 - CI: 9/9 green on `0565271` (incl. Eval Static 97.9% — baseline match).
+- Working tree clean.
 - `training_data/playwright_resolved_alpaca.jsonl`: **122 rows, 0 cross-site leaks** — ready for the Unsloth training run.
 - RAG store: 83 golden + 27 doc + 5 learned (correct).
 
-## 7. Reproduction cheatsheet (for the follow-up conversation)
+## 8. Reproduction cheatsheet (for the follow-up conversation)
 
 ```bash
 # 1. Prove the MockServer leak (fixed — expect correct isolation):
