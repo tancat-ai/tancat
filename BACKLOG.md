@@ -1427,9 +1427,19 @@ retrieve), so RAG-off passes are also blocked for the rest of the process.
 Observed: learned count 27 → 27 across the 2026-08-08 3-mock re-run despite
 27 passing tests; an instrumented single-file run (no holder) learned OK and
 hit-bumped an existing pattern (hits 1→2). The historical 17→27 growth
-therefore most plausibly came from uncontended execution phases (UAT / eval
-`--run` / verify_production — processes that run pytest without a concurrent
-store-holding parent), not from resolve-and-learn subprocess hooks. Fix
+provenance (resolved 2026-08-09): the 17-pattern baseline pre-dated the
+2026-08-07/08 resolve-and-learn sessions — it came from prior uncontended mock
+executions (2026-08-04 session's self-healing demo artifact `CLICK 'Cart link'
+→ a[href="/cart.html"]` documented in
+`docs/sessions/2026-08-04_consumer_config_and_self_learning_rag.md`, plus
+eval-006's "8/8 execution passed" and earlier eval/UAT mock runs — the same
+UAT / eval `--run` / verify_production phases cited below). The +10 (17→27)
+was learned IN the 2026-08-07/08 session by the one uncontended standalone
+ecommerce test (mock server up, no parent store-holder); the batch and
+full-combo resolve-and-learn runs contributed 0 (lock-blocked). All 26 purged
+patterns share `sha256("localhost")` because B-047's port-stripping was live
+throughout — regardless of which session produced them, they were inert
+post-fix, so the purge was correct. Fix
 candidate: parent-side sweep of `evidence/*.evidence.json` sidecars after each
 site's executions (parent calls `learn_from_evidence` itself — no lock
 contention), ~30 lines in `scripts/synthesize_stories.py`.
