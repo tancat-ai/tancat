@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 import time
@@ -119,6 +120,8 @@ async def run(stories_file: Path, limit: int, save: Path) -> None:
 
     summary = {
         "model": _current_model(),
+        "runtime": _llamacpp_props(),
+        "codebase": _git_state(),
         "stories_evaluated": n,
         "valid_skeleton_rate": round(valid / n, 3) if n else 0,
         "criteria_cover_rate": round(cover / n, 3) if n else 0,
@@ -134,6 +137,10 @@ async def run(stories_file: Path, limit: int, save: Path) -> None:
 
     print("\n=== MODEL BASELINE ===")
     print(f"  model              : {summary['model']}")
+    print(f"  n_ctx              : {summary['runtime'].get('n_ctx')}")
+    print(
+        f"  codebase           : {summary['codebase'].get('commit')} {'(dirty)' if summary['codebase'].get('dirty') else ''}"
+    )
     print(f"  stories            : {n}")
     print(f"  valid skeleton rate: {summary['valid_skeleton_rate']:.1%}")
     print(f"  criteria cover rate: {summary['criteria_cover_rate']:.1%}")
@@ -145,9 +152,67 @@ async def run(stories_file: Path, limit: int, save: Path) -> None:
 
 
 def _current_model() -> str:
+    """Return the model identity: env override, else the llama.cpp model path."""
     import os
 
-    return os.environ.get("OPENAI_MODEL", "") or "auto-detect (see server /v1/models)"
+    env_model = os.environ.get("OPENAI_MODEL", "")
+    if env_model:
+        return env_model
+    props = _llamacpp_props()
+    return props.get("model_path", "unknown (server not responding)")
+
+
+def _llamacpp_props() -> dict:
+    """Fetch llama.cpp server runtime props (/props) for reproducibility.
+
+    Records which model file is loaded, context size, cache types, and
+    generation defaults — so the before/after comparison is trustworthy.
+    Returns {} if the server is unreachable.
+    """
+    import json as _json
+    import urllib.request
+
+    base = os.environ.get("LLM_BASE_URL", "http://localhost:8080")
+    try:
+        with urllib.request.urlopen(f"{base}/props", timeout=5) as resp:
+            d = _json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return {}
+    keep = [
+        "model_path",
+        "n_ctx",
+        "n_batch",
+        "total_slots",
+        "cache_type_k",
+        "cache_type_v",
+    ]
+    out = {k: d.get(k) for k in keep if k in d}
+    gen = d.get("default_generation_settings", {})
+    if gen:
+        out["temperature"] = gen.get("params", {}).get("temperature")
+        out["n_ctx"] = gen.get("n_ctx", out.get("n_ctx"))
+    return out
+
+
+def _git_state() -> dict:
+    """Record the codebase commit + dirty state for reproducibility."""
+    import subprocess as _sp
+
+    try:
+        commit = _sp.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(PROJECT_ROOT)
+        ).stdout.strip()
+    except Exception:
+        commit = ""
+    dirty = False
+    try:
+        status = _sp.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(PROJECT_ROOT)
+        ).stdout.strip()
+        dirty = bool(status)
+    except Exception:
+        pass
+    return {"commit": commit[:12], "dirty": dirty}
 
 
 def main() -> None:
