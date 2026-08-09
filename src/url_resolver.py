@@ -65,16 +65,21 @@ class UrlResolver:
         """
         # Store scraped URLs for resolve-time fallback
         self._scraped_urls = list(scraped_urls)
-        # 1. Always map seed URL to home/login keywords
+        # 1. Map seed URL to home/homepage keywords. `login` is NOT pre-mapped
+        #    to seed here: a site with a distinct login page (e.g.
+        #    /login, /signin) must resolve `login` to that page, not the
+        #    homepage — otherwise {{GOTO:login}} lands on the homepage and
+        #    fills like `username` fail (they live on /login). SPA sites whose
+        #    login IS the homepage (saucedemo) still work via the fallback
+        #    below (no /login URL discovered → seed).
         self._keyword_to_url["home"] = seed_url
-        self._keyword_to_url["login"] = seed_url
         self._keyword_to_url["homepage"] = seed_url
 
         # 2. Match keywords against discovered URL paths
         for keyword in keywords:
             kw_lower = keyword.lower()
             if kw_lower in self._keyword_to_url:
-                continue  # Already mapped (home/login)
+                continue  # Already mapped (home/homepage)
 
             resolved = self._match_keyword_to_url(kw_lower, scraped_urls)
             if resolved:
@@ -108,6 +113,16 @@ class UrlResolver:
                     segment = path.split("/")[-1].split(".")[0]
                     if segment and segment not in self._keyword_to_url:
                         self._keyword_to_url[segment] = candidate_url
+
+        # 5. Login fallback: if `login` wasn't mapped to a distinct page
+        #    (no /login-style URL scraped), point it at the seed URL. This
+        #    keeps SPA sites (saucedemo, where login IS the homepage)
+        #    working while sites with a real login page use it.
+        if "login" not in self._keyword_to_url:
+            has_login_url = any("login" in urlparse(u).path.lower().split("/") for u in self._scraped_urls)
+            if not has_login_url:
+                self._keyword_to_url["login"] = seed_url
+                logger.debug("login keyword fell back to seed URL %s", seed_url)
 
     def resolve(self, keyword: str) -> str | None:
         """Resolve a keyword to an actual URL.

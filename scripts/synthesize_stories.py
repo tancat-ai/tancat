@@ -116,6 +116,21 @@ SITE_INVENTORY: dict[str, str] = {
     ),
 }
 
+#: Sites with a login/authentication flow. The story synthesizer uses this to
+#: reject stories that invent login steps for sites without auth (ecommerce,
+#: lv_insurance, demoqa have no login page — a `standard_user` login step there
+#: can never resolve and produces poisoned training rows).
+HAS_LOGIN: dict[str, bool] = {
+    "saucedemo": True,
+    "automationexercise": True,
+    "demoqa": False,
+    "theinternet": True,
+    "lv_insurance": False,
+    "ecommerce_mock": False,
+    "banking_mock": True,
+}
+
+
 STORY_PROMPT = """You are a QA scenario writer for automated web testing.
 
 Write {count} DISTINCT, realistic user stories for the website "{site}" at {url}.
@@ -127,6 +142,10 @@ The stories must ONLY exercise elements that exist on this site:
 
 === SITE ELEMENT INVENTORY ===
 {inventory}
+
+=== AUTHENTICATION RULE (STRICT) ===
+This site has login: {has_login}.
+{auth_rule}
 
 === RULES ===
 1. Every story must be executable against the inventory above — no imaginary pages.
@@ -213,12 +232,35 @@ def validate_story(story: dict[str, str]) -> bool:
 
 async def synthesize_stories_for_site(client: LLMClient, site: dict[str, str], count: int) -> list[dict[str, Any]]:
     """Ask the LLM for `count` stories on one site; return validated rows."""
-    prompt = STORY_PROMPT.format(site=site["site"], url=site["url"], inventory=site["inventory"], count=count)
+    has_login = HAS_LOGIN.get(site["site"], False)
+    auth_rule = (
+        "ONLY include sign-in/login steps in a story when this site HAS a login page "
+        "AND the inventory above lists login/username/password elements."
+        if has_login
+        else "NEVER write stories or criteria that require signing in, a username, a password, "
+        "or a login page — this site has no authentication. Checkout/shopping flows are guest flows."
+    )
+    prompt = STORY_PROMPT.format(
+        site=site["site"],
+        url=site["url"],
+        inventory=site["inventory"],
+        count=count,
+        has_login=has_login,
+        auth_rule=auth_rule,
+    )
     completion = await client.generate(prompt, timeout=600)
     rows: list[dict[str, Any]] = []
     for story in extract_stories(completion):
         if not validate_story(story):
             logger.warning("Dropping malformed story for %s: %.60s", site["site"], story["story"])
+            continue
+        # Auth guard: a story on a login-less site must not invent login steps.
+        if not has_login and _story_mentions_login(story):
+            logger.warning(
+                "Dropping story that invents login on login-less site %s: %.60s",
+                site["site"],
+                story["story"],
+            )
             continue
         rows.append(
             {
@@ -229,6 +271,25 @@ async def synthesize_stories_for_site(client: LLMClient, site: dict[str, str], c
             }
         )
     return rows
+
+
+def _story_mentions_login(story: dict[str, str]) -> bool:
+    """True when a story or its conditions reference authentication."""
+    text = (story.get("story", "") + " " + story.get("conditions", "")).lower()
+    return any(
+        term in text
+        for term in (
+            "log in",
+            "login",
+            "sign in",
+            "sign-in",
+            "signin",
+            "username",
+            "password",
+            "credentials",
+            "authenticate",
+        )
+    )
 
 
 async def generate_skeleton_for_row(
