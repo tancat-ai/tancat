@@ -293,3 +293,28 @@ def test_normalize_url_root_gets_trailing_slash() -> None:
     assert normalize_url("https://automationexercise.com/products") == "https://automationexercise.com/products"
     assert normalize_url("http://shop.example") == "http://shop.example/"
     assert normalize_url("https://shop.example?q=1") == "https://shop.example/?q=1"
+
+
+def test_login_resolves_to_distinct_login_page_when_scraped() -> None:
+    """A site with a real /login page must map `login` there, not the seed."""
+    resolver = UrlResolver()
+    resolver.build_mapping(
+        keywords=["login"],
+        scraped_urls=[
+            "https://the-internet.herokuapp.com/",
+            "https://the-internet.herokuapp.com/login",
+        ],
+        seed_url="https://the-internet.herokuapp.com/",
+    )
+    assert resolver.resolve("login") == "https://the-internet.herokuapp.com/login"
+
+
+def test_login_falls_back_to_seed_when_no_login_page() -> None:
+    """SPA sites (login == homepage) keep the seed mapping when /login absent."""
+    resolver = UrlResolver()
+    resolver.build_mapping(
+        keywords=["inventory"],
+        scraped_urls=["https://www.saucedemo.com/inventory.html"],
+        seed_url="https://www.saucedemo.com/",
+    )
+    assert resolver.resolve("login") == "https://www.saucedemo.com/"
