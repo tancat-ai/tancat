@@ -1352,9 +1352,9 @@ unblock.
 
 ---
 
-## 🆕 AI-040 — Fine-Tuning Dataset Generation Tooling (SEED WORK — model not yet trained)
+## ✅ AI-040 — Fine-Tuning Dataset Generation Tooling (TOOLING COMPLETE 2026-08-09 — training is AI-041)
 
-**Status:** 🟡 ready-for-agent (tooling shipped 2026-08-07; training itself is a separate follow-up)
+**Status:** ✅ Complete (tooling + corpus + baseline shipped 2026-08-07/09); the actual training run is tracked as **AI-041**
 **Priority:** Medium — enables the Qwen training effort referenced by AI-038
 **Spec:** `scripts/build_finetune_dataset.py`, `scripts/synthesize_stories.py`, `training_data/`
 
@@ -1444,11 +1444,47 @@ candidate: parent-side sweep of `evidence/*.evidence.json` sidecars after each
 site's executions (parent calls `learn_from_evidence` itself — no lock
 contention), ~30 lines in `scripts/synthesize_stories.py`.
 
-**Next steps (follow-up items):**
-1. Train resolution LoRA on the 90 rows; validate via `eval_harness.py compare`
-2. Grow skeleton set to 200+ via `synthesize_stories.py --count N --mode both`
+**Completed follow-ups (2026-08-09):** dataset cleaned (--clean filter, 55
+hallucinated-login rows dropped), skeleton prompt fixed (DO-NOT-INVENT-AUTH),
+login URL resolution fixed, ecommerce skeletons regenerated, model-level
+baseline captured with full reproducibility envelope. Full runbook in
+`docs/sessions/2026-08-09_unsloth_training_runbook.md`.
+
+**Next steps (now tracked as AI-041):**
+1. Run the Unsloth Studio QLoRA training (see runbook §4)
+2. Re-run `eval_model_baseline.py` against the fine-tuned model; compare
 3. Decide where the fine-tuned model plugs into the pipeline (skeleton vs resolver)
 4. ✅ (B-047) port-aware site_hash + MockServer multi-server fix (2026-08-08)
+
+---
+
+## 🆕 AI-041 — Unsloth Studio QLoRA Training Run (IN PROGRESS — model downloading)
+
+**Status:** 🟡 in-progress — Qwen3.6-27B downloading in Studio (2026-08-09); training not yet started
+**Priority:** High — the payoff for AI-040's corpus + baseline
+**Spec:** Unsloth Studio (localhost:8888), `training_data/`, `scripts/eval/eval_model_baseline.py`
+
+**What:** Fine-tune a QLoRA on the clean training corpus (158 skeleton + 96
+resolved + 90 resolution rows), export to GGUF, swap into the pipeline, and
+measure the before/after delta with the captured baseline.
+
+**Runbook:** `docs/sessions/2026-08-09_unsloth_training_runbook.md` — model
+choice (safetensors, NOT NVFP4/GGUF), Studio settings table, export + model
+swap (no .env edit — auto-detect via /v1/models), baseline comparison.
+
+**Hardware:** AMD Strix Halo (gfx1151) — Unsloth AMD support is FULL; training
+is bitsandbytes-based QLoRA (4-bit).
+
+**Current model baseline (before):**
+`training_data/model_baseline_qwen36_27b_ud_q4_k_xl.json` — valid skeleton
+100%, criteria cover 100%, hallucinated login 0%, eval static 97.9%.
+
+**Steps:**
+1. Studio: QLoRA, `Qwen/Qwen3.6-27B`, upload skeleton dataset, Train on
+   Completions ON (runbook §4)
+2. Export GGUF q4_k_m → `~/.lmstudio/models/unsloth/`
+3. Load fine-tuned model on :8080 (pipeline auto-detects)
+4. `eval_model_baseline.py` + `eval_harness.py run --mode static` → compare
 
 ---
 
