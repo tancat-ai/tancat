@@ -398,3 +398,77 @@ def test_fill_select_evaluate_failure_falls_back_to_fill(tmp_path: Any) -> None:
 
     locator_mock.fill.assert_called_once_with("x")
     locator_mock.select_option.assert_not_called()
+
+
+def _mock_metadata_page(*, doc_size: tuple[float, float], scroll: tuple[float, float], bbox: dict[str, float]) -> Any:
+    """Build a mock page whose evaluate() serves doc-size then scroll offsets."""
+    page_mock = MagicMock()
+    locator_mock = MagicMock()
+    page_mock.locator.return_value = locator_mock
+    locator_mock.first = locator_mock  # .first returns itself
+    locator_mock.evaluate.return_value = "button"
+    locator_mock.get_attribute.side_effect = ["btn-id", None, None]
+
+    def fake_evaluate(expr: str) -> dict[str, float]:
+        if "scrollWidth" in expr:
+            return {"width": doc_size[0], "height": doc_size[1]}
+        return {"x": scroll[0], "y": scroll[1]}
+
+    page_mock.evaluate.side_effect = fake_evaluate
+    locator_mock.bounding_box.return_value = bbox
+    return page_mock
+
+
+def test_metadata_viewport_pct_is_document_relative(tmp_path: Any) -> None:
+    """AI-043: viewport_pct must be % of the FULL DOCUMENT (full-page screenshot).
+
+    bbox is viewport-relative (element scrolled 800px down); without the scroll
+    correction the recorded y% would be ~7% instead of the true ~34%."""
+    page_mock = _mock_metadata_page(
+        doc_size=(1000.0, 3000.0),
+        scroll=(0.0, 800.0),
+        bbox={"x": 100.0, "y": 200.0, "width": 50.0, "height": 30.0},
+    )
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    meta = tracker._get_element_metadata("#btn")
+
+    pct = meta["viewport_pct"]
+    # doc center: x=125, y=1015 → 12.5% / 33.83%
+    assert abs(pct["x"] - 12.5) < 0.01
+    assert abs(pct["y"] - 33.833) < 0.01
+
+
+def test_metadata_clamps_negative_y_to_zero(tmp_path: Any) -> None:
+    """AI-043: an element above the viewport (negative bbox y) must not paint an
+    off-page marker — the % is clamped into [0, 100]."""
+    page_mock = _mock_metadata_page(
+        doc_size=(1000.0, 3000.0),
+        scroll=(0.0, 0.0),
+        bbox={"x": 100.0, "y": -100.0, "width": 50.0, "height": 30.0},
+    )
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    meta = tracker._get_element_metadata("#btn")
+
+    pct = meta["viewport_pct"]
+    assert pct["y"] == 0.0
+    assert 0.0 <= pct["x"] <= 100.0
+
+
+def test_metadata_scroll_probe_failure_falls_back_to_bbox(tmp_path: Any) -> None:
+    """If the scroll probe fails, degrade gracefully (no scroll correction)."""
+    page_mock = _mock_metadata_page(
+        doc_size=(1000.0, 3000.0),
+        scroll=(0.0, 0.0),
+        bbox={"x": 100.0, "y": 200.0, "width": 50.0, "height": 30.0},
+    )
+
+    def fake_evaluate(expr: str) -> dict[str, float]:
+        if "scrollWidth" in expr:
+            return {"width": 1000.0, "height": 3000.0}
+        raise Exception("page gone")
+
+    page_mock.evaluate.side_effect = fake_evaluate
+    tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    meta = tracker._get_element_metadata("#btn")
+    assert 0.0 <= meta["viewport_pct"]["x"] <= 100.0
+    assert 0.0 <= meta["viewport_pct"]["y"] <= 100.0

@@ -17,6 +17,7 @@ from src.rag_bundled import (
     prune_learned,
     store_stats,
 )
+from src.rag_learn import site_hash
 
 
 class TestBuildBundledPack:
@@ -37,6 +38,30 @@ class TestBuildBundledPack:
         assert any("demoqa" in pg for pg in pages)
         assert any("the-internet" in pg for pg in pages)
         assert any("localhost:8781" in pg for pg in pages)  # mock sites
+
+    def test_golden_patterns_are_site_scoped(self) -> None:
+        """B-047 residual: goldens carry a one-way site_hash from their dataset.
+
+        The +20 golden bonus must be site-scoped like the learned +5. Mock
+        datasets whose ``base_url`` predates B-047 (all three mocks on :8781)
+        get their canonical concurrent-serve ports instead, so the three mocks
+        do not collapse into one bucket.
+        """
+        patterns = build_bundled_patterns()
+        assert patterns
+        hashes = {p.site_hash for p in patterns}
+        # Real sites hash from their base_url domains.
+        assert site_hash("www.saucedemo.com") in hashes
+        assert site_hash("automationexercise.com") in hashes
+        assert site_hash("demoqa.com") in hashes
+        assert site_hash("the-internet.herokuapp.com") in hashes
+        # Mock sites: lv_insurance keeps :8781; banking/ecommerce use the
+        # canonical concurrent-serve ports (8782/8783) — no collision.
+        assert site_hash("localhost:8781") in hashes  # lv_insurance
+        assert site_hash("localhost:8782") in hashes  # banking_mock
+        assert site_hash("localhost:8783") in hashes  # ecommerce_mock
+        assert len(hashes) == 7  # 4 real + 3 mock sites, all distinct
+        assert all(p.site_hash for p in patterns)
 
     def test_bundled_docs_nonempty_and_wellformed(self) -> None:
         chunks = build_bundled_docs()

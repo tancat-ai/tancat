@@ -1,6 +1,23 @@
 # Unsloth Studio Training Runbook (2026-08-09)
 
-**Status:** model downloading, training not yet started
+> ## ⚠️ SUPERSEDED — THIS RUN FAILED (2026-08-11)
+>
+> **This runbook is the plan; it did not succeed.** The Qwen3.6-27B training
+> itself worked (4-bit QLoRA, loss 0.94 → 0.081), but the GGUF export never
+> completed and **no usable fine-tuned model was produced**. All artifacts were
+> deleted.
+>
+> **Why it failed (summary):**
+> - Studio's Train UI silently flips QLoRA 4-bit → 16-bit for Qwen3.6 → 16-bit 27B (55.6 GB) can't fit the ~44 GB usable pool → fused-CE crash. Worked around by a direct script.
+> - 4-bit training works (batch 4 × ctx 1024), but the **GGUF export needs a 16-bit merge (~55 GB) that this machine can't produce**: unsloth's `merged_16bit` save doesn't merge, `merge_and_unload` doesn't exist on this architecture, memory is capped at ~46 GB, and disk peak needs ~110 GB.
+> - Verified dead ends: both BIOS memory modes, page-file tweaks, `PYTORCH_HIP_ALLOC_CONF=expandable_segments` (crashes this HIP build), 8-bit loading (missing transformers class), and Studio env overrides.
+>
+> **Full details + what DID work:** `docs/sessions/2026-08-10_strix_halo_27b_qlora_field_guide.md`
+> **Recommendation:** on a 64 GB Windows box, train a **14B bnb-4bit** model instead — its export fits and the pipeline completes.
+
+---
+
+**Original status:** model downloading, training not yet started
 **Machine:** AMD Ryzen AI MAX+ 395 / Radeon 8060S (Strix Halo), 64 GB unified
 memory (BIOS carves ~48 GB as UMA VRAM; Windows sees ~17 GB system RAM).
 

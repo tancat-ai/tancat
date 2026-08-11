@@ -218,7 +218,7 @@ class PlaceholderScorer:
 
         # RAG golden pattern bonus
         if golden_patterns:
-            score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns)
+            score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
         if site_hash:
             score += PlaceholderScorer._learned_pattern_bonus(element, golden_patterns, site_hash)
 
@@ -694,11 +694,18 @@ class PlaceholderScorer:
     def _golden_pattern_bonus(
         element: dict[str, Any],
         golden_patterns: list,
+        site_hash: str | None = None,
     ) -> int:
         """Apply a bonus when the element's selector matches a golden pattern.
 
         Full selector match → +GOLDEN_PATTERN_BONUS (20).
         Substring/tolerance match → scaled to 10.
+
+        B-047 residual: once seeded with a ``site_hash``, a golden pattern is
+        only trusted for the site it was curated for — cross-site goldens earn
+        nothing (mirrors the learned-pattern gate). Legacy entries with an
+        empty ``site_hash`` stay site-agnostic so existing stores keep working
+        until rebuilt.
         """
         if not golden_patterns:
             return 0
@@ -709,6 +716,9 @@ class PlaceholderScorer:
             if not hasattr(pattern, "selector") or not pattern.selector:
                 continue
             if not hasattr(pattern, "source") or pattern.source != "golden":
+                continue
+            pattern_site = getattr(pattern, "site_hash", "")
+            if pattern_site and pattern_site != site_hash:
                 continue
             if pattern.selector == element_selector:
                 return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * pattern.confidence)

@@ -84,6 +84,33 @@ def build_default_store() -> RAGStore:
 # ---------------------------------------------------------------------------
 
 
+#: Canonical ``host[:port]`` identity for mock datasets whose ``base_url``
+#: predates B-047 (all three mocks pointed at :8781). Real sites and
+#: lv_insurance derive their identity from ``base_url``. These MUST match the
+#: ports ``scripts/synthesize_stories.py`` assigns when it serves the mock
+#: sites concurrently (8781 lv_insurance / 8782 banking / 8783 ecommerce).
+_MOCK_SITE_IDENTITY: dict[str, str] = {
+    "banking_mock": "localhost:8782",
+    "ecommerce_mock": "localhost:8783",
+}
+
+
+def _site_identity_hash(site_name: str, base_url: str) -> str:
+    """One-way hash of a golden pattern's canonical site identity (B-047).
+
+    Golden patterns are site-scoped so a saucedemo golden cannot award a +20
+    bonus while resolving another site. Identity comes from the dataset
+    ``base_url`` domain — except the mock datasets whose ``base_url`` predates
+    B-047 (all three mocks on :8781); those use the canonical concurrent-serve
+    ports. Lazy import: ``src.rag_learn`` imports this module, so importing it
+    at module level would be circular.
+    """
+    from src.rag_learn import domain_from_url, site_hash
+
+    identity = _MOCK_SITE_IDENTITY.get(site_name) or domain_from_url(base_url)
+    return site_hash(identity) if identity else ""
+
+
 def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
     """Parse golden eval dataset JSON files into GoldenPattern entries.
 
@@ -99,6 +126,7 @@ def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
 
     for fpath in json_files:
         data = json.loads(fpath.read_text(encoding="utf-8"))
+        site_identity_hash = _site_identity_hash(data.get("site", ""), data.get("base_url", ""))
         for criterion in data.get("golden_resolutions", []):
             for placeholder in criterion.get("placeholders", []):
                 patterns.append(
@@ -108,6 +136,7 @@ def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
                         expected_locator=placeholder.get("expected_locator", ""),
                         tolerance_selectors=placeholder.get("tolerance_selectors", []),
                         expected_page=placeholder.get("expected_page", ""),
+                        site_hash=site_identity_hash,
                     )
                 )
 

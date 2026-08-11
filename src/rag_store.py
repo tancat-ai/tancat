@@ -50,6 +50,9 @@ class GoldenPattern:
     expected_locator: str  # e.g. "button.add-to-cart"
     tolerance_selectors: list[str] = field(default_factory=list)
     expected_page: str = ""
+    #: One-way sha256 of the dataset site's canonical ``host[:port]`` (B-047
+    #: residual). Empty = legacy site-agnostic golden (still applies anywhere).
+    site_hash: str = ""
 
     @property
     def query_text(self) -> str:
@@ -327,7 +330,10 @@ class MilvusLiteBackend:
             _COLLECTION_NAME,
             [query_vector],
             limit=k,
-            output_fields=["text", "action_type", "selector", "entry_type", "page"],
+            # ``site_hash`` must be returned for the site-scoping gates
+            # (B-047 residual): golden/learned patterns read it at scoring
+            # time — without it every pattern looks site-agnostic.
+            output_fields=["text", "action_type", "selector", "entry_type", "page", "site_hash"],
         )
         if not results or not results[0]:
             return []
@@ -479,6 +485,9 @@ class RAGStore:
                     "selector": p.expected_locator,
                     "entry_type": "golden",
                     "page": p.expected_page,
+                    # B-047 residual: site-scoped goldens only earn a bonus
+                    # on their own site (empty = legacy agnostic).
+                    "site_hash": p.site_hash,
                 },
             )
             for vec, p in zip(vectors, patterns, strict=True)

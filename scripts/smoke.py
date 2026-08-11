@@ -222,6 +222,7 @@ def run_all(json_output: bool = False) -> int:
         ("Skeleton parsing", check_skeleton_parsing),
         ("POM mode smoke", check_pom_mode_smoke),
         ("Orchestrator data model", check_orchestrator_init),
+        ("Artifact validation", check_artifact_validation),
     ]
 
     for cat_name, checker in categories:
@@ -269,6 +270,42 @@ def run_all(json_output: bool = False) -> int:
         print()
 
     return 1 if failed else 0
+
+
+def check_artifact_validation() -> list[Check]:
+    """AI-043 Layer 1: golden report-artifact fixtures must stay valid.
+
+    Runs the deterministic invariants against the fixtures/report_golden corpus:
+    the known-good set must pass, the known-bad sets (legacy pixel coords, NaN
+    duration) must fail — so a regression in the heatmap/Gantt data contract
+    breaks this check instead of shipping a misleading report.
+    """
+    from src.artifact_validation import validate_evidence_artifacts
+    from src.gantt_utils import load_gantt_entries
+    from src.heatmap_utils import _normalise_url
+
+    fixtures = PROJECT_ROOT / "fixtures" / "report_golden"
+    good = validate_evidence_artifacts(fixtures / "heatmap_good", [_normalise_url("https://example.com/page1")])
+    legacy = validate_evidence_artifacts(
+        fixtures / "heatmap_legacy_pixels", [_normalise_url("https://example.com/page1")]
+    )
+    nan_entries = load_gantt_entries(fixtures / "gantt_nan")
+    from src.artifact_validation import validate_gantt_entries
+
+    checks = [
+        Check("[Artifact validation] golden good fixture passes", good.passed, f"{len(good.errors)} error(s)"),
+        Check(
+            "[Artifact validation] legacy pixel fixture flagged",
+            not legacy.passed,
+            "legacy pixel coords must be caught",
+        ),
+        Check(
+            "[Artifact validation] NaN duration flagged",
+            bool(validate_gantt_entries(nan_entries)),
+            "NaN duration must be caught",
+        ),
+    ]
+    return checks
 
 
 def main() -> int:

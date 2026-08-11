@@ -1,6 +1,6 @@
 {
-  "total": 146,
-  "completed": 146,
+  "total": 147,
+  "completed": 147,
   "pending": 0,
   "files": [
     {
@@ -731,6 +731,11 @@
     {
       "source": "src/ui/ui_run_comparison.py",
       "doc": "markdown_docs/src/ui/ui_run_comparison.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/artifact_validation.py",
+      "doc": "markdown_docs/src/artifact_validation.py.md",
       "status": "completed"
     }
   ],

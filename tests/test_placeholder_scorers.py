@@ -799,3 +799,73 @@ class TestLearnedPatternBonus:
         )
         assert base is not None and scored is not None
         assert scored == base  # cross-site learned patterns add nothing
+
+
+class TestGoldenPatternBonus:
+    """B-047 residual: the golden +20 must be site-scoped like the learned +5."""
+
+    @staticmethod
+    def _golden(selector: str, site_hash: str = "abc123", confidence: float = 0.9) -> RetrievedPattern:
+        return RetrievedPattern(
+            description="CLICK: target",
+            selector=selector,
+            action_type="CLICK",
+            confidence=confidence,
+            source="golden",
+            site_hash=site_hash,
+        )
+
+    def test_same_site_full_match(self) -> None:
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._golden_pattern_bonus(el, [self._golden("#login-button")], site_hash="abc123")
+        assert bonus == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
+
+    def test_cross_site_gets_zero(self) -> None:
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._golden_pattern_bonus(
+            el, [self._golden("#login-button", site_hash="other-site")], site_hash="abc123"
+        )
+        assert bonus == 0
+
+    def test_legacy_empty_site_hash_still_applies(self) -> None:
+        """Unseeded stores keep working — empty site_hash = site-agnostic."""
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._golden_pattern_bonus(
+            el, [self._golden("#login-button", site_hash="")], site_hash="abc123"
+        )
+        assert bonus > 0
+
+    def test_unknown_site_skips_scoped_golden(self) -> None:
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._golden_pattern_bonus(el, [self._golden("#login-button")], site_hash=None)
+        assert bonus == 0
+
+    def test_tolerance_match_scaled(self) -> None:
+        el = _element({"selector": "#login-button"})
+        bonus = PlaceholderScorer._golden_pattern_bonus(el, [self._golden("#login")], site_hash="abc123")
+        assert bonus == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.5 * 0.9)
+
+    def test_compute_element_score_site_scopes_golden(self) -> None:
+        el = _element({"selector": "#user-name", "role": "textbox", "tag": "input"})
+        base = PlaceholderScorer.compute_element_score("FILL", "username", el, "#user-name", 0)
+        same = PlaceholderScorer.compute_element_score(
+            "FILL",
+            "username",
+            el,
+            "#user-name",
+            0,
+            golden_patterns=[self._golden("#user-name")],
+            site_hash="abc123",
+        )
+        cross = PlaceholderScorer.compute_element_score(
+            "FILL",
+            "username",
+            el,
+            "#user-name",
+            0,
+            golden_patterns=[self._golden("#user-name", site_hash="other-site")],
+            site_hash="abc123",
+        )
+        assert base is not None and same is not None and cross is not None
+        assert same - base == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
+        assert cross == base  # cross-site golden adds nothing

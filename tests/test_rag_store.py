@@ -659,6 +659,39 @@ class TestMilvusLiteRAGStore:
         assert top.action_type == "CLICK"
         assert top.selector == "#checkout"
 
+    def test_golden_site_hash_roundtrips(self, ml_store: RAGStore) -> None:
+        """B-047 residual: a golden's site_hash must survive the store round-trip.
+
+        Regression: ``MilvusLiteBackend.search`` omitted ``site_hash`` from
+        ``output_fields``, so every retrieved pattern looked site-agnostic and
+        the site-scoping gates could not fire.
+        """
+        ml_store.add_patterns(
+            [
+                GoldenPattern(
+                    action="FILL",
+                    description="username",
+                    expected_locator="#user-name",
+                    site_hash="abc123",
+                )
+            ]
+        )
+        results = ml_store.retrieve("FILL: username", k=3)
+        assert any(r.selector == "#user-name" and r.site_hash == "abc123" for r in results)
+
+    def test_learned_site_hash_roundtrips(self, ml_store: RAGStore) -> None:
+        """AI-035 Phase 2: a learned pattern's site_hash must round-trip too."""
+        ml_store.upsert_pattern(
+            LearnedPattern(
+                action_type="FILL",
+                description="password",
+                locator="#password",
+                site_hash="abc123",
+            )
+        )
+        results = ml_store.retrieve("FILL: password", k=3)
+        assert any(r.selector == "#password" and r.site_hash == "abc123" for r in results)
+
     def test_upsert_pattern_insert_dedup_hit(self, ml_store: RAGStore) -> None:
         """AI-035: learned patterns insert once, dedup bumps hit_count."""
         pattern = LearnedPattern(

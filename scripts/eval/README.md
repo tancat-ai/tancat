@@ -174,3 +174,28 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 Baseline file: `scripts/eval/baseline.json`
 
 To refresh scraped data: `python scripts/eval/eval_resolver.py --mode pipeline`
+
+---
+
+## Model Baseline Comparison (before/after fine-tuning)
+
+Diff two `eval_model_baseline.py` outputs in one command — the runbook §6
+workflow (capture baseline → train → re-capture → compare):
+
+```bash
+# after training + model swap, re-capture the 'after' baseline
+python scripts/eval/eval_model_baseline.py --save training_data/model_baseline_finetuned.json
+
+# compare (auto-discovers the two model_baseline_*.json files; older = before)
+python scripts/eval/compare_model_baselines.py
+
+# explicit paths + machine-readable output
+python scripts/eval/compare_model_baselines.py --before A.json --after B.json --json
+```
+
+- Matches stories by `story_head`, so regressions/improvements are attributed
+  per story, not just as aggregate rates.
+- Exit codes: `0` = no regressions, `2` = regressions detected (same
+  convention as the eval-harness quality gate), `1` = usage/IO error.
+- Aggregates: valid-skeleton rate, criteria-cover rate, hallucinated-login
+  rate, skip lines, placeholders, LLM errors.
