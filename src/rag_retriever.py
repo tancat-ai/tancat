@@ -106,11 +106,12 @@ class RAGRetriever:
         """Compute a scoring bonus for an element based on pattern overlap.
 
         Returns ``GOLDEN_PATTERN_BONUS`` (20) for a direct golden selector
-        match, scaled by pattern confidence for partial (tolerance) matches.
-        Same-site learned patterns (``source == "learned"`` and matching
-        ``site_hash``) earn ``SAME_SITE_LEARNED_BONUS`` (5) instead — cross-
-        site learned patterns earn nothing (they could be wrong here).
-        Returns 0 when no patterns match.
+        match, scaled by pattern confidence for partial (tolerance) matches —
+        site-scoped to the golden's own site when seeded with a ``site_hash``
+        (B-047 residual). Same-site learned patterns (``source == "learned"``
+        and matching ``site_hash``) earn ``SAME_SITE_LEARNED_BONUS`` (5)
+        instead — cross-site learned patterns earn nothing (they could be
+        wrong here). Returns 0 when no patterns match.
 
         The bonus is designed to tip the scale between similarly-scored
         candidates (e.g. two elements scoring ~25 each) without overriding
@@ -129,6 +130,11 @@ class RAGRetriever:
             if not pattern.selector:
                 continue
             if pattern.source == "golden":
+                # B-047 residual: site-scoped goldens (seeded with a
+                # site_hash) only earn a bonus on their own site; legacy
+                # entries without one stay site-agnostic.
+                if pattern.site_hash and pattern.site_hash != site_hash:
+                    continue
                 # Direct selector match
                 if pattern.selector == element_selector:
                     return float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * pattern.confidence

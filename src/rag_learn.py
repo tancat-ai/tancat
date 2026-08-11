@@ -17,8 +17,10 @@ full URLs, story text, credentials, or screenshots. All learning is local.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -147,6 +149,53 @@ def learn_from_evidence(
             exists,
         )
     return {"inserted": inserted, "exists": exists}
+
+
+def learn_from_evidence_sidecars(
+    evidence_dir: str | Path,
+    *,
+    store: RAGStore | None = None,
+) -> dict[str, int]:
+    """Sweep ``evidence/*.evidence.json`` sidecars and learn passed steps.
+
+    B-047 deferred fix (parent-side sweep): the pytest subprocess hook
+    (``generated_tests/conftest.py``) cannot open the Milvus-lite store while
+    a resolve-and-learn parent process holds it — every subprocess
+    ``learn_from_evidence`` call raises ``DataDirLockedError`` and is
+    swallowed by the conftest try/except, so batch runs learn nothing. This
+    does the same learning IN the parent, after a subprocess run wrote its
+    sidecars: no lock contention, same dedup + site scoping.
+
+    Mirrors the conftest gate exactly: only sidecars whose test fully passed
+    (``test.status == "passed"``) are learned; ``learn_from_evidence`` then
+    enforces the per-step ``result.status == "passed"`` filter.
+
+    Never raises — learning is best-effort (corrupt sidecars are counted in
+    ``errors`` and skipped, matching the "never break the run" contract).
+
+    Returns:
+        ``{"sidecars": K, "inserted": N, "exists": M, "errors": E}`` — K
+        sidecar files scanned, N new patterns, M dedup'd repeats (hit
+        bumped), E unreadable/skipped files.
+    """
+    sidecars = list(Path(evidence_dir).glob("*.evidence.json"))
+    totals = {"sidecars": len(sidecars), "inserted": 0, "exists": 0, "errors": 0}
+    for sidecar in sidecars:
+        try:
+            data = json.loads(sidecar.read_text(encoding="utf-8"))
+            if str((data.get("test") or {}).get("status", "")) != "passed":
+                continue
+            result = learn_from_evidence(data.get("steps") or [], store=store)
+            totals["inserted"] += result["inserted"]
+            totals["exists"] += result["exists"]
+        except Exception as exc:  # best-effort — never break the run
+            totals["errors"] += 1
+            logger.warning(
+                "Evidence sidecar sweep failed for %s (non-fatal): %s",
+                sidecar,
+                exc,
+            )
+    return totals
 
 
 # ---------------------------------------------------------------------------

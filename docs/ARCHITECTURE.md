@@ -170,6 +170,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/evidence_report.py` | Evidence-specific report helpers. Extracted from `report_utils.py`. |
 | `src/evidence_tracker.py` (`EvidenceTracker`) | Captures runtime diagnostics during test execution: failure_note, diagnosis, screenshots. Delegates to `evidence_serializer.py` and `screenshot_capture.py`. |
 | `src/evidence_loader.py` | Loads evidence JSON from test packages for report generation. |
+| `src/artifact_validation.py` | AI-043 — deterministic validation of report artifacts (heatmap overlays, Gantt timelines, Plotly figures): heatmap points must be document-% in [0,100], embedded HTML payloads parseable/finite/consistent, Gantt durations finite ≥0, no NaN/None/empty chart series. Consumed by `scripts/validate_report_artifacts.py` + Gate-0 smoke checks over `fixtures/report_golden/`. |
 | `src/evidence_serializer.py` | Evidence JSON serialization (sidecar file writing). Extracted from `evidence_tracker.py`. |
 | `src/screenshot_capture.py` | Screenshot capture and annotation utilities. Extracted from `evidence_tracker.py`. |
 | `src/failure_reporter.py` | Generates "Failure Diagnostics" sections with page URL, failure note, suggested alternatives, available elements, screenshot paths. Uses `LocatorScorer` for diagnostic scoring. |

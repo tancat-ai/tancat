@@ -1,0 +1,45 @@
+{
+ "schema_version": "1.0",
+ "test": {
+  "name": "test_legacy",
+  "condition_ref": "TC-01",
+  "story_ref": "S01",
+  "status": "passed",
+  "duration_s": 1.0
+ },
+ "page": {
+  "url": "https://example.com/page1"
+ },
+ "steps": [
+  {
+   "type": "navigate",
+   "label": "Navigate to https://example.com/page1",
+   "value": "https://example.com/page1",
+   "locator": null,
+   "screenshot": null,
+   "element": {},
+   "url": "https://example.com/page1",
+   "result": {
+    "status": "passed",
+    "run_count": 1
+   }
+  },
+  {
+   "type": "click",
+   "label": "Submit",
+   "locator": "button#submit-btn",
+   "element": {
+    "viewport_pct": {
+     "x": 273.5,
+     "y": 702.34
+    },
+    "element_id": "submit-btn",
+    "tag": "button"
+   },
+   "result": {
+    "status": "passed",
+    "run_count": 1
+   }
+  }
+ ]
+}

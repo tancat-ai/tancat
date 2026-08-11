@@ -215,13 +215,25 @@ class EvidenceTracker:
             doc_size = self.page.evaluate(
                 "() => ({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
             )
-            dw = doc_size["width"]
-            dh = doc_size["height"]
+            dw = max(doc_size["width"], 1)
+            dh = max(doc_size["height"], 1)
 
             raw_bbox = loc.bounding_box()
             if raw_bbox:
-                # bounding_box() is relative to the main frame (the whole page).
-                # We record these coordinates as a percentage of the WHOLE document.
+                # bounding_box() is relative to the viewport; the evidence
+                # screenshot is full-page (whole document), so the recorded
+                # percentages must be document-relative. Without the scroll
+                # correction, markers land off-page — e.g. a negative y for an
+                # element scrolled above the viewport (AI-043 validator caught
+                # y=-4.02 in production evidence).
+                try:
+                    scroll = self.page.evaluate("() => ({ x: window.scrollX, y: window.scrollY })")
+                    scroll_x = float(scroll.get("x", 0))
+                    scroll_y = float(scroll.get("y", 0))
+                except Exception:
+                    scroll_x = 0.0
+                    scroll_y = 0.0
+
                 center_x = raw_bbox["x"] + (raw_bbox["width"] / 2)
                 center_y = raw_bbox["y"] + (raw_bbox["height"] / 2)
 
@@ -234,10 +246,14 @@ class EvidenceTracker:
                     "center_y": center_y,
                 }
 
-                # Record center point as percentage of FULL document
+                # Record center point as percentage of FULL document, clamped
+                # to [0, 100] so fixed/edge-positioned elements can never paint
+                # an off-page marker.
+                doc_center_x = center_x + scroll_x
+                doc_center_y = center_y + scroll_y
                 viewport_pct = {
-                    "x": (center_x / dw) * 100,
-                    "y": (center_y / dh) * 100,
+                    "x": min(100.0, max(0.0, (doc_center_x / dw) * 100)),
+                    "y": min(100.0, max(0.0, (doc_center_y / dh) * 100)),
                 }
         except Exception:
             pass

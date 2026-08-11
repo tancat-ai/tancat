@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from src.placeholder_scorers import PlaceholderScorer
 from src.rag_retriever import RAGRetriever
 from src.rag_store import (
     GoldenPattern,
@@ -267,6 +268,36 @@ class TestRAGRetrieverLearnedScoring:
             site_hash="abc123",
         )
         assert golden > learned
+
+    def test_cross_site_golden_no_bonus(self) -> None:
+        """B-047 residual: a site-scoped golden earns nothing off-site."""
+        retriever = RAGRetriever(None)
+        golden = RetrievedPattern(
+            description="CLICK: login button",
+            selector="#login-button",
+            action_type="CLICK",
+            confidence=0.9,
+            source="golden",
+            site_hash="saucedemo-hash",
+        )
+        assert retriever.scoring_bonus_for({"selector": "#login-button"}, [golden], site_hash="banking-hash") == 0.0
+        # ...and its own site still earns the full bonus.
+        assert (
+            retriever.scoring_bonus_for({"selector": "#login-button"}, [golden], site_hash="saucedemo-hash")
+            == float(PlaceholderScorer.GOLDEN_PATTERN_BONUS) * 0.9
+        )
+
+    def test_legacy_ungated_golden_still_applies(self) -> None:
+        """Empty site_hash goldens (unseeded stores) stay site-agnostic."""
+        retriever = RAGRetriever(None)
+        golden = RetrievedPattern(
+            description="CLICK: login button",
+            selector="#login-button",
+            action_type="CLICK",
+            confidence=0.9,
+            source="golden",
+        )
+        assert retriever.scoring_bonus_for({"selector": "#login-button"}, [golden], site_hash="any-site") > 0.0
 
 
 class TestRAGRetrieverEmptyStore:

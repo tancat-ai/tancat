@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.rag_learn import (
     _step_to_pattern,
     domain_from_url,
     learn_from_evidence,
+    learn_from_evidence_sidecars,
     learn_from_patch,
     pattern_from_patch,
     site_hash,
@@ -419,3 +422,84 @@ class TestLearnFromPatch:
             store=store,
         )
         assert result == {"inserted": 0, "exists": 0}
+
+
+class TestLearnFromEvidenceSidecars:
+    """B-047 deferred fix: parent-side sweep of evidence sidecars.
+
+    The pytest subprocess hook cannot open the Milvus-lite store while a
+    resolve-and-learn parent holds it, so the parent sweeps
+    ``evidence/*.evidence.json`` and learns them itself — same gate (only
+    fully-passed tests), no lock contention.
+    """
+
+    def _write_sidecar(
+        self,
+        evidence_dir: Path,
+        name: str,
+        *,
+        status: str = "passed",
+        steps: list[dict[str, object]] | None = None,
+    ) -> Path:
+        data = {
+            "schema_version": "1.0",
+            "test": {"name": name, "status": status},
+            "steps": steps if steps is not None else [_step()],
+        }
+        path = evidence_dir / f"{name}.evidence.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def test_learns_steps_from_passed_sidecar(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        self._write_sidecar(
+            tmp_path,
+            "test_01_login",
+            steps=[_step(label="username"), _step(label="password")],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result == {"sidecars": 1, "inserted": 2, "exists": 0, "errors": 0}
+        assert store.upsert_pattern.call_count == 2
+
+    def test_skips_failed_sidecar(self, tmp_path: Path) -> None:
+        """Mirrors the conftest gate: only fully-passing runs are learned."""
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        self._write_sidecar(tmp_path, "test_failed", status="failed")
+        self._write_sidecar(tmp_path, "test_passed", status="passed")
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result == {"sidecars": 2, "inserted": 1, "exists": 0, "errors": 0}
+        assert store.upsert_pattern.call_count == 1
+
+    def test_empty_dir_returns_zeros(self, tmp_path: Path) -> None:
+        assert learn_from_evidence_sidecars(tmp_path) == {
+            "sidecars": 0,
+            "inserted": 0,
+            "exists": 0,
+            "errors": 0,
+        }
+
+    def test_missing_dir_returns_zeros(self, tmp_path: Path) -> None:
+        assert learn_from_evidence_sidecars(tmp_path / "nope") == {
+            "sidecars": 0,
+            "inserted": 0,
+            "exists": 0,
+            "errors": 0,
+        }
+
+    def test_corrupt_sidecar_counted_not_raised(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        (tmp_path / "bad.evidence.json").write_text("{not json", encoding="utf-8")
+        self._write_sidecar(tmp_path, "good", status="passed")
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result == {"sidecars": 2, "inserted": 1, "exists": 0, "errors": 1}
+
+    def test_dedup_repeat_bumps_hit_in_sweep(self, tmp_path: Path) -> None:
+        store = MagicMock()
+        store.upsert_pattern.side_effect = [("inserted", 1), ("exists", 3)]
+        self._write_sidecar(tmp_path, "one", status="passed")
+        self._write_sidecar(tmp_path, "two", status="passed")
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result == {"sidecars": 2, "inserted": 1, "exists": 1, "errors": 0}

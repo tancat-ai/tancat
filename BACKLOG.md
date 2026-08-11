@@ -1458,11 +1458,17 @@ baseline captured with full reproducibility envelope. Full runbook in
 
 ---
 
-## 🆕 AI-041 — Unsloth Studio QLoRA Training Run (IN PROGRESS — model downloading)
+## 🆕 AI-041 — Unsloth Studio QLoRA Training Run (❌ FAILED / CLOSED 2026-08-11)
 
-**Status:** 🟡 in-progress — Qwen3.6-27B downloading in Studio (2026-08-09); training not yet started
+**Status:** ❌ failed — training worked (Qwen3.6-27B 4-bit QLoRA, loss 0.94→0.081) but the GGUF export never completed; no usable model produced; all artifacts deleted (2026-08-11)
 **Priority:** High — the payoff for AI-040's corpus + baseline
 **Spec:** Unsloth Studio (localhost:8888), `training_data/`, `scripts/eval/eval_model_baseline.py`
+
+**Why it failed:** the GGUF export needs a 16-bit merge (~55 GB) that a 64 GB Windows box can't produce — unsloth's `merged_16bit` save doesn't merge, `merge_and_unload` doesn't exist on the Qwen3.5 architecture, memory caps at ~46 GB, disk peak needs ~110 GB. Studio's Train UI additionally flips 4-bit→16-bit for Qwen3.6 (fused-CE crash), which a direct script worked around.
+
+**Field guide (full write-up incl. what worked + dead ends):** `docs/sessions/2026-08-10_strix_halo_27b_qlora_field_guide.md`
+
+**Recommendation for a future attempt:** train a **14B bnb-4bit** model on this hardware (export fits: ~28 GB merge + ~9 GB GGUF) — or retry the 27B on a machine with ≥110 GB free disk AND ≥55 GB addressable memory (e.g. Linux/128 GB Strix Halo).
 
 **What:** Fine-tune a QLoRA on the clean training corpus (158 skeleton + 96
 resolved + 90 resolution rows), export to GGUF, swap into the pipeline, and

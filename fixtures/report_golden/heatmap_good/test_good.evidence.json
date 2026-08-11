@@ -1,0 +1,62 @@
+{
+ "schema_version": "1.0",
+ "test": {
+  "name": "test_good",
+  "condition_ref": "TC-01",
+  "story_ref": "S01",
+  "status": "passed",
+  "duration_s": 2.5
+ },
+ "page": {
+  "url": "https://example.com/page1"
+ },
+ "steps": [
+  {
+   "type": "navigate",
+   "label": "Navigate to https://example.com/page1",
+   "value": "https://example.com/page1",
+   "locator": null,
+   "screenshot": null,
+   "element": {},
+   "url": "https://example.com/page1",
+   "result": {
+    "status": "passed",
+    "run_count": 1
+   }
+  },
+  {
+   "type": "click",
+   "label": "Submit",
+   "locator": "button#submit-btn",
+   "element": {
+    "viewport_pct": {
+     "x": 40.0,
+     "y": 60.0
+    },
+    "element_id": "submit-btn",
+    "tag": "button"
+   },
+   "result": {
+    "status": "passed",
+    "run_count": 2
+   }
+  },
+  {
+   "type": "assertion",
+   "label": "confirmation shown",
+   "locator": "#confirmation",
+   "element": {
+    "viewport_pct": {
+     "x": 50.0,
+     "y": 70.0
+    },
+    "element_id": "confirmation",
+    "tag": "div"
+   },
+   "result": {
+    "status": "failed",
+    "run_count": 1
+   }
+  }
+ ]
+}

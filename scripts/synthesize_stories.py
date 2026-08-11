@@ -24,6 +24,9 @@ Pipeline (reuses the project's own machinery end-to-end):
         resolved test against the live site. Passing steps are automatically
         written into the RAG store as verified ``LearnedPattern`` entries
         (via ``generated_tests/conftest.py``'s ``learn_from_evidence`` hook)
+        — the subprocess hook is lock-blocked while this parent holds the
+        Milvus store (B-047 follow-up), so the parent additionally sweeps the
+        site's ``evidence/*.evidence.json`` sidecars and learns them itself
         — growing retrieval memory for future runs, exactly like a real
         pipeline run. Run with ``RAG_ENABLED=0`` for cold-start (no golden
         pattern bonus) resolutions — the resolver's known weak spot.
@@ -62,6 +65,7 @@ from typing import Any
 
 from src.llm_client import LLMClient
 from src.prompt_utils import count_conditions, prepare_conditions_for_generation
+from src.rag_learn import learn_from_evidence_sidecars
 from src.skeleton_parser import SkeletonParser
 from src.test_generator import TestGenerator
 
@@ -593,6 +597,21 @@ async def resolve_and_learn(
                             "output": final_code,
                         }
                     )
+
+        # B-047 deferred fix (parent-side sweep): the pytest subprocess hook
+        # can't open the Milvus-lite store while THIS parent holds it
+        # (DataDirLockedError, silently swallowed by the conftest try/except),
+        # so batch resolve-and-learn runs previously learned nothing. Sweep
+        # the site's evidence sidecars here, in the parent process — same
+        # dedup + site scoping as the hook, no lock contention.
+        learned = learn_from_evidence_sidecars(site_dir / "evidence")
+        if learned["sidecars"]:
+            print(
+                f"  [learn] {site}: swept {learned['sidecars']} sidecar(s) "
+                f"-> {learned['inserted']} new pattern(s), "
+                f"{learned['exists']} repeat(s) (hit bumped), "
+                f"{learned['errors']} error(s)"
+            )
 
     # Persist resolved fine-tuning rows — APPEND so multiple resolve_and_learn
     # calls (e.g. mocks phase + live phase) accumulate in one file instead of
