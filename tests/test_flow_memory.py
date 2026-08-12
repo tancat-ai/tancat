@@ -512,3 +512,198 @@ def test_goto_skips_when_flow_memory_disabled_or_empty(tmp_path: Path) -> None:
     # (pre-existing behavior — zero interference from the flow feature)
     assert "https://unseen.com/dashboard.html" not in result
     assert "{{GOTO:dashboard}}" in result
+
+
+# ---------------------------------------------------------------------------
+# AI-042-F3: suite-level chaining (cross-test flows)
+# ---------------------------------------------------------------------------
+
+
+def _suite_sidecar(name: str, steps: list[dict[str, Any]], status: str = "passed") -> dict[str, Any]:
+    return {"test": {"name": name, "status": status}, "steps": steps}
+
+
+def _dashboard_test() -> list[dict[str, Any]]:
+    """Passing test: navigate to login, sign in → lands on dashboard."""
+    return [
+        _navigate("https://suite-site.com/login"),
+        _step("click", label="Click: sign in", url="https://suite-site.com/dashboard.html"),
+    ]
+
+
+def _products_test() -> list[dict[str, Any]]:
+    return [_navigate("https://suite-site.com/products")]
+
+
+class TestSidecarRoutes:
+    def test_entry_and_terminal_from_urls(self) -> None:
+        from src.flow_memory import _sidecar_routes
+
+        entry, terminal, site = _sidecar_routes(_suite_sidecar("t1", _dashboard_test()))
+        assert (entry, terminal, site) == ("login", "dashboard", "suite-site.com")
+
+    def test_old_sidecars_fall_back_to_navigate_values(self) -> None:
+        """Pre-B-033 sidecars have url=None on steps — value carries the page."""
+        from src.flow_memory import _sidecar_routes
+
+        steps = [
+            {"type": "navigate", "value": "https://site.com/products", "url": None, "result": {"status": "passed"}},
+        ]
+        entry, terminal, site = _sidecar_routes(_suite_sidecar("t1", steps))
+        assert (entry, terminal) == ("products", "products")
+        assert site == "site.com"
+
+    def test_home_routes_skipped(self) -> None:
+        from src.flow_memory import _sidecar_routes
+
+        steps = [
+            _navigate("https://site.com/"),
+            _step("click", label="Click: browse", url="https://site.com/products.html"),
+        ]
+        entry, terminal, site = _sidecar_routes(_suite_sidecar("t1", steps))
+        assert (entry, terminal) == ("products", "products")
+
+
+class TestChainSuiteTransitions:
+    def test_chains_terminal_to_entry_across_tests(self) -> None:
+        from src.flow_memory import chain_suite_transitions
+
+        pairs = [
+            ("test_01_login[chromium].evidence.json", _suite_sidecar("test_01", _dashboard_test())),
+            ("test_02_products[chromium].evidence.json", _suite_sidecar("test_02", _products_test())),
+        ]
+        transitions = chain_suite_transitions(pairs)
+        assert [(t.from_route, t.action, t.description, t.to_route) for t, _ in transitions] == [
+            ("dashboard", "GOTO", "products", "products")
+        ]
+        assert {site for _, site in transitions} == {"suite-site.com"}
+
+    def test_mixed_site_pairs_never_chain(self) -> None:
+        from src.flow_memory import chain_suite_transitions
+
+        pairs = [
+            ("test_01[chromium].evidence.json", _suite_sidecar("test_01", _dashboard_test())),
+            (
+                "test_02[chromium].evidence.json",
+                _suite_sidecar("test_02", [_navigate("https://other-site.com/products")]),
+            ),
+        ]
+        assert chain_suite_transitions(pairs) == []
+
+    def test_home_entry_and_no_movement_dropped(self) -> None:
+        from src.flow_memory import chain_suite_transitions
+
+        # entry is home (fresh-session navigate to site root) → skipped
+        home_entry = [
+            ("test_01[chromium].evidence.json", _suite_sidecar("test_01", _dashboard_test())),
+            ("test_02[chromium].evidence.json", _suite_sidecar("test_02", [_navigate("https://suite-site.com/")])),
+        ]
+        assert chain_suite_transitions(home_entry) == []
+
+        # no movement: terminal == entry → skipped (test_02 starts on dashboard,
+        # same page the login test ended on)
+        same = [
+            ("test_01[chromium].evidence.json", _suite_sidecar("test_01", _dashboard_test())),
+            (
+                "test_02[chromium].evidence.json",
+                _suite_sidecar("test_02", [_navigate("https://suite-site.com/dashboard.html")]),
+            ),
+        ]
+        assert chain_suite_transitions(same) == []
+
+    def test_missing_routes_dropped(self) -> None:
+        from src.flow_memory import chain_suite_transitions
+
+        empty = [
+            ("test_01[chromium].evidence.json", _suite_sidecar("test_01", [])),
+            ("test_02[chromium].evidence.json", _suite_sidecar("test_02", _products_test())),
+        ]
+        assert chain_suite_transitions(empty) == []
+
+
+class TestLearnSuiteFlows:
+    def test_learns_suite_chains_with_source(self, tmp_path: Path) -> None:
+        evidence_dir = tmp_path / "evidence"
+        evidence_dir.mkdir()
+        (evidence_dir / "test_01_login[chromium].evidence.json").write_text(
+            json.dumps(_suite_sidecar("test_01", _dashboard_test())), encoding="utf-8"
+        )
+        (evidence_dir / "test_02_products[chromium].evidence.json").write_text(
+            json.dumps(_suite_sidecar("test_02", _products_test())), encoding="utf-8"
+        )
+
+        store = FlowMemoryStore(tmp_path / "flow_memory.json")
+        totals = store.learn_suite_flows(evidence_dir)
+        assert totals["inserted"] == 1
+        pattern = store.query("dashboard", action="GOTO", description="products")[0]
+        assert pattern.source == "suite_chain"
+        assert pattern.to_route == "products"
+        assert store.stats()["suite_chains"] == 1
+
+    def test_failed_test_breaks_the_chain(self, tmp_path: Path) -> None:
+        evidence_dir = tmp_path / "evidence"
+        evidence_dir.mkdir()
+        (evidence_dir / "test_01_login[chromium].evidence.json").write_text(
+            json.dumps(_suite_sidecar("test_01", _dashboard_test())), encoding="utf-8"
+        )
+        # test_02 failed — the adjacent chain must not form (only fully-passing pairs)
+        (evidence_dir / "test_02_products[chromium].evidence.json").write_text(
+            json.dumps(_suite_sidecar("test_02", _products_test(), status="failed")), encoding="utf-8"
+        )
+
+        store = FlowMemoryStore(tmp_path / "flow_memory.json")
+        totals = store.learn_suite_flows(evidence_dir)
+        assert totals["inserted"] == 0
+
+    def test_corrupt_sidecar_counts_not_raises(self, tmp_path: Path) -> None:
+        evidence_dir = tmp_path / "evidence"
+        evidence_dir.mkdir()
+        (evidence_dir / "test_01[chromium].evidence.json").write_text("{ nope", encoding="utf-8")
+        (evidence_dir / "test_02[chromium].evidence.json").write_text(
+            json.dumps(_suite_sidecar("test_02", _products_test())), encoding="utf-8"
+        )
+        store = FlowMemoryStore(tmp_path / "flow_memory.json")
+        totals = store.learn_suite_flows(evidence_dir)
+        assert totals["errors"] == 1
+        assert totals["inserted"] == 0  # corrupt test_01 can't form a chain
+
+    def test_dedup_bumps_hits_and_merges_with_within_test(self, tmp_path: Path) -> None:
+        store = FlowMemoryStore(tmp_path / "flow_memory.json")
+        evidence_dir = tmp_path / "evidence"
+        evidence_dir.mkdir()
+        for _ in range(2):
+            (evidence_dir / "test_01_login[chromium].evidence.json").write_text(
+                json.dumps(_suite_sidecar("test_01", _dashboard_test())), encoding="utf-8"
+            )
+            (evidence_dir / "test_02_products[chromium].evidence.json").write_text(
+                json.dumps(_suite_sidecar("test_02", _products_test())), encoding="utf-8"
+            )
+            store.learn_suite_flows(evidence_dir)
+        pattern = store.query("dashboard", action="GOTO", description="products")[0]
+        assert pattern.hit_count == 2
+        assert pattern.source == "suite_chain"
+
+
+# ---------------------------------------------------------------------------
+# AI-042-F2: sidebar summary helper
+# ---------------------------------------------------------------------------
+
+
+class TestFormatFlowStatsSummary:
+    def test_formats_all_fields(self) -> None:
+        from src.flow_memory import format_flow_stats_summary
+
+        text = format_flow_stats_summary(
+            {"patterns": 113, "sites": 6, "cross_site": 8, "suite_chains": 24, "within_test": 89}
+        )
+        assert "**Patterns:** 113" in text
+        assert "**Sites:** 6" in text
+        assert "**Cross-site:** 8" in text
+        assert "**Suite chains:** 24" in text
+
+    def test_tolerates_missing_keys(self) -> None:
+        from src.flow_memory import format_flow_stats_summary
+
+        text = format_flow_stats_summary({})
+        assert "**Patterns:** 0" in text
+        assert "**Suite chains:** 0" in text

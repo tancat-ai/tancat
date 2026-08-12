@@ -183,6 +183,7 @@ class FlowPattern:
     to_route: str
     hit_count: int = 0
     site_hashes: set[str] = field(default_factory=set)
+    source: str = "within_test"  # "within_test" | "suite_chain" (AI-042-F3)
 
     @property
     def site_count(self) -> int:
@@ -251,6 +252,86 @@ def flow_transitions(steps: Iterable[dict[str, Any]]) -> list[tuple[FlowTransiti
 
 
 # ---------------------------------------------------------------------------
+# Suite-level chaining (AI-042-F3)
+# ---------------------------------------------------------------------------
+
+
+def _sidecar_routes(sidecar: dict[str, Any]) -> tuple[str | None, str | None, str]:
+    """(entry_route, terminal_route, site_identity) of one sidecar.
+
+    Entry = route of the first step (its URL, else the navigate value);
+    terminal = route of the last step with a URL, else the last navigate
+    value (older sidecars predate the B-033 per-step URL field). Site
+    identity from the first URL seen.
+    """
+    steps = sidecar.get("steps", [])
+    if not isinstance(steps, list) or not steps:
+        return (None, None, "")
+
+    def _route_of(step: dict[str, Any]) -> str | None:
+        url = str(step.get("url", "") or step.get("value", "") or "")
+        if not url:
+            return None
+        route = normalize_route(url)
+        return route if route != "home" else None
+
+    site_identity = ""
+    entry: str | None = None
+    terminal: str | None = None
+    for _idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        url = str(step.get("url", "") or step.get("value", "") or "")
+        if not site_identity and url:
+            site_identity = domain_from_url(url)
+        route = _route_of(step)
+        if route is None:
+            continue
+        if entry is None:
+            entry = route
+        terminal = route  # last non-home route wins
+    return (entry, terminal, site_identity)
+
+
+def chain_suite_transitions(sidecars: list[tuple[str, dict[str, Any]]]) -> list[tuple[FlowTransition, str]]:
+    """Chain adjacent passing tests into GOTO transitions (AI-042-F3).
+
+    ``sidecars`` are ``(filename, data)`` pairs, ordered by name (test_01,
+    test_02, …). For each adjacent pair (N, N+1): the terminal page of N and
+    the entry page of N+1 produce ``(terminal_N, GOTO, entry_N1, entry_N1)`` —
+    "from the dashboard, a GOTO to products is a known suite step". The
+    description is the destination route name, so GOTO placeholders match it
+    by vocabulary.
+
+    Guardrails: both tests fully passed (caller filters), same site only,
+    entry not home, no-movement chains (from == to) dropped, missing routes
+    dropped.
+    """
+    transitions: list[tuple[FlowTransition, str]] = []
+    for (_name_n, data_n), (_name_n1, data_n1) in zip(sidecars, sidecars[1:], strict=False):
+        entry_n, terminal_n, site_n = _sidecar_routes(data_n)
+        entry_n1, _terminal_n1, site_n1 = _sidecar_routes(data_n1)
+        if not (terminal_n and entry_n1):
+            continue
+        if site_n != site_n1 or not site_n:
+            continue  # mixed-site dir — never chain across sites
+        if terminal_n == entry_n1 or entry_n1 == "home":
+            continue
+        transitions.append(
+            (
+                FlowTransition(
+                    from_route=terminal_n,
+                    action="GOTO",
+                    description=entry_n1,
+                    to_route=entry_n1,
+                ),
+                site_n,
+            )
+        )
+    return transitions
+
+
+# ---------------------------------------------------------------------------
 # Store
 # ---------------------------------------------------------------------------
 
@@ -297,6 +378,7 @@ class FlowMemoryStore:
                     to_route=str(entry["to_route"]),
                     hit_count=int(entry.get("hit_count", 1)),
                     site_hashes={str(s) for s in entry.get("site_hashes", [])},
+                    source=str(entry.get("source", "within_test")),
                 )
                 self._patterns[pattern.key] = pattern
             self._last_learned_at = data.get("last_learned_at")
@@ -317,6 +399,7 @@ class FlowMemoryStore:
                     "to_route": p.to_route,
                     "hit_count": p.hit_count,
                     "site_hashes": sorted(p.site_hashes),
+                    "source": p.source,
                 }
                 for p in self._patterns.values()
             ],
@@ -333,10 +416,12 @@ class FlowMemoryStore:
 
     # -- learning ----------------------------------------------------------
 
-    def upsert_flow(self, transition: FlowTransition, site: str) -> str:
+    def upsert_flow(self, transition: FlowTransition, site: str, *, source: str = "within_test") -> str:
         """Add one transition for one site; dedup bumps hit_count + site set.
 
         Returns ``"inserted"`` or ``"exists"`` (repeat — hit bumped).
+        ``source`` distinguishes within-test transitions from suite-level
+        chains (AI-042-F3); a repeat keeps the original source.
         """
         key = transition.key
         pattern = self._patterns.get(key)
@@ -348,6 +433,7 @@ class FlowMemoryStore:
                 to_route=transition.to_route,
                 hit_count=1,
                 site_hashes={site},
+                source=source,
             )
             return "inserted"
         pattern.hit_count += 1
@@ -395,6 +481,47 @@ class FlowMemoryStore:
             except Exception as exc:
                 totals["errors"] += 1
                 logger.warning("Flow sidecar sweep failed for %s (non-fatal): %s", sidecar, exc)
+        return totals
+
+    def learn_suite_flows(self, evidence_dir: str | Path) -> dict[str, int]:
+        """AI-042-F3: learn suite-level navigation chains from a package.
+
+        Within-test transitions only see the journey inside one test function
+        (most sidecars contain a single navigation — the suite-level shape
+        login test → products test → cart test is invisible to them). This
+        chains **adjacent, fully-passing tests in name order**: the terminal
+        page of test N becomes the from-route of a GOTO transition to test
+        N+1's entry page. The description is the destination route name, so
+        the learned fact reads "from the dashboard, a GOTO to products is a
+        known suite step".
+
+        Guardrails: same-site pairs only (a mixed evidence dir never chains),
+        entry must not be home, no-movement chains dropped, both tests fully
+        passed. Never raises; corrupt sidecars count toward ``errors``.
+        """
+        sidecars = list(Path(evidence_dir).glob("*.evidence.json"))
+        totals = {"sidecars": len(sidecars), "inserted": 0, "exists": 0, "errors": 0}
+
+        passing: list[tuple[str, dict[str, Any]]] = []
+        for sidecar in sidecars:
+            try:
+                data = json.loads(sidecar.read_text(encoding="utf-8"))
+                if str((data.get("test") or {}).get("status", "")) == _LEARNED_STATUS:
+                    passing.append((sidecar.name, data))
+            except Exception as exc:
+                totals["errors"] += 1
+                logger.warning("Suite-flow sweep failed for %s (non-fatal): %s", sidecar, exc)
+
+        for transition, site_identity in chain_suite_transitions(passing):
+            if not site_identity:
+                continue
+            if self.upsert_flow(transition, site_hash(site_identity), source="suite_chain") == "inserted":
+                totals["inserted"] += 1
+            else:
+                totals["exists"] += 1
+        if totals["inserted"] or totals["exists"]:
+            self._last_learned_at = _now_iso()
+            self.save()
         return totals
 
     # -- querying ----------------------------------------------------------
@@ -449,6 +576,8 @@ class FlowMemoryStore:
             "patterns": len(self._patterns),
             "sites": len(sites),
             "cross_site": sum(1 for p in self._patterns.values() if p.site_count >= 2),
+            "suite_chains": sum(1 for p in self._patterns.values() if p.source == "suite_chain"),
+            "within_test": sum(1 for p in self._patterns.values() if p.source == "within_test"),
             "last_learned_at": self._last_learned_at,
             "path": str(self._path),
         }
@@ -458,6 +587,20 @@ def _now_iso() -> str:
     from datetime import UTC, datetime
 
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def format_flow_stats_summary(stats: dict[str, Any]) -> str:
+    """One-line sidebar summary of flow-memory stats (AI-042-F2).
+
+    Pure string helper so the Streamlit renderer stays thin and the format is
+    unit-testable.
+    """
+    return (
+        f"**Patterns:** {int(stats.get('patterns', 0))} · "
+        f"**Sites:** {int(stats.get('sites', 0))} · "
+        f"**Cross-site:** {int(stats.get('cross_site', 0))} · "
+        f"**Suite chains:** {int(stats.get('suite_chains', 0))}"
+    )
 
 
 # ---------------------------------------------------------------------------

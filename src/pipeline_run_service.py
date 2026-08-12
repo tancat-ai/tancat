@@ -98,6 +98,18 @@ class PipelineRunService:
         # Persist run result to disk for historical comparison
         if persist:
             persist_run_result(run_result, test_package=saved_path)
+            # AI-042-F3: suite-level flow chaining — after a real run, chain
+            # the package's fully-passing tests into GOTO transitions (terminal
+            # of test N → entry of test N+1). Within-test flows are learned per
+            # test by the conftest hook; this closes the suite-level shape for
+            # the UI/CLI product paths (synthesize_stories does it for training
+            # runs). Best-effort — never breaks the run.
+            try:
+                from src.flow_memory import FlowMemoryStore
+
+                FlowMemoryStore().learn_suite_flows(Path(package_dir) / "evidence")
+            except Exception:
+                pass
 
         return PipelineExecutionResult(
             command=command,
