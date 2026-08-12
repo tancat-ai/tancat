@@ -738,3 +738,116 @@ def test_learn_suite_flows_chains_in_name_order_regardless_of_glob(monkeypatch: 
     pattern = store.query("dashboard", action="GOTO", description="products")
     assert len(pattern) == 1, f"expected dashboard→products chain, got {store.stats()}"
     assert pattern[0].to_route == "products"
+
+
+def test_page_state_assert_resolves_via_flow_memory(tmp_path: Path) -> None:
+    """The B-021 page-state ASSERT path also uses the flow fallback: 'cart page
+    title' asserted from the products page resolves via a learned
+    products→cart flow into expect(page).to_have_url(...)."""
+    import asyncio
+
+    from src.flow_memory import FlowMemoryStore, FlowTransition
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    store = FlowMemoryStore(tmp_path / "flow_memory.json")
+    store.upsert_flow(FlowTransition("products", "GOTO", "cart", "cart"), "site-a.com")
+    store.upsert_flow(FlowTransition("products", "GOTO", "cart", "cart"), "site-b.com")
+
+    skeleton = "page.locator('{{ASSERT:cart page title}}')\n"
+    scraped_data = {
+        "https://unseen.com/products": [{"selector": "h1", "tag": "h1", "text": "Products"}],
+        "https://unseen.com/cart.html": [{"selector": "h2", "tag": "h2", "text": "Cart"}],
+    }
+    journey = TestJourney(
+        test_name="test_flow_assert",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=1,
+                raw_line="page.locator('{{ASSERT:cart page title}}')",
+                placeholders=[
+                    PlaceholderUse(
+                        action="ASSERT",
+                        description="cart page title",
+                        token="{{ASSERT:cart page title}}",
+                        line_number=1,
+                        raw_line="page.locator('{{ASSERT:cart page title}}')",
+                    )
+                ],
+            )
+        ],
+    )
+
+    orch = PlaceholderOrchestrator(starting_url="https://unseen.com/products", flow_store=store)
+    orch.url_resolver = _NullUrlResolver()  # type: ignore[assignment]
+    orch.resolver = _NullResolver()  # type: ignore[assignment]
+
+    async def run() -> str:
+        return await orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="products")],
+            seed_urls=["https://unseen.com/products"],
+            scraped_data=scraped_data,
+            scraped_errors={},
+        )
+
+    result = asyncio.run(run())
+    assert 'expect(page).to_have_url("https://unseen.com/cart.html")' in result
+
+
+def test_page_state_assert_ignores_flow_memory_without_match(tmp_path: Path) -> None:
+    """With no matching flow, the page-state ASSERT falls through to element
+    resolution — it must NOT emit a flow-derived to_have_url."""
+    import asyncio
+
+    from src.flow_memory import FlowMemoryStore
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    store = FlowMemoryStore(tmp_path / "flow_memory.json")  # empty — no flows
+
+    skeleton = "page.locator('{{ASSERT:cart page title}}')\n"
+    scraped_data = {
+        "https://unseen.com/products": [{"selector": "h1", "tag": "h1", "text": "Products"}],
+        "https://unseen.com/cart.html": [{"selector": "h2", "tag": "h2", "text": "Cart"}],
+    }
+    journey = TestJourney(
+        test_name="test_flow_assert_off",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=1,
+                raw_line="page.locator('{{ASSERT:cart page title}}')",
+                placeholders=[
+                    PlaceholderUse(
+                        action="ASSERT",
+                        description="cart page title",
+                        token="{{ASSERT:cart page title}}",
+                        line_number=1,
+                        raw_line="page.locator('{{ASSERT:cart page title}}')",
+                    )
+                ],
+            )
+        ],
+    )
+
+    orch = PlaceholderOrchestrator(starting_url="https://unseen.com/products", flow_store=store)
+    orch.url_resolver = _NullUrlResolver()  # type: ignore[assignment]
+    orch.resolver = _NullResolver()  # type: ignore[assignment]
+
+    async def run() -> str:
+        return await orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="products")],
+            seed_urls=["https://unseen.com/products"],
+            scraped_data=scraped_data,
+            scraped_errors={},
+        )
+
+    result = asyncio.run(run())
+    assert "to_have_url" not in result
