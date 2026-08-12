@@ -512,6 +512,11 @@ class FlowMemoryStore:
                 totals["errors"] += 1
                 logger.warning("Suite-flow sweep failed for %s (non-fatal): %s", sidecar, exc)
 
+        # ``Path.glob`` order is filesystem-dependent (sorted on Windows, not
+        # guaranteed on Linux) — the chain MUST follow test-name order, so sort
+        # explicitly (CI caught the reversed-chain bug on Linux).
+        passing.sort(key=lambda item: item[0])
+
         for transition, site_identity in chain_suite_transitions(passing):
             if not site_identity:
                 continue
