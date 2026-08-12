@@ -21,6 +21,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from src.artifact_validation import ArtifactValidationResult, validate_evidence_artifacts
 from src.gantt_utils import safe_read_sidecar
@@ -61,6 +62,33 @@ def _report(result: ArtifactValidationResult, evidence_dir: Path, urls: list[str
     print(f"  -> {len(result.errors)} error(s), {len(result.warnings)} warning(s)")
 
 
+def _run_layers(evidence_dir: Path, urls: list[str], page: Any | None) -> ArtifactValidationResult:
+    """Layer 1/2 deterministic invariants always; Layer 3 live alignment when a
+    browser page is supplied (``--full``)."""
+    result = validate_evidence_artifacts(evidence_dir, urls)
+    if page is None:
+        return result
+
+    from src.artifact_validation import ArtifactIssue
+    from src.heatmap_alignment import validate_heatmap_alignment
+
+    for url in urls:
+        try:
+            page.goto(url, wait_until="load", timeout=30_000)
+        except Exception as exc:
+            result.issues.append(
+                ArtifactIssue(
+                    artifact="heatmap-alignment",
+                    severity="error",
+                    message=f"could not open {url}: {exc}",
+                    context={"url": url},
+                )
+            )
+            continue
+        result.issues.extend(validate_heatmap_alignment(evidence_dir, url, page=page))
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -73,6 +101,13 @@ def main() -> int:
         help="Page URL(s) to heatmap-validate (default: from sidecar navigations)",
     )
     parser.add_argument("--json", action="store_true", help="Print machine-readable report")
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Layer 3: open each page URL in a real browser and assert every heatmap "
+        "overlay box centre hits the element it claims (requires playwright + network, "
+        "or the mock sites running locally)",
+    )
     args = parser.parse_args()
 
     dirs = [args.evidence_dir] if args.evidence_dir else _discover_evidence_dirs()
@@ -82,17 +117,34 @@ def main() -> int:
 
     all_results: list[dict[str, object]] = []
     exit_code = 0
-    for evidence_dir in dirs:
-        urls = args.page_url or _page_urls_from_sidecars(evidence_dir)
-        result = validate_evidence_artifacts(evidence_dir, urls)
+
+    def handle_dir(result: ArtifactValidationResult, evidence_dir: Path, urls: list[str]) -> None:
+        nonlocal exit_code
         all_results.append(
             {"evidence_dir": str(evidence_dir), "errors": len(result.errors), "warnings": len(result.warnings)}
         )
         if args.json:
-            continue
+            return
         _report(result, evidence_dir, urls)
         if result.errors:
             exit_code = 1
+
+    if args.full:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page(viewport={"width": 1280, "height": 720})
+                for evidence_dir in dirs:
+                    urls = args.page_url or _page_urls_from_sidecars(evidence_dir)
+                    handle_dir(_run_layers(evidence_dir, urls, page), evidence_dir, urls)
+            finally:
+                browser.close()
+    else:
+        for evidence_dir in dirs:
+            urls = args.page_url or _page_urls_from_sidecars(evidence_dir)
+            handle_dir(_run_layers(evidence_dir, urls, None), evidence_dir, urls)
 
     if args.json:
         print(json.dumps(all_results, indent=2))

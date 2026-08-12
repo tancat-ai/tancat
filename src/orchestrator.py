@@ -75,6 +75,7 @@ class TestOrchestrator:
         pom_mode: bool = False,
         provider: str = "",
         model: str = "",
+        flow_store: Any | None = None,
     ) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()
@@ -84,6 +85,21 @@ class TestOrchestrator:
         self._pom_mode = pom_mode
         self._provider = provider
         self._model = model
+        # AI-042: cross-site flow memory — always-on in the product (empty store
+        # is a no-op), disabled for unit tests via FLOW_MEMORY_ENABLED=0 so the
+        # suite stays hermetic (mirrors the RAG_ENABLED=0 pattern). Never blocks
+        # generation — a store failure just disables flow resolution.
+        if flow_store is None and os.getenv("FLOW_MEMORY_ENABLED", "1") != "0":
+            try:
+                from src.flow_memory import FlowMemoryStore
+
+                flow_store = FlowMemoryStore()
+            except Exception:
+                logger.warning(
+                    "Flow memory store unavailable — continuing without flow resolution",
+                    exc_info=True,
+                )
+        self._flow_store = flow_store
         # RAG: optionally wire retrieval-augmented scoring
         rag_retriever = self._build_rag_retriever()
         # B-036 Phase 2: first-run bundled auto-seed (idempotent marker).
@@ -106,6 +122,7 @@ class TestOrchestrator:
             pom_mode=pom_mode,
             generator=test_generator.client,
             rag_retriever=rag_retriever,
+            flow_store=flow_store,
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None

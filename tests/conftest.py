@@ -12,6 +12,9 @@ import pytest
 # retrieval is exercised explicitly by tests/test_rag_retriever.py and by
 # the eval harness (scripts/eval/), which is the resolution-accuracy gate.
 os.environ.setdefault("RAG_ENABLED", "0")
+# AI-042: flow memory must not consult machine-local evidence/flow_memory.json
+# in unit tests (same hermeticity principle as RAG_ENABLED=0).
+os.environ.setdefault("FLOW_MEMORY_ENABLED", "0")
 
 
 @pytest.fixture

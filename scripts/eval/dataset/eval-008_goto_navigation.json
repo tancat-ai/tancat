@@ -1,0 +1,161 @@
+{
+  "id": "eval-008",
+  "site": "banking_mock",
+  "base_url": "http://localhost:8781/index.html",
+  "mock_dir": "mock_sites/banking",
+  "title": "GOTO-flavored banking flow (AI-042-F1: exercise flow-memory navigation resolution)",
+  "user_story": "As a customer, I want to sign in to my online banking, then go directly to the transfer page and the bill payments page to manage my money.",
+  "conditions": [
+    "1. Navigate to the bank sign-in page",
+    "2. Sign in with username and password",
+    "3. Verify the accounts dashboard is loaded",
+    "4. Go to the transfer page",
+    "5. Fill in the transfer amount and submit",
+    "6. Verify the transfer success message appears",
+    "7. Navigate to bill payments",
+    "8. Fill in the payment amount and submit",
+    "9. Verify the payment success message appears"
+  ],
+  "golden_resolutions": [
+    {
+      "criterion_index": 0,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "bank sign-in page loaded",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "tolerance_selectors": ["expect(page).to_have_url", "#user-name"],
+          "expected_page": "http://localhost:8781/index.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 1,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "username",
+          "expected_locator": "#user-name",
+          "tolerance_selectors": ["input[name=\"username\"]"],
+          "expected_page": "http://localhost:8781/index.html"
+        },
+        {
+          "action": "FILL",
+          "description": "password",
+          "expected_locator": "#password",
+          "tolerance_selectors": ["input[name=\"password\"]"],
+          "expected_page": "http://localhost:8781/index.html"
+        },
+        {
+          "action": "CLICK",
+          "description": "sign in button",
+          "expected_locator": "#login-button",
+          "tolerance_selectors": ["button[type=\"submit\"]"],
+          "expected_page": "http://localhost:8781/dashboard.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 2,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "accounts dashboard loaded",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/dashboard.html\")",
+          "tolerance_selectors": ["expect(page).to_have_url"],
+          "expected_page": "http://localhost:8781/dashboard.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 3,
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "go to the transfer page",
+          "expected_type": "url",
+          "expected_locator": "http://localhost:8781/transfer.html",
+          "tolerance_selectors": ["http://localhost:8781/transfer.html"],
+          "expected_page": "http://localhost:8781/dashboard.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 4,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "amount",
+          "expected_locator": "#amount",
+          "tolerance_selectors": ["input[name=\"amount\"]"],
+          "expected_page": "http://localhost:8781/transfer.html"
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Funds button",
+          "expected_locator": "#transfer-submit",
+          "tolerance_selectors": ["button[type=\"submit\"]"],
+          "expected_page": "http://localhost:8781/transfer_success.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 5,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "transfer success message",
+          "expected_locator": "#transfer-success-title",
+          "tolerance_selectors": ["h2#transfer-success-title"],
+          "expected_page": "http://localhost:8781/transfer_success.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 6,
+      "placeholders": [
+        {
+          "action": "GOTO",
+          "description": "navigate to bill payments",
+          "expected_type": "url",
+          "expected_locator": "http://localhost:8781/payments.html",
+          "tolerance_selectors": ["http://localhost:8781/payments.html"],
+          "expected_page": "http://localhost:8781/dashboard.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 7,
+      "placeholders": [
+        {
+          "action": "FILL",
+          "description": "payment amount",
+          "expected_locator": "#payment-amount",
+          "tolerance_selectors": ["input[name=\"payment-amount\"]"],
+          "expected_page": "http://localhost:8781/payments.html"
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay Bill button",
+          "expected_locator": "#pay-bill",
+          "tolerance_selectors": ["button[type=\"submit\"]"],
+          "expected_page": "http://localhost:8781/payment_success.html"
+        }
+      ]
+    },
+    {
+      "criterion_index": 8,
+      "placeholders": [
+        {
+          "action": "ASSERT",
+          "description": "payment success message",
+          "expected_locator": "#payment-success-title",
+          "tolerance_selectors": ["h2#payment-success-title"],
+          "expected_page": "http://localhost:8781/payment_success.html"
+        }
+      ]
+    }
+  ]
+}

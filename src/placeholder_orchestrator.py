@@ -106,6 +106,7 @@ class PlaceholderOrchestrator:
         pom_mode: bool = False,
         generator: AsyncGeneratorLike | None = None,
         rag_retriever: RAGRetriever | None = None,
+        flow_store: Any | None = None,
     ) -> None:
         """Initialise the placeholder resolution orchestrator.
 
@@ -117,10 +118,13 @@ class PlaceholderOrchestrator:
             generator: B-020 LLM generator for semantic candidate ranking.
             rag_retriever: Optional RAG retriever for golden-pattern scoring.
                 When ``None``, RAG is disabled (zero overhead).
+            flow_store: AI-042 cross-site flow memory store. When ``None``, flow
+                resolution is disabled (zero overhead).
         """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
         self._pom_mode = pom_mode
+        self._flow_store = flow_store
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.url_resolver = UrlResolver()
@@ -903,6 +907,25 @@ class PlaceholderOrchestrator:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
 
+            # Step 2.5 (AI-042): cross-site flow memory — learned navigation
+            # shape rescues otherwise-unresolvable GOTO/URL assertions. Runs
+            # after all site-specific resolution (UrlResolver / resolve_url)
+            # so flow memory only fills gaps, never overrides site evidence.
+            if self._flow_store is not None and current_url:
+                from src.flow_memory import flow_resolved_url
+
+                flow_url = flow_resolved_url(
+                    self._flow_store,
+                    description=description,
+                    from_url=current_url,
+                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
+                )
+                if flow_url:
+                    flow_url = normalize_url(flow_url)
+                    await self._ensure_scraped(flow_url, scraped_data, scraped_errors)
+                    logger.info("Flow memory resolved '%s' → %s (from %s)", description, flow_url, current_url)
+                    return repr(flow_url), flow_url, None
+
             # Step 3: Heuristic fallback
             if current_url:
                 heuristic = heuristic_url_from_description(current_url, description)
@@ -941,6 +964,22 @@ class PlaceholderOrchestrator:
                 resolved_url = normalize_url(resolved_url)
                 logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
                 return f'expect(page).to_have_url("{resolved_url}")', None, "url"
+            # AI-042: cross-site flow memory — page-state asserts share GOTO
+            # intent; learned navigation shape can rescue the URL when
+            # site-specific DOM resolution finds nothing.
+            if self._flow_store is not None and current_url:
+                from src.flow_memory import flow_resolved_url
+
+                flow_url = flow_resolved_url(
+                    self._flow_store,
+                    description=description,
+                    from_url=current_url,
+                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
+                )
+                if flow_url:
+                    flow_url = normalize_url(flow_url)
+                    logger.info("Flow memory resolved URL assertion '%s' → %s", description, flow_url)
+                    return f'expect(page).to_have_url("{flow_url}")', None, "url"
             logger.debug("URL assertion failed for '%s' — falling through to element resolution", description)
 
         excluded = self._build_excluded_selectors(
