@@ -548,6 +548,35 @@ class PlaceholderOrchestrator:
                                     )
                                 )
                                 continue
+                            # AI-042: flow-memory fallback for page-state asserts —
+                            # learned cross-site navigation shape can rescue the
+                            # URL when site-specific resolution finds nothing
+                            # (mirrors the same fallback in
+                            # ``_resolve_placeholder_for_current_page``).
+                            if self._flow_store is not None and current_url:
+                                from src.flow_memory import flow_resolved_url
+
+                                flow_url = flow_resolved_url(
+                                    self._flow_store,
+                                    description=description,
+                                    from_url=current_url,
+                                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
+                                )
+                                if flow_url:
+                                    flow_url = normalize_url(flow_url)
+                                    logger.info("Flow memory resolved URL assertion '%s' → %s", description, flow_url)
+                                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                                        (
+                                            placeholder.token,
+                                            action,
+                                            f'expect(page).to_have_url("{flow_url}")',
+                                            description,
+                                            fill_value,
+                                            current_url,
+                                            "url",
+                                        )
+                                    )
+                                    continue
                         # Defer element-based ASSERT for batch resolution.
                         deferred_asserts.append(
                             {

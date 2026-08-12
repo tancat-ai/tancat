@@ -1,7 +1,36 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-11 (doc audit: Phase 4 Export TODO cleared — export panel + CLI menu shipped 2026-08-03)
+Last updated: 2026-08-12 (testing hardening: coverage gate, ASSERT flow-fallback test, script-hook guards; learning-loop E2E tracked below)
+
+---
+
+## 🆕 Learning-loop E2E test (AI-042 learning loop, end-to-end)
+
+**Status:** 🆕 new (2026-08-12) — NOT a roadmap item; tracked here so the gap stays visible
+**Priority:** Medium — proves the feature loop the product is built on
+**Estimated sessions:** 0.5-1 (needs a pytest subprocess + mock site + browser)
+
+**What:** one integration test that runs a tiny generated pytest package (the REAL
+`generated_tests/conftest.py`) against a local mock site and asserts the full
+learning loop end-to-end:
+
+1. tests pass → conftest teardown learns within-test flows
+2. the package post-run hook (`PipelineRunService` / verify_production) chains
+   suite flows
+3. `evidence/flow_memory.json` gains the patterns (dedup + hit bumps)
+4. a follow-up resolution (orchestrator GOTO/URL step 2.5) resolves using the
+   learned flows
+
+Today the loop is tested piecewise with mocks: `flow_memory` unit tests (98%),
+the run-service wiring test (patched store), orchestrator integration tests.
+No single test proves the loop works with the REAL conftest + real run service
++ real store file.
+
+**Why it matters:** the 2026-08 test-pack audit's core lesson — green units don't
+equal a working product; the expensive bugs (B-029..B-035) lived at the
+integration seams. The learning loop is exactly such a seam: conftest → store →
+resolver.
 
 ---
 
