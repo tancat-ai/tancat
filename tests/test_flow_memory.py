@@ -707,3 +707,34 @@ class TestFormatFlowStatsSummary:
         text = format_flow_stats_summary({})
         assert "**Patterns:** 0" in text
         assert "**Suite chains:** 0" in text
+
+
+def test_learn_suite_flows_chains_in_name_order_regardless_of_glob(monkeypatch: Any, tmp_path: Path) -> None:
+    """CI regression (Linux): ``Path.glob`` order is filesystem-dependent — the
+    sweep must sort by test name before chaining, or the chain forms reversed
+    (products→login instead of dashboard→products)."""
+    from pathlib import Path as _Path
+
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    # written in name order, but force glob to return REVERSE order
+    (evidence_dir / "test_01_login[chromium].evidence.json").write_text(
+        json.dumps(_suite_sidecar("test_01", _dashboard_test())), encoding="utf-8"
+    )
+    (evidence_dir / "test_02_products[chromium].evidence.json").write_text(
+        json.dumps(_suite_sidecar("test_02", _products_test())), encoding="utf-8"
+    )
+    real_glob = _Path.glob
+
+    def reversed_glob(self: _Path, pattern: str) -> list[Any]:
+        return sorted(real_glob(self, pattern), reverse=True)
+
+    monkeypatch.setattr(_Path, "glob", reversed_glob)
+
+    store = FlowMemoryStore(tmp_path / "flow_memory.json")
+    totals = store.learn_suite_flows(evidence_dir)
+    assert totals["inserted"] == 1
+    # the chain must follow NAME order: dashboard (end of test_01) → products
+    pattern = store.query("dashboard", action="GOTO", description="products")
+    assert len(pattern) == 1, f"expected dashboard→products chain, got {store.stats()}"
+    assert pattern[0].to_route == "products"
