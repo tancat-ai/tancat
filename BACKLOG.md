@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-07 (B-042 locator-repair indent fix + B-043 real run-history dropdown counts)
+Last updated: 2026-08-11 (doc audit: Phase 4 Export TODO cleared — export panel + CLI menu shipped 2026-08-03)
 
 ---
 
@@ -283,7 +283,7 @@ differs from the golden key's expected format, causing a comparison failure.
 | Resolver restructure Phase 0–1 | **Complete** | Dead methods removed from `placeholder_resolver.py` |
 | Resolver restructure Phase 2 | **Partial** | Pass 1 (CLICK/FILL + ASSERT text), Pass 2 structural, Pass 3 scoring+LLM; pass logging added |
 | AI-019 | **Superseded** | Skeleton uses placeholders; `code_postprocessor` injects `evidence_tracker` — no LLM evidence rules needed |
-| Phase 4 Export (core) | **Complete** | `ExportMode` enum, `ExportService.export()`, `strip_evidence_from_test_code()`, `strip_evidence_from_pom()`. 28 tests. **TODO:** Streamlit panel + CLI menu. |
+| Phase 4 Export (core) | **Complete** | `ExportMode` enum, `ExportService.export()`, `strip_evidence_from_test_code()`, `strip_evidence_from_pom()`. 28 tests. Streamlit panel + CLI menu shipped (2026-08-03 export gate session — B-031/B-032, `scripts/export_gate.py` 9/9 gates). |
 
 **Still open (high level):** (none at this time)
 

@@ -612,6 +612,16 @@ async def resolve_and_learn(
                 f"{learned['exists']} repeat(s) (hit bumped), "
                 f"{learned['errors']} error(s)"
             )
+        # AI-042: learn cross-site flows from the same sidecar sweep (plain
+        # JSON store — no Milvus lock contention).
+        try:
+            from src.flow_memory import FlowMemoryStore
+
+            flow_learned = FlowMemoryStore().learn_from_sidecars(site_dir / "evidence")
+            if flow_learned["inserted"] or flow_learned["exists"]:
+                print(f"  [learn] {site}: flows -> {flow_learned['inserted']} new, {flow_learned['exists']} repeat(s)")
+        except Exception:
+            pass
 
     # Persist resolved fine-tuning rows — APPEND so multiple resolve_and_learn
     # calls (e.g. mocks phase + live phase) accumulate in one file instead of

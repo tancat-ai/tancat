@@ -92,3 +92,12 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
             # A repeat (dedup) is a silent hit bump; a failure means the
             # next run retries. See docs/plans/AI-035_B036_P3_plan.md §7.
             pass
+        # AI-042: learn cross-site flow transitions from the same passing run
+        # (login → dashboard → cart → checkout navigation shape generalizes
+        # across sites even though locators don't). Same best-effort contract.
+        try:
+            from src.flow_memory import FlowMemoryStore
+
+            FlowMemoryStore().learn_from_evidence(tracker.steps)
+        except Exception:
+            pass

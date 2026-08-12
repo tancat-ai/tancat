@@ -146,13 +146,38 @@ def _resolve_placeholder(
     expected_page: str,
     element_matcher: Any,
     rag_retriever: Any | None = None,
+    flow_store: Any | None = None,
+    expected_type: str | None = None,
 ) -> str | None:
     """Resolve a single placeholder using ElementMatcher's multi-pass pipeline.
+
+    Args:
+        expected_type: Golden-key classification ("url_assertion", "url", …).
+            When set for URL-class placeholders, flow memory (AI-042) resolves
+            navigation intent before element matching — a GOTO has no DOM
+            element to match.
+        flow_store: AI-042 cross-site flow memory store. ``None`` disables the
+            flow path (baseline behavior).
 
     Returns:
         Resolved locator string, or None if not found.
     """
     from src.placeholder_scorers import PlaceholderScorer
+
+    # AI-042-F1: URL-class placeholders (GOTO / URL-assertion) — navigation
+    # intent has no DOM element to match, so resolve via cross-site flow
+    # memory first, using the golden's ``expected_page`` as the from-context.
+    if flow_store is not None and expected_page and (action in ("GOTO", "URL") or expected_type == "url_assertion"):
+        from src.flow_memory import flow_resolved_url
+
+        flow_url = flow_resolved_url(
+            flow_store,
+            description=description,
+            from_url=expected_page,
+            scraped_urls=pages_data.keys() if isinstance(pages_data, dict) else [],
+        )
+        if flow_url:
+            return flow_url
 
     # Filter to the expected page if specified
     if expected_page and expected_page in pages_data:
@@ -247,6 +272,16 @@ async def run_resolver_eval(
     from src.element_matcher import ElementMatcher
     from src.placeholder_resolver import PlaceholderResolver
 
+    # AI-042: the resolver harness exercises flow memory too — construct the
+    # workspace store (empty/missing → flows disabled, baseline behavior).
+    flow_store: Any | None = None
+    try:
+        from src.flow_memory import FlowMemoryStore
+
+        flow_store = FlowMemoryStore()
+    except Exception:
+        pass
+
     placeholders = _load_golden_placeholders()
     resolver = PlaceholderResolver()
     element_matcher = ElementMatcher(resolver, generator=None)
@@ -269,6 +304,8 @@ async def run_resolver_eval(
             expected_page=ph["expected_page"],
             element_matcher=element_matcher,
             rag_retriever=rag_retriever,
+            flow_store=flow_store,
+            expected_type=ph.get("expected_type"),
         )
 
         expected = ph["expected_locator"]
