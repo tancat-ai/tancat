@@ -620,6 +620,15 @@ async def resolve_and_learn(
             flow_learned = FlowMemoryStore().learn_from_sidecars(site_dir / "evidence")
             if flow_learned["inserted"] or flow_learned["exists"]:
                 print(f"  [learn] {site}: flows -> {flow_learned['inserted']} new, {flow_learned['exists']} repeat(s)")
+            # AI-042-F3: suite-level chains (adjacent passing tests -> GOTO
+            # transitions) — the bigger surface, since most tests contain a
+            # single navigation.
+            flow_chains = FlowMemoryStore().learn_suite_flows(site_dir / "evidence")
+            if flow_chains["inserted"] or flow_chains["exists"]:
+                print(
+                    f"  [learn] {site}: suite chains -> {flow_chains['inserted']} new, "
+                    f"{flow_chains['exists']} repeat(s)"
+                )
         except Exception:
             pass
 

@@ -34,12 +34,12 @@ the page-state ASSERT fallback), `generated_tests/conftest.py` teardown hook,
 
 ## Module Metadata
 
-- **Lines:** ~440
+- **Lines:** ~520
 - **Imports:** `json`, `logging`, `os`, `re`, `dataclasses`, `pathlib`,
   `typing`, `urllib.parse`, `src.rag_learn` (`domain_from_url`, `site_hash`),
   `src.storage` (`get_storage`)
 - **Spec:** roadmap item AI-042 (Tier 4 §16) — cross-site flow memory
-- **Shipped:** 2026-08-12
+- **Shipped:** 2026-08-12 (suite chaining AI-042-F3 same day)
 
 ## Public API
 
@@ -77,15 +77,20 @@ property.
 ### `FlowMemoryStore`
 JSON-file store (`evidence/flow_memory.json`, atomic writes, corrupt-tolerant
 load):
-- `upsert_flow(transition, site)` — dedup bumps hit_count + site set
+- `upsert_flow(transition, site, *, source=...)` — dedup bumps hit_count +
+  site set; `source` distinguishes `within_test` from `suite_chain`
 - `learn_from_evidence(steps)` — passed-only learning with per-transition
   site identity
 - `learn_from_sidecars(evidence_dir)` — sweep (gates on
   `test.status == "passed"`; never raises)
+- `learn_suite_flows(evidence_dir)` — **AI-042-F3**: chains adjacent
+  fully-passing tests in name order into GOTO transitions (terminal page of
+  test N → entry page of test N+1, description = destination route name;
+  same-site pairs only, home/no-movement dropped)
 - `query(from_route, action=None, description=None)` — ranked by
   (site_count, hit_count)
 - `route_hints(from_route, *, min_sites=1)` — `[(to_route, hits, sites)]`
-- `stats()` / `clear()`
+- `stats()` (incl. `suite_chains` / `within_test` split) / `clear()`
 
 ### `flow_resolved_url(store, *, description, from_url, scraped_urls, min_sites=1) -> str | None`
 The consumption hook: which scraped destination route do flows say is
@@ -93,6 +98,10 @@ reachable from the current page for this description? Description tokens
 match against both learned action labels and the destination-route
 vocabulary (so "dashboard page is loaded" matches a flow whose `to_route`
 is "dashboard").
+
+### `format_flow_stats_summary(stats) -> str`
+One-line sidebar summary (AI-042-F2): Patterns · Sites · Cross-site · Suite
+chains — the pure helper behind `SidebarConfig._render_flow_memory()`.
 
 ## Design Notes
 

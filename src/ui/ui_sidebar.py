@@ -120,6 +120,7 @@ class SidebarConfig:
                 save_setting(SETTING_WORKSPACE, workspace)
 
         SidebarConfig._render_learned_patterns()
+        SidebarConfig._render_flow_memory()
 
         return {"ocr_backend": ocr_backend, "workspace": workspace}
 
@@ -166,6 +167,54 @@ class SidebarConfig:
 
                     pruned = prune_learned()
                     st.sidebar.success(f"Pruned {pruned} learned pattern(s).")
+                except Exception as exc:
+                    st.sidebar.error(f"Prune failed: {exc}")
+                st.session_state[prune_key] = False
+
+    @staticmethod
+    def _render_flow_memory() -> None:
+        """AI-042-F2: flow-memory stats + prune (parity with the RAG "Learned
+        Patterns" section above).
+
+        Shows the navigation-shape memory the conftest/sweep hooks learn from
+        passing runs: pattern count, distinct sites, cross-site (>=2 sites)
+        and suite-chain patterns, plus a two-step prune that clears the whole
+        flow store (all flows are learned — there is no golden/docs tier to
+        keep, unlike RAG). Best-effort: a missing store degrades to a note.
+        """
+        try:
+            from src.flow_memory import FlowMemoryStore, format_flow_stats_summary
+
+            store = FlowMemoryStore()
+            stats = store.stats()
+        except Exception:
+            st.sidebar.caption("Flow Memory: store unavailable.")
+            return
+
+        if int(stats.get("patterns", 0)) == 0:
+            st.sidebar.caption("Flow Memory: no flows learned yet — run a passing suite to learn navigation shape.")
+            return
+
+        st.sidebar.subheader("Flow Memory")
+        st.sidebar.caption(format_flow_stats_summary(stats))
+
+        prune_key = "prune_flows_confirm"
+        if st.sidebar.button(
+            "Prune learned flows",
+            type="secondary",
+            help=(
+                "Delete flows learned from your runs (navigation-shape memory). "
+                "RAG learned patterns, golden patterns and docs stay."
+            ),
+            key="prune_flows_button",
+        ):
+            st.session_state[prune_key] = True
+        if st.session_state.get(prune_key, False):
+            st.sidebar.caption("Click again to confirm pruning all learned flows.")
+            if st.sidebar.button("Yes — prune learned flows", type="primary", key="prune_flows_confirm_btn"):
+                try:
+                    store.clear()
+                    st.sidebar.success("Pruned all learned flows.")
                 except Exception as exc:
                     st.sidebar.error(f"Prune failed: {exc}")
                 st.session_state[prune_key] = False

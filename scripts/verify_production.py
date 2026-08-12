@@ -381,6 +381,16 @@ async def verify_site(
         if proc.stderr:
             (output_dir / "pytest_stderr.txt").write_text(proc.stderr, encoding="utf-8")
 
+        # AI-042-F3: chain the suite's fully-passing tests into GOTO flows
+        # (same hook as the UI/CLI run service — keeps the product gate's
+        # evidence feeding flow memory too). Best-effort, never breaks the run.
+        try:
+            from src.flow_memory import FlowMemoryStore
+
+            FlowMemoryStore().learn_suite_flows(output_dir / "evidence")
+        except Exception:
+            pass
+
     except subprocess.TimeoutExpired as exc:
         # The suite cap fired — salvage whatever completed so the verdict is
         # informative instead of a bare "timeout" gate.

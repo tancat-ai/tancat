@@ -204,3 +204,80 @@ evidence on a sibling port (8782, from resolve_and_learn runs) vs the eval's
 mock, so it exercises the hook rather than proving unseen-site transfer. The
 automationexercise URL asserts remain the true holdout story (saucedemo +
 mocks only).
+
+---
+
+# Session 2 addendum 3: AI-042-F3 shipped — cross-test flow chaining
+
+The within-test learner only sees the journey inside one test function; 904/908
+real sidecars contain a single navigation, so the suite-level shape (login test
+→ products test → cart test) was invisible. F3 chains **adjacent,
+fully-passing tests in name order**: terminal page of test N → entry page of
+test N+1, as a GOTO transition whose description is the destination route name.
+
+**Design findings from the real corpus:**
+- The top-level `generated_tests/evidence/` is a MIXED dir (different sites,
+  different stories) — chaining there creates nonsense. Guard: same-site pairs
+  only (`domain_from_url` equality).
+- Pre-B-033 sidecars have `url=None` on steps — `_sidecar_routes` falls back
+  to navigate `value` for entry/terminal.
+- Failed tests break the chain (adjacent passing pair only).
+
+**Shipped (`src/flow_memory.py`):** `_sidecar_routes`, `chain_suite_transitions`
+(pure), `FlowMemoryStore.learn_suite_flows()`; `FlowPattern.source`
+(`within_test` | `suite_chain`); `stats()` split. Wired into
+`synthesize_stories.py` parent sweep. 11 new tests (45 total).
+
+**Re-seed result:** 24 new suite-chain patterns (store 89 → **113**, cross-site
+5 → **8**), including the valuable cart↔checkout↔products chains verified on
+**2 sites**; holdout eval strict cross-site 1/11 → **2/11**; theinternet and
+banking chains are coherent per-site. Some chains are suite-ORDER adjacencies
+rather than navigation edges (checkout-step-one → products) — real facts, but
+consumers should prefer hit-count/site-count ranked (the flow_resolved_url
+ranking already does).
+
+**Remaining F-series:** F2 (Streamlit stats + prune — the source split is ready
+for it), F4 (skeleton guidance, deliberately deferred).
+
+---
+
+# Session 2 addendum 4: F3 product-path wiring
+
+F3's learner was script-only (synthesize_stories). Real product runs never
+chained: each test's conftest hook learns within-test flows, but nothing
+chained the package afterwards. Closed the gap:
+
+- **`PipelineRunService.run_saved_test`** (shared UI + CLI post-run hook):
+  when `persist=True` (a real run), calls `learn_suite_flows(<package>/evidence)`
+  — best-effort, never breaks the run. 2 new tests (persist chains, preview
+  doesn't; the class-attribute patch needs the `self` arg — unbound-method
+  semantics).
+- **`scripts/verify_production.py`**: same hook after the execution gate.
+
+Now every run path feeds suite flows: UI, CLI, verify_production (product),
+synthesize_stories (training). 52 tests pass across the flow/goto/run-service
+files; ruff/mypy clean.
+
+---
+
+# Session 2 addendum 5: AI-042-F2 shipped — flow stats + prune in the sidebar
+
+`SidebarConfig._render_flow_memory()` (src/ui/ui_sidebar.py) — parity with the
+RAG "Learned Patterns" section (B-036 Phase 4):
+
+- "Flow Memory" subheader showing `format_flow_stats_summary(stats)`:
+  Patterns · Sites · Cross-site · Suite chains (the F3 source split surfaces
+  here).
+- Two-step prune button → `FlowMemoryStore.clear()` — all flows are learned
+  (there is no golden/docs tier to keep, unlike RAG), so prune clears the
+  whole store. Confirmation mirrors the RAG prune UX.
+- Empty store degrades to a hint ("no flows learned yet — run a passing suite
+  to learn navigation shape"); store failure degrades to a note — the
+  always-on/best-effort contract.
+
+Testing: pure `format_flow_stats_summary` helper (unit-tested) + 2 lightweight
+stubbed-UI tests (fake `st` + patched store) covering the stats caption and
+the empty-store degradation — 4 new tests (51 total in the flow/UI files).
+
+With F1, F2, F3 all shipped, the AI-042 follow-up series is complete (F4
+remains deliberately deferred — prompt changes are regeneration-sensitive).
