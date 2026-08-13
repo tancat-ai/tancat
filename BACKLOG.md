@@ -1,36 +1,46 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-12 (testing hardening: coverage gate, ASSERT flow-fallback test, script-hook guards; learning-loop E2E tracked below)
+Last updated: 2026-08-13 (learning-loop E2E test shipped — real conftest + run service + store, mock brought up by the automation)
 
 ---
 
-## 🆕 Learning-loop E2E test (AI-042 learning loop, end-to-end)
+## ✅ Learning-loop E2E test (AI-042 learning loop, end-to-end)
 
-**Status:** 🆕 new (2026-08-12) — NOT a roadmap item; tracked here so the gap stays visible
+**Status:** ✅ Complete 2026-08-13 — `tests/integration/test_learning_loop_e2e.py`, 4/4 tests green, full suite 2482 passed / 1 skipped, ruff + mypy clean
 **Priority:** Medium — proves the feature loop the product is built on
-**Estimated sessions:** 0.5-1 (needs a pytest subprocess + mock site + browser)
+**Actual sessions:** 1 (estimated 0.5-1)
 
-**What:** one integration test that runs a tiny generated pytest package (the REAL
+**Shipped:** one integration test that runs a tiny generated pytest package (the REAL
 `generated_tests/conftest.py`) against a local mock site and asserts the full
 learning loop end-to-end:
 
-1. tests pass → conftest teardown learns within-test flows
-2. the package post-run hook (`PipelineRunService` / verify_production) chains
-   suite flows
-3. `evidence/flow_memory.json` gains the patterns (dedup + hit bumps)
-4. a follow-up resolution (orchestrator GOTO/URL step 2.5) resolves using the
-   learned flows
+1. **Mock site is brought up as part of the automation** — module-scoped
+   `MockServer` (port 8784, `mock_sites/ecommerce`) with a fail-fast urllib probe;
+   a dedicated test asserts all journey pages serve 200.
+2. tests pass → conftest teardown learns within-test flows (verified: 4/4
+   passed, one sidecar per test, all `passed`)
+3. the package post-run hook (`PipelineRunService` / verify_production) chains
+   suite flows (verified: 3 suite chains)
+4. `evidence/flow_memory.json` gains the patterns (verified: exactly 7 designed
+   patterns, site-scoped to `localhost:8784`, dedup + hit bumps on re-run —
+   7 patterns / hit_count 2 after run 2)
+5. a follow-up resolution (orchestrator GOTO/URL step 2.5) resolves using the
+   learned flows (verified: "view cart" from products → cart URL)
 
-Today the loop is tested piecewise with mocks: `flow_memory` unit tests (98%),
-the run-service wiring test (patched store), orchestrator integration tests.
-No single test proves the loop works with the REAL conftest + real run service
-+ real store file.
+Hermeticity: real `evidence/flow_memory.json` snapshotted/wiped/restored;
+`generated_tests/evidence/` (past sidecars from other ports) parked/restored;
+RAG-learning leg neutralised via a package-local conftest (sibling loop — avoids
+real `rag_store.db` writes + ~80 MB embedder download on fresh CI). Marked
+`slow` + `integration` + `subprocess` — excluded from the default suite.
 
-**Why it matters:** the 2026-08 test-pack audit's core lesson — green units don't
-equal a working product; the expensive bugs (B-029..B-035) lived at the
-integration seams. The learning loop is exactly such a seam: conftest → store →
-resolver.
+**Open item (noted here so the quirk stays visible):** `PipelineRunService`
+derives the suite-chain evidence dir from `Path(saved_path).parent` — for a
+**directory** `saved_path` (not what the UI/CLI pass — they always pass test
+files) that lands in `generated_tests/evidence/` and chains stale sidecars into
+flow memory. Latent quirk, not a live bug; the E2E test parks the legacy dir to
+work around it. Fix if directory targets ever become a supported product path:
+`package_dir = Path(saved_path) if it is a dir else Path(saved_path).parent`.
 
 ---
 
