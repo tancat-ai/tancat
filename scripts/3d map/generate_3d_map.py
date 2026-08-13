@@ -162,6 +162,9 @@ SKIP_DIRS = {
     "cline-mcp-memory-bank",
     "memory-bank",
     "evidence",
+    # Generated graph artifacts — thousands of hashed AST-cache nodes that
+    # drown the real architecture in the 3D map (2026-08-13).
+    "graphify-out",
 }
 for root, dirs, files in os.walk("."):
     dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
@@ -570,7 +573,11 @@ for fpath in sorted(ALL_FILES):
     if fpath.endswith(".md"):
         group = "Documentation"
     elif fpath.endswith(".py"):
-        group = LAYER_MAP.get(fpath_clean, "utility")
+        # Only explicitly-mapped modules are architecture layers; unmapped .py
+        # files (tests/, scripts/, notebooks, generated) are "Other" so the
+        # utility layer stays the src/ utility modules, not everything else
+        # (2026-08-13 — was defaulting every unmapped .py to "utility").
+        group = LAYER_MAP.get(fpath_clean, "Other")
     elif fpath_clean in (
         ".clinerules",
         ".dockerignore",
