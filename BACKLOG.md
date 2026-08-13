@@ -1,7 +1,28 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-13 (learning-loop E2E test shipped — real conftest + run service + store, mock brought up by the automation)
+Last updated: 2026-08-13 (Phase 7 CI/CD — spec drafted + fully grilled; 7a core shipped: headless driver, fake LLM, ignore list, workspace-isolation fix)
+
+---
+
+## ✅ Phase 7 CI/CD Integration — spec + 7a core shipped (2026-08-13)
+
+**Status:** 🟡 ready-for-agent — spec complete (no open questions) + 7a core shipped; 7a tail pending (Docker action + self-test workflow)
+**Priority:** Medium-High (Tier 5 — Commercialization)
+**Spec:** `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
+
+**What shipped this session (7a core, all gates green — 2510 passed, smoke 38/38, eval static 97.9%):**
+- `scripts/ci_generate.py` — **headless driver**: the product's first non-interactive generation entry point. Exit codes 0/1/2, `--json` output, AI-029 workspace isolation, danger-zone allow-list (`localhost`/`*.staging.*`/`*-dev`/`*.test.*` + `--danger-zone`/`--allowed-domains` overrides), credential profiles, ignore-file validation. Calls the SAME `ui_pipeline.run_pipeline()` the UI/CLI use.
+- `scripts/fake_llm.py` — OpenAI-compatible fake LLM (conditions / per-condition skeleton fragments / semantic routing) so the FULL generation pipeline runs offline against the mock-site family — hermetic, never decays.
+- `src/ci_ignore.py` — `.ai-test-ignore.yml` parser/validator/matcher (the "buttons moved but still works" mechanism). **Anti-rug rule: `reason` is required per rule** — an ignore without a recorded why fails at parse time.
+- `tests/test_ci_ignore.py` (12) + `tests/test_ci_generate.py` (16: allow-list, config-error contract, JSON shape + 1 slow-lane E2E: fake LLM + ecommerce mock → package written, workspace isolated, 8 tests).
+- **Product bug found + fixed: `src/pipeline_writer.py`** — `PipelineArtifactWriter` hardcoded `output_dir="generated_tests"`, silently bypassing AI-029 workspace isolation for the UI path (named workspaces still wrote to the repo root). Now storage-aware via `get_storage().generated_tests_dir()`; default-workspace behavior identical (verified: full suite green).
+
+**Grilled decisions (all closed, folded into the spec):** referee-by-default CI (no self-healing — false-negative risk; learning opt-in `learn: true`), verified adaptation offered post-failure (`/adapt` command + tool link, never default; locator-only + assertion-verified), `.ai-test-ignore.yml`, danger-zone Option C, two-stage Action repo (in-repo now → thin public repo + PyPI at launch), trigger scope (`workflow_dispatch`+`push`; fork PRs unsupported), flaky from cached per-branch history, GitLab parity in 7c (same milestone, platform adapters).
+
+**Also deferred this session:** AI-044 (Visual Grounding) — off-the-shelf GUI-grounding models (UGround/OS-Atlas/UI-TARS) cover the core task; AI-041 (training) failed; slim AI-044-B option documented. Cross-referenced in AI-039's launch batch.
+
+**Remaining (7a tail → next session):** `action.yml` Docker action + `entrypoint.sh` + `.github/workflows/ci-cd-action.yml` self-test (static packaging over the verified driver; needs Docker/GitHub to exercise). Then 7b (generate-and-run, PR comment, cache, verified adaptation) + 7c (GitLab parity).
 
 ---
 
@@ -1533,6 +1554,19 @@ is bitsandbytes-based QLoRA (4-bit).
 
 ---
 
+## 👤 AI-044 — Visual Grounding: vision-based element location (DEFERRED)
+
+**Status:** 👤 Deferred 2026-08-13 — decision: use an off-the-shelf GUI-grounding model instead of training one; fine-tune only if eval shows a domain gap
+**Priority:** Low-Medium (portfolio + long-term differentiator) — "sees the page like a tester does"
+**Roadmap ref:** `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` Tier 4 §18
+**Original estimate:** 5-8 sessions
+
+**Why deferred:** (1) AI-041 — the training-pipeline dependency — was closed FAILED 2026-08-11 (GGUF export physically impossible on 64GB Windows); (2) verified via tavily (2026-08-13) that open-source GUI-grounding models already do the core task: **UGround** (10M elements / 1.3M screenshots, ~95% web, LLaVA-based, SOTA on ScreenSpot), **OS-Atlas** (2.23M cross-platform), **UI-TARS**, **GUI-Actor** (attention-map grounding, no numeric coords). The product value (use screenshots for location; heatmap boxes from detection) is fully achievable off-the-shelf; training-own only pays off as a fine-tune-on-own-sidecars LoRA *after* measuring a gap.
+
+**If resurrected, slim scope (AI-044-B, ~1-2 sessions):** pick UGround/ShowUI → wire vision score into `compute_element_score` as tie-break/pre-filter → eval bbox-IoU metric via AI-043's alignment layer → latency budget (CPU-only on this box; AI-038's ROCm wall applies) + DOM fallback. Fine-tune later only if eval shows a gap.
+
+---
+
 ## 👤 AI-039 — Repo Rename: TanCat (DEFERRED)
 
 **Status:** 👤 ready-for-human — deferred by decision 2026-08-01; revisit at launch readiness
@@ -1551,6 +1585,17 @@ docs headers, script docstrings, CI badge URL. Regenerate graphify output.
 **Product name:** TanCat (`pip install tancat` / `uv add tancat`)
 **Holding company:** Cat Tan Operations Ltd (cattanooperations.co.uk)
 **Domains acquired:** tancat.dev, cattanooperations.co.uk, cattanooperations.com
+
+**Launch-batch dependencies (grilled 2026-08-13, Phase 7 CI/CD):** the rename is the same
+launch-readiness gate that governs the Phase 7 GitHub Action extraction — at launch,
+extract a **thin public Action repo** (`action.yml` + `entrypoint.sh` + `Dockerfile`) whose
+image installs the product from PyPI (the product repo stays private). The rename
+determines the Action's owner reference (`tancat/ai-test-generator@v1`) and the PyPI
+package name — both are post-rename constants. Spec: `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
+§Q4; keep `ci_generate.py` imports package-relative (`playwright_test_generator.…`) so the
+extraction is copy-paste, not refactor. GitHub Marketplace requires a **public** repo +
+semver release tags (same-repo listing is allowed but the thin-repo split is cleaner);
+AWS/Azure marketplaces consume the Docker image/AMI, not the repo layout.
 
 ---
 

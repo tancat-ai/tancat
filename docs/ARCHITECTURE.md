@@ -155,6 +155,12 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/url_resolver.py` (`UrlResolver`) | Resolves LLM-generated page keywords (e.g., "cart", "checkout") to real URLs discovered by journey scraping. Uses heuristic matching against URL paths with fallback to common path candidates. |
 | `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
 
+#### CI/CD Integration (Phase 7)
+
+| Module | Role |
+|--------|------|
+| `src/ci_ignore.py` | CI ignore-list parsing (`.ai-test-ignore.yml`): versioned, human-recorded known-benign test failures. `load_ignore_spec()` validates structure + compiles regexes (fails fast on malformed input); `IgnoreSpec.matches()`/`describe()` gate failures in the CI report so they surface as "known-benign ignored" instead of real failures. **`reason` is required per rule** (the anti-rug rule — an ignore without a recorded why is rejected). Consumed by `scripts/ci_generate.py`; run-phase gating lands in Phase 7b. |
+
 ### 💾 Persistence & Reporting Layer
 
 | Module | Role |

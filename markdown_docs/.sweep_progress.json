@@ -1,6 +1,6 @@
 {
- "total": 151,
- "completed": 136,
+ "total": 152,
+ "completed": 137,
  "pending": 15,
  "files": [
   {
@@ -757,7 +757,12 @@
    "source": "scripts/3d map/audit_3d_map.py",
    "doc": "markdown_docs/scripts/3d map/audit_3d_map.py.md",
    "status": "completed"
+  },
+  {
+   "source": "src/ci_ignore.py",
+   "doc": "markdown_docs/src/ci_ignore.py.md",
+   "status": "completed"
   }
  ],
- "last_updated": "2026-08-12T23:04:18+00:00"
+ "last_updated": "2026-08-13T18:22:46+00:00"
 }

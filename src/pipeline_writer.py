@@ -13,6 +13,7 @@ from src.code_validator import validate_python_syntax
 from src.file_utils import slugify
 from src.pipeline_artifact_manager import PackageManifest, save_package_manifest
 from src.pipeline_models import ManifestRecord, PipelineArtifactSet
+from src.storage import get_storage
 
 if TYPE_CHECKING:
     from src.orchestrator import PipelineRunResult
@@ -23,8 +24,20 @@ logger = logging.getLogger(__name__)
 class PipelineArtifactWriter:
     """Persist final code, page objects, and a manifest as one package."""
 
-    def __init__(self, output_dir: str = "generated_tests") -> None:
-        self.output_dir = Path(output_dir)
+    def __init__(self, output_dir: str | Path | None = None) -> None:
+        """Persist one generated package under *output_dir*.
+
+        ``None`` (the default) resolves through the AI-029 storage layer
+        (``get_storage().generated_tests_dir()``), so workspace isolation
+        actually holds — previously the hardcoded ``"generated_tests"``
+        default silently ignored named workspaces (the UI path called this
+        with no arguments, so per-workspace runs landed in the repo root).
+        Explicit callers (CLI, debug scripts) keep passing ``output_dir``.
+        """
+        if output_dir is None:
+            self.output_dir = get_storage().generated_tests_dir()
+        else:
+            self.output_dir = Path(output_dir)
 
     def write_run_artifacts(
         self,

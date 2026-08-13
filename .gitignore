@@ -142,3 +142,4 @@ nul
 raw/
 generated_tests/debug_*
 unsloth_compiled_cache/
+ci-workspace/
