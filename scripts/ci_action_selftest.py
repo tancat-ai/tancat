@@ -104,7 +104,7 @@ def run_generate_only() -> int:
     results.mkdir(parents=True, exist_ok=True)
     env = {
         "INPUT_MODE": "generate-only",
-        "INPUT_SELF_TEST": "true",
+        "INPUT_SELF-TEST": "true",
         "INPUT_STORY": STORY,
         "INPUT_URL": "http://127.0.0.1:8781/index.html",
         "INPUT_WORKSPACE": WORKSPACE_NAME,
@@ -140,7 +140,7 @@ def run_existing() -> int:
     results = _host_mount_dir() / "results"
     env = {
         "INPUT_MODE": "run-existing",
-        "INPUT_SELF_TEST": "true",
+        "INPUT_SELF-TEST": "true",
         "INPUT_TESTS": f"{WORKSPACE_NAME}/generated_tests",
         "INPUT_WORKSPACE": WORKSPACE_NAME,
         "GITHUB_WORKSPACE": MOUNT,
