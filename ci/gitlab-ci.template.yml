@@ -161,11 +161,17 @@ ai-testgen:compute-key:
     expire_in: 1 day
 
 # ---------------------------------------------------------------------------
-# The three public modes. Entrypoint: the action image's /entrypoint.sh
-# (image entrypoint neutralised with `entrypoint: [""]` — GitLab runs
-# script lines directly, the action is invoked explicitly).
+# The three public modes, as two jobs (one is always skipped via rules —
+# GitLab's rules: does not accept an `artifacts:` key, so per-mode artifacts
+# need separate jobs):
+#   ai-testgen:run            — generate-and-run (default) + run-existing
+#   ai-testgen:generate-only  — generate-only (package artifact, no junit)
+# The shared INPUT_* surface lives in the hidden .ai-testgen:base job and is
+# inherited with `extends`. Entrypoint: the action image's /entrypoint.sh
+# (image entrypoint neutralised with `entrypoint: [""]` — GitLab runs script
+# lines directly, the action is invoked explicitly).
 # ---------------------------------------------------------------------------
-ai-testgen:run:
+.ai-testgen:base:
   stage: ai-testgen
   image:
     name: $AITEST_IMAGE_TAG
@@ -220,32 +226,39 @@ ai-testgen:run:
     GITHUB_WORKSPACE: "$CI_PROJECT_DIR"
   script:
     - /entrypoint.sh
+
+ai-testgen:run:
+  extends: .ai-testgen:base
+  rules:
+    - if: '$AITEST_MODE != "generate-only"'
+  artifacts:
+    when: always
+    expire_in: 7 days
+    reports:
+      # GitLab's native MR test UI (the raw pytest junit)
+      junit: ai-test-workspace/results/junit.xml
+    paths:
+      - ai-test-workspace/results/junit.xml
+      - ai-test-workspace/results/junit-evidence.xml
+      - ai-test-workspace/results/report.json
+      - ai-test-workspace/results/report.md
+      - ai-test-workspace/results/comment.md
+      - ai-test-workspace/results/action-state.txt
+      - ai-test-workspace/generated_tests/
+      - ai-test-workspace/run-history.json
+
+ai-testgen:generate-only:
+  extends: .ai-testgen:base
   rules:
     - if: '$AITEST_MODE == "generate-only"'
-      artifacts:
-        when: always
-        expire_in: 7 days
-        paths:
-          - ai-test-workspace/generated_tests/
-          - ai-test-workspace/results/action-state.txt
-          - ai-test-workspace/results/report.json
-          - ai-test-workspace/results/report.md
-    - when: always
-      artifacts:
-        when: always
-        expire_in: 7 days
-        reports:
-          # GitLab's native MR test UI (the raw pytest junit)
-          junit: ai-test-workspace/results/junit.xml
-        paths:
-          - ai-test-workspace/results/junit.xml
-          - ai-test-workspace/results/junit-evidence.xml
-          - ai-test-workspace/results/report.json
-          - ai-test-workspace/results/report.md
-          - ai-test-workspace/results/comment.md
-          - ai-test-workspace/results/action-state.txt
-          - ai-test-workspace/generated_tests/
-          - ai-test-workspace/run-history.json
+  artifacts:
+    when: always
+    expire_in: 7 days
+    paths:
+      - ai-test-workspace/generated_tests/
+      - ai-test-workspace/results/action-state.txt
+      - ai-test-workspace/results/report.json
+      - ai-test-workspace/results/report.md
 
 # ---------------------------------------------------------------------------
 # Slash-command loop (/adapt, /ignore) — GitLab has no issue_comment pipeline
