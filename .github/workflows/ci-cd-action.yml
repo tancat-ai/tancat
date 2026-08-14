@@ -46,13 +46,27 @@ jobs:
           self-test: 'true'
 
       - name: Assert generate-only contract (stub step)
+        continue-on-error: true
         run: |
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
+
+          print('pwd:', os.getcwd())
+          print('workspace entries:', sorted(os.listdir('.'))[:30])
 
           ws = Path('.ai-test-workspace')
           results = ws / 'results'
+
+          if not ws.exists():
+            print('ERROR: .ai-test-workspace missing on runner')
+            print('GITHUB_WORKSPACE:', os.environ.get('GITHUB_WORKSPACE'))
+            raise SystemExit(2)
+          print('ai-test-workspace entries:', sorted(os.listdir(ws)))
+          if not results.exists():
+            print('ERROR: results dir missing; contents of ws:', sorted(os.listdir(ws)))
+            raise SystemExit(2)
+          print('results entries:', sorted(os.listdir(results)))
 
           # Driver JSON contract (last stdout line of generate.json)
           raw = (results / 'generate.json').read_text(encoding='utf-8').strip()
@@ -81,6 +95,7 @@ jobs:
       # ── Step 2: run-existing against the just-generated package ──────────
       - name: Run generated tests (self-test)
         id: run
+        if: always()
         uses: ./
         with:
           mode: run-existing
