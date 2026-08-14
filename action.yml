@@ -135,24 +135,6 @@ runs:
   using: 'docker'
   image: 'Dockerfile.action'
   entrypoint: '/entrypoint.sh'
-  # Declared so the runner injects GITHUB_OUTPUT into the container (Docker
-  # actions only receive it when outputs exist); the stubs additionally read
-  # the parallel ai-test-workspace/results/action-state.txt.
-  outputs:
-    exit_code:
-      description: 'Action exit code (0/1/2).'
-    cache_key:
-      description: 'Spec §7 cache key (generate modes).'
-    cache_hit:
-      description: 'true when the generated package came from the cache.'
-    package:
-      description: 'Generated package path (generate modes).'
-    test_count:
-      description: 'Number of generated tests (generate modes).'
-    junit:
-      description: 'Raw pytest junit.xml path (run modes).'
-    report:
-      description: 'report.json path (run modes).'
 
 branding:
   icon: 'test-tube'
