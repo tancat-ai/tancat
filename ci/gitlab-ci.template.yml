@@ -67,7 +67,7 @@ variables:
   # --- generation -----------------------------------------------------------
   AITEST_POM: "false"
   AITEST_CREDENTIAL_PROFILE: ""            # {"label","username","password"} for login-gated sites
-  AITEST_IGNORE_FILE: ".ai-test-ignore.yml"
+  AITEST_IGNORE_FILE: ""                   # path to .ai-test-ignore.yml (empty = none; a missing file fails generation)
   AITEST_DANGER_ZONE: "false"              # never true for mutating prod stories
   AITEST_ALLOWED_DOMAINS: ""               # comma-separated extra safe domains
   # --- run -------------------------------------------------------------------
@@ -83,6 +83,9 @@ variables:
   AITEST_COMMENT: "true"
   AITEST_SKIP_BUILD: "false"               # "true" once the image is pushed (repeat runs)
   AITEST_FORK_SAFE: "false"                # "true" to also run MR pipelines from forks
+  AITEST_SELF_TEST: "false"                # INTERNAL: boot the hermetic mock site + fake LLM inside the
+                                            # job container (used by the real-project self-test; consumers
+                                            # target their own staging URL instead)
   # --- image -----------------------------------------------------------------
   # The action image is built by ai-testgen:build-image and pushed to the
   # project's container registry under this tag.
@@ -100,6 +103,9 @@ workflow:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
     # manual runs (Run pipeline form) for slash-commands and ad-hoc modes
     - if: '$CI_PIPELINE_SOURCE == "web"'
+    # API-created / webhook-triggered pipelines (the documented slash-command
+    # trigger path and programmatic runs)
+    - if: '$CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "trigger"'
     - when: never
 
 stages:
@@ -199,6 +205,7 @@ ai-testgen:run:
     INPUT_COMMENT: "$AITEST_COMMENT"
     INPUT_ADAPT: "$AITEST_ADAPT"
     INPUT_TESTS: "$AITEST_TESTS"
+    INPUT_SELF_TEST: "$AITEST_SELF_TEST"
     # MR-note posting (empty on push pipelines -> payload only, like GitHub)
     INPUT_GITLAB_TOKEN: "$AITEST_GL_TOKEN"
     INPUT_GITLAB_PROJECT: "$CI_PROJECT_PATH"
