@@ -176,11 +176,15 @@ ai-testgen:run:
   environment:
     name: ai-testgen-$AITEST_ENV_SUFFIX
   cache:
-    key: ai-testgen-pkg-$CI_COMMIT_BRANCH-$AITEST_RUN_KEY-$AITEST_CACHE_KEY
+    # CI_COMMIT_REF_NAME = branch for push pipelines, source branch for MR
+    # pipelines — the branch scope that lets MR pipelines reuse the push
+    # pipeline's package cache (and the slash job reuse the branch snapshot).
+    key: ai-testgen-pkg-$CI_COMMIT_REF_NAME-$AITEST_RUN_KEY-$AITEST_CACHE_KEY
     fallback_keys:
-      - ai-testgen-pkg-$CI_COMMIT_BRANCH-
+      - ai-testgen-pkg-$CI_COMMIT_REF_NAME-
     paths:
       - ai-test-workspace/cache/
+      - ai-test-workspace/run-history.json   # per-branch flaky markers (AI-011)
   variables:
     # The action reads INPUT_*; GitLab variable names cannot contain hyphens,
     # so the underscore spellings are set here — the entrypoint's get_input
@@ -277,7 +281,7 @@ ai-testgen:slash-command:
     GITHUB_WORKSPACE: "$CI_PROJECT_DIR"
     AITEST_SLASH_COMMENT: ""               # override: "true" to force a specific command
   cache:
-    key: ai-testgen-pkg-$CI_COMMIT_BRANCH-
+    key: ai-testgen-pkg-$CI_COMMIT_REF_NAME-
     fallback_keys:
       - ai-testgen-pkg-
     paths:

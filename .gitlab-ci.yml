@@ -1,0 +1,18 @@
+# Phase 7c — GitLab CI entry point (inert on GitHub; add this file to your
+# GitLab project to run the AI test generator in your pipeline).
+#
+# The real configuration lives in ci/gitlab-ci.template.yml (the include
+# template: the three modes, cache, artifacts, slash-commands, danger-zone
+# approvals). Set the AITEST_* variables in your GitLab project's CI/CD
+# variables (or below) before running — the full reference is in the
+# template's `variables:` block.
+#
+# AITEST_GL_TOKEN (GitLab PAT, `api` scope) is a secret: set it as a MASKED
+# CI/CD variable in the project, never in this file.
+
+include:
+  - local: ci/gitlab-ci.template.yml
+
+variables:
+  AITEST_URL: ""                      # STAGING url — required; the job fails fast without it
+  AITEST_STORY_FILE: "ai-test-story.md"

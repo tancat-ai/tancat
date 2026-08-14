@@ -15,6 +15,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `fake_llm.py` | OpenAI-compatible fake LLM server (canned skeletons) — hermetic pipeline testing | Nothing — localhost |
 | `mock_server.py` | Robust mock-site HTTP server (concurrent Playwright-safe) | Nothing — localhost |
 | `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate/run/cache/comment/adapt gates, GitHub + GitLab mock APIs) | Docker |
+| `ci_gitlab_real_project_test.py` | Real GitLab.com gate for the Phase 7c template (push pipeline → junit → MR note idempotency). Needs `GITLAB_TOKEN` (api scope) in `.env` | GitLab.com + API |
 | `ci_slash_commands.py` | Slash-command core (`/adapt`, `/ignore`) — parse comments, render reply payloads | Nothing — offline |
 | `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
 | `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
