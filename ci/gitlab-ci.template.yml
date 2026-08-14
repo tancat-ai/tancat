@@ -254,6 +254,9 @@ ai-testgen:slash-command:
     entrypoint: [""]
   needs: []
   when: manual
+  # The manual job runs the branch's latest image tag — trigger a pipeline
+  # with ai-testgen:build-image first if this job has never run on the branch
+  # (the tag embeds CI_COMMIT_SHORT_SHA).
   variables:
     INPUT_PLATFORM: "gitlab"
     INPUT_MODE: "slash-command"

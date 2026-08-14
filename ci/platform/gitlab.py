@@ -15,8 +15,7 @@ thread per run.
 GitLab REST differs from GitHub in the shapes the GitHub adapter owns:
 - notes live under ``/projects/:id/merge_requests/:iid/notes`` (not
   ``/issues/:n/comments``)
-- the body field is ``note`` (create) / ``body`` (edit) — actually both
-  accept ``body`` for notes
+- the note body field is ``body`` on create and edit alike
 - edits are **PUT**, not PATCH
 - auth is ``PRIVATE-TOKEN: <pat>`` (a PAT with ``api`` scope)
 - the project id is numeric **or** a URL-encoded path (``group%2Fproject``)
