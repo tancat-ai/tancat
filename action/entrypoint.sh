@@ -73,9 +73,9 @@ RESULT_DIR="${WORKSPACE_ROOT}/${WS_NAME}/results"
 
 log() { echo "[ai-test-gen] $*" >&2; }
 
-echo_github_output() { # name value — writes GITHUB_OUTPUT (runner) + a parallel
-  # state file the hermetic stubs can read even when GITHUB_OUTPUT is absent
-  # (Docker actions only get GITHUB_OUTPUT when action.yml declares outputs).
+echo_github_output() { # name value — Docker actions never receive GITHUB_OUTPUT
+  # from the runner, so every output is mirrored into a state file the
+  # hermetic stubs read (local Docker runs and the GitHub self-test alike).
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
   fi
