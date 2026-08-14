@@ -46,7 +46,6 @@ jobs:
           self-test: 'true'
 
       - name: Assert generate-only contract (stub step)
-        continue-on-error: true
         run: |
           python - <<'PY'
           import json, os
@@ -55,11 +54,11 @@ jobs:
           print('pwd:', os.getcwd())
           print('workspace entries:', sorted(os.listdir('.'))[:30])
 
-          ws = Path('.ai-test-workspace')
+          ws = Path('ai-test-workspace')
           results = ws / 'results'
 
           if not ws.exists():
-            print('ERROR: .ai-test-workspace missing on runner')
+            print('ERROR: ai-test-workspace missing on runner')
             print('GITHUB_WORKSPACE:', os.environ.get('GITHUB_WORKSPACE'))
             raise SystemExit(2)
           print('ai-test-workspace entries:', sorted(os.listdir(ws)))
@@ -86,31 +85,31 @@ jobs:
           PY
 
       - name: Upload generated package
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: generated-tests
-          path: .ai-test-workspace/generated_tests/
-          if-no-files-found: error
+          path: ai-test-workspace/generated_tests/
+          if-no-files-found: warn
 
       # ── Step 2: run-existing against the just-generated package ──────────
       - name: Run generated tests (self-test)
         id: run
-        if: always()
         uses: ./
         with:
           mode: run-existing
-          tests: .ai-test-workspace/generated_tests
+          tests: ai-test-workspace/generated_tests
           self-test: 'true'
 
       - name: Assert run-existing artifacts (stub step)
-        if: always()
+        if: steps.run.outcome == 'success'
         run: |
           python - <<'PY'
           import json
           import xml.etree.ElementTree as ET
           from pathlib import Path
 
-          results = Path('.ai-test-workspace/results')
+          results = Path('ai-test-workspace/results')
 
           # Raw pytest junit — must exist and be well-formed with real tests
           junit = results / 'junit.xml'
@@ -146,5 +145,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: run-existing-artifacts
-          path: .ai-test-workspace/results/
-          if-no-files-found: error
+          path: ai-test-workspace/results/
+          if-no-files-found: warn
