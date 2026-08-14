@@ -13,14 +13,18 @@
 name: 'AI Test Generator'
 description: >-
   Generate Playwright Python tests from a user story (headless, hermetic) and
-  run existing packages through pytest with JUnit evidence. Phase 7a: modes
-  generate-only and run-existing.
+  run them through pytest with JUnit evidence. Modes: generate-only |
+  generate-and-run | run-existing. 7b adds the full loop: actions/cache,
+  idempotent PR comment, slash-commands (/adapt, /ignore), verified
+  adaptation (locator-only, assertion-gated).
 
 inputs:
   mode:
     description: >-
-      generate-only (generate a test package, no execution) | run-existing
-      (run a caller-provided package through pytest + JUnit).
+      generate-only (generate a test package, no execution) | generate-and-run
+      (generate or restore from cache, run pytest, post the PR comment) |
+      run-existing (run a caller-provided package through pytest + JUnit).
+      Internal: slash-command (PR-thread /adapt | /ignore loop).
     default: 'generate-only'
   story:
     description: >-
@@ -75,6 +79,51 @@ inputs:
   pytest-args:
     description: 'Extra whitespace-separated pytest args for run-existing.'
     default: '-q --tb=short'
+  cache:
+    description: >-
+      Enable actions/cache on generated packages (spec §7). Key =
+      sha256(story + url + model + provider + prompt-fingerprint); cache: false
+      forces fresh generation every run.
+    default: 'true'
+  cache-dir:
+    description: >-
+      Path where the generated-package cache lives (restored by the caller's
+      actions/cache step; the action seeds it on miss). Relative to the repo
+      root. Default: <workspace>/cache.
+    default: ''
+  comment:
+    description: 'Post the PR summary comment (idempotent, marker-edited).'
+    default: 'true'
+  adapt:
+    description: >-
+      Repo-level opt-in for verified adaptation (locator-only patch -> re-run ->
+      assertion gate -> keep-or-revert). NEVER default — prefer the /adapt
+      slash-command. Requires pull-requests: write to report results.
+    default: 'false'
+  learn:
+    description: >-
+      Write patterns from passing runs into the cached flow-memory store
+      (generate modes only). NOT IMPLEMENTED — the action fails fast if set to
+      true rather than silently no-op'ing.
+    default: 'false'
+  # Slash-command / internal run context (ci-slash-commands.yml).
+  comment-body:
+    description: 'INTERNAL: raw PR-thread comment text (slash-command mode).'
+    default: ''
+  test:
+    description: 'INTERNAL: test name for slash-command runs (e.g. test_08_checkout[chromium]).'
+    default: ''
+  repo:
+    description: 'org/repo for comment posting (default: GITHUB_REPOSITORY).'
+    default: ''
+  pr-number:
+    description: 'PR number for comment posting (push runs have none — payload only).'
+    default: ''
+  github-token:
+    description: >-
+      Token for comment posting (pass secrets.GITHUB_TOKEN; requires
+      pull-requests: write). Omit to write the comment payload without posting.
+    default: ''
   # Internal/test-only — never used by consumers.
   self-test:
     description: >-

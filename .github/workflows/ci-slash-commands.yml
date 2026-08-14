@@ -1,0 +1,77 @@
+# Phase 7b slash-command loop (spec §6 + §9.7): respond to /adapt and /ignore
+# comments on pull requests.
+#
+#   - /adapt <test>   — run verified adaptation (locator-only patch -> re-run
+#                       -> assertion gate -> keep-or-revert), post the result
+#                       as a reply. NEVER default — the human asked for it.
+#   - /ignore <test>  — reply with the exact .ai-test-ignore.yml entry to
+#                       commit (versioned + reviewable; the anti-rug rule
+#                       requires a reason). The bot never mutates the repo.
+#
+# The work happens inside the action image (mode: slash-command — hermetic
+# core + the GitHub platform adapter). The package comes from the branch's
+# last generate-and-run cache (restore-keys prefix match on the branch ref).
+#
+# Security (spec §9.2): fork PRs are unsupported and this workflow never uses
+# pull_request_target. GitHub withholds secrets from fork-PR runs, which is
+# the property that makes excluding forks safe — add an explicit actor check
+# below for private/same-repo teams that want pull_request triggers.
+
+name: CI Slash Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  actions: read
+
+jobs:
+  slash-command:
+    name: /adapt or /ignore
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # PR comments only (issue_comment fires for issues too), never forks.
+    if: >-
+      github.event.issue.pull_request &&
+      github.event.comment.author_association != 'NONE' &&
+      (startsWith(github.event.comment.body, '/adapt') ||
+       startsWith(github.event.comment.body, '/ignore'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # The branch's last generate-and-run saved its package under a
+      # run-specific key; restore-keys falls back to the most recent branch
+      # snapshot (the action's own cache-dir layout: packages/<sha>/<pkg>).
+      - name: Restore branch package cache
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ai-testgen-pkg-${{ github.ref }}-
+
+      - name: Run slash command (self-contained action)
+        id: slash
+        uses: ./
+        with:
+          mode: slash-command
+          comment-body: ${{ github.event.comment.body }}
+          tests: ai-test-workspace/cache/packages
+          workspace: ai-test-workspace
+          # URL comes from the package manifest's starting_url (adapt re-scrapes
+          # the target site). Posting goes through the token below.
+          repo: ${{ github.repository }}
+          pr-number: ${{ github.event.issue.number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug cache miss
+        if: steps.slash.outcome == 'failure'
+        run: |
+          echo "cache restored: ${{ steps.cache.outputs.cache-hit }}"
+          find ai-test-workspace -maxdepth 3 -type d 2>/dev/null | head -30 || true

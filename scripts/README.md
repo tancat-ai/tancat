@@ -14,7 +14,8 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `ci_generate.py` | Headless test-generation driver (Phase 7) — exit codes 0/1/2, `--json` | LLM endpoint (mock + fake LLM for hermetic runs) |
 | `fake_llm.py` | OpenAI-compatible fake LLM server (canned skeletons) — hermetic pipeline testing | Nothing — localhost |
 | `mock_server.py` | Robust mock-site HTTP server (concurrent Playwright-safe) | Nothing — localhost |
-| `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate-only + run-existing) | Docker |
+| `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate/run/cache/comment/adapt gates) | Docker |
+| `ci_slash_commands.py` | Slash-command core (`/adapt`, `/ignore`) — parse comments, render reply payloads | Nothing — offline |
 | `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
 | `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
@@ -256,22 +257,40 @@ Archived scripts from previous debugging sessions. Not executed, kept for refere
 
 ## ci_action_selftest.py — Local Docker Self-Test for the CI Action
 
-Exercises the Phase 7a Docker action (`Dockerfile.action` + `action/entrypoint.sh`)
+Exercises the Phase 7 Docker action (`Dockerfile.action` + `action/entrypoint.sh`)
 exactly the way `.github/workflows/ci-cd-action.yml` does on GitHub, but locally:
-builds the image, then runs it twice with GitHub's Docker-action env surface
-(`INPUT_*`, `GITHUB_WORKSPACE`, `GITHUB_OUTPUT`) and the repo mounted at
-`/github/workspace`:
+builds the image, then runs it with GitHub's Docker-action env surface
+(`INPUT_*`, `GITHUB_WORKSPACE`, `GITHUB_OUTPUT`), the repo mounted at
+`/github/workspace`, and a **mock GitHub API on the host** so comment posting is
+verified against real HTTP traffic (`host.docker.internal` — Docker Desktop NAT):
 
 1. **generate-only** + `self-test: true` — hermetic mock site + fake LLM inside
    the container → driver JSON contract, persisted package.
 2. **run-existing** + `self-test: true` — pytest `--junitxml` + AI-028 evidence
    JUnit + report against the generated package → JUnit well-formedness, report
-   payload shape (the 7b comment shape), referee exit code.
+   payload shape, referee exit code.
+3. **generate-and-run (cache miss)** — generates, seeds `actions/cache`-shaped
+   package cache, pytest, §6 comment payload, idempotent POST to the mock API.
+4. **generate-and-run (cache hit)** — reuses the cached package (no
+   regeneration), comment EDITED not duplicated.
+5. **slash-command /adapt** — sabotages a locator, runs verified adaptation
+   (locator-only patch → re-run → assertion gate → keep), reply POSTED.
+6. **slash-command /ignore** — reply renders the `.ai-test-ignore.yml` entry.
 
 ```bash
-python scripts/ci_action_selftest.py            # build + run + assert (9 gates)
+python scripts/ci_action_selftest.py            # build + run + assert (28 gates)
 python scripts/ci_action_selftest.py --skip-build
 python scripts/ci_action_selftest.py --keep     # keep .ai-test-workspace/ on pass
 ```
 
 Exit codes: `0` all green, `1` a gate failed, `2` usage/build error.
+
+## ci_slash_commands.py — Slash-Command Loop Core
+
+Parses PR-thread `/adapt <test>` and `/ignore <test>` comments and renders the
+reply payloads the slash-command workflow posts (via `ci/platform/github.py`).
+Platform-neutral — no GitHub imports, fully offline-testable:
+
+- `/adapt` — reply from an `adaptation.json` (kept/reverted summary).
+- `/ignore` — the exact `.ai-test-ignore.yml` entry to commit (reason required —
+  the anti-rug rule), with a suggested `match` regex from the failure message.

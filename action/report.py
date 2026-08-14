@@ -54,8 +54,13 @@ class JunitStats(TypedDict):
     repair_candidates: list[dict[str, str]]
 
 
-def _is_repair_candidate(message: str) -> bool:
+def is_repair_candidate(message: str) -> bool:
+    """Public repair-candidate classifier — shared with the adapt engine (7b)."""
     return any(p.search(message) for p in _REPAIR_PATTERNS)
+
+
+# Backwards-compatible alias (7a callers).
+_is_repair_candidate = is_repair_candidate
 
 
 def _parse_junit(path: Path) -> JunitStats:
@@ -94,7 +99,7 @@ def _parse_junit(path: Path) -> JunitStats:
                 "message": message[:500],
             }
             failed_tests.append(record)
-            if _is_repair_candidate(message):
+            if is_repair_candidate(message):
                 repair_candidates.append(record)
 
     passed = total - failures - errors - skipped
@@ -118,10 +123,12 @@ def _render_markdown(report: dict[str, object]) -> str:
     candidates: list[dict[str, str]] = report["repair_candidates"]  # type: ignore[assignment]
     failed_tests: list[dict[str, str]] = report["failed_tests"]  # type: ignore[assignment]
 
+    site = report.get("url") or "—"
+    model = report.get("model") or "—"
     lines = [
         "## 🤖 AI Test Generator — results",
         "",
-        f"**Mode:** {report['mode']} · **Package:** {report.get('package', '—')}",
+        f"**Mode:** {report['mode']} · **Site:** {site} · **Model:** {model}",
         "",
         "| Metric | Value |",
         "|---|---|",
@@ -130,6 +137,15 @@ def _render_markdown(report: dict[str, object]) -> str:
         f"| Duration | {tests['duration_s']}s |",
         "",
     ]
+    if report.get("conditions"):
+        lines.append(f"| Conditions | {report['conditions']} |")
+    if report.get("resolved_placeholders"):
+        lines.append(f"| Resolved placeholders | {report['resolved_placeholders']} |")
+    lines.append("")
+    flaky_block = str(report.get("flaky") or "")
+    if flaky_block:
+        lines.append(flaky_block)
+        lines.append("")
     if failed_tests:
         lines.append("**Failed tests:**")
         for ft in failed_tests[:10]:
@@ -139,7 +155,9 @@ def _render_markdown(report: dict[str, object]) -> str:
         lines.append(
             "**Repair candidates** (offered, never auto-applied): "
             f"{len(candidates)} failure(s) are locator-class — mechanical, often environment "
-            "churn in shared environments. Interactive repair is available in the tool."
+            "churn in shared environments. Interactive repair is available in the tool. "
+            "One line to act: reply `/adapt` (verified re-run) or `/ignore` (record in "
+            ".ai-test-ignore.yml as known-benign)."
         )
         for ft in candidates[:10]:
             lines.append(f"- `{ft['test']}` — {ft['message'][:200]}")
@@ -162,6 +180,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--workspace", default="", help="AI-029 workspace name")
     parser.add_argument("--url", default="", help="Target site URL (context only)")
     parser.add_argument("--story", default="", help="Story ref (context only)")
+    parser.add_argument("--model", default="", help="Model name (comment context)")
+    parser.add_argument("--provider", default="", help="LLM provider (comment context)")
+    parser.add_argument(
+        "--flaky",
+        default="",
+        help="Flaky marker block text (7b; empty = none) or path to a file containing it",
+    )
     parser.add_argument("--output", required=True, help="Output directory (report.json + report.md)")
     return parser
 
@@ -175,6 +200,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     stats = _parse_junit(junit_path)
+    flaky_block = ""
+    if args.flaky:
+        flaky_path = Path(args.flaky)
+        flaky_block = flaky_path.read_text(encoding="utf-8") if flaky_path.exists() else args.flaky
     report: dict[str, object] = {
         "mode": args.mode,
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -182,6 +211,9 @@ def main(argv: list[str] | None = None) -> int:
         "workspace": args.workspace,
         "url": args.url,
         "story": args.story,
+        "model": args.model,
+        "provider": args.provider,
+        "flaky": flaky_block.strip(),
         "junit": str(junit_path.resolve()),
         "evidence_junit": str(Path(args.evidence_junit).resolve()) if args.evidence_junit else "",
         "tests": {

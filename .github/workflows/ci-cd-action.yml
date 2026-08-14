@@ -1,9 +1,17 @@
-# Phase 7a self-test — runs the Action ITSELF against the hermetic mock site
+# Phase 7 self-test — runs the Action ITSELF against the hermetic mock site
 # + fake LLM (spec §10 "Action self-test"). Asserts, via stub steps (no real
 # PR, no secrets):
-#   - generate-only: exit code 0, driver JSON contract, package artifact
-#   - run-existing:  pytest junit.xml well-formed, report.json payload shape
-#                    (the 7b comment shape), evidence JUnit when sidecars exist
+#   - generate-only:      exit code 0, driver JSON contract, package artifact
+#   - run-existing:       pytest junit.xml well-formed, report.json payload
+#                         shape (the comment shape), evidence JUnit
+#   - generate-and-run:   cache miss -> generate + seed + pytest, comment
+#                         payload shape, cache_key output (cache-hit and
+#                         idempotent comment editing are proven locally by
+#                         scripts/ci_action_selftest.py and by the adapter
+#                         unit tests; the run-specific cache key here keeps
+#                         the miss deterministic across re-runs)
+#   - slash-command:      sabotage a locator -> /adapt fixes it (kept,
+#                         reverted == 0); /ignore renders the YAML entry
 #
 # Mirrors scripts/export_gate.py's golden-fixture layering and the E2E in
 # tests/test_ci_generate.py (MockServer + FakeLLMServer, RAG_ENABLED=0).
@@ -21,12 +29,14 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
+  actions: read
 
 jobs:
   action-self-test:
-    name: Action self-test (generate-only + run-existing)
+    name: Action self-test (generate / run / cache / comment / adapt)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -126,7 +136,7 @@ jobs:
           ev_total = sum(int(s.get('tests', 0) or 0) for s in ([ev_root] if ev_root.tag == 'testsuite' else list(ev_root)))
           assert ev_total >= 1, f'evidence junit reports {ev_total} tests'
 
-          # Report payload — the 7b comment shape, asserted via a stub step
+          # Report payload — the comment shape, asserted via a stub step
           report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
           assert report['mode'] == 'run-existing'
           assert report['tests']['total'] == total
@@ -140,6 +150,198 @@ jobs:
 
           print(f'run-existing OK: {total} tests ({report["tests"]["passed"]} passed, '
                 f'{report["tests"]["failed"]} failed), {len(report["repair_candidates"])} repair candidates')
+          PY
+
+      # ── Step 3: generate-and-run with actions/cache (spec §7) ────────────
+      # The cache key is computed by the same module the action uses (one
+      # source of truth). A run-specific prefix keeps the first restore a
+      # MISS on every run — deterministic self-test; the hit path is covered
+      # by scripts/ci_action_selftest.py + the adapter unit tests.
+      - name: Compute cache key
+        id: cache-key
+        run: |
+          KEY=$(python3 action/cache_key.py \
+            --story "$STORY" \
+            --url "$URL" \
+            --model fake-model \
+            --provider openai-local)
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+        env:
+          STORY: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          URL: http://127.0.0.1:8781/index.html
+
+      - name: Restore generated-package cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Restore run-history (per-branch flaky markers, AI-011)
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      - name: Generate + run (self-test, cache miss)
+        id: genrun
+        uses: ./
+        with:
+          mode: generate-and-run
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          cache-dir: ai-test-workspace/cache
+          self-test: 'true'
+          # No github-token / pr-number: posting is skipped, payload asserted.
+
+      - name: Assert generate-and-run (stub step)
+        if: steps.genrun.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+
+          # GITHUB_OUTPUT surface: cache_key emitted + cache_hit=false
+          outputs = {}
+          gf = results / 'github-output.txt'
+          for line in gf.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  k, _, v = line.partition('=')
+                  outputs[k.strip()] = v.strip()
+          assert outputs.get('cache_hit') == 'false', outputs
+          assert len(outputs.get('cache_key', '')) == 64, outputs.get('cache_key')
+
+          # Cache seeded for the workflow's save step
+          seeded = list(Path('ai-test-workspace/cache').rglob('test_*.py'))
+          assert seeded, 'cache was not seeded with the generated package'
+
+          # Comment payload — §6 shape (posting skipped: no token/PR)
+          md = (results / 'comment.md').read_text(encoding='utf-8')
+          assert md.startswith('## 🤖 AI Test Generator — results'), md[:80]
+          assert '| Metric | Value |' in md, md[:200]
+          assert '**Mode:** generate-and-run' in md, md[:200]
+
+          # Report carries the flaky-marker key (AI-011; empty on first run)
+          report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
+          assert 'flaky' in report, report.keys()
+
+          # pytest junit + evidence junit exist
+          assert (results / 'junit.xml').exists()
+          assert (results / 'junit-evidence.xml').exists()
+          print(f'generate-and-run OK: cache_hit={outputs.get("cache_hit")}, '
+                f'{len(seeded)} cached test file(s), comment payload {len(md)} chars')
+          PY
+
+      - name: Save generated-package cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Save run-history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      # ── Step 4: slash-command /adapt — verified adaptation (spec §9.6) ───
+      # Sabotage the Cart-link locator, then /adapt it: patch -> re-run ->
+      # assertion gate -> keep. Reply payload asserted; posting skipped.
+      - name: Sabotage Cart-link locator
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          pkg_dir = Path('ai-test-workspace/cache/packages')
+          pkgs = [p for p in pkg_dir.rglob('*.py')]
+          assert pkgs, 'no cached package to sabotage'
+          target = None
+          for path in pkgs:
+              text = path.read_text(encoding='utf-8')
+              for i, line in enumerate(text.splitlines()):
+                  m = re.search(r"\.click\(\s*'([^']+)'\s*,\s*label='Cart link'", line)
+                  if not m:
+                      continue
+                  if m.group(1) == 'a[href="/bogus.html"]':
+                      continue
+                  path.write_text(text.replace(m.group(1), 'a[href="/bogus.html"]', 1), encoding='utf-8')
+                  target = (path, i + 1, m.group(1))
+                  break
+              if target:
+                  break
+          assert target, 'no Cart-link step found to sabotage'
+          print(f'sabotaged {target[0]}:{target[1]} {target[2]} -> a[href="/bogus.html"]')
+          PY
+
+      - name: Slash-command /adapt (self-test)
+        id: adapt
+        uses: ./
+        with:
+          mode: slash-command
+          comment-body: /adapt test_04_go_to_cart_page
+          tests: ai-test-workspace/cache/packages/${{ steps.cache-key.outputs.key }}
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert verified adaptation (stub step)
+        if: steps.adapt.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+          report = json.loads((results / 'adaptation.json').read_text(encoding='utf-8'))
+          summary = report['summary']
+          assert summary['adapted'] >= 1, report
+          assert summary['reverted'] == 0, report
+          assert report['kept'][0]['new_locator'] != 'a[href="/bogus.html"]', report['kept']
+
+          # The sabotaged source is fixed on disk
+          fixed = True
+          for path in Path('ai-test-workspace/cache/packages').rglob('*.py'):
+              if 'a[href="/bogus.html"]' in path.read_text(encoding='utf-8'):
+                  fixed = False
+          assert fixed, 'bogus locator still present after adaptation'
+
+          # Reply payload rendered (posting skipped: no token/PR)
+          reply = (results / 'comment.md').read_text(encoding='utf-8')
+          assert 'Verified adaptation' in reply, reply[:200]
+          print(f'adapt OK: {summary["adapted"]} kept / {summary["reverted"]} reverted')
+          PY
+
+      # ── Step 5: slash-command /ignore — the YAML entry reply ─────────────
+      - name: Slash-command /ignore (self-test)
+        id: ignore
+        uses: ./
+        with:
+          mode: slash-command
+          comment-body: /ignore test_05_verify_cart_product_details
+          tests: ai-test-workspace/cache/packages/${{ steps.cache-key.outputs.key }}
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert /ignore reply (stub step)
+        if: steps.ignore.outcome == 'success'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          reply = (Path('ai-test-workspace/results') / 'comment.md').read_text(encoding='utf-8')
+          assert '.ai-test-ignore.yml' in reply, reply[:200]
+          assert 'test_05_verify_cart_product_details' in reply, reply[:200]
+          assert 'reason' in reply, reply[:200]
+          print(f'/ignore OK: reply {len(reply)} chars')
           PY
 
       - name: Upload run artifacts
