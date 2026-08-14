@@ -225,8 +225,11 @@ def docker_run(env: dict[str, str], label: str = "") -> subprocess.CompletedProc
 
 
 def _github_outputs() -> dict[str, str]:
-    """Parse the GITHUB_OUTPUT file written by the last run."""
-    path = _results() / "github-output.txt"
+    """Parse the outputs written by the last run (action-state.txt mirror of
+    GITHUB_OUTPUT — always written, even when the runner injects no file)."""
+    path = _results() / "action-state.txt"
+    if not path.exists():
+        path = _results() / "github-output.txt"
     if not path.exists():
         return {}
     out: dict[str, str] = {}
@@ -238,7 +241,10 @@ def _github_outputs() -> dict[str, str]:
 
 
 def _clear_github_output() -> None:
-    (_results() / "github-output.txt").write_text("", encoding="utf-8")
+    for name in ("action-state.txt", "github-output.txt"):
+        path = _results() / name
+        if path.exists():
+            path.write_text("", encoding="utf-8")
 
 
 def _find_generated_package() -> Path | None:

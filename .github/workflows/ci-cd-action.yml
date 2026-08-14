@@ -209,8 +209,12 @@ jobs:
           results = Path('ai-test-workspace/results')
 
           # GITHUB_OUTPUT surface: cache_key emitted + cache_hit=false
+          # (Docker actions get GITHUB_OUTPUT only when outputs are declared;
+          # the entrypoint mirrors everything into action-state.txt for stubs)
           outputs = {}
-          gf = results / 'github-output.txt'
+          gf = results / 'action-state.txt'
+          if not gf.exists():
+              gf = results / 'github-output.txt'
           for line in gf.read_text(encoding='utf-8').splitlines():
               if '=' in line:
                   k, _, v = line.partition('=')
