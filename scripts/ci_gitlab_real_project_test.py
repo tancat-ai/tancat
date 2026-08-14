@@ -109,6 +109,28 @@ class GitLab:
             {"branch": branch, "commit_message": message, "actions": actions},
         )
 
+    def create_branch(self, branch: str, ref: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/projects/{self.project_path}/repository/branches",
+            {"branch": branch, "ref": ref},
+        )
+
+    def delete_branch(self, branch: str) -> None:
+        self._request(
+            "DELETE", f"/projects/{self.project_path}/repository/branches/{urllib.parse.quote(branch, safe='')}"
+        )
+
+    def list_mrs(self, source: str) -> list[dict[str, Any]]:
+        data = self._request(
+            "GET",
+            f"/projects/{self.project_path}/merge_requests?state=opened&source_branch={urllib.parse.quote(source)}&per_page=20",
+        )
+        return data if isinstance(data, list) else []
+
+    def delete_mr(self, iid: int) -> None:
+        self._request("DELETE", f"/projects/{self.project_path}/merge_requests/{iid}")
+
     def create_mr(self, source: str, target: str, title: str) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -133,6 +155,10 @@ class GitLab:
 
     def mr_notes(self, iid: int) -> list[dict[str, Any]]:
         data = self._request("GET", f"/projects/{self.project_path}/merge_requests/{iid}/notes?per_page=100")
+        return data if isinstance(data, list) else []
+
+    def mr_pipelines(self, iid: int) -> list[dict[str, Any]]:
+        data = self._request("GET", f"/projects/{self.project_path}/merge_requests/{iid}/pipelines")
         return data if isinstance(data, list) else []
 
 
@@ -276,23 +302,47 @@ def _wait_latest_pipeline(gitlab: GitLab, ref: str, label: str) -> dict[str, Any
     raise TimeoutError(f"no {label} pipeline appeared on {ref}")
 
 
+def _wait_mr_pipeline(gitlab: GitLab, iid: int, label: str, after_pid: int | None = None) -> dict[str, Any]:
+    """Wait for the newest pipeline of an MR. MR pipelines report
+    ``ref: refs/merge-requests/<iid>/head`` (not the source branch), so the
+    MR's own pipelines endpoint is the reliable handle. ``after_pid`` skips
+    already-seen pipelines (a commit may take ~30 s to spawn its pipeline;
+    without it a fast poll can latch onto the previous run's)."""
+    deadline = time.monotonic() + 180
+    while time.monotonic() < deadline:
+        pipelines = [p for p in gitlab.mr_pipelines(iid) if p.get("id") != after_pid]
+        if pipelines:
+            return wait_pipeline(gitlab, int(pipelines[0]["id"]), label)
+        time.sleep(POLL_SECONDS)
+    raise TimeoutError(f"no {label} pipeline appeared on MR !{iid}")
+
+
 def stage_mr(gitlab: GitLab, edit_check: bool) -> int:
     print("\n=== 3/4 feature branch + MR -> MR pipeline -> §6 note ===")
-    # The commits API auto-creates the branch from the default branch; the
-    # push to a non-default branch with no MR yet is dropped by the
-    # template's workflow rules (no premature pipeline).
-    gitlab.create_commit(
-        "feature/selftest",
-        "ci: feature branch for the real-project gate",
-        [{"action": "update", "file_path": "ai-test-story.md", "content": STORY + "\n"}],
-    )
-    print("  feature/selftest committed")
-    mr = gitlab.create_mr("feature/selftest", "main", "ci: real-project gate")
-    iid = int(mr["iid"])
-    print(f"  MR !{iid} created")
+    existing = gitlab.list_mrs("feature/selftest")
+    if existing:
+        iid = int(existing[0]["iid"])
+        print(f"  reusing existing MR !{iid}")
+    else:
+        # Fresh state: drop any stale branch, recreate, commit, open the MR.
+        try:
+            gitlab.delete_branch("feature/selftest")
+        except RuntimeError:
+            pass  # never existed
+        gitlab.create_branch("feature/selftest", "main")
+        gitlab.create_commit(
+            "feature/selftest",
+            "ci: feature branch for the real-project gate",
+            [{"action": "update", "file_path": "ai-test-story.md", "content": STORY + "\n"}],
+        )
+        print("  feature/selftest created + committed")
+        mr = gitlab.create_mr("feature/selftest", "main", "ci: real-project gate")
+        iid = int(mr["iid"])
+        print(f"  MR !{iid} created")
 
-    pipeline = _wait_latest_pipeline(gitlab, "feature/selftest", "MR")
+    pipeline = _wait_mr_pipeline(gitlab, iid, "MR")
     gate("MR pipeline success", pipeline.get("status") == "success", f"status={pipeline.get('status')}")
+    mr_first_pid = int(pipeline["id"])
 
     notes = [n for n in gitlab.mr_notes(iid) if MARKER in n.get("body", "")]
     gate("§6 MR note posted (1)", len(notes) == 1, f"{len(notes)} note(s)")
@@ -313,7 +363,7 @@ def stage_mr(gitlab: GitLab, edit_check: bool) -> int:
             "ci: edit-check commit (idempotency)",
             [{"action": "update", "file_path": "ai-test-story.md", "content": STORY.strip() + "\n\n# edit-check\n"}],
         )
-        pipeline2 = _wait_latest_pipeline(gitlab, "feature/selftest", "MR #2")
+        pipeline2 = _wait_mr_pipeline(gitlab, iid, "MR #2", after_pid=mr_first_pid)
         gate("MR pipeline #2 success", pipeline2.get("status") == "success", f"status={pipeline2.get('status')}")
         # cache HIT: same branch + same §7 key -> the package is reused
         jobs2 = gitlab.pipeline_jobs(int(pipeline2["id"]))
