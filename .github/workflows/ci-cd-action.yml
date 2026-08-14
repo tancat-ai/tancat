@@ -260,9 +260,11 @@ jobs:
       # ── Step 4: slash-command /adapt — verified adaptation (spec §9.6) ───
       # Sabotage the Cart-link locator, then /adapt it: patch -> re-run ->
       # assertion gate -> keep. Reply payload asserted; posting skipped.
+      # (sudo: the cached files were created by the container's root user;
+      # the runner edits them as root on an ephemeral scratch workspace.)
       - name: Sabotage Cart-link locator
         run: |
-          python - <<'PY'
+          sudo python - <<'PY'
           import re
           from pathlib import Path
 
