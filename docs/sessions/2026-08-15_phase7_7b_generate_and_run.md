@@ -29,18 +29,21 @@ Tests: +45 (cache-key 5, flaky-history 5, slash-commands 10, GitHub adapter 7 ag
 
 ## Gotchas found this session (so 7c doesn't re-derive them)
 
-1. **JUnit XML escapes quotes** — the junit failure message stores `a[href=&quot;…&quot;]`, but the adapt engine parses the *escaped* message then patches the *source* file (unescaped) — no issue there; the real trap was my own `patch_locator` guard: bailing when the NEW locator already exists in the file. A sabotaged package legitimately still contains the good locator on other lines — the guard must only check the OLD locator (replacement of the quoted form is inherently idempotent).
-2. **Playwright locators contain quotes of the other kind** (`a[href="/x"]` inside `'…'`) — a `[^'"]+` character class breaks. Use a backreference to the opening quote: `(['"])(.*?)\1`.
-3. **Two locator message shapes** — Playwright native (`waiting for locator('…')`) AND the evidence_tracker's own fast-fail (`Locator '…' not found on current page (…)`). The report's repair-candidate classifier already matched the tracker shape; the adapt engine's locator extractor must match both.
-4. **`os.environ` is not exported to heredoc python** — bash vars aren't visible in `python - <<'PY'` children; pass argv or export.
-5. **Windows console cp1252 crashes on 🤖** — `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` in the selftest.
-6. **`actions/cache` key shape**: a run-specific prefix (`github.run_id`) makes the self-test restore deterministically MISS (so `cache_hit=false` is assertable on GitHub); the hit path is proven locally + by adapter unit tests. The slash-command workflow uses a branch prefix + `restore-keys` fallback.
+1. **Docker actions have no `outputs:` key in action.yml** — the schema rejects it (action fails to load), and the runner NEVER injects `GITHUB_OUTPUT` into container steps. Outputs go through a file the action writes: `echo_github_output` mirrors every value into `<workspace>/results/action-state.txt`, which the hermetic stubs read (local + GitHub use the same file). Declaring outputs in action.yml is a hard error — do not retry.
+2. **Container-created files are root-owned** — a `run:` step that edits the action's cache output gets PermissionError. The self-test's sabotage step runs with `sudo` (GitHub runners have passwordless sudo; the workspace is ephemeral scratch).
+3. **The cache must seed the package DIRECTORY, not the test file** — the driver's `package` field is the .py path; `cp -r <file> <cache>/` drops `package_manifest.json` + `pages/`, and the adapt engine then has no target URL (`no-url`). Normalize to `dirname` and copy the package root; `adapt._package_url` searches recursively (cache restore nests `<key>/<pkg>/`).
+4. **JUnit XML escapes quotes** — no issue parsing, but `patch_locator` must only guard on the OLD locator: a sabotaged package legitimately still contains the good locator on other lines, so a `new_locator in text` bail breaks the patch.
+5. **Two locator message shapes** — Playwright native (`waiting for locator('…')`) AND the evidence_tracker's own fast-fail (`Locator '…' not found on current page (…)`). Both must be parsed; a `[^'"]+` character class breaks on locators containing quotes of the other kind — use a backreference `(['"])(.*?)\1`.
+6. **`os.environ` is not exported to heredoc python** — pass argv instead.
+7. **Windows console cp1252 crashes on 🤖** — `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`.
+8. **`actions/cache` key shapes** — a run-specific prefix (`github.run_id`) makes the self-test restore deterministically MISS (`cache_hit=false` assertable); the slash-command workflow uses a branch prefix + `restore-keys` fallback.
+9. **Efficiency (measured 2026-08-15)**: the local selftest's floor is the product's real per-test overhead — a full 8-test pytest run is ~3 min, and the browser generation is ~2.5 min. The selftest merges the duplicate generation (generate-only contract is asserted inside generate-and-run's stub), runs the cache-hit gate and slash-command referees with `-k <test>` (single test), and the Dockerfile orders the browser install BEFORE `COPY . .` so code edits don't re-download Chromium. No-build: ~9.7 min (was ~17.5 min cold). `--skip-build` is guarded by a stale-image check (refuses when action/source files are newer than the image). The authoritative check remains the GitHub self-test workflow, which runs in parallel with every push.
 
 ## Verification
 
-- Local: `scripts/ci_action_selftest.py` **28/28 gates** (image build + generate-only 8 tests/138s + run-existing 8 tests 6 passed 2 skipped + cache miss/hit with mock-API comment POST/EDIT + sabotage→adapt kept + ignore YAML reply). Ran repeatedly through the fixes above.
+- Local: `scripts/ci_action_selftest.py` **25/25 gates** (~9.7 min no-build; miss gate generates + runs the suite, hit gate is a single-test referee, slash referees are `-k` single-test). Ran repeatedly through the fixes above.
 - Unit gates: **2571 passed / 1 skipped** (was 2526), smoke 38/38, ruff + mypy clean.
-- GitHub (to follow this push): **CI/CD Pipeline** (default gates) + **CI/CD Action Self-Test** (generate/run/cache/comment/adapt/ignore phases, stub-asserted).
+- GitHub: CI/CD Pipeline ✓ on the feature commit; the Action Self-Test needed three GitHub-only fixes (Docker actions have no `outputs:` key → action-state.txt; container-root-owned cache files → sudo sabotage; cache seeds the package dir → adapt URL search) — final green pending this push.
 
 ## Housekeeping
 

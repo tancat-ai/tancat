@@ -187,18 +187,21 @@ provision_conftest() { # $1 = package dir
 }
 
 # Shared pytest runner: junit.xml + AI-028 evidence JUnit + pytest.out.
-# Sets PKG_DIR (the package root) for callers.
-run_pytest() { # $1 = tests path (dir or file)
-  local TESTS_PATH="$1"
+# Sets PYTEST_RC for callers. An optional -k filter (slash-command referee)
+# limits the run to the named test — the full-suite cost is only paid where
+# the whole package must be judged.
+run_pytest() { # $1 = tests path (dir or file), $2 = optional -k filter
+  local TESTS_PATH="$1" FILTER="${2:-}"
   local PKG_DIR
   if [ -d "$TESTS_PATH" ]; then PKG_DIR="$TESTS_PATH"; else PKG_DIR="$(dirname "$TESTS_PATH")"; fi
   provision_conftest "$PKG_DIR"
 
-  log "pytest $TESTS_PATH -> $RESULT_DIR/junit.xml"
+  log "pytest $TESTS_PATH -> $RESULT_DIR/junit.xml"${FILTER:+" (filter: $FILTER)"}
   local PYTEST_ARGS
   PYTEST_ARGS="$(get_input PYTEST-ARGS)"
   local -a EXTRA_ARGS=()
   [ -n "$PYTEST_ARGS" ] && read -r -a EXTRA_ARGS <<< "$PYTEST_ARGS"
+  [ -n "$FILTER" ] && EXTRA_ARGS+=(-k "$FILTER")
 
   set +e
   python -m pytest "$TESTS_PATH" \
@@ -411,6 +414,10 @@ run_generate_and_run() {
     fi
     printf '%s\n' "$DRIVER_OUTPUT" | tail -n 1 > "$RESULT_DIR/summary.json"
     PKG_PATH="$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["package"])' "$RESULT_DIR/summary.json")"
+    # The driver's package field is the test FILE; the package root (dirname)
+    # carries package_manifest.json + pages/ — normalize so pytest/report/adapt
+    # and the cache seed all use the package directory.
+    PKG_PATH="$(dirname "$PKG_PATH")"
     echo_github_output package "$PKG_PATH"
     echo_github_output test_count "$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["test_count"])' "$RESULT_DIR/summary.json")"
 
@@ -575,6 +582,8 @@ run_slash_command() {
     exit 0
   fi
   log "slash command: /$CMD $TEST"
+  # Normalise the test token for -k: users may write the [chromium] suffix.
+  local TEST_BASE="${TEST%%[*}"
 
   local TESTS_INPUT
   TESTS_INPUT="$(get_input TESTS)"
@@ -592,7 +601,9 @@ run_slash_command() {
   fi
 
   # Referee: fresh pytest reproduces the failure (locator-class) + junit.
-  run_pytest "$TESTS_PATH"
+  # Only the named test is re-run (the -k filter) — the full-suite cost is
+  # paid by generate-and-run, not by every slash-command dispatch.
+  run_pytest "$TESTS_PATH" "$TEST_BASE"
 
   local SLASH_URL
   SLASH_URL="$(get_input URL)"
@@ -602,7 +613,7 @@ run_slash_command() {
         --package "$TESTS_PATH" \
         --junit "$RESULT_DIR/junit.xml" \
         --url "$SLASH_URL" \
-        --test "$TEST" \
+        --test "$TEST_BASE" \
         --output "$RESULT_DIR" 2>"$RESULT_DIR/adapt.err"; then
       log "adaptation OK (see $RESULT_DIR/adaptation.json)"
     else
@@ -617,7 +628,7 @@ with open(result_dir + "/reply.md", "w", encoding="utf-8") as f:
     f.write(build_adapt_reply(report)["body"])
 PY
   else # ignore
-    python - "$TEST" "$RESULT_DIR" <<'PY'
+    python - "$TEST_BASE" "$RESULT_DIR" <<'PY'
 import json, sys, xml.etree.ElementTree as ET
 from scripts.ci_slash_commands import build_ignore_reply
 test, result_dir = sys.argv[1], sys.argv[2]
