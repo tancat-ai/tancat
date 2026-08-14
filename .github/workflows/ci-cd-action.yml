@@ -1,0 +1,135 @@
+# Phase 7a self-test — runs the Action ITSELF against the hermetic mock site
+# + fake LLM (spec §10 "Action self-test"). Asserts, via stub steps (no real
+# PR, no secrets):
+#   - generate-only: exit code 0, driver JSON contract, package artifact
+#   - run-existing:  pytest junit.xml well-formed, report.json payload shape
+#                    (the 7b comment shape), evidence JUnit when sidecars exist
+#
+# Mirrors scripts/export_gate.py's golden-fixture layering and the E2E in
+# tests/test_ci_generate.py (MockServer + FakeLLMServer, RAG_ENABLED=0).
+#
+# Deliberately NOT part of the default ci.yml gate chain: building the Docker
+# image + a full browser generation costs minutes. Run on demand
+# (workflow_dispatch) and on main pushes.
+
+name: CI/CD Action Self-Test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  action-self-test:
+    name: Action self-test (generate-only + run-existing)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 1: generate-only against hermetic mock + fake LLM ──────────
+      - name: Generate tests (self-test)
+        id: generate
+        uses: ./
+        with:
+          mode: generate-only
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert generate-only contract (stub step)
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          ws = Path('.ai-test-workspace')
+          results = ws / 'results'
+
+          # Driver JSON contract (last stdout line of generate.json)
+          raw = (results / 'generate.json').read_text(encoding='utf-8').strip()
+          summary = json.loads(raw.splitlines()[-1])
+          assert summary['ok'] is True, summary
+          assert summary['exit_code'] == 0, summary
+          assert summary['mode'] == 'generate-only'
+          assert summary['test_count'] >= 1, summary
+          assert summary['conditions'] >= 1, summary
+
+          # Package artifact persists in the mounted workspace (runner-relative)
+          pkg_dir = ws / 'generated_tests'
+          assert pkg_dir.exists(), f'no generated package dir: {pkg_dir}'
+          pkgs = sorted(pkg_dir.rglob('test_*.py'))
+          assert pkgs, f'no test_*.py under {pkg_dir}'
+          print(f'generate-only OK: {summary["test_count"]} tests -> {pkgs[-1]}')
+          PY
+
+      - name: Upload generated package
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-tests
+          path: .ai-test-workspace/generated_tests/
+          if-no-files-found: error
+
+      # ── Step 2: run-existing against the just-generated package ──────────
+      - name: Run generated tests (self-test)
+        id: run
+        uses: ./
+        with:
+          mode: run-existing
+          tests: .ai-test-workspace/generated_tests
+          self-test: 'true'
+
+      - name: Assert run-existing artifacts (stub step)
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          results = Path('.ai-test-workspace/results')
+
+          # Raw pytest junit — must exist and be well-formed with real tests
+          junit = results / 'junit.xml'
+          assert junit.exists(), 'junit.xml missing'
+          root = ET.parse(junit).getroot()
+          suites = [root] if root.tag == 'testsuite' else list(root)
+          total = sum(int(s.get('tests', 0) or 0) for s in suites)
+          assert total >= 1, f'junit reports {total} tests'
+
+          # Evidence JUnit — AI-028 export against the package's sidecars
+          ev = results / 'junit-evidence.xml'
+          assert ev.exists(), 'junit-evidence.xml missing (sidecars were expected)'
+          ev_root = ET.parse(ev).getroot()
+          ev_total = sum(int(s.get('tests', 0) or 0) for s in ([ev_root] if ev_root.tag == 'testsuite' else list(ev_root)))
+          assert ev_total >= 1, f'evidence junit reports {ev_total} tests'
+
+          # Report payload — the 7b comment shape, asserted via a stub step
+          report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
+          assert report['mode'] == 'run-existing'
+          assert report['tests']['total'] == total
+          assert report['tests']['passed'] + report['tests']['failed'] + report['tests']['errors'] == total
+          assert isinstance(report['repair_candidates'], list)
+          assert isinstance(report['failed_tests'], list)
+          md = (results / 'report.md').read_text(encoding='utf-8')
+          assert md.startswith('## 🤖 AI Test Generator — results'), md[:80]
+
+          print(f'run-existing OK: {total} tests ({report["tests"]["passed"]} passed, '
+                f'{report["tests"]["failed"]} failed), {len(report["repair_candidates"])} repair candidates')
+          PY
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-existing-artifacts
+          path: .ai-test-workspace/results/
+          if-no-files-found: error

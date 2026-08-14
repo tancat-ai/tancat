@@ -1,13 +1,13 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-13 (Phase 7 CI/CD — spec drafted + fully grilled; 7a core shipped: headless driver, fake LLM, ignore list, workspace-isolation fix)
+Last updated: 2026-08-14 (Phase 7 CI/CD — 7a complete: core + Docker action + self-test workflow; 7b next)
 
 ---
 
-## ✅ Phase 7 CI/CD Integration — spec + 7a core shipped (2026-08-13)
+## ✅ Phase 7 CI/CD Integration — spec + 7a complete (2026-08-13/14)
 
-**Status:** 🟡 ready-for-agent — spec complete (no open questions) + 7a core shipped; 7a tail pending (Docker action + self-test workflow)
+**Status:** 🟡 ready-for-agent — spec complete (no open questions) + **7a shipped in full** (core 2026-08-13, Docker action tail 2026-08-14); 7b (generate-and-run) next
 **Priority:** Medium-High (Tier 5 — Commercialization)
 **Spec:** `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
 
@@ -22,7 +22,15 @@ Last updated: 2026-08-13 (Phase 7 CI/CD — spec drafted + fully grilled; 7a cor
 
 **Also deferred this session:** AI-044 (Visual Grounding) — off-the-shelf GUI-grounding models (UGround/OS-Atlas/UI-TARS) cover the core task; AI-041 (training) failed; slim AI-044-B option documented. Cross-referenced in AI-039's launch batch.
 
-**Remaining (7a tail → next session):** `action.yml` Docker action + `entrypoint.sh` + `.github/workflows/ci-cd-action.yml` self-test (static packaging over the verified driver; needs Docker/GitHub to exercise). Then 7b (generate-and-run, PR comment, cache, verified adaptation) + 7c (GitLab parity).
+**7a tail shipped 2026-08-14 (Docker action + self-test; verified locally 9/9 gates):**
+- `action/` — Docker action: `action.yml` (inputs: mode/story/tests/url/workspace/pom/provider/model/llm-base-url/llm-api-key/credential-profile/ignore-file/danger-zone/allowed-domains/pytest-args + internal `self-test`), `Dockerfile` (uv-built 3.14 venv on python:3.14-slim — NOT the playwright/python image, whose python 3.10 can't run the repo's PEP-758 syntax; Chromium installed from the venv's own playwright so browser version matches uv.lock), `entrypoint.sh` (thin orchestrator: generate-only + run-existing; `generate-and-run` fails fast — 7b), `report.py` + `export_evidence_junit.py` (platform-neutral cores: JUnit → counts + repair-candidate marking [7a: marking only, no adaptation]; AI-028 evidence → enriched JUnit).
+- `scripts/ci_generate.py` gained `--storage-root` (action passes $GITHUB_WORKSPACE so artifacts persist to the runner mount) + 2 unit tests.
+- `.github/workflows/ci-cd-action.yml` — hermetic self-test (mock site + fake LLM inside the container): generate-only (exit code + driver JSON contract + package artifact) then run-existing (pytest junit + AI-028 evidence junit + report payload shape, asserted via stub steps; no real PR).
+- `scripts/ci_action_selftest.py` — the same 9-gate self-test locally via Docker (`docker build -f action/Dockerfile .` + two container runs with GitHub's INPUT_*/GITHUB_WORKSPACE env surface). Verified on this machine: generate-only → 8 tests (137s), run-existing → 8 tests (6 passed/2 skipped), junit + evidence junit well-formed, report shape OK. 16 new unit tests (storage-root x2, report x11, evidence-junit x3); full suite 2526 passed / 1 skipped, smoke 38/38, ruff + mypy clean, eval static 97.9%.
+- `.dockerignore` hardened (was shipping 7.3 GB of historical output to the build context → now ~20 MB) — also speeds up the product image build. Latent product-image issues recorded below.
+- **Latent issue noted (product `Dockerfile`, NOT touched):** same `uv sync`-before-`COPY src` empty-project-wheel flaw + `~/.cargo/bin/uv` path + playwright/python image python-3.10 mismatch — the action image fixes all three; the product image should adopt the same fixes when next maintained.
+
+**Remaining (7b → next session):** generate-and-run wiring (PR comment with summary + flaky markers + evidence bundle, actions/cache, slash-command loop `/adapt` `/ignore`, verified adaptation engine). Then 7c (GitLab parity: `.gitlab-ci.yml` template + platform adapter + `docs/ci.md`).
 
 ---
 

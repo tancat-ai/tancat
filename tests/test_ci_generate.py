@@ -135,6 +135,68 @@ def test_valid_ignore_file_loads(tmp_path: object) -> None:
 
 
 # ---------------------------------------------------------------------------
+# --storage-root (CI action: artifacts must persist under $GITHUB_WORKSPACE)
+# ---------------------------------------------------------------------------
+
+
+def test_storage_root_passed_to_init_storage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The action passes $GITHUB_WORKSPACE as --storage-root so generated
+    artifacts land in the runner's mounted workspace, not the container."""
+    captured: dict[str, object] = {}
+
+    def fake_init_storage(root: object = None, workspace: str = "default") -> object:
+        captured["root"] = root
+        captured["workspace"] = workspace
+        return object()
+
+    async def fake_run(**kwargs: object) -> None:  # noqa: ANN003
+        return None
+
+    monkeypatch.setattr(ci_generate, "init_storage", fake_init_storage)
+    monkeypatch.setattr(ci_generate, "_run_pipeline_async", fake_run)
+
+    rc = ci_generate.main(
+        [
+            "--story",
+            "s",
+            "--url",
+            "http://localhost:8781/",
+            "--workspace",
+            "ws-name",
+            "--storage-root",
+            str(tmp_path),
+        ]
+    )
+    # fake pipeline writes nothing -> generation error contract (exit 1)
+    assert rc == ci_generate.EXIT_GENERATION_ERROR
+    assert captured["root"] == tmp_path
+    assert captured["workspace"] == "ws-name"
+
+
+def test_default_storage_root_is_none(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """Without --storage-root the driver keeps the repo-root default (backwards
+    compatible with the shipped 7a-core behaviour and the E2E test)."""
+    captured: dict[str, object] = {}
+
+    def fake_init_storage(root: object = None, workspace: str = "default") -> object:
+        captured["root"] = root
+        captured["workspace"] = workspace
+        return object()
+
+    async def fake_run(**kwargs: object) -> None:  # noqa: ANN003
+        return None
+
+    monkeypatch.setattr(ci_generate, "init_storage", fake_init_storage)
+    monkeypatch.setattr(ci_generate, "_run_pipeline_async", fake_run)
+
+    ci_generate.main(["--story", "s", "--url", "http://localhost:8781/", "--workspace", "ws-name"])
+    assert captured["root"] is None
+    assert captured["workspace"] == "ws-name"
+
+
+# ---------------------------------------------------------------------------
 # E2E — full generation against the mock with the fake LLM (hermetic)
 # ---------------------------------------------------------------------------
 
