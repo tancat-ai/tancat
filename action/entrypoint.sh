@@ -29,11 +29,35 @@ if [ -d "/app/.venv/bin" ] && [[ ":$PATH:" != *":/app/.venv/bin:"* ]]; then
   export PATH="/app/.venv/bin:$PATH"
 fi
 
+# --- inputs ---------------------------------------------------------------
+# GitHub sets Docker-action input env vars with hyphens PRESERVED
+# (INPUT_SELF-TEST, INPUT_LLM-BASE-URL — spaces become underscores, hyphens
+# do not), and parameter expansion cannot reference hyphenated names. Read
+# via printenv; fall back to the underscore spelling for local runs.
+get_input() { # $1 = input name, e.g. SELF-TEST
+  local hyphen="INPUT_$1"
+  local underscore="INPUT_${1//-/_}"
+  local value=""
+  value="$(printenv "$hyphen" 2>/dev/null)" || true
+  if [ -z "$value" ]; then
+    value="${!underscore:-}"
+  fi
+  printf '%s' "$value"
+}
+
+MODE="$(get_input MODE)"
+MODE="${MODE:-generate-only}"
+WS_NAME="$(get_input WORKSPACE)"
+WS_NAME="${WS_NAME:-ai-test-workspace}"
+SELFTEST="$(get_input SELF-TEST)"
+SELFTEST="${SELFTEST:-false}"
+POM="$(get_input POM)"
+POM="${POM:-false}"
+DANGER_ZONE="$(get_input DANGER-ZONE)"
+DANGER_ZONE="${DANGER_ZONE:-false}"
+
 WORKSPACE_ROOT="${GITHUB_WORKSPACE:-/github/workspace}"
-MODE="${INPUT_MODE:-generate-only}"
-WS_NAME="${INPUT_WORKSPACE:-ai-test-workspace}"
 RESULT_DIR="${WORKSPACE_ROOT}/${WS_NAME}/results"
-SELFTEST="${INPUT_SELF_TEST:-false}"
 
 log() { echo "[ai-test-gen] $*" >&2; }
 
@@ -122,25 +146,49 @@ fi
 # generate-only
 # ============================================================================
 run_generate_only() {
-  log "mode=generate-only: generating tests for ${INPUT_URL} (workspace '${WS_NAME}')"
+  local URL STORY
+  URL="$(get_input URL)"
+  STORY="$(get_input STORY)"
+  if [ -z "$STORY" ]; then
+    echo "ERROR: mode generate-only requires the 'story' input (inline text or a path)" >&2
+    echo_github_output exit_code 2
+    exit 2
+  fi
+  if [ -z "$URL" ]; then
+    echo "ERROR: mode generate-only requires the 'url' input (staging URL)" >&2
+    echo_github_output exit_code 2
+    exit 2
+  fi
+  log "mode=generate-only: generating tests for $URL (workspace '$WS_NAME')"
 
   local -a DRIVER_ARGS=(
-    --story "${INPUT_STORY:?mode generate-only requires the 'story' input}"
-    --url "${INPUT_URL:?mode generate-only requires the 'url' input}"
+    --story "$STORY"
+    --url "$URL"
     --workspace "$WS_NAME"
     --storage-root "$WORKSPACE_ROOT"
   )
-  [ "${INPUT_POM:-false}" = "true" ] && DRIVER_ARGS+=(--pom)
-  [ -n "${INPUT_CREDENTIAL_PROFILE:-}" ] && DRIVER_ARGS+=(--credential-profile "$INPUT_CREDENTIAL_PROFILE")
-  if [ -n "${INPUT_IGNORE_FILE:-}" ]; then
-    DRIVER_ARGS+=(--ignore-file "${WORKSPACE_ROOT}/${INPUT_IGNORE_FILE}")
+  [ "$POM" = "true" ] && DRIVER_ARGS+=(--pom)
+
+  local CREDENTIAL_PROFILE IGNORE_FILE ALLOWED_DOMAINS
+  CREDENTIAL_PROFILE="$(get_input CREDENTIAL-PROFILE)"
+  IGNORE_FILE="$(get_input IGNORE-FILE)"
+  ALLOWED_DOMAINS="$(get_input ALLOWED-DOMAINS)"
+  [ -n "$CREDENTIAL_PROFILE" ] && DRIVER_ARGS+=(--credential-profile "$CREDENTIAL_PROFILE")
+  if [ -n "$IGNORE_FILE" ]; then
+    DRIVER_ARGS+=(--ignore-file "${WORKSPACE_ROOT}/${IGNORE_FILE}")
   fi
-  [ "${INPUT_DANGER_ZONE:-false}" = "true" ] && DRIVER_ARGS+=(--danger-zone)
-  [ -n "${INPUT_ALLOWED_DOMAINS:-}" ] && DRIVER_ARGS+=(--allowed-domains "$INPUT_ALLOWED_DOMAINS")
-  DRIVER_ARGS+=(--provider "${FORCE_PROVIDER:-${INPUT_PROVIDER:-openai-local}}")
-  [ -n "${FORCE_MODEL:-${INPUT_MODEL:-}}" ] && DRIVER_ARGS+=(--model "${FORCE_MODEL:-$INPUT_MODEL}")
-  [ -n "${FORCE_BASE_URL:-${INPUT_LLM_BASE_URL:-}}" ] && DRIVER_ARGS+=(--llm-base-url "${FORCE_BASE_URL:-$INPUT_LLM_BASE_URL}")
-  [ -n "${INPUT_LLM_API_KEY:-}" ] && DRIVER_ARGS+=(--llm-api-key "$INPUT_LLM_API_KEY")
+  [ "$DANGER_ZONE" = "true" ] && DRIVER_ARGS+=(--danger-zone)
+  [ -n "$ALLOWED_DOMAINS" ] && DRIVER_ARGS+=(--allowed-domains "$ALLOWED_DOMAINS")
+
+  local PROVIDER MODEL BASE_URL API_KEY
+  PROVIDER="$(get_input PROVIDER)"
+  MODEL="$(get_input MODEL)"
+  BASE_URL="$(get_input LLM-BASE-URL)"
+  API_KEY="$(get_input LLM-API-KEY)"
+  DRIVER_ARGS+=(--provider "${FORCE_PROVIDER:-${PROVIDER:-openai-local}}")
+  [ -n "${FORCE_MODEL:-$MODEL}" ] && DRIVER_ARGS+=(--model "${FORCE_MODEL:-$MODEL}")
+  [ -n "${FORCE_BASE_URL:-$BASE_URL}" ] && DRIVER_ARGS+=(--llm-base-url "${FORCE_BASE_URL:-$BASE_URL}")
+  [ -n "$API_KEY" ] && DRIVER_ARGS+=(--llm-api-key "$API_KEY")
   DRIVER_ARGS+=(--json)
 
   set +e
@@ -173,7 +221,8 @@ PY
 # run-existing
 # ============================================================================
 run_existing() {
-  local TESTS_INPUT="${INPUT_TESTS:-}"
+  local TESTS_INPUT
+  TESTS_INPUT="$(get_input TESTS)"
   if [ -z "$TESTS_INPUT" ]; then
     echo "ERROR: mode 'run-existing' requires the 'tests' input (path to a generated" >&2
     echo "       test package directory or test file(s), relative to the repo root)" >&2
@@ -205,8 +254,10 @@ run_existing() {
   fi
 
   log "mode=run-existing: pytest $TESTS_PATH -> $RESULT_DIR/junit.xml"
-  local -a PYTEST_ARGS=()
-  [ -n "${INPUT_PYTEST_ARGS:-}" ] && read -r -a PYTEST_ARGS <<< "$INPUT_PYTEST_ARGS"
+  local PYTEST_ARGS
+  PYTEST_ARGS="$(get_input PYTEST-ARGS)"
+  local -a EXTRA_ARGS=()
+  [ -n "$PYTEST_ARGS" ] && read -r -a EXTRA_ARGS <<< "$PYTEST_ARGS"
 
   set +e
   python -m pytest "$TESTS_PATH" \
@@ -215,7 +266,7 @@ run_existing() {
     --browser=chromium --screenshot=only-on-failure --timeout=120 \
     -q --tb=short --no-header -p no:cacheprovider \
     --junitxml="$RESULT_DIR/junit.xml" \
-    "${PYTEST_ARGS[@]}" 2>&1 | tee "$RESULT_DIR/pytest.out"
+    "${EXTRA_ARGS[@]}" 2>&1 | tee "$RESULT_DIR/pytest.out"
   PYTEST_RC=${PIPESTATUS[0]}
   set -e
   log "pytest exit $PYTEST_RC"
