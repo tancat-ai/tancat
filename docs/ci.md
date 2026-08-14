@@ -228,5 +228,11 @@ enforcement.
   sites + fake LLM, with stub-asserted comment shapes and a host-side mock
   API for real POST/PATCH/PUT traffic (GitLab MR notes included).
   `python scripts/ci_action_selftest.py` (≈15 min cold, ≈10 min no-build).
+- **Real GitLab.com gate (passed 2026-08-15)**: `scripts/ci_gitlab_real_project_test.py`
+  — runs the template end-to-end against a real GitLab project (needs a
+  `GITLAB_TOKEN` with `api` scope in `.env`; the account must pass GitLab's
+  identity verification to use shared runners). 14/14 live checks: push
+  pipeline + junit artifact + cache miss, MR §6 note posted + edited-not-
+  duplicated, cache hit on re-run.
 - The eval harness gate (`scripts/eval/eval_harness.py`) covers resolution
   accuracy — run before shipping pipeline/resolver changes.
