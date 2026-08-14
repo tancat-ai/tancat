@@ -124,6 +124,29 @@ inputs:
       Token for comment posting (pass secrets.GITHUB_TOKEN; requires
       pull-requests: write). Omit to write the comment payload without posting.
     default: ''
+  # GitLab parity (Phase 7c) — the platform seam (spec §5.5). The same
+  # marker + edit-not-duplicate contract runs through ci/platform/gitlab.py
+  # (MR notes). GitLab runners set CI_PROJECT_PATH/CI_MERGE_REQUEST_IID/
+  # CI_API_V4_URL natively — the template maps them to these inputs.
+  platform:
+    description: >-
+      Posting platform: auto (detect GITLAB_CI from the runner env) | github |
+      gitlab. The .gitlab-ci.yml template sets 'gitlab' explicitly.
+    default: 'auto'
+  gitlab-token:
+    description: >-
+      GitLab PAT with api scope for MR note posting (pass from CI/CD masked
+      variables). Omit to write the comment payload without posting.
+    default: ''
+  gitlab-project:
+    description: 'GitLab project id or group/project path (default: CI_PROJECT_PATH).'
+    default: ''
+  gitlab-mr-iid:
+    description: 'GitLab merge-request iid for note posting (default: CI_MERGE_REQUEST_IID).'
+    default: ''
+  gitlab-api-url:
+    description: 'GitLab API base URL (default: CI_API_V4_URL or https://gitlab.com/api/v4).'
+    default: ''
   # Internal/test-only — never used by consumers.
   self-test:
     description: >-

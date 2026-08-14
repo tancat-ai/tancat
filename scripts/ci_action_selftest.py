@@ -23,6 +23,14 @@ Gates:
      the referee pytest runs only the named test (-k), not the whole suite
   5. slash-command /ignore         -> reply renders the .ai-test-ignore.yml
      entry (3 comments)
+  6. gitlab generate-and-run       -> Phase 7c parity: INPUT_PLATFORM=gitlab
+     posts the §6 payload as an MR note to a host-side mock GitLab API
+     (notes endpoint, PRIVATE-TOKEN, URL-encoded project path); cache HIT
+     reuses the GitHub miss gate's seeded package (no duplicate generation),
+     single-test referee
+  7. gitlab slash-command /adapt   -> sabotage the CACHED package, verified
+     adaptation fixes it, reply posted as an MR note (2 notes)
+  8. gitlab slash-command /ignore  -> reply posted as an MR note (3 notes)
 
 Cost profile (measured 2026-08-15, this machine): miss ~5.5 min (2.5 gen + 3
 suite), hit ~20s, run-existing ~3 min (suite), /adapt ~1 min, /ignore ~10s.
@@ -67,6 +75,9 @@ for _stream in (sys.stdout, sys.stderr):
             pass
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# The selftest imports action/cache_key.py (the §7 key formula) to locate the
+# cached package the GitLab gates reuse — the repo root must be importable.
+sys.path.insert(0, str(PROJECT_ROOT))
 IMAGE = "ai-test-generator-action"
 MOUNT = "/github/workspace"
 WORKSPACE_NAME = "ai-test-workspace"
@@ -178,6 +189,93 @@ class MockGitHubAPI:
         return Handler
 
     def __enter__(self) -> MockGitHubAPI:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._server.shutdown()
+        self._thread.join(timeout=5)
+        self._server.server_close()
+
+
+# ---------------------------------------------------------------------------
+# Mock GitLab API (host-side) — the container posts MR notes here when
+# INPUT_PLATFORM=gitlab (Phase 7c gates)
+# ---------------------------------------------------------------------------
+
+
+class MockGitLabAPI:
+    def __init__(self) -> None:
+        self.notes: list[dict[str, object]] = []
+        self.requests: list[dict[str, object]] = []
+        self._server = ThreadingHTTPServer(("0.0.0.0", 0), self._handler_factory())
+        self.port = self._server.server_address[1]
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def _handler_factory(self) -> type[BaseHTTPRequestHandler]:
+        store = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args: object) -> None:
+                pass
+
+            def _record(self, body: bytes | None = None) -> None:
+                store.requests.append(
+                    {
+                        "method": self.command,
+                        "path": self.path,
+                        "body": json.loads(body.decode("utf-8")) if body else None,
+                        "private-token": self.headers.get("PRIVATE-TOKEN", ""),
+                    }
+                )
+
+            def _send(self, payload: list | dict, code: int = 200) -> None:
+                raw = json.dumps(payload).encode("utf-8")
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def _note_id(self) -> int | None:
+                m = re.search(r"/merge_requests/\d+/notes/(\d+)$", self.path)
+                return int(m.group(1)) if m else None
+
+            def do_GET(self) -> None:  # noqa: N802
+                self._record()
+                if "/merge_requests/42/notes" in self.path and "?per_page=" in self.path:
+                    self._send(store.notes)
+                else:
+                    self._send({"message": "Not Found"}, 404)
+
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length) if length else None
+                self._record(body)
+                if "/merge_requests/42/notes" in self.path:
+                    payload = json.loads(body or b"{}")
+                    note = {"id": len(store.notes) + 1, "body": payload.get("body", "")}
+                    store.notes.append(note)
+                    self._send(note, 201)
+                else:
+                    self._send({"message": "Not Found"}, 404)
+
+            def do_PUT(self) -> None:  # noqa: N802
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length) if length else None
+                self._record(body)
+                nid = self._note_id()
+                found = next((n for n in store.notes if n["id"] == nid), None) if nid else None
+                if found is None:
+                    self._send({"message": "Not Found"}, 404)
+                    return
+                payload = json.loads(body or b"{}")
+                found["body"] = payload.get("body", "")
+                self._send(found)
+
+        return Handler
+
+    def __enter__(self) -> MockGitLabAPI:
         self._thread.start()
         return self
 
@@ -300,6 +398,17 @@ def _clear_github_output() -> None:
             path.write_text("", encoding="utf-8")
 
 
+def _gitlab_cached_package() -> Path | None:
+    """The package dir the GitHub miss gate seeded under cache/packages/<key>
+    (same story/url/model/provider as the GitHub gates, so the §7 key
+    matches). The GitLab gates reuse it — no duplicate ~2.5 min generation."""
+    from action.cache_key import compute_cache_key
+
+    key = compute_cache_key(STORY, MOCK_SITE, "fake-model", "openai-local")
+    pkg = _host_mount_dir() / "cache" / "packages" / key
+    return pkg if pkg.exists() else None
+
+
 def _find_generated_package() -> Path | None:
     """Most recently modified generated package (gate 1 and gate 3 each generate)."""
     base = _host_mount_dir() / "generated_tests"
@@ -400,6 +509,31 @@ def _generate_and_run_env(api_port: int) -> dict[str, str]:
     }
 
 
+def _gitlab_generate_and_run_env(api_port: int) -> dict[str, str]:
+    """The same generate-and-run surface, but through the GitLab platform
+    seam (Phase 7c): INPUT_PLATFORM=gitlab + the gitlab-* posting inputs.
+    GitLab runners set CI_PROJECT_PATH/CI_MERGE_REQUEST_IID/CI_API_V4_URL
+    natively; here they come from the inputs, exactly as the
+    .gitlab-ci.template.yml maps them."""
+    return {
+        "INPUT_MODE": "generate-and-run",
+        "INPUT_SELF-TEST": "true",
+        "INPUT_STORY": STORY,
+        "INPUT_URL": MOCK_SITE,
+        "INPUT_WORKSPACE": WORKSPACE_NAME,
+        "INPUT_CACHE": "true",
+        "INPUT_CACHE-DIR": f"{WORKSPACE_NAME}/cache",
+        "INPUT_COMMENT": "true",
+        "INPUT_PLATFORM": "gitlab",
+        "INPUT_GITLAB-TOKEN": "gl-test-token",
+        "INPUT_GITLAB-PROJECT": "org/project",
+        "INPUT_GITLAB-MR-IID": "42",
+        "INPUT_GITLAB-API-URL": f"http://host.docker.internal:{api_port}",
+        "GITHUB_WORKSPACE": MOUNT,
+        "GITHUB_OUTPUT": GITHUB_OUTPUT_PATH,
+    }
+
+
 def run_generate_and_run(api: MockGitHubAPI) -> int:
     print("\n=== Gate: generate-and-run (cache miss -> generate + seed + comment) ===")
     _clear_github_output()
@@ -474,10 +608,9 @@ def run_cache_hit(api: MockGitHubAPI, gen_stamp: float) -> int:
     return proc.returncode
 
 
-def sabotage_cart_link() -> tuple[Path | None, str | None]:
+def sabotage_cart_link(pkg: Path | None) -> tuple[Path | None, str | None]:
     """Rewrite the Cart-link locator to a bogus selector so pytest fails with
     a LocatorNotFound-class error (the adapt engine's exact input)."""
-    pkg = _find_generated_package()
     if pkg is None:
         return None, None
     for path in sorted(pkg.rglob("*.py")):
@@ -503,7 +636,7 @@ def run_slash_adapt(api: MockGitHubAPI) -> int:
     if pkg is None:
         gate("sabotage target present", False, "no generated package")
         return 1
-    sabotaged, old_locator = sabotage_cart_link()
+    sabotaged, old_locator = sabotage_cart_link(pkg)
     gate("locator sabotaged", sabotaged is not None, f"{sabotaged}" if sabotaged else "no Cart-link step found")
 
     env = {
@@ -592,6 +725,136 @@ def run_slash_ignore(api: MockGitHubAPI) -> int:
     return proc.returncode
 
 
+def run_gitlab_generate_and_run(api: MockGitLabAPI) -> int:
+    print("\n=== Gate: gitlab generate-and-run (cache hit + MR note POSTED) ===")
+    if _gitlab_cached_package() is None:
+        gate("gitlab cache package present (seeded by the GitHub miss gate)", False, "no cache package")
+        return 1
+    _clear_github_output()
+    env = _gitlab_generate_and_run_env(api.port)
+    # The hit-path contract is "reuse the package, run pytest, edit the note"
+    # — the full 8-test suite is already judged by the GitHub miss gate, so a
+    # single test keeps this gate at ~20s.
+    env["INPUT_PYTEST-ARGS"] = "-k test_01_navigate_to_store_home"
+    proc = docker_run(env, "gitlab generate-and-run (hit)")
+    outputs = _github_outputs()
+    gate("gitlab generate-and-run exits 0", proc.returncode == 0, f"rc={proc.returncode}")
+    gate(
+        "gitlab cache_hit=true (reuses the GitHub gate's seeded package)",
+        outputs.get("cache_hit") == "true",
+        str(outputs.get("cache_hit")),
+    )
+    gate("MR note POSTED (1)", len(api.notes) == 1, f"{len(api.notes)} note(s)")
+
+    # GitLab REST shape: notes endpoint, URL-encoded project path, PRIVATE-TOKEN.
+    post = next((r for r in api.requests if r["method"] == "POST"), None)
+    path_ok = post is not None and "/projects/org%2Fproject/merge_requests/42/notes" in str(post["path"])
+    gate("MR note REST shape (encoded project + notes endpoint)", path_ok, str(post["path"]) if post else "no POST")
+    gate("PRIVATE-TOKEN auth header sent", post is not None and post["private-token"] == "gl-test-token", "")
+
+    md = _results() / "comment.md"
+    if md.exists():
+        body = md.read_text(encoding="utf-8")
+        gate(
+            "MR note payload matches §6 shape",
+            body.startswith("## 🤖 AI Test Generator — results") and "| Metric | Value |" in body,
+            f"{len(body)} chars",
+        )
+    else:
+        gate("MR note payload matches §6 shape", False, "comment.md missing")
+    return proc.returncode
+
+
+def run_gitlab_slash_adapt(api: MockGitLabAPI) -> int:
+    print("\n=== Gate: gitlab slash-command /adapt (MR note reply) ===")
+    pkg = _gitlab_cached_package()
+    if pkg is None:
+        gate("gitlab adapt target present", False, "no cached package")
+        return 1
+    sabotaged, _old = sabotage_cart_link(pkg)
+    gate(
+        "gitlab cache package sabotaged",
+        sabotaged is not None,
+        f"{sabotaged}" if sabotaged else "no Cart-link step found",
+    )
+
+    env = {
+        "INPUT_MODE": "slash-command",
+        "INPUT_SELF-TEST": "true",
+        "INPUT_COMMENT-BODY": "/adapt test_04_go_to_cart_page",
+        "INPUT_TESTS": f"{WORKSPACE_NAME}/cache/packages/{pkg.name}",
+        "INPUT_WORKSPACE": WORKSPACE_NAME,
+        "INPUT_PLATFORM": "gitlab",
+        "INPUT_GITLAB-TOKEN": "gl-test-token",
+        "INPUT_GITLAB-PROJECT": "org/project",
+        "INPUT_GITLAB-MR-IID": "42",
+        "INPUT_GITLAB-API-URL": f"http://host.docker.internal:{api.port}",
+        "GITHUB_WORKSPACE": MOUNT,
+        "GITHUB_OUTPUT": GITHUB_OUTPUT_PATH,
+    }
+    proc = docker_run(env, "gitlab slash-adapt")
+    gate("gitlab slash /adapt exits 0", proc.returncode == 0, f"rc={proc.returncode}")
+
+    adapt_report = _results() / "adaptation.json"
+    if adapt_report.exists():
+        report = json.loads(adapt_report.read_text(encoding="utf-8"))
+        summary = report.get("summary", {})
+        gate(
+            "gitlab adaptation kept (assertion gate green)",
+            summary.get("adapted", 0) >= 1 and summary.get("reverted", 0) == 0,
+            f"{summary.get('adapted')} kept / {summary.get('reverted')} reverted",
+        )
+    else:
+        gate("gitlab adaptation kept (assertion gate green)", False, "adaptation.json missing")
+
+    if sabotaged is not None:
+        text = sabotaged.read_text(encoding="utf-8")
+        gate("gitlab source patched back to a real locator", 'a[href="/bogus.html"]' not in text, sabotaged.name)
+    else:
+        gate("gitlab source patched back to a real locator", False, "no source to check")
+
+    gate("gitlab adapt reply POSTED (2 notes total)", len(api.notes) == 2, f"{len(api.notes)} note(s)")
+    return proc.returncode
+
+
+def run_gitlab_slash_ignore(api: MockGitLabAPI) -> int:
+    print("\n=== Gate: gitlab slash-command /ignore (MR note reply) ===")
+    pkg = _gitlab_cached_package()
+    if pkg is None:
+        gate("gitlab ignore target package present", False, "no cached package")
+        return 1
+    env = {
+        "INPUT_MODE": "slash-command",
+        "INPUT_SELF-TEST": "true",
+        "INPUT_COMMENT-BODY": "/ignore test_05_verify_cart_product_details",
+        "INPUT_TESTS": f"{WORKSPACE_NAME}/cache/packages/{pkg.name}",
+        "INPUT_WORKSPACE": WORKSPACE_NAME,
+        "INPUT_PLATFORM": "gitlab",
+        "INPUT_GITLAB-TOKEN": "gl-test-token",
+        "INPUT_GITLAB-PROJECT": "org/project",
+        "INPUT_GITLAB-MR-IID": "42",
+        "INPUT_GITLAB-API-URL": f"http://host.docker.internal:{api.port}",
+        "GITHUB_WORKSPACE": MOUNT,
+        "GITHUB_OUTPUT": GITHUB_OUTPUT_PATH,
+    }
+    proc = docker_run(env, "gitlab slash-ignore")
+    gate("gitlab slash /ignore exits 0", proc.returncode == 0, f"rc={proc.returncode}")
+
+    md = _results() / "comment.md"
+    if md.exists():
+        body = md.read_text(encoding="utf-8")
+        gate(
+            "gitlab ignore reply renders the YAML entry",
+            ".ai-test-ignore.yml" in body and "test_05_verify_cart_product_details" in body and "reason" in body,
+            f"{len(body)} chars",
+        )
+    else:
+        gate("gitlab ignore reply renders the YAML entry", False, "comment.md missing")
+
+    gate("gitlab ignore reply POSTED (3 notes total)", len(api.notes) == 3, f"{len(api.notes)} note(s)")
+    return proc.returncode
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -621,13 +884,16 @@ def main() -> int:
     if not args.skip_build:
         build_image()
 
-    with MockGitHubAPI() as api:
+    with MockGitHubAPI() as api, MockGitLabAPI() as gl_api:
         _run_gate("generate-and-run (cache miss)", run_generate_and_run, api)
         gen = _results() / "generate.json"
         _run_gate("generate-and-run (cache hit)", run_cache_hit, api, gen.stat().st_mtime if gen.exists() else 0.0)
         _run_gate("run-existing", run_existing)
         _run_gate("slash /adapt", run_slash_adapt, api)
         _run_gate("slash /ignore", run_slash_ignore, api)
+        _run_gate("gitlab generate-and-run (MR note)", run_gitlab_generate_and_run, gl_api)
+        _run_gate("gitlab slash /adapt", run_gitlab_slash_adapt, gl_api)
+        _run_gate("gitlab slash /ignore", run_gitlab_slash_ignore, gl_api)
 
     passed = sum(1 for _, ok, _ in GATES if ok)
     print(f"\n{'=' * 60}")

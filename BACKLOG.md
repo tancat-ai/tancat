@@ -1,13 +1,13 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-15 (Phase 7 CI/CD — 7a + 7b complete: generate-and-run, cache, PR comment, slash-commands, verified adaptation; 7c next)
+Last updated: 2026-08-15 (Phase 7 CI/CD — **7a + 7b + 7c complete**: GitHub Action full loop + GitLab parity; Phase 7 → `[x]` on the roadmap)
 
 ---
 
-## ✅ Phase 7 CI/CD Integration — spec + 7a + 7b complete (2026-08-13/14/15)
+## ✅ Phase 7 CI/CD Integration — spec + 7a + 7b + 7c complete (2026-08-13/14/15)
 
-**Status:** 🟡 ready-for-agent — spec complete (no open questions) + **7a shipped in full** (core 2026-08-13, Docker action tail 2026-08-14) + **7b shipped in full** (generate-and-run 2026-08-15); 7c (GitLab parity) next
+**Status:** ✅ Complete — spec (no open questions) + **7a** (driver 2026-08-13, Docker action tail 2026-08-14) + **7b** (generate-and-run 2026-08-15) + **7c (GitLab parity 2026-08-15)**: `.gitlab-ci.template.yml` include template (three modes + build/compute-key jobs + manual slash job), `ci/platform/gitlab.py` (MR notes), protected-environment approvals, `docs/ci.md`. Roadmap Phase 7 → `[x]`.
 **Priority:** Medium-High (Tier 5 — Commercialization)
 **Spec:** `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
 
@@ -30,7 +30,7 @@ Last updated: 2026-08-15 (Phase 7 CI/CD — 7a + 7b complete: generate-and-run, 
 - `.dockerignore` hardened (was shipping 7.3 GB of historical output to the build context → now ~20 MB) — also speeds up the product image build. Latent product-image issues recorded below.
 - **Latent issue noted (product `Dockerfile`, NOT touched):** same `uv sync`-before-`COPY src` empty-project-wheel flaw + `~/.cargo/bin/uv` path + playwright/python image python-3.10 mismatch — the action image fixes all three; the product image should adopt the same fixes when next maintained.
 
-**Remaining (7c → next session):** GitLab parity — `.gitlab-ci.yml` include template (same three modes) + GitLab platform adapter (MR note comments, slash-commands, `cache:`/`artifacts:`, protected-environment approvals), tested against a real GitLab.com project (credentials available); `docs/ci.md` (modes, when to adapt — shared vs isolated envs, ignore-list format). Also tracked: `learn: true` input exists but fails fast (store-caching learning arrives after 7c).
+**Remaining:** `learn: true` input exists but fails fast (store-caching learning arrives after Phase 7). **Real GitLab.com gate (DoD, pending credentials)**: the hermetic mock-API gates cover MR-note shape (39-gate local selftest incl. 13 GitLab gates) and the template is ready (`ci/gitlab-ci.template.yml`, `docs/ci.md` §3); a live pipeline run against a real GitLab.com project mirrors the GitHub self-test once a `GITLAB_TOKEN` (api scope) is available.
 
 **7b shipped 2026-08-15 (generate-and-run; verified locally 28/28 gates):**
 - `generate-and-run` mode in `action/entrypoint.sh` — the full spec §5.4 pipeline: generate (or restore from cache) → pytest (referee exit) → AI-028 evidence JUnit → report + **flaky markers (AI-011 from the action's own cached per-branch run history)** → §6 PR comment payload (+ idempotent posting via the GitHub adapter when a token/PR context exists). `adapt: true` repo-level opt-in runs the verified adaptation engine and applies the referee-exit override (all failures adapted + re-run green → exit 0). `learn: true` fails fast with a clear message (never a silent no-op).
