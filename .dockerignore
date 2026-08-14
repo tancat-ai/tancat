@@ -30,6 +30,52 @@ before/
 raw/
 unsloth_compiled_cache/
 .ai-test-workspace/
+ai-test-workspace/
 generated_tests/test_*/
 generated_tests/verify_*/
+generated_tests/resolved/
+generated_tests/evidence/
+generated_tests/pages/
+generated_tests/uat_*/
+generated_tests/debug_*
 ~
+
+# Dev-tool / doc artifacts at the repo root (intentionally committed, but not
+# runtime files — keep them out of the image)
+/fix.sh
+/notebook_upload.md
+/nul
+/run_results.sqlite
+/streamlit*.log
+/*.log
+
+# Docs, tests, dev tooling — never read by the images at runtime (verified:
+# runtime reads are src/, scripts/, streamlit_app.py, cli/, mock_sites/,
+# action/, assets/ (logo), .streamlit/ (config), generated_tests/conftest.py)
+docs/
+markdown_docs/
+tests/
+CONTEXT.md
+CONTRIBUTING.md
+SECURITY.md
+AGENTS.md
+build-docs.ps1
+docker-compose.yml
+launch_*.sh
+launch_*.bat
+.pre-commit-config.yaml
+.clinerules
+.clineignore
+.mcp.json
+.agents
+.pi
+.playwright-mcp
+.mypy_cache
+.ruff_cache
+.uv-cache
+
+# Scratch / local artifacts (root-level only — /*.png keeps assets/logo.png)
+/*.png
+custom-ws/
+explicit/
+evidence/
