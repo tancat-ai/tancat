@@ -130,7 +130,9 @@ jobs:
           report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
           assert report['mode'] == 'run-existing'
           assert report['tests']['total'] == total
-          assert report['tests']['passed'] + report['tests']['failed'] + report['tests']['errors'] == total
+          assert (
+              report['tests']['passed'] + report['tests']['failed'] + report['tests']['errors'] + report['tests']['skipped'] == total
+          )
           assert isinstance(report['repair_candidates'], list)
           assert isinstance(report['failed_tests'], list)
           md = (results / 'report.md').read_text(encoding='utf-8')
