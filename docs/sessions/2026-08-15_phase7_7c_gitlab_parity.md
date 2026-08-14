@@ -37,7 +37,7 @@ GitHub proved the pattern end-to-end (7b). GitLab parity per spec §8/7c: `.gitl
 - **Local Docker selftest: 39/39 gates** (was 26) — the full GitHub sequence unchanged + three GitLab gates (~15 min cold / ~11 min no-build incl. the new ~1.5 min GitLab sequence; the GitLab gates reuse the GitHub miss gate's seeded cache — no duplicate generation).
 - **Pre-flight (targeted):** slash-command `/ignore` through the gitlab platform branch against a host mock — MR note 1 posted, payload rendered. Confirmed the bash plumbing before the full run.
 - **Unit gates:** full suite **2587 passed / 1 skipped** (measured; incl. the 14 new GitLab adapter tests), smoke 38/38, ruff + mypy clean.
-- **GitHub CI:** the two existing workflows (CI/CD Pipeline + Action Self-Test) are green on `dbf1d67` (7b's final state) and this session touched no GitHub workflow files — the push will re-run them (expected green; the selftest run here is the local mirror of the Action Self-Test workflow).
+- **GitHub CI:** both workflows green on `0ed06b5` — **CI/CD Pipeline 9/9** (PyTest+Coverage, Ruff, MyPy, Eval Static, Graph/Kanban/Docs freshness, Smoke, Sanitizer) and **Action Self-Test 21/21** (generate-only → run-existing → cache → generate-and-run miss → sabotage → `/adapt` → `/ignore`). The entrypoint platform refactor (detect_platform + gitlab branch) left the GitHub path byte-identical in behaviour — verified by the GitHub self-test, not just the local mirror.
 
 ## Housekeeping
 
