@@ -2,7 +2,7 @@
 """Phase 7a local self-test — exercise the Docker action exactly the way
 ``.github/workflows/ci-cd-action.yml`` does, without GitHub.
 
-Builds ``action/Dockerfile`` and runs the container twice with the same env
+Builds ``Dockerfile.action`` and runs the container twice with the same env
 surface GitHub sets for Docker actions (``INPUT_*``, ``GITHUB_WORKSPACE``,
 ``GITHUB_OUTPUT``), with the repo mounted at ``/github/workspace``:
 
@@ -57,9 +57,9 @@ def _win_path(p: Path) -> str:
 
 
 def build_image() -> None:
-    print(f"\n=== Build image: {IMAGE} (docker build -f action/Dockerfile .) ===")
+    print(f"\n=== Build image: {IMAGE} (docker build -f Dockerfile.action .) ===")
     proc = subprocess.run(
-        ["docker", "build", "-f", "action/Dockerfile", "-t", IMAGE, "."],
+        ["docker", "build", "-f", "Dockerfile.action", "-t", IMAGE, "."],
         cwd=str(PROJECT_ROOT),
         capture_output=True,
         text=True,

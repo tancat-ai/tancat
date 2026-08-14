@@ -84,7 +84,7 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'action/Dockerfile'
+  image: 'Dockerfile.action'
   entrypoint: '/entrypoint.sh'
 
 branding:
