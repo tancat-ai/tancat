@@ -1,13 +1,13 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-14 (Phase 7 CI/CD — 7a complete: core + Docker action + self-test workflow; 7b next)
+Last updated: 2026-08-15 (Phase 7 CI/CD — 7a + 7b complete: generate-and-run, cache, PR comment, slash-commands, verified adaptation; 7c next)
 
 ---
 
-## ✅ Phase 7 CI/CD Integration — spec + 7a complete (2026-08-13/14)
+## ✅ Phase 7 CI/CD Integration — spec + 7a + 7b complete (2026-08-13/14/15)
 
-**Status:** 🟡 ready-for-agent — spec complete (no open questions) + **7a shipped in full** (core 2026-08-13, Docker action tail 2026-08-14); 7b (generate-and-run) next
+**Status:** 🟡 ready-for-agent — spec complete (no open questions) + **7a shipped in full** (core 2026-08-13, Docker action tail 2026-08-14) + **7b shipped in full** (generate-and-run 2026-08-15); 7c (GitLab parity) next
 **Priority:** Medium-High (Tier 5 — Commercialization)
 **Spec:** `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
 
@@ -30,7 +30,16 @@ Last updated: 2026-08-14 (Phase 7 CI/CD — 7a complete: core + Docker action + 
 - `.dockerignore` hardened (was shipping 7.3 GB of historical output to the build context → now ~20 MB) — also speeds up the product image build. Latent product-image issues recorded below.
 - **Latent issue noted (product `Dockerfile`, NOT touched):** same `uv sync`-before-`COPY src` empty-project-wheel flaw + `~/.cargo/bin/uv` path + playwright/python image python-3.10 mismatch — the action image fixes all three; the product image should adopt the same fixes when next maintained.
 
-**Remaining (7b → next session):** generate-and-run wiring (PR comment with summary + flaky markers + evidence bundle, actions/cache, slash-command loop `/adapt` `/ignore`, verified adaptation engine). Then 7c (GitLab parity: `.gitlab-ci.yml` template + platform adapter + `docs/ci.md`).
+**Remaining (7c → next session):** GitLab parity — `.gitlab-ci.yml` include template (same three modes) + GitLab platform adapter (MR note comments, slash-commands, `cache:`/`artifacts:`, protected-environment approvals), tested against a real GitLab.com project (credentials available); `docs/ci.md` (modes, when to adapt — shared vs isolated envs, ignore-list format). Also tracked: `learn: true` input exists but fails fast (store-caching learning arrives after 7c).
+
+**7b shipped 2026-08-15 (generate-and-run; verified locally 28/28 gates):**
+- `generate-and-run` mode in `action/entrypoint.sh` — the full spec §5.4 pipeline: generate (or restore from cache) → pytest (referee exit) → AI-028 evidence JUnit → report + **flaky markers (AI-011 from the action's own cached per-branch run history)** → §6 PR comment payload (+ idempotent posting via the GitHub adapter when a token/PR context exists). `adapt: true` repo-level opt-in runs the verified adaptation engine and applies the referee-exit override (all failures adapted + re-run green → exit 0). `learn: true` fails fast with a clear message (never a silent no-op).
+- **Cache (spec §7)** — `action/cache_key.py`: the single source of truth for key = `sha256(story + url + model + provider + PROMPT_FINGERPRINT)` (pure stdlib, shared by the workflow's `actions/cache` steps and the action's internal cache-dir check — they can't drift). The action emits `cache_key`/`cache_hit` outputs, seeds `<cache-dir>/packages/<key>/` on miss, reuses on hit (no regeneration); `cache: false` forces fresh generation. Workflow: run-specific package key (deterministic miss for the self-test) + branch-scoped run-history key.
+- **PR comment (spec §6)** — `ci/platform/github.py`: the GitHub surface behind the §5.5 seam (find-by-marker → edit-not-duplicate create, reply posting; stdlib urllib; injectable base URL for hermetic tests). `action/report.py` gained the §6 context fields (**Site**/Model lines) + the flaky block; the entrypoint always writes `comment.md` and posts only when `repo`+`pr-number`+`github-token` inputs are present (local runs / stub steps assert the payload).
+- **Verified adaptation engine (spec §8/7b + §9.6)** — `action/adapt.py`: parses LocatorNotFound-class failures (both Playwright `locator('…')` and evidence_tracker `Locator '…' not found` shapes) → locates the source step → re-resolves the step's semantic label with the product's OWN machinery (`PageScraper` + `PlaceholderResolver`, no LLM) → patches → re-runs ONLY that test → keeps only if the test's assertions still pass, reverts otherwise → `adaptation.json` (every attempt recorded; CI never mutates silently). Assertion failures never reach the engine.
+- **Slash-command loop (spec §6)** — `scripts/ci_slash_commands.py` (platform-neutral parse + reply rendering: `/adapt <test>` reply from the adaptation report; `/ignore <test>` reply renders the exact `.ai-test-ignore.yml` entry with the required reason) + internal `slash-command` mode in the entrypoint + `.github/workflows/ci-slash-commands.yml` (`issue_comment` trigger, `pull-requests: write`, fork-PR guard, branch-cache restore via `restore-keys`).
+- **Self-test extended** — `.github/workflows/ci-cd-action.yml`: cache-key step + `actions/cache` restore/save (package + run-history) + generate-and-run phase (stub asserts: cache miss + seeding + §6 comment shape + flaky key) + sabotage→`/adapt` phase (stub asserts kept≥1, reverted=0, source fixed) + `/ignore` phase (stub asserts the YAML reply). `scripts/ci_action_selftest.py`: 28 gates locally incl. a host-side **mock GitHub API** (container posts comments via `host.docker.internal` — real POST/PATCH traffic verified: 1 comment, edited not duplicated on cache hit, adapt reply, ignore reply = 3 total).
+- **Tests:** +45 (cache-key 5, flaky-history 5, slash-commands 10, GitHub adapter 7, adaptation engine 13, report flaky/context 5). Full suite **2571 passed / 1 skipped**, smoke 38/38, ruff + mypy clean. The four 7a GitHub gotchas were not re-derived (action.yml at root, Dockerfile build context, hyphenated INPUT_* env vars, workspace dir name).
 
 ---
 

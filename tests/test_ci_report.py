@@ -128,3 +128,80 @@ def test_report_main_writes_comment_payload(tmp_path: Path) -> None:
 def test_report_missing_junit_exits_2(tmp_path: Path) -> None:
     rc = ci_report.main(["--mode", "run-existing", "--junit", str(tmp_path / "nope.xml"), "--output", str(tmp_path)])
     assert rc == 2
+
+
+def test_report_context_fields_and_site_line(tmp_path: Path) -> None:
+    junit = _write_junit(tmp_path)
+    out = tmp_path / "out"
+    rc = ci_report.main(
+        [
+            "--mode",
+            "generate-and-run",
+            "--junit",
+            str(junit),
+            "--package",
+            "pkg",
+            "--workspace",
+            "ws",
+            "--url",
+            "https://staging.example.com",
+            "--story",
+            "story.md",
+            "--model",
+            "gpt-4o",
+            "--provider",
+            "openai",
+            "--output",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert report["url"] == "https://staging.example.com"
+    assert report["model"] == "gpt-4o"
+    assert report["provider"] == "openai"
+    md = (out / "report.md").read_text(encoding="utf-8")
+    assert "**Site:** https://staging.example.com" in md
+    assert "**Model:** gpt-4o" in md
+
+
+def test_report_flaky_block_injected(tmp_path: Path) -> None:
+    junit = _write_junit(tmp_path)
+    out = tmp_path / "out"
+    flaky_txt = tmp_path / "flaky.txt"
+    flaky_txt.write_text(
+        "**Flaky (last few runs):**\n- `test_timeout` — 1 failure(s) across 3 run(s)", encoding="utf-8"
+    )
+    rc = ci_report.main(
+        [
+            "--mode",
+            "generate-and-run",
+            "--junit",
+            str(junit),
+            "--package",
+            "pkg",
+            "--workspace",
+            "ws",
+            "--flaky",
+            str(flaky_txt),
+            "--output",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    report = json.loads((out / "report.json").read_text(encoding="utf-8"))
+    assert "Flaky" in report["flaky"]
+    md = (out / "report.md").read_text(encoding="utf-8")
+    assert "**Flaky (last few runs):**" in md
+    assert "test_timeout" in md
+
+
+def test_report_flaky_absent_when_empty(tmp_path: Path) -> None:
+    junit = _write_junit(tmp_path)
+    out = tmp_path / "out"
+    rc = ci_report.main(
+        ["--mode", "run-existing", "--junit", str(junit), "--package", "pkg", "--workspace", "ws", "--output", str(out)]
+    )
+    assert rc == 0
+    md = (out / "report.md").read_text(encoding="utf-8")
+    assert "**Flaky" not in md
