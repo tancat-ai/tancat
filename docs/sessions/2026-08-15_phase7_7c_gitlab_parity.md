@@ -39,9 +39,24 @@ GitHub proved the pattern end-to-end (7b). GitLab parity per spec §8/7c: `.gitl
 - **Unit gates:** full suite **2587 passed / 1 skipped** (measured; incl. the 14 new GitLab adapter tests), smoke 38/38, ruff + mypy clean.
 - **GitHub CI:** both workflows green on `0ed06b5` — **CI/CD Pipeline 9/9** (PyTest+Coverage, Ruff, MyPy, Eval Static, Graph/Kanban/Docs freshness, Smoke, Sanitizer) and **Action Self-Test 21/21** (generate-only → run-existing → cache → generate-and-run miss → sabotage → `/adapt` → `/ignore`). The entrypoint platform refactor (detect_platform + gitlab branch) left the GitHub path byte-identical in behaviour — verified by the GitHub self-test, not just the local mirror.
 
+## Real GitLab.com gate (DoD §12 — passed 2026-08-15)
+
+Ran `scripts/ci_gitlab_real_project_test.py` against a real GitLab.com project (`cat-tan-operations/ai-testgen-selftest`, private, shared runners) with a PAT (`api` scope). **14/14 checks verified live** across three pipelines:
+
+| Gate | Result |
+|---|---|
+| push pipeline (default branch) | **success** — build (dind) + compute-key + run all green |
+| action-state exit_code | 0 |
+| cache miss on fresh project | `cache_hit=false` |
+| junit.xml artifact | 8 tests, 0 failed |
+| MR pipeline (feature/selftest → main) | **success** — §6 **MR note posted (1)**, marker + metric table |
+| edit-check (2nd commit on the branch) | **success** — `cache_hit=true` (package reused), **note still ONE** (edited, never duplicated) |
+
+Account-level blockers found + cleared along the way: (1) GitLab.com **identity verification** is required before new accounts can run CI on shared runners — the account needed a phone number added (avatar → Preferences → Account); 2FA alone does not lift it. (2) The commits API will not auto-create a branch — `POST /repository/branches` first. (3) MR pipelines report `ref: refs/merge-requests/<iid>/head`, not the source branch — wait on the MR's own pipelines endpoint. (4) `rules:` rejects an `artifacts:` key — per-mode artifacts need separate jobs (the `extends` restructure). Template fixes from the live run: `AITEST_IGNORE_FILE` defaults empty (a missing file fails generation), `INPUT_SELF_TEST` mapping, `CI_COMMIT_REF_NAME` cache keys (CI_COMMIT_BRANCH is empty on MR events), run-history in cache paths, `.gitlab-ci.yml` + `ai-test-story.md` added to the repo.
+
 ## Housekeeping
 
-- BACKLOG top entry: 7c complete, Phase 7 closed; remaining = `learn: true` (fails fast until store-caching) + the **real GitLab.com gate** (pending credentials).
+- BACKLOG top entry: 7c complete, **real GitLab.com gate passed** (DoD §12 closed — 14/14 live checks on `cat-tan-operations/ai-testgen-selftest`); remaining = `learn: true` (fails fast until store-caching).
 - CHANGELOG [Unreleased] 7c entry; kanban regenerated; scripts/README.md (selftest 39 gates + GitLab gates list); ROADMAP Phase 7 → `[x]` + Tier 5 §14 status + session-tracking rows; ARCHITECTURE.md gained the CI/CD Integration Layer subsection.
 - **DoD status:** all spec §12 items met except the live GitLab.com run — the `.gitlab-ci.yml` template + adapter are built and hermetically tested (mock-API gates carry the MR-note shape asserts); a real-project run mirrors the GitHub self-test once a `GITLAB_TOKEN` (api scope) is provided. No GitLab credentials exist on this machine or in the repo env.
 
