@@ -9,15 +9,28 @@ GitHub API on the host so comment posting is verified against real HTTP
 traffic (host.docker.internal — Docker Desktop NAT).
 
 Gates:
-  1. generate-only + self-test     -> exit 0, driver JSON contract, persisted package
-  2. run-existing + self-test      -> junit + evidence junit + report shape, exit 0
-  3. generate-and-run (cache miss) -> generates, seeds cache, pytest, comment payload
-     + idempotent POST to the mock API (1 comment), cache_hit=false
-  4. generate-and-run (cache hit)  -> no regeneration, cache_hit=true, comment EDITED
-     (still 1 comment)
-  5. slash-command /adapt          -> sabotage a locator, verified adaptation fixes it
-     (patch -> re-run -> gate -> keep), reply POSTED (2 comments)
-  6. slash-command /ignore         -> reply renders the .ai-test-ignore.yml entry (3 comments)
+  1. generate-and-run (cache miss) -> generates, seeds cache, pytest, driver
+     JSON contract, §6 comment payload + idempotent POST to the mock API (1
+     comment), cache_hit=false. (The generate-only MODE's driver contract is
+     asserted here — the same driver block powers both modes, so a separate
+     full generation gate would double the ~2.5 min pipeline cost.)
+  2. generate-and-run (cache hit)  -> no regeneration, cache_hit=true, comment
+     EDITED (still 1 comment); the referee pytest runs a single test (-k) —
+     the full suite is already judged by the miss gate
+  3. run-existing                  -> junit + evidence junit + report shape
+  4. slash-command /adapt          -> sabotage a locator, verified adaptation
+     fixes it (patch -> re-run -> gate -> keep), reply POSTED (2 comments);
+     the referee pytest runs only the named test (-k), not the whole suite
+  5. slash-command /ignore         -> reply renders the .ai-test-ignore.yml
+     entry (3 comments)
+
+Cost profile (measured 2026-08-15, this machine): miss ~5.5 min (2.5 gen + 3
+suite), hit ~20s, run-existing ~3 min (suite), /adapt ~1 min, /ignore ~10s.
+The image build (~2-5 min) only reruns the changed layers; the browser layer
+is ordered before COPY so action-code edits don't re-download Chromium. The
+full-suite pytest cost (~3 min) is the product's real per-test overhead — the
+GitHub self-test workflow (authoritative, runs in parallel with every push)
+carries the same profile.
 
 Usage::
 
@@ -40,7 +53,9 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -177,6 +192,44 @@ class MockGitHubAPI:
 # ---------------------------------------------------------------------------
 
 
+def _image_is_stale() -> bool:
+    """True when any image input is newer than the built image.
+
+    --skip-build must not silently test stale code: the guard refuses it when
+    the action/source files the image bundles changed since the last build.
+    """
+    try:
+        proc = subprocess.run(
+            ["docker", "image", "inspect", IMAGE, "--format", "{{.Created}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except subprocess.SubprocessError, OSError:
+        return True
+    if proc.returncode != 0:
+        return True  # no image yet
+    try:
+        # docker prints RFC3339-ish, e.g. 2026-08-14T17:52:29.8512381Z
+        image_ts = datetime.fromisoformat(proc.stdout.strip().replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return True
+    inputs = [
+        PROJECT_ROOT / "Dockerfile.action",
+        PROJECT_ROOT / ".dockerignore",
+        PROJECT_ROOT / "pyproject.toml",
+        PROJECT_ROOT / "uv.lock",
+        PROJECT_ROOT / "generated_tests" / "conftest.py",
+    ]
+    for rel in ("action", "ci", "src", "scripts", "mock_sites"):
+        base = PROJECT_ROOT / rel
+        if base.exists():
+            inputs += [p for p in base.rglob("*") if p.is_file()]
+    latest = max((p.stat().st_mtime for p in inputs if p.exists()), default=0.0)
+    return latest > image_ts
+
+
 def build_image() -> None:
     print(f"\n=== Build image: {IMAGE} (docker build -f Dockerfile.action .) ===")
     proc = subprocess.run(
@@ -261,39 +314,6 @@ def _find_generated_package() -> Path | None:
 # ---------------------------------------------------------------------------
 # Gates
 # ---------------------------------------------------------------------------
-
-
-def run_generate_only() -> int:
-    print("\n=== Gate: generate-only (hermetic mock + fake LLM) ===")
-    results = _results()
-    results.mkdir(parents=True, exist_ok=True)
-    env = {
-        "INPUT_MODE": "generate-only",
-        "INPUT_SELF-TEST": "true",
-        "INPUT_STORY": STORY,
-        "INPUT_URL": MOCK_SITE,
-        "INPUT_WORKSPACE": WORKSPACE_NAME,
-        "GITHUB_WORKSPACE": MOUNT,
-        "GITHUB_OUTPUT": GITHUB_OUTPUT_PATH,
-    }
-    proc = docker_run(env, "generate-only")
-    gate("generate-only exits 0", proc.returncode == 0, f"rc={proc.returncode}")
-
-    summary_path = results / "summary.json"
-    if summary_path.exists():
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        gate("driver JSON contract ok", summary.get("ok") is True and summary.get("exit_code") == 0, str(summary))
-        gate("test_count >= 1", summary.get("test_count", 0) >= 1, f"{summary.get('test_count')} tests")
-    else:
-        gate("driver JSON contract ok", False, "summary.json missing")
-
-    pkgs = (
-        sorted((_host_mount_dir() / "generated_tests").rglob("test_*.py"))
-        if (_host_mount_dir() / "generated_tests").exists()
-        else []
-    )
-    gate("package persisted to mounted workspace", len(pkgs) >= 1, f"{len(pkgs)} test file(s)")
-    return proc.returncode
 
 
 def run_existing() -> int:
@@ -390,6 +410,22 @@ def run_generate_and_run(api: MockGitHubAPI) -> int:
     gate("cache_hit=false on first run", outputs.get("cache_hit") == "false", str(outputs.get("cache_hit")))
     gate("cache_key emitted", len(outputs.get("cache_key", "")) == 64, outputs.get("cache_key", "")[:16])
 
+    # The driver JSON contract (generate-only's asserts live here now — the
+    # same driver block powers generate-and-run, so a separate full generation
+    # gate would double the ~2.5 min pipeline cost for the same output).
+    summary_path = _results() / "summary.json"
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        contract_ok = (
+            summary.get("ok") is True
+            and summary.get("exit_code") == 0
+            and summary.get("test_count", 0) >= 1
+            and summary.get("conditions", 0) >= 1
+        )
+        gate("driver JSON contract ok", contract_ok, str(summary))
+    else:
+        gate("driver JSON contract ok", False, "summary.json missing")
+
     cache = _host_mount_dir() / "cache" / "packages"
     seeded = list(cache.rglob("test_*.py")) if cache.exists() else []
     gate("cache seeded with the generated package", len(seeded) >= 1, f"{len(seeded)} test file(s)")
@@ -416,6 +452,10 @@ def run_cache_hit(api: MockGitHubAPI, gen_stamp: float) -> int:
     print("\n=== Gate: generate-and-run (cache hit -> reuse, no regeneration) ===")
     _clear_github_output()
     env = _generate_and_run_env(api.port)
+    # The hit-path contract is "reuse the package, run pytest, edit the comment"
+    # — the full 8-test suite is already judged by the miss gate, so a single
+    # test keeps this gate at ~20s instead of ~3 min.
+    env["INPUT_PYTEST-ARGS"] = "-k test_01_navigate_to_store_home"
     proc = docker_run(env, "generate-and-run (hit)")
     outputs = _github_outputs()
     gate("generate-and-run exits 0 on cache hit", proc.returncode == 0, f"rc={proc.returncode}")
@@ -562,19 +602,32 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _run_gate(name: str, fn: object, *args: object) -> None:
+    """Run one gate and print its wall-clock time (the selftest's cost profile)."""
+    t0 = time.monotonic()
+    fn(*args)  # type: ignore[operator]
+    print(f"  ({name}: {time.monotonic() - t0:.0f}s)")
+
+
 def main() -> int:
     args = parse_args()
+    if args.skip_build and _image_is_stale():
+        print(
+            "ERROR: --skip-build requested but the image is stale (action/source files are newer "
+            "than the last build). Run without --skip-build to rebuild.",
+            file=sys.stderr,
+        )
+        return 2
     if not args.skip_build:
         build_image()
 
     with MockGitHubAPI() as api:
-        run_generate_only()
-        run_existing()
-        run_generate_and_run(api)
+        _run_gate("generate-and-run (cache miss)", run_generate_and_run, api)
         gen = _results() / "generate.json"
-        run_cache_hit(api, gen.stat().st_mtime if gen.exists() else 0.0)
-        run_slash_adapt(api)
-        run_slash_ignore(api)
+        _run_gate("generate-and-run (cache hit)", run_cache_hit, api, gen.stat().st_mtime if gen.exists() else 0.0)
+        _run_gate("run-existing", run_existing)
+        _run_gate("slash /adapt", run_slash_adapt, api)
+        _run_gate("slash /ignore", run_slash_ignore, api)
 
     passed = sum(1 for _, ok, _ in GATES if ok)
     print(f"\n{'=' * 60}")

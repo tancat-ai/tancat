@@ -260,3 +260,30 @@ def test_adapt_report_writes_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert data["summary"]["adapted"] == 1
     assert data["url"] == "http://127.0.0.1:9999/index.html"  # from the manifest
     assert data["package"].endswith("test_pkg")
+
+
+def test_adapt_url_from_nested_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cache restore lays out <key>/<pkg>/ — the URL search must recurse."""
+    nested = tmp_path / "key123" / "test_pkg"
+    pkg = _package(tmp_path)
+    # Move the synthetic package under a cache-style nesting.
+    import shutil
+
+    shutil.copytree(pkg, nested)
+    junit = _junit_with_failure(tmp_path)
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: _fake_elements())
+    monkeypatch.setattr(adapt, "run_single_test", lambda pkg, test, root: (0, "1 passed"))
+
+    report = adapt_package(nested, junit)
+    assert report.url == "http://127.0.0.1:9999/index.html"
+    assert report.summary["adapted"] == 1
+
+
+def test_adapt_no_url_fails_cleanly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pkg = _package(tmp_path)
+    (pkg / "package_manifest.json").unlink()
+    junit = _junit_with_failure(tmp_path)
+    monkeypatch.setattr(adapt, "scrape_elements", lambda url: _fake_elements())
+    report = adapt_package(pkg, junit)
+    assert report.summary["candidates"] == 1
+    assert report.candidates[0]["status"] == "no-url"

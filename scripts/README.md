@@ -278,7 +278,8 @@ verified against real HTTP traffic (`host.docker.internal` — Docker Desktop NA
 6. **slash-command /ignore** — reply renders the `.ai-test-ignore.yml` entry.
 
 ```bash
-python scripts/ci_action_selftest.py            # build + run + assert (28 gates)
+python scripts/ci_action_selftest.py            # build + run + assert (25 gates, ~15 min cold)
+python scripts/ci_action_selftest.py --skip-build   # ~10 min; refused when the image is stale
 python scripts/ci_action_selftest.py --skip-build
 python scripts/ci_action_selftest.py --keep     # keep .ai-test-workspace/ on pass
 ```

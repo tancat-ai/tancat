@@ -276,15 +276,19 @@ def run_single_test(package: Path, test_name: str, repo_root: Path) -> tuple[int
 
 
 def _package_url(package: Path, url: str) -> str:
-    """URL from the explicit input, else the package manifest's starting_url."""
+    """URL from the explicit input, else the package manifest's starting_url.
+
+    The package may be nested (cache restore lays out ``<key>/<pkg>/`` or the
+    slash-command flow points at the whole cache dir) — search recursively for
+    the first manifest with a starting_url.
+    """
     if url:
         return url
-    manifest = package / "package_manifest.json"
-    if manifest.exists():
+    for manifest in package.rglob("package_manifest.json"):
         try:
             data = json.loads(manifest.read_text(encoding="utf-8"))
         except json.JSONDecodeError, OSError:
-            return ""
+            continue
         if data.get("starting_url"):
             return str(data["starting_url"])
     return ""
