@@ -151,6 +151,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--criteria", default="", help="Optional pre-written acceptance criteria; empty = derive from the story"
     )
     parser.add_argument("--workspace", default="ci-workspace", help="AI-029 workspace name (default: ci-workspace)")
+    parser.add_argument(
+        "--storage-root",
+        default="",
+        help="Base directory for the workspace (default: repo root). The CI action passes "
+        "$GITHUB_WORKSPACE so generated artifacts persist to the runner.",
+    )
     parser.add_argument("--pom", action="store_true", help="Page Object Model mode")
     parser.add_argument(
         "--provider", default="openai-local", help="LLM provider (openai-local, lm-studio, ollama, openai)"
@@ -208,7 +214,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     model_name = args.model or get_provider_defaults(provider)[1]
 
     # --- workspace isolation (AI-029) --------------------------------------
-    init_storage(workspace=args.workspace)
+    init_storage(root=Path(args.storage_root) if args.storage_root else None, workspace=args.workspace)
 
     # --- run the production pipeline ---------------------------------------
     session = PipelineSessionState()

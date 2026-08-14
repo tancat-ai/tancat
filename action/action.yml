@@ -1,0 +1,92 @@
+# Phase 7a — GitHub Action metadata.
+#
+# Docker action: the image is built from action/Dockerfile (uv + Playwright
+# chromium, same base as the product image), and action/entrypoint.sh is the
+# thin orchestrator over scripts/ci_generate.py + pytest + the AI-028
+# evidence exporter. All behaviour lives in this repo (scripts + image) so it
+# is testable with pytest, not only via GitHub.
+#
+# Phase 7a scope: generate-only + run-existing. generate-and-run (PR comment,
+# cache, verified adaptation) arrives in 7b — the entrypoint fails fast with
+# a clear message instead of silently degrading.
+
+name: 'AI Test Generator'
+description: >-
+  Generate Playwright Python tests from a user story (headless, hermetic) and
+  run existing packages through pytest with JUnit evidence. Phase 7a: modes
+  generate-only and run-existing.
+
+inputs:
+  mode:
+    description: >-
+      generate-only (generate a test package, no execution) | run-existing
+      (run a caller-provided package through pytest + JUnit).
+    default: 'generate-only'
+  story:
+    description: >-
+      User story markdown — inline text or a path to a story file in the repo
+      (required for generate-only).
+    default: ''
+  tests:
+    description: >-
+      Path to an existing generated test package (directory) or test file(s),
+      relative to the repo root (required for run-existing).
+    default: ''
+  url:
+    description: >-
+      Target site URL — staging only (localhost / *.staging.* / *-dev /
+      *.test.*). Override with danger-zone (prod smoke/load testing only).
+    default: ''
+  workspace:
+    description: >-
+      AI-029 workspace name; artifacts (generated package, results) are
+      written under <repo-root>/<workspace>/ so later steps can upload them.
+    default: 'ai-test-workspace'
+  pom:
+    description: 'Page Object Model mode (generate-only).'
+    default: 'false'
+  provider:
+    description: 'LLM provider: openai-local | lm-studio | ollama | openai.'
+    default: 'openai-local'
+  model:
+    description: 'Model name (defaults to the provider default).'
+    default: ''
+  llm-base-url:
+    description: 'OpenAI-compatible base URL (for local endpoints).'
+    default: ''
+  llm-api-key:
+    description: 'API key for cloud providers — pass from secrets, never inline.'
+    default: ''
+  credential-profile:
+    description: >-
+      Login credentials JSON {"label","username","password"} for sites that
+      require a session.
+    default: ''
+  ignore-file:
+    description: 'Path to .ai-test-ignore.yml (validated at generation time).'
+    default: ''
+  danger-zone:
+    description: >-
+      Explicitly allow a non-allow-listed URL (prod smoke/load testing only).
+    default: 'false'
+  allowed-domains:
+    description: 'Comma-separated extra safe domains (internal staging names).'
+    default: ''
+  pytest-args:
+    description: 'Extra whitespace-separated pytest args for run-existing.'
+    default: '-q --tb=short'
+  # Internal/test-only — never used by consumers.
+  self-test:
+    description: >-
+      INTERNAL: boot the hermetic mock site + fake LLM inside the container
+      (used by .github/workflows/ci-cd-action.yml).
+    default: 'false'
+
+runs:
+  using: 'docker'
+  image: 'action/Dockerfile'
+  entrypoint: '/entrypoint.sh'
+
+branding:
+  icon: 'test-tube'
+  color: 'purple'

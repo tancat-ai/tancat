@@ -16,3 +16,20 @@ node_modules
 .DS_Store
 .vscode
 .idea
+
+# Heavy / non-runtime content — keep the docker build context small
+.venv
+graphify-out/
+exported_tests/
+scratch/
+notebooks/
+screenshots/
+training_data/
+tier2-demo/
+before/
+raw/
+unsloth_compiled_cache/
+.ai-test-workspace/
+generated_tests/test_*/
+generated_tests/verify_*/
+~

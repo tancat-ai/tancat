@@ -11,6 +11,10 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `debug_step_through.py` | Step-by-step interactive debugger for generated tests (headed) | Browser + Enter |
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
+| `ci_generate.py` | Headless test-generation driver (Phase 7) — exit codes 0/1/2, `--json` | LLM endpoint (mock + fake LLM for hermetic runs) |
+| `fake_llm.py` | OpenAI-compatible fake LLM server (canned skeletons) — hermetic pipeline testing | Nothing — localhost |
+| `mock_server.py` | Robust mock-site HTTP server (concurrent Playwright-safe) | Nothing — localhost |
+| `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate-only + run-existing) | Docker |
 | `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
 | `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
@@ -249,3 +253,25 @@ Archived scripts from previous debugging sessions. Not executed, kept for refere
 ---
 
 *Last updated: 2026-07-15*
+
+## ci_action_selftest.py — Local Docker Self-Test for the CI Action
+
+Exercises the Phase 7a Docker action (`action/Dockerfile` + `action/entrypoint.sh`)
+exactly the way `.github/workflows/ci-cd-action.yml` does on GitHub, but locally:
+builds the image, then runs it twice with GitHub's Docker-action env surface
+(`INPUT_*`, `GITHUB_WORKSPACE`, `GITHUB_OUTPUT`) and the repo mounted at
+`/github/workspace`:
+
+1. **generate-only** + `self-test: true` — hermetic mock site + fake LLM inside
+   the container → driver JSON contract, persisted package.
+2. **run-existing** + `self-test: true` — pytest `--junitxml` + AI-028 evidence
+   JUnit + report against the generated package → JUnit well-formedness, report
+   payload shape (the 7b comment shape), referee exit code.
+
+```bash
+python scripts/ci_action_selftest.py            # build + run + assert (9 gates)
+python scripts/ci_action_selftest.py --skip-build
+python scripts/ci_action_selftest.py --keep     # keep .ai-test-workspace/ on pass
+```
+
+Exit codes: `0` all green, `1` a gate failed, `2` usage/build error.
