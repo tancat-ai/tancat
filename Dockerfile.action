@@ -1,5 +1,10 @@
 # Dockerfile for the Phase 7 CI/CD GitHub Action image.
 #
+# Named Dockerfile.action at the REPO ROOT on purpose: GitHub Actions builds
+# a Docker action's image with the Dockerfile's own directory as the build
+# context, so a Dockerfile in action/ cannot see pyproject.toml/uv.lock/src/
+# (verified empirically 2026-08-14). At the root the context is the repo.
+#
 # Separate from the product Dockerfile on purpose: the product image's CMD
 # runs Streamlit; the Action image is a headless entrypoint.
 #
@@ -11,8 +16,8 @@
 # OWN playwright (uv.lock -> 1.61.0), so browser version always matches the
 # driver — deterministic, never the image's stale 1.50 bundle.
 #
-# Build context is the repository root (same as the product image):
-#     docker build -f action/Dockerfile -t ai-test-generator-action .
+# Build context is the repository root:
+#     docker build -f Dockerfile.action -t ai-test-generator-action .
 
 # Builder stage: install dependencies using uv
 FROM python:3.14-slim AS builder

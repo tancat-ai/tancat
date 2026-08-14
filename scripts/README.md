@@ -256,7 +256,7 @@ Archived scripts from previous debugging sessions. Not executed, kept for refere
 
 ## ci_action_selftest.py — Local Docker Self-Test for the CI Action
 
-Exercises the Phase 7a Docker action (`action/Dockerfile` + `action/entrypoint.sh`)
+Exercises the Phase 7a Docker action (`Dockerfile.action` + `action/entrypoint.sh`)
 exactly the way `.github/workflows/ci-cd-action.yml` does on GitHub, but locally:
 builds the image, then runs it twice with GitHub's Docker-action env surface
 (`INPUT_*`, `GITHUB_WORKSPACE`, `GITHUB_OUTPUT`) and the repo mounted at
