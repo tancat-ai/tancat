@@ -197,6 +197,27 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/hover_click_utils.py` | Hover-reveal click strategies for hidden elements (display:none, visibility:hidden, opacity:0). Progressive strategies: direct hover → dispatch mouseenter → ancestor traversal → force-show via JS. Extracted from `browser_utils.py`. |
 | `src/file_utils.py` | File operation helpers: `slugify()`, `validate_python_syntax` wrapper, timestamped file naming. |
 
+### 🔁 CI/CD Integration Layer (Phase 7)
+
+The headless CI/CD surface — the **same pipeline** (the src/ layers above) behind a platform seam. Everything platform-neutral lives in `action/` + `scripts/`; the only platform-touching layer is `ci/platform/`.
+
+| Module | Role |
+|--------|------|
+| `scripts/ci_generate.py` | Headless generation driver — runs `ui_pipeline.run_pipeline()` non-interactively (exit codes 0/1/2, `--json`, workspace isolation, danger-zone allow-list). The front door every mode uses. |
+| `scripts/fake_llm.py` | OpenAI-compatible fake LLM (canned skeletons) — makes generate-mode self-testable hermetically. |
+| `src/ci_ignore.py` | `.ai-test-ignore.yml` parser/validator/matcher (required-`reason` anti-rug rule). |
+| `action/entrypoint.sh` | Thin Docker-action orchestrator over the driver + pytest + report/adapt/flaky; reads the GitHub `INPUT_*` / GitLab underscore env surface; `detect_platform` routes comment posting to the right adapter. |
+| `action/cache_key.py` | The §7 cache key (`sha256(story+url+model+provider+PROMPT_FINGERPRINT)`) — one source of truth shared by workflow cache steps and the action's internal cache check. |
+| `action/report.py` | JUnit → §6 report payload (counts, repair candidates, flaky block, Site/Model context). |
+| `action/adapt.py` | Verified adaptation engine — locator-only patch → re-run → assertion gate → keep-or-revert; `adaptation.json`. |
+| `action/flaky_history.py` | Per-branch run-history store → AI-011 flaky markers. |
+| `scripts/ci_slash_commands.py` | Slash-command core (`/adapt`, `/ignore`) — platform-neutral parse + reply rendering. |
+| `ci/platform/github.py` | **GitHub adapter** — PR comments (find-by-marker → edit-not-duplicate), injectable base URL, stdlib urllib. |
+| `ci/platform/gitlab.py` | **GitLab adapter** (7c) — MR notes (`/projects/:id/merge_requests/:iid/notes`), `PRIVATE-TOKEN`, **PUT** edits, URL-encoded project paths, `--latest-command` for the manual slash job. |
+| `ci/gitlab-ci.template.yml` | GitLab include template — same three modes + build/compute-key jobs + manual slash job; `cache:`/`artifacts:`/protected-env approval gate. |
+
+User-facing configuration: `docs/ci.md`. Spec: `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`.
+
 ---
 
 ## 3. Pipeline Flow (7 Phases)

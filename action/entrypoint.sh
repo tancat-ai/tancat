@@ -174,6 +174,25 @@ resolve_path() { # $1 = input value
   esac
 }
 
+# Resolve the posting platform (spec §5.5 seam): explicit `platform` input
+# wins; else auto-detect from the runner env. GitLab sets GITLAB_CI=true in
+# every pipeline (and CI_SERVER_HOST on all runners); GitHub sets neither.
+detect_platform() {
+  local PLATFORM
+  PLATFORM="$(get_input PLATFORM)"
+  case "$PLATFORM" in
+    "" | auto)
+      if [ -n "${GITLAB_CI:-}" ] || [ -n "${CI_SERVER_HOST:-}" ]; then
+        printf 'gitlab'
+      else
+        printf 'github'
+      fi
+      ;;
+    github | gitlab) printf '%s' "$PLATFORM" ;;
+    *) printf 'github' ;;
+  esac
+}
+
 # Provision the evidence conftest next to a package when missing (lazy
 # fixture — plain pytest packages are unaffected). CI checkouts are
 # ephemeral; this is scratch-space provisioning, not mutation of tracked
@@ -232,15 +251,45 @@ run_pytest() { # $1 = tests path (dir or file), $2 = optional -k filter
   fi
 }
 
-# Post a comment payload idempotently when a PR context + token exist.
+# Post a comment payload idempotently when a PR/MR context + token exist.
 # Always writes comment.md so local runs / stub steps can assert the shape.
+# The platform seam (spec §5.5) resolves here: the same marker + edit-not-
+# duplicate contract runs through ci/platform/github.py (PR comments) or
+# ci/platform/gitlab.py (MR notes) — a repo that moves between platforms
+# keeps one comment thread per run.
 post_comment() { # $1 = markdown body path, $2 = marker
   local BODY_FILE="$1" MARKER="$2"
+  cp "$BODY_FILE" "$RESULT_DIR/comment.md"
+  local PLATFORM
+  PLATFORM="$(detect_platform)"
+
+  if [ "$PLATFORM" = "gitlab" ]; then
+    local GL_TOKEN GL_PROJECT GL_MR_IID GL_API_URL
+    GL_TOKEN="$(get_input GITLAB-TOKEN)"
+    GL_PROJECT="$(get_input GITLAB-PROJECT)"
+    GL_MR_IID="$(get_input GITLAB-MR-IID)"
+    GL_API_URL="$(get_input GITLAB-API-URL)"
+    GL_API_URL="${GL_API_URL:-${CI_API_V4_URL:-https://gitlab.com/api/v4}}"
+    if [ -n "$GL_TOKEN" ] && [ -n "$GL_PROJECT" ] && [ -n "$GL_MR_IID" ]; then
+      log "posting MR note to $GL_PROJECT!$GL_MR_IID (platform: gitlab, marker: $MARKER)"
+      if GITLAB_TOKEN="$GL_TOKEN" CI_PROJECT_PATH="$GL_PROJECT" CI_MERGE_REQUEST_IID="$GL_MR_IID" \
+          CI_API_V4_URL="$GL_API_URL" \
+          python ci/platform/gitlab.py --body-file "$BODY_FILE" --marker "$MARKER" \
+          >"$RESULT_DIR/comment-post.out" 2>"$RESULT_DIR/comment-post.err"; then
+        log "MR note posted: $(cat "$RESULT_DIR/comment-post.out")"
+      else
+        log "WARN: MR note posting failed (see $RESULT_DIR/comment-post.err)"
+      fi
+    else
+      log "comment payload written ($RESULT_DIR/comment.md); posting skipped (no GitLab MR context/token)"
+    fi
+    return 0
+  fi
+
   local REPO PR_NUMBER TOKEN
   REPO="$(get_input REPO)"
   PR_NUMBER="$(get_input PR-NUMBER)"
   TOKEN="$(get_input GITHUB-TOKEN)"
-  cp "$BODY_FILE" "$RESULT_DIR/comment.md"
   if [ -n "$TOKEN" ] && [ -n "$REPO" ] && [ -n "$PR_NUMBER" ]; then
     log "posting comment to $REPO#$PR_NUMBER (marker: $MARKER)"
     if GITHUB_TOKEN="$TOKEN" GITHUB_REPOSITORY="$REPO" GITHUB_PR_NUMBER="$PR_NUMBER" \

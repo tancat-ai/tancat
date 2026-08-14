@@ -14,7 +14,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `ci_generate.py` | Headless test-generation driver (Phase 7) — exit codes 0/1/2, `--json` | LLM endpoint (mock + fake LLM for hermetic runs) |
 | `fake_llm.py` | OpenAI-compatible fake LLM server (canned skeletons) — hermetic pipeline testing | Nothing — localhost |
 | `mock_server.py` | Robust mock-site HTTP server (concurrent Playwright-safe) | Nothing — localhost |
-| `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate/run/cache/comment/adapt gates) | Docker |
+| `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate/run/cache/comment/adapt gates, GitHub + GitLab mock APIs) | Docker |
 | `ci_slash_commands.py` | Slash-command core (`/adapt`, `/ignore`) — parse comments, render reply payloads | Nothing — offline |
 | `export_gate.py` | Export gate — exports flat+POM, validates artifacts, runs the exported suites | Browser (golden: localhost only) |
 | `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
@@ -276,11 +276,21 @@ verified against real HTTP traffic (`host.docker.internal` — Docker Desktop NA
 5. **slash-command /adapt** — sabotages a locator, runs verified adaptation
    (locator-only patch → re-run → assertion gate → keep), reply POSTED.
 6. **slash-command /ignore** — reply renders the `.ai-test-ignore.yml` entry.
+7. **gitlab generate-and-run** — Phase 7c parity: `INPUT_PLATFORM=gitlab` posts
+   the §6 payload as an **MR note** to a host-side mock GitLab API (notes
+   endpoint, `PRIVATE-TOKEN`, URL-encoded project path); the cache-hit reuses
+   the GitHub miss gate's seeded package (no duplicate ~2.5 min generation).
+8. **gitlab slash-command /adapt** — sabotages the CACHED package, verified
+   adaptation fixes it, reply posted as an MR note.
+9. **gitlab slash-command /ignore** — reply posted as an MR note.
+
+The GitLab gates assert the REST shapes that differ from GitHub: MR notes live
+under `/projects/:id/merge_requests/:iid/notes`, edits are **PUT** (not
+PATCH), auth is `PRIVATE-TOKEN`.
 
 ```bash
-python scripts/ci_action_selftest.py            # build + run + assert (25 gates, ~15 min cold)
+python scripts/ci_action_selftest.py            # build + run + assert (39 gates, ~15 min cold)
 python scripts/ci_action_selftest.py --skip-build   # ~10 min; refused when the image is stale
-python scripts/ci_action_selftest.py --skip-build
 python scripts/ci_action_selftest.py --keep     # keep .ai-test-workspace/ on pass
 ```
 
