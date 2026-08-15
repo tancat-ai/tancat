@@ -86,3 +86,36 @@ Local/CI gates unchanged and green: Docker selftest **39/39**, full suite **2587
 > learned store). Otherwise the next item is yours to pick (BACKLOG top entry
 > is Phase 7-closed; roadmap candidates: Phase 8 GTM assets `[~]`, AI-044-B,
 > or Phase 6 SaaS).
+>
+> **NEXT SESSION = `learn: true` (decided with the user 2026-08-15).** Why:
+> CI should behave like the UI/CLI or have a documented reason not to — the
+> fail-fast is that sort of unexplained divergence. Note: learning ≠
+> self-healing (self-healing in CI was deliberately rejected; learning was
+> always a planned opt-in input, just never wired).
+>
+> Settled design:
+> - **Flow memory only; RAG off in CI** (the RAG leg needs an ~80 MB embedder
+>   download per runner — document the reason in `docs/ci.md`).
+> - **Saturation is expected** (user-derived, correct): a stable package vs a
+>   stable site learns most new patterns on the first full green run; later
+>   runs dedup + reinforce (hit counts). Value = consistency + first-run
+>   seeding (a NEW story on the same site later resolves better). Modest-
+>   value, consistency-driven — why it is opt-in and default off.
+> - **Within-test flows first** (free — the action already runs the package's
+>   conftest teardown); **suite chains** need the UI/CLI post-run hook — add
+>   one explicit entrypoint call only if the within-test store proves thin.
+>
+> Implementation sketch: (1) `action/entrypoint.sh` — replace the fail-fast:
+> on a GREEN generate-and-run with `learn: true`, ensure `RAG_ENABLED=0`, let
+> the conftest teardown write `evidence/flow_memory.json` in the workspace,
+> log/emit the learned count; (2) `.github/workflows/ci-cd-action.yml` — a
+> branch-scoped `actions/cache` step for the store (like run-history);
+> (3) `ci/gitlab-ci.template.yml` — add the store path to cache `paths`;
+> (4) `action.yml` — update the `learn` input description; (5) selftest learn
+> gate (seed on a passing run, restore on a re-run — reuse the miss/hit
+> structure); (6) docs (`docs/ci.md`, session doc, BACKLOG).
+>
+> Read first: `src/flow_memory.py` (store format + consumption hook),
+> `generated_tests/conftest.py` (the teardown learning leg; how the action's
+> provisioned conftest differs), `scripts/ci_action_selftest.py` (miss/hit
+> gate structure to mirror).
