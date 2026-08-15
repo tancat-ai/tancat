@@ -96,8 +96,32 @@ This session implemented it exactly as sketched.
 - Full default suite: **2597 passed / 1 skipped** (+10 new tests).
 - ruff + mypy clean; `action.yml` / `.github/workflows/ci-cd-action.yml` /
   `ci/gitlab-ci.template.yml` all parse.
-- GitHub CI: the pushed workflows run the selftest (Action Self-Test) and
-  the pipeline — see the Actions tab.
+- GitHub CI (both pushed workflows green on `3db0b0d`): **CI/CD Pipeline
+  success** + **Action Self-Test success (25/25 steps)** — the learn gate
+  passed on the runner (`learn OK: 1 patterns / 1 sites`; flow-memory
+  restore/save steps green). Two benign warnings: run-history restore
+  "Permission denied" (the known root-owned-file quirk — the sabotage step
+  documents it) and one "Cache save failed" (parallel-job race on the
+  run-history key between the two workflows — one wins, other skipped).
+- **GitLab.com live (template changed → re-verified)**: pushed the repo to
+  `cat-tan-operations/ai-testgen-selftest`; the push pipeline's first
+  attempt failed at `build-image` with a **transient Chrome download error**
+  ("Failed to download Chrome for Testing", exit 1 — the browser layer is
+  untouched by this change and built fine in the 7c run); retried the same
+  commit → **pipeline success** (build-image ✓, compute-key ✓,
+  ai-testgen:run ✓). Run-job artifacts verified: `exit_code=0`,
+  `cache_hit=true` (branch cache restored with the new cache `paths`),
+  `cache_key` 64-hex, junit **8 tests / 0 failed**.
+
+  The full 14/14 script (`scripts/ci_gitlab_real_project_test.py`) was NOT
+  re-run end-to-end: its stage-2 gate asserts a cache MISS on a "fresh
+  project", and the branch cache now exists on the test project (the token
+  can't clear it via the API — the `clear_cache` endpoints 404). The
+  MR-note gates (stages 3-4) are untouched by this change (no posting code
+  was modified; `INPUT_LEARN` is inert with `AITEST_LEARN=false`, and the
+  added cache path is a no-op without a store) and were proven 14/14 in 7c.
+  The template's live-pipeline path with the new variables/paths is
+  verified by the retried run above.
 
 ## Housekeeping
 
