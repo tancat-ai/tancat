@@ -1526,10 +1526,21 @@ ecommerce test (mock server up, no parent store-holder); the batch and
 full-combo resolve-and-learn runs contributed 0 (lock-blocked). All 26 purged
 patterns share `sha256("localhost")` because B-047's port-stripping was live
 throughout — regardless of which session produced them, they were inert
-post-fix, so the purge was correct. Fix
-candidate: parent-side sweep of `evidence/*.evidence.json` sidecars after each
-site's executions (parent calls `learn_from_evidence` itself — no lock
-contention), ~30 lines in `scripts/synthesize_stories.py`.
+post-fix, so the purge was correct.
+
+**Fix — ✅ SHIPPED 2026-08-11 (`e03ee0e`, "RAG learning lock"): parent-side
+sweep of `evidence/*.evidence.json` sidecars after each site's executions.
+`learn_from_evidence_sidecars()` (`src/rag_learn.py`) runs IN the parent
+process (no lock contention), same dedup + site scoping as the conftest
+hook; the AI-042 flow-memory legs (`learn_from_sidecars` + F3
+`learn_suite_flows`) ride the same per-site sweep (plain JSON store). Wired
+in per-site in `scripts/synthesize_stories.py` `resolve_and_learn`; the
+conftest subprocess hook stays for non-batch runs (UI/CLI/CI single runs
+where no parent holds the store). Wired-in guards: `tests/test_script_hooks.py`
+(presence + evidence-dir target + per-site loop placement). Live-verified
+2026-08-15: parent holds the store → subprocess open blocked (as diagnosed)
+→ parent-side sweep of 5 passed sidecars learned 9 new + 1 repeat in-process
+(store 13 → 22 learned); 48/48 `tests/test_rag_learn.py` + full suite green.
 
 **Completed follow-ups (2026-08-09):** dataset cleaned (--clean filter, 55
 hallucinated-login rows dropped), skeleton prompt fixed (DO-NOT-INVENT-AUTH),
