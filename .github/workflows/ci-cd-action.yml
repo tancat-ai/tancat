@@ -10,6 +10,10 @@
 #                         scripts/ci_action_selftest.py and by the adapter
 #                         unit tests; the run-specific cache key here keeps
 #                         the miss deterministic across re-runs)
+#   - learn: true:        green run persists the conftest's within-test flows
+#                         into the branch-scoped flow-memory store cache
+#                         (flow_patterns/flow_store outputs asserted; RAG leg
+#                         off — no rag_store.db on the runner)
 #   - slash-command:      sabotage a locator -> /adapt fixes it (kept,
 #                         reverted == 0); /ignore renders the YAML entry
 #
@@ -185,6 +189,12 @@ jobs:
           path: ai-test-workspace/run-history.json
           key: ai-testgen-history-${{ github.ref }}
 
+      - name: 'Restore flow-memory store (learn: true — branch-scoped)'
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/evidence/flow_memory.json
+          key: ai-testgen-flowmem-${{ github.ref }}
+
       - name: Generate + run (self-test, cache miss)
         id: genrun
         uses: ./
@@ -257,7 +267,69 @@ jobs:
           path: ai-test-workspace/run-history.json
           key: ai-testgen-history-${{ github.ref }}
 
-      # ── Step 4: slash-command /adapt — verified adaptation (spec §9.6) ───
+      # ── Step 4: learn: true — spec §3 goal 13 ────────────────────────────
+      # The conftest teardown learns within-test flows during pytest; the
+      # store lands in the workspace evidence dir (entrypoint points the
+      # lazy storage there) and is persisted branch-scoped above/below. The
+      # single -k test keeps this step ~20s; the full-suite seed/restore
+      # contract is proven locally by scripts/ci_action_selftest.py.
+      - name: Learn flows (self-test)
+        id: learn
+        uses: ./
+        with:
+          mode: generate-and-run
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          cache-dir: ai-test-workspace/cache
+          pytest-args: -k test_04_go_to_cart_page
+          learn: 'true'
+          self-test: 'true'
+
+      - name: 'Assert learn: true (stub step)'
+        if: steps.learn.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+          outputs = {}
+          gf = results / 'action-state.txt'
+          if not gf.exists():
+              gf = results / 'github-output.txt'
+          for line in gf.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  k, _, v = line.partition('=')
+                  outputs[k.strip()] = v.strip()
+
+          # Learned-count reporting: flow_store + flow_patterns emitted.
+          assert outputs.get('flow_store'), outputs
+          assert int(outputs.get('flow_patterns') or 0) >= 1, outputs
+          assert int(outputs.get('flow_sites') or 0) >= 1, outputs
+
+          # The store persisted to the runner-mount workspace (cacheable).
+          store = Path('ai-test-workspace/evidence/flow_memory.json')
+          assert store.exists(), 'flow_memory.json missing after learn: true'
+          data = json.loads(store.read_text(encoding='utf-8'))
+          assert data['patterns'], 'empty store after a green learn run'
+
+          # RAG off in CI: no rag_store.db (no ~80 MB embedder on the runner).
+          assert not (Path('ai-test-workspace/evidence') / 'rag_store.db').exists(), \
+              'RAG leg ran despite RAG_ENABLED=0'
+          print(f'learn OK: {outputs["flow_patterns"]} patterns / {outputs["flow_sites"]} sites -> {store}')
+          PY
+
+      - name: Save flow-memory store
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/evidence/flow_memory.json
+          key: ai-testgen-flowmem-${{ github.ref }}
+
+      # ── Step 5: slash-command /adapt — verified adaptation (spec §9.6) ───
       # Sabotage the Cart-link locator, then /adapt it: patch -> re-run ->
       # assertion gate -> keep. Reply payload asserted; posting skipped.
       # (sudo: the cached files were created by the container's root user;
@@ -326,7 +398,7 @@ jobs:
           print(f'adapt OK: {summary["adapted"]} kept / {summary["reverted"]} reverted')
           PY
 
-      # ── Step 5: slash-command /ignore — the YAML entry reply ─────────────
+      # ── Step 6: slash-command /ignore — the YAML entry reply ─────────────
       - name: Slash-command /ignore (self-test)
         id: ignore
         uses: ./

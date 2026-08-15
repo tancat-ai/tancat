@@ -30,7 +30,8 @@
 #                      external services.
 #
 # Never silently degrade an unimplemented mode — fail fast with a clear
-# message (the generate-and-run 7a branch was the precedent; learn: true is).
+# message (the generate-and-run 7a branch and the pre-7d learn: true were
+# the precedents).
 # ============================================================================
 set -euo pipefail
 
@@ -405,10 +406,17 @@ run_generate_and_run() {
   local LEARN
   LEARN="$(get_input LEARN)"
   if [ "$LEARN" = "true" ]; then
-    echo "ERROR: learn: true is not implemented yet (7b scope ends at cache + verified" >&2
-    echo "       adaptation; learning writes into the cached RAG store and arrives after)." >&2
-    echo_github_output exit_code 2
-    exit 2
+    # learn: true (spec §3 goal 13) — persist passing-run navigation flows
+    # into the cached flow-memory store. Flow memory ONLY; RAG stays off in
+    # CI (its ~80 MB embedder download per runner; docs/ci.md §8).
+    export RAG_ENABLED=0
+    # The conftest teardown writes the store through get_storage()'s lazy
+    # default — point it at the runner-mount workspace so the store lands
+    # exactly where the caller's actions/cache step persists it (branch-
+    # scoped), and a restored store is loaded for dedup/reinforcement.
+    export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"
+    export AITEST_WORKSPACE="$WS_NAME"
+    log "learn: true — RAG off; flow-memory store: $WORKSPACE_ROOT/$WS_NAME/evidence/flow_memory.json"
   fi
 
   # --- cache (spec §7): key = sha256(story + url + model + provider + prompt-fingerprint)
@@ -508,6 +516,27 @@ run_generate_and_run() {
     log "report written ($RESULT_DIR/report.json)"
   else
     log "WARN: report generation failed (see $RESULT_DIR/report.err)"
+  fi
+
+  # --- learning (spec §3 goal 13): persist + report the flow-memory store
+  # The conftest teardown wrote the store during pytest (within-test flows
+  # only — suite chains need the UI/CLI post-run hook and stay out of scope
+  # unless the within-test store proves thin). Reported only on a GREEN run:
+  # a red run's signal is the failure, and its partial passing steps are
+  # still cached by the workflow's always-save (conftest only learns passed
+  # steps, so a red run never pollutes the store).
+  if [ "$LEARN" = "true" ] && [ "$PYTEST_RC" -eq 0 ]; then
+    local FLOW_STORE
+    FLOW_STORE="$WORKSPACE_ROOT/$WS_NAME/evidence/flow_memory.json"
+    if python action/flow_memory_stats.py --store "$FLOW_STORE" --json \
+        >"$RESULT_DIR/flow-memory.json" 2>"$RESULT_DIR/flow-memory.err"; then
+      log "learning: $(cat "$RESULT_DIR/flow-memory.json")"
+      echo_github_output flow_store "$FLOW_STORE"
+      echo_github_output flow_patterns "$(python -c 'import json,sys;print(json.load(open(sys.argv[1])).get("patterns",0))' "$RESULT_DIR/flow-memory.json")"
+      echo_github_output flow_sites "$(python -c 'import json,sys;print(json.load(open(sys.argv[1])).get("sites",0))' "$RESULT_DIR/flow-memory.json")"
+    else
+      log "WARN: flow-memory stats failed (see $RESULT_DIR/flow-memory.err)"
+    fi
   fi
 
   # --- verified adaptation (opt-in only: /adapt or repo-level adapt: true) --
