@@ -75,3 +75,9 @@ Account-level blockers found + cleared along the way: (1) GitLab.com **identity 
 > 1. The full 7c deliverable is shipped and hermetically tested: `ci/platform/gitlab.py` (+14 unit tests vs a mock API), `ci/gitlab-ci.template.yml` (build/compute-key/run/slash jobs; dotenv-fed cache key; protected-env approval gate), entrypoint `detect_platform` + gitlab post_comment branch, `docs/ci.md`, selftest 39/39 gates (incl. 13 GitLab gates with a host-side mock GitLab API — MR-note REST shape, PRIVATE-TOKEN, cache-hit reuse, adapt/ignore replies).
 > 2. **The one open DoD item needs a `GITLAB_TOKEN` (api scope).** No GitLab credentials exist on this machine. Ask the user for a token (or have them set it), then: create a throwaway project via `POST /projects`, push `ci/gitlab-ci.template.yml` + a `.gitlab-ci.yml` include + `ai-test-story.md`, open an MR, trigger the pipeline with `AITEST_RUN_KEY=$CI_PIPELINE_ID` + `INPUT_SELF-TEST=true`, poll, assert success + junit artifact + §6 MR note (1 note, edited not duplicated on re-run).
 > 3. Session doc: `docs/sessions/2026-08-15_phase7_7c_gitlab_parity.md` (the 9 gotchas — especially GitLab's variable-name hyphen ban, the image-entrypoint neutralisation `entrypoint: [""]`, and the dotenv→cache:key pattern).
+
+> **SUPERSEDED (same day): the live gate ran and PASSED 14/14.** See
+> `docs/sessions/2026-08-15_phase7_7c_gitlab_live_gate.md` — the token
+> setup, the identity-verification blocker, the live-run template fixes
+> (`rules:artifacts` → extends, explicit branch create, MR-pipeline refs,
+> `CI_COMMIT_REF_NAME` cache keys), and the next-session kickoff.
