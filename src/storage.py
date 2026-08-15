@@ -20,6 +20,7 @@ Usage::
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Protocol
 
@@ -146,16 +147,35 @@ class LocalStorageBackend:
 _storage: StorageBackend | None = None
 
 
+#: Environment overrides for the lazy default (CI/action use). The UI/CLI
+#: call :func:`init_storage` explicitly and are unaffected; a bare pytest
+#: subprocess (the generated-package conftest) resolves through here, so the
+#: action points the lazy singleton at the runner-mount workspace with
+#: ``AITEST_STORAGE_ROOT`` + ``AITEST_WORKSPACE`` and the conftest's
+#: ``FlowMemoryStore()`` writes the learned store exactly where the caller's
+#: cache step persists it (spec §3 goal 13, ``learn: true``).
+_AITEST_ROOT_ENV = "AITEST_STORAGE_ROOT"
+_AITEST_WORKSPACE_ENV = "AITEST_WORKSPACE"
+
+
 def get_storage() -> StorageBackend:
     """Return the global storage singleton.
 
     If not yet initialised this lazily creates a ``LocalStorageBackend``
     with ``workspace="default"`` so that every module can safely call
-    ``get_storage()`` without worrying about startup ordering.
+    ``get_storage()`` without worrying about startup ordering. The lazy
+    default honours the ``AITEST_STORAGE_ROOT`` / ``AITEST_WORKSPACE``
+    environment overrides (used by the CI action); unset = today's
+    behaviour (repo-root discovery + default workspace).
     """
     global _storage
     if _storage is None:
-        _storage = LocalStorageBackend()
+        env_root = os.environ.get(_AITEST_ROOT_ENV, "").strip()
+        env_workspace = os.environ.get(_AITEST_WORKSPACE_ENV, "").strip()
+        _storage = LocalStorageBackend(
+            root=Path(env_root) if env_root else None,
+            workspace=env_workspace or "default",
+        )
     return _storage
 
 

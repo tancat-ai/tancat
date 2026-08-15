@@ -23,14 +23,21 @@ Gates:
      the referee pytest runs only the named test (-k), not the whole suite
   5. slash-command /ignore         -> reply renders the .ai-test-ignore.yml
      entry (3 comments)
-  6. gitlab generate-and-run       -> Phase 7c parity: INPUT_PLATFORM=gitlab
+  6. learn: true (seed)            -> green run persists the conftest's
+     within-test flows into ai-test-workspace/evidence/flow_memory.json,
+     flow_patterns/flow_store outputs emitted, and the RAG leg stays OFF
+     (no rag_store.db — the ~80 MB embedder never touches the runner)
+  7. learn: true (restore)         -> a pre-seeded marker pattern survives a
+     re-run (the store was loaded + merged, not overwritten) — the
+     branch-scoped cache restore/reinforce contract
+  8. gitlab generate-and-run       -> Phase 7c parity: INPUT_PLATFORM=gitlab
      posts the §6 payload as an MR note to a host-side mock GitLab API
      (notes endpoint, PRIVATE-TOKEN, URL-encoded project path); cache HIT
      reuses the GitHub miss gate's seeded package (no duplicate generation),
      single-test referee
-  7. gitlab slash-command /adapt   -> sabotage the CACHED package, verified
+  9. gitlab slash-command /adapt   -> sabotage the CACHED package, verified
      adaptation fixes it, reply posted as an MR note (2 notes)
-  8. gitlab slash-command /ignore  -> reply posted as an MR note (3 notes)
+  10. gitlab slash-command /ignore -> reply posted as an MR note (3 notes)
 
 Cost profile (measured 2026-08-15, this machine): miss ~5.5 min (2.5 gen + 3
 suite), hit ~20s, run-existing ~3 min (suite), /adapt ~1 min, /ignore ~10s.
@@ -509,6 +516,51 @@ def _generate_and_run_env(api_port: int) -> dict[str, str]:
     }
 
 
+def _learn_env(api_port: int) -> dict[str, str]:
+    """generate-and-run + learn: true — the spec §3 goal 13 surface. The
+    cache is a HIT (gate 1 already seeded the same story/url/model package),
+    so the gate costs a single-test pytest run (~20s), not another
+    generation. The single -k test (test_04) navigates home -> cart via the
+    Cart link, so the conftest teardown learns at least one within-test
+    flow."""
+    env = _generate_and_run_env(api_port)
+    env["INPUT_LEARN"] = "true"
+    env["INPUT_PYTEST-ARGS"] = "-k test_04_go_to_cart_page"
+    return env
+
+
+def _flow_store_path() -> Path:
+    return _host_mount_dir() / "evidence" / "flow_memory.json"
+
+
+def _flow_store_outputs() -> dict[str, str]:
+    """flow_* outputs the entrypoint emitted (learned-count reporting)."""
+    outputs = _github_outputs()
+    return {k: outputs.get(k, "") for k in ("flow_store", "flow_patterns", "flow_sites")}
+
+
+def _inject_marker_pattern() -> None:
+    """Add a distinctive marker pattern to the mount-side store. If a re-run
+    started empty (restore broken) the conftest would overwrite it away — its
+    survival is the restore proof."""
+    from src.flow_memory import FlowMemoryStore, FlowTransition
+    from src.rag_learn import site_hash
+
+    store = FlowMemoryStore(_flow_store_path())
+    store.upsert_flow(
+        FlowTransition("home", "GOTO", "zzlearn-gate-marker", "products"),
+        site_hash("localhost:8781"),
+    )
+    store.save()
+
+
+def _store_has_marker() -> bool:
+    from src.flow_memory import FlowMemoryStore
+
+    store = FlowMemoryStore(_flow_store_path())
+    return any(p.description == "zzlearn-gate-marker" for p in store._patterns.values())  # noqa: SLF001
+
+
 def _gitlab_generate_and_run_env(api_port: int) -> dict[str, str]:
     """The same generate-and-run surface, but through the GitLab platform
     seam (Phase 7c): INPUT_PLATFORM=gitlab + the gitlab-* posting inputs.
@@ -602,6 +654,73 @@ def run_cache_hit(api: MockGitHubAPI, gen_stamp: float) -> int:
 
     gate(
         "comment EDITED, not duplicated (still 1 comment)",
+        len(api.comments) == 1,
+        f"{len(api.comments)} comment(s)",
+    )
+    return proc.returncode
+
+
+def run_learn_seed(api: MockGitHubAPI) -> int:
+    print("\n=== Gate: learn: true (seed — green run persists the flow-memory store) ===")
+    _clear_github_output()
+    env = _learn_env(api.port)
+    proc = docker_run(env, "learn seed")
+    outputs = _flow_store_outputs()
+    gate("learn: true exits 0 (referee: tests pass)", proc.returncode == 0, f"rc={proc.returncode}")
+    gate(
+        "flow_store output emitted (workspace path)",
+        _flow_store_path().name in outputs.get("flow_store", ""),
+        str(outputs.get("flow_store")),
+    )
+    gate(
+        "flow_patterns >= 1 (within-test flows learned)",
+        int(outputs.get("flow_patterns") or 0) >= 1,
+        str(outputs.get("flow_patterns")),
+    )
+    gate(
+        "flow_sites >= 1 (site-scoped)",
+        int(outputs.get("flow_sites") or 0) >= 1,
+        str(outputs.get("flow_sites")),
+    )
+
+    store_file = _flow_store_path()
+    gate("store persisted to the workspace evidence dir", store_file.exists(), str(store_file))
+
+    # RAG stays OFF in CI (flow memory only): the conftest's RAG-learning leg
+    # is gated on RAG_ENABLED, so no rag_store.db (and no ~80 MB embedder)
+    # ever lands on the runner mount.
+    rag_db = _host_mount_dir() / "evidence" / "rag_store.db"
+    gate("RAG leg off — no rag_store.db in the workspace", not rag_db.exists(), "")
+
+    gate(
+        "comment EDITED, not duplicated (still 1 comment)",
+        len(api.comments) == 1,
+        f"{len(api.comments)} comment(s)",
+    )
+    return proc.returncode
+
+
+def run_learn_restore(api: MockGitHubAPI) -> int:
+    print("\n=== Gate: learn: true (restore — seeded marker survives a re-run) ===")
+    _inject_marker_pattern()
+    _clear_github_output()
+    env = _learn_env(api.port)
+    proc = docker_run(env, "learn restore")
+    gate("learn: true re-run exits 0", proc.returncode == 0, f"rc={proc.returncode}")
+
+    # The conftest LOADED the restored store (branch-scoped actions/cache
+    # contract): the marker pattern must survive the run. If the store had
+    # been started empty and overwritten, the marker would be gone.
+    gate("restored store merged (marker pattern survived)", _store_has_marker(), str(_flow_store_path()))
+    outputs = _flow_store_outputs()
+    gate(
+        "flow_patterns output emitted on re-run",
+        int(outputs.get("flow_patterns") or 0) >= 1,
+        str(outputs.get("flow_patterns")),
+    )
+
+    gate(
+        "comment still ONE (idempotent edit)",
         len(api.comments) == 1,
         f"{len(api.comments)} comment(s)",
     )
@@ -888,6 +1007,8 @@ def main() -> int:
         _run_gate("generate-and-run (cache miss)", run_generate_and_run, api)
         gen = _results() / "generate.json"
         _run_gate("generate-and-run (cache hit)", run_cache_hit, api, gen.stat().st_mtime if gen.exists() else 0.0)
+        _run_gate("learn: true (seed)", run_learn_seed, api)
+        _run_gate("learn: true (restore)", run_learn_restore, api)
         _run_gate("run-existing", run_existing)
         _run_gate("slash /adapt", run_slash_adapt, api)
         _run_gate("slash /ignore", run_slash_ignore, api)
@@ -907,7 +1028,7 @@ def main() -> int:
     if passed < len(GATES):
         print("\nVERDICT: FAIL — see failing gates above.")
         return 1
-    print("\nVERDICT: PASS — the action image generates, runs, caches, comments and adapts hermetically.")
+    print("\nVERDICT: PASS — the action image generates, runs, caches, learns, comments and adapts hermetically.")
     return 0
 
 

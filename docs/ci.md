@@ -177,6 +177,9 @@ renders the exact entry (with a suggested `match`) for you to commit.
 
 ## 8. Cache
 
+Generated packages and per-branch run history are cached between runs (the
+package cache is the "don't regenerate the same story twice" mechanism;
+run history feeds the flaky markers).
 Key = `sha256(story + url + model + provider + prompt-fingerprint)` — one
 source of truth (`action/cache_key.py`) shared by the workflow's cache steps
 and the action's internal cache-dir check. The fingerprint constant bumps
@@ -188,6 +191,44 @@ forces fresh generation (CI users who never want a cached package).
   the self-test; branch-scoped run-history key for flaky markers.
 - **GitLab:** `cache:key` = branch + compute-key dotenv; `fallback_keys`
   provide the branch snapshot for slash-command runs.
+
+## 8b. Learning (`learn: true`) — the opt-in "diary"
+
+`learn: true` (generate-and-run only, **default off**) writes navigation
+flows from **passing** run steps into a flow-memory store so future
+generation for the same site resolves better. It is the same learning loop
+as the UI/CLI (the generated package's conftest teardown) — CI finally
+behaves like the interactive product. It never touches test code: it writes
+the "diary" only.
+
+- **Flow memory only; RAG is OFF in CI.** The RAG leg (locator learning)
+  needs an ~80 MB embedder model download per runner — a poor trade for a
+  runner that will cache anyway. Flow memory (navigation *shape*: login →
+  browse → cart → checkout) transfers across sites and needs no model
+  download, so that is what CI learns. With `learn: true` the action exports
+  `RAG_ENABLED=0` and the conftest's RAG write leg is gated on it too — no
+  `rag_store.db`, no embedder download on the runner (the UI/CLI keep RAG
+  learning; this is a CI-only policy).
+- **Store location:** `<workspace>/evidence/flow_memory.json`. The action
+  points the lazy storage singleton at the runner-mount workspace, so the
+  conftest writes the store exactly where your cache step persists it:
+  - GitHub: branch-scoped `actions/cache` key `ai-testgen-flowmem-${{ github.ref }}`;
+  - GitLab: add `ai-test-workspace/evidence/flow_memory.json` to `cache: paths`
+    (branch-scoped — MR pipelines reuse the push pipeline's store).
+  A restored store is loaded and merged (dedup + hit bumps), never
+  overwritten.
+- **Saturation is expected.** A stable package vs a stable site learns most
+  new patterns on the first green run; later runs dedup and reinforce (hit
+  counts). The value is consistency + first-run seeding — a NEW story on the
+  same site later resolves better. That modest, consistency-driven value is
+  why it is opt-in and default off.
+- **Within-test flows only.** Suite-level chains (terminal of test N → entry
+  of test N+1) need the UI/CLI post-run hook and are deliberately not
+  learned by the action.
+- **Reporting:** on a green run the action logs the store stats and emits
+  `flow_store` / `flow_patterns` / `flow_sites` outputs (learned-count
+  reporting for workflow steps / the self-test). A red run reports the
+  failure, not learning bookkeeping.
 
 ## 9. Danger zone + approval gates
 
@@ -214,9 +255,9 @@ enforcement.
 - Adaptation is assertion-gated and recorded; ignores are versioned with a
   required reason. **CI never changes tests without a visible, explicit human
   action** (or a repo-level `adapt: true` commit).
-- `learn: true` is **not implemented** — the action fails fast with a clear
-  message rather than silently no-op'ing (learning writes into the cached
-  RAG store and arrives after Phase 7).
+- `learn: true` writes only the flow-memory store (opt-in; see §8b) — it
+  never mutates tests or branches, and it is distinct from self-healing
+  (which CI deliberately rejects: the referee must not hide regressions).
 
 ## 11. Testing & self-test
 
@@ -226,7 +267,10 @@ enforcement.
 - Hermetic self-test (GitHub CI + locally): `.github/workflows/ci-cd-action.yml`
   and `scripts/ci_action_selftest.py` — the action ITSELF against the mock
   sites + fake LLM, with stub-asserted comment shapes and a host-side mock
-  API for real POST/PATCH/PUT traffic (GitLab MR notes included).
+  API for real POST/PATCH/PUT traffic (GitLab MR notes included). The
+  `learn: true` gates seed the store on a passing run and prove a restored
+  store survives a re-run (merge, not overwrite) — the branch-cache
+  contract.
   `python scripts/ci_action_selftest.py` (≈15 min cold, ≈10 min no-build).
 - **Real GitLab.com gate (passed 2026-08-15)**: `scripts/ci_gitlab_real_project_test.py`
   — runs the template end-to-end against a real GitLab project (needs a

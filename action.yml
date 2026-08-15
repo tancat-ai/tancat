@@ -103,8 +103,13 @@ inputs:
   learn:
     description: >-
       Write patterns from passing runs into the cached flow-memory store
-      (generate modes only). NOT IMPLEMENTED — the action fails fast if set to
-      true rather than silently no-op'ing.
+      (generate-and-run only). Flow memory only — RAG stays off in CI (the
+      ~80 MB embedder download per runner; see docs/ci.md). The store lands
+      in <workspace>/evidence/flow_memory.json (persist it branch-scoped
+      with actions/cache) and improves future generation for the same site:
+      most new patterns are learned on the first green run; later runs
+      dedup and reinforce (hit counts). Opt-in; default off. Suite-level
+      chains (the UI/CLI post-run hook) are not learned.
     default: 'false'
   # Slash-command / internal run context (ci-slash-commands.yml).
   comment-body:

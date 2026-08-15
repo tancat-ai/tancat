@@ -149,6 +149,35 @@ class TestSingletonLazyInit:
         b = get_storage()
         assert a is b
 
+    def test_lazy_init_honours_workspace_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The CI action points the lazy singleton at the runner-mount
+        workspace via AITEST_WORKSPACE (spec §3 goal 13, learn: true) — a
+        bare pytest subprocess (the generated-package conftest) resolves
+        through here, so its learned store lands in the workspace."""
+        monkeypatch.setenv("AITEST_STORAGE_ROOT", str(tmp_path))
+        monkeypatch.setenv("AITEST_WORKSPACE", "ai-test-workspace")
+        storage = get_storage()
+        assert storage.root == tmp_path
+        assert storage.workspace == "ai-test-workspace"
+        assert storage.evidence_dir() == tmp_path / "ai-test-workspace" / "evidence"
+
+    def test_lazy_init_env_empty_means_repo_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Empty env values must fall back to today's behaviour (repo-root
+        discovery + default workspace), never a broken root."""
+        monkeypatch.setenv("AITEST_STORAGE_ROOT", "")
+        monkeypatch.setenv("AITEST_WORKSPACE", "")
+        storage = get_storage()
+        assert storage.workspace == "default"
+        assert storage.root == _find_repo_root()
+
+    def test_lazy_init_env_unset_means_repo_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Unset env vars = the original lazy default (backwards compatible)."""
+        monkeypatch.delenv("AITEST_STORAGE_ROOT", raising=False)
+        monkeypatch.delenv("AITEST_WORKSPACE", raising=False)
+        storage = get_storage()
+        assert storage.workspace == "default"
+        assert storage.root == _find_repo_root()
+
 
 class TestSingletonInit:
     def test_init_storage_sets_workspace(self) -> None:

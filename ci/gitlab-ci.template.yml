@@ -73,6 +73,9 @@ variables:
   # --- run -------------------------------------------------------------------
   AITEST_PYTEST_ARGS: "-q --tb=short"
   AITEST_ADAPT: "false"                    # repo-level verified-adaptation opt-in (shared envs)
+  AITEST_LEARN: "false"                    # learn: true — persist passing-run flows into the
+                                            # branch-cached flow-memory store (flow memory only;
+                                            # RAG stays off in CI — the ~80 MB embedder per runner)
   # --- cache / artifacts -----------------------------------------------------
   AITEST_CACHE: "true"
   AITEST_WORKSPACE: "ai-test-workspace"
@@ -191,6 +194,7 @@ ai-testgen:compute-key:
     paths:
       - ai-test-workspace/cache/
       - ai-test-workspace/run-history.json   # per-branch flaky markers (AI-011)
+      - ai-test-workspace/evidence/flow_memory.json  # per-branch learned flows (learn: true)
   variables:
     # The action reads INPUT_*; GitLab variable names cannot contain hyphens,
     # so the underscore spellings are set here — the entrypoint's get_input
@@ -214,6 +218,7 @@ ai-testgen:compute-key:
     INPUT_CACHE_DIR: "$AITEST_CACHE_DIR"
     INPUT_COMMENT: "$AITEST_COMMENT"
     INPUT_ADAPT: "$AITEST_ADAPT"
+    INPUT_LEARN: "$AITEST_LEARN"
     INPUT_TESTS: "$AITEST_TESTS"
     INPUT_SELF_TEST: "$AITEST_SELF_TEST"
     # MR-note posting (empty on push pipelines -> payload only, like GitHub)
