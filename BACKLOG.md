@@ -1545,9 +1545,9 @@ baseline captured with full reproducibility envelope. Full runbook in
 
 ---
 
-## 🆕 AI-041 — Unsloth Studio QLoRA Training Run (❌ FAILED / CLOSED 2026-08-11)
+## 🆕 AI-041 — Unsloth Studio QLoRA Training Run (❌ FAILED / CLOSED 2026-08-11; DEFERRED indefinitely 2026-08-15)
 
-**Status:** ❌ failed — training worked (Qwen3.6-27B 4-bit QLoRA, loss 0.94→0.081) but the GGUF export never completed; no usable model produced; all artifacts deleted (2026-08-11)
+**Status:** ❌ failed — training worked (Qwen3.6-27B 4-bit QLoRA, loss 0.94→0.081) but the GGUF export never completed; no usable model produced; all artifacts deleted (2026-08-11). **Deferred 2026-08-15:** no retry planned until Unsloth/Windows fixes unified-memory detection — the 55.6 GB fp16 model cannot fit the 53.9 GB usable ceiling (LoRA OOM'd at full precision; QLoRA's 4-bit in-memory quantize peaked at 50.94 GB and crashed the HIP driver). The 52 GB HF-cache download was deleted 2026-08-15 to reclaim space.
 **Priority:** High — the payoff for AI-040's corpus + baseline
 **Spec:** Unsloth Studio (localhost:8888), `training_data/`, `scripts/eval/eval_model_baseline.py`
 
