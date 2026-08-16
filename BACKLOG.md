@@ -82,13 +82,14 @@ RAG-learning leg neutralised via a package-local conftest (sibling loop — avoi
 real `rag_store.db` writes + ~80 MB embedder download on fresh CI). Marked
 `slow` + `integration` + `subprocess` — excluded from the default suite.
 
-**Open item (noted here so the quirk stays visible):** `PipelineRunService`
-derives the suite-chain evidence dir from `Path(saved_path).parent` — for a
-**directory** `saved_path` (not what the UI/CLI pass — they always pass test
-files) that lands in `generated_tests/evidence/` and chains stale sidecars into
-flow memory. Latent quirk, not a live bug; the E2E test parks the legacy dir to
-work around it. Fix if directory targets ever become a supported product path:
-`package_dir = Path(saved_path) if it is a dir else Path(saved_path).parent`.
+**Open item: ✅ FIXED 2026-08-16** — `PipelineRunService.run_saved_test` now
+resolves the suite-chain evidence dir explicitly (`saved if saved.is_dir() else
+saved.parent`) instead of always using `Path(saved_path).parent`, so a
+directory target points at the package's own `evidence/` (a test file still
+resolves to its containing package). The learning-loop E2E's workaround is
+removed — it no longer parks `generated_tests/evidence/` nor calls
+`learn_suite_flows` manually (the fixed hook chains the right dir; the manual
+call was doubling hit counts). +2 unit tests; E2E 4/4.
 
 ---
 
