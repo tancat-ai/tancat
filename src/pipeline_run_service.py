@@ -70,7 +70,14 @@ class PipelineRunService:
         command = [sys.executable, "-m", *pytest_command]
 
         project_root = str(Path(__file__).resolve().parent.parent)
-        package_dir = str(Path(saved_path).parent.absolute())
+        # saved_path may be a test FILE (UI/CLI always pass files) or a package
+        # DIRECTORY (e.g. the learning-loop E2E). A directory's own .parent is
+        # the wrong evidence scope — it would land in generated_tests/evidence/
+        # and chain stale sidecars into flow memory. Resolve the package dir
+        # explicitly so both target shapes point at the package's own evidence/.
+        saved = Path(saved_path)
+        package_path = saved if saved.is_dir() else saved.parent
+        package_dir = str(package_path.absolute())
 
         env = os.environ.copy()
         # Add both project root and package directory to PYTHONPATH

@@ -45,12 +45,13 @@ Hermeticity:
 - The real ``evidence/flow_memory.json`` is snapshotted before the module
   runs and restored after (the store must be real for this test to mean
   anything; it is wiped so the assertions are deterministic — no
-  pre-existing patterns to merge with). ``generated_tests/evidence/`` (past
-  sidecars from other ports) is parked for the duration and restored too,
-  so the run service's directory-target hook chains nothing stale.
+  pre-existing patterns to merge with). The run service's suite-chain hook
+  sweeps the package's OWN ``evidence/`` dir for a directory target (the
+  2026-08-16 ``Path(saved_path).parent`` fix), so nothing stale is chained —
+  no legacy-dir parking is needed.
 - Do not run the product app (Streamlit/CLI) concurrently with this module —
-  it snapshots the real flow-memory store and parks the legacy evidence dir
-  for the ~2 minutes it runs (both restored at teardown).
+  it snapshots the real flow-memory store for the ~2 minutes it runs
+  (restored at teardown).
 - The package ships a local ``conftest.py`` that neutralises ONLY the real
   conftest's RAG-learning leg (``src.rag_learn.learn_from_evidence`` — a
   sibling loop, B-036 Phase 3) so the run never writes the machine-local
@@ -82,19 +83,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 MOCK_DIR = ROOT / "mock_sites" / "ecommerce"
 PACKAGE_DIR = ROOT / "generated_tests" / "learning_loop_e2e"
 STORE_FILE = ROOT / "evidence" / "flow_memory.json"
-#: Legacy evidence dir for tests that live directly in generated_tests/
-#: (past real runs; gitignored). The run service's suite-chain hook derives
-#: the evidence dir from ``Path(saved_path).parent`` — for a directory target
-#: that lands HERE, so pre-existing sidecars would be chained into the store
-#: as junk. Parked for the duration of the module, restored at teardown.
-LEGACY_EVIDENCE_DIR = ROOT / "generated_tests" / "evidence"
 
 #: File-unique port — see docstring for the per-file convention.
 PORT = 8784
 BASE_URL = f"http://localhost:{PORT}"
-#: Parked location for LEGACY_EVIDENCE_DIR while this module runs.
-_PARKED_EVIDENCE_DIR = ROOT / "generated_tests" / f".evidence_parked_{PORT}"
-
 #: The exact flows this package is designed to produce.
 #: (from_route, action, description.lower(), to_route)
 EXPECTED_WITHIN_TEST: set[tuple[str, str, str, str]] = {
@@ -258,22 +250,7 @@ def isolated_flow_store() -> Iterator[None]:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def parked_legacy_evidence(mock_site: None, isolated_flow_store: None) -> Iterator[None]:
-    """Park ``generated_tests/evidence/`` (past-run sidecars on other ports)
-    so the run service's suite-chain hook — which sweeps
-    ``Path(saved_path).parent / evidence`` — finds nothing when ``saved_path``
-    is a directory. Restored at teardown, so no real data is touched."""
-    parked = False
-    if LEGACY_EVIDENCE_DIR.exists() and not _PARKED_EVIDENCE_DIR.exists():
-        LEGACY_EVIDENCE_DIR.rename(_PARKED_EVIDENCE_DIR)
-        parked = True
-    yield
-    if parked:
-        _PARKED_EVIDENCE_DIR.rename(LEGACY_EVIDENCE_DIR)
-
-
-@pytest.fixture(scope="module", autouse=True)
-def tiny_package(mock_site: None, isolated_flow_store: None, parked_legacy_evidence: None) -> Iterator[Path]:
+def tiny_package(mock_site: None, isolated_flow_store: None) -> Iterator[Path]:
     """Write the tiny generated package under generated_tests/ so the REAL
     generated_tests/conftest.py applies via parent-directory discovery."""
     if PACKAGE_DIR.exists():
@@ -296,20 +273,19 @@ def _run_package() -> Any:
 
     ``saved_path`` is the package directory, so one pytest invocation
     executes all four tests (the standard ``pytest <package>`` shape). The
-    service's built-in suite-chain hook sweeps ``Path(saved_path).parent /
-    evidence`` — for a directory target that lands in generated_tests/evidence
-    (parked by :func:`parked_legacy_evidence`, so it is a no-op here), and we
-    invoke the same ``learn_suite_flows`` API the hook calls on the package's
-    REAL evidence dir (exactly what verify_production does with its own
-    ``output_dir / "evidence"``). Within-test learning happens inside each
-    subprocess via the REAL conftest teardown.
+    service's built-in suite-chain hook sweeps the package's OWN
+    ``<PACKAGE_DIR>/evidence`` dir for a directory target (the 2026-08-16
+    ``Path(saved_path).parent`` fix — before it landed here and chained stale
+    sidecars, so the test had to park ``generated_tests/evidence/`` and chain
+    manually). The hook now chains the right dir, so no manual
+    ``learn_suite_flows`` call is needed (calling it too would double the
+    hit counts — the very bug the assertion catches).
+    Within-test learning happens inside each subprocess via the REAL conftest
+    teardown.
     """
-    from src.flow_memory import FlowMemoryStore
     from src.pipeline_run_service import PipelineRunService
 
-    result = PipelineRunService().run_saved_test(str(PACKAGE_DIR), persist=True)
-    FlowMemoryStore().learn_suite_flows(PACKAGE_DIR / "evidence")
-    return result
+    return PipelineRunService().run_saved_test(str(PACKAGE_DIR), persist=True)
 
 
 def _store_snapshot() -> dict[tuple[str, str, str, str], Any]:

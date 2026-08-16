@@ -81,6 +81,60 @@ generated_tests/pkg/test_02.py::test_02_products PASSED [100%]
     assert captured["evidence_dir"] == Path("generated_tests/pkg/evidence").absolute()
 
 
+def test_run_saved_test_directory_target_chains_package_own_evidence(tmp_path: Path) -> None:
+    """A directory saved_path must chain the package's OWN evidence dir.
+
+    Before the fix, package_dir was derived from ``Path(saved_path).parent`` —
+    for a directory target that lands in ``generated_tests/evidence/`` and
+    chains stale sidecars into flow memory. The UI/CLI always pass test files
+    (where ``.parent`` is correct); only the learning-loop E2E passes a
+    directory, and it had to park the legacy dir to work around this.
+    """
+    service = PipelineRunService()
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    stdout = "============================== 1 passed in 1.00s ==============================\n"
+    captured: dict[str, object] = {}
+
+    def fake_learn(self: object, evidence_dir: object) -> dict[str, int]:  # noqa: ARG002
+        captured["evidence_dir"] = evidence_dir
+        return {"sidecars": 0, "inserted": 0, "exists": 0, "errors": 0}
+
+    with (
+        patch("src.pipeline_run_service.subprocess.run") as mock_run,
+        patch("src.pipeline_run_service.persist_run_result"),
+        patch("src.flow_memory.FlowMemoryStore.learn_suite_flows", fake_learn),
+    ):
+        mock_run.return_value = CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
+        service.run_saved_test(str(pkg), cwd=".", persist=True)
+
+    # the chain hook gets <pkg>/evidence — NOT <tmp>/evidence (the .parent bug)
+    assert captured["evidence_dir"] == (pkg / "evidence").absolute()
+
+
+def test_run_saved_test_file_target_still_chains_package_own_evidence() -> None:
+    """A file saved_path must still chain its containing package's evidence dir
+    (guards the UI/CLI path against the directory fix regressing files)."""
+    service = PipelineRunService()
+    pkg = Path("generated_tests/pkg")
+    stdout = "============================== 1 passed in 1.00s ==============================\n"
+    captured: dict[str, object] = {}
+
+    def fake_learn(self: object, evidence_dir: object) -> dict[str, int]:  # noqa: ARG002
+        captured["evidence_dir"] = evidence_dir
+        return {"sidecars": 0, "inserted": 0, "exists": 0, "errors": 0}
+
+    with (
+        patch("src.pipeline_run_service.subprocess.run") as mock_run,
+        patch("src.pipeline_run_service.persist_run_result"),
+        patch("src.flow_memory.FlowMemoryStore.learn_suite_flows", fake_learn),
+    ):
+        mock_run.return_value = CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
+        service.run_saved_test(str(pkg / "test_01.py"), cwd=".", persist=True)
+
+    assert captured["evidence_dir"] == (pkg / "evidence").absolute()
+
+
 def test_run_saved_test_does_not_chain_on_preview_runs() -> None:
     """Non-persisting (preview) runs skip the suite-chain hook."""
     service = PipelineRunService()
