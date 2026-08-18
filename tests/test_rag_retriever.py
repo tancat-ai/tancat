@@ -10,6 +10,7 @@ import pytest
 from src.placeholder_scorers import PlaceholderScorer
 from src.rag_retriever import RAGRetriever
 from src.rag_store import (
+    EmbeddingMismatchError,
     GoldenPattern,
     KnowledgeEntry,
     RAGStore,
@@ -150,6 +151,31 @@ class TestRAGRetrieverDisabled:
     def test_scoring_bonus_returns_zero_when_no_patterns(self) -> None:
         retriever = RAGRetriever(None)
         assert retriever.scoring_bonus_for({"selector": "#btn"}, []) == 0.0
+
+
+class _MismatchBackend(_InMemoryBackend):
+    """Phase 6 6b: a backend whose stamp verification refuses."""
+
+    def verify_embedder(self, embedder_identity: str | None) -> None:
+        raise EmbeddingMismatchError(
+            f"RAG store was created with a different embedder ('{embedder_identity}') — "
+            "run `python scripts/rag_ingest.py --reindex`"
+        )
+
+
+class TestRAGRetrieverEmbedderMismatch:
+    """Phase 6 6b: a mismatch refuses retrieval (empty result) and is loud, never silent."""
+
+    @pytest.fixture
+    def retriever(self) -> RAGRetriever:
+        store = RAGStore(_MismatchBackend(dimension=16), _FakeEmbedder())
+        return RAGRetriever(store)
+
+    def test_enabled_is_false_on_mismatch(self, retriever: RAGRetriever) -> None:
+        assert retriever.enabled is False
+
+    def test_retrieve_returns_empty_on_mismatch(self, retriever: RAGRetriever) -> None:
+        assert retriever.retrieve("CLICK: Add to cart") == []
 
 
 class TestRAGRetrieverEnabled:

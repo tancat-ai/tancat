@@ -83,6 +83,54 @@ def test_production_url_blocked_exits_2(capsys: pytest.CaptureFixture[str]) -> N
     assert "not on the safe allow-list" in capsys.readouterr().err
 
 
+# ---------------------------------------------------------------------------
+# SSRF guard composition (Phase 6 6a) — under the danger-zone allow-list
+# ---------------------------------------------------------------------------
+
+
+def test_ssrf_metadata_blocked_even_with_danger_zone(capsys: pytest.CaptureFixture[str]) -> None:
+    """--danger-zone may promote a public host; it never unblocks link-local."""
+    rc = ci_generate.main(["--story", "s", "--url", "http://169.254.169.254/latest/meta-data/", "--danger-zone"])
+    assert rc == ci_generate.EXIT_CONFIG_ERROR
+    assert "SSRF guard refused" in capsys.readouterr().err
+
+
+def test_ssrf_private_network_blocked_by_default(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = ci_generate.main(["--story", "s", "--url", "http://10.0.0.5/", "--danger-zone"])
+    assert rc == ci_generate.EXIT_CONFIG_ERROR
+    assert "SSRF guard refused" in capsys.readouterr().err
+
+
+def test_ssrf_private_network_allowed_with_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--allow-private-networks opts a deployment into RFC1918 targets."""
+    captured: dict[str, object] = {}
+
+    def fake_init_storage(root: object = None, workspace: str = "default") -> object:
+        captured["root"] = root
+        captured["workspace"] = workspace
+        return object()
+
+    async def fake_run(**kwargs: object) -> None:  # noqa: ANN003
+        return None
+
+    monkeypatch.setattr(ci_generate, "init_storage", fake_init_storage)
+    monkeypatch.setattr(ci_generate, "_run_pipeline_async", fake_run)
+
+    rc = ci_generate.main(
+        [
+            "--story",
+            "s",
+            "--url",
+            "http://10.0.0.5/",
+            "--danger-zone",
+            "--allow-private-networks",
+        ]
+    )
+    # Guard passed (config validation completed); the fake pipeline writes
+    # nothing -> the driver's generation-error contract fires (exit 1).
+    assert rc == ci_generate.EXIT_GENERATION_ERROR
+
+
 def test_empty_story_exits_2() -> None:
     rc = ci_generate.main(["--story", "", "--url", "http://localhost:8781/"])
     assert rc == ci_generate.EXIT_CONFIG_ERROR

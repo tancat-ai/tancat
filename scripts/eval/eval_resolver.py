@@ -391,7 +391,11 @@ async def _cmd_static() -> int:
             from src.storage import get_storage
 
             embedder = SentenceTransformerEmbedder()
-            backend = MilvusLiteBackend(str(get_storage().rag_path()), embedder.dimension)
+            backend = MilvusLiteBackend(
+                str(get_storage().rag_path()),
+                embedder.dimension,
+                embedder_identity=embedder.identity,
+            )
             store = RAGStore(backend, embedder)
             rag_retriever = RAGRetriever(store)
             logger.info("RAG retriever initialised")

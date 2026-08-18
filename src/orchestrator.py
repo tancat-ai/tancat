@@ -38,6 +38,7 @@ from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
 from src.test_structure_assembler import rebuild_test_structure
+from src.url_guard import UrlGuard, UrlGuardError
 from src.url_utils import build_common_path_candidates, extract_route_concepts
 
 logger = logging.getLogger(__name__)
@@ -111,11 +112,21 @@ class TestOrchestrator:
                 from src.rag_bundled import ensure_bundled_seeded
 
                 ensure_bundled_seeded()
-            except Exception:
-                logger.warning(
-                    "Bundled RAG auto-seed failed — continuing without RAG bonus",
-                    exc_info=True,
-                )
+            except Exception as exc:
+                from src.rag_store import EmbeddingMismatchError
+
+                if isinstance(exc, EmbeddingMismatchError):
+                    # Phase 6 6b: a model-change/corrupt-store refusal is a
+                    # config error, not a transient seed failure — surface the fix.
+                    logger.error(
+                        "RAG store embedding-model mismatch: %s — run `python scripts/rag_ingest.py --reindex`",
+                        exc,
+                    )
+                else:
+                    logger.warning(
+                        "Bundled RAG auto-seed failed — continuing without RAG bonus",
+                        exc_info=True,
+                    )
         self._placeholder_orchestrator = PlaceholderOrchestrator(
             starting_url=None,
             credential_profile=self._credential_profile,
@@ -179,7 +190,11 @@ class TestOrchestrator:
             # against a NON-empty store; empty stores short-circuit before any
             # network/model load, so first-run generation never blocks on it.
             embedder = SentenceTransformerEmbedder()
-            backend = MilvusLiteBackend(str(get_storage().rag_path()), embedder.dimension)
+            backend = MilvusLiteBackend(
+                str(get_storage().rag_path()),
+                embedder.dimension,
+                embedder_identity=embedder.identity,
+            )
             store = RAGStore(backend, embedder)
             return RAGRetriever(store)
         except Exception:
@@ -265,6 +280,15 @@ class TestOrchestrator:
         Returns:
             Final test code with resolved placeholders.
         """
+        # SSRF guard: fail fast on any target URL the guard refuses (private/
+        # link-local/metadata/non-http) — never scrape what we shouldn't.
+        guard = UrlGuard()
+        for target in target_urls or []:
+            try:
+                guard.validate(target.strip() if isinstance(target, str) else str(target))
+            except UrlGuardError as exc:
+                raise ValueError(str(exc)) from exc
+
         self._starting_url = (target_urls[0].strip() if target_urls else None) or None
         # Build list of known URLs for journey resolution
         self._starting_url_list = list(set(target_urls or []))

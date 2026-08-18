@@ -75,7 +75,11 @@ def build_default_store() -> RAGStore:
     first ``embed()`` against a non-empty store.
     """
     embedder = SentenceTransformerEmbedder()
-    backend = MilvusLiteBackend(str(get_storage().rag_path()), embedder.dimension)
+    backend = MilvusLiteBackend(
+        str(get_storage().rag_path()),
+        embedder.dimension,
+        embedder_identity=embedder.identity,
+    )
     return RAGStore(backend, embedder)
 
 

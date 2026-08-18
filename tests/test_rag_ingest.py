@@ -244,6 +244,33 @@ class TestMain:
         assert result["pruned"] == 3
         fake.assert_called_once()
 
+    def test_reindex_flag_rebuilds_from_bundled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Phase 6 6b: --reindex rebuilds the store from bundled content + writes the marker."""
+        fake_result = {"golden": 67, "docs": 27, "pdfs": 0}
+        monkeypatch.setattr("scripts.rag_ingest.build_bundled_patterns", lambda: ["p"])
+        monkeypatch.setattr("scripts.rag_ingest.build_bundled_docs", lambda: ["d"])
+        monkeypatch.setattr("scripts.rag_ingest.rebuild_store", lambda patterns, docs: fake_result)
+        marker_writer = MagicMock()
+        marker_path = MagicMock()
+        monkeypatch.setattr("scripts.rag_ingest._write_marker", marker_writer)
+        monkeypatch.setattr("scripts.rag_ingest.bundled_marker_path", lambda: marker_path)
+
+        result = main(["--reindex"])
+        assert result["reindex"] == fake_result
+        marker_writer.assert_called_once_with(marker_path)
+
+    def test_embedder_mismatch_returns_clean_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Phase 6 6b: a mismatch refusal surfaces cleanly (no traceback) with the fix."""
+        from src.rag_store import EmbeddingMismatchError
+
+        def boom(*args: object, **kwargs: object) -> dict[str, int]:
+            raise EmbeddingMismatchError("RAG store at x.db was created with embedder 'a' ... --reindex")
+
+        monkeypatch.setattr("scripts.rag_ingest.store_stats", boom)
+        result = main(["--stats"])
+        assert "error" in result
+        assert "--reindex" in str(result["error"])
+
     @pytest.mark.slow
     def test_both_flags_accepted(self) -> None:
         """Smoke test: --golden --docs should run without error."""

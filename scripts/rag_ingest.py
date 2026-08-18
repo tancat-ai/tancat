@@ -34,10 +34,15 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from src.pdf_ingest import ingest_pdf_directory
 from src.rag_bundled import (
+    _write_marker,
+    build_bundled_docs,
+    build_bundled_patterns,
+    bundled_marker_path,
     chunk_markdown_file,  # re-exported for backwards compatibility
     ensure_bundled_seeded,
     load_docs,  # re-exported for backwards compatibility
@@ -47,10 +52,12 @@ from src.rag_bundled import (
 )
 from src.rag_store import (
     DocChunk,
+    EmbeddingMismatchError,
     GoldenPattern,
     MilvusLiteBackend,
     RAGStore,
     SentenceTransformerEmbedder,
+    embedder_stamp_path,
 )
 from src.storage import get_storage
 
@@ -90,15 +97,25 @@ def rebuild_store(
     embedder = SentenceTransformerEmbedder()
     store_path = str(get_storage().rag_path())
 
-    # Delete existing store if present (Milvus Lite creates a directory)
+    # Delete existing store + embedder-stamp sidecar if present
+    # (Milvus Lite creates a directory)
+    import os
     import shutil
 
-    try:
-        shutil.rmtree(store_path)
-    except FileNotFoundError, PermissionError, OSError:
-        pass
+    for target in (store_path, embedder_stamp_path(store_path)):
+        try:
+            if os.path.isdir(target):
+                shutil.rmtree(target)
+            else:
+                os.remove(target)
+        except FileNotFoundError, PermissionError, OSError:
+            pass
 
-    backend = MilvusLiteBackend(store_path, embedder.dimension)
+    backend = MilvusLiteBackend(
+        store_path,
+        embedder.dimension,
+        embedder_identity=embedder.identity,
+    )
     store = RAGStore(backend, embedder)
 
     result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0}
@@ -127,8 +144,18 @@ def rebuild_store(
 def main(argv: list[str] | None = None) -> dict[str, object]:
     """Run the ingestion CLI.
 
-    Returns a summary dict so tests can verify output.
+    Returns a summary dict so tests can verify output. An embedder-mismatch
+    refusal is printed cleanly (no traceback) with the reindex fix.
     """
+    try:
+        return _run(argv)
+    except EmbeddingMismatchError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return {"error": str(exc)}
+
+
+def _run(argv: list[str] | None = None) -> dict[str, object]:
+    """Parse args and execute the requested operations (see :func:`main`)."""
 
     parser = argparse.ArgumentParser(
         description="Manage the RAG vector store: rebuild from sources, seed the bundled pack, or inspect.",
@@ -168,12 +195,19 @@ def main(argv: list[str] | None = None) -> dict[str, object]:
         action="store_true",
         help="Delete learned patterns from the store, keeping golden patterns and doc chunks",
     )
+    parser.add_argument(
+        "--reindex",
+        action="store_true",
+        help="Re-embed the bundled golden pack + docs from scratch (deletes the store, "
+        "resets learned patterns, rewrites the embedder stamp). Use after changing "
+        "the embedding model (Phase 6 6b)",
+    )
 
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    if not any((args.golden, args.docs, args.pdfs, args.bundled, args.stats, args.prune_learned)):
+    if not any((args.golden, args.docs, args.pdfs, args.bundled, args.stats, args.prune_learned, args.reindex)):
         parser.print_help()
         return {"golden": 0, "docs": 0, "pdfs": 0}
 
@@ -208,6 +242,20 @@ def main(argv: list[str] | None = None) -> dict[str, object]:
 
     if args.bundled:
         result["bundled"] = ensure_bundled_seeded(force=args.force)
+
+    if args.reindex:
+        patterns = build_bundled_patterns()
+        doc_chunks = build_bundled_docs()
+        result["reindex"] = rebuild_store(patterns, doc_chunks)
+        # The rebuilt store holds the bundled pack — mark it seeded so the
+        # first-run auto-seed stays a no-op.
+        _write_marker(bundled_marker_path())
+        reindexed = result["reindex"]
+        assert isinstance(reindexed, dict)
+        print(
+            f"Re-indexed RAG store: golden={reindexed.get('golden', 0)} "
+            f"docs={reindexed.get('docs', 0)} pdfs={reindexed.get('pdfs', 0)}"
+        )
 
     if args.stats:
         counts = store_stats()
