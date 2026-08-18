@@ -33,6 +33,7 @@ from src.journey_models import CredentialProfile
 from src.provider_config import get_provider_defaults
 from src.storage import init_storage
 from src.ui_pipeline import PipelineSessionState, run_pipeline
+from src.url_guard import UrlGuard
 
 EXIT_OK = 0
 EXIT_GENERATION_ERROR = 1
@@ -176,6 +177,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allowed-domains", default="", help="Comma-separated extra safe domains (internal staging names)"
     )
+    parser.add_argument(
+        "--allow-private-networks",
+        action="store_true",
+        help="Permit target URLs on private/RFC1918 networks (internal staging behind a "
+        "corporate network). Never unblocks link-local/metadata addresses. "
+        "Equivalent env: AITEST_ALLOW_PRIVATE_NETWORKS=1.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON on stdout")
     return parser
 
@@ -201,6 +209,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not story_text.strip():
             raise ValueError("--story resolved to empty text")
         _check_danger_zone(args.url, args.danger_zone, allowed_domains)
+        # SSRF guard (Phase 6 6a): composes UNDER the danger-zone allow-list —
+        # --danger-zone may promote a public host, it never unblocks a
+        # link-local/metadata/private address. Private networks are opt-in.
+        UrlGuard(allow_private_networks=args.allow_private_networks).validate(args.url)
         ignore_spec = load_ignore_spec(args.ignore_file or None)
         if args.llm_api_key:
             os.environ["OPENAI_API_KEY"] = args.llm_api_key

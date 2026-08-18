@@ -22,6 +22,7 @@ from src.accessibility_enricher import AccessibilityEnricher
 from src.form_login_utils import attempt_login
 from src.journey_models import CredentialProfile
 from src.scraper import PageScraper
+from src.url_guard import UrlGuard, UrlGuardError
 
 
 class StatefulPageScraper:
@@ -107,9 +108,21 @@ class StatefulPageScraper:
             page = context.new_page()
             page.set_default_timeout(self.timeout_ms)
 
+            # SSRF guard: re-check every request (redirects + sub-resources)
+            # at request time so a page can never pull the browser onto an
+            # internal/metadata address.
+            guard = UrlGuard()
+            page.on("request", guard.request_handler())
+
             try:
                 self._seed_cart_session(page)
                 for url in urls:
+                    try:
+                        guard.validate(url)
+                    except UrlGuardError:
+                        # Security refusal — record empty, do not retry.
+                        output[url] = []
+                        continue
                     last_error: Exception | None = None
 
                     for attempt in range(1, self.max_retries + 1):
@@ -171,6 +184,12 @@ class StatefulPageScraper:
     def _seed_cart_session(self, page: Any) -> None:
         """Navigate, login if needed, then try to add one item to cart (best effort)."""
         if not self.starting_url:
+            return
+        try:
+            UrlGuard().validate(self.starting_url)
+        except UrlGuardError:
+            # SSRF guard refusal — skip session seeding; per-URL navigation is
+            # guarded separately.
             return
 
         page.goto(self.starting_url, wait_until="domcontentloaded")

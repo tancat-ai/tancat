@@ -32,9 +32,21 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+
+class EmbeddingMismatchError(RuntimeError):
+    """The RAG store was created with a different embedding model than configured.
+
+    Raised at store-open time when the stored embedder stamp (model + dim)
+    does not match the configured embedder — refusing retrieval instead of
+    silently returning garbage (Phase 6 6b — BACKLOG AI-045 #2). The message
+    carries the fix: ``python scripts/rag_ingest.py --reindex``.
+    """
+
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -170,6 +182,20 @@ class SentenceTransformerEmbedder:
         return 384  # all-MiniLM-L6-v2
 
     @property
+    def model_name(self) -> str:
+        """The configured sentence-transformer model name."""
+        return self._model_name
+
+    @property
+    def identity(self) -> str:
+        """Stable embedder identity for store stamping: ``'<model>@<dim>'``.
+
+        Changing either the model or the dimension changes the identity, so a
+        store created with a different identity is refused (Phase 6 6b).
+        """
+        return f"{self._model_name}@{self.dimension}"
+
+    @property
     def _loaded_model(self) -> Any:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
@@ -185,6 +211,11 @@ class SentenceTransformerEmbedder:
             return []
         result = self._loaded_model.encode(texts, normalize_embeddings=True)
         return [vec.tolist() for vec in result]
+
+
+# The only embedder that could have built a pre-stamp (legacy) store — no
+# model configuration existed before embedder-identity tracking (Phase 6 6b).
+DEFAULT_EMBEDDER_IDENTITY: str = f"{SentenceTransformerEmbedder._DEFAULT_MODEL}@384"
 
 
 # ---------------------------------------------------------------------------
@@ -244,22 +275,125 @@ class VectorStoreBackend(Protocol):
 _COLLECTION_NAME = "rag_entries"
 
 
+#: Suffix of the embedder-stamp sidecar written next to the Milvus db dir.
+_EMBEDDER_STAMP_SUFFIX = ".embedder.json"
+
+
+def embedder_stamp_path(db_path: str) -> str:
+    """Path of the embedder-stamp sidecar for a Milvus db path.
+
+    Milvus Lite stores its db as a *directory*; the stamp lives as a sibling
+    file so ``shutil.rmtree`` of the db dir never silently carries a stale
+    stamp into a rebuilt store.
+    """
+    return str(db_path) + _EMBEDDER_STAMP_SUFFIX
+
+
 class MilvusLiteBackend:
     """Vector store backend backed by Milvus Lite (embedded).
 
     Stores the database at *db_path* (a ``.db`` file).
     Single-writer — safe for dev/CLI/single-process Streamlit.
     For multi-worker SaaS (Phase 6), swap to ``ChromaDBBackend``.
+
+    Embedder stamping (Phase 6 6b): on first creation the backend writes a
+    sidecar stamp (``<db_path>.embedder.json``) recording the embedder
+    identity + dimension. Opening an existing store verifies the stamp
+    against the configured identity and raises :class:`EmbeddingMismatchError`
+    on mismatch — never silently returning vectors from a different embedding
+    space.
     """
 
-    def __init__(self, db_path: str, dimension: int) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        dimension: int,
+        *,
+        embedder_identity: str | None = None,
+    ) -> None:
         self._db_path = str(db_path)
         self._dimension = dimension
+        self._embedder_identity = embedder_identity
         self._client: Any | None = None
 
     @property
     def dimension(self) -> int:
         return self._dimension
+
+    # -- embedder stamp (Phase 6 6b) -----------------------------------------
+
+    def _stamp_path(self) -> str:
+        return embedder_stamp_path(self._db_path)
+
+    def _read_stamp(self) -> dict[str, Any] | None:
+        try:
+            with open(self._stamp_path(), encoding="utf-8") as fh:
+                data = json.load(fh)
+        except OSError, ValueError:
+            return None
+        return data if isinstance(data, dict) else None
+
+    def _write_stamp(self, embedder_identity: str | None) -> None:
+        payload = {
+            "embedder": embedder_identity,
+            "dim": self._dimension,
+            "created_at": time.time(),
+        }
+        with open(self._stamp_path(), "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+
+    def _verify_stamp(self, embedder_identity: str | None) -> None:
+        """Compare the stored stamp against *embedder_identity*; refuse on mismatch.
+
+        Refusal policy:
+        * dimension mismatch → always refuse (inserts would fail confusingly);
+        * embedder identity mismatch → refuse (cosine similarity is meaningless
+          across embedding spaces — the silent-corruption case);
+        * legacy store (no sidecar) → accept only the default embedder (the only
+          model that could have built it) and migrate the stamp forward;
+          any other identity is refused because the store cannot be verified.
+        """
+        stored = self._read_stamp()
+        if stored is None:
+            if embedder_identity in (None, DEFAULT_EMBEDDER_IDENTITY):
+                self._write_stamp(embedder_identity)
+                return
+            raise EmbeddingMismatchError(
+                f"RAG store at {self._db_path} has no embedder stamp (created before "
+                "embedder-identity tracking) and cannot be verified against embedder "
+                f"'{embedder_identity}'. Re-embed with: "
+                "`python scripts/rag_ingest.py --reindex`"
+            )
+        stored_dim = stored.get("dim")
+        if stored_dim is not None and int(stored_dim) != self._dimension:
+            raise EmbeddingMismatchError(
+                f"RAG store at {self._db_path} was created with dimension "
+                f"{stored_dim} but the configured embedder produces "
+                f"{self._dimension}-dim vectors. Re-embed with: "
+                "`python scripts/rag_ingest.py --reindex`"
+            )
+        stored_embedder = stored.get("embedder")
+        if stored_embedder is not None and embedder_identity is not None and stored_embedder != embedder_identity:
+            raise EmbeddingMismatchError(
+                f"RAG store at {self._db_path} was created with embedder "
+                f"'{stored_embedder}' but the configured embedder is "
+                f"'{embedder_identity}'. Refusing retrieval to prevent silent "
+                "corruption. Re-embed with: `python scripts/rag_ingest.py --reindex`"
+            )
+
+    def verify_embedder(self, embedder_identity: str | None) -> None:
+        """Cross-check the stored stamp against *embedder_identity*.
+
+        Called by :class:`RAGStore` before every operation with the actual
+        embedder's identity, so a store opened with a different declared
+        identity cannot smuggle mismatched vectors past the constructor-time
+        check. The lazy client is opened first so a brand-new store gets
+        created + stamped before the cross-check (otherwise a first-run
+        store would look like an unverifiable legacy one). In-memory/fake
+        backends may omit this method (callers use ``getattr``).
+        """
+        _ = self._c  # ensure the collection exists (created + stamped)
+        self._verify_stamp(embedder_identity)
 
     # -- client lazy init ----------------------------------------------------
 
@@ -299,6 +433,12 @@ class MilvusLiteBackend:
                     _COLLECTION_NAME,
                     index_params,
                 )
+                # Embedder stamp: recorded at creation so a later model change
+                # is detected instead of silently corrupting retrieval.
+                self._write_stamp(self._embedder_identity)
+            else:
+                # Existing store: verify the embedder stamp before any use.
+                self._verify_stamp(self._embedder_identity)
 
             client.load_collection(_COLLECTION_NAME)
             self._client = client
@@ -434,17 +574,24 @@ class MilvusLiteBackend:
         the database.  Milvus Lite stores the database as a directory
         (multiple files), so we use ``shutil.rmtree``.  On Windows,
         milvus-lite may not release its file locks immediately — the
-        directory is left for the caller or OS to clean up.
+        directory is left for the caller or OS to clean up.  The
+        embedder-stamp sidecar is removed too so a rebuilt store never
+        inherits a stale stamp.
         """
         if self._client is not None:
             self._client.close()
             self._client = None
+        import os
         import shutil
 
-        try:
-            shutil.rmtree(self._db_path)
-        except FileNotFoundError, PermissionError, OSError:
-            pass  # milvus-lite may hold file locks
+        for target in (self._db_path, self._stamp_path()):
+            try:
+                if os.path.isdir(target):
+                    shutil.rmtree(target)
+                else:
+                    os.remove(target)
+            except FileNotFoundError, PermissionError, OSError:
+                pass  # milvus-lite may hold file locks
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +614,20 @@ class RAGStore:
     ) -> None:
         self._backend = backend
         self._embedder = embedder
+        self._identity: str | None = getattr(embedder, "identity", None)
+
+    def _ensure_embedder_match(self) -> None:
+        """Refuse operations when the store's stamp doesn't match this embedder.
+
+        Phase 6 6b: the backend verifies its constructor-declared identity at
+        open; this cross-check uses the *actual* embedder's identity so a store
+        opened with a different declared identity cannot smuggle mismatched
+        vectors through. Backends without ``verify_embedder`` (in-memory
+        fakes) skip the check.
+        """
+        verify = getattr(self._backend, "verify_embedder", None)
+        if verify is not None:
+            verify(self._identity)
 
     # -- ingestion -----------------------------------------------------------
 
@@ -474,6 +635,7 @@ class RAGStore:
         """Embed and store golden locator patterns. Returns count inserted."""
         if not patterns:
             return 0
+        self._ensure_embedder_match()
         texts = [p.query_text for p in patterns]
         vectors = self._embedder.embed_batch(texts)
         entries = [
@@ -498,6 +660,7 @@ class RAGStore:
         """Embed and store documentation chunks. Returns count inserted."""
         if not chunks:
             return 0
+        self._ensure_embedder_match()
         texts = [c.text for c in chunks]
         vectors = self._embedder.embed_batch(texts)
         entries = [
@@ -532,6 +695,7 @@ class RAGStore:
         Returns results with confidence ≥ *min_confidence*, sorted
         descending by confidence.
         """
+        self._ensure_embedder_match()
         if self._backend.count() == 0:
             return []
 
@@ -561,10 +725,12 @@ class RAGStore:
 
     @property
     def is_empty(self) -> bool:
+        self._ensure_embedder_match()
         return self._backend.count() == 0
 
     def counts_by_type(self) -> dict[str, int]:
         """Count stored entries grouped by ``entry_type`` (golden/doc/learned)."""
+        self._ensure_embedder_match()
         return self._backend.counts_by_type()
 
     def delete_learned(self) -> int:
@@ -573,6 +739,7 @@ class RAGStore:
         Keeps golden patterns and doc chunks so re-seeding stays
         dedup-free. Returns the number of entries removed.
         """
+        self._ensure_embedder_match()
         return self._backend.delete_learned()
 
     def upsert_pattern(self, pattern: LearnedPattern) -> tuple[str, int]:
@@ -593,6 +760,7 @@ class RAGStore:
             hit = self._backend.increment_learned_hit(existing)
             return ("exists", hit)
 
+        self._ensure_embedder_match()
         vector = self._embedder.embed(pattern.query_text)
         self._backend.upsert(
             [

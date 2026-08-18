@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from src.rag_store import RetrievedPattern
+from src.rag_store import EmbeddingMismatchError, RetrievedPattern
 
 if TYPE_CHECKING:
     from src.rag_store import RAGStore
@@ -62,7 +62,14 @@ class RAGRetriever:
     @property
     def enabled(self) -> bool:
         """Whether RAG is enabled (store is not ``None`` and not empty)."""
-        return self._store is not None and not self._store.is_empty
+        if self._store is None:
+            return False
+        try:
+            return not self._store.is_empty
+        except EmbeddingMismatchError:
+            # Logged loudly on the first retrieve() attempt — the mismatch is
+            # a config/data error, not a silent degradation.
+            return False
 
     def retrieve(
         self,
@@ -76,7 +83,8 @@ class RAGRetriever:
 
         Returns an empty list when RAG is disabled or the store is empty,
         and when the underlying store or embedder fails (graceful
-        degradation — RAG never blocks generation).
+        degradation — RAG never blocks generation). An embedder mismatch
+        is logged at ERROR with the reindex fix — never silently.
         """
         if self._store is None:
             return []
@@ -88,6 +96,14 @@ class RAGRetriever:
                 k=k,
                 min_confidence=min_confidence,
             )
+        except EmbeddingMismatchError as exc:
+            logger.error(
+                "RAG store embedding-model mismatch — refusing retrieval to prevent "
+                "silent corruption. Re-embed with: `python scripts/rag_ingest.py "
+                "--reindex` (%s)",
+                exc,
+            )
+            return []
         except Exception:
             if not self._warned_failure:
                 logger.warning(

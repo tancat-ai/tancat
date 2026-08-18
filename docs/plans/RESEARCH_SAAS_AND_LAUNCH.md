@@ -3,6 +3,9 @@
 **Created:** 2026-08-17
 **Status:** Open — research tasks, not implementation items
 **Feeds:** Phase 6 (SaaS), Phase 8 (GTM), BACKLOG AI-039 (rename)
+**Cross-referenced with:** `RESEARCH_COMPETITIVE_LANDSCAPE.md` (2026-08-17) — market/
+competitive research. Items marked ✅ below are now answered by that doc; see its §9
+for the full mapping.
 **Why this doc exists:** The Phase 6 checklist is an *infrastructure* list. The gaps
 below are architecture/business/legal decisions that must be researched and decided
 **before** SaaS work starts — several of them change what the code has to build.
@@ -23,10 +26,9 @@ below are architecture/business/legal decisions that must be researched and deci
 
 ## §1. BYO-LLM architecture (decided — remaining research)
 
-**Spec prerequisite (decision 2026-08-17):** the Phase 6 build starts from a spec —
-`docs/specs/FEATURE_SPEC_phase6_saas.md` (NOT WRITTEN yet). It must cover: BYO-LLM
-architecture (this section), the free-tier limit (§5 — the old "3 generations" sandbox
-number is arbitrary), license key design (§5), credential policy (§4). The roadmap's
+**Spec (decision 2026-08-17, WRITTEN 2026-08-17):** the Phase 6 build starts from a spec —
+`docs/specs/FEATURE_SPEC_phase6_saas.md` (Draft — §9 open questions to grill before 6a/6e build). It covers: BYO-LLM
+architecture (this section → spec §5.3), the free-tier limit (§5 → spec §5.5, resolved 2026-08-17 to runs/credits — the old "3 generations" sandbox number is arbitrary), license key design (§5 → spec §5.4), credential policy (§4 → spec §5.6). The roadmap's
 Phase 6 is now a two-part plan: **Part 1 = per-company deployment (the v1)**, **Part 2
 = true multi-tenant SaaS (deferred)**.
 
@@ -41,9 +43,11 @@ D1 is settled. Open research:
 - [ ] **"Check my LLM" health check:** first-run probe — list models, run a 5-token
       completion, warn if the model is too small / endpoint unreachable / key invalid.
       Design as a small CLI + Streamlit onboarding step.
-- [ ] **Cost analysis to confirm D1:** document why hosting LLMs is not profitable
-      (GPU cost vs license revenue, token metering, abuse) — one paragraph for the
-      pricing page's "why BYO" FAQ.
+- [x] **Cost analysis to confirm D1:** ✅ answered 2026-08-17 by competitive research —
+      no vendor in the AI test-gen space hosts its own models (Mabl, testRigor, QA
+      Wolf, Functionize, Qodo all BYO/cloud-API); GPU hosting vs $99–499/mo license
+      revenue is a losing trade. Write the one-paragraph "why BYO" FAQ from
+      RESEARCH_COMPETITIVE_LANDSCAPE.md §2.2/§5.2.
 
 ## §2. Deployment-per-company — what a customer actually installs
 
@@ -62,6 +66,9 @@ Research to write the deployment docs (and to confirm the v1 story is complete):
       is literally true: audit all outbound HTTP in the codebase (LLM calls go to
       THEIR endpoint — confirm nothing else: no telemetry, no update checks, no
       PyPI/uv checks at runtime).
+      ⚠️ **Escalated to priority (2026-08-17):** this audit is the #1 sales argument —
+      it's the claim no cloud competitor can make. It gates both this doc and the
+      positioning in RESEARCH_COMPETITIVE_LANDSCAPE.md (§3, §5.4 milestone 1).
 
 ## §3. Multi-tenant SaaS (tier 2 — research only, no build decision yet)
 
@@ -121,14 +128,16 @@ is the rate-limit boundary. They re-enter scope only with Part 2.
 
 - [ ] **Entity & tax:** Cat Tan Operations Ltd as the selling vehicle? VAT
       registration threshold? How to invoice UK + international customers?
-- [ ] **Pricing model:** subscription (per month, per what — deployment? seat?) vs
-      perpetual + maintenance. What is a "seat" — everyone who can log in, or
-      everyone who can generate? (v1 is per-deployment, so probably "per deployment")
-- [ ] **Free tier / sandbox size:** roadmap says "3 generations" — arbitrary.
-      Research comparable tools' trial limits (Mabl, testRigor, Cypress trial,
-      Playwright MCP) + what's the minimum that completes the value moment
-      (story → generate → run → evidence → export). Cost is ~0 since customer's
-      LLM does the work, so the limit is about *perceived value*, not cost.
+- [x] **Pricing model:** ✅ answered 2026-08-17 — **per-deployment, not per-seat**
+      (testRigor $99/$450, Mabl ~$499/mo, QA Wolf per-test/ACV; "team shares one
+      workspace" is the norm, matching D2). Suggested tiers: $99–149 self-serve,
+      $299–499 pro, $1–3k/mo air-gap premium (Mabl "Private" ~$900 anchor).
+      See RESEARCH_COMPETITIVE_LANDSCAPE.md §4.2.
+- [x] **Free tier / sandbox size:** ✅ answered 2026-08-17 — comparable tools limit by
+      **runs/credits, not generations** (Mabl 500 cloud runs/mo; testRigor time-boxed
+      trial). Replace "3 generations" with **"N generations + evidence exports"** so
+      the full value moment (story → generate → run → evidence → export) completes.
+      See RESEARCH_COMPETITIVE_LANDSCAPE.md §4.2.
 - [ ] **Terms of service:** "provided as-is" for generated tests (their release
       breaks — not my liability). Need it written down, not assumed.
 - [ ] **Privacy policy scope:** if v1 stores nothing centrally, the policy is small —
@@ -160,3 +169,65 @@ is the rate-limit boundary. They re-enter scope only with Part 2.
 | Concurrency/rate limiting | Customer's LLM is their rate-limit problem (D1) |
 | Multi-tenant account linking | D3 — tier 2 |
 | UD-01/02 user docs | Gated on tier split (Phase 6/8) — but note: deployment docs from §2 are needed for v1 sales, so split "internal docs" from "customer deployment docs" |
+
+> **Cross-validation (2026-08-17):** competitive research confirms all four deferrals
+> are correct — a solo vendor cannot out-SaaS funded incumbents (D3); customer-ops and
+> customer-LLM rate-limit boundaries match how every rival actually sells. See
+> RESEARCH_COMPETITIVE_LANDSCAPE.md §6–§7.
+
+---
+
+## §8. Commercial-readiness gaps — feature/architecture audit (2026-08-17)
+
+Factual audit of the codebase against the commercial plan (answers: "do we need a
+vector DB? is PDF ingestion up to scratch? chunking/indexing? what happens when the
+embedding model changes? are the guard rails enough? what's the latency?").
+
+### 8.1 Vector database
+| Question | Current state | Gap for commercial | Severity |
+|----------|---------------|--------------------|----------|
+| Do we need a vector DB? | **Already have one** — Milvus Lite (embedded), `VectorStoreBackend` protocol (swap to ChromaDB/hosted Milvus = one-file change, flagged for Phase 6). | Milvus Lite is **single-writer** — safe for CLI/single-process Streamlit, but a per-company *team* deployment (D2: N employees, one workspace) risks concurrent writes from two Streamlit sessions or UI + CI Action. | **High** — blocks D2 team shape |
+| Index type | IVF_FLAT, COSINE, nlist=128 | Fine at current scale (hundreds of chunks); revisit only if the corpus grows ~100x. | Low |
+
+### 8.2 PDF ingestion (`src/pdf_ingest.py`)
+| Question | Current state | Gap | Severity |
+|----------|---------------|-----|----------|
+| Is PDF ingestion up to scratch? | PyMuPDF: heading detection by font size, tables kept whole as markdown, chunking on heading boundaries (~2000 chars, 250 overlap). Optional `[pdf]` extra. | **No OCR** — image-only pages are *skipped*. Scanned insurance PDFs (common in the target domain) yield zero content. `src/ocr_backends.py` exists but is not wired into the ingest path. | **High** — core domain pain |
+| Table handling | Tables kept whole, never split | A large table becomes one giant chunk → embedding/token limits, poor retrieval. | Medium |
+| Chunking quality | Char-based heuristic (~500 tokens), naive overlap | Not tokenizer-aware; no semantic/recursive splitting. Adequate for advisory retrieval, weak for long domain docs. | Medium |
+| Re-ingest safety | `--bundled` idempotent (version marker); learned patterns dedup by key | **Doc chunks have no dedup key** — re-ingesting a PDF/markdown dir duplicates chunks unless the store is manually cleared. | Medium |
+
+### 8.3 Embedding model changes — REINDEXING REQUIRED (path currently broken)
+| Question | Answer |
+|----------|--------|
+| What happens when the embedding model changes? | **Silent corruption or hard failure.** `SentenceTransformerEmbedder._DEFAULT_MODEL = "all-MiniLM-L6-v2"`; `dimension` returns literal `384`; the Milvus collection schema is fixed at dim=384 on first creation. Different dimension → inserts fail / collection must be dropped & recreated. Same dimension, different model → cosine similarity meaningless across embedding spaces → retrieval quietly degrades. |
+| Is the model version recorded? | **No.** Store records no embedder identity; nothing detects a stale index. `rag_bundled` has a pack version marker but not an embedder stamp. |
+| Is there a reindex command? | **No.** `rag_ingest.py` rebuilds golden/docs but has no "re-embed everything" migration; learned patterns wiped via `--prune-learned`. |
+| Required fix (Phase 6 spec) | Store `embedder_name + dim` in collection metadata; on mismatch refuse retrieval and require re-seed; add `rag_ingest.py --reindex` re-embedding golden+docs and resetting learned. |
+
+### 8.4 Guard rails
+| Question | Current state | Gap | Severity |
+|----------|---------------|-----|----------|
+| Prompt injection | `src/agents/prompt_safety.py` wraps user input in `<user_input>` XML tags (PEP 750 t-strings) for agent prompts. | Coverage is per-prompt — audit every prompt path (skeleton gen, resolver, semantic ranker); AGENTS.md bans XML tags in skeleton prompts — resolve this tension. | Medium |
+| SSRF | **Not implemented.** Only a `localhost:3000` config default for mock sites. | No private-IP blocklist, no `169.254.169.254` metadata guard, no URL-scheme restriction. §3 flags it; v1 per-company promised "warning + cheap blocklist" — neither exists. | **High** — the no-egress/security claim is a sales cornerstone |
+| Credential redaction in evidence | Fernet-encrypted settings store; CI/CD reads env (D4). | **Screenshot redaction of passwords unverified** (fields filled via `fill()` — do screenshots mask inputs?). Needs a test + redaction pass (§4). | High |
+| Sandboxing | Generated tests run via real Playwright against real sites — by design. | No sandbox/dependency isolation; acceptable for v1 per-company (their infra), a hard requirement for multi-tenant (D3, deferred). | Low (v1) |
+
+### 8.5 Latency
+| Question | Current state | Gap | Severity |
+|----------|---------------|-----|----------|
+| What's our latency? | **No published number.** LLM timeouts: 5s probe, 30s list-models, 45s semantic ranking, 300s default, 600s max. `verify_production.py` times pipeline gen + execution; debug prints show per-phase elapsed. | No end-to-end latency benchmark, no SLO, no LLM-call cache. Per-run LLM calls: 1 skeleton + up to 3 corrections + semantic-rank batches (only when fast passes fail) + ASSERT-type selection. Embedding runs per-query at resolution time (MiniLM, CPU, fast). | **Medium** — demo/enterprise expectation is "story → test in minutes" |
+| Free-tier implication | Cost ≈ £0 (BYO-LLM) so latency is the UX ceiling, not cost. | Target: < 2–3 min per 6-criteria story on consumer hardware with a mid-size local model; measure and publish a table per model tier. | Medium |
+
+### 8.6 Accuracy evidence (for the sales claim)
+- Current `scripts/eval/baseline.json`: **100% resolution accuracy on 67 resolutions** — but a **single site (saucedemo), 6 stories**. AGENTS.md cites 79.1% as the historical baseline; the file has since improved.
+- **Gap:** "accurate on real sites" needs breadth — multi-site golden datasets (automationexercise, LV mock, saucedemo) re-validated on live sites, plus a published eval harness as the honesty signal (§5.4). Not enterprise-trustworthy on one site.
+
+### 8.7 Priority order (feeds Phase 6 spec + BACKLOG)
+1. **SSRF guard + egress audit** (8.4) — gates the no-egress sales claim (already escalated in §2).
+2. **Embedding model stamp + reindex path** (8.3) — data-corruption risk if the model changes; cheap fix.
+3. **Team-deployment concurrency** (8.1) — decides the D2 team shape; may be "one server, one process" + file locks instead of a DB swap.
+4. **PDF OCR wiring** (8.2) — insurance scanned-doc pain; `ocr_backends.py` already exists.
+5. **Screenshot redaction test** (8.4).
+6. **Latency benchmark + LLM cache** (8.5).
+7. **Multi-site eval dataset** (8.6).

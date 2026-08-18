@@ -212,6 +212,30 @@ def check_orchestrator_init() -> list[Check]:
     return checks
 
 
+def check_egress_audit() -> list[Check]:
+    """Gate 0: no unrecognised outbound-HTTP call sites in the product runtime.
+
+    Phase 6 6a — the "no data leaves your deployment" claim is only honest
+    while every runtime outbound call targets a user-configured endpoint or
+    the already-SSRF-guarded target site (scripts/audit_egress.py).
+    """
+    from scripts.audit_egress import DEFAULT_SCOPE, run_audit
+
+    result = run_audit(DEFAULT_SCOPE)
+    checks = [
+        Check(
+            "[Egress audit] product runtime clean",
+            not result.flagged and not result.errors,
+            f"{len(result.sites)} call site(s), {len(result.flagged)} flagged, {len(result.errors)} scan error(s)",
+        )
+    ]
+    for site in result.flagged:
+        checks.append(Check(f"[Egress audit] FLAGGED {site.file}:{site.line}", False, site.statement))
+    for error in result.errors:
+        checks.append(Check("[Egress audit] scan error", False, error))
+    return checks
+
+
 def run_all(json_output: bool = False) -> int:
     """Run all smoke checks and print results."""
     all_checks: list[Check] = []
@@ -223,6 +247,7 @@ def run_all(json_output: bool = False) -> int:
         ("POM mode smoke", check_pom_mode_smoke),
         ("Orchestrator data model", check_orchestrator_init),
         ("Artifact validation", check_artifact_validation),
+        ("Egress audit", check_egress_audit),
     ]
 
     for cat_name, checker in categories:

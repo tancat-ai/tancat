@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -29,18 +32,36 @@ from src.test_generator import TestGenerator
 
 FIXTURES_DIR = Path(__file__).parent.parent.parent / "generated_tests"
 
+# Served once per worker process over localhost HTTP: the SSRF guard
+# (Phase 6 6a) refuses ``file://`` schemes, and the product's own dev flow
+# serves the mock over HTTP anyway (``scripts/serve_mock_site.py``). Loopback
+# is guard-permitted by default.
+_HTTP_SERVER: ThreadingHTTPServer | None = None
+_HTTP_BASE_URL: str = ""
 
-def mock_insurance_html() -> Path:
-    """Return the path to the mock insurance site HTML fixture."""
-    p = FIXTURES_DIR / "mock_insurance_site.html"
-    assert p.exists(), f"Mock fixture not found at {p}"
-    return p
+
+def _ensure_http_server() -> str:
+    global _HTTP_SERVER, _HTTP_BASE_URL
+    if _HTTP_SERVER is None:
+        handler = partial(SimpleHTTPRequestHandler, directory=str(FIXTURES_DIR))
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        _HTTP_SERVER = server
+        _HTTP_BASE_URL = f"http://127.0.0.1:{server.server_address[1]}"
+    return _HTTP_BASE_URL
 
 
-def mock_insurance_file_url() -> str:
-    """Return a file:// URL for the mock insurance site."""
-    path_str = str(mock_insurance_html()).replace("\\", "/")
-    return f"file:///{path_str}"
+def mock_insurance_url() -> str:
+    """Return the mock insurance site URL served over localhost HTTP.
+
+    The SSRF guard (Phase 6 6a) refuses ``file://`` schemes; the fixture is
+    served over loopback HTTP instead (the same shape as the product's own
+    ``scripts/serve_mock_site.py``).
+    """
+    fixture = FIXTURES_DIR / "mock_insurance_site.html"
+    assert fixture.exists(), f"Mock fixture not found at {fixture}"
+    return f"{_ensure_http_server()}/mock_insurance_site.html"
 
 
 # ── Test: Scraper captures known elements ─────────────────────────────
@@ -55,7 +76,7 @@ def test_scraper_finds_known_elements() -> None:
 
     async def _run() -> None:
         scraper = PageScraper()
-        url = mock_insurance_file_url()
+        url = mock_insurance_url()
         elements, error, _final_url = await scraper.scrape_url(url)
 
         if error:
@@ -85,7 +106,7 @@ def test_resolver_matches_known_placeholder() -> None:
     async def _run() -> None:
         scraper = PageScraper()
         resolver = PlaceholderResolver()
-        url = mock_insurance_file_url()
+        url = mock_insurance_url()
 
         elements, error, _final_url = await scraper.scrape_url(url)
         if error:
@@ -177,7 +198,7 @@ def test_locator_survives_full_pipeline() -> None:
         test_generator = TestGenerator(client=llm_client)
         orchestrator = TestOrchestrator(test_generator)
 
-        url = mock_insurance_file_url()
+        url = mock_insurance_url()
         user_story = "As a user I want to browse products and add them to my cart"
         conditions = (
             "1. Navigate to the home page\n"
@@ -261,7 +282,7 @@ def test_pipeline_produces_valid_python() -> None:
         test_generator = TestGenerator(client=llm_client)
         orchestrator = TestOrchestrator(test_generator)
 
-        url = mock_insurance_file_url()
+        url = mock_insurance_url()
         user_story = "As a user I want to browse the site"
         conditions = "1. Navigate to the home page\n(Total: 1 criteria)"
 
@@ -294,7 +315,7 @@ def test_scraper_produces_valid_selectors() -> None:
 
     async def _run() -> None:
         scraper = PageScraper()
-        url = mock_insurance_file_url()
+        url = mock_insurance_url()
         elements, error, _final_url = await scraper.scrape_url(url)
 
         if error:

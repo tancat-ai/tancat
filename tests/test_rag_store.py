@@ -16,6 +16,7 @@ import pytest
 
 from src.rag_store import (
     DocChunk,
+    EmbeddingMismatchError,
     GoldenPattern,
     KnowledgeEntry,
     LearnedPattern,
@@ -24,6 +25,7 @@ from src.rag_store import (
     RetrievedPattern,
     SearchHit,
     SentenceTransformerEmbedder,
+    embedder_stamp_path,
 )
 
 # ---------------------------------------------------------------------------
@@ -57,6 +59,11 @@ class FakeEmbedder:
     @property
     def dimension(self) -> int:
         return self._dimension
+
+    @property
+    def identity(self) -> str:
+        """Phase 6 6b: embedder identity for stamping/cross-checks."""
+        return f"fake@{self._dimension}"
 
     def embed(self, text: str) -> list[float]:
         return self._fake_vector(text)
@@ -617,6 +624,100 @@ class TestMilvusLiteBackend:
         assert counts.get("learned", 0) == 0
         assert counts["golden"] == 1
         assert counts["doc"] == 1
+
+
+class TestEmbedderStamp:
+    """Phase 6 6b — embedder stamp written at creation, verified on open."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path: Path) -> None:
+        import atexit
+        import uuid
+
+        self.db_path = str(tmp_path / f"stamp_{uuid.uuid4().hex[:8]}.db")
+        atexit.register(lambda: _safe_unlink(self.db_path))
+        atexit.register(lambda: _safe_unlink(embedder_stamp_path(self.db_path)))
+
+    def test_stamp_written_on_creation(self) -> None:
+        import json
+
+        backend = MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16")
+        backend.count()  # opens the client -> creates + stamps
+        stamp = json.loads(Path(embedder_stamp_path(self.db_path)).read_text(encoding="utf-8"))
+        assert stamp["embedder"] == "model-a@16"
+        assert stamp["dim"] == 16
+
+    def test_reopen_same_identity_is_ok(self) -> None:
+        MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16").count()
+        reopened = MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16")
+        assert reopened.count() == 0  # no refusal
+
+    def test_dimension_mismatch_refused(self) -> None:
+        MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16").count()
+        with pytest.raises(EmbeddingMismatchError) as excinfo:
+            MilvusLiteBackend(self.db_path, dimension=384, embedder_identity="model-a@384").count()
+        assert "dimension" in str(excinfo.value)
+        assert "--reindex" in str(excinfo.value)
+
+    def test_embedder_mismatch_refused(self) -> None:
+        MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16").count()
+        with pytest.raises(EmbeddingMismatchError) as excinfo:
+            MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-b@16").count()
+        assert "model-a@16" in str(excinfo.value)
+        assert "model-b@16" in str(excinfo.value)
+        assert "--reindex" in str(excinfo.value)
+
+    def test_verify_embedder_cross_check(self) -> None:
+        """RAGStore-level cross-check re-verifies with the ACTUAL embedder."""
+        backend = MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16")
+        backend.count()
+        backend.verify_embedder("model-a@16")  # matches
+        with pytest.raises(EmbeddingMismatchError):
+            backend.verify_embedder("model-b@16")
+
+    def test_legacy_store_migrated_with_default_embedder(self) -> None:
+        """A pre-stamp store (no sidecar) is accepted only for the default model."""
+        from src.rag_store import DEFAULT_EMBEDDER_IDENTITY
+
+        MilvusLiteBackend(self.db_path, dimension=384, embedder_identity="legacy@384").count()
+        Path(embedder_stamp_path(self.db_path)).unlink()  # simulate pre-stamp store
+
+        reopened = MilvusLiteBackend(self.db_path, dimension=384, embedder_identity=DEFAULT_EMBEDDER_IDENTITY)
+        assert reopened.count() == 0
+        # Migration: the stamp is now written.
+        import json
+
+        stamp = json.loads(Path(embedder_stamp_path(self.db_path)).read_text(encoding="utf-8"))
+        assert stamp["embedder"] == DEFAULT_EMBEDDER_IDENTITY
+
+    def test_legacy_store_refused_with_custom_embedder(self) -> None:
+        MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="legacy@16").count()
+        Path(embedder_stamp_path(self.db_path)).unlink()  # simulate pre-stamp store
+        with pytest.raises(EmbeddingMismatchError) as excinfo:
+            MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="custom@16").count()
+        assert "no embedder stamp" in str(excinfo.value)
+
+    def test_clear_removes_stamp(self) -> None:
+        backend = MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="model-a@16")
+        backend.count()
+        assert Path(embedder_stamp_path(self.db_path)).exists()
+        backend.clear()
+        assert not Path(embedder_stamp_path(self.db_path)).exists()
+
+    def test_ragstore_refuses_embedder_mismatch(self) -> None:
+        """RAGStore refuses ops when its embedder differs from the store's stamp.
+
+        The store is stamped 'other@16' by its creating backend; RAGStore is
+        given an embedder with identity 'fake@16' — the cross-check must fire
+        before any Milvus access (pure sidecar read, no second client needed).
+        """
+        MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="other@16").count()
+        store = RAGStore(
+            MilvusLiteBackend(self.db_path, dimension=16, embedder_identity="other@16"),
+            FakeEmbedder(dimension=16),  # identity: fake@16
+        )
+        with pytest.raises(EmbeddingMismatchError):
+            store.retrieve("CLICK: x")
 
     def test_delete_learned_empty(self) -> None:
         backend = MilvusLiteBackend(self.db_path, dimension=16)

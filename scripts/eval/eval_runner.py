@@ -16,6 +16,7 @@ import os
 import sqlite3
 import subprocess
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -178,6 +179,7 @@ def run_full_validation(
     durations: dict[str, float] | None = None,
     test_files: dict[str, Path] | None = None,
     pytest_timeout: float = 120.0,
+    on_story: Callable[[str], None] | None = None,
 ) -> list[StoryResult]:
     """Run full validation: static + test execution.
 
@@ -188,6 +190,8 @@ def run_full_validation(
         test_files: Optional dict mapping story_id to Path of generated test file.
             If provided, tests are executed via pytest.
         pytest_timeout: Timeout for each pytest run in seconds.
+        on_story: Optional per-story hook called with ``story_id`` before its
+            tests execute (used to serve the correct localhost-mock root).
 
     Returns:
         List of StoryResult with both resolution and test metrics populated.
@@ -204,6 +208,9 @@ def run_full_validation(
         if test_file is None or not test_file.exists():
             logger.info("No test file for %s — static validation only (no execution)", story.story_id)
             continue
+
+        if on_story is not None:
+            on_story(story.story_id)
 
         logger.info("Executing tests for %s: %s", story.story_id, test_file)
         total, passed, failed, skipped, duration, raw_output = run_generated_tests(
@@ -379,6 +386,13 @@ class EvalRunner:
         self.test_output_dir = test_output_dir
         self.regenerate = regenerate
         self.use_graph = use_graph
+        # Phase 6 6a follow-up (eval fix): per-story mock serving. ``story_id``
+        # -> served directory for localhost-mock datasets; the single mock
+        # server on :8781 is (re)started per story so each mock family is
+        # served at root (golden keys reference root-relative URLs).
+        self._story_mock_dirs: dict[str, str] = {}
+        self._mock_server: Any | None = None
+        self._mock_serving_dir: str | None = None
 
     def _load_code_map(self) -> dict[str, str]:
         """Load all captured code files into a map keyed by story_id."""
@@ -464,11 +478,11 @@ class EvalRunner:
         Returns:
             HarnessReport with all metrics computed.
         """
-        # Auto-manage mock server for lv_insurance (eval-005) — the mock
-        # insurance SPA requires a local HTTP server.  ThreadingHTTPServer
-        # handles concurrent Playwright requests without crashing.
-        # The server runs as a daemon thread — auto-stops when the process exits.
-        _mock_server = self._ensure_mock_server()
+        # Auto-manage mock serving (Phase 6 6a follow-up): the :8781 server is
+        # (re)started per story so each mock family is served at root (golden
+        # keys reference root-relative URLs). No server starts until a mock
+        # story actually processes.
+        self._story_mock_dirs = self._build_mock_dirs()
         if self.regenerate:
             code_map, durations = self._regenerate_code()
             # Phase 1d: When regenerating via graph, save captures for future CI gates
@@ -491,6 +505,7 @@ class EvalRunner:
                 durations=durations,
                 test_files=test_files,
                 pytest_timeout=pytest_timeout,
+                on_story=self._on_story_mock_swap,
             )
         else:
             results = run_static_validation(self.dataset_dir, code_map, durations)
@@ -502,6 +517,7 @@ class EvalRunner:
             gen_mode = "regenerated" if self.regenerate else "captured"
             rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
             git_commit = _get_git_commit()
+            provider, model = self._loaded_model_identity()
             run_ids = persist_results(
                 self.db_path,
                 results,
@@ -510,24 +526,34 @@ class EvalRunner:
                 generation_mode=gen_mode,
                 rag_enabled=rag_enabled,
                 git_commit=git_commit,
+                provider=provider,
+                model=model,
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
         return HarnessReport(stories=results)
 
-    def _ensure_mock_server(self) -> Any | None:
-        """Auto-start the mock HTTP server if any story needs it.
+    def _build_mock_dirs(self, repo_root: Path | None = None) -> dict[str, str]:
+        """Map each localhost-mock story to the directory it must be served from.
 
         A dataset opts in via ``base_url`` on ``http://localhost:8781`` and an
         optional ``mock_dir`` field (served as the server root). Legacy
-        datasets without ``mock_dir`` (eval-005 / lv_insurance) keep the
-        repo-root serving behaviour.
+        datasets without ``mock_dir`` (eval-005 / lv_insurance) are served
+        from the repo root (their ``generated_tests/...`` URLs resolve there).
 
-        Returns a ``MockServer`` instance that auto-stops on exit, or None
-        if no mock server is needed.
+        Each mock family must be served at root — golden keys reference
+        root-relative URLs (``/cart.html`` etc.) — so stories with different
+        mock dirs cannot share one server: :meth:`_ensure_mock_serves` swaps
+        the server per story.
+
+        Args:
+            repo_root: Injectable repo root (tests use a scratch dir);
+                defaults to the module's own location
+                (``<repo>/scripts/eval/eval_runner.py``).
         """
-        mock_dir: str | None = None
-        for dataset_file in self.dataset_dir.glob("*.json"):
+        repo_root = (repo_root or Path(__file__).resolve().parent.parent.parent).resolve()
+        result: dict[str, str] = {}
+        for dataset_file in sorted(self.dataset_dir.glob("*.json")):
             try:
                 data = json.loads(dataset_file.read_text(encoding="utf-8"))
             except OSError, json.JSONDecodeError:
@@ -535,18 +561,55 @@ class EvalRunner:
             base_url = data.get("base_url", "")
             if "localhost:8781" not in base_url:
                 continue
-            # Prefer the dataset's declared mock_dir; fall back to repo root
-            # (eval-005 legacy behaviour serves generated_tests/mock_insurance_site.html
-            #  from the working directory).
-            mock_dir = data.get("mock_dir") or os.getcwd()
-            break
-        if mock_dir is None:
-            return None
+            story_id = str(data.get("id") or dataset_file.stem)
+            mock_dir = data.get("mock_dir") or ""
+            if mock_dir:
+                result[story_id] = str((repo_root / mock_dir).resolve())
+            else:
+                # Legacy (eval-005): served from the repo root so
+                # ``/generated_tests/mock_insurance_site.html`` resolves.
+                result[story_id] = str(repo_root)
+        return result
 
+    def _ensure_mock_serves(self, mock_dir: str | None) -> None:
+        """(Re)start the :8781 mock server when *mock_dir* differs from the current one.
+
+        Stories that don't need the mock (live-site datasets) pass ``None``
+        and leave any running server untouched. Restarting is cheap (daemon
+        thread + ``allow_reuse_address``) and happens per story in both the
+        regeneration and execution phases.
+        """
+        if mock_dir is None:
+            return
+        if self._mock_server is not None and self._mock_serving_dir == mock_dir:
+            return
+        if self._mock_server is not None:
+            self._mock_server.stop()
+            self._mock_server = None
         from scripts.mock_server import MockServer
 
-        logger.info("Auto-starting mock server for %s (dir=%s)...", Path(mock_dir).name, mock_dir)
-        return MockServer.start(port=8781, directory=mock_dir)
+        self._mock_server = MockServer.start(port=8781, directory=mock_dir)
+        self._mock_serving_dir = mock_dir
+
+    def _on_story_mock_swap(self, story_id: str) -> None:
+        """Execution-phase hook: serve the right mock root for *story_id*."""
+        self._ensure_mock_serves(self._story_mock_dirs.get(story_id))
+
+    def _loaded_model_identity(self) -> tuple[str, str]:
+        """Best-effort (provider, model) of the LLM that produced this run.
+
+        Recorded into ``eval_runs`` so A/B runs across model swaps are
+        comparable (the 3.6-vs-3.8 comparison this fix came from was
+        hampered by an empty ``model`` column). Returns ``("", "")`` when
+        no endpoint is reachable.
+        """
+        try:
+            from src.llm_providers import auto_detect_provider
+
+            provider = auto_detect_provider()
+            return str(provider.provider_name), str(provider.get_loaded_model(timeout=5) or "")
+        except Exception:
+            return "", ""
 
     def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
         """Regenerate code for all stories using the live pipeline.
@@ -575,6 +638,10 @@ class EvalRunner:
 
             try:
                 start = datetime.now(UTC).timestamp()
+                # Serve the right mock root for this story (localhost-mock
+                # stories share the :8781 port; each family must be served at
+                # root for golden-key page-scoping to match).
+                self._ensure_mock_serves(self._story_mock_dirs.get(story_id))
                 # Fresh orchestrator per story — prevents state contamination
                 client = LLMClient()
                 generator = TestGenerator(client=client)

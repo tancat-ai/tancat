@@ -1,7 +1,44 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-15 (Phase 7 CI/CD — **7a + 7b + 7c complete**: GitHub Action full loop + GitLab parity; Phase 7 → `[x]` on the roadmap)
+Last updated: 2026-08-18 (ship-it — 6a SSRF+egress, 6b embedder stamp, file:// test fix, AI-047 eval mock fix committed; AI-046 qwen3.8 regression recorded)
+
+---
+
+## 🆕 AI-046 — Qwen3.8-27B skeleton/resolution regression (vs 3.6)
+
+**Status:** 🆕 new — finding from the 2026-08-17 model A/B; no fix scheduled (workaround: use qwen3.6)
+**Priority:** Medium — model-choice issue, not code
+**Evidence (2026-08-17, same eval `--mode full --regenerate`, same code):** resolution 31.2% (3.8) vs 45.9% (3.6); saucedemo **35% vs 75%**; lv_insurance 42% vs 75%; identical saucedemo scrape both runs (model-independent); live DOM verified intact; zero SSRF/stamp interference. `verify_production`: saucedemo 5 failures with 3.8 (login asserts pre-login URL; duplicate add-to-cart clicks) → all pass with 3.6. eval_runs `model` column now records the model (was empty — this A/B was hampered by it).
+**Cross-ref:** docs/sessions/2026-08-17_phase6_spec.md (session record), tests/test_eval_runner_mocks.py (eval fix).
+
+## 🆕 AI-047 — Eval harness mock-server bug: mock stories 0% in regenerate mode (✅ FIXED 2026-08-18)
+
+**Status:** ✅ Fixed — committed and CI green (see commit); fix verified by the mock-only confirm run (0% → 81%) and the full eval (31.2% → 55.0% on qwen3.8)
+**Priority:** Medium — eval infrastructure; polluted the 3.8/3.6 A/B headline (3 mock stories dragged resolution to 31.2%)
+**Root cause:** `EvalRunner._ensure_mock_server` served ONE directory for the whole run — the first localhost dataset's `mock_dir` (legacy eval-005 has none → repo root), so `mock_sites/ecommerce|banking` URLs 404'd (golden keys reference root-relative URLs like `/cart.html`; ecommerce and banking both use `/index.html` so one root cannot serve both).
+**Fix (`scripts/eval/eval_runner.py`):** `_build_mock_dirs()` maps story_id → served dir (declared `mock_dir` resolved against the repo root; legacy → repo root; injectable root for tests); `_ensure_mock_serves()` (re)starts the :8781 server per story in BOTH the regeneration and execution phases (`on_story` hook into `run_full_validation`). Also: `_loaded_model_identity()` records provider/model into `eval_runs` (the empty-model gap that hampered the A/B). **Repo-root derivation bug found while fixing:** `dataset_dir.parent.parent` lands on `scripts/` not the repo root — now module-path-based.
+**Tests:** `tests/test_eval_runner_mocks.py` (4: legacy→repo root, declared mock_dir resolution, live-sites ignored, per-dir server swap). Verified end-to-end: each mock family serves at root (ecommerce/banking/lv all 200).
+
+## 🆕 AI-045 — Commercial-readiness gaps for Phase 6 (from competitive research + code audit)
+
+**Status:** 🟡 ready-for-agent — priority list folded into the Phase 6 spec as the 6a–6i build order (`docs/specs/FEATURE_SPEC_phase6_saas.md`, WRITTEN 2026-08-17 — Draft, §9 open questions to grill before 6a/6e build)
+**Priority:** High — commercial viability blockers, not nice-to-haves
+**Cross-ref:** `docs/plans/RESEARCH_SAAS_AND_LAUNCH.md` §8 (full audit with per-item severity); `docs/plans/RESEARCH_COMPETITIVE_LANDSCAPE.md` (why air-gap/no-egress is the wedge)
+**Source:** code audit 2026-08-17 (read `rag_store.py`, `pdf_ingest.py`, `rag_bundled.py`, `llm_client.py`, `prompt_safety.py`, `secure_config.py`, `verify_production.py`, eval baseline)
+
+**Context:** competitive research concluded the differentiated revenue is the **air-gap/compliance tier** (BYO-LLM, no egress). These gaps are what must be true before that pitch is honest and before the Phase 6 spec is written. The `no data leaves your deployment` claim is the #1 sales argument — two of these gaps (SSRF, redaction) are security claims, not just features.
+
+**Priority order (from the audit):**
+1. **SSRF guard + egress audit** (§8.4) — **✅ SHIPPED 2026-08-17 (spec 6a)**: `src/url_guard.py` (resolve-and-classify: link-local/metadata always-blocked, private opt-in via `AITEST_ALLOW_PRIVATE_NETWORKS`, loopback default-ON for local/mock family, Playwright request-level redirect handler) wired into orchestrator intake + all scrapers + `ci_generate.py` (under the Phase 7 danger-zone check, new `--allow-private-networks`); `scripts/audit_egress.py` static gate (143 files / 13 sites / 0 flagged) in smoke Gate 0 + CI; `docs/security/egress-audit.md` published. 43 new tests; suite 2641 passed / 4 skipped, smoke 39/39, ruff + mypy clean, fake-LLM E2E green.
+2. **Embedding model stamp + reindex path** (§8.3) — **✅ SHIPPED 2026-08-17 (spec 6b)**: `SentenceTransformerEmbedder.identity` (`model@dim`) + `MilvusLiteBackend` embedder stamp sidecar (`<db>.embedder.json`, written at creation; dimension mismatch ALWAYS refused, embedder mismatch refused, legacy no-sidecar stores accepted+migrated only for the default model); `RAGStore` cross-checks its actual embedder before every op; `rag_ingest.py --reindex` (rebuild from bundled pack, resets learned, rewrites stamp + marker); mismatch surfaced loudly (retriever ERROR + orchestrator seed catch, CLI clean error). 13 new tests; suite 2654 passed / 4 skipped, eval static 97.9% (no regression), smoke 39/39, ruff + mypy clean; legacy migration verified against the real store (145 entries, stamped).
+3. **Team-deployment concurrency** (§8.1) — Milvus Lite is single-writer; D2 team shape (N employees, one workspace) risks concurrent writes (two Streamlit sessions / UI + CI Action). May resolve as "one server, one process" + file locks instead of a DB swap.
+4. **PDF OCR wiring** (§8.2) — image-only pages are skipped; scanned insurance PDFs (core domain) yield zero content. `src/ocr_backends.py` exists but is not wired into `pdf_ingest.py`. Also: doc chunks have no dedup key (re-ingest duplicates).
+5. **Screenshot credential redaction** (§8.4) — unverified whether screenshots mask filled password fields; needs a test + redaction pass if not.
+6. **Latency benchmark + LLM cache** (§8.5) — no published E2E number, no SLO, no LLM-call cache. Target < 2–3 min per 6-criteria story on consumer hardware + a published per-model-tier table.
+7. **Multi-site eval dataset** (§8.6) — current baseline 100% on 67 resolutions but single site (saucedemo); not an enterprise-trustworthy accuracy claim. Needs automationexercise + LV mock goldens re-validated on live sites.
+
+**Dependencies:** the Phase 6 spec is written (2026-08-17, draft — grill §9 before 6e) with 6a + 6b shipped; remaining 6c–6i build from the spec's §6 table.
 
 ---
 

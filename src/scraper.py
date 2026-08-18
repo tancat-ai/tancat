@@ -17,6 +17,7 @@ from playwright.sync_api import Page, sync_playwright
 from src.accessibility_enricher import AccessibilityEnricher
 from src.aria_parser import parse_aria_snapshot
 from src.element_enricher import ElementEnricher
+from src.url_guard import UrlGuard, UrlGuardError
 
 
 @dataclass
@@ -278,6 +279,12 @@ class PageScraper:
 
     def _scrape_url_via_subprocess(self, url: str) -> tuple[list[dict[str, Any]], str | None, str]:
         """Run the sync Playwright scrape in a clean subprocess (avoids Windows nested loop issues)."""
+        try:
+            UrlGuard().validate(url)
+        except UrlGuardError as exc:
+            # SSRF guard refusal — no browser is spawned for a refused target.
+            self._debug(f"SSRF guard refused {url}: {exc}")
+            return [], str(exc), url
         self._debug(f"Starting browser scrape for {url}...")
 
         payload = {
@@ -350,6 +357,16 @@ class PageScraper:
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                 )
                 page = context.new_page()
+
+                # SSRF guard: re-check every request (redirects + sub-resources)
+                # at request time; refuse the target up-front for a clean error.
+                guard = UrlGuard()
+                page.on("request", guard.request_handler())
+                try:
+                    guard.validate(url)
+                except UrlGuardError as exc:
+                    browser.close()
+                    return ScrapeResult(url=url, elements=[], error=str(exc), final_url=url)
 
                 response = page.goto(url, wait_until="networkidle", timeout=self.timeout_ms)
                 if not response:

@@ -49,6 +49,7 @@ from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
 from src.placeholder_scorers import PlaceholderScorer
 from src.scraper import PageScraper
+from src.url_guard import UrlGuard
 
 # Legacy alias — old test files import _substitute_templates
 _substitute_templates = substitute_templates  # noqa: PLW1508
@@ -217,10 +218,18 @@ class JourneyScraper:
             page = context.new_page()
             page.set_default_timeout(self.timeout_ms)
 
+            # SSRF guard: re-check every request (redirects + sub-resources)
+            # at request time so a page can never pull the browser onto an
+            # internal/metadata address.
+            guard = UrlGuard()
+            page.on("request", guard.request_handler())
+
             try:
                 # Start at the starting URL to establish session
                 if self.starting_url:
                     current_url = self.starting_url
+                    # SSRF guard: refuse an internal/metadata starting URL up-front.
+                    guard.validate(self.starting_url)
                     self._debug(f"Navigating to starting URL: {self.starting_url}")
                     page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
@@ -462,8 +471,14 @@ class JourneyScraper:
         if not candidates:
             return None
 
-        # Probe candidates with HEAD (fast, no page load)
+        # Probe candidates with HEAD (fast, no page load). The probe is an
+        # outbound call outside the browser, so it honours the same SSRF guard
+        # as navigation (candidates share the guarded base host, but a
+        # hallucinated cross-host URL must never be probed).
+        _probe_guard = UrlGuard()
         for candidate in candidates:
+            if not _probe_guard.is_allowed(candidate):
+                continue
             try:
                 resp = httpx.head(candidate, timeout=3, follow_redirects=True)
                 if resp.status_code < 400:
@@ -896,6 +911,10 @@ class JourneyScraper:
             from urllib.parse import urljoin
 
             full_url = urljoin(page.url, url)
+
+        # SSRF guard: a journey-inferred URL must satisfy the same rules as
+        # the starting URL (the request handler covers redirects/sub-resources).
+        UrlGuard().validate(full_url)
 
         response = page.goto(full_url, wait_until="networkidle", timeout=timeout_ms)
         if response:
