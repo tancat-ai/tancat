@@ -124,5 +124,34 @@ class TestOutputDirectoryPermissions:
             assert generator.output_dir == sub_dir
 
 
+class TestSkeletonThinkingMode:
+    """Skeleton generation opts out of thinking mode explicitly.
+
+    Root cause found 2026-08-18 (docs/sessions/2026-08-18_llm_model_ab_investigation.md):
+    on thinking models the thinking phase exhausts the max_tokens budget and
+    returns EMPTY content — the `got=0` retry loops. The single-call skeleton
+    path sends enable_thinking=False deliberately (not a silent provider
+    default — the switch is logged per call and recorded in the eval manifest).
+    """
+
+    def test_single_call_skeleton_sends_thinking_off(self) -> None:
+        fake_client = MagicMock()
+        fake_client.generate = AsyncMock(return_value="skeleton code")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            generator = TestGenerator(client=fake_client, output_dir=tmpdir)
+            result = asyncio.run(
+                generator.generate_skeleton(
+                    user_story="story",
+                    conditions="1. do a thing",
+                    target_urls=["https://example.com/"],
+                )
+            )
+
+        assert result == "skeleton code"
+        assert fake_client.generate.await_count == 1
+        assert fake_client.generate.await_args.kwargs.get("enable_thinking") is False
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

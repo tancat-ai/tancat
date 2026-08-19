@@ -32,7 +32,7 @@ from src.prompt_utils import (
     prepare_conditions_for_generation,
 )
 from src.scraper import PageScraper, scrape_with_enrichment
-from src.semantic_candidate_ranker import SemanticCandidateRanker
+from src.semantic_candidate_ranker import DEFAULT_RESOLUTION_TIMEOUT, SemanticCandidateRanker
 from src.skeleton_parser import SkeletonParser
 from src.skeleton_validator import SkeletonValidator
 from src.spec_analyzer import TestCondition, infer_condition_intent
@@ -77,6 +77,7 @@ class TestOrchestrator:
         provider: str = "",
         model: str = "",
         flow_store: Any | None = None,
+        resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
     ) -> None:
         self.test_generator = test_generator
         self.parser = SkeletonParser()
@@ -134,6 +135,7 @@ class TestOrchestrator:
             generator=test_generator.client,
             rag_retriever=rag_retriever,
             flow_store=flow_store,
+            resolution_timeout=resolution_timeout,
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None

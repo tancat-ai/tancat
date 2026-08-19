@@ -89,6 +89,77 @@ class TestOpenAICompatibleInstance:
         assert provider.provider_name == "openai-local"
 
 
+class TestThinkingModeSwitch:
+    """OpenAI-compatible endpoints get an explicit chat_template_kwargs switch.
+
+    ``enable_thinking=None`` (the default) must NOT add the field — the
+    model/server default governs and is never silently overridden. Only an
+    explicit True/False is forwarded.
+    """
+
+    @staticmethod
+    def _payload_for(provider: object, **complete_kwargs: object) -> dict[str, object]:
+        from unittest.mock import MagicMock, patch
+
+        from src.llm_providers import ChatMessage
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": "ok"}}],
+            "model": "m",
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+        with patch.object(provider, "_client") as mock_client:  # type: ignore[arg-type]
+            mock_client.post.return_value = mock_resp
+            mock_post = mock_client.post
+            provider.complete([ChatMessage(role="user", content="hi")], model="m", **complete_kwargs)  # type: ignore[attr-defined,union-attr]
+        return mock_post.call_args[1]["json"]  # type: ignore[no-any-return]
+
+    def test_openai_default_sends_no_thinking_field(self) -> None:
+        provider = get_provider("openai-compatible", api_key="sk-test-key")
+        payload = self._payload_for(provider)
+        assert "chat_template_kwargs" not in payload
+
+    def test_openai_explicit_off_sends_chat_template_kwargs(self) -> None:
+        provider = get_provider("openai-compatible", api_key="sk-test-key")
+        payload = self._payload_for(provider, enable_thinking=False)
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_openai_explicit_on_sends_chat_template_kwargs(self) -> None:
+        provider = get_provider("openai-compatible", api_key="sk-test-key")
+        payload = self._payload_for(provider, enable_thinking=True)
+        assert payload["chat_template_kwargs"] == {"enable_thinking": True}
+
+    def test_lmstudio_default_sends_no_thinking_field(self) -> None:
+        from src.llm_providers import LMStudioProvider
+
+        provider = LMStudioProvider(base_url="http://localhost:1234")
+        payload = self._payload_for(provider)
+        assert "chat_template_kwargs" not in payload
+
+    def test_lmstudio_explicit_off_sends_chat_template_kwargs(self) -> None:
+        from src.llm_providers import LMStudioProvider
+
+        provider = LMStudioProvider(base_url="http://localhost:1234")
+        payload = self._payload_for(provider, enable_thinking=False)
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_ollama_accepts_switch_for_contract_parity(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from src.llm_providers import ChatMessage, OllamaProvider
+
+        provider = OllamaProvider(base_url="http://localhost:11434")
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"message": {"content": "ok"}, "model": "m"}
+        with patch.object(provider, "_client") as mock_client:
+            mock_client.post.return_value = mock_resp
+            # Must not raise — Ollama has no thinking switch but honors the contract.
+            provider.complete([ChatMessage(role="user", content="hi")], model="m", enable_thinking=False)
+
+
 class TestGenerationTokenCap:
     """Every provider must cap generation so a runaway LLM response can't burn
     the full request timeout (B-028 session: skeleton call ran 600s)."""

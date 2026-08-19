@@ -97,6 +97,157 @@ class _FakeMockServer:
         type(self).stopped += 1
 
 
+def test_sampling_identity_records_pinned_temperature(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New runs record what sampling the pipeline actually delivered.
+
+    Graph runs always send 0; linear runs send AITEST_LLM_TEMPERATURE or the
+    0.0 pipeline default. server_defaults falls back to {} when the endpoint
+    isn't reachable (no network in tests).
+    """
+    import tempfile
+
+    from eval_metrics import StoryResult
+    from eval_runner import persist_results
+
+    story = StoryResult(
+        story_id="eval-sample",
+        site="mock",
+        total_criteria=1,
+        criteria_with_skeletons=1,
+    )
+    with tempfile.TemporaryDirectory() as td:
+        db_path = Path(td) / "runs.db"
+
+        monkeypatch.delenv("AITEST_LLM_TEMPERATURE", raising=False)
+        run_ids = persist_results(
+            db_path, [story], "static", temperature_sent=0.0, server_defaults="{}", thinking="off"
+        )
+        assert run_ids
+
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_path))
+        row = conn.execute("SELECT temperature_sent, server_defaults, thinking FROM eval_runs LIMIT 1").fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == 0.0
+        assert row[1] == "{}"
+        assert row[2] == "off"
+
+        # Graph pipeline → agents pin temperature=0 regardless of env.
+        monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "0.7")
+        run_ids = persist_results(db_path, [story], "static", pipeline="graph", temperature_sent=0.0)
+        assert run_ids
+
+
+def test_legacy_eval_runs_table_is_migrated() -> None:
+    """Pre-existing databases get the new columns without data loss."""
+    import sqlite3
+    import tempfile
+
+    from eval_runner import _ensure_eval_table
+
+    with tempfile.TemporaryDirectory() as td:
+        db_path = Path(td) / "legacy.db"
+        conn = sqlite3.connect(str(db_path))
+        # Emulate the pre-fix schema (no sampling columns).
+        conn.execute(
+            """
+            CREATE TABLE eval_runs (
+                run_id TEXT PRIMARY KEY,
+                story_id TEXT NOT NULL,
+                site TEXT NOT NULL,
+                placeholders_total INTEGER NOT NULL DEFAULT 0,
+                placeholders_correct INTEGER NOT NULL DEFAULT 0,
+                resolution_accuracy REAL NOT NULL DEFAULT 0.0,
+                test_pass_rate REAL NOT NULL DEFAULT 0.0,
+                false_positive_rate REAL NOT NULL DEFAULT 0.0,
+                skeleton_completeness REAL NOT NULL DEFAULT 0.0,
+                generation_duration REAL NOT NULL DEFAULT 0.0,
+                mode TEXT NOT NULL DEFAULT 'static',
+                raw_report TEXT,
+                created_at TEXT NOT NULL,
+                pipeline TEXT NOT NULL DEFAULT 'linear',
+                generation_mode TEXT NOT NULL DEFAULT 'captured',
+                rag_enabled INTEGER NOT NULL DEFAULT 0,
+                pom_mode INTEGER NOT NULL DEFAULT 0,
+                provider TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                git_commit TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO eval_runs (run_id, story_id, site, created_at) VALUES ('legacy-1', 's1', 'site', '2026-08-17')"
+        )
+        conn.commit()
+
+        _ensure_eval_table(conn)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(eval_runs)").fetchall()]
+        assert "temperature_sent" in cols
+        assert "server_defaults" in cols
+        assert "thinking" in cols
+        # Row data survives the migration and new columns are NULL for legacy
+        # rows. Note: SQLite on Windows keeps the file lock until the single
+        # connection is fully closed, so all queries share one connection.
+        row = conn.execute("SELECT run_id, temperature_sent FROM eval_runs WHERE run_id='legacy-1'").fetchone()
+        conn.close()
+        assert row == ("legacy-1", None)
+
+
+def test_sampling_identity_hits_origin_props(monkeypatch: pytest.MonkeyPatch) -> None:
+    """/props is fetched at the origin, not under the /v1 OpenAl base URL.
+
+    Providers expose base_url as ``<origin>/v1``; llama.cpp's /props endpoint
+    lives at the origin. The snapshot must come from the origin URL.
+    """
+    import tempfile
+
+    captured: list[str] = []
+
+    class _FakeProvider:
+        provider_name = "openai-local"
+        base_url = "http://localhost:8080/v1"
+
+        def get_loaded_model(self, timeout: int = 5) -> str:
+            return "fake-model"
+
+    def _fake_get(url: str, timeout: float = 5) -> object:
+        captured.append(url)
+        return _FakeResponse()
+
+    class _FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, object]:
+            return {
+                "default_generation_settings": {"params": {"temperature": 1.0, "top_p": 0.95}},
+                "n_ctx": 262144,
+            }
+
+    monkeypatch.setattr("src.llm_providers.auto_detect_provider", lambda: _FakeProvider())
+    monkeypatch.setattr("httpx.get", _fake_get)
+
+    with tempfile.TemporaryDirectory() as td:
+        runner = EvalRunner(dataset_dir=Path(td), code_dir=Path(td), db_path=Path(td) / "r.db")
+        temp_sent, defaults, thinking = runner._sampling_identity(use_graph=False)  # noqa: SLF001
+        _, _, graph_thinking = runner._sampling_identity(use_graph=True)  # noqa: SLF001
+
+    assert captured == [
+        "http://localhost:8080/props",
+        "http://localhost:8080/slots",
+        "http://localhost:8080/props",
+        "http://localhost:8080/slots",
+    ]
+    assert temp_sent == 0.0
+    assert "temperature" in defaults
+    # Thinking policy is recorded like temperature — never silent: linear
+    # structured calls send enable_thinking=False explicitly; graph stages
+    # currently inherit the model default (per-stage opt-in is future work).
+    assert thinking == "off"
+    assert graph_thinking == "model-default"
+
+
 def test_ensure_mock_serves_swaps_per_directory(monkeypatch: pytest.MonkeyPatch) -> None:
     import tempfile
 

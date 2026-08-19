@@ -16,6 +16,35 @@ from src.llm_providers import (
     get_provider,
 )
 
+# The linear (non-graph) pipeline historically sent NO temperature, so the
+# server's own default (often 1.0 on llama.cpp launches) silently governed
+# sampling — maximum entropy at the skeleton stage where determinism matters.
+# Pin it via AITEST_LLM_TEMPERATURE (default 0.0, matching the graph agents')
+# so launch config can no longer change product behaviour and model A/Bs are
+# controlled. See docs/sessions/2026-08-18_llm_sampling_config_fix.md.
+LLM_TEMPERATURE_ENV = "AITEST_LLM_TEMPERATURE"
+
+
+def llm_temperature_default() -> float:
+    """Sampling temperature for calls that don't set one explicitly.
+
+    Reads ``AITEST_LLM_TEMPERATURE`` (clamped 0.0-2.0); invalid values fall
+    back to 0.0 with a warning. The 0.0 default matches the LangGraph agents'
+    ``temperature=0`` (proven: 100% byte-for-byte skeleton self-consistency).
+    """
+    raw = os.getenv(LLM_TEMPERATURE_ENV)
+    if raw is None or raw.strip() == "":
+        return 0.0
+    try:
+        value = float(raw)
+    except ValueError:
+        print(
+            f"Warning: invalid {LLM_TEMPERATURE_ENV}={raw!r}, using 0.0",
+            file=sys.stderr,
+        )
+        return 0.0
+    return max(0.0, min(2.0, value))
+
 
 class LLMClient:
     """High-level client for generating Playwright code from local or remote LLMs."""
@@ -253,10 +282,22 @@ class LLMClient:
             print(f"[llm_client] {message}", flush=True, file=sys.stderr)
 
     def _complete_sync(
-        self, prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None
+        self,
+        prompt: str,
+        timeout: int = 300,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> ChatCompletion:
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
+
+        # Pin sampling: calls that don't set a temperature get the pipeline
+        # default (AITEST_LLM_TEMPERATURE, 0.0) instead of the server's
+        # arbitrary default. Explicit temperatures (e.g. the graph agents'
+        # temperature=0) always win.
+        if temperature is None:
+            temperature = llm_temperature_default()
 
         self.reset_conversation(system_prompt=system_prompt)
         self._conversation_history.append(ChatMessage(role="user", content=prompt))
@@ -265,13 +306,19 @@ class LLMClient:
 
         start_time = time.time()
         try:
-            temp_label = f"temp={temperature}" if temperature is not None else "temp=default"
-            self._debug(f"Calling provider={self.provider_name} model={self._model} timeout={timeout} {temp_label}")
+            temp_label = f"temp={temperature}"
+            # Thinking mode is logged like temperature: never silent. "default"
+            # means nothing was sent and the model/server default governs.
+            thinking_label = "default" if enable_thinking is None else f"{'on' if enable_thinking else 'off'}"
+            self._debug(
+                f"Calling provider={self.provider_name} model={self._model} timeout={timeout} {temp_label} thinking={thinking_label}"
+            )
             completion = self._provider.complete(
                 messages=self._conversation_history,
                 model=self._model,
                 timeout=timeout,
                 temperature=temperature,
+                enable_thinking=enable_thinking,
             )
             elapsed = time.time() - start_time
             content_len = len(completion.content) if completion.content else 0
@@ -289,21 +336,41 @@ class LLMClient:
             raise
 
     async def generate(
-        self, prompt: str, timeout: int = 600, system_prompt: str | None = None, temperature: float | None = None
+        self,
+        prompt: str,
+        timeout: int = 600,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> str:
         """Async wrapper used by the intelligent pipeline."""
         try:
-            completion = await asyncio.to_thread(self._complete_sync, prompt, timeout, system_prompt, temperature)
+            completion = await asyncio.to_thread(
+                self._complete_sync, prompt, timeout, system_prompt, temperature, enable_thinking
+            )
         except Exception as exc:
             raise RuntimeError(f"Failed to generate tests: {exc}") from exc
 
         cleaned = self._extract_code(completion.content)
         return self.normalise_code_newlines(cleaned)
 
-    def generate_test(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> str:
-        """Sync generation helper retained for existing tests and utility flows."""
+    def generate_test(
+        self,
+        prompt: str,
+        timeout: int = 300,
+        system_prompt: str | None = None,
+        temperature: float | None = None,
+        enable_thinking: bool | None = None,
+    ) -> str:
+        """Sync generation helper retained for existing tests and utility flows.
+
+        ``temperature`` is threaded through so callers can override the pinned
+        pipeline default; ``None`` resolves to ``AITEST_LLM_TEMPERATURE`` / 0.0
+        (see :func:`llm_temperature_default`). ``enable_thinking=None`` sends
+        nothing (model/server default governs).
+        """
         try:
-            completion = self._complete_sync(prompt, timeout, system_prompt)
+            completion = self._complete_sync(prompt, timeout, system_prompt, temperature, enable_thinking)
         except ValueError:
             raise
         except Exception as exc:

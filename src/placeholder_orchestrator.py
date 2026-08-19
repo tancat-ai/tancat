@@ -39,7 +39,11 @@ from src.role_mapper import (
 )
 from src.scraper import PageScraper
 from src.section_scoper import scope_elements
-from src.semantic_candidate_ranker import AsyncGeneratorLike, SemanticCandidateRanker
+from src.semantic_candidate_ranker import (
+    DEFAULT_RESOLUTION_TIMEOUT,
+    AsyncGeneratorLike,
+    SemanticCandidateRanker,
+)
 from src.skip_manager import (
     insert_consolidated_skips,
     remove_old_placeholder_skips,
@@ -107,6 +111,8 @@ class PlaceholderOrchestrator:
         generator: AsyncGeneratorLike | None = None,
         rag_retriever: RAGRetriever | None = None,
         flow_store: Any | None = None,
+        *,
+        resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
     ) -> None:
         """Initialise the placeholder resolution orchestrator.
 
@@ -120,6 +126,7 @@ class PlaceholderOrchestrator:
                 When ``None``, RAG is disabled (zero overhead).
             flow_store: AI-042 cross-site flow memory store. When ``None``, flow
                 resolution is disabled (zero overhead).
+            resolution_timeout: Hard limit (seconds) for each resolution LLM call.
         """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
@@ -128,10 +135,10 @@ class PlaceholderOrchestrator:
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.url_resolver = UrlResolver()
-        self._element_matcher = ElementMatcher(self.resolver, generator)
+        self._element_matcher = ElementMatcher(self.resolver, generator, resolution_timeout=resolution_timeout)
         self._generated_page_objects: list[GeneratedPageObject] = []
         self.page_object_builder = PageObjectBuilder()
-        self.semantic_ranker = SemanticCandidateRanker(generator)
+        self.semantic_ranker = SemanticCandidateRanker(generator, timeout=resolution_timeout)
         self._rag_retriever = rag_retriever
 
     @property

@@ -187,6 +187,122 @@ There are **no classes** and **no functions** defined in this file. The entire m
 
 
 
+# `scripts/3d map/audit_3d_map.py`
+
+## High-Level Purpose
+
+**Architectural audit of the 3D map** — validates the generated
+`docs/nodes.csv` + `docs/links.csv` (produced by `generate_3d_map.py`) against
+architectural invariants:
+
+- every node has a label and a resolvable path
+- no orphan links (source/target both exist as nodes)
+- layer assignments are sane (known layer names only)
+- duplicate labels are reported (ambiguous nodes break the visualisation)
+
+Run after regenerating the map:
+
+```
+python "scripts/3d map/audit_3d_map.py"
+```
+
+## Module Metadata
+
+- **Lines:** ~180
+- **Imports:** `csv`, `os`, `collections`
+- **Spec:** companion to `generate_3d_map.py` — keeps the Cosmograph dataset
+  trustworthy
+- **Maintained:** 2026-08-12 (doc added; logic unchanged since 2026-05)
+
+## Public API
+
+No importable API — run as a script. Internally loads `docs/nodes.csv` and
+`docs/links.csv` and prints a report of violations; exits non-zero when the
+dataset is broken.
+
+## Design Notes
+
+- Pure CSV audit — no browser, no graph library; the 3D map stays
+  auditable in CI.
+- The map data (`docs/nodes.csv`, `docs/links.csv`,
+  `scripts/3d_map_data.json`) is committed, so the audit can run on a clean
+  checkout.
+
+
+
+
+
+
+# `scripts/3d map/generate_3d_map.py`
+
+## High-Level Purpose
+
+**3D architecture map generator** — produces the nodes/links dataset the
+Cosmograph 3D graph visualizer consumes:
+
+- `docs/nodes.csv` — every tracked project file as a node (label, layer/group,
+  path)
+- `docs/links.csv` — edges: import links (AST-extracted), proximity links
+  (same-directory neighbours), and reference links (markdown_docs ↔ source)
+- `scripts/3d_map_data.json` — the merged payload for Cosmograph
+
+The `LAYER_MAP` classifies files into architecture layers (interface /
+orchestration / intelligence / context / refinement / output / utility); files
+not mapped fall back to their directory convention. Kept current with the
+module set — regenerate after adding/removing `src/` modules:
+
+```
+python "scripts/3d map/generate_3d_map.py"
+```
+
+## Module Metadata
+
+- **Lines:** ~640
+- **Imports:** `ast`, `csv`, `json`, `os`, `collections`
+- **Spec:** architecture-visualization utility; the interactive alternative is
+  `graphify-out/callflow.html` (graphify, Mermaid-based)
+- **Maintained:** 2026-08-12 (LAYER_MAP caught up to the current module set —
+  intelligence 11→24, refinement 7→21, output 5→15, context 4→15,
+  orchestration 5→10)
+
+## Public API
+
+No importable API — run as a script. Key internal structures:
+
+### `LAYER_MAP: dict[str, str]`
+Path → layer group for every `src/` / `cli/` module. The groups mirror the
+architecture: `interface` (Streamlit + CLI), `orchestration` (pipeline
+wiring), `intelligence` (LLM, prompts, RAG, learning — incl. `flow_memory`),
+`context` (scraping), `refinement` (resolution), `output` (evidence/reports),
+`utility` (storage/settings/persistence).
+
+### `ALL_FILES: set[str]`
+Every project file discovered by directory scan (git-tracked, filtered for
+artifacts: `.xml`, `.lock`, logs, mock HTML).
+
+### Output writers
+- nodes: label, clean label, layer group, path
+- links: source → target with `link_type` (`import` | `proximity` |
+  `references`)
+- `3d_map_data.json`: `{nodes, links}` for Cosmograph
+
+## Design Notes
+
+- **Dynamic import extraction:** each `.py` file is parsed with `ast` to find
+  real imports — links only exist where both endpoints are real files (dead
+  links filtered).
+- **Proximity links:** files in the same directory are linked so the graph
+  shows neighbourhoods, not just imports.
+- **markdown_docs proximity:** each doc references its source module, so the
+  3D map shows the documentation layer connected to the code it documents.
+- **Audit companion:** `scripts/3d map/audit_3d_map.py` checks the generated
+  CSV for architectural invariants (orphan nodes, layer sanity).
+
+
+
+
+
+
 # `scripts/archive/debug_scripts/probe_saucedemo_spa_404.py` — SPA Soft-404 Probe (one-off)
 
 ## Purpose
@@ -3780,6 +3896,113 @@ Private `_`-helpers — the module's real logic (7 items). Grouped under the pub
 
 
 
+# `src/artifact_validation.py`
+
+## High-Level Purpose
+
+**Deterministic validation of output report artifacts** (AI-043 Layer 1+2).
+The pipeline's evidence reports render heatmap overlays, Gantt timelines and
+Plotly charts from sidecar data — but unit tests only exercised the chart
+*builders*, never the truthfulness of what ships. This module checks the
+rendered artifacts and their source data against invariants:
+
+- heatmap points must be document-percentages in `[0, 100]` (legacy sidecars
+  recorded raw pixels → markers painted off-page)
+- the JSON payloads embedded in the shipped HTML must be parseable, finite,
+  and internally consistent
+- Gantt durations must be finite and ≥ 0 (one NaN/negative `duration_s`
+  collapses the sequential timeline)
+- Plotly figures must carry no NaN/None/empty series
+
+```
+evidence sidecars → validate_evidence_artifacts(evidence_dir, urls)
+    ├─ validate_suite_heatmap()      # renders the real HTML, parses embedded payloads
+    ├─ validate_gantt_entries()      # duration/status invariants
+    └─ validate_gantt_chart()        # rendered figure data invariants
+    → ArtifactValidationResult (issues; passed == no error-severity issues)
+```
+
+**Consumers:** `scripts/validate_report_artifacts.py` (CLI gate, exit 1 on
+errors) and three Gate-0 checks in `scripts/smoke.py` that validate the
+`fixtures/report_golden/` corpus every CI run.
+
+## Module Metadata
+
+- **Lines:** ~270
+- **Imports:** `json`, `math`, `re`, `dataclasses`, `pathlib`, `typing`,
+  `src.gantt_utils`, `src.heatmap_utils`
+- **Spec:** roadmap item AI-043 (Tier 3 §17) — Layers 1+2 of the output
+  artifact quality gate
+- **Shipped:** 2026-08-10
+
+## Public API
+
+### `ArtifactIssue` (dataclass)
+`artifact: str` (e.g. `"heatmap"` / `"gantt"` / `"chart"`), `severity: str`
+(`"error"` | `"warning"`), `message: str`, `context: dict`.
+
+### `ArtifactValidationResult` (dataclass)
+Wraps `issues: list[ArtifactIssue]`. Properties: `errors` (error-severity
+issues), `warnings`, `passed` (True when no error-severity issues).
+
+### `validate_step_points(points_by_url: dict[str, list[dict]]) -> list[ArtifactIssue]`
+Invariants on extracted step points (I1/I5/I6): coordinates are finite
+percentages in `[0, 100]`, `status` is a known status, `run_count` ≥ 1.
+
+### `validate_suite_heatmap(evidence_dir: Path, page_url: str) -> list[ArtifactIssue]`
+Runs the real `generate_suite_heatmap` (the shipped artifact), extracts the
+embedded `allPoints` / `aggregated` payloads from the HTML, and checks:
+payloads present + parseable; every rendered point has finite in-range
+coordinates and a known status; aggregated element counts sum correctly;
+the HTML's rendered totals match the payload; a background screenshot exists
+when points are rendered (else a warning — markers on an imaginary 16:9 box).
+
+### `validate_gantt_entries(entries: Iterable[GanttEntry]) -> list[ArtifactIssue]`
+G1/G3: every `duration_s` is finite and ≥ 0; every status is known.
+
+### `validate_gantt_chart(entries: list[GanttEntry]) -> list[ArtifactIssue]`
+Builds the real Gantt figure and checks each bar's `base` (start) and `x`
+(duration) are finite, ≥ 0, and paired 1:1 — a NaN/negative anywhere means
+the sequential timeline is broken.
+
+### `validate_plotly_figure(fig, artifact: str) -> list[ArtifactIssue]`
+Generic chart sanity: no traces (error), no `None` / non-finite values in any
+trace's `x`/`y`/`base`/`values`/`labels`.
+
+### `validate_evidence_artifacts(evidence_dir: Path, page_urls: list[str]) -> ArtifactValidationResult`
+Orchestrator: heatmap validation per URL + Gantt entries/chart. This is what
+the CLI gate calls.
+
+## How It Works (internals)
+
+### `validate_suite_heatmap` — end-to-end artifact validation
+- `_extract_js_payload(html, var_name)` — regex-extracts a payload embedded as
+  `const <var> = ...;` in the heatmap HTML and `json.loads` it. Validates the
+  *shipped* HTML rather than intermediate structures.
+- `_count_statuses(statuses)` — counts status strings into a dict (used to
+  verify aggregated `passed/partial_pass/failed/skipped` sums equal `total`).
+
+### `validate_gantt_chart` — rendered-data validation
+- Reads `trace.base` / `trace.x` directly off the built Plotly figure (they
+  are numpy arrays — the code guards against truthiness-on-array pitfalls by
+  normalising via `list(...) if raw is not None else []`).
+
+### Internal utilities
+- `_finite(value)` — True for finite int/float (excludes bool).
+- `_in_range(value, lo, hi)` — `_finite` plus bounds check.
+
+## Verification
+
+- 22 unit tests in `tests/test_artifact_validation.py` (step points, HTML
+  round-trip, legacy-pixel regression, NaN Gantt, golden fixtures, CLI exits)
+- Ran against all 51 production evidence dirs — flagged 5 with real negative-y
+  off-page markers (the `evidence_tracker` fix this validator caught)
+
+
+
+
+
+
 # `src/browser_utils.py`
 
 ## High-Level Purpose
@@ -4003,6 +4226,99 @@ Ensures the cart has items before scraping cart/checkout pages. Extracted from `
 ## Related
 - `src/journey_scraper.py` — parent class
 - `src/orchestrator.py` — `_upgrade_stateful_pages()` integration
+
+
+
+
+
+
+# `src/ci_ignore.py`
+
+## High-Level Purpose
+
+The CI ignore list (`.ai-test-ignore.yml`) — a **versioned, human-recorded**
+list of *known-benign* test failures for the Phase 7 CI/CD integration. When
+a test fails in CI for a reason a human has already accepted ("the button
+moved but still works", "known flaky in this environment"), the report
+surfaces it as **"N known-benign ignored"** instead of a real failure.
+
+This module parses + validates that file. It exists so CI fails *loudly* on
+a malformed ignore file (never silently ignore the wrong things), and so the
+"this failure is acceptable" decision lives in git — visible, reviewable,
+versioned — instead of in hidden `@pytest.mark.skip` markers, commented-out
+tests, or silent self-healing patches (the mechanisms this file exists to
+replace).
+
+**The anti-rug rule:** every ignore rule **requires a `reason`**. A rule
+without a recorded "why" is the rug-sweeping shape and is rejected at parse
+time — the ignore list must never be how a real failure gets hidden.
+
+```yaml
+# .ai-test-ignore.yml
+ignores:
+  - test: "test_08_checkout*"
+    reason: "button moved to new class, verified still functional 2026-08-14"
+    match: "Locator '.*' not found"   # optional regex on the failure message
+```
+
+## Public API
+
+### `load_ignore_spec(path: str | Path | None) -> IgnoreSpec`
+
+Load and validate the ignore file.
+
+- **`path`** — file path, or `None` (empty spec — no ignores).
+- **Returns** an `IgnoreSpec` (empty when `path is None`).
+- **Raises `ValueError`** with a clear message when the file is missing, the
+  YAML is malformed, the structure is wrong (no `ignores` list), a rule has
+  an unknown key / missing `test` / missing `reason`, or a `match` regex
+  doesn't compile. CI fails fast on any of these.
+
+### `IgnoreSpec` (dataclass)
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `ignores` | `tuple[IgnoreRule, ...]` | The parsed rules |
+| `path` | `str` | The source file path (empty for a `None`-loaded spec) |
+| `count` | `int` (property) | Number of rules |
+| `matches(test_name, failure_message="")` | `bool` | True when any rule's glob matches `test_name` AND (if the rule has a `match` regex) the regex matches `failure_message` |
+| `describe(test_name, failure_message="")` | `str \| None` | The matching rule's `reason` (or the rule's glob), used so the CI report can name *why* a failure was ignored — an ignore is never silent |
+
+### `IgnoreRule` (dataclass, frozen)
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `test` | `str` | Test-name glob (fnmatch-style, `*` wildcards) |
+| `reason` | `str` | **Required** — why the failure is known-benign (the human record) |
+| `match` | `str` | Optional regex on the failure message; empty = any failure of a matching test |
+| `pattern` | `re.Pattern[str] \| None` | Compiled `match` (internal, set by the parser) |
+
+## How It Works (internals)
+
+### `load_ignore_spec(path)` — main parser
+- **`_parse_rule(item, index)`** — validates one YAML mapping into an
+  `IgnoreRule`:
+  - unknown keys rejected (typos fail loudly),
+  - non-empty `test` required,
+  - **non-empty `reason` required** (the anti-rug rule),
+  - `match` compiled with `re.compile`, invalid regexes rejected with a
+    message naming the rule index.
+- **`_KEYS`** — the allowed rule keys (`{"test", "reason", "match"}`);
+  anything else is an unknown-key error.
+
+### `IgnoreSpec.matches(...)` / `IgnoreSpec.describe(...)` — matching
+- **`fnmatch.fnmatch(test_name, rule.test)`** — glob match on the test name
+  (handles pytest parameterization suffixes like `[chromium]`).
+- **`rule.pattern.search(failure_message)`** — when a rule has a `match`
+  regex, the failure message must match too; a rule without one covers any
+  failure of the matching test.
+- First matching rule wins (rules are evaluated in file order).
+- `describe()` returns the matching rule's `reason` so the CI report can
+  print *why* an ignore applied — never a silent pass.
+
+### Internal utilities
+- **`yaml.safe_load`** — the file is plain YAML; `safe_load` avoids arbitrary
+  object construction (no code execution from the config).
 
 
 
@@ -5847,6 +6163,130 @@ File operation helpers for the Playwright test generator. Handles saving generat
 
 
 
+# `src/flow_memory.py`
+
+## High-Level Purpose
+
+**Cross-site flow memory** (AI-042). Locator memory can't transfer across
+sites (only ~3% of learned locator pairs overlap across sites — B-047 locks
+locators to their site), but navigation *shape* does: login → browse → cart →
+checkout is near-identical across e-commerce sites. This module learns those
+flows from passing evidence and serves them back to URL resolution when
+site-specific resolution fails.
+
+A flow is a transition tuple: `(from_route, action, description, to_route)`.
+Routes are normalized URL path keywords ("login", "dashboard", "cart") —
+**never raw URLs** (AI-035 §4 privacy: full URLs/credentials/story text are
+never stored). Aggregation is cross-site: each pattern tracks the set of
+distinct sites (one-way sha256 hashes) that verified it, so a transition seen
+on ≥2 sites is a learned cross-site flow; single-site flows stay site
+evidence.
+
+```
+evidence sidecars → FlowMemoryStore.learn_from_sidecars(evidence_dir)
+    ├─ flow_transitions(steps)    # passing steps → (transition, site) pairs
+    ├─ normalize_route(url)       # URL → route keyword ("cart.html" → "cart")
+    └─ upsert_flow()              # dedup on (from, action, desc, to); hit + site set
+    → evidence/flow_memory.json   # atomic tmp + os.replace
+
+consumption: PlaceholderOrchestrator GOTO/URL-assertion chain
+    UrlResolver → resolve_url → flow_resolved_url(store, ...) → heuristic → seed
+```
+
+**Consumers:** `PlaceholderOrchestrator` (step 2.5 in the GOTO/URL chain and
+the page-state ASSERT fallback), `generated_tests/conftest.py` teardown hook,
+`scripts/synthesize_stories.py` parent-side sweep.
+
+## Module Metadata
+
+- **Lines:** ~520
+- **Imports:** `json`, `logging`, `os`, `re`, `dataclasses`, `pathlib`,
+  `typing`, `urllib.parse`, `src.rag_learn` (`domain_from_url`, `site_hash`),
+  `src.storage` (`get_storage`)
+- **Spec:** roadmap item AI-042 (Tier 4 §16) — cross-site flow memory
+- **Shipped:** 2026-08-12 (suite chaining AI-042-F3 same day)
+
+## Public API
+
+### `normalize_route(url: str) -> str`
+URL → normalized route keyword: scheme/host/query dropped, extensions
+stripped (`cart.html` → `cart`), index/default/home collapse to `"home"`,
+purely-numeric segments (ids) dropped, lowercase `/`-joined
+(`checkout-step-one`), then page-type aliases canonicalized (`view_cart`/
+`basket` → `cart`, `inventory` → `products`, `signin`/`auth` → `login` —
+exact whole-route match only, so `checkout-step-one`/`-two` stay distinct
+flow states). The aliases are the learned analog of `url_resolver`'s
+hardcoded groups: without them, cross-site flows can't transfer (saucedemo's
+`cart.html` never reaches automationexercise's `view_cart` — AI-042 session-2
+finding).
+
+### `clean_description(label: str) -> str`
+Strips action prefixes (`"Click: view cart link"`) and placeholder wrappers
+(`"{{CLICK:view cart link}}"`) to the plain description.
+
+### `FlowTransition` (dataclass)
+`from_route`, `action`, `description`, `to_route` + `key` (case-insensitive
+dedup key).
+
+### `flow_transitions(steps) -> list[tuple[FlowTransition, str]]`
+Extracts `(transition, site_identity)` pairs from evidence steps. `navigate`
+steps set the current-page context (their destination becomes the `from_route`
+of following actions). Only fully-passing steps emit; same-page actions
+(`from == to`) are dropped; page context advances after every step that
+records a URL.
+
+### `FlowPattern` (dataclass)
+Aggregated transition: `hit_count`, `site_hashes: set[str]`, `site_count`
+property.
+
+### `FlowMemoryStore`
+JSON-file store (`evidence/flow_memory.json`, atomic writes, corrupt-tolerant
+load):
+- `upsert_flow(transition, site, *, source=...)` — dedup bumps hit_count +
+  site set; `source` distinguishes `within_test` from `suite_chain`
+- `learn_from_evidence(steps)` — passed-only learning with per-transition
+  site identity
+- `learn_from_sidecars(evidence_dir)` — sweep (gates on
+  `test.status == "passed"`; never raises)
+- `learn_suite_flows(evidence_dir)` — **AI-042-F3**: chains adjacent
+  fully-passing tests in name order into GOTO transitions (terminal page of
+  test N → entry page of test N+1, description = destination route name;
+  same-site pairs only, home/no-movement dropped)
+- `query(from_route, action=None, description=None)` — ranked by
+  (site_count, hit_count)
+- `route_hints(from_route, *, min_sites=1)` — `[(to_route, hits, sites)]`
+- `stats()` (incl. `suite_chains` / `within_test` split) / `clear()`
+
+### `flow_resolved_url(store, *, description, from_url, scraped_urls, min_sites=1) -> str | None`
+The consumption hook: which scraped destination route do flows say is
+reachable from the current page for this description? Description tokens
+match against both learned action labels and the destination-route
+vocabulary (so "dashboard page is loaded" matches a flow whose `to_route`
+is "dashboard").
+
+### `format_flow_stats_summary(stats) -> str`
+One-line sidebar summary (AI-042-F2): Patterns · Sites · Cross-site · Suite
+chains — the pure helper behind `SidebarConfig._render_flow_memory()`.
+
+## Design Notes
+
+- **Site-specific evidence always wins:** the orchestrator runs flow memory
+  only after UrlResolver and `resolve_url` fail — flows fill gaps, never
+  override site evidence.
+- **Guardrails:** passed-only learning, same-page actions dropped, non-empty
+  non-URL descriptions, `min_sites` filter for cross-site strictness
+  (2 = only flows verified on ≥2 sites).
+- **Privacy:** routes are generic page vocabulary — no full URLs, credentials,
+  or story text; site identity is a one-way sha256.
+- **Hermetic tests:** `TestOrchestrator` constructs the store only when
+  `FLOW_MEMORY_ENABLED != "0"` (tests set it to `"0"` in
+  `tests/conftest.py`, mirroring `RAG_ENABLED=0`).
+
+
+
+
+
+
 # `src/form_detector.py`
 
 ## High-Level Purpose
@@ -6377,6 +6817,117 @@ Builds Gantt-style timelines from EvidenceTracker sidecars (.evidence.json). Vis
 - Chart uses `px.bar` with `base="Start"` for Gantt-style floating bars (avoids px.timeline date-casting issues)
 - Color mapping: passed=green, failed=red, skipped=yellow, pending=gray, unknown=cyan
 - Dynamic chart height: min(800, 300 + len(entries)*25)
+
+
+
+
+
+# `src/heatmap_alignment.py`
+
+## High-Level Purpose
+
+**Heatmap overlay ↔ live-page alignment checks** (AI-043 Layer 3). Layer 1/2
+(`src/artifact_validation.py`) validate the heatmap artifact's *internal*
+invariants — points are document-relative percentages in `[0, 100]`, payloads
+parse, counts add up. Layer 3 validates the artifact against the **live page**
+it claims to depict:
+
+1. render the suite heatmap for a URL (the shipped artifact),
+2. open the live page in a real browser,
+3. for every overlay box, map its centre (`x%`, `y%` of the document) to
+   document pixels using the live document size, scroll the point into view,
+   and assert the element hit by `document.elementFromPoint` is the element
+   the box claims — the locator recorded in the sidecar.
+
+This catches the two production failure classes:
+
+- **wrong frame** — the heatmap picks one background screenshot per URL; if
+  the page changed between steps, earlier boxes sit on elements that moved.
+  The centre no longer hits the claimed element.
+- **stale locator** — the recorded locator no longer resolves on the live
+  page (element renamed / removed / hidden).
+
+```
+evidence sidecars → validate_heatmap_alignment(evidence_dir, url, page)
+    ├─ generate_suite_heatmap()      # the shipped artifact (src/heatmap_utils)
+    ├─ extract_points(html)          # parse the allPoints payload
+    ├─ live_document_size(page)      # % → document pixels uses live doc size
+    └─ check_point_alignment(point)  # one locator-scoped evaluate: hit + containment
+    → list[ArtifactIssue]            # error per misaligned box
+```
+
+**Consumers:** `scripts/validate_report_artifacts.py --full` (browser gate,
+exit 1 on errors) and the live integration test against the ecommerce mock
+(`tests/test_heatmap_alignment_live.py`). The decision logic is unit-tested
+offline (`tests/test_heatmap_alignment.py`) with a scriptable fake page.
+
+## Module Metadata
+
+- **Lines:** ~310
+- **Imports:** `json`, `math`, `re`, `dataclasses`, `pathlib`, `typing`,
+  `src.artifact_validation`, `src.heatmap_utils`; `playwright.sync_api`
+  imported lazily inside `validate_evidence_dir_live`
+- **Spec:** roadmap item AI-043 (Tier 3 §17) — Layer 3 of the output artifact
+  quality gate
+- **Shipped:** 2026-08-11
+
+## Public API
+
+### `HeatmapPoint` (dataclass)
+One overlay box from the heatmap HTML payload: `type`, `x`/`y` (document-
+relative %), `run_count`, `status`, `locator`, `label`, `element_id`, `tag`.
+
+### `AlignmentCheck` (dataclass)
+Outcome of checking one box against the live page: `kind` (`"pass"` | `"fail"`
+| `"skip"`), `detail`, `target_px`, `hit_element`, `distance_px`.
+
+### `extract_points(heatmap_html: str) -> list[HeatmapPoint]`
+Parses the `allPoints` JSON payload embedded in the heatmap HTML. Empty list
+when absent/unparseable (Layer 1 flags that as an error separately).
+
+### `point_to_document_px(point, doc_w: float, doc_h: float) -> tuple[float, float]`
+Maps a point's document-relative % centre to document pixels — the inverse of
+`EvidenceTracker._get_element_metadata` (which records centre as a % of the
+full document, scroll-corrected and clamped to `[0, 100]`).
+
+### `classify_point(point) -> str`
+`"skip"` for navigate points (synthetic 50/50 markers, no element claim) and
+points without a recorded locator; `"check"` otherwise.
+
+### `check_point_alignment(point, *, page, doc_size, viewport) -> AlignmentCheck`
+The core check. Resolves the recorded locator (`missing` → fail, no bounding
+box → fail), maps the centre to document pixels, scrolls it into view
+(reading actual scrollX/Y back — the browser clamps at document edges), then
+runs **one locator-scoped evaluate** that does `elementFromPoint` at the
+viewport position and tests ancestor/descendant/same-node relation with the
+claimed element. Passes when related; fails with `"wrong frame"` otherwise.
+All DOM work happens inside that single evaluate because this Playwright
+build serialises DOM-node returns from `page.evaluate` as plain strings —
+handles cannot cross the protocol boundary.
+
+### `validate_heatmap_alignment(evidence_dir, page_url, *, page, viewport) -> list[ArtifactIssue]`
+Renders the suite heatmap for one URL and checks every extracted box against
+the live page (which must already be navigated to `page_url`). Returns one
+error-severity `ArtifactIssue` per misaligned box.
+
+### `validate_evidence_dir_live(evidence_dir, page_urls, *, viewport, headless) -> ArtifactValidationResult`
+Launches its own chromium, opens each URL (`wait_until="load"`, 30s timeout)
+and runs the alignment checks; URL-open failures become error issues. Used by
+the CLI `--full` gate.
+
+## Design Notes
+
+- **% coordinates are document-relative** (the AI-043 follow-up fix to
+  `evidence_tracker._get_element_metadata`), so the inverse mapping uses the
+  **live document size**, not the viewport. A changed document size between
+  record and check time is exactly the wrong-frame drift Layer 3 detects.
+- **Tolerance:** the gate is the containment test (strict-mode tolerant — a
+  box centre landing on a child of the claimed element is correct, e.g. a
+  button's inner `<span>`); the centre-to-centre distance is reported as
+  context, not a gate.
+- **Skip policy:** navigate markers and locator-less points are skipped — they
+  make no element claim, so nothing to verify against.
+
 
 
 

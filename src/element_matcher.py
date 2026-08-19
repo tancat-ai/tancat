@@ -20,7 +20,11 @@ from src.role_mapper import (
     is_display_role,
     normalise_element_text,
 )
-from src.semantic_candidate_ranker import AsyncGeneratorLike, SemanticCandidateRanker
+from src.semantic_candidate_ranker import (
+    DEFAULT_RESOLUTION_TIMEOUT,
+    AsyncGeneratorLike,
+    SemanticCandidateRanker,
+)
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
@@ -118,15 +122,22 @@ class ElementMatcher:
     - Pass 3: Scoring + LLM semantic ranking (B-020 for ASSERT)
     """
 
-    def __init__(self, resolver: PlaceholderResolver, generator: AsyncGeneratorLike | None = None) -> None:
+    def __init__(
+        self,
+        resolver: PlaceholderResolver,
+        generator: AsyncGeneratorLike | None = None,
+        *,
+        resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
+    ) -> None:
         """Initialize the element matcher.
 
         Args:
             resolver: PlaceholderResolver instance for text matching and ranking.
             generator: B-020 LLM generator for semantic candidate ranking.
+            resolution_timeout: Hard limit (seconds) for each resolution LLM call.
         """
         self._resolver = resolver
-        self._semantic_ranker = SemanticCandidateRanker(generator)
+        self._semantic_ranker = SemanticCandidateRanker(generator, timeout=resolution_timeout)
 
         # Batching state for Pass 3 LLM calls
         self._pass3_batch: list[dict[str, Any]] = []

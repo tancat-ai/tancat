@@ -75,6 +75,7 @@ class LLMProvider(ABC):
         model: str | None = None,
         timeout: int = 300,
         temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> ChatCompletion:
         """Send a chat completion request to the LLM.
 
@@ -83,6 +84,12 @@ class LLMProvider(ABC):
             model: Optional model override (uses provider default if not provided).
             timeout: Request timeout in seconds.
             temperature: Sampling temperature (0.0 = deterministic, None = provider default).
+            enable_thinking: Explicit thinking-mode switch for thinking-capable
+                models (e.g. Qwen3 via the chat template). ``None`` (default)
+                sends NOTHING — the model/server default governs and is never
+                silently overridden. ``True``/``False`` is forwarded to
+                OpenAI-compatible endpoints as ``chat_template_kwargs``;
+                providers without a thinking concept accept and ignore it.
 
         Returns:
             ChatCompletion with the assistant's response.
@@ -146,8 +153,11 @@ class OllamaProvider(LLMProvider):
         model: str | None = None,
         timeout: int = 300,
         temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> ChatCompletion:
         import os
+
+        _ = enable_thinking  # Ollama's /api/chat has no thinking switch; accepted for contract parity
 
         model = model or os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 
@@ -209,6 +219,7 @@ class LMStudioProvider(LLMProvider):
         model: str | None = None,
         timeout: int = 300,
         temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> ChatCompletion:
         import os
 
@@ -220,6 +231,12 @@ class LMStudioProvider(LLMProvider):
         payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
         if temperature is not None:
             payload["temperature"] = temperature
+        # Explicit thinking-mode switch (None = send nothing, model default
+        # governs). Proven necessary for thinking models like Qwen3.6/3.8:
+        # their thinking phase can exhaust the max_tokens budget and return
+        # empty content (see docs/sessions/2026-08-18_llm_model_ab_investigation.md).
+        if enable_thinking is not None:
+            payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
         payload["max_tokens"] = generation_max_tokens()
 
         response = self._client.post("/chat/completions", json=payload, timeout=timeout)
@@ -391,6 +408,7 @@ class OpenAIProvider(LLMProvider):
         model: str | None = None,
         timeout: int = 300,
         temperature: float | None = None,
+        enable_thinking: bool | None = None,
     ) -> ChatCompletion:
         import os
 
@@ -406,6 +424,8 @@ class OpenAIProvider(LLMProvider):
         payload: dict[str, Any] = {"model": model, "messages": openai_messages, "stream": False}
         if temperature is not None:
             payload["temperature"] = temperature
+        if enable_thinking is not None:
+            payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
         payload["max_tokens"] = generation_max_tokens()
 
         response = self._client.post("/chat/completions", json=payload, timeout=timeout)
