@@ -52,7 +52,10 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     pom_mode     INTEGER NOT NULL DEFAULT 0,
     provider     TEXT NOT NULL DEFAULT '',
     model        TEXT NOT NULL DEFAULT '',
-    git_commit   TEXT NOT NULL DEFAULT ''
+    git_commit   TEXT NOT NULL DEFAULT '',
+    temperature_sent REAL,
+    server_defaults  TEXT,
+    thinking         TEXT
 )
 """
 
@@ -76,9 +79,23 @@ def _get_git_commit() -> str:
 
 
 def _ensure_eval_table(conn: sqlite3.Connection) -> None:
-    """Create eval_runs table and index if they don't exist."""
+    """Create eval_runs table and index if they don't exist.
+
+    Newer columns (temperature_sent, server_defaults, thinking) are added to
+    pre-existing databases via ALTER TABLE so historical rows keep NULL
+    (accurate: the delivered sampling config was unknown for those runs).
+    """
     conn.execute(_EVAL_SCHEMA_SQL)
     conn.execute(_EVAL_INDEX_SQL)
+    for column_decl in (
+        "temperature_sent REAL",
+        "server_defaults TEXT",
+        "thinking TEXT",
+    ):
+        try:
+            conn.execute(f"ALTER TABLE eval_runs ADD COLUMN {column_decl}")
+        except sqlite3.OperationalError:
+            pass  # column already exists (fresh table or previously migrated)
     conn.commit()
 
 
@@ -249,6 +266,9 @@ def persist_results(
     provider: str = "",
     model: str = "",
     git_commit: str = "",
+    temperature_sent: float | None = None,
+    server_defaults: str = "",
+    thinking: str = "",
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -285,8 +305,9 @@ def persist_results(
                     (run_id, story_id, site, placeholders_total, placeholders_correct,
                      resolution_accuracy, test_pass_rate, false_positive_rate,
                      skeleton_completeness, generation_duration, mode, raw_report, created_at,
-                     pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit,
+                     temperature_sent, server_defaults, thinking)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -309,6 +330,9 @@ def persist_results(
                     provider,
                     model,
                     git_commit,
+                    temperature_sent,
+                    server_defaults,
+                    thinking,
                 ),
             )
             run_ids.append(run_id)
@@ -515,9 +539,10 @@ class EvalRunner:
             # is the only supported selector for graph pipeline runs.
             pipeline_type = "graph" if self.use_graph else "linear"
             gen_mode = "regenerated" if self.regenerate else "captured"
-            rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
+            rag_enabled = os.environ.get("RAG_ENABLED", "").strip() == "1"
             git_commit = _get_git_commit()
             provider, model = self._loaded_model_identity()
+            temperature_sent, server_defaults, thinking = self._sampling_identity(self.use_graph)
             run_ids = persist_results(
                 self.db_path,
                 results,
@@ -528,6 +553,9 @@ class EvalRunner:
                 git_commit=git_commit,
                 provider=provider,
                 model=model,
+                temperature_sent=temperature_sent,
+                server_defaults=server_defaults,
+                thinking=thinking,
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
@@ -611,6 +639,90 @@ class EvalRunner:
         except Exception:
             return "", ""
 
+    def _sampling_identity(self, use_graph: bool) -> tuple[float | None, str, str]:
+        """Resolved (temperature_sent, server_defaults, thinking) for a run.
+
+        ``temperature_sent`` is the sampling temperature the pipeline actually
+        delivers: graph runs always send 0 (agents pin ``temperature=0``);
+        linear runs send ``AITEST_LLM_TEMPERATURE`` or the 0.0 pipeline
+        default (``src.llm_client.llm_temperature_default``). ``None`` is
+        never produced for new runs — it only existed for legacy rows before
+        the pin.
+
+        ``thinking`` records the thinking-mode policy of the run, so a future
+        session can never be misled about what a number was measured with
+        (the 2026-08-18 root cause: thinking models burning the token budget
+        on reasoning and returning empty content). "off" = the structured
+        calls (skeleton generation + resolution ranking) send
+        ``enable_thinking=False`` explicitly — the linear pipeline default
+        since the fix. "model-default" = graph stages currently inherit the
+        model/server default (measured opt-in/out per stage is future work).
+
+        ``server_defaults`` is a best-effort JSON snapshot of the endpoint's
+        advertised sampling defaults (``/props`` on llama.cpp), so future A/Bs
+        can tell model differences from launch-config differences. Falls back
+        to ``{}`` when the endpoint isn't reachable.
+        """
+        thinking = "model-default" if use_graph else "off"
+        if use_graph:
+            temperature_sent = 0.0
+        else:
+            try:
+                from src.llm_client import llm_temperature_default
+
+                temperature_sent = llm_temperature_default()
+            except Exception:
+                temperature_sent = None
+
+        server_defaults: dict[str, float | int | str] = {}
+        try:
+            import httpx
+
+            from src.llm_providers import auto_detect_provider
+
+            provider = auto_detect_provider()
+            base_url = str(provider.base_url)
+            if not base_url.startswith("http"):
+                base_url = "".join(("http://", base_url))
+            # OpenAI-compatible providers use an <origin>/v1 base; /props lives
+            # at the origin (llama.cpp's own endpoint).
+            base_url = base_url.rstrip("/")
+            if base_url.endswith("/v1"):
+                base_url = base_url[: -len("/v1")]
+            props = {}
+            try:
+                resp = httpx.get(f"{base_url}/props", timeout=5)
+                if resp.status_code == 200:
+                    props = resp.json()
+            except Exception:
+                props = {}
+            # Server identity + build (mirrors llm-benchmarks' bench_manifest).
+            server_defaults["model_path"] = props.get("model_path", "")
+            server_defaults["build_info"] = props.get("build_info", "")
+            server_defaults["model_ftype"] = props.get("model_ftype", "")
+            # Sampling defaults the server would apply if unset.
+            params = props.get("default_generation_settings", {}).get("params", {})
+            for key in ("temperature", "top_p", "top_k", "min_p", "seed", "repeat_penalty"):
+                if key in params:
+                    server_defaults[key] = params[key]
+            server_defaults["n_ctx"] = props.get("default_generation_settings", {}).get("n_ctx", 0)
+            # Serving reality from /slots (n_ctx + speculative are the fields
+            # that ACTUALLY differ between launches — see the 262k-vs-156k and
+            # draft-mtp-on/off config drift that confounded the model A/B).
+            try:
+                slots = httpx.get(f"{base_url}/slots", timeout=5).json()
+                if isinstance(slots, list) and slots:
+                    s0 = slots[0]
+                    server_defaults["slot_n_ctx"] = s0.get("n_ctx", 0)
+                    server_defaults["speculative"] = bool(s0.get("speculative", False))
+            except Exception:
+                pass
+        except json.JSONDecodeError:
+            pass
+        except Exception:
+            pass
+        return temperature_sent, json.dumps(server_defaults, sort_keys=True), thinking
+
     def _regenerate_code(self) -> tuple[dict[str, str], dict[str, float]]:
         """Regenerate code for all stories using the live pipeline.
 
@@ -627,6 +739,7 @@ class EvalRunner:
 
         from src.llm_client import LLMClient
         from src.orchestrator import TestOrchestrator
+        from src.semantic_candidate_ranker import DEFAULT_RESOLUTION_TIMEOUT
         from src.test_generator import TestGenerator
 
         code_map: dict[str, str] = {}
@@ -645,7 +758,11 @@ class EvalRunner:
                 # Fresh orchestrator per story — prevents state contamination
                 client = LLMClient()
                 generator = TestGenerator(client=client)
-                orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
+                # Explicit consumer: eval measures resolution, so the timeout is
+                # passed deliberately (default lives in DEFAULT_RESOLUTION_TIMEOUT).
+                orchestrator = TestOrchestrator(
+                    generator, pom_mode=False, resolution_timeout=DEFAULT_RESOLUTION_TIMEOUT
+                )  # flat mode for validator compatibility
                 code = await orchestrator.run_pipeline(
                     user_story=golden["user_story"],
                     conditions="\n".join(golden["conditions"]),
@@ -681,6 +798,7 @@ class EvalRunner:
 
         from src.llm_client import LLMClient
         from src.orchestrator import TestOrchestrator
+        from src.semantic_candidate_ranker import DEFAULT_RESOLUTION_TIMEOUT
         from src.test_generator import TestGenerator
 
         code_map: dict[str, str] = {}
@@ -701,7 +819,11 @@ class EvalRunner:
                 # Fresh orchestrator per story
                 client = LLMClient()
                 generator = TestGenerator(client=client)
-                orchestrator = TestOrchestrator(generator, pom_mode=False)  # flat mode for validator compatibility
+                # Explicit consumer: eval measures resolution, so the timeout is
+                # passed deliberately (default lives in DEFAULT_RESOLUTION_TIMEOUT).
+                orchestrator = TestOrchestrator(
+                    generator, pom_mode=False, resolution_timeout=DEFAULT_RESOLUTION_TIMEOUT
+                )  # flat mode for validator compatibility
 
                 # Step 1: Generate skeleton via graph
                 state = await orchestrator.run_pipeline_via_graph(

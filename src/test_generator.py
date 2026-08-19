@@ -99,7 +99,13 @@ class TestGenerator:
         # metadata (fields, truncation, static-vs-dynamic split).
         logger.debug("llm_call=generate_skeleton fields=%s", rendered.to_log_entry())
         prompt = rendered.text + count_note
-        return await self.client.generate(prompt)
+        # Explicit pipeline decision (2026-08-18): skeleton generation is a
+        # structured-output task. On thinking models (Qwen3.6/3.8) the
+        # thinking phase exhausts the max_tokens budget and returns EMPTY
+        # content — the root cause of the `got=0` generation retry loops.
+        # With thinking off the same call is deterministic and ~10x faster.
+        # The delivered mode is logged per call by LLMClient, never silent.
+        return await self.client.generate(prompt, enable_thinking=False)
 
     async def _generate_skeleton_langgraph(
         self,

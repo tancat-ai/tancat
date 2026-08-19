@@ -337,5 +337,158 @@ class TestErrorHandling:
         assert "Connection refused" in str(exc_info.value)
 
 
+class TestSamplingTemperaturePin:
+    """Linear pipeline must deliver a pinned temperature, not the server default.
+
+    History (see docs/sessions/2026-08-18_llm_sampling_config_fix.md): the
+    linear path sent NO temperature, so llama.cpp's default (1.0) silently
+    governed skeleton generation — max entropy where determinism matters, and
+    an unrecorded confound in model A/Bs. The pin makes the delivered value
+    deterministic (AITEST_LLM_TEMPERATURE, default 0.0) and explicit calls
+    still win.
+    """
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_default_delivers_zero_when_env_unset(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No env → temperature=0.0 is delivered to the provider."""
+        monkeypatch.delenv("AITEST_LLM_TEMPERATURE", raising=False)
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
+        mock_provider.complete.return_value = ChatCompletion(content="x = 1", model="qwen3.5:9b")
+        mock_auto_detect_provider.return_value = mock_provider
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+        client = LLMClient()
+        _ = client.generate_test("test scenario")
+
+        call_args = mock_provider.complete.call_args
+        assert call_args[1]["temperature"] == 0.0
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_env_override_is_delivered(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """AITEST_LLM_TEMPERATURE=0.7 → 0.7 delivered to the provider."""
+        monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "0.7")
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
+        mock_provider.complete.return_value = ChatCompletion(content="x = 1", model="qwen3.5:9b")
+        mock_auto_detect_provider.return_value = mock_provider
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+        client = LLMClient()
+        _ = client.generate_test("test scenario")
+
+        call_args = mock_provider.complete.call_args
+        assert call_args[1]["temperature"] == 0.7
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_explicit_temperature_overrides_env(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit temperature (e.g. the graph agents' temperature=0) wins over env."""
+        monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "0.7")
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
+        mock_provider.complete.return_value = ChatCompletion(content="x = 1", model="qwen3.5:9b")
+        mock_auto_detect_provider.return_value = mock_provider
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+        client = LLMClient()
+        _ = client.generate_test("test scenario", temperature=0.4)
+
+        call_args = mock_provider.complete.call_args
+        assert call_args[1]["temperature"] == 0.4
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_invalid_env_value_falls_back_to_zero(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Garbage in AITEST_LLM_TEMPERATURE → warn and use 0.0."""
+        monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "hot")
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
+        mock_provider.complete.return_value = ChatCompletion(content="x = 1", model="qwen3.5:9b")
+        mock_auto_detect_provider.return_value = mock_provider
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+        client = LLMClient()
+        _ = client.generate_test("test scenario")
+
+        call_args = mock_provider.complete.call_args
+        assert call_args[1]["temperature"] == 0.0
+
+
+class TestThinkingModeDelivery:
+    """Thinking mode is explicit and visible, never a silent override.
+
+    History (see docs/sessions/2026-08-18_llm_model_ab_investigation.md):
+    thinking models (Qwen3.6/3.8) burned the max_tokens budget on reasoning
+    and returned EMPTY content — the got=0 generation collapse and the
+    resolution timeouts. The fix is an explicit per-call switch; the default
+    (None) sends NOTHING so the model/server default is never overridden
+    silently, and structured call sites opt out deliberately.
+    """
+
+    @staticmethod
+    def _mocked_client(mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch) -> LLMClient:
+        mock_provider = MagicMock()
+        mock_provider.provider_name = "ollama"
+        mock_provider.list_models.return_value = []
+        mock_provider.complete.return_value = ChatCompletion(content="x = 1", model="qwen3.5:9b")
+        mock_auto_detect_provider.return_value = mock_provider
+        monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+        return LLMClient()
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_default_sends_nothing(self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No explicit choice → None reaches the provider (model default governs)."""
+        client = self._mocked_client(mock_auto_detect_provider, monkeypatch)
+        _ = client.generate_test("test scenario")
+
+        call_args = mock_auto_detect_provider.return_value.complete.call_args
+        assert call_args[1]["enable_thinking"] is None
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_explicit_off_is_delivered(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = self._mocked_client(mock_auto_detect_provider, monkeypatch)
+        _ = client.generate_test("test scenario", enable_thinking=False)
+
+        call_args = mock_auto_detect_provider.return_value.complete.call_args
+        assert call_args[1]["enable_thinking"] is False
+
+    @patch("src.llm_client.auto_detect_provider")
+    def test_explicit_on_is_delivered(
+        self, mock_auto_detect_provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client = self._mocked_client(mock_auto_detect_provider, monkeypatch)
+        _ = client.generate_test("test scenario", enable_thinking=True)
+
+        call_args = mock_auto_detect_provider.return_value.complete.call_args
+        assert call_args[1]["enable_thinking"] is True
+
+
+def test_llm_temperature_default_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Helper resolves env value and clamps to the sane 0.0-2.0 range."""
+    from src.llm_client import llm_temperature_default
+
+    monkeypatch.delenv("AITEST_LLM_TEMPERATURE", raising=False)
+    assert llm_temperature_default() == 0.0
+    monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "1.5")
+    assert llm_temperature_default() == 1.5
+    monkeypatch.setenv("AITEST_LLM_TEMPERATURE", "9")
+    assert llm_temperature_default() == 2.0
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

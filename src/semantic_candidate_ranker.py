@@ -8,13 +8,48 @@ Playwright assertion type (toBeVisible, toHaveText, toContainText, etc.).
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any, Protocol
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+#: Default hard limit (seconds) for a resolution LLM call. Previously the
+#: limit was hard-coded at 45s, which is too short on a loaded server and
+#: silently produced flat-0% eval scores (`generated_locator=None`).
+#: See docs/sessions/2026-08-18_llm_model_ab_investigation.md §10.
+DEFAULT_RESOLUTION_TIMEOUT: float = 120.0
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    """True if ``exc`` (or anything in its cause chain) is a timeout.
+
+    ``LLMClient.generate`` wraps provider errors in ``RuntimeError``, so the
+    underlying httpx timeout may sit one level down the cause chain.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (TimeoutError, httpx.TimeoutException)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class AsyncGeneratorLike(Protocol):
     """Minimal protocol for async text generation used by the ranker."""
 
-    async def generate(self, prompt: str, timeout: int = 300, system_prompt: str | None = None) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        timeout: int = 300,
+        system_prompt: str | None = None,
+        *,
+        enable_thinking: bool | None = None,
+    ) -> str:
         """Generate text from a prompt."""
         ...
 
@@ -52,8 +87,21 @@ class SemanticCandidateRanker:
         "Return compact JSON only."
     )
 
-    def __init__(self, generator: AsyncGeneratorLike | None = None) -> None:
+    def __init__(
+        self,
+        generator: AsyncGeneratorLike | None = None,
+        *,
+        timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
+        enable_thinking: bool | None = False,
+    ) -> None:
         self.generator = generator
+        self.timeout = timeout
+        # Explicit pipeline decision (2026-08-18): resolution is a structured
+        # pick-from-candidates task — on thinking models the thinking phase
+        # consumed the response budget / blew the call timeout for zero gain.
+        # ``None`` opts back into the model default; the delivered mode is
+        # logged per call by LLMClient, never silent.
+        self.enable_thinking = enable_thinking
 
     async def choose_best_candidate(
         self,
@@ -89,9 +137,33 @@ class SemanticCandidateRanker:
             candidates=candidates,
             previous_steps=previous_steps,
         )
+        start = time.monotonic()
         try:
-            raw = await self.generator.generate(prompt, timeout=45, system_prompt=self.SYSTEM_PROMPT)
-        except Exception:
+            raw = await self.generator.generate(
+                prompt,
+                timeout=int(self.timeout),
+                system_prompt=self.SYSTEM_PROMPT,
+                enable_thinking=self.enable_thinking,
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - start
+            if _is_timeout_error(exc):
+                logger.warning(
+                    "Resolution LLM call TIMED OUT after %.1fs (limit %.0fs) for %s %r — "
+                    "placeholder scored as unresolved (None); this is a failure, not a model result",
+                    elapsed,
+                    self.timeout,
+                    action,
+                    description,
+                )
+            else:
+                logger.warning(
+                    "Resolution LLM call failed after %.1fs for %s %r: %s",
+                    elapsed,
+                    action,
+                    description,
+                    exc,
+                )
             return None
 
         try:
@@ -157,9 +229,34 @@ class SemanticCandidateRanker:
 
         # Build batch prompt
         prompt = self._build_batch_prompt(batch_items)
+        start = time.monotonic()
         try:
-            raw = await self.generator.generate(prompt, timeout=45, system_prompt=self.SYSTEM_PROMPT)
-        except Exception:
+            raw = await self.generator.generate(
+                prompt,
+                timeout=int(self.timeout),
+                system_prompt=self.SYSTEM_PROMPT,
+                enable_thinking=self.enable_thinking,
+            )
+        except Exception as exc:
+            elapsed = time.monotonic() - start
+            batch_desc = "; ".join(f"{item.get('action')} {item.get('description')!r}" for _, item in batch_items)
+            if _is_timeout_error(exc):
+                logger.warning(
+                    "Batch resolution LLM call TIMED OUT after %.1fs (limit %.0fs) — %d placeholder(s) "
+                    "scored as unresolved (None): %s",
+                    elapsed,
+                    self.timeout,
+                    len(batch_items),
+                    batch_desc,
+                )
+            else:
+                logger.warning(
+                    "Batch resolution LLM call failed after %.1fs — %d placeholder(s) unresolved: %s — %s",
+                    elapsed,
+                    len(batch_items),
+                    batch_desc,
+                    exc,
+                )
             return results
 
         try:
