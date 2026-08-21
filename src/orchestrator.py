@@ -78,8 +78,17 @@ class TestOrchestrator:
         model: str = "",
         flow_store: Any | None = None,
         resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
+        enable_thinking: bool | None = None,
     ) -> None:
         self.test_generator = test_generator
+        # ``None`` resolves to AITEST_ENABLE_THINKING (default off, preserving
+        # the proven thinking-off behaviour); explicit True/False wins and is
+        # recorded per call. Required so a thinking-ON A/B leg can be run via a
+        # constant (no silent drift) while staying explicit + logged.
+        if enable_thinking is None:
+            from src.llm_client import enable_thinking_default
+
+            enable_thinking = enable_thinking_default()
         self.parser = SkeletonParser()
         self._starting_url: str | None = None
         self._credential_profile = credential_profile
@@ -136,6 +145,7 @@ class TestOrchestrator:
             rag_retriever=rag_retriever,
             flow_store=flow_store,
             resolution_timeout=resolution_timeout,
+            enable_thinking=enable_thinking,
         )
         # Delegate placeholder resolution to PlaceholderOrchestrator
         self.last_result: PipelineRunResult | None = None

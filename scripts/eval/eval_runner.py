@@ -663,16 +663,18 @@ class EvalRunner:
         can tell model differences from launch-config differences. Falls back
         to ``{}`` when the endpoint isn't reachable.
         """
-        thinking = "model-default" if use_graph else "off"
+        thinking = "model-default" if use_graph else None
         if use_graph:
             temperature_sent = 0.0
         else:
             try:
-                from src.llm_client import llm_temperature_default
+                from src.llm_client import enable_thinking_default, llm_temperature_default
 
                 temperature_sent = llm_temperature_default()
+                thinking = "on" if enable_thinking_default() else "off"
             except Exception:
                 temperature_sent = None
+                thinking = thinking or "off"
 
         server_defaults: dict[str, float | int | str] = {}
         try:

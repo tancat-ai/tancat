@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Any, Protocol
 
@@ -20,7 +21,11 @@ logger = logging.getLogger(__name__)
 #: limit was hard-coded at 45s, which is too short on a loaded server and
 #: silently produced flat-0% eval scores (`generated_locator=None`).
 #: See docs/sessions/2026-08-18_llm_model_ab_investigation.md §10.
-DEFAULT_RESOLUTION_TIMEOUT: float = 120.0
+#: Configurable via AITEST_RESOLUTION_TIMEOUT so a thinking-ON A/B leg can
+#: raise it fairly (thinking models are ~2-3x slower per resolution call;
+#: a too-short timeout silently re-introduces the None->0% confound it was
+#: raised to 120s to fix). Default 120.0 — constant in code unless overridden.
+DEFAULT_RESOLUTION_TIMEOUT: float = float(os.getenv("AITEST_RESOLUTION_TIMEOUT", "120.0"))
 
 
 def _is_timeout_error(exc: BaseException) -> bool:
@@ -99,8 +104,11 @@ class SemanticCandidateRanker:
         # Explicit pipeline decision (2026-08-18): resolution is a structured
         # pick-from-candidates task — on thinking models the thinking phase
         # consumed the response budget / blew the call timeout for zero gain.
-        # ``None`` opts back into the model default; the delivered mode is
-        # logged per call by LLMClient, never silent.
+        # Default is ``False`` (thinking off). ``None`` opts back into the
+        # model/server default (sends nothing). A thinking-ON leg passes
+        # ``True`` explicitly at the construction site (driven by
+        # AITEST_ENABLE_THINKING=1). The delivered mode is logged per call by
+        # LLMClient, never silent.
         self.enable_thinking = enable_thinking
 
     async def choose_best_candidate(
