@@ -126,7 +126,9 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 # ── Scratch Files ──────────────
-scratch/generated_tests/
+# scratch/ removed 2026-08-21 (audit): benchmark material moved to ../llm-benchmarks,
+# stale debug scripts deleted. Keep the dir ignored so agent scratch never gets tracked again.
+scratch/
 
 # ── notebooks ──────────────
 

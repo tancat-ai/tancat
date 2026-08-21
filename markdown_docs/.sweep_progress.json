@@ -749,13 +749,13 @@
    "status": "completed"
   },
   {
-   "source": "scripts/3d map/generate_3d_map.py",
-   "doc": "markdown_docs/scripts/3d map/generate_3d_map.py.md",
+   "source": "scripts/map_3d/generate_3d_map.py",
+   "doc": "markdown_docs/scripts/map_3d/generate_3d_map.py.md",
    "status": "completed"
   },
   {
-   "source": "scripts/3d map/audit_3d_map.py",
-   "doc": "markdown_docs/scripts/3d map/audit_3d_map.py.md",
+   "source": "scripts/map_3d/audit_3d_map.py",
+   "doc": "markdown_docs/scripts/map_3d/audit_3d_map.py.md",
    "status": "completed"
   },
   {

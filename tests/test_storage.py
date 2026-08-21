@@ -180,17 +180,17 @@ class TestSingletonLazyInit:
 
 
 class TestSingletonInit:
-    def test_init_storage_sets_workspace(self) -> None:
-        init_storage(workspace="custom-ws")
+    def test_init_storage_sets_workspace(self, tmp_path: Path) -> None:
+        init_storage(root=tmp_path, workspace="custom-ws")
         assert get_storage().workspace == "custom-ws"
 
     def test_init_storage_sets_root(self, tmp_path: Path) -> None:
         init_storage(root=tmp_path, workspace="ws1")
         assert get_storage().root == tmp_path
 
-    def test_init_storage_overrides_lazy_default(self) -> None:
+    def test_init_storage_overrides_lazy_default(self, tmp_path: Path) -> None:
         _ = get_storage()  # triggers lazy default
-        init_storage(workspace="explicit")
+        init_storage(root=tmp_path, workspace="explicit")
         assert get_storage().workspace == "explicit"
 
     def test_init_storage_returns_backend(self) -> None:
@@ -206,8 +206,8 @@ class TestSingletonReset:
         # Accessing after reset lazily recreates
         assert get_storage() is not None
 
-    def test_reset_then_lazy_init_is_new_instance(self) -> None:
-        init_storage(workspace="before")
+    def test_reset_then_lazy_init_is_new_instance(self, tmp_path: Path) -> None:
+        init_storage(root=tmp_path, workspace="before")
         a = get_storage()
         reset_storage()
         b = get_storage()
