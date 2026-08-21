@@ -80,6 +80,32 @@ Last updated: 2026-08-19 (AI-050 thinking-budget collapse root cause found + fix
 
 ---
 
+## 🆕 AI-051 — B-021 post-action URL assertions emit the base/starting URL, not the landing page (login redirect unaccounted)
+
+**Status:** 🆕 new (OPEN) — surfaced 2026-08-21 via `verify_production` FAIL. Concrete case: generated saucedemo `test_01_login` ends with `expect(page).to_have_url("https://www.saucedemo.com/")` after clicking Login, but saucedemo always redirects to `/inventory.html` post-login → `AssertionError: Page URL expected to be .../ actual .../inventory.html`.
+**Priority:** Medium — pipeline-generation quality; makes generated tests fail-safe at runtime but produces false-red tests for redirecting flows.
+**Root cause:** `placeholder_orchestrator.py` **B-021** (`if action == "ASSERT": # B-021: Page-state assertions become URL assertions`) converts a page-state ASSERT into a URL assertion but emits the **initial/base URL** (`current_url` at step start) instead of the **landing URL** the preceding action actually navigates to. The resolver tracks `current_url` through the journey (and `url_inference.infer_next_page_url` does compute transition targets for CLICK steps) — the ASSERT conversion does not consume that inferred "next" URL.
+**Runtime safety net works as intended:** `evidence_tracker`/Playwright `to_have_url` correctly flags the mismatch; the failure is generated-upstream, not a runtime path defect.
+**Regression status:** pre-existing — reproduced **identically** on clean HEAD (`git worktree`, no diff): `[saucedemo] 10/13 gates (3 failed)` / `TOTAL 22/26 (4 failed)` both with and without the thinking/timeout commit (`6fd2620`). Not introduced by that change.
+**OPEN QUESTION — enable_thinking may affect it:** bug originates in skeleton generation + resolution ranking (the two call sites `enable_thinking` toggles). Current runs are `thinking=off`. A thinking-ON leg could change *which* URL the model emits / how the assert is framed — candidate to test when the matched-precision 3.8 re-test (AI-046) runs. Currently unverified which direction.
+**Repro:** `generated_tests/verify_saucedemo_20260820_234225/test_saucedemo.py::test_01_login`. Session record: `docs/sessions/2026-08-21_peer_verification.md`.
+
+---
+
+## 🆕 AI-052 — Resolver page-scope enforcement: locator resolved for a page the test isn't on (wrong-page add-to-cart)
+
+**Status:** 🆕 new (OPEN) — surfaced 2026-08-21 via `verify_production` FAIL. Concrete case: generated saucedemo `test_02/03/04` sequence `click('#item_4_title_link')` (nav → product-detail `inventory-item.html?id=4`) then `click('#add-to-cart-sauce-labs-fleece-jacket')` which exists **only on the inventory page** → runtime `_LocatorNotFoundError: element exists on a different page than the one this step runs on`.
+**Priority:** Medium — pipeline-generation quality; produces semantically-wrong journeys and page-scope violations.
+**Root cause (two compounding generation bugs):**
+1. **Skeleton/flow logic** — the LLM generated a wrong sequence ("view item A, then add item B" where B's button is on a different page).
+2. **Resolver page-scope bounding** — `placeholder_orchestrator` tracks `current_url` per step (B-014 step-context exclusion at the resolver, `url_inference.infer_next_page_url` computes the transition after the title-link CLICK) but the **next** step's resolution was **not bounded to the actual current page**; the yellow-flag locator slipped through.
+**Runtime safety net works as intended:** `src/evidence_tracker.py::click` fast-fails with `_LocatorNotFoundError` (count==0 on current page) instead of burning the ~150s fallback marathon — that guard is functioning correctly; the bug is that the wrong-page locator was generated at all.
+**Regression status:** pre-existing — reproduced **identically** on clean HEAD. Not introduced by commit `6fd2620` (thinking/timeout).
+**OPEN QUESTION — enable_thinking may affect it:** the wrong-page locator is produced by skeleton generation + resolution ranking (the call sites `enable_thinking` toggles, currently `off`). Whether thinking-ON changes the model's page-awareness/flow logic is unverified — candidate to test in the AI-046 re-test. Currently unverified which direction.
+**Repro:** `generated_tests/verify_saucedemo_20260820_234225/test_saucedemo.py::test_02_add_item`. Session record: `docs/sessions/2026-08-21_peer_verification.md`.
+
+---
+
 ## ✅ Phase 7 CI/CD Integration — spec + 7a + 7b + 7c complete (2026-08-13/14/15)
 
 **Status:** ✅ Complete — spec (no open questions) + **7a** (driver 2026-08-13, Docker action tail 2026-08-14) + **7b** (generate-and-run 2026-08-15) + **7c (GitLab parity 2026-08-15)**: `.gitlab-ci.template.yml` include template (three modes + build/compute-key jobs + manual slash job), `ci/platform/gitlab.py` (MR notes), protected-environment approvals, `docs/ci.md`. Roadmap Phase 7 → `[x]`.
