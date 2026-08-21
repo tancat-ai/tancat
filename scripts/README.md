@@ -7,6 +7,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | Script | Purpose | Needs |
 |--------|---------|-------|
 | `smoke.py` | Fast pre-commit smoke test (<1s) | Nothing — fully offline |
+| `audit_generated_tests.sh` | Read-only safety audit of `generated_tests/` — git-depth check, .gitignore validation, evidence sha256 snapshot. Non-destructive (exit 2 = untracked artifacts at risk) | Nothing — offline |
 | `debug.py` | Unified diagnostic CLI | Varies by command (see below) |
 | `debug_step_through.py` | Step-by-step interactive debugger for generated tests (headed) | Browser + Enter |
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
