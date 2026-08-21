@@ -23,7 +23,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
 | `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |
-| `3d map/*.py` | 3D documentation map generation | Nothing |
+| `map_3d/*.py` | 3D documentation map generation | Nothing |
 
 ---
 
