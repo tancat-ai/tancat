@@ -104,8 +104,11 @@ class TestGenerator:
         # thinking phase exhausts the max_tokens budget and returns EMPTY
         # content — the root cause of the `got=0` generation retry loops.
         # With thinking off the same call is deterministic and ~10x faster.
+        # Default is off; AITEST_ENABLE_THINKING=1 opts into a thinking-ON leg.
         # The delivered mode is logged per call by LLMClient, never silent.
-        return await self.client.generate(prompt, enable_thinking=False)
+        from src.llm_client import enable_thinking_default
+
+        return await self.client.generate(prompt, enable_thinking=enable_thinking_default())
 
     async def _generate_skeleton_langgraph(
         self,

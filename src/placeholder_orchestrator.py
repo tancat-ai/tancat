@@ -113,6 +113,7 @@ class PlaceholderOrchestrator:
         flow_store: Any | None = None,
         *,
         resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
+        enable_thinking: bool | None = False,
     ) -> None:
         """Initialise the placeholder resolution orchestrator.
 
@@ -127,6 +128,10 @@ class PlaceholderOrchestrator:
             flow_store: AI-042 cross-site flow memory store. When ``None``, flow
                 resolution is disabled (zero overhead).
             resolution_timeout: Hard limit (seconds) for each resolution LLM call.
+            enable_thinking: Thinking-mode switch for the resolution ranker
+                (default ``False`` — proven stable for structured pick-from-
+                candidates). ``None`` sends nothing (model default). A
+                thinking-ON leg passes ``True`` explicitly.
         """
         self._starting_url = starting_url
         self._credential_profile = credential_profile
@@ -135,10 +140,14 @@ class PlaceholderOrchestrator:
         self.resolver = PlaceholderResolver()
         self.scraper = PageScraper()
         self.url_resolver = UrlResolver()
-        self._element_matcher = ElementMatcher(self.resolver, generator, resolution_timeout=resolution_timeout)
+        self._element_matcher = ElementMatcher(
+            self.resolver, generator, resolution_timeout=resolution_timeout, enable_thinking=enable_thinking
+        )
         self._generated_page_objects: list[GeneratedPageObject] = []
         self.page_object_builder = PageObjectBuilder()
-        self.semantic_ranker = SemanticCandidateRanker(generator, timeout=resolution_timeout)
+        self.semantic_ranker = SemanticCandidateRanker(
+            generator, timeout=resolution_timeout, enable_thinking=enable_thinking
+        )
         self._rag_retriever = rag_retriever
 
     @property

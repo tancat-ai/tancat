@@ -128,6 +128,7 @@ class ElementMatcher:
         generator: AsyncGeneratorLike | None = None,
         *,
         resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
+        enable_thinking: bool | None = None,
     ) -> None:
         """Initialize the element matcher.
 
@@ -135,9 +136,20 @@ class ElementMatcher:
             resolver: PlaceholderResolver instance for text matching and ranking.
             generator: B-020 LLM generator for semantic candidate ranking.
             resolution_timeout: Hard limit (seconds) for each resolution LLM call.
+            enable_thinking: Thinking-mode switch for the semantic ranker.
+                ``None`` resolves to the pipeline default
+                (``AITEST_ENABLE_THINKING``, off by default) so the resolved
+                mode stays consistent with the rest of the run and is logged
+                per call.
         """
+        from src.llm_client import enable_thinking_default
+
         self._resolver = resolver
-        self._semantic_ranker = SemanticCandidateRanker(generator, timeout=resolution_timeout)
+        self._semantic_ranker = SemanticCandidateRanker(
+            generator,
+            timeout=resolution_timeout,
+            enable_thinking=enable_thinking_default() if enable_thinking is None else enable_thinking,
+        )
 
         # Batching state for Pass 3 LLM calls
         self._pass3_batch: list[dict[str, Any]] = []

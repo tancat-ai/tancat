@@ -46,6 +46,47 @@ def llm_temperature_default() -> float:
     return max(0.0, min(2.0, value))
 
 
+#: Explicit switch for thinking-capable models (Qwen3.6/3.8) on the structured
+#: linear call sites (skeleton generation + resolution ranking). Mirror of the
+#: temperature pin: constant default so A/B legs can't drift on it. Default
+#: ``off`` (the proven-broken thinking collapse fix, 2026-08-18); set
+#: ``AITEST_ENABLE_THINKING=1`` to run a thinking-ON leg. Delivered mode is
+#: still logged per call by :meth:`LLMClient._complete_sync` and recorded in
+#: ``eval_runs.thinking`` — never silent.
+LLM_ENABLE_THINKING_ENV = "AITEST_ENABLE_THINKING"
+
+
+def enable_thinking_default() -> bool:
+    """Whether the structured linear call sites send ``enable_thinking=True``.
+
+    Reads ``AITEST_ENABLE_THINKING`` (truthy values ``1/true/yes/on``).
+    Defaults to ``False`` — preserves the proven thinking-off behaviour for
+    skeleton/resolution. A thinking-ON A/B leg sets the env var explicitly and
+    the resulting value is recorded in ``eval_runs.thinking``.
+    """
+    raw = os.getenv(LLM_ENABLE_THINKING_ENV)
+    if raw is None or raw.strip() == "":
+        return False
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+#: Default per-call generation timeout (seconds). Constant in code unless
+#: overridden via AITEST_GENERATION_TIMEOUT so a thinking-ON A/B leg can raise
+#: it fairly without silent drift. 600s is ample for thinking-off; thinking-ON
+#: on complex stories can exceed it, and a too-short timeout silently yields
+#: empty code (the flat-zeros failure mode).
+def generation_env_timeout() -> int:
+    """Resolve the generation timeout from ``AITEST_GENERATION_TIMEOUT``."""
+    raw = os.getenv("AITEST_GENERATION_TIMEOUT")
+    if raw is None or raw.strip() == "":
+        return 600
+    try:
+        value = int(float(raw))
+    except ValueError:
+        return 600
+    return max(60, value)
+
+
 class LLMClient:
     """High-level client for generating Playwright code from local or remote LLMs."""
 
@@ -338,12 +379,21 @@ class LLMClient:
     async def generate(
         self,
         prompt: str,
-        timeout: int = 600,
+        timeout: int | None = None,
         system_prompt: str | None = None,
         temperature: float | None = None,
         enable_thinking: bool | None = None,
     ) -> str:
-        """Async wrapper used by the intelligent pipeline."""
+        """Async wrapper used by the intelligent pipeline.
+
+        ``timeout`` defaults to ``AITEST_GENERATION_TIMEOUT`` (600s) so a
+        thinking-ON A/B leg can raise it fairly — thinking generation on
+        complex stories can exceed the 600s default, and a too-short timeout
+        silently turns generated code into an empty string (the flat-zeros
+        failure mode, see 2026-08-18 doc §10).
+        """
+        if timeout is None:
+            timeout = generation_env_timeout()
         try:
             completion = await asyncio.to_thread(
                 self._complete_sync, prompt, timeout, system_prompt, temperature, enable_thinking
