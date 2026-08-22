@@ -322,16 +322,18 @@ class JourneyScraper:
                                             # observed outcome — mark the step as failed so the
                                             # resolver can distinguish "journey did not reach it".
                                             observed.error = "locator_not_found_even_relaxed"
-                                            # B-015 / Phase 1d: When a CLICK description can't
-                                            # find a matching element, try to navigate to a
-                                            # related URL instead.  This bridges the gap
-                                            # between skeleton descriptions ("checkout button")
-                                            # and sites where the button is on a different
-                                            # page (checkout-step-one.html).
-                                            inferred_url = self._infer_url_from_description(step.description, page.url)
+                                            # B-015 / Phase 1d, AI-052 S4: when a CLICK
+                                            # description can't find a matching element,
+                                            # navigate only to an ALREADY-DISCOVERED page
+                                            # whose URL matches the description. No URL
+                                            # fabrication, no HEAD probes: if no discovered
+                                            # page matches, the step is honestly skipped.
+                                            inferred_url = self._match_discovered_url(
+                                                step.description, known_urls=list(output.keys())
+                                            )
                                             if inferred_url:
                                                 self._debug(
-                                                    f"Navigating to inferred URL '{inferred_url}' "
+                                                    f"Navigating to discovered URL '{inferred_url}' "
                                                     f"for unfound click '{step.description}'"
                                                 )
                                                 self._context_log.append(
@@ -344,7 +346,7 @@ class JourneyScraper:
                                                     }
                                                 )
                                                 current_url = self._navigate_to(page, inferred_url, step.timeout_ms)
-                                                # Auto-scrape after URL-inferred navigation so the
+                                                # Auto-scrape after discovered-URL navigation so the
                                                 # destination page's elements are captured for
                                                 # subsequent resolution.
                                                 if current_url:
@@ -496,75 +498,31 @@ class JourneyScraper:
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 
     @staticmethod
-    def _infer_url_from_description(description: str, current_url: str) -> str | None:
-        """Infer a navigation URL from a description when no click target is found.
+    def _match_discovered_url(description: str, known_urls: list[str]) -> str | None:
+        """Return an ALREADY-DISCOVERED page URL matching a description (AI-052 S4).
 
-        When the skeleton generates ``CLICK: checkout button`` but the current
-        page has no checkout button (it's on the next page), this method tries
-        common URL patterns based on the description keywords.
-
-        Uses a lightweight HEAD probe to avoid navigating to 404s.
+        Evidence-only replacement for the deleted ``_infer_url_from_description``:
+        candidates come exclusively from pages the journey has actually scraped.
+        No path fabrication, no HEAD probes, no cross-host guesses — if no
+        discovered page's URL matches the description keywords, return None and
+        let the caller record ``step_skipped``.
         """
-        from urllib.parse import urljoin, urlparse
-
-        import httpx
+        from urllib.parse import urlparse
 
         desc_lower = description.lower()
-        origin = urlparse(current_url)
-        base = f"{origin.scheme}://{origin.netloc}"
-
-        # Map description keywords to common path patterns
-        keyword_routes: dict[str, list[str]] = {
-            "cart": ["/cart.html", "/cart", "/view_cart", "/basket"],
-            "checkout": [
-                "/checkout-step-one.html",
-                "/checkout_step_one",
-                "/checkout.html",
-                "/checkout",
-            ],
-            "continue": [
-                "/checkout-step-two.html",
-                "/checkout_step_two",
-                "/checkout-overview.html",
-            ],
-            "finish": [
-                "/checkout-complete.html",
-                "/complete",
-                "/thank-you",
-            ],
-            "product": ["/products", "/inventory.html"],
-            "login": ["/login", "/signin", "/"],
-            "home": ["/", "/index.html", "/home"],
-        }
-
-        candidates: list[str] = []
-        for keyword, paths in keyword_routes.items():
-            if keyword in desc_lower:
-                for path in paths:
-                    candidates.append(urljoin(base, path))
-                break  # first keyword match wins
-
-        if not candidates:
-            return None
-
-        # Probe candidates with HEAD (fast, no page load). The probe is an
-        # outbound call outside the browser, so it honours the same SSRF guard
-        # as navigation (candidates share the guarded base host, but a
-        # hallucinated cross-host URL must never be probed).
-        _probe_guard = UrlGuard()
-        for candidate in candidates:
-            if not _probe_guard.is_allowed(candidate):
+        best: tuple[int, str] | None = None
+        for url in known_urls:
+            parsed = urlparse(url)
+            path = (parsed.path or "/").strip("/").lower()
+            if not path:
                 continue
-            try:
-                resp = httpx.head(candidate, timeout=3, follow_redirects=True)
-                if resp.status_code < 400:
-                    return candidate
-            except Exception:
-                continue
-
-        # Fallback: return the first candidate even if HEAD failed —
-        # Playwright will handle 404 gracefully via timeout
-        return candidates[0]
+            # Split the discovered path into words and require at least one
+            # description keyword to appear as a path word.
+            words = {w for w in path.replace("-", "_").split("_") if len(w) >= 3}
+            matched_words = sum(1 for w in words if w in desc_lower)
+            if matched_words and (best is None or matched_words > best[0]):
+                best = (matched_words, url)
+        return best[1] if best else None
 
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 

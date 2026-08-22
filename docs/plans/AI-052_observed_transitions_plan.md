@@ -5,12 +5,14 @@
 > Backlog: `BACKLOG.md` → AI-052. Root-cause evidence: `docs/sessions/2026-08-21_peer_verification.md`
 > + this plan's §0 (re-verified 2026-08-22).
 >
-> **PROGRESS (2026-07-23):** S1 ✅ (capture + typed `ObservedTrail`, live saucedemo check) ·
-> S2 ✅ (plumbed into resolver, `PIPELINE_DEBUG=1` log) · **S3 ✅ (core fix — trail-driven
-> scoping, strict no-fallback, divergence-aware replay; zero different-page errors on BOTH
-> verify sites; record: `docs/sessions/2026-07-23_ai052_session3_core_fix.md`). Next: S4**
-> (delete keyword-URL guessing). Session records: `docs/sessions/2026-07-23_ai052_session1_observed_trail.md`,
-> `docs/sessions/2026-07-23_ai052_session2_plumbing.md`. S1+S2+S3 committed. Status flips to `✅` only at S6.
+> **PROGRESS (2026-08-23):** S1 ✅ · S2 ✅ · S3 ✅ (core fix — zero different-page errors on
+> BOTH verify sites) · **S4 ✅ (keyword-URL guessing deleted; evidence-only transitions;
+> eval static 97.9% unchanged — open question #3 answered: no regression. Record:
+> `docs/sessions/2026-08-23_ai052_session4_no_guessing.md`). Next: S6** (regression sweep,
+> docs sync, ship) — S5 (ARIA role gate) remains optional. Session records:
+> `docs/sessions/2026-07-23_ai052_session1_observed_trail.md`,
+> `docs/sessions/2026-07-23_ai052_session2_plumbing.md`,
+> `docs/sessions/2026-07-23_ai052_session3_core_fix.md`. Status flips to `✅` only at S6.
 
 ---
 

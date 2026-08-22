@@ -940,10 +940,11 @@ def test_02_add_item(page):
         "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack')"
         in final_code
     )
-    assert (
-        "evidence_tracker.click('a[href=\"https://www.saucedemo.com/cart.html\"]', label='shopping cart link')"
-        in final_code
-    )
+    # AI-052 S4: keyword-URL inference is gone — without an observed trail the
+    # resolver cannot know that login lands on /inventory.html, so the
+    # "shopping cart link" click is not evidenced there. The navigation-intent
+    # fallback honestly emits a GOTO to the VERIFIED cart page instead.
+    assert "evidence_tracker.navigate('https://www.saucedemo.com/cart.html')" in final_code
 
 
 def test_orchestrator_passes_credential_to_scraper() -> None:
