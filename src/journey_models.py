@@ -63,6 +63,78 @@ class CredentialProfile:
 
 
 @dataclass
+class ObservedStep:
+    """One observed transition in a journey (AI-052).
+
+    A factual record of where the browser actually was at each step —
+    captured from ``page.url``, never inferred. The resolver consumes these
+    observations instead of re-guessing next-page URLs.
+
+    Attributes:
+        index: Zero-based step index within the journey.
+        action: The step action ("navigate", "click", "fill", "wait", "scrape", "capture").
+        description: Human-readable description of the step.
+        selector_used: The selector actually clicked/filled ("" when discovered
+            text or none at all).
+        from_url: URL before the step ran ("" before the starting page).
+        to_url: URL after the step ran ("" when the step raised before a URL
+            could be observed).
+        navigated: True when the step changed ``page.url`` relative to
+            ``from_url``. For the very first step ``from_url`` is "" (the
+            browser had no URL yet) so ``navigated`` is always False there;
+            consumers should use ``from_url != to_url`` directly for step 0.
+        scraped: True when the step caused the destination page to be scraped
+            (``output`` gained a key for ``to_url``).
+        error: Exception message when the step failed after all retries.
+    """
+
+    index: int
+    action: str
+    description: str = ""
+    selector_used: str = ""
+    from_url: str = ""
+    to_url: str = ""
+    navigated: bool = False
+    scraped: bool = False
+    error: str | None = None
+
+
+@dataclass
+class ObservedTrail:
+    """Ordered, per-journey record of observed page transitions (AI-052).
+
+    Observation, not inference: every URL here was read from the live browser
+    after the step ran. The resolver (Sessions 3-4) consumes this trail to
+    scope resolution to pages that were actually reached.
+
+    Attributes:
+        steps: One :class:`ObservedStep` per journey step, in order.
+    """
+
+    steps: list[ObservedStep] = field(default_factory=list)
+
+    @property
+    def pages_visited(self) -> list[str]:
+        """Ordered, deduped list of observed URLs."""
+        urls: list[str] = []
+        for step in self.steps:
+            for url in (step.to_url,):
+                if url and url not in urls:
+                    urls.append(url)
+        return urls
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to a plain dictionary (JSON-friendly)."""
+        return {"steps": [asdict(s) for s in self.steps]}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ObservedTrail:
+        """Deserialize from a plain dictionary."""
+        steps = [ObservedStep(**s) for s in data.get("steps", []) if isinstance(s, dict)]
+        return cls(steps=steps)
+
+
+@dataclass
 class JourneyResult:
     """Result of executing a journey through authenticated pages."""
 
@@ -71,6 +143,7 @@ class JourneyResult:
     failed_steps: list[str]  # human-readable descriptions
     error_message: str | None = None  # top-level error (SSO, MFA, CAPTCHA)
     redirected_urls: list[str] = field(default_factory=list)
+    trail: ObservedTrail | None = None  # observed transition trail (AI-052)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dictionary (JSON-friendly)."""
@@ -79,12 +152,14 @@ class JourneyResult:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> JourneyResult:
         """Deserialize from a plain dictionary."""
+        trail_data = data.get("trail")
         return cls(
             success=bool(data.get("success", False)),
             captured_pages=data.get("captured_pages", {}),
             failed_steps=data.get("failed_steps", []),
             error_message=data.get("error_message"),
             redirected_urls=data.get("redirected_urls", []),
+            trail=ObservedTrail.from_dict(trail_data) if isinstance(trail_data, dict) else None,
         )
 
 

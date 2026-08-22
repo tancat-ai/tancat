@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sys
 
-from src.journey_models import CredentialProfile, JourneyStep
+from src.journey_models import CredentialProfile, JourneyStep, ObservedStep
 from src.journey_scraper import JourneyScraper
 
 
@@ -68,8 +68,13 @@ def run_journey_subprocess_entry() -> int:
         headless=bool(headless),
         credential_profile=credential_profile,
     )
-    output = scraper._scrape_journey_sync(steps)
-    print(json.dumps(output))
+    # AI-052: capture the typed observed trail in-process and embed it in the
+    # stdout payload so the parent process receives it (see _scrape_journey_via_subprocess).
+    trail_steps: list[ObservedStep] = []
+    output = scraper._scrape_journey_sync(steps, _observed_trail_out=trail_steps)
+    output_payload: dict = {"__trail__": {"steps": [vars(s) for s in trail_steps]}}
+    output_payload.update(output)
+    print(json.dumps(output_payload))
     return 0
 
 

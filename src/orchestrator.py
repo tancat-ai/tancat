@@ -12,6 +12,7 @@ from typing import Any
 
 from src.agents.pipeline_state import PipelineState
 from src.code_postprocessor import normalise_generated_code
+from src.journey_models import ObservedTrail
 from src.journey_scraper import (
     CredentialProfile,
     JourneyResult,
@@ -59,6 +60,7 @@ class PipelineRunResult:
     generated_page_objects: list[GeneratedPageObject] = field(default_factory=list)
     unresolved_placeholders: list[str] = field(default_factory=list)
     pages_visited: list[str] = field(default_factory=list)
+    observed_trails: dict[str, ObservedTrail] = field(default_factory=dict)
     pom_mode: bool = False
 
 
@@ -491,9 +493,10 @@ class TestOrchestrator:
 
         # Approach 3: Stateful journey discovery (the "User-Driven" fix)
         pages_visited: list[str] = []
+        observed_trails: dict[str, ObservedTrail] = {}
         if self._starting_url:
             self._debug("phase=journey_discovery start")
-            discovery_data, pages_visited = await self._scrape_journeys_statefully(
+            discovery_data, pages_visited, observed_trails = await self._scrape_journeys_statefully(
                 journeys, self._starting_url, self._credential_profile
             )
             all_journey_scraped_data.update(discovery_data)
@@ -566,6 +569,7 @@ class TestOrchestrator:
             seed_urls=target_urls or [],
             scraped_data=scraped_data,
             scraped_errors=scraped_errors,
+            observed_trails=observed_trails,
         )
         self._debug("phase=resolve_placeholders done")
 
@@ -636,6 +640,7 @@ class TestOrchestrator:
             generated_page_objects=generated_page_objects,
             unresolved_placeholders=unresolved,
             pages_visited=pages_visited,
+            observed_trails=observed_trails,
             pom_mode=self._pom_mode,
         )
         return final_code
@@ -673,22 +678,26 @@ class TestOrchestrator:
         journeys: list[TestJourney],
         starting_url: str,
         credential_profile: CredentialProfile | None = None,
-    ) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[str], dict[str, ObservedTrail]]:
         """Scrape pages by following the generated skeleton journeys step-by-step.
 
         Journeys are independent — each starts from the same base URL and follows
         its own path. They run in parallel via asyncio.gather to cut the journey
         discovery phase time (~34s → ~10-15s expected).
 
-        Returns a tuple of (scraped_data, pages_visited) where pages_visited is
-        extracted from the journey scraper's context log.
+        Returns a tuple of (scraped_data, pages_visited, observed_trails) where
+        pages_visited is extracted from the journey scraper's context log and
+        observed_trails (AI-052) maps each journey's test_name to its typed
+        ObservedTrail of factual page transitions.
         """
         if not starting_url:
-            return {}, []
+            return {}, [], {}
 
         import asyncio
 
-        async def _scrape_one(journey: TestJourney) -> tuple[dict[str, list[dict[str, Any]]], list[str]]:
+        async def _scrape_one(
+            journey: TestJourney,
+        ) -> tuple[dict[str, list[dict[str, Any]]], list[str], ObservedTrail]:
             """Scrape a single journey in its own JourneyScraper instance."""
             scraper = JourneyScraper(
                 starting_url=starting_url,
@@ -727,7 +736,8 @@ class TestOrchestrator:
             self._debug(f"following discovery journey for: {journey.test_name}")
             journey_data = await scraper.scrape_journey(steps, credential_profile=credential_profile)
             pages = scraper.get_pages_visited()
-            return journey_data, pages
+            trail = scraper.get_observed_trail()
+            return journey_data, pages, trail
 
         # Run all journeys concurrently — each gets its own browser subprocess
         tasks = [_scrape_one(j) for j in journeys]
@@ -735,11 +745,13 @@ class TestOrchestrator:
 
         all_scraped_data: dict[str, list[dict[str, Any]]] = {}
         all_pages_visited: list[str] = []
-        for data, pages in results:
+        observed_trails: dict[str, ObservedTrail] = {}
+        for journey, (data, pages, trail) in zip(journeys, results, strict=True):
             all_scraped_data.update(data)
             all_pages_visited.extend(pages)
+            observed_trails[journey.test_name] = trail
 
-        return all_scraped_data, all_pages_visited
+        return all_scraped_data, all_pages_visited, observed_trails
 
     @staticmethod
     def _normalize_journey_urls(steps: list[JourneyStep]) -> list[JourneyStep]:

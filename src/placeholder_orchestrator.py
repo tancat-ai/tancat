@@ -8,7 +8,9 @@ Skip insertion to ``skip_manager``. Role mapping to ``role_mapper``.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
 from src.cart_seeding_scraper import CartSeedingScraper
 from src.code_postprocessor import replace_token_in_line
 from src.element_matcher import ElementMatcher
-from src.journey_models import CredentialProfile
+from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
@@ -486,6 +488,7 @@ class PlaceholderOrchestrator:
         seed_urls: list[str],
         scraped_data: dict[str, list[dict[str, str]]],
         scraped_errors: dict[str, str] | None = None,
+        observed_trails: dict[str, ObservedTrail] | None = None,
     ) -> str:
         """Resolve placeholders step by step while tracking the active page for each test."""
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
@@ -495,10 +498,37 @@ class PlaceholderOrchestrator:
         fallback_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
         errors = scraped_errors or {}
 
+        observed_trails = observed_trails or {}
         journey_unresolved: dict[str, list[str]] = {}
+        # AI-052: tokens skipped under strict scope must never reach the
+        # all-pages batch fallback below — that would resurrect exactly the
+        # cross-page locator this fix removes.
+        strict_skipped_tokens: set[str] = set()
 
         # 1. Resolve placeholders inside test functions
         for journey in journeys:
+            # AI-052 (S2): log the factual trail under PIPELINE_DEBUG (stderr —
+            # Python logging is not configured by the Streamlit app).
+            # AI-052 (S3): CONSUME it — each step's page is derived from the
+            # observation instead of infer_next_page_url's guess.
+            trail = observed_trails.get(journey.test_name)
+            trail_steps: list[ObservedStep] = trail.steps if trail else []
+            if trail_steps:
+                trail_urls = " -> ".join(dict.fromkeys(s.to_url for s in trail_steps if s.to_url))
+                if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
+                    print(f"[resolve] {journey.test_name} observed trail: [{trail_urls}]", flush=True, file=sys.stderr)
+            trail_by_token = self._map_trail_to_placeholders(journey, trail_steps)
+            # Canonicaliser: trail URLs come straight from page.url (trailing
+            # slashes etc.) while scraped_data keys are normalised — resolve
+            # every membership check through this map.
+            norm_scraped = {normalize_url(k): k for k in scraped_data}
+
+            def canon(url: str | None, _map: dict[str, str] = norm_scraped) -> str | None:
+                """Return the actual scraped_data key for url, else None."""
+                if not url:
+                    return None
+                return _map.get(normalize_url(url))
+
             current_url = self._select_initial_page_url(
                 journey,
                 page_requirements,
@@ -506,6 +536,21 @@ class PlaceholderOrchestrator:
                 scraped_data,
                 lines,
             )
+            initial_key = canon(current_url)
+            if initial_key:
+                current_url = initial_key
+            # Anchor for evidenced/unknown steps (AI-052): the last page we have
+            # scraped DOM for. Resolution scope never leaves verified pages.
+            last_verified_url = initial_key
+            # AI-052: set when WE emit a CLICK whose real href targets an
+            # unscraped page — the runtime browser will land there, so the next
+            # step cannot honestly resolve against the stale verified page.
+            pending_evidence: str | None = None
+            # AI-052: latches True once OUR emitted path departs from the
+            # observed one (href navigation / proven-static override). From
+            # then on the trail describes a different journey than the
+            # generated test — only our own verified anchor is trustworthy.
+            diverged = False
             journey_unresolved[journey.test_name] = []
 
             last_selector: str | None = None
@@ -525,6 +570,58 @@ class PlaceholderOrchestrator:
                         parts = description.split(":", 1)
                         description = parts[0]
                         fill_value = parts[1]
+
+                    # ── AI-052 S3: observation over inference ──────────────
+                    # Where is this step's page? Ask the trail (a browser
+                    # fact), not a guesser.
+                    obs = trail_by_token.get(placeholder.token)
+                    if trail_steps:
+                        if pending_evidence:
+                            # We emitted a navigation click to an unscraped page
+                            # (real href). The scraper followed a different
+                            # element, so the trail cannot vouch for this step:
+                            # the runtime browser will be on the href target,
+                            # which has no scraped DOM → honest skip below.
+                            current_url = pending_evidence
+                            pending_evidence = None
+                        elif diverged:
+                            # The trail no longer describes this test's path —
+                            # trust only our own verified anchor.
+                            if last_verified_url:
+                                current_url = last_verified_url
+                        else:
+                            scoped = self._trail_step_scope_url(obs, canon, last_verified_url)
+                            if scoped:
+                                current_url = scoped
+                                last_verified_url = scoped
+
+                    if action == "GOTO" and obs is not None and obs.to_url:
+                        # The scraper already made this exact navigation — use
+                        # where it actually landed instead of re-resolving the
+                        # URL from keywords/href guessing.
+                        observed_target = normalize_url(obs.to_url)
+                        line_resolutions.setdefault(placeholder.line_number, []).append(
+                            (
+                                placeholder.token,
+                                action,
+                                repr(observed_target),
+                                description,
+                                fill_value,
+                                current_url,
+                                None,
+                            )
+                        )
+                        target_key = canon(obs.to_url)
+                        if target_key:
+                            current_url = target_key
+                            last_verified_url = target_key
+                            pending_evidence = None
+                        else:
+                            pending_evidence = obs.to_url
+                        continue
+
+                    # AI-052: replay the scraper's PROVEN selector — see the
+                    # divergence-aware block after _resolve_placeholder_for_page.
 
                     if action == "ASSERT":
                         # B-021: Page-state assertions become URL assertions —
@@ -607,6 +704,7 @@ class PlaceholderOrchestrator:
                         )
                         continue
 
+                    matched_box: dict[str, Any] = {}
                     resolved_value, next_url, assertion_type = await self._resolve_placeholder_for_page(
                         action=action,
                         description=description,
@@ -616,9 +714,61 @@ class PlaceholderOrchestrator:
                         previous_selector=last_selector,
                         previous_description=last_description,
                         resolved_steps=resolved_steps,
+                        strict_scope=bool(trail_steps),
+                        matched_out=matched_box,
                     )
 
-                    if "pytest.skip" in resolved_value:
+                    # ── AI-052: divergence-aware replay ────────────────────
+                    # The trail's selector_used was PROVEN (successfully clicked
+                    # during discovery, error is None). When the resolver picks
+                    # a DIFFERENT element:
+                    #   • ours navigates via a real href → keep ours (the href
+                    #     is evidence; pending_evidence/anchor handle the move);
+                    #   • ours has no href (navigation behaviour unknowable —
+                    #     e.g. JS-driven links) → replay the PROVEN selector so
+                    #     the generated test re-enacts the observed journey;
+                    #   • ours found nothing scoped → fall back to the proven
+                    #     selector instead of skipping.
+                    if (
+                        trail_steps
+                        and not diverged
+                        and action == "CLICK"
+                        and obs is not None
+                        and obs.error is None
+                        and obs.selector_used
+                    ):
+                        ours = matched_box.get("element")
+                        if ours is None:
+                            if "pytest.skip" in resolved_value:
+                                resolved_value = repr(obs.selector_used)
+                                next_url = None
+                        else:
+                            raw_sel = str(ours.get("selector", "")).strip()
+                            robust_sel = build_robust_locator(ours) or raw_sel
+                            if obs.selector_used not in {raw_sel, robust_sel} and not next_url:
+                                # No href on our pick: we cannot know whether it
+                                # navigates. The proven element's behaviour is
+                                # recorded in the trail — follow it.
+                                resolved_value = repr(obs.selector_used)
+                                next_url = None
+                                if action != "ASSERT":
+                                    assertion_type = None
+
+                    # AI-052: the trail PROVES whether the proven click navigated.
+                    # A navigation-intent click that provably stayed put (and our
+                    # own pick has no href either) is better emitted as a
+                    # navigation to a verified page than as a dead click.
+                    proven_static = (
+                        trail_steps
+                        and not diverged
+                        and action == "CLICK"
+                        and obs is not None
+                        and obs.error is None
+                        and not obs.navigated
+                        and not next_url
+                    )
+
+                    if "pytest.skip" in resolved_value or proven_static:
                         # Navigation-intent fallback: SPA sites render cart/basket
                         # icons without accessible names, so element matching can't
                         # resolve "cart icon"/"cart link". Navigate to the verified
@@ -634,6 +784,7 @@ class PlaceholderOrchestrator:
                                 previous_selector=last_selector,
                                 previous_description=last_description,
                                 resolved_steps=resolved_steps,
+                                strict_scope=bool(trail_steps),
                             )
                             if "pytest.skip" not in nav_resolved:
                                 resolved_value = nav_resolved
@@ -641,6 +792,28 @@ class PlaceholderOrchestrator:
                                 assertion_type = nav_at
                                 action = "GOTO"
 
+                    if "pytest.skip" in resolved_value and trail_steps:
+                        # AI-052: under strict scope a skip stays a skip.
+                        strict_skipped_tokens.add(placeholder.token)
+                        if obs is None or not canon(obs.to_url):
+                            # Evidenced/unknown page: skip WITH the honest reason,
+                            # recorded inline so it survives to the generated test.
+                            resolved_value = (
+                                f"pytest.skip(\"next page '{description}' not in scrape inventory "
+                                f'- journey did not reach it")'
+                            )
+                            line_resolutions.setdefault(placeholder.line_number, []).append(
+                                (
+                                    placeholder.token,
+                                    action,
+                                    resolved_value,
+                                    description,
+                                    fill_value,
+                                    current_url,
+                                    assertion_type,
+                                )
+                            )
+                            continue
                     if "pytest.skip" in resolved_value:
                         journey_unresolved[journey.test_name].append(description)
                     else:
@@ -661,7 +834,26 @@ class PlaceholderOrchestrator:
                             selector_short = resolved_value.strip("'\"")
                             resolved_steps.append(f"{action}: {description} -> {selector_short}")
 
-                    if next_url:
+                    if trail_steps:
+                        # AI-052: advance the verified anchor on OBSERVED,
+                        # scraped landings (fact) — never on inferred URLs.
+                        if obs is not None and not diverged:
+                            landed = canon(obs.to_url)
+                            if landed:
+                                last_verified_url = landed
+                        if next_url and not canon(next_url):
+                            # Real href emitted to an unscraped page — the next
+                            # step runs (if at all) on that page.
+                            pending_evidence = next_url
+                            diverged = True
+                        elif next_url:
+                            # Navigation to a KNOWN page — a verified fact.
+                            landed = canon(next_url)
+                            if landed:
+                                last_verified_url = landed
+                                if obs is None or canon(obs.to_url) != landed:
+                                    diverged = True
+                    elif next_url:
                         current_url = next_url
 
             # Batch-resolve deferred ASSERT placeholders for this journey
@@ -674,6 +866,7 @@ class PlaceholderOrchestrator:
                     line_resolutions=line_resolutions,
                     journey_unresolved=journey_unresolved,
                     journey_name=journey.test_name,
+                    strict_scope=bool(trail_steps),
                 )
 
         # 2. Resolve remaining placeholders using fallback context (batched Pass 3)
@@ -689,6 +882,8 @@ class PlaceholderOrchestrator:
 
         for use in all_placeholder_uses:
             if use.token in resolved_tokens:
+                continue
+            if use.token in strict_skipped_tokens:
                 continue
             if use.action in ("GOTO", "URL"):
                 # GOTO/URL are URL resolution — handle per-use
@@ -834,6 +1029,7 @@ class PlaceholderOrchestrator:
         line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]],
         journey_unresolved: dict[str, list[str]],
         journey_name: str,
+        strict_scope: bool = False,
     ) -> None:
         """Batch-resolve deferred ASSERT placeholders grouped by page URL.
 
@@ -850,6 +1046,13 @@ class PlaceholderOrchestrator:
         for url, group in by_url.items():
             await self._ensure_scraped(url, scraped_data, scraped_errors)
             pages_data = self._build_scoped_pages(url, scraped_data)
+            if not pages_data and strict_scope:
+                # AI-052: the recorded page is not in the scrape inventory —
+                # these asserts are unverifiable → honest unresolved, never an
+                # all-pages cross-page match.
+                for da in group:
+                    journey_unresolved.setdefault(journey_name, []).append(da["description"])
+                continue
             pages_to_search = pages_data if pages_data else scraped_data
 
             # Build excluded selectors from the last CLICK/FILL step in the journey.
@@ -925,6 +1128,8 @@ class PlaceholderOrchestrator:
         previous_selector: str | None = None,
         previous_description: str | None = None,
         resolved_steps: list[str] | None = None,
+        strict_scope: bool = False,
+        matched_out: dict[str, Any] | None = None,
     ) -> tuple[str, str | None, str | None]:
         """Resolve one placeholder using the active page first, then fall back to known pages.
 
@@ -933,6 +1138,12 @@ class PlaceholderOrchestrator:
             previous_description: The description from the previous interactive step
                 (B-014 step-context exclusion).
             resolved_steps: B-020 list of compressed step descriptions for LLM context.
+            strict_scope: AI-052 — when True (journeys with an observed trail), NEVER
+                fall back to searching all scraped pages. An empty verified scope means
+                no evidence for the element → honest skip instead of a cross-page locator.
+            matched_out: AI-052 — optional dict; when provided, receives the matched
+                element under key ``"element"`` so callers can compare their own
+                choice against the trail's proven selector.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
         scoped_pages = self._build_scoped_pages(current_url, scraped_data)
@@ -991,7 +1202,18 @@ class PlaceholderOrchestrator:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
             return f'pytest.skip("{error_msg}")', None, None
 
-        pages_to_search = scoped_pages if scoped_pages else scraped_data
+        if scoped_pages:
+            pages_to_search = scoped_pages
+        elif strict_scope:
+            # AI-052: collecting candidates from ALL pages is exactly how a
+            # cross-page locator wins (the bug). With an observed trail we know
+            # which page the browser was on; if the element isn't evidenced
+            # there, skip honestly — never emit a locator for another page.
+            error_msg = f"Locator for '{description}' not found on '{current_url}' - page not in scrape inventory."
+            print(f"[DEBUG] Strict scope miss: '{description}' (current={current_url})")
+            return f'pytest.skip("{error_msg}")', None, None
+        else:
+            pages_to_search = scraped_data
 
         # 1b: Section-aware scoping — filter elements to the section named
         # in the placeholder description (e.g. "on account page").
@@ -1051,15 +1273,29 @@ class PlaceholderOrchestrator:
         )
 
         if matched_element is not None:
+            if matched_out is not None:
+                matched_out["element"] = matched_element
             self._verify_page_context(description, matched_element, current_url, scraped_data)
 
             robust_selector = build_robust_locator(matched_element)
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)
-            next_url = infer_next_page_url(action, description, matched_element, scraped_data, current_url)
-            if next_url:
-                await self._ensure_scraped(next_url, scraped_data, scraped_errors)
+            # AI-052: with an observed trail, element scoping must not depend on
+            # URL inference at all — the trail drives transitions. The keyword
+            # guesser also has a side effect here (_ensure_scraped of a guessed
+            # URL), so skip it entirely under strict scope. It remains available
+            # as a last-resort hint for non-trail callers until Session 4.
+            next_url = None
+            if strict_scope:
+                # AI-052: evidence only — a real href on the matched element is
+                # a fact about where the emitted click navigates. Keyword-based
+                # inference stays out of strict scope (deleted in Session 4).
+                next_url = self._emitted_navigation_target(matched_element, current_url)
+            else:
+                next_url = infer_next_page_url(action, description, matched_element, scraped_data, current_url)
+                if next_url:
+                    await self._ensure_scraped(next_url, scraped_data, scraped_errors)
             assertion_type = matched_element.get("assertion_type") if action == "ASSERT" else None
             # Assertion-state polarity: "popup closed" / "item removed" assert
             # ABSENCE — emit assert_hidden(...) instead of assert_visible(...).
@@ -1187,10 +1423,102 @@ class PlaceholderOrchestrator:
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
     ) -> dict[str, list[dict[str, str]]]:
-        """Return a page mapping scoped to the current journey URL when available."""
+        """Return a page mapping scoped to the current journey URL when available.
+
+        AI-052 contract: returns ``{}`` when ``current_url`` is not a verified
+        (scraped) page — callers decide the fallback. Trail-driven callers
+        (``strict_scope=True``) treat ``{}`` as honest-skip, never as licence to
+        search every page.
+        """
         if current_url and current_url in scraped_data:
             return {current_url: scraped_data[current_url]}
         return {}
+
+    @staticmethod
+    def _emitted_navigation_target(
+        matched_element: dict[str, str],
+        current_url: str | None,
+    ) -> str | None:
+        """Return the real-href navigation target of an emitted CLICK (AI-052).
+
+        Evidence only: the element's own ``href``. Returns ``None`` for
+        non-navigation elements (plain buttons, fragments, javascript:), and
+        for hrefs that resolve back to the current page.
+        """
+        href = str(matched_element.get("href", "")).strip()
+        if not href or href.startswith(("#", "javascript", "mailto", "tel")):
+            return None
+        if href.startswith(("http://", "https://")):
+            target = href
+        elif current_url:
+            target = urljoin(current_url, href)
+        else:
+            return None
+        if normalize_url(target.rstrip("/#")) == normalize_url((current_url or "").rstrip("/#")):
+            return None
+        return target
+
+    @staticmethod
+    def _trail_step_scope_url(
+        obs: ObservedStep | None,
+        canon: Any,
+        last_verified_url: str | None,
+    ) -> str | None:
+        """Return the page a placeholder should resolve against (AI-052 three states).
+
+        ``canon`` maps a raw URL to its actual scraped_data key (or None) —
+        trail URLs come from page.url and may differ cosmetically (trailing
+        slashes) from the normalised scrape keys.
+
+        - **verified** — the observed step ran on a page we have DOM for →
+          scope to it. An action runs on its FROM-page, never its landing page.
+        - **step 0** — ``from_url`` is "" by construction; use the landing
+          (to_url) page instead.
+        - **evidenced / unknown** — no scraped DOM for this step's page → stay
+          honest on the last verified page (caller skips if unresolvable there).
+        """
+        if obs is not None:
+            if obs.from_url:
+                actual = canon(obs.from_url)
+                if actual:
+                    return actual
+            elif obs.to_url:
+                # Step 0: no from-page recorded — the landing page is where
+                # this action runs.
+                actual = canon(obs.to_url)
+                if actual:
+                    return actual
+        return last_verified_url
+
+    @staticmethod
+    def _map_trail_to_placeholders(
+        journey: TestJourney,
+        trail_steps: list[ObservedStep],
+    ) -> dict[str, ObservedStep]:
+        """Map skeleton placeholder tokens to their observed trail steps (AI-052 S3).
+
+        The trail was captured from the SAME journey:
+        ``_scrape_journeys_statefully`` flattens placeholders in the same order
+        (GOTO→"navigate", CLICK/FILL→same, ASSERT→"scrape"). Exact index
+        alignment cannot be assumed though — GOTOs that resolved to no URL
+        produced no scraping step, and a trailing "final page state" scrape is
+        appended — so placeholders are matched to trail steps by
+        ``(action, description)`` with a monotonic cursor. Unmatched
+        placeholders get no entry → treated as the "unknown" state.
+        """
+        action_map = {"GOTO": "navigate", "ASSERT": "scrape"}
+        mapping: dict[str, ObservedStep] = {}
+        cursor = 0
+        for step in journey.steps:
+            for placeholder in step.placeholders:
+                expected_action = action_map.get(placeholder.action, placeholder.action.lower())
+                for i in range(cursor, len(trail_steps)):
+                    candidate = trail_steps[i]
+                    if candidate.action == expected_action and candidate.description == placeholder.description:
+                        mapping[placeholder.token] = candidate
+                        cursor = i + 1
+                        break
+        return mapping
 
     def _apply_section_scoping(
         self,

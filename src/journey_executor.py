@@ -25,7 +25,14 @@ from src.journey_auth_detector import (
     detect_sso,
 )
 from src.journey_enrichment import capture_a11y_snapshot_sync
-from src.journey_models import CredentialProfile, JourneyResult, JourneyStep, substitute_templates
+from src.journey_models import (
+    CredentialProfile,
+    JourneyResult,
+    JourneyStep,
+    ObservedStep,
+    ObservedTrail,
+    substitute_templates,
+)
 from src.scraper import PageScraper
 
 # ───────────────────────────────────────────────────────────────
@@ -47,6 +54,8 @@ def _execute_journey_sync(
     failed_steps: list[str] = []
     redirected_urls: list[str] = []
     error_message: str | None = None
+    # AI-052: observed transition trail (facts read from page.url).
+    trail_steps: list[ObservedStep] = []
 
     # Determine base domain for SSO detection
     base_domain: str = ""
@@ -71,9 +80,20 @@ def _execute_journey_sync(
             current_url: str = page.url
 
             for step_index, step in enumerate(journey_steps):
+                # AI-052: begin recording this step's observed transition.
+                observed = ObservedStep(
+                    index=step_index,
+                    action=step.action,
+                    description=step.description or "",
+                    from_url=current_url,
+                    selector_used=step.selector or "",
+                )
+                trail_steps.append(observed)
+
                 if error_message:
                     # Journey stopped by detection — record remaining as failed
                     failed_steps.append(f"Step {step_index + 1} ({step.action}): journey stopped — {error_message}")
+                    observed.error = error_message
                     continue
 
                 try:
@@ -156,6 +176,7 @@ def _execute_journey_sync(
                             _fill_with_locator(page, selector, fill_text, step.timeout_ms)
                         except Exception as e:
                             failed_steps.append(f"Step {step_index + 1}: fill '{selector}' failed — {e}")
+                            observed.error = str(e)
 
                     elif step.action == "submit":
                         # Submit — click submit button
@@ -205,6 +226,12 @@ def _execute_journey_sync(
 
                 except Exception as e:
                     failed_steps.append(f"Step {step_index + 1} ({step.description or step.action}): {e}")
+                    observed.error = str(e)
+
+                # AI-052: record the observed transition (facts only).
+                observed.to_url = page.url
+                observed.navigated = bool(current_url and page.url != current_url)
+                observed.scraped = bool(page.url in captured_pages)
 
                 current_url = page.url
 
@@ -219,6 +246,7 @@ def _execute_journey_sync(
         failed_steps=failed_steps,
         error_message=error_message,
         redirected_urls=redirected_urls,
+        trail=ObservedTrail(steps=trail_steps),
     )
 
 
