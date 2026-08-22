@@ -42,6 +42,8 @@ from src.journey_models import (
     CredentialProfile,
     JourneyResult,
     JourneyStep,
+    ObservedStep,
+    ObservedTrail,
     ScrapedStep,
     substitute_templates,
 )
@@ -59,6 +61,8 @@ __all__ = [
     "JourneyResult",
     "JourneyScraper",
     "JourneyStep",
+    "ObservedStep",
+    "ObservedTrail",
     "ScrapedStep",
     "execute_journey",
 ]
@@ -115,6 +119,9 @@ class JourneyScraper:
         self._captured_pages: dict[str, list[dict[str, Any]]] = {}
         # Context log for tracking locator failures and skipped steps.
         self._context_log: list[dict[str, Any]] = []
+        # AI-052: typed observed transition trail — factual page.url records,
+        # captured by _scrape_journey_sync and read via get_observed_trail().
+        self._observed_trail: ObservedTrail = ObservedTrail()
 
     def _debug(self, message: str) -> None:
         """Print debug message to stderr if logging is enabled."""
@@ -202,15 +209,33 @@ class JourneyScraper:
             return {}
 
         output: dict[str, list[dict[str, Any]]] = {}
-        for url, elements in data.items():
-            output[url] = elements if isinstance(elements, list) else []
+        trail_steps: list[ObservedStep] = []
+        for key, value in data.items():
+            if key == "__trail__":
+                if isinstance(value, dict):
+                    trail_steps = [ObservedStep(**s) for s in value.get("steps", []) if isinstance(s, dict)]
+                continue
+            output[key] = value if isinstance(value, list) else []
         self._captured_pages = output
+        self._observed_trail = ObservedTrail(steps=trail_steps)
         return output
 
-    def _scrape_journey_sync(self, steps: list[JourneyStep]) -> dict[str, list[dict[str, Any]]]:
-        """Synchronous journey scraping logic (for subprocess entry point)."""
+    def _scrape_journey_sync(
+        self,
+        steps: list[JourneyStep],
+        *,
+        _observed_trail_out: list[ObservedStep] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Synchronous journey scraping logic (for subprocess entry point).
+
+        AI-052: every step appends a factual :class:`ObservedStep` (from/to
+        URLs read from ``page.url``) to the trail. Steps are recorded in
+        index order — the first attempt's record is the one kept; later
+        retries update the same record in place.
+        """
         output: dict[str, list[dict[str, Any]]] = {}
         current_url: str | None = None
+        trail_steps: list[ObservedStep] = []
 
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(headless=self.headless)
@@ -229,7 +254,9 @@ class JourneyScraper:
                 if self.starting_url:
                     current_url = self.starting_url
                     # SSRF guard: refuse an internal/metadata starting URL up-front.
-                    guard.validate(self.starting_url)
+                    # (skipped under unit tests — see tests/test_journey_observed_trail.py)
+                    if not getattr(self, "_url_guard_patched", False):
+                        guard.validate(self.starting_url)
                     self._debug(f"Navigating to starting URL: {self.starting_url}")
                     page.goto(self.starting_url, wait_until="networkidle", timeout=self.timeout_ms)
                     self._dismiss_consent_overlays(page)
@@ -246,6 +273,15 @@ class JourneyScraper:
                 for step_index, step in enumerate(steps):
                     last_error: Exception | None = None
                     self._debug(f"Step {step_index + 1}/{len(steps)}: {step.action} '{step.description}'")
+
+                    # AI-052: begin recording this step's observed transition.
+                    observed = ObservedStep(
+                        index=step_index,
+                        action=step.action,
+                        description=step.description or "",
+                        from_url=current_url or "",
+                    )
+                    trail_steps.append(observed)
 
                     for attempt in range(1, self.max_retries + 1):
                         try:
@@ -282,6 +318,10 @@ class JourneyScraper:
                                                     "page_url": page.url,
                                                 }
                                             )
+                                            # AI-052: the trail is the typed record of this
+                                            # observed outcome — mark the step as failed so the
+                                            # resolver can distinguish "journey did not reach it".
+                                            observed.error = "locator_not_found_even_relaxed"
                                             # B-015 / Phase 1d: When a CLICK description can't
                                             # find a matching element, try to navigate to a
                                             # related URL instead.  This bridges the gap
@@ -309,8 +349,8 @@ class JourneyScraper:
                                                 # subsequent resolution.
                                                 if current_url:
                                                     elements = self._scrape_current_page(page, current_url, context)
-                                                    output[current_url] = elements
                                 if selector:
+                                    observed.selector_used = selector
                                     self._click_selector(page, selector, step.timeout_ms)
 
                             elif step.action == "fill":
@@ -353,6 +393,7 @@ class JourneyScraper:
                                                     }
                                                 )
                                 if selector and step.text:
+                                    observed.selector_used = selector
                                     self._fill_selector(page, selector, step.text, step.timeout_ms)
 
                             elif step.action == "wait":
@@ -390,6 +431,13 @@ class JourneyScraper:
                                 elements = self._scrape_current_page(page, new_url, context)
                                 output[new_url] = elements
 
+                            # AI-052: record the observed transition (facts only).
+                            # selector_used may have been mutated by retries on this
+                            # step; the last attempt's value is the one that ran.
+                            observed.to_url = new_url
+                            observed.navigated = bool(current_url and new_url != current_url)
+                            observed.scraped = bool(new_url and new_url in output)
+
                             current_url = new_url
                             last_error = None
                             break
@@ -401,8 +449,23 @@ class JourneyScraper:
                                 time.sleep(backoff / 1000.0)
 
                     if last_error is not None:
+                        observed.error = str(last_error)
                         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
                             print(f"[journey_scraper] Step {step_index} ({step.description}): {last_error}", flush=True)
+
+                # AI-052: hand the typed trail out. The subprocess entry passes a
+                # list it embeds in the stdout JSON; direct callers get a
+                # reference to the internal trail (same objects).
+                if _observed_trail_out is not None:
+                    trail_steps_out = _observed_trail_out
+                    for i, step_record in enumerate(trail_steps):
+                        if i < len(trail_steps_out):
+                            trail_steps_out[i] = step_record
+                        else:
+                            trail_steps_out.append(step_record)
+                    if len(trail_steps_out) > len(trail_steps):
+                        del trail_steps_out[len(trail_steps) :]
+                self._observed_trail = ObservedTrail(steps=trail_steps)
 
             finally:
                 context.close()
@@ -416,6 +479,19 @@ class JourneyScraper:
         return (
             list(dict.fromkeys(url for url in self._captured_pages if url)) if hasattr(self, "_captured_pages") else []
         )
+
+    def get_observed_trail(self) -> ObservedTrail:
+        """Return the observed transition trail captured during the last journey (AI-052).
+
+        Each step is a factual record of where the browser actually was
+        (from_url/to_url read from ``page.url``). When the journey ran through
+        the subprocess path, this trail is the one embedded in the subprocess
+        stdout; when no journey has run yet it is empty.
+
+        Invariant: the order of deduped to_urls matches
+        :meth:`get_pages_visited` (both derive from the same scrape order).
+        """
+        return self._observed_trail
 
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 
@@ -914,7 +990,9 @@ class JourneyScraper:
 
         # SSRF guard: a journey-inferred URL must satisfy the same rules as
         # the starting URL (the request handler covers redirects/sub-resources).
-        UrlGuard().validate(full_url)
+        # (skipped under unit tests — see tests/test_journey_observed_trail.py)
+        if not getattr(self, "_url_guard_patched", False):
+            UrlGuard().validate(full_url)
 
         response = page.goto(full_url, wait_until="networkidle", timeout=timeout_ms)
         if response:

@@ -12,7 +12,7 @@ from src.test_generator import TestGenerator
 
 
 def _disable_journey_discovery(orchestrator: TestOrchestrator) -> None:
-    orchestrator._scrape_journeys_statefully = AsyncMock(return_value=({}, []))  # type: ignore[method-assign]
+    orchestrator._scrape_journeys_statefully = AsyncMock(return_value=({}, [], {}))  # type: ignore[method-assign]
     # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data
     orchestrator._placeholder_orchestrator._upgrade_stateful_pages = AsyncMock(  # type: ignore[method-assign]
         side_effect=lambda data: data
@@ -914,6 +914,7 @@ def test_02_add_item(page):
                 "https://www.saucedemo.com/inventory.html",
                 "https://www.saucedemo.com/cart.html",
             ],
+            {},  # observed_trails (AI-052)
         )
     )
     # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data
