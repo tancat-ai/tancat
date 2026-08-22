@@ -138,7 +138,7 @@ def _make_scraper() -> JourneyScraper:
     scraper._dismiss_modals = staticmethod(lambda page: None)  # type: ignore[method-assign]
     scraper._discover_selector = lambda page, action, desc: "#title_link"  # type: ignore[method-assign,assignment]
     scraper._discover_selector_relaxed = lambda page, action, desc: None  # type: ignore[method-assign,assignment]
-    scraper._infer_url_from_description = staticmethod(lambda desc, url: None)  # type: ignore[method-assign,assignment]
+    scraper._match_discovered_url = staticmethod(lambda desc, urls: None)  # type: ignore[method-assign,assignment]
     scraper._try_quantity_stepper_fallback = lambda page, step: False  # type: ignore[method-assign,assignment]
     scraper._click_selector = staticmethod(lambda page, sel, ms: page.click(sel))  # type: ignore[method-assign,assignment]
     scraper._fill_selector = staticmethod(lambda page, sel, text, ms: None)  # type: ignore[method-assign,assignment]

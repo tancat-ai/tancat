@@ -1,4 +1,12 @@
-"""URL transition inference for journey-aware placeholder resolution.
+"""URL transition resolution for journey-aware placeholder resolution.
+
+AI-052 principle (no-guessing): a URL transition is derived ONLY from
+evidence — the clicked element's own ``href``. Description keywords are never
+turned into URLs ("description says inventory, so probably /inventory.html" is
+banned): the observed trail (``ObservedTrail``) is the source of truth for
+where a step lands. Keyword branches (login/checkout/continue/finish/
+transfer/pay → discovered-URL lookup) were deleted in Session 4; the strict
+trail path never consults this module at all.
 
 Extracted from placeholder_orchestrator.py to separate URL inference
 into its own independently testable module.
@@ -19,112 +27,23 @@ def infer_next_page_url(
     scraped_data: dict[str, list[dict[str, str]]],
     current_url: str | None,
 ) -> str | None:
-    """Infer the next active page after a resolved step when navigation is implied."""
+    """Return the transition target of a resolved CLICK — its own ``href`` only.
+
+    Evidence-only: the element's ``href`` is a fact about where the click goes.
+    Anything else (keyword patterns, description text) would be a guess and is
+    intentionally not implemented. Trail-driven callers don't call this at all;
+    non-trail callers get ``None`` for elements without a real href, which the
+    caller treats as "no observed transition".
+    """
+    if action != "CLICK":
+        return None
+
     href = str(matched_element.get("href", "")).strip()
-    if action == "CLICK" and href:
-        if href.startswith(("http://", "https://")):
-            return href
-        if current_url:
-            return urljoin(current_url, href)
+    if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+        return None
+
+    if href.startswith(("http://", "https://")):
         return href
-
-    if action == "CLICK":
-        inferred = _infer_click_transition_url(description, matched_element, scraped_data, current_url)
-        if inferred:
-            return inferred
-
-    lowered_description = description.replace("_", " ").lower()
-    if action == "CLICK" and "add" in lowered_description and "cart" in lowered_description:
-        return None
-
-    is_navigation_click = any(
-        term in lowered_description for term in ("link", "icon", "go to", "open", "navigate", "checkout", "home")
-    )
-    if (
-        action == "CLICK"
-        and is_navigation_click
-        and any(term in lowered_description for term in ("cart", "checkout", "product", "home"))
-    ):
-        from src.placeholder_resolver import PlaceholderResolver
-
-        resolver = PlaceholderResolver()
-        return resolver.resolve_url(description, scraped_data)
-
-    return None
-
-
-def _infer_click_transition_url(
-    description: str,
-    matched_element: dict[str, str],
-    scraped_data: dict[str, list[dict[str, str]]],
-    current_url: str | None,
-) -> str | None:
-    """Infer common URL transitions for buttons that navigate without hrefs."""
-    desc_lower = description.lower()
-    selector_lower = str(matched_element.get("selector", "")).lower()
-    id_lower = str(matched_element.get("id", "")).lower()
-    data_test_lower = str(matched_element.get("data_test", "")).lower()
-    haystack = " ".join([desc_lower, selector_lower, id_lower, data_test_lower])
-
-    if "login" in haystack:
-        # Post-login landing pages vary by site shape: e-commerce lands on
-        # inventory/products; banking lands on dashboard/accounts; portals on
-        # home/overview. Site-agnostic union — the mock catalog (banking
-        # mock eval-007) exposed the ecommerce-only vocabulary here.
-        return _find_discovered_url(
-            scraped_data,
-            ("inventory", "products", "dashboard", "accounts", "home", "overview"),
-        )
-
-    if "checkout" in haystack:
-        return _find_discovered_url(
-            scraped_data,
-            ("checkout-step-one", "checkout_step_one", "checkout"),
-        )
-
-    if "continue" in haystack and current_url and "checkout-step-one" in current_url:
-        return _find_discovered_url(
-            scraped_data,
-            ("checkout-step-two", "checkout_step_two", "checkout-overview"),
-        )
-
-    if "finish" in haystack:
-        return _find_discovered_url(
-            scraped_data,
-            ("checkout-complete", "complete", "thank"),
-        )
-
-    # Generic submit-success transitions (banking mock eval-007 surface):
-    # transfer/payment forms submit without hrefs, so the resolver never
-    # advances past the form page and success-message asserts resolve
-    # against the form's own elements (submit button / error paragraph).
-    if "transfer" in haystack:
-        return _find_discovered_url(
-            scraped_data,
-            ("transfer_success", "success", "thank"),
-        )
-    if any(term in haystack for term in ("pay", "payment", "submit")):
-        return _find_discovered_url(
-            scraped_data,
-            ("payment_success", "success", "thank"),
-        )
-
-    return None
-
-
-def _find_discovered_url(
-    scraped_data: dict[str, list[dict[str, str]]],
-    preferred_terms: tuple[str, ...],
-) -> str | None:
-    """Return the best discovered URL containing one of the preferred terms."""
-    candidates: list[tuple[int, int, str]] = []
-    for url, elements in scraped_data.items():
-        lowered_url = url.lower()
-        for priority, term in enumerate(preferred_terms):
-            if term in lowered_url:
-                candidates.append((priority, -len(elements), url))
-                break
-    if not candidates:
-        return None
-    candidates.sort()
-    return candidates[0][2]
+    if current_url:
+        return urljoin(current_url, href)
+    return href
