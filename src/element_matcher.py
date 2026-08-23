@@ -62,6 +62,55 @@ _NAMED_ROLE_MAP: dict[str, set[str]] = {
 # Verbs that describe submitting a form (as opposed to navigating to a page).
 _SUBMIT_INTENT_VERBS: tuple[str, ...] = ("submit", "place", "pay", "register", "send", "confirm")
 
+# AI-052 S5: ARIA roles that CONTRADICT a CLICK intent — a match on such an
+# element in the fast passes (0/D/1/2) is deferred rather than returned, so
+# the deeper role-aware passes get to compete. Deliberately conservative:
+# generic div/span containers stay eligible (B-025 clickable containers), and
+# fillable inputs are covered structurally via ``_is_fillable``.
+_CLICK_CONTRADICTORY_ROLES = {
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "heading",
+    "status",
+    "alert",
+    "log",
+    "marquee",
+    "timer",
+    "banner",
+    "navigation",
+    "main",
+    "contentinfo",
+    "complementary",
+    "search",
+    "region",
+    "form",
+    "separator",
+    "figure",
+    "caption",
+}
+
+#: ARIA roles that denote text-entry fields — never CLICK targets regardless
+#: of which attribute supplied them (``computed_role`` is authoritative).
+_CLICK_FILLABLE_ARIA_ROLES = {
+    "textbox",
+    "searchbox",
+    "combobox",
+    "spinbutton",
+    "slider",
+    "number",
+    "date",
+    "time",
+    "email",
+    "tel",
+    "url",
+    "password",
+    "textarea",
+}
+
 
 def _named_role_in_description(norm_description: str) -> str | None:
     """Return the single named clickable role in a description, if any.
@@ -740,6 +789,21 @@ class ElementMatcher:
 
     # ── Pass 3: Scoring + LLM ──────────────────────────────────
 
+    @staticmethod
+    def role_contradicts_click(element: dict[str, str]) -> bool:
+        """AI-052 S5: True when the element's ARIA role contradicts CLICK intent.
+
+        Uses ``computed_role`` (authoritative, from the accessibility enricher)
+        falling back to ``role``/tag. Fillable inputs are checked structurally
+        so date/number/text fields can't win a CLICK on text overlap alone.
+        """
+        role = str(element.get("computed_role") or element.get("role", "")).strip().lower()
+        if role and role in _CLICK_CONTRADICTORY_ROLES:
+            return True
+        if role in _CLICK_FILLABLE_ARIA_ROLES:
+            return True
+        return _is_fillable(element)
+
     async def find_best_element_for_current_page(
         self,
         action: str,
@@ -765,46 +829,81 @@ class ElementMatcher:
                 enables the same-site learned-pattern bonus.
         """
         # Pass 0 — exact text match for ASSERT:"exact text"
+        # ── AI-052 S5: penalty-first role gate on the fast passes ──────
+        # A fast-pass CLICK match whose ARIA role contradicts the intent
+        # (heading, fillable input, status/banner region…) no longer wins
+        # outright: it is DEFERRED so the deeper role-aware passes compete.
+        # The first deferred candidate remains available as a last resort —
+        # penalty-first, never a hard filter.
+        role_deferred: list[dict[str, str]] = []
+
+        def _defer_if_role_contradicted(candidate: dict[str, str], pass_name: str) -> bool:
+            """True → caller may return this candidate; False → defer it."""
+            if action != "CLICK":
+                return True
+            if not self.role_contradicts_click(candidate):
+                return True
+            if not role_deferred:
+                role_deferred.append(candidate)
+            logger.debug(
+                "[RESOLVE] '%s' | S5 role gate (%s): '%s' role '%s' contradicts CLICK — deferred",
+                description,
+                pass_name,
+                str(candidate.get("selector", "")).strip(),
+                str(candidate.get("computed_role") or candidate.get("role", "")).strip().lower(),
+            )
+            return False
+
         pass0_result = self.pass0_exact_text_match(action, description, pages_data)
-        if pass0_result is not None:
-            if not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors):
-                _log_resolve_pass(0, "exact text match", description, pass0_result)
-                pass0_result["assertion_type"] = "toHaveText"
-                pass0_result["expected_value"] = description.strip("'\"")
-                return pass0_result
-            logger.debug("[RESOLVE] '%s' | pass=0 exact text EXCLUDED (step context)", description)
+        if (
+            pass0_result is not None
+            and (not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors))
+            and _defer_if_role_contradicted(pass0_result, "pass=0 exact text")
+        ):
+            _log_resolve_pass(0, "exact text match", description, pass0_result)
+            pass0_result["assertion_type"] = "toHaveText"
+            pass0_result["expected_value"] = description.strip("'\"")
+            return pass0_result
 
         # Pass D — dialog-action scoping (CLICK descriptions implying
         # dismiss/confirm resolve to the modal's own controls)
         pass_dialog_result = self.pass_dialog_action(action, description, pages_data)
-        if pass_dialog_result is not None:
-            if not excluded_selectors or not _is_excluded(pass_dialog_result, excluded_selectors):
-                return pass_dialog_result
-            logger.debug("[RESOLVE] '%s' | pass=D dialog EXCLUDED (step context)", description)
+        if (
+            pass_dialog_result is not None
+            and (not excluded_selectors or not _is_excluded(pass_dialog_result, excluded_selectors))
+            and _defer_if_role_contradicted(pass_dialog_result, "pass=D dialog")
+        ):
+            return pass_dialog_result
 
         # Pass 1 — fast text match (CLICK/FILL)
         pass1_result = self.pass1_text_match(action, description, pages_data)
-        if pass1_result is not None:
-            if not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors):
-                _log_resolve_pass(1, "text match", description, pass1_result)
-                return pass1_result
-            logger.debug("[RESOLVE] '%s' | pass=1 text match EXCLUDED (step context)", description)
+        if (
+            pass1_result is not None
+            and (not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors))
+            and _defer_if_role_contradicted(pass1_result, "pass=1 text")
+        ):
+            _log_resolve_pass(1, "text match", description, pass1_result)
+            return pass1_result
 
         # Pass 1 — ASSERT text-bearing elements
         pass1_assert = self.pass1_assert_text_match(action, description, pages_data)
-        if pass1_assert is not None:
-            if not excluded_selectors or not _is_excluded(pass1_assert, excluded_selectors):
-                _log_resolve_pass(1, "assert text match", description, pass1_assert)
-                return pass1_assert
-            logger.debug("[RESOLVE] '%s' | pass=1 assert text match EXCLUDED (step context)", description)
+        if (
+            pass1_assert is not None
+            and (not excluded_selectors or not _is_excluded(pass1_assert, excluded_selectors))
+            and _defer_if_role_contradicted(pass1_assert, "pass=1 assert")
+        ):
+            _log_resolve_pass(1, "assert text match", description, pass1_assert)
+            return pass1_assert
 
         # Pass 2 — structural attribute match
         pass2_result = self.pass2_structural_match(action, description, pages_data)
-        if pass2_result is not None:
-            if not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors):
-                _log_resolve_pass(2, "structural match", description, pass2_result)
-                return pass2_result
-            logger.debug("[RESOLVE] '%s' | pass=2 structural match EXCLUDED (step context)", description)
+        if (
+            pass2_result is not None
+            and (not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors))
+            and _defer_if_role_contradicted(pass2_result, "pass=2 structural")
+        ):
+            _log_resolve_pass(2, "structural match", description, pass2_result)
+            return pass2_result
 
         # Pass 3 — scoring shortlist + semantic ranker
         logger.debug("[RESOLVE] '%s' | pass=3 (scoring)", description)
@@ -958,6 +1057,17 @@ class ElementMatcher:
                 description,
             )
             return top_candidate
+
+        # AI-052 S5: penalty-first fallback — every role-aware option failed;
+        # a role-deferred fast match is still better than no resolution.
+        if role_deferred:
+            logger.warning(
+                "[RESOLVE] '%s' | S5 role gate: all passes exhausted — using "
+                "role-deferred candidate '%s' as last resort",
+                description,
+                str(role_deferred[0].get("selector", "")).strip(),
+            )
+            return role_deferred[0]
         return None
 
     async def find_best_elements_batch(
@@ -978,15 +1088,35 @@ class ElementMatcher:
         # Phase 1: Pass 0-2 for all requests (fast, no LLM)
         pass3_requests: list[tuple[int, str, str, list[Any]]] = []
         results: list[dict[str, str] | None] = [None] * len(requests)
+        role_deferred_by_index: dict[int, list[dict[str, str]]] = {}
 
         for i, req in enumerate(requests):
             action = req.get("action", "CLICK")
             description = req.get("description", "")
 
+            # AI-052 S5: penalty-first role gate (same contract as the single
+            # resolution path) — role-contradicted fast matches are deferred
+            # and only used if nothing else resolves the request.
+            role_deferred: list[dict[str, str]] = []
+            role_deferred_by_index[i] = role_deferred
+
+            def _defer_if_role_contradicted(
+                candidate: dict[str, str], role_deferred: list[dict[str, str]] = role_deferred, action: str = action
+            ) -> bool:
+                if action != "CLICK":
+                    return True
+                if not self.role_contradicts_click(candidate):
+                    return True
+                if not role_deferred:
+                    role_deferred.append(candidate)
+                return False
+
             # Pass 0 — exact text match
             pass0_result = self.pass0_exact_text_match(action, description, pages_data)
-            if pass0_result is not None and (
-                not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors)
+            if (
+                pass0_result is not None
+                and (not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors))
+                and _defer_if_role_contradicted(pass0_result)
             ):
                 pass0_result["assertion_type"] = "toHaveText"
                 pass0_result["expected_value"] = description.strip("'\"")
@@ -995,8 +1125,10 @@ class ElementMatcher:
 
             # Pass 1 — text match
             pass1_result = self.pass1_text_match(action, description, pages_data)
-            if pass1_result is not None and (
-                not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors)
+            if (
+                pass1_result is not None
+                and (not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors))
+                and _defer_if_role_contradicted(pass1_result)
             ):
                 results[i] = pass1_result
                 continue
@@ -1011,8 +1143,10 @@ class ElementMatcher:
 
             # Pass 2 — structural match
             pass2_result = self.pass2_structural_match(action, description, pages_data)
-            if pass2_result is not None and (
-                not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors)
+            if (
+                pass2_result is not None
+                and (not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors))
+                and _defer_if_role_contradicted(pass2_result)
             ):
                 results[i] = pass2_result
                 continue
@@ -1066,6 +1200,12 @@ class ElementMatcher:
                 idx = batch_items[j].get("_batch_idx", j)
                 if result is not None:
                     results[idx] = result
+
+        # AI-052 S5: penalty-first fallback — fill any request that still has
+        # no resolution with its deferred (role-contradicted) candidate.
+        for i, _req in enumerate(requests):
+            if results[i] is None and role_deferred_by_index.get(i):
+                results[i] = role_deferred_by_index[i][0]
 
         return results
 
