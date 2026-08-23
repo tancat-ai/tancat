@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-08-23T11:58:40.496616",
+  "pom_mode": true,
+  "sites": [
+    {
+      "site_id": "saucedemo",
+      "site_name": "saucedemo.com",
+      "pom_mode": true,
+      "checks": [
+        {
+          "name": "LLM client (openai-local / C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf)",
+          "passed": true,
+          "detail": ""
+        },
+        {
+          "name": "Pipeline generation (363.5s)",
+          "passed": true,
+          "detail": "4934 chars"
+        },
+        {
+          "name": "Generated code substantive",
+          "passed": true,
+          "detail": "4934 chars"
+        },
+        {
+          "name": "No unresolved placeholder tokens",
+          "passed": true,
+          "detail": "clean"
+        },
+        {
+          "name": "Minimal pytest.skip usage",
+          "passed": false,
+          "detail": "3 skip lines"
+        },
+        {
+          "name": "Evidence tracker calls present",
+          "passed": true,
+          "detail": "20 calls"
+        },
+        {
+          "name": "@pytest.mark.evidence decorators",
+          "passed": true,
+          "detail": "6 decorators"
+        },
+        {
+          "name": "Test functions generated (6)",
+          "passed": true,
+          "detail": "6 tests vs 6 criteria"
+        },
+        {
+          "name": "POM page objects used in tests",
+          "passed": true,
+          "detail": "found"
+        },
+        {
+          "name": "Pages scraped (5)",
+          "passed": true,
+          "detail": "https://www.saucedemo.com, https://www.saucedemo.com/cart.html, www.saucedemo.com/checkout-step-one.html, https://www.saucedemo.com/inventory.html, https://www.saucedemo.com/"
+        },
+        {
+          "name": "POM classes generated (5)",
+          "passed": true,
+          "detail": "HomePage, HomePage, HomePage, HomePage, HomePage"
+        },
+        {
+          "name": "Unresolved placeholders (3)",
+          "passed": false,
+          "detail": "[\"pytest.skip(\\\"Skipping: unresolved placeholders for: 'Sauce Labs Backpack in cart'\\\")\", \"pytest.skip(\\\"Skipping: unresolved placeholders for: 'Checkout'\\\")\", \"pytest.skip(\\\"Skipping: unresolved placeholders for: 'Add to cart'; 'Checkout'; 'Finish'; 'checkout complete'\\\")\"]"
+        },
+        {
+          "name": "Test execution (49.1s)",
+          "passed": false,
+          "detail": "2 passed, 1 failed, 3 skipped"
+        }
+      ],
+      "generation_duration_s": 363.48,
+      "run_duration_s": 49.12,
+      "run_pass": false,
+      "error": ""
+    }
+  ]
+}
