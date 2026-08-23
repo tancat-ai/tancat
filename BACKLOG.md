@@ -1,7 +1,48 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-19 (AI-050 thinking-budget collapse root cause found + fixed; AI-049 resolution-timeout fix implemented; A/B re-run in progress — spec-off single config; all pending commit)
+Last updated: 2026-08-23 (AI-052 + AI-053 + AI-051 shipped — both live sites fully green; AI-054 pipeline-consolidation & testing-strategy review added)
+
+---
+
+## 📋 AI-054 — Pipeline consolidation & testing-strategy review (UNDISCOVERED decisions + test triggers)
+
+**Status:** 📋 review — consolidated 2026-08-23 from a session test-coverage audit (after the AI-051/052/053 ship). Six related facets of "what do we maintain, and when do we test it." No code changes implied yet — this is a decision + test-strategy record. We will add fixes/changes here as they are scoped.
+**Priority:** Medium — mostly strategy/coverage; the one buildable piece is (5).
+
+### 1. One pipeline? — LINEAR vs LANGGRAPH (⏸️ UNDECIDED — pending research)
+**Decision owner:** user — undecided until more data.
+**What we know (recorded):** linear is the production default; the LangGraph multi-agent path (Planner→Generator→Validator, `src/agents/`) is built + unit-tested but **dormant — not wired into the user flow** and never made default because eval results were worse. The decisive comparison (`docs/sessions/2026-07-29_eval_baseline_restoration.md`): **linear 88.1% vs graph 32.8%**, BUT that session concluded the gap is **not the architecture** — graph generates more comprehensive skeletons (more steps; e.g. LV Insurance 90–102 steps) that the **journey scraper can't keep up with** (multi-step SPA forms, hidden sections). Recorded verdict: *"Once the scraper can click through form sections, the graph pipeline should match or beat linear."*
+**Research the user needs before deciding:** (a) deep-dive the two pipelines' real benefits/limitations (per-site, not just the headline number — the 2026-07-29 table shows graph *won* on automationexercise +12pp); (b) **market direction** — how AI test-generation is evolving and what's best for our customers (multi-agent/agent-orchestration trends vs robust single-pass); (c) what a customer actually buys (breadth of coverage vs reliability/speed).
+**Candidate outcomes (to grill later):** keep-dormant (linear is the product, graph stays experimental) / invest-in-scraper-then-reactivate-graph / delete-graph (cut the dormant ~`src/agents/` surface). **Do not decide on memory — re-pull the 2026-07-29 per-site numbers first.**
+
+### 2. RAG — on/off is already settled in code; the gap is test coverage
+RAG is **always-on by default** (B-036, 2026-08-04): `src/orchestrator.py::_build_rag_retriever()` treats a missing `RAG_ENABLED` as *enabled*; only `RAG_ENABLED=0` opts out; empty store ⇒ no bonus ⇒ identical behavior (graceful degradation). **When off:** hermetic tests + CI (CI forces `RAG_ENABLED=0` to skip the ~80 MB embedder download per runner — flow-memory-only in CI, see `docs/ci.md` §8b).
+**The real gap:** our `verify_production` / `uat` / eval-static runs this session were **RAG-off**, so we have NOT seen RAG retrieval + golden-pattern bonus + the trail fix (AI-051/AI-052) *compose* live.
+**Test trigger:** run **one RAG-ON verify** (`RAG_ENABLED=1 verify_production saucedemo`) to confirm composition; treat RAG-on as the product default in future UAT.
+
+### 3. thinking=ON — model-gated re-test (pairs with flakiness, #6)
+`enable_thinking` switch is ✅ shipped (AI-050). But a **valid thinking-ON verdict is blocked** by AI-046: the 3.8 GGUF on this box is Q2_K-heavy (3.3bpw) vs 3.6 (6.7bpw), so the earlier thinking-ON A/B (75.3 vs 62.4 excl.-timeout) is a **quantization confound, not a model/thinking verdict**. Records: `docs/sessions/2026-08-19_thinking_collapse_and_ab.md`, `2026-08-19_external_benchmark_and_thinking_on_ab.md`, `2026-08-20_model_ab_retest_handover.md`.
+**Test trigger:** when a matched-precision 3.8 exists, re-run thinking-ON A/B + GSM8K per the handover plan — and measure **flakiness** in the same pass (byte-stability re-runs; the GPU-contention UAT timeout we saw is a candidate flake to investigate).
+
+### 4. Flat (non-POM) mode — keep, test occasionally
+Flat is a supported, distinct output shape (non-POM). No single "scenario" because it's **mode parity**, not a feature. **Test trigger:** after any *structural* pipeline change (resolver/scorer/skeleton shape), run **one flat UAT** (`uat.py --flat` or `verify_production --flat`) to confirm it still resolves. Low-frequency, high-value. (POM mode is what all this session's runs used.)
+
+### 5. Export / code-postprocessor — bring to a quality bar, then GUARD it (the one buildable piece)
+Two phases: **(a)** bring export quality up to a level we're happy with — evidence collection, POM/flat strip (`code_postprocessor`), JUnit/HTML/JSON export, artifact (heatmap/Gantt) accuracy; **(b)** add a **regression gate** so pipeline changes are checked against evidence export (extend the eval harness or a CI job: generate → export → validate evidence shape/sidecars). This is the only sub-item that requires *building* rather than just *testing*.
+
+### 6. Flakiness — fold into the thinking re-test, don't chase constantly
+We don't need dedicated flakiness runs constantly. **Test trigger:** measure flakiness (determinism / byte-stability / timeout behavior) **during the thinking-ON re-test (#3)** — that's where non-determinism would show. Known candidate: the `uat.py --all-sites` saucedemo leg timed out on LLM generation under GPU contention (2026-08-23) — infra flake, but worth understanding.
+
+### Suggested test cadence (rollup)
+| Trigger | What to run |
+|---------|-------------|
+| Structural pipeline change (resolver/scorer/skeleton) | eval static (gate) + **one flat UAT** (#4) + **one RAG-ON verify** (#2) |
+| Thinking re-test / model change (#3) | thinking-ON A/B + GSM8K + **flakiness/determinism** (#6) |
+| Export/touch code_postprocessor (#5) | export-quality pass + evidence-export regression gate |
+| Before any ship | existing: smoke → pytest → verify_production both sites → eval static → ruff/mypy → CI |
+
+**Session record:** `docs/sessions/2026-08-23_ai054_pipeline_testing_review.md` (to be created when work starts).
 
 ---
 
