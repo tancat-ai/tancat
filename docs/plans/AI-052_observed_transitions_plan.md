@@ -6,10 +6,11 @@
 > + this plan's §0 (re-verified 2026-08-22).
 >
 > **PROGRESS (2026-08-23):** S1 ✅ · S2 ✅ · S3 ✅ (core fix — zero different-page errors on
-> BOTH verify sites) · **S4 ✅ (keyword-URL guessing deleted; evidence-only transitions;
-> eval static 97.9% unchanged — open question #3 answered: no regression. Record:
-> `docs/sessions/2026-08-23_ai052_session4_no_guessing.md`). Next: S6** (regression sweep,
-> docs sync, ship) — S5 (ARIA role gate) remains optional. Session records:
+> BOTH verify sites) · S4 ✅ (keyword-URL guessing deleted; evidence-only transitions) ·
+> **S5 ✅ (ARIA role gate, penalty-first; resolver-mode A/B 97.9% = 97.9% — zero golden
+> regressions. Records: `docs/sessions/2026-08-23_ai052_session4_no_guessing.md`,
+> `docs/sessions/2026-08-23_ai052_session5_role_gate.md`). Next: S6** (regression sweep,
+> docs sync, ship). Session records:
 > `docs/sessions/2026-07-23_ai052_session1_observed_trail.md`,
 > `docs/sessions/2026-07-23_ai052_session2_plumbing.md`,
 > `docs/sessions/2026-07-23_ai052_session3_core_fix.md`. Status flips to `✅` only at S6.
