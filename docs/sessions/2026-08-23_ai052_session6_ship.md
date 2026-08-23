@@ -52,10 +52,10 @@ consequence of strict evidence-only scoping, not regressions.
 In `scripts/uat.py` main:
 
 ```python
-    for site_id in site_ids:
-        ...
-        site_result = await run_site_uat(...)
-    results.append(site_result)      # ← OUTSIDE the loop
+for site_id in site_ids:
+    ...
+    site_result = await run_site_uat(...)
+results.append(site_result)  # ← OUTSIDE the loop
 ```
 
 So with `--all-sites`, only the last site's `SiteResult` reaches `results` —
