@@ -89,6 +89,19 @@ replaces a guess.
 **Other gates:** eval static **97.9% (no regression)**; full suite **2744
 passed / 1 skipped**; smoke 39/39; ruff + mypy clean.
 
+## Post-ship verification — BOTH sites green (2026-08-23)
+
+Re-ran `verify_production` on **both** sites after the fix landed:
+
+| Site | Run | Execution | Gates |
+|------|-----|-----------|-------|
+| saucedemo | `verify_saucedemo_20260823_180614` | **5 passed / 1 honest skip / 0 failed / 0 different-page** | 11/13 (2 fail = skip-related checks) |
+| automationexercise | `verify_automationexercise_20260823_193521` | **7 passed / 0 failed / 0 different-page** | **13/13** ✅ |
+
+The automationexercise result corrects an earlier misdiagnosis: `test_07_proceed_to_checkout` was **not** login-gated (automationexercise has no login page). It was the **same AI-051-class bug** — the B-021 assert guessed the landing URL from description keywords ("checkout" → `/checkout`), but clicking "Proceed to checkout" on that SPA **stays on `/view_cart`** (it doesn't navigate). The trail recorded the click landing on `/view_cart`, so the fix now asserts that browser fact (`test_07` → `to_have_url("https://automationexercise.com/view_cart")`). The fix generalizes exactly as intended — no site-specific code.
+
+**Both live sites are now fully green on execution.**
+
 ## Notes
 
 - The `enable_thinking` open question in the backlog is now moot — the fix is
