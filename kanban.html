@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (81) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (29) &mdash; 2026-08-23 00:51 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (81) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (29) &mdash; 2026-08-23 11:53 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (25)</h2>
+    <h2>To Do (24)</h2>
     
     <div class="">
     <div class="card">
@@ -190,13 +190,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium — pipeline-generation quality; makes generated tests fail-safe at runtime but produces false-red tests for redirecting flows.</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L83" target="_blank">BACKLOG.md:83</a></div>
-</div>
-<div class="card">
-    <div class="card-id">AI-052</div>
-    <div class="card-title">Resolver page-scope enforcement: locator resolved for a page the test isn&#x27;t on (wrong-page add-to-cart)</div>
-    <div class="card-meta"><span>Medium — pipeline-generation quality; produces semantically-wrong journeys and page-scope violations.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L95" target="_blank">BACKLOG.md:95</a></div>
 </div>
 <div class="card">
     <div class="card-id">REF-001</div>
@@ -310,8 +303,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (83)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (83)</button>
+    <h2>Done (84)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (84)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -488,6 +481,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium — eval infrastructure; polluted the 3.8/3.6 A/B headline (3 mock stories dragged resolution to 31.2%)</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L53" target="_blank">BACKLOG.md:53</a></div>
+</div>
+<div class="card">
+    <div class="card-id">AI-052</div>
+    <div class="card-title">Resolver page-scope enforcement: locator resolved for a page the test isn&#x27;t on (wrong-page add-to-cart) — SHIPPED 2026-08-23</div>
+    <div class="card-meta"><span>Medium — pipeline-generation quality; produces semantically-wrong journeys and page-scope violations.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L95" target="_blank">BACKLOG.md:95</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-032</div>
@@ -867,7 +867,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "83";
+    var count = "84";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
