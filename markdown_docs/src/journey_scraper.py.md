@@ -30,7 +30,7 @@ Primary responsibilities:
 Compatibility aliases and re-exports:
 
 - `execute_journey` is imported from `src.journey_executor`.
-- `CredentialProfile`, `JourneyResult`, `JourneyStep`, `ScrapedStep`, and `substitute_templates` are imported from `src.journey_models`.
+- `CredentialProfile`, `JourneyResult`, `JourneyStep`, `ScrapedStep`, `ObservedStep`, `ObservedTrail`, and `substitute_templates` are imported from `src.journey_models` (`ObservedStep` / `ObservedTrail` added in AI-052 S1).
 - `_substitute_templates = substitute_templates` preserves older imports used by legacy tests.
 
 ## Top-Level Helper Functions
@@ -622,6 +622,47 @@ Public diagnostic accessors expose skipped steps and locator warnings.
 - Click and fill runtime exceptions are re-raised after debug logging.
 - Step-level exceptions are retried with exponential backoff and then logged only when debug mode is enabled.
 
+## AI-052 Update (2026-08-23, S1 + S4)
+
+### S1 — observed transition trail (the source of truth for where a step lands)
+
+The scraper now records, for **every** journey step, a factual
+`ObservedStep` (from `src.journey_models`): `index`, `action`, `description`,
+`from_url` / `to_url` (read from `page.url` — not inferred), `navigated`
+(bool), `scraped` (bool), and the `selector` that actually proved the
+transition. The trail is an `ObservedTrail` held on the scraper
+(`self._observed_trail`), captured in `_scrape_journey_sync` and round-tripped
+through the subprocess boundary (embedded in the subprocess stdout JSON,
+reconstructed on the parent side) so the trail exists identically for both
+the subprocess and in-process paths.
+
+- **`get_observed_trail() -> ObservedTrail`** (new public method) — returns the
+  trail captured during the last journey; empty before the first run.
+  Invariant: the order of deduped `to_url`s matches `get_pages_visited()`
+  (both derive from the same scrape order).
+- First-attempt records win; later retries update the same record in place.
+- Consumers: `src/placeholder_orchestrator.py` consumes the trail in
+  `_replace_placeholders_sequentially` for strict page scoping (S2/S3) — the
+  resolver never guesses a next-page URL again.
+
+### S4 — URL matching is evidence-only
+
+**`_infer_url_from_description` was DELETED.** It turned description keywords
+into fabricated paths ("description says checkout → `/checkout-one`") and
+HEAD-probed them — guessing by design. Replaced by **`_match_discovered_url`
+**(staticmethod): returns an **already-discovered** page URL whose path words
+overlap the description's keywords (scored by matched-word count; only pages
+the journey actually scraped are candidates). No path fabrication, no HEAD
+probes, no cross-host guesses — if nothing matches, it returns `None` and the
+caller records `step_skipped` (an honest skip beats a guessed navigation).
+
+### Also current (earlier work, verified at this refresh)
+
+- **SSRF guard** (Phase 6 6a): a `UrlGuard` is constructed at journey start
+  and `validate()`d at every navigation entry point (`_navigate_to`); a
+  Playwright `request` handler re-checks redirects/sub-resources at request
+  time (`_url_guard_patched` flag, both in-process and subprocess paths).
+
 ## Data Flow Summary
 
 1. Caller creates `JourneyScraper` or `CartSeedingScraper`.
@@ -641,3 +682,6 @@ Public diagnostic accessors expose skipped steps and locator warnings.
 - Non-destructive: if no modal is visible, selectors won't match → no-op
 - Called alongside `_dismiss_consent_overlays()` before every click step and after navigation
 - Eliminates "intercepts pointer events" errors when cart modals block navigation link clicks
+
+## Metadata
+- **Lines:** 1173 (at refresh, 2026-08-23)

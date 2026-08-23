@@ -1,7 +1,7 @@
 {
  "total": 152,
- "completed": 137,
- "pending": 15,
+ "completed": 140,
+ "pending": 12,
  "files": [
   {
    "source": "cli/__init__.py",
@@ -256,7 +256,7 @@
   {
    "source": "src/element_matcher.py",
    "doc": "markdown_docs/src/element_matcher.py.md",
-   "status": "updated-2026-08-03"
+   "status": "completed"
   },
   {
    "source": "src/evidence_export.py",
@@ -361,7 +361,7 @@
   {
    "source": "src/journey_scraper.py",
    "doc": "markdown_docs/src/journey_scraper.py.md",
-   "status": "updated-2026-08-03"
+   "status": "completed"
   },
   {
    "source": "src/journey_subprocess.py",
@@ -456,7 +456,7 @@
   {
    "source": "src/placeholder_orchestrator.py",
    "doc": "markdown_docs/src/placeholder_orchestrator.py.md",
-   "status": "updated-2026-08-03"
+   "status": "completed"
   },
   {
    "source": "src/placeholder_resolver.py",
