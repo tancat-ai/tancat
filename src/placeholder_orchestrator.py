@@ -647,6 +647,32 @@ class PlaceholderOrchestrator:
                                     else:
                                         continue
                                     break
+                            # AI-051: the trail is the source of truth for where
+                            # the preceding action landed. When it evidences the
+                            # step's page DIFFERS from the one this assertion was
+                            # scoped to (e.g. a Login CLICK navigates
+                            # home -> /inventory.html, but /inventory.html was
+                            # never scraped, so keyword resolution above fell back
+                            # to the base URL), assert the OBSERVED landing URL —
+                            # a browser fact — not the keyword-inferred one.
+                            if (
+                                resolved_url
+                                and obs is not None
+                                and not diverged
+                                and pending_evidence is None
+                                and obs.to_url
+                            ):
+                                landing_key = canon(obs.to_url)
+                                if landing_key is not None and normalize_url(landing_key) != normalize_url(
+                                    resolved_url
+                                ):
+                                    logger.info(
+                                        "AI-051: page-state assert '%s' — asserting observed landing %s (trail to_url), not keyword-inferred %s",
+                                        description,
+                                        landing_key,
+                                        resolved_url,
+                                    )
+                                    resolved_url = landing_key
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
