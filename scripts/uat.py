@@ -522,6 +522,14 @@ def compare_results(baseline: dict[str, Any], current: dict[str, Any]) -> None:
         print()
 
 
+def summarize_results(results: list[SiteResult]) -> tuple[int, int, int]:
+    """Aggregate per-site check counts across ALL sites (not just the last)."""
+    total_passed = sum(r.passed for r in results)
+    total_failed = sum(r.failed for r in results)
+    total_checks = sum(r.total for r in results)
+    return total_passed, total_failed, total_checks
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -627,12 +635,10 @@ async def main() -> int:
             model=args.model,
             base_url=args.base_url,
         )
-    results.append(site_result)
+        results.append(site_result)
 
-    # Overall summary
-    total_passed = sum(r.passed for r in results)
-    total_failed = sum(r.failed for r in results)
-    total_checks = sum(r.total for r in results)
+    # Overall summary (aggregated across all sites)
+    total_passed, total_failed, total_checks = summarize_results(results)
 
     print(f"\n{'=' * 70}")
     print(f"OVERALL: {total_passed} passed, {total_failed} failed ({total_checks} total)")

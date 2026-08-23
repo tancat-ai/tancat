@@ -88,13 +88,19 @@ Last updated: 2026-08-19 (AI-050 thinking-budget collapse root cause found + fix
 **Runtime safety net works as intended:** `evidence_tracker`/Playwright `to_have_url` correctly flags the mismatch; the failure is generated-upstream, not a runtime path defect.
 **Regression status:** pre-existing — reproduced **identically** on clean HEAD (`git worktree`, no diff): `[saucedemo] 10/13 gates (3 failed)` / `TOTAL 22/26 (4 failed)` both with and without the thinking/timeout commit (`6fd2620`). Not introduced by that change.
 **OPEN QUESTION — enable_thinking may affect it:** bug originates in skeleton generation + resolution ranking (the two call sites `enable_thinking` toggles). Current runs are `thinking=off`. A thinking-ON leg could change *which* URL the model emits / how the assert is framed — candidate to test when the matched-precision 3.8 re-test (AI-046) runs. Currently unverified which direction.
-**S6 note (2026-08-23):** still reproduces post-AI-052 ship — it is the sole remaining saucedemo verify_production/UAT execution failure (`verify_saucedemo_20260823_111019`, `uat_saucedemo_20260823_115751`). **UAT quirk found in S6:** `scripts/uat.py --all-sites --save` persists only the last site's `SiteResult` (the `results.append` sits outside the loop — `scripts/uat.py` main), so `uat_ai052_final.json` holds only saucedemo even though both sites ran; OVERALL count likewise counts the last site. Not a pipeline issue; fix + multi-site save merge worth a small follow-up. Session record: `docs/sessions/2026-08-23_ai052_session6_ship.md`.
+**S6 note (2026-08-23):** still reproduces post-AI-052 ship — it is the sole remaining saucedemo verify_production/UAT execution failure (`verify_saucedemo_20260823_111019`, `uat_saucedemo_20260823_115751`). The UAT `--all-sites --save` quirk found in S6 (only the last site persisted) is **fixed 2026-08-23** — `results.append` moved inside the loop, OVERALL now aggregated across all sites via `summarize_results()` (see AI-053 below); `uat_ai052_final.json` remains a single-site artifact from the S6 run. Session record: `docs/sessions/2026-08-23_ai052_session6_ship.md`.
+
+---
+
+## ✅ AI-053 — `uat.py --all-sites --save` persists only the last site (✅ COMPLETE 2026-08-23)
+
+**Status:** ✅ Complete 2026-08-23 — found during AI-052 S6 ship: with `--all-sites`, `results.append(site_result)` sat OUTSIDE the site loop in `main()`, so the saved JSON (e.g. `docs/sessions/uat_ai052_final.json`) and the OVERALL line both reflected only the last site (saucedemo) even though both ran. **Fix:** `scripts/uat.py` — append moved inside the loop; OVERALL counts aggregated across all sites via new `summarize_results()` (testable helper; `--compare` already merged multi-site baselines by site_id). 5 new tests in `tests/test_uat.py` incl. an AST guard pinning `results.append` inside the loop (catches the exact regression shape). Gates: full suite 2740 passed / 1 skipped, smoke 39/39, ruff + mypy clean.
 
 ---
 
 ## ✅ AI-052 — Resolver page-scope enforcement: locator resolved for a page the test isn't on (wrong-page add-to-cart) — SHIPPED 2026-08-23
 
-**Status:** 🆕 new (OPEN) — surfaced 2026-08-21 via `verify_production` FAIL. Concrete case: generated saucedemo `test_02/03/04` sequence `click('#item_4_title_link')` (nav → product-detail `inventory-item.html?id=4`) then `click('#add-to-cart-sauce-labs-fleece-jacket')` which exists **only on the inventory page** → runtime `_LocatorNotFoundError: element exists on a different page than the one this step runs on`.
+**Status:** ✅ Complete 2026-08-23 — surfaced 2026-08-21 via `verify_production` FAIL. Concrete case: generated saucedemo `test_02/03/04` sequence `click('#item_4_title_link')` (nav → product-detail `inventory-item.html?id=4`) then `click('#add-to-cart-sauce-labs-fleece-jacket')` which exists **only on the inventory page** → runtime `_LocatorNotFoundError: element exists on a different page than the one this step runs on`.
 **Priority:** Medium — pipeline-generation quality; produces semantically-wrong journeys and page-scope violations.
 **Root cause (two compounding generation bugs):**
 1. **Skeleton/flow logic** — the LLM generated a wrong sequence ("view item A, then add item B" where B's button is on a different page).
