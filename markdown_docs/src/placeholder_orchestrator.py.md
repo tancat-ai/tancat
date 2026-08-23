@@ -122,7 +122,7 @@ GOTO/URL placeholders resolve against ALL verified pages (not just the current p
 
 ## Notes
 
-- Largest module in the project (1828 lines)
+- Largest module in the project (1833 lines at refresh 2026-08-23)
 - Extracted from `TestOrchestrator` to separate concerns
 - Supports both legacy flat mode and modern POM mode
 - Handles complex stateful scraping scenarios (cart, checkout, authentication)
@@ -134,6 +134,59 @@ GOTO/URL placeholders resolve against ALL verified pages (not just the current p
 - **Phase 3 RAG (2026-07-21):** `rag_retriever` kwarg + `_retrieve_golden_patterns()` → golden patterns flow into `ElementMatcher.find_best_element_for_current_page()` → `PlaceholderScorer.compute_element_score()` for +GOLDEN_PATTERN_BONUS
 - Consolidated skip logic reduces noise in generated tests
 ---
+
+## AI-052 Update (2026-08-23, S2 + S3 — consuming the observed trail)
+
+`_replace_placeholders_sequentially(skeleton_code, journeys, page_requirements,
+seed_urls, scraped_data, scraped_errors=None, observed_trails=None)` gained the
+`observed_trails: dict[str, ObservedTrail] | None` kwarg (journey test name →
+the trail `src/journey_scraper.py` captured during discovery). The resolver now
+**derives each step's page from the observation instead of guessing**:
+
+- **Strict scoping** — a step resolves only against the page the trail says it
+  is on. There is **never an all-pages fallback**: when the trail evidences no
+  scraped page for a step (or a token was skipped under strict scope), the
+  placeholder becomes an honest `pytest.skip` ("unresolved placeholders for…")
+  instead of a locator from the wrong page. Tokens in `strict_skipped_tokens`
+  are additionally barred from the all-pages batch fallback — that path would
+  have resurrected the exact cross-page locator this fix removes.
+- **`_map_trail_to_placeholders(journey, trail_steps) -> dict[str, ObservedStep]`
+  **(new helper)** — aligns skeleton placeholders to trail steps by
+  `(action, description)` with a monotonic cursor (GOTO→"navigate",
+  ASSERT→"scrape"). Exact index alignment can't be assumed (GOTOs that
+  resolved to no URL produced no scrape step; a trailing final-page scrape is
+  appended). Unmatched placeholders get no entry → "unknown" state.
+- **GOTO from observed landings** — a GOTO's target URL comes from the trail's
+  observed `to_url` (factual), not from keyword/href inference
+  (`src/url_inference.py` is now the non-trail fallback only, and itself
+  evidence-only after S4).
+- **Pending-evidence anchor** — when WE emit a CLICK whose real `href` targets
+  an unscraped page, the runtime browser will land there; `pending_evidence`
+  marks that move so the next step resolves against the *new* page instead of
+  the stale verified one.
+- **Divergence-aware replay** — the trail's `selector_used` was PROVEN (clicked
+  successfully during discovery, `error is None`). When the resolver picks a
+  different element for a CLICK: ours navigates via a real `href` → keep ours
+  (the href is evidence); ours has no `href` (JS-driven link, navigation
+  behaviour unknowable) → **replay the proven selector** so the generated test
+  re-enacts the observed journey; ours found nothing scoped → fall back to the
+  proven selector instead of skipping. A navigation-intent click that provably
+  stayed put is emitted as a navigation to a verified page rather than a dead
+  click (proven-static navigation intent).
+- **Divergence latch** — once our emitted path departs from the observed one
+  (href navigation / proven-static override), `diverged` latches True: from
+  then on the trail describes a different journey than the generated test, and
+  only our own verified anchor (`last_verified_url`) is trustworthy.
+- **URL canonicalisation** — trail URLs come straight from `page.url` while
+  `scraped_data` keys are normalised; every membership check goes through a
+  `normalize_url`-based map so `https://x/` vs `https://x` never mismatches.
+- **Debug** — with `PIPELINE_DEBUG=1`, each journey logs its observed trail on
+  stderr (`[resolve] test_N observed trail: [url1 -> url2 …]`).
+
+Cross-links: `src/journey_scraper.py` (trail capture, S1) ·
+`src/journey_models.py` (`ObservedStep` / `ObservedTrail`) ·
+`src/url_inference.py` (evidence-only fallback, S4) ·
+`src/element_matcher.py` (S5 role gate, second line of defence).
 
 ## AI-035 / B-036 Update (2026-08-03)
 
