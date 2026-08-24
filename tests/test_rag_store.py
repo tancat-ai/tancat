@@ -478,6 +478,55 @@ class TestRAGStorePopulated:
     def test_add_docs_empty_list(self, rag_store: RAGStore) -> None:
         assert rag_store.add_docs([]) == (0, 0)
 
+    def test_add_docs_dedup_skips_existing_key(self, rag_store: RAGStore) -> None:
+        from src.pdf_ingest import doc_chunk_key
+
+        chunk = DocChunk(text="same content", source="a.md", heading_path="A")
+        chunk.dedup_key = doc_chunk_key(chunk)
+
+        assert rag_store.add_docs([chunk]) == (1, 0)
+        # Re-ingesting the identical chunk is a no-op.
+        assert rag_store.add_docs([chunk]) == (0, 1)
+        # Store holds exactly one row.
+        assert rag_store.counts_by_type().get("doc") == 1
+
+    def test_add_docs_mixed_new_and_dup(self, rag_store: RAGStore) -> None:
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="alpha content", source="a.md", heading_path="A")
+        a.dedup_key = doc_chunk_key(a)
+        b = DocChunk(text="beta content", source="b.md", heading_path="B")
+        b.dedup_key = doc_chunk_key(b)
+
+        assert rag_store.add_docs([a, b]) == (2, 0)
+        # One new (a-dup) + one genuinely new (c).
+        c = DocChunk(text="gamma content", source="c.md", heading_path="C")
+        c.dedup_key = doc_chunk_key(c)
+        assert rag_store.add_docs([a, c]) == (1, 1)
+
+    def test_add_docs_empty_key_always_inserts(self, rag_store: RAGStore) -> None:
+        """Chunks without a dedup_key (back-compat) are inserted every time."""
+        chunk = DocChunk(text="no key", source="a.md", heading_path="A")  # dedup_key == ""
+        assert rag_store.add_docs([chunk]) == (1, 0)
+        assert rag_store.add_docs([chunk]) == (1, 0)
+        assert rag_store.counts_by_type().get("doc") == 2
+
+    def test_doc_chunk_key_normalisation(self) -> None:
+        from src.pdf_ingest import doc_chunk_key
+
+        base = DocChunk(text="Hello   World\nfoo", source="s.md", heading_path="H")
+        whitespace_variant = DocChunk(text="Hello World foo", source="s.md", heading_path="H")
+        case_variant = DocChunk(text="hello world foo", source="s.md", heading_path="H")
+        assert doc_chunk_key(base) == doc_chunk_key(whitespace_variant)
+        assert doc_chunk_key(base) == doc_chunk_key(case_variant)
+
+        different_text = DocChunk(text="Completely different", source="s.md", heading_path="H")
+        different_heading = DocChunk(text="Hello World foo", source="s.md", heading_path="Other")
+        different_source = DocChunk(text="Hello World foo", source="t.md", heading_path="H")
+        assert doc_chunk_key(base) != doc_chunk_key(different_text)
+        assert doc_chunk_key(base) != doc_chunk_key(different_heading)
+        assert doc_chunk_key(base) != doc_chunk_key(different_source)
+
     def test_retrieve_returns_results(self, populated_store: RAGStore) -> None:
         results = populated_store.retrieve("CLICK: Add to cart button")
         assert len(results) > 0

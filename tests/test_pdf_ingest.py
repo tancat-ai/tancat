@@ -18,6 +18,8 @@ import pytest
 
 pytest.importorskip("fitz", reason="PyMuPDF (fitz) not installed — skipping PDF tests")
 
+from collections.abc import Callable
+
 import pytest
 
 from src.pdf_ingest import (
@@ -378,6 +380,125 @@ class TestIngestPdfDirectory:
     def test_empty_directory(self, tmp_path: Path) -> None:
         chunks = ingest_pdf_directory(tmp_path)
         assert chunks == []
+
+    def test_threads_ocr_fallback_through(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ingest_pdf_directory passes ocr_fallback to each file's ingest_pdf."""
+        (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4 fake")
+        seen: list[bool] = []
+
+        def fake_ingest(path: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None) -> list[DocChunk]:
+            seen.append(ocr_fallback is not None)
+            return []
+
+        monkeypatch.setattr("src.pdf_ingest.ingest_pdf", fake_ingest)
+        ingest_pdf_directory(tmp_path, ocr_fallback=lambda _p, _n: "")
+        # The fallback closure was provided (not None) and threaded through.
+        assert seen == [True]
+
+
+# ---------------------------------------------------------------------------
+# OCR fallback wiring (AI-045 #4) — mocked fitz doc, no GPU
+# ---------------------------------------------------------------------------
+
+
+def _mock_doc_with_page(page_count: int, page_text: str) -> MagicMock:
+    """Build a MagicMock fitz doc whose single page returns *page_text*."""
+    doc = MagicMock()
+    doc.page_count = page_count
+    page = MagicMock()
+    page.get_text.return_value = page_text
+    doc.__getitem__ = lambda _self, _i: page
+    doc.close.return_value = None
+    return doc
+
+
+def _patch_fitz_doc(monkeypatch: pytest.MonkeyPatch, doc: MagicMock) -> None:
+    """Point ``src.pdf_ingest._import_fitz`` at a fake fitz module returning *doc*."""
+
+    def fake_fitz_open(*_a: object, **_k: object) -> MagicMock:
+        return doc
+
+    monkeypatch.setattr("src.pdf_ingest._import_fitz", lambda: type("F", (), {"open": staticmethod(fake_fitz_open)}))
+
+
+class TestIngestPdfOcrFallback:
+    """Page-scoped OCR fallback for image-only pages (mocked fitz)."""
+
+    def test_fallback_called_for_image_only_page(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        doc = _mock_doc_with_page(1, "  ")  # < MIN_PAGE_CHARS → image-only
+        _patch_fitz_doc(monkeypatch, doc)
+
+        calls: list[tuple[Path, int]] = []
+
+        def fallback(path: Path, pageno: int) -> str:
+            calls.append((path, pageno))
+            return "OCR EXTRACTED TEXT here"
+
+        chunks = ingest_pdf(pdf, ocr_fallback=fallback)
+        assert calls == [(pdf, 1)]
+        assert any("OCR EXTRACTED TEXT" in c.text for c in chunks)
+
+    def test_no_fallback_warns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        doc = _mock_doc_with_page(1, "  ")
+        _patch_fitz_doc(monkeypatch, doc)
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            chunks = ingest_pdf(pdf)  # no fallback
+
+        assert any("unlimited-ocr" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+        assert chunks == []
+
+    def test_fallback_returns_empty_warns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        doc = _mock_doc_with_page(1, "  ")
+        _patch_fitz_doc(monkeypatch, doc)
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "")
+
+        assert any("OCR returned no text" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+
+    def test_fallback_exception_skips_page(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        doc = _mock_doc_with_page(1, "  ")
+        _patch_fitz_doc(monkeypatch, doc)
+
+        def boom(path: Path, pageno: int) -> str:
+            raise RuntimeError("GPU oom")
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            chunks = ingest_pdf(pdf, ocr_fallback=boom)
+
+        assert chunks == []
+        assert any("OCR fallback failed" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+
+    def test_text_page_not_ocrd(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A page with enough text is not sent to the OCR fallback."""
+        pdf = tmp_path / "text.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        doc = _mock_doc_with_page(1, "This is a real text page with enough characters.")
+        _patch_fitz_doc(monkeypatch, doc)
+
+        calls: list[int] = []
+
+        def record(n: int) -> str:
+            calls.append(n)
+            return "X"
+
+        ingest_pdf(pdf, ocr_fallback=lambda _p, n: record(n))
+        assert calls == []  # fallback never invoked for a text page
 
 
 # ---------------------------------------------------------------------------
