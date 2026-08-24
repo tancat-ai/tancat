@@ -60,6 +60,7 @@ Two related gaps in the document-ingestion path, both flagged **High** in the
 ```python
 # src/pdf_ingest.py
 
+
 def ingest_pdf(
     filepath: Path,
     *,
@@ -76,6 +77,7 @@ The caller (`rag_ingest.py` or a new wrapper) decides whether to pass an OCR fal
 
 ```python
 # scripts/rag_ingest.py (or a helper in src/)
+
 
 def _ocr_fallback_for(backend: OcrBackend) -> Callable[[Path, int], str] | None:
     if backend.name == "unlimited-ocr" and backend.available:
@@ -104,6 +106,7 @@ def doc_chunk_key(chunk: DocChunk) -> str:
     normalised = _normalise_for_dedup(chunk.text)
     payload = f"{chunk.source}\x00{chunk.heading_path}\x00{normalised}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 def _normalise_for_dedup(text: str) -> str:
     """Collapse whitespace, strip, lowercase. Stable across re-extraction."""
