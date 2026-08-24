@@ -140,19 +140,19 @@ def rebuild_store(
     )
     store = RAGStore(backend, embedder)
 
-    result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0}
+    result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0, "docs_skipped": 0, "pdfs_skipped": 0}
 
     if patterns:
         result["golden"] = store.add_patterns(patterns)
         logger.info("Ingested %d golden patterns", result["golden"])
 
     if docs:
-        result["docs"] = store.add_docs(docs)
-        logger.info("Ingested %d doc chunks", result["docs"])
+        result["docs"], result["docs_skipped"] = store.add_docs(docs)
+        logger.info("Ingested %d doc chunks (%d duplicates skipped)", result["docs"], result["docs_skipped"])
 
     if pdfs:
-        result["pdfs"] = store.add_docs(pdfs)
-        logger.info("Ingested %d pdf chunks", result["pdfs"])
+        result["pdfs"], result["pdfs_skipped"] = store.add_docs(pdfs)
+        logger.info("Ingested %d pdf chunks (%d duplicates skipped)", result["pdfs"], result["pdfs_skipped"])
 
     logger.info("Store rebuilt at %s (total entries: %d)", store_path, backend.count())
     return result

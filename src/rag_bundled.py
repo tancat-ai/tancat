@@ -329,7 +329,7 @@ def ensure_bundled_seeded(
         patterns = build_bundled_patterns()
         doc_chunks = build_bundled_docs()
         golden = store.add_patterns(patterns)
-        docs = store.add_docs(doc_chunks)
+        docs, _docs_skipped = store.add_docs(doc_chunks)
         status = "seeded"
         logger.info(
             "Auto-seeded bundled RAG pack: %d golden patterns, %d doc chunks",

@@ -128,6 +128,13 @@ class InMemoryBackend:
         counter: Counter[str] = Counter(str(meta.get("entry_type", "unknown")) for _vec, meta, _text in self._entries)
         return dict(counter)
 
+    def query_dedup_keys(self, entry_type: str) -> list[str]:
+        return [
+            str(meta["dedup_key"])
+            for _vec, meta, _text in self._entries
+            if meta.get("entry_type") == entry_type and meta.get("dedup_key")
+        ]
+
     def delete_learned(self) -> int:
         before = len(self._entries)
         self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
@@ -464,11 +471,12 @@ class TestRAGStorePopulated:
 
     def test_add_docs_returns_count(self, rag_store: RAGStore) -> None:
         docs = [DocChunk(text="some documentation")]
-        count = rag_store.add_docs(docs)
-        assert count == 1
+        inserted, skipped = rag_store.add_docs(docs)
+        assert inserted == 1
+        assert skipped == 0
 
     def test_add_docs_empty_list(self, rag_store: RAGStore) -> None:
-        assert rag_store.add_docs([]) == 0
+        assert rag_store.add_docs([]) == (0, 0)
 
     def test_retrieve_returns_results(self, populated_store: RAGStore) -> None:
         results = populated_store.retrieve("CLICK: Add to cart button")

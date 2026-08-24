@@ -18,6 +18,7 @@ Usage::
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 from collections.abc import Callable
@@ -67,6 +68,33 @@ MIN_PAGE_CHARS: int = 10
 def _estimate_tokens(text: str) -> int:
     """Rough token count: character length / 4."""
     return max(1, len(text) // 4)
+
+
+# ---------------------------------------------------------------------------
+# Dedup key (AI-045 #4) — idempotent doc re-ingestion
+# ---------------------------------------------------------------------------
+
+
+def _normalise_for_dedup(text: str) -> str:
+    """Normalise chunk text for the dedup key.
+
+    Collapses whitespace, strips, and lowercases so the key is stable across
+    cosmetic re-extraction differences (trailing spaces, line-break placement,
+    case) while still distinguishing genuinely different content.
+    """
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def doc_chunk_key(chunk: DocChunk) -> str:
+    """Stable dedup key for a doc chunk.
+
+    ``sha256(source \x00 heading_path \x00 normalised_text)``.  Two chunks are
+    duplicates iff source, heading path, and normalised content all match.
+    The ``\x00`` separators prevent field-boundary collisions (a source ending
+    in a space can't collide with a heading starting with one).
+    """
+    payload = f"{chunk.source}\x00{chunk.heading_path}\x00{_normalise_for_dedup(chunk.text)}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +399,11 @@ def ingest_pdf(
                 heading_path=f"{doc_title} > table",
             )
         )
+
+    # Compute the dedup key for every chunk so re-ingestion is idempotent
+    # (AI-045 #4).  RAGStore.add_docs skips chunks whose key already exists.
+    for chunk in chunks:
+        chunk.dedup_key = doc_chunk_key(chunk)
 
     logger.info("  %s → %d chunk(s) from %d pages", source, len(chunks), page_count)
     return chunks

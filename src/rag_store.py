@@ -74,11 +74,19 @@ class GoldenPattern:
 
 @dataclass(slots=True)
 class DocChunk:
-    """A chunk of Playwright documentation (or other domain text)."""
+    """A chunk of Playwright documentation (or other domain text).
+
+    ``dedup_key`` is a stable content hash (see :func:`src.pdf_ingest.doc_chunk_key`)
+    used by :meth:`RAGStore.add_docs` to make re-ingestion idempotent — a chunk
+    whose key already exists in the store is skipped rather than duplicated.
+    Empty ("" = not computed) means "always insert" for back-compat with
+    callers that build chunks without the key.
+    """
 
     text: str
     source: str = ""  # e.g. "playwright-locators.md"
     heading_path: str = ""  # e.g. "Locators > Best Practices"
+    dedup_key: str = ""  # sha256(source \x00 heading_path \x00 normalised text)
 
 
 @dataclass(slots=True)
@@ -242,6 +250,14 @@ class VectorStoreBackend(Protocol):
     def counts_by_type(self) -> dict[str, int]:
         """Count stored entries grouped by ``entry_type`` (golden/doc/learned)."""
         ...
+
+    def query_dedup_keys(self, entry_type: str) -> list[str]:
+        """Return the non-empty ``dedup_key`` values stored for *entry_type*.
+
+        Used by :meth:`RAGStore.add_docs` to make re-ingestion idempotent.
+        Backends without support return an empty list (dedup disabled).
+        """
+        return []  # pragma: no cover - protocol default
 
     def delete_learned(self) -> int:
         """Delete entries that are neither golden nor doc (learned patterns).
@@ -508,6 +524,23 @@ class MilvusLiteBackend:
         counter: Counter[str] = Counter(str(row.get("entry_type", "unknown")) for row in rows)
         return dict(counter)
 
+    def query_dedup_keys(self, entry_type: str) -> list[str]:
+        """Return non-empty ``dedup_key`` values stored for *entry_type*.
+
+        One batched query (not per-chunk).  Entries written before dedup-key
+        tracking have no ``dedup_key`` field and are simply absent from the
+        result — they are treated as "no key" by the caller, so a re-ingest of
+        their content inserts a fresh keyed row (cleaned up by --reindex or
+        --prune-dupes).
+        """
+        rows = self._c.query(
+            _COLLECTION_NAME,
+            filter=f"entry_type == '{entry_type}'",
+            output_fields=["dedup_key"],
+            limit=100_000,
+        )
+        return [str(row["dedup_key"]) for row in rows if row.get("dedup_key")]
+
     def delete_learned(self) -> int:
         """Delete non-golden/doc entries (learned patterns).
 
@@ -656,12 +689,25 @@ class RAGStore:
         ]
         return self._backend.upsert(entries)
 
-    def add_docs(self, chunks: list[DocChunk]) -> int:
-        """Embed and store documentation chunks. Returns count inserted."""
+    def add_docs(self, chunks: list[DocChunk]) -> tuple[int, int]:
+        """Embed and store documentation chunks, deduping by ``dedup_key``.
+
+        Returns ``(inserted, skipped)`` where *skipped* counts chunks whose
+        non-empty ``dedup_key`` already exists in the store (re-ingestion is
+        idempotent).  Chunks with an empty ``dedup_key`` are always inserted
+        (back-compat for callers that don't compute the key).
+        """
         if not chunks:
-            return 0
+            return (0, 0)
         self._ensure_embedder_match()
-        texts = [c.text for c in chunks]
+
+        existing_keys = set(self._backend.query_dedup_keys("doc"))
+        new_chunks = [c for c in chunks if not c.dedup_key or c.dedup_key not in existing_keys]
+        skipped = len(chunks) - len(new_chunks)
+        if not new_chunks:
+            return (0, skipped)
+
+        texts = [c.text for c in new_chunks]
         vectors = self._embedder.embed_batch(texts)
         entries = [
             KnowledgeEntry(
@@ -674,11 +720,13 @@ class RAGStore:
                     "page": "",
                     "source": c.source,
                     "heading_path": c.heading_path,
+                    "dedup_key": c.dedup_key,
                 },
             )
-            for vec, c in zip(vectors, chunks, strict=True)
+            for vec, c in zip(vectors, new_chunks, strict=True)
         ]
-        return self._backend.upsert(entries)
+        inserted = self._backend.upsert(entries)
+        return (inserted, skipped)
 
     # -- retrieval -----------------------------------------------------------
 

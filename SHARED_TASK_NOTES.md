@@ -5,7 +5,7 @@
 
 ## Progress
 - [x] Step 1: OCR wiring in pdf_ingest.py (22 passed / 1 skipped on the two OCR/PDF test files)
-- [ ] Step 2: Dedup key in rag_store.py
+- [x] Step 2: Dedup key in rag_store.py (99 passed / 1 skipped across rag_store/rag_bundled/rag_retriever/pdf_ingest)
 - [ ] Step 3: Update callers + CLI surface
 - [ ] Step 4: New tests
 - [ ] Step 5: De-sloppify + verify (ruff/mypy/pytest/smoke)
