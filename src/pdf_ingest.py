@@ -362,15 +362,42 @@ def ingest_pdf(
     for page_num in range(page_count):
         page = doc[page_num]
 
-        # Quick check: skip pages with too few characters (image-only)
+        # Quick check: pages with too few characters are image-only.
         quick_text = page.get_text()
         if len(quick_text) < MIN_PAGE_CHARS:
-            logger.info(
-                "  %s: page %d skipped (%d chars, likely image-only)",
-                source,
-                page_num + 1,
-                len(quick_text),
-            )
+            if ocr_fallback is not None:
+                try:
+                    ocr_text = ocr_fallback(filepath, page_num + 1)
+                except Exception:
+                    logger.warning(
+                        "  %s: page %d OCR fallback failed — page skipped",
+                        source,
+                        page_num + 1,
+                        exc_info=True,
+                    )
+                    continue
+                if ocr_text and ocr_text.strip():
+                    all_text += ocr_text.strip() + "\n\n"
+                    logger.info(
+                        "  %s: page %d extracted via OCR (%d chars)",
+                        source,
+                        page_num + 1,
+                        len(ocr_text.strip()),
+                    )
+                else:
+                    logger.warning(
+                        "  %s: page %d OCR returned no text — page skipped",
+                        source,
+                        page_num + 1,
+                    )
+            else:
+                logger.warning(
+                    "  %s: page %d skipped (%d chars, likely image-only). "
+                    "Set OCR_BACKEND=unlimited-ocr to extract scanned pages.",
+                    source,
+                    page_num + 1,
+                    len(quick_text),
+                )
             continue
 
         # Extract text with heading markers

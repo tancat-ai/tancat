@@ -64,18 +64,37 @@ PDF duplicated every chunk.
 - **`--prune-dupes` over auto-migration** — non-destructive to the rest of the
   store; `--reindex` remains the nuclear option.
 
-## Test results (local, 2026-08-24)
+## Test results (local, 2026-08-24, fitz INSTALLED to match CI's `--all-extras`)
 - New tests: OCR wiring x5 (fallback-called / no-fallback-warns / empty-warns /
   exception-skips / text-page-not-ocrd), dedup x3 (skip-existing / mixed /
   empty-key-always-inserts + key normalisation), prune x2 (prunes-keeps-lowest /
-  none-returns-zero). Hermetic — mocked fitz, fake embedder, in-memory backend;
-  no GPU.
-- Full suite: **2750 passed, 1 skipped** (was 2744 pre-task; net +6 new tests
-  after the `add_docs` return-type changes).
-- smoke: **39/39**. ruff: clean (incl. `scripts/`). mypy: clean (140 files).
+  none-returns-zero). OCR tests use **real one-page PyMuPDF PDFs** (image-only =
+  a drawn rect, no text) + a plain callable OCR hook — no GPU, no fitz mocking.
+- Full suite: **2793 passed, 0 failed** with the `[pdf]` extra installed (CI parity).
+  (The earlier "2750 passed / 1 skipped" was a false positive — fitz was NOT
+  installed locally, so the whole `test_pdf_ingest.py` module was `importorskip`
+  -ed and the OCR tests never ran. See "Bug found" below.)
+- smoke: **39/39**. ruff: clean (incl. `scripts/`). mypy: clean (143 files incl. cli/).
 - eval static: **97.9%** (no regression vs baseline).
+- coverage: 70% (CI gate ≥ 65%).
+
+## Bug found (caught by CI, fixed before merge)
+The first push's `ocr_fallback` param was added to the `ingest_pdf`/`ingest_pdf_directory`
+**signatures + docstrings but the page-loop body edit silently failed to apply** —
+the parameter was accepted but never used, so image-only pages were still skipped
+with the old `info` log and no OCR/warning. All 5 OCR tests failed identically on CI
+(`calls == []`, no warning). Root cause of the masking: fitz was absent locally so the
+PDF test module skipped, hiding the dead parameter. **Fix:** re-applied the page-loop
+OCR branch (fallback call + merge + WARNING paths) and rewrote the OCR tests to use
+real PyMuPDF PDFs instead of mocking fitz (mocking `Page.get_text("dict")` / `__getitem__`
+was brittle). Verified: real image-only PDF now routes to the fallback and merges its
+output; full suite green with fitz installed.
 
 ## Findings / gotchas
+- **⚠️ Install the `[pdf]` extra before validating PDF work.** fitz (PyMuPDF) is an
+  optional extra; without it `tests/test_pdf_ingest.py` is `importorskip`-ed and
+  PDF changes are *not* tested locally. CI runs `uv sync --frozen --all-extras`, so
+  what passes locally without `[pdf]` can still fail in CI. (`uv sync --extra pdf`.)
 - pre-commit's mypy hook runs on staged **test** files too (not just `src/`) —
   inner test helper functions and lambdas need full annotations because
   `disallow_untyped_defs = true`.
@@ -83,6 +102,9 @@ PDF duplicated every chunk.
   used in a runtime function-signature position (ruff F821 + mypy name-defined).
 - `scripts/` is excluded from pyproject mypy but **not** from ruff — the
   B007 unused-loop-var fired on `prune_doc_duplicates`.
+- A multi-hunk `edit` call fails atomically: if one hunk's `oldText` doesn't match,
+  the whole call is rejected. Verify every hunk landed (grep for the new symbol) —
+  don't assume a signature edit implies its body edit applied.
 
 ## Cross-refs
 - `BACKLOG.md` AI-045 #4 (PDF OCR wiring) + §8.2 dedup sub-item.
