@@ -18,6 +18,8 @@ import pytest
 
 pytest.importorskip("fitz", reason="PyMuPDF (fitz) not installed — skipping PDF tests")
 
+from collections.abc import Callable
+
 import pytest
 
 from src.pdf_ingest import (
@@ -378,6 +380,118 @@ class TestIngestPdfDirectory:
     def test_empty_directory(self, tmp_path: Path) -> None:
         chunks = ingest_pdf_directory(tmp_path)
         assert chunks == []
+
+    def test_threads_ocr_fallback_through(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ingest_pdf_directory passes ocr_fallback to each file's ingest_pdf."""
+        (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4 fake")
+        seen: list[bool] = []
+
+        def fake_ingest(path: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None) -> list[DocChunk]:
+            seen.append(ocr_fallback is not None)
+            return []
+
+        monkeypatch.setattr("src.pdf_ingest.ingest_pdf", fake_ingest)
+        ingest_pdf_directory(tmp_path, ocr_fallback=lambda _p, _n: "")
+        # The fallback closure was provided (not None) and threaded through.
+        assert seen == [True]
+
+
+# ---------------------------------------------------------------------------
+# OCR fallback wiring (AI-045 #4) — real PyMuPDF-generated PDFs, no GPU
+#
+# These use *real* one-page PDFs built with fitz (installed via the ``[pdf]``
+# extra; CI runs ``uv sync --all-extras``) rather than mocking fitz — mocking
+# fitz's ``Page``/``Document`` magic methods is brittle and environment-
+# dependent. The OCR hook itself is a plain callable, so no GPU/model is
+# needed: we only assert the ingest path routes image-only pages to it.
+# ---------------------------------------------------------------------------
+
+
+def _write_image_only_pdf(path: Path) -> None:
+    """Write a real one-page PDF with a drawing but no text (image-only)."""
+    import fitz  # PyMuPDF (already importorskip'd at module top)
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.draw_rect(fitz.Rect(0, 0, 50, 50), color=(1, 0, 0))  # shape only → get_text() == ""
+    doc.save(str(path))
+    doc.close()
+
+
+def _write_text_pdf(path: Path, body: str) -> None:
+    """Write a real one-page PDF whose text is *body* (>= MIN_PAGE_CHARS)."""
+    import fitz  # PyMuPDF
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text(fitz.Point(72, 72), body, fontsize=12)
+    doc.save(str(path))
+    doc.close()
+
+
+class TestIngestPdfOcrFallback:
+    """Page-scoped OCR fallback for image-only pages (real PDFs, mocked OCR hook)."""
+
+    def test_fallback_called_for_image_only_page(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+
+        calls: list[tuple[Path, int]] = []
+
+        def fallback(path: Path, pageno: int) -> str:
+            calls.append((path, pageno))
+            return "OCR EXTRACTED TEXT here"
+
+        chunks = ingest_pdf(pdf, ocr_fallback=fallback)
+        assert calls == [(pdf, 1)]
+        assert any("OCR EXTRACTED TEXT" in c.text for c in chunks)
+
+    def test_no_fallback_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            chunks = ingest_pdf(pdf)  # no fallback
+
+        assert any("unlimited-ocr" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+        assert chunks == []
+
+    def test_fallback_returns_empty_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "")
+
+        assert any("OCR returned no text" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+
+    def test_fallback_exception_skips_page(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+
+        def boom(path: Path, pageno: int) -> str:
+            raise RuntimeError("GPU oom")
+
+        with caplog.at_level("WARNING", logger="src.pdf_ingest"):
+            chunks = ingest_pdf(pdf, ocr_fallback=boom)
+
+        assert chunks == []
+        assert any("OCR fallback failed" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+
+    def test_text_page_not_ocrd(self, tmp_path: Path) -> None:
+        """A page with enough text is not sent to the OCR fallback."""
+        pdf = tmp_path / "text.pdf"
+        _write_text_pdf(pdf, "This is a real text page with enough characters to be kept.")
+
+        calls: list[int] = []
+
+        def record(n: int) -> str:
+            calls.append(n)
+            return "X"
+
+        chunks = ingest_pdf(pdf, ocr_fallback=lambda _p, n: record(n))
+        assert calls == []  # fallback never invoked for a text page
+        assert any("enough characters" in c.text for c in chunks)  # real text path used
 
 
 # ---------------------------------------------------------------------------

@@ -35,8 +35,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
+from src.ocr_backends import OcrBackend, get_ocr_backend
 from src.pdf_ingest import ingest_pdf_directory
 from src.rag_bundled import (
     _write_marker,
@@ -79,6 +81,26 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
+# OCR fallback
+# ---------------------------------------------------------------------------
+
+
+def _build_ocr_fallback() -> Callable[[Path, int], str] | None:
+    """Build a page-scoped OCR fallback for image-only PDF pages.
+
+    Consults the configured OCR backend (persisted setting > ``OCR_BACKEND``
+    env > pymupdf default).  Only the GPU Unlimited-OCR backend can actually
+    OCR a rasterised page, so a fallback is returned only when that backend
+    is configured *and* available in this environment.  Otherwise ``None`` —
+    image-only pages are then skipped with a loud warning (not silently).
+    """
+    backend: OcrBackend = get_ocr_backend()
+    if backend.name == "unlimited-ocr" and backend.available:
+        return backend.parse_page
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Reconstruction
 # ---------------------------------------------------------------------------
 
@@ -118,22 +140,68 @@ def rebuild_store(
     )
     store = RAGStore(backend, embedder)
 
-    result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0}
+    result: dict[str, int] = {"golden": 0, "docs": 0, "pdfs": 0, "docs_skipped": 0, "pdfs_skipped": 0}
 
     if patterns:
         result["golden"] = store.add_patterns(patterns)
         logger.info("Ingested %d golden patterns", result["golden"])
 
     if docs:
-        result["docs"] = store.add_docs(docs)
-        logger.info("Ingested %d doc chunks", result["docs"])
+        result["docs"], result["docs_skipped"] = store.add_docs(docs)
+        logger.info("Ingested %d doc chunks (%d duplicates skipped)", result["docs"], result["docs_skipped"])
 
     if pdfs:
-        result["pdfs"] = store.add_docs(pdfs)
-        logger.info("Ingested %d pdf chunks", result["pdfs"])
+        result["pdfs"], result["pdfs_skipped"] = store.add_docs(pdfs)
+        logger.info("Ingested %d pdf chunks (%d duplicates skipped)", result["pdfs"], result["pdfs_skipped"])
 
     logger.info("Store rebuilt at %s (total entries: %d)", store_path, backend.count())
     return result
+
+
+def prune_doc_duplicates() -> int:
+    """Remove duplicate doc chunks (same ``dedup_key``) from the live store.
+
+    Groups stored ``entry_type == "doc"`` rows by ``dedup_key`` (skipping
+    legacy rows with no key), keeps the lowest ``id`` in each group, and
+    deletes the rest.  Returns the number of duplicate rows removed.  Safe to
+    run repeatedly — a second run finds nothing to prune.
+    """
+    from src.rag_store import _COLLECTION_NAME  # noqa: PLC0415 - private name, CLI-only
+
+    embedder = SentenceTransformerEmbedder()
+    store_path = str(get_storage().rag_path())
+    backend = MilvusLiteBackend(store_path, embedder.dimension, embedder_identity=embedder.identity)
+    # CLI-only: reach the lazy Milvus client directly to run a bulk doc-prune
+    # query/delete that the RAGStore API doesn't expose.
+    client = backend._c  # noqa: SLF001
+
+    rows = client.query(
+        _COLLECTION_NAME,
+        filter='entry_type == "doc"',
+        output_fields=["id", "dedup_key"],
+        limit=100_000,
+    )
+
+    groups: dict[str, list[int]] = {}
+    for row in rows:
+        key = str(row.get("dedup_key") or "")
+        if not key:
+            continue  # legacy row (no key) — left alone, cleaned up by --reindex
+        groups.setdefault(key, []).append(int(row["id"]))
+
+    dup_ids: list[int] = []
+    for _key, ids in groups.items():
+        if len(ids) > 1:
+            ids.sort()
+            dup_ids.extend(ids[1:])  # keep the lowest id, drop the rest
+
+    if not dup_ids:
+        return 0
+
+    result = client.delete(_COLLECTION_NAME, ids=dup_ids)
+    if isinstance(result, dict):
+        return int(result.get("delete_count", len(dup_ids)))
+    return len(result)
 
 
 # ---------------------------------------------------------------------------
@@ -202,12 +270,29 @@ def _run(argv: list[str] | None = None) -> dict[str, object]:
         "resets learned patterns, rewrites the embedder stamp). Use after changing "
         "the embedding model (Phase 6 6b)",
     )
+    parser.add_argument(
+        "--prune-dupes",
+        action="store_true",
+        help="Remove duplicate doc chunks (same dedup key) from the live store, "
+        "keeping the earliest row of each group. Non-destructive to other entries.",
+    )
 
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    if not any((args.golden, args.docs, args.pdfs, args.bundled, args.stats, args.prune_learned, args.reindex)):
+    if not any(
+        (
+            args.golden,
+            args.docs,
+            args.pdfs,
+            args.bundled,
+            args.stats,
+            args.prune_learned,
+            args.reindex,
+            args.prune_dupes,
+        )
+    ):
         parser.print_help()
         return {"golden": 0, "docs": 0, "pdfs": 0}
 
@@ -224,6 +309,11 @@ def _run(argv: list[str] | None = None) -> dict[str, object]:
         result["pruned"] = pruned
         print(f"Pruned {pruned} learned pattern(s) from the RAG store")
 
+    if args.prune_dupes:
+        removed = prune_doc_duplicates()
+        result["pruned_dupes"] = removed
+        print(f"Pruned {removed} duplicate doc chunk(s) from the RAG store")
+
     if args.golden or args.docs or args.pdfs:
         patterns: list[GoldenPattern] = []
         docs_chunks: list[DocChunk] = []
@@ -236,7 +326,7 @@ def _run(argv: list[str] | None = None) -> dict[str, object]:
             docs_chunks = load_docs(docs_dir)
 
         if args.pdfs:
-            pdf_chunks = ingest_pdf_directory(pdfs_dir)
+            pdf_chunks = ingest_pdf_directory(pdfs_dir, ocr_fallback=_build_ocr_fallback())
 
         result.update(rebuild_store(patterns, docs_chunks, pdf_chunks))
 

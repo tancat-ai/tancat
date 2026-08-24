@@ -18,8 +18,10 @@ Usage::
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -66,6 +68,33 @@ MIN_PAGE_CHARS: int = 10
 def _estimate_tokens(text: str) -> int:
     """Rough token count: character length / 4."""
     return max(1, len(text) // 4)
+
+
+# ---------------------------------------------------------------------------
+# Dedup key (AI-045 #4) — idempotent doc re-ingestion
+# ---------------------------------------------------------------------------
+
+
+def _normalise_for_dedup(text: str) -> str:
+    """Normalise chunk text for the dedup key.
+
+    Collapses whitespace, strips, and lowercases so the key is stable across
+    cosmetic re-extraction differences (trailing spaces, line-break placement,
+    case) while still distinguishing genuinely different content.
+    """
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def doc_chunk_key(chunk: DocChunk) -> str:
+    """Stable dedup key for a doc chunk.
+
+    ``sha256(source \x00 heading_path \x00 normalised_text)``.  Two chunks are
+    duplicates iff source, heading path, and normalised content all match.
+    The ``\x00`` separators prevent field-boundary collisions (a source ending
+    in a space can't collide with a heading starting with one).
+    """
+    payload = f"{chunk.source}\x00{chunk.heading_path}\x00{_normalise_for_dedup(chunk.text)}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -295,14 +324,24 @@ def _is_table_section(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def ingest_pdf(filepath: Path) -> list[DocChunk]:
+def ingest_pdf(
+    filepath: Path,
+    *,
+    ocr_fallback: Callable[[Path, int], str] | None = None,
+) -> list[DocChunk]:
     """Ingest a single PDF file into DocChunks.
 
     Processes all pages, detects headings, extracts tables, and
     chunks the result.  Returns an empty list for empty/unreadable PDFs.
 
     Args:
-        filepath: Path to a PDF file.
+        filepath: Path to the PDF file.
+        ocr_fallback: Optional page-scoped OCR hook for image-only pages.
+            Called as ``ocr_fallback(filepath, page_number_1indexed)`` and
+            should return extracted text (may be empty).  When provided, an
+            image-only page is sent to OCR instead of being skipped.  When
+            ``None``, image-only pages are skipped with a loud WARNING hinting
+            at ``OCR_BACKEND=unlimited-ocr``.
 
     Returns:
         List of ``DocChunk`` objects ready for ``RAGStore.add_docs()``.
@@ -323,15 +362,42 @@ def ingest_pdf(filepath: Path) -> list[DocChunk]:
     for page_num in range(page_count):
         page = doc[page_num]
 
-        # Quick check: skip pages with too few characters (image-only)
+        # Quick check: pages with too few characters are image-only.
         quick_text = page.get_text()
         if len(quick_text) < MIN_PAGE_CHARS:
-            logger.info(
-                "  %s: page %d skipped (%d chars, likely image-only)",
-                source,
-                page_num + 1,
-                len(quick_text),
-            )
+            if ocr_fallback is not None:
+                try:
+                    ocr_text = ocr_fallback(filepath, page_num + 1)
+                except Exception:
+                    logger.warning(
+                        "  %s: page %d OCR fallback failed — page skipped",
+                        source,
+                        page_num + 1,
+                        exc_info=True,
+                    )
+                    continue
+                if ocr_text and ocr_text.strip():
+                    all_text += ocr_text.strip() + "\n\n"
+                    logger.info(
+                        "  %s: page %d extracted via OCR (%d chars)",
+                        source,
+                        page_num + 1,
+                        len(ocr_text.strip()),
+                    )
+                else:
+                    logger.warning(
+                        "  %s: page %d OCR returned no text — page skipped",
+                        source,
+                        page_num + 1,
+                    )
+            else:
+                logger.warning(
+                    "  %s: page %d skipped (%d chars, likely image-only). "
+                    "Set OCR_BACKEND=unlimited-ocr to extract scanned pages.",
+                    source,
+                    page_num + 1,
+                    len(quick_text),
+                )
             continue
 
         # Extract text with heading markers
@@ -361,15 +427,26 @@ def ingest_pdf(filepath: Path) -> list[DocChunk]:
             )
         )
 
+    # Compute the dedup key for every chunk so re-ingestion is idempotent
+    # (AI-045 #4).  RAGStore.add_docs skips chunks whose key already exists.
+    for chunk in chunks:
+        chunk.dedup_key = doc_chunk_key(chunk)
+
     logger.info("  %s → %d chunk(s) from %d pages", source, len(chunks), page_count)
     return chunks
 
 
-def ingest_pdf_directory(directory: Path) -> list[DocChunk]:
+def ingest_pdf_directory(
+    directory: Path,
+    *,
+    ocr_fallback: Callable[[Path, int], str] | None = None,
+) -> list[DocChunk]:
     """Ingest all PDFs in a directory.
 
     Args:
         directory: Path to a directory containing PDF files.
+        ocr_fallback: Page-scoped OCR hook threaded through to
+            :func:`ingest_pdf` for each file (see its docstring).
 
     Returns:
         Combined list of ``DocChunk`` objects from all PDFs.
@@ -382,7 +459,7 @@ def ingest_pdf_directory(directory: Path) -> list[DocChunk]:
         return all_chunks
 
     for fpath in pdf_files:
-        chunks = ingest_pdf(fpath)
+        chunks = ingest_pdf(fpath, ocr_fallback=ocr_fallback)
         all_chunks.extend(chunks)
 
     logger.info(

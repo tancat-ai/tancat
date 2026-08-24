@@ -43,6 +43,7 @@ A chunk of Playwright documentation (or other domain text).
 | `text` | `str` | Chunk content |
 | `source` | `str` | Source filename, e.g. "playwright-locators.md" |
 | `heading_path` | `str` | Heading hierarchy, e.g. "Locators > Best Practices" |
+| `dedup_key` | `str` | Stable sha256 content hash (see `src.pdf_ingest.doc_chunk_key`); `""` = not computed → always inserted |
 
 ### `KnowledgeEntry`
 Internal entry ready for vector store upsert. Contains `vector`, `text`, `metadata`.
@@ -117,13 +118,15 @@ High-level retrieval store: embeds text and delegates to a vector backend.
 ```python
 def __init__(self, backend: VectorStoreBackend, embedder: EmbeddingProvider) -> None: ...
 def add_patterns(self, patterns: list[GoldenPattern]) -> int: ...
-def add_docs(self, chunks: list[DocChunk]) -> int: ...
+def add_docs(self, chunks: list[DocChunk]) -> tuple[int, int]: ...
 def retrieve(
     self, query: str, *, action_type: str = "", k: int = 5, min_confidence: float = 0.6
 ) -> list[RetrievedPattern]: ...
 ```
 
 **`retrieve()`:** Embeds the query, searches the backend, filters by `min_confidence`, and returns `RetrievedPattern` objects sorted by confidence descending. Returns empty list when the store is empty.
+
+**`add_docs()`:** Returns `(inserted, skipped)`. Before embedding, it queries the backend for existing `dedup_key` values (`query_dedup_keys("doc")`) and skips any chunk whose non-empty key already exists — re-ingestion is idempotent. Chunks with an empty `dedup_key` are always inserted (back-compat). The key is stored as a dynamic `dedup_key` field on each row.
 
 ## Key Design Decisions
 
@@ -193,7 +196,8 @@ over Milvus dynamic fields — spike-verified) + `increment_learned_hit()`
 - `counts_by_type() -> dict[str, int]` — per-`entry_type` counts (`--stats`)
 - `delete_learned() -> int` — delete non-golden/doc rows, keep the pack
   (`--prune-learned`); handles both pymilvus delete return shapes
-- `find_learned(...)` / `increment_learned_hit(...)` — dedup machinery
+- `find_learned(...)` / `increment_learned_hit(...)` — learned-pattern dedup machinery
+- `query_dedup_keys(entry_type: str) -> list[str]` — doc-chunk dedup keys (AI-045 #4); protocol default returns `[]`, Milvus impl queries the `dedup_key` field
 
 ### `RetrievedPattern.site_hash`
 New field (`str = ""`) — learned patterns carry their site hash through to the
