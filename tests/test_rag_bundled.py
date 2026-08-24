@@ -98,7 +98,7 @@ class TestEnsureBundledSeeded:
         store = MagicMock()
         store.is_empty = True
         store.add_patterns.return_value = 67
-        store.add_docs.return_value = 27
+        store.add_docs.return_value = (27, 0)
         result = ensure_bundled_seeded(store=store, marker_path=marker)
         assert result["status"] == "seeded"
         assert result["golden"] == 67
@@ -122,6 +122,7 @@ class TestEnsureBundledSeeded:
         marker.write_text(json.dumps({"version": 1}))
         store = MagicMock()
         store.is_empty = True
+        store.add_docs.return_value = (27, 0)
         result = ensure_bundled_seeded(store=store, marker_path=marker, force=True)
         assert result["status"] == "seeded"
         store.add_patterns.assert_called_once()
@@ -132,7 +133,7 @@ class TestEnsureBundledSeeded:
         store = MagicMock()
         store.is_empty = False
         store.add_patterns.return_value = 67
-        store.add_docs.return_value = 27
+        store.add_docs.return_value = (27, 0)
         result = ensure_bundled_seeded(store=store, marker_path=marker, force=True)
         assert result["status"] == "seeded"
         store.add_patterns.assert_called_once()
@@ -142,6 +143,7 @@ class TestEnsureBundledSeeded:
         marker = tmp_path / ".rag_bundled_seeded.json"
         store = MagicMock()
         store.is_empty = True
+        store.add_docs.return_value = (27, 0)
         ensure_bundled_seeded(store=store, marker_path=marker)
         data = json.loads(marker.read_text(encoding="utf-8"))
         assert data["version"] == BUNDLED_PACK_VERSION

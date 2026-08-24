@@ -14,7 +14,75 @@ from scripts.rag_ingest import (
     load_docs,
     load_golden_patterns,
     main,
+    prune_doc_duplicates,
 )
+
+# ---------------------------------------------------------------------------
+# Doc-chunk duplicate pruning (AI-045 #4)
+# ---------------------------------------------------------------------------
+
+
+class TestPruneDocDuplicates:
+    def _make_client(self, rows: list[dict]) -> MagicMock:
+        """A fake Milvus client whose query returns *rows*; delete records ids."""
+        client = MagicMock()
+        client.query.return_value = rows
+        deleted: list[int] = []
+
+        def _delete(_name: str, ids: list[int] | None = None) -> dict[str, int]:
+            if ids:
+                deleted.extend(ids)
+            return {"delete_count": len(ids) if ids else 0}
+
+        client.delete.side_effect = _delete
+        client._deleted = deleted  # type: ignore[attr-defined]
+        return client
+
+    def test_prunes_duplicates_keeps_lowest_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rows = [
+            {"id": 10, "dedup_key": "K"},
+            {"id": 5, "dedup_key": "K"},  # dup of K
+            {"id": 7, "dedup_key": "K"},  # dup of K
+            {"id": 3, "dedup_key": "J"},
+            {"id": 9, "dedup_key": ""},  # legacy, no key — untouched
+        ]
+        client = self._make_client(rows)
+        backend = MagicMock()
+        backend._c = client
+
+        import scripts.rag_ingest as ri
+
+        monkeypatch.setattr(ri, "MilvusLiteBackend", lambda *a, **k: backend)
+        monkeypatch.setattr(
+            ri, "SentenceTransformerEmbedder", lambda *a, **k: MagicMock(dimension=8, identity="fake@8")
+        )
+        monkeypatch.setattr(ri, "get_storage", lambda: MagicMock(rag_path=lambda: "x"))
+
+        removed = prune_doc_duplicates()
+        # Kept ids 5 (K) and 3 (J); removed 10, 7 (K dups). Legacy 9 untouched.
+        assert removed == 2
+        assert sorted(client._deleted) == [7, 10]
+
+    def test_no_duplicates_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        rows = [
+            {"id": 1, "dedup_key": "A"},
+            {"id": 2, "dedup_key": "B"},
+        ]
+        client = self._make_client(rows)
+        backend = MagicMock()
+        backend._c = client
+
+        import scripts.rag_ingest as ri
+
+        monkeypatch.setattr(ri, "MilvusLiteBackend", lambda *a, **k: backend)
+        monkeypatch.setattr(
+            ri, "SentenceTransformerEmbedder", lambda *a, **k: MagicMock(dimension=8, identity="fake@8")
+        )
+        monkeypatch.setattr(ri, "get_storage", lambda: MagicMock(rag_path=lambda: "x"))
+
+        assert prune_doc_duplicates() == 0
+        client.delete.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Golden pattern loading

@@ -61,10 +61,19 @@ class OcrBackend(ABC):
         """Read a Markdown file directly (no OCR needed)."""
         ...
 
+    def parse_page(self, path: str | Path, page_number: int) -> str:
+        """OCR a single PDF page (1-indexed) — for image-only page fallback.
+
+        Backends without page-level OCR return an empty string.  The
+        production ingest path calls this only for pages where PyMuPDF
+        found too few characters (i.e. scanned/image-only pages).
+        """
+        return ""
+
     @property
     @abstractmethod
     def name(self) -> str:
-        """Human-readable backend name for logging."""
+        """Human-readable backend name for logging.""" ""
         ...
 
     @property
@@ -98,6 +107,11 @@ class PyMuPDFBackend(OcrBackend):
 
     def parse_markdown(self, path: str | Path) -> str:
         return Path(path).read_text(encoding="utf-8")
+
+    def parse_page(self, path: str | Path, page_number: int) -> str:
+        """PyMuPDF has no OCR — it can only read embedded text, which an
+        image-only page does not have.  Return empty so the caller skips."""
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +266,53 @@ class UnlimitedOCRBackend(OcrBackend):
     def parse_markdown(self, path: str | Path) -> str:
         """Markdown files are read directly — no OCR needed."""
         return Path(path).read_text(encoding="utf-8")
+
+    def parse_page(self, path: str | Path, page_number: int) -> str:
+        """OCR a single PDF page (1-indexed) — the image-only-page fallback.
+
+        Rasterises just that page to a 300 DPI PNG and runs the vision model
+        on the single image.  Much cheaper than :meth:`parse_pdf` (no whole-
+        document pass), which is why the production ingest path calls this
+        per skipped page rather than re-OCRing the document.
+        """
+        import shutil
+        import tempfile
+
+        import fitz  # PyMuPDF
+
+        self._ensure_model()
+        assert self._model is not None
+        assert self._tokenizer is not None
+
+        pdf_path = Path(path)
+        doc = fitz.open(str(pdf_path))
+        if page_number < 1 or page_number > doc.page_count:
+            doc.close()
+            logger.warning("parse_page: page %d out of range (1-%d) for %s", page_number, doc.page_count, pdf_path.name)
+            return ""
+        page = doc[page_number - 1]
+        tmp_dir = tempfile.mkdtemp(prefix="unlimited_ocr_page_")
+        mat = fitz.Matrix(300 / 72, 300 / 72)
+        try:
+            out = Path(tmp_dir) / "page.png"
+            page.get_pixmap(matrix=mat).save(str(out))
+
+            self._model.infer_multi(
+                self._tokenizer,
+                prompt="<image>Single page parsing.",
+                image_files=[str(out)],
+                output_path=str(Path(tmp_dir) / "output"),
+                image_size=1024,
+                max_length=32768,
+                no_repeat_ngram_size=35,
+                ngram_window=1024,
+                save_results=True,
+            )
+            return self._collect_output_text(Path(tmp_dir) / "output")
+        finally:
+            doc.close()
+            if os.getenv("PIPELINE_DEBUG") != "1":
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
     @staticmethod
     def _collect_output_text(output_dir: Path) -> str:
