@@ -35,8 +35,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
+from src.ocr_backends import OcrBackend, get_ocr_backend
 from src.pdf_ingest import ingest_pdf_directory
 from src.rag_bundled import (
     _write_marker,
@@ -76,6 +78,26 @@ __all__ = [
     "rebuild_store",
     "store_stats",
 ]
+
+
+# ---------------------------------------------------------------------------
+# OCR fallback
+# ---------------------------------------------------------------------------
+
+
+def _build_ocr_fallback() -> Callable[[Path, int], str] | None:
+    """Build a page-scoped OCR fallback for image-only PDF pages.
+
+    Consults the configured OCR backend (persisted setting > ``OCR_BACKEND``
+    env > pymupdf default).  Only the GPU Unlimited-OCR backend can actually
+    OCR a rasterised page, so a fallback is returned only when that backend
+    is configured *and* available in this environment.  Otherwise ``None`` —
+    image-only pages are then skipped with a loud warning (not silently).
+    """
+    backend: OcrBackend = get_ocr_backend()
+    if backend.name == "unlimited-ocr" and backend.available:
+        return backend.parse_page
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +258,7 @@ def _run(argv: list[str] | None = None) -> dict[str, object]:
             docs_chunks = load_docs(docs_dir)
 
         if args.pdfs:
-            pdf_chunks = ingest_pdf_directory(pdfs_dir)
+            pdf_chunks = ingest_pdf_directory(pdfs_dir, ocr_fallback=_build_ocr_fallback())
 
         result.update(rebuild_store(patterns, docs_chunks, pdf_chunks))
 

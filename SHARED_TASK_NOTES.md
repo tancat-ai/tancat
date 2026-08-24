@@ -4,7 +4,7 @@
 **Plan:** `docs/plans/AI-045_4_pdf_ocr_dedup_plan.md`
 
 ## Progress
-- [ ] Step 1: OCR wiring in pdf_ingest.py
+- [x] Step 1: OCR wiring in pdf_ingest.py (22 passed / 1 skipped on the two OCR/PDF test files)
 - [ ] Step 2: Dedup key in rag_store.py
 - [ ] Step 3: Update callers + CLI surface
 - [ ] Step 4: New tests

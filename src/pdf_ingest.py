@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -295,14 +296,24 @@ def _is_table_section(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def ingest_pdf(filepath: Path) -> list[DocChunk]:
+def ingest_pdf(
+    filepath: Path,
+    *,
+    ocr_fallback: Callable[[Path, int], str] | None = None,
+) -> list[DocChunk]:
     """Ingest a single PDF file into DocChunks.
 
     Processes all pages, detects headings, extracts tables, and
     chunks the result.  Returns an empty list for empty/unreadable PDFs.
 
     Args:
-        filepath: Path to a PDF file.
+        filepath: Path to the PDF file.
+        ocr_fallback: Optional page-scoped OCR hook for image-only pages.
+            Called as ``ocr_fallback(filepath, page_number_1indexed)`` and
+            should return extracted text (may be empty).  When provided, an
+            image-only page is sent to OCR instead of being skipped.  When
+            ``None``, image-only pages are skipped with a loud WARNING hinting
+            at ``OCR_BACKEND=unlimited-ocr``.
 
     Returns:
         List of ``DocChunk`` objects ready for ``RAGStore.add_docs()``.
@@ -365,11 +376,17 @@ def ingest_pdf(filepath: Path) -> list[DocChunk]:
     return chunks
 
 
-def ingest_pdf_directory(directory: Path) -> list[DocChunk]:
+def ingest_pdf_directory(
+    directory: Path,
+    *,
+    ocr_fallback: Callable[[Path, int], str] | None = None,
+) -> list[DocChunk]:
     """Ingest all PDFs in a directory.
 
     Args:
         directory: Path to a directory containing PDF files.
+        ocr_fallback: Page-scoped OCR hook threaded through to
+            :func:`ingest_pdf` for each file (see its docstring).
 
     Returns:
         Combined list of ``DocChunk`` objects from all PDFs.
@@ -382,7 +399,7 @@ def ingest_pdf_directory(directory: Path) -> list[DocChunk]:
         return all_chunks
 
     for fpath in pdf_files:
-        chunks = ingest_pdf(fpath)
+        chunks = ingest_pdf(fpath, ocr_fallback=ocr_fallback)
         all_chunks.extend(chunks)
 
     logger.info(
