@@ -16,7 +16,18 @@
 - OCR fallback is page-scoped (only image-only pages hit OCR); `OcrBackend.parse_page` default returns ""; UnlimitedOCR implements single-page 300DPI OCR.
 - `--prune-dupes` keeps lowest id per dedup_key group; legacy no-key rows untouched (cleaned by --reindex).
 - pre-commit mypy runs on staged test files too — inner test fns/lambdas need full annotations (disallow_untyped_defs).
-- [ ] Step 6: Documentation + session record + CHANGELOG
+- [x] Step 6: Documentation + session record + CHANGELOG + BACKLOG status
+
+## Done
+All six steps complete. AI-045 #4 (PDF OCR wiring + doc-chunk dedup) is code-complete and locally verified:
+- OCR page-scoped fallback wired into the production `--pdfs` path; loud WARNING when no OCR backend.
+- `DocChunk.dedup_key` + idempotent `add_docs` (returns `(inserted, skipped)`) + `--prune-dupes` CLI.
+- 10 new hermetic tests. Gates: full suite 2750 passed / 1 skipped, smoke 39/39, eval static 97.9% (no regression), ruff + mypy clean.
+- Docs updated: markdown_docs (pdf_ingest/rag_store/ocr_backends), session record, CHANGELOG [Unreleased], BACKLOG AI-045 #4 → 🟡 code-complete pending ship-it.
+
+## Remaining (user / ship-it)
+- Ship-it: ruff → mypy → pytest → commit → push → CI (see ship-it skill).
+- Real GPU `parse_page` path untested (opt-in, GPU-gated); consider a manual smoke on a box with UnlimitedOCR + a scanned PDF.
 
 ## Findings / Decisions
 (record any design changes, surprises, or deviations from the plan here)
