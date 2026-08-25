@@ -8,6 +8,13 @@ from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import Page
 
+from src.credential_redaction import (
+    is_sensitive_field,
+    masked_screenshot_page,
+    redact_text,
+    redact_url_credentials,
+    redact_value,
+)
 from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
@@ -332,7 +339,12 @@ class EvidenceTracker:
                 except Exception:
                     pass
                 # Take full page screenshot so coordinates relative to frame always match.
-                self.page.screenshot(path=str(screenshot_full_path), full_page=True)
+                # AI-045 §8.4: blank filled credential fields (password inputs and
+                # text inputs whose attributes look credential-ish) for the
+                # duration of the capture, then restore — evidence screenshots
+                # must never contain typed secrets in the clear.
+                with masked_screenshot_page(self.page):
+                    self.page.screenshot(path=str(screenshot_full_path), full_page=True)
                 screenshot_path = f"evidence/{screenshot_name}"
             except Exception as exc:
                 # Evidence collection must never break test execution, but a
@@ -446,7 +458,10 @@ class EvidenceTracker:
                    "Navigate to <url>" when empty.
         """
         if not label:
-            label = f"Navigate to {url}"
+            label = f"Navigate to {redact_url_credentials(url)}"
+        # AI-045 §8.4: never persist basic-auth userinfo (user:pass@host) in
+        # the evidence sidecar; navigation itself uses the original URL.
+        safe_url = redact_url_credentials(url)
         _t0 = time.time()
         try:
             self.page.goto(url)
@@ -457,13 +472,13 @@ class EvidenceTracker:
             # ``_record_step``).
             self.page.wait_for_timeout(500)
             self._record_step(
-                "navigate", label, value=url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
+                "navigate", label, value=safe_url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
             )
         except Exception as e:
             self._record_step(
                 "navigate",
                 label,
-                value=url,
+                value=safe_url,
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
@@ -471,8 +486,20 @@ class EvidenceTracker:
             raise
 
     def fill(self, locator: str, value: str, label: str = "") -> None:
+        # AI-045 §8.4: classify the field BEFORE filling. Sensitive fields get
+        # their value replaced by the redaction marker in BOTH evidence
+        # channels (sidecar ``value`` + any label that embeds it). Detection
+        # must run before the fill attempt: on the failure path the element
+        # may be gone from the DOM entirely, and locator-string matching alone
+        # is the weaker heuristic.
+        sensitive = is_sensitive_field(self.page, locator)
+        safe_value = redact_value(value) if sensitive else value
         if not label:
-            label = f"Fill {locator} with '{value}'"
+            label = f"Fill {locator} with '{safe_value}'"
+        else:
+            # An explicitly supplied label may still quote the raw value
+            # (e.g. "Fill password with 'hunter2'") — scrub it defensively.
+            label = redact_text(label, value) if sensitive else label
         _t0 = time.time()
         try:
             # B-045: native <select> elements reject .fill() ("Element is not an
@@ -485,10 +512,17 @@ class EvidenceTracker:
                 self._select_option(locator, value)
             else:
                 self.page.locator(locator).fill(value)
-            self._record_step("fill", label, locator=locator, value=value, elapsed_ms=int((time.time() - _t0) * 1000))
+            self._record_step(
+                "fill", label, locator=locator, value=safe_value, elapsed_ms=int((time.time() - _t0) * 1000)
+            )
         except Exception as e:
             self._record_step(
-                "fill", label, locator=locator, value=value, error=str(e), elapsed_ms=int((time.time() - _t0) * 1000)
+                "fill",
+                label,
+                locator=locator,
+                value=safe_value,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
             )
             raise
 
