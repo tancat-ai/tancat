@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-24 (AI-045 #4 PDF OCR wiring + dedup shipped; ingestion spec + TanCat Cloud decision record added)
+Last updated: 2026-08-25 (AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
 
 ---
 
@@ -46,6 +46,22 @@ Last updated: 2026-08-24 (AI-045 #4 PDF OCR wiring + dedup shipped; ingestion sp
 **Sequence when it becomes real:** option 2 (self-hosted) first, option 3 (cloud-API) after; the tier-3 VLM re-pick (dots.ocr/olmOCR vs Unlimited-OCR) lands here (cloud controls the GPU stack).
 
 **Guardrail:** do NOT let TanCat Cloud scope leak into the local product's launch scope — local ingestion is tiers 0–1 + summary, nothing cloud-shaped.
+
+---
+
+## 🆕 AI-057 — `llm_providers` extensibility for easy provider/model addition (POSSIBILITY — needs investigation)
+
+**Status:** 🆕 new — possibility logged 2026-08-25; **NOT a committed work item**. Needs further investigation before any scoping or build.
+**Priority:** TBD (future — as provider/model/API churn demands)
+**Context (from cleanup review 2026-08-25):** `src/llm_providers/__init__.py` (624 lines) mixes the `LLMProvider` ABC, the `get_provider()` factory, and the three concrete providers (OpenAI / LMStudio / Ollama) in one file. It is the single largest *protected* file (AGENTS.md §3: stable LLM client — changes require explicit instruction) and the one most likely to need frequent editing as new providers, models, and provider-API updates land.
+**Why it matters:** provider/model/API updates will keep arriving; the current single-file shape makes each addition a manual edit to a protected, high-blast-radius module. Designing for extensibility now (e.g. provider-as-plugin registration, per-provider adapter modules, declared model-capability metadata) would make future additions mechanical rather than surgical.
+**Open questions (investigate before scoping):**
+- Plugin/registration pattern vs explicit factory switch — which keeps the protected-file change surface smallest?
+- Per-provider adapter modules (`base.py` + `openai.py` / `lmstudio.py` / `ollama.py`) vs status quo — does this reduce risk or just relocate it?
+- Model-capability metadata (context window, thinking support, quantization notes) — where should it live so resolver/prompt layers read it without importing providers?
+- Relationship to the dormant Phase 1 per-agent model config (`src/agents/` NOT BUILT scope) — is this the seam that finally delivers it?
+- Air-gap / no-egress interaction — providers must never phone home; how does an extensible registry preserve the wedge?
+**Not in scope now:** no code, no schema, no build. Captured so it resurfaces when provider churn makes it urgent. Folds into the AI-054 testing-strategy review's "what do we maintain" question.
 
 ---
 
