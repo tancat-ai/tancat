@@ -1,6 +1,6 @@
 {
-  "total": 152,
-  "completed": 140,
+  "total": 153,
+  "completed": 141,
   "pending": 12,
   "files": [
     {
@@ -46,6 +46,16 @@
     {
       "source": "scripts/eval/eval_runner.py",
       "doc": "markdown_docs/scripts/eval_runner.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/map_3d/audit_3d_map.py",
+      "doc": "markdown_docs/scripts/map_3d/audit_3d_map.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "scripts/map_3d/generate_3d_map.py",
+      "doc": "markdown_docs/scripts/map_3d/generate_3d_map.py.md",
       "status": "completed"
     },
     {
@@ -139,6 +149,11 @@
       "status": "completed"
     },
     {
+      "source": "src/artifact_validation.py",
+      "doc": "markdown_docs/src/artifact_validation.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/browser_utils.py",
       "doc": "markdown_docs/src/browser_utils.py.md",
       "status": "completed"
@@ -146,6 +161,11 @@
     {
       "source": "src/cart_seeding_scraper.py",
       "doc": "markdown_docs/src/cart_seeding_scraper.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/ci_ignore.py",
+      "doc": "markdown_docs/src/ci_ignore.py.md",
       "status": "completed"
     },
     {
@@ -249,6 +269,11 @@
       "status": "completed"
     },
     {
+      "source": "src/credential_redaction.py",
+      "doc": "markdown_docs/src/credential_redaction.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/element_enricher.py",
       "doc": "markdown_docs/src/element_enricher.py.md",
       "status": "completed"
@@ -309,6 +334,11 @@
       "status": "completed"
     },
     {
+      "source": "src/flow_memory.py",
+      "doc": "markdown_docs/src/flow_memory.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/form_detector.py",
       "doc": "markdown_docs/src/form_detector.py.md",
       "status": "completed"
@@ -321,6 +351,11 @@
     {
       "source": "src/gantt_utils.py",
       "doc": "markdown_docs/src/gantt_utils.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/heatmap_alignment.py",
+      "doc": "markdown_docs/src/heatmap_alignment.py.md",
       "status": "completed"
     },
     {
@@ -499,6 +534,16 @@
       "status": "completed"
     },
     {
+      "source": "src/rag_bundled.py",
+      "doc": "markdown_docs/src/rag_bundled.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_learn.py",
+      "doc": "markdown_docs/src/rag_learn.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/rag_retriever.py",
       "doc": "markdown_docs/src/rag_retriever.py.md",
       "status": "updated-2026-08-03"
@@ -564,11 +609,6 @@
       "status": "completed"
     },
     {
-      "source": "src/settings_store.py",
-      "doc": "markdown_docs/src/settings_store.py.md",
-      "status": "completed"
-    },
-    {
       "source": "src/self_healing.py",
       "doc": "markdown_docs/src/self_healing.py.md",
       "status": "completed"
@@ -581,6 +621,11 @@
     {
       "source": "src/semantic_matcher.py",
       "doc": "markdown_docs/src/semantic_matcher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/settings_store.py",
+      "doc": "markdown_docs/src/settings_store.py.md",
       "status": "completed"
     },
     {
@@ -674,6 +719,11 @@
       "status": "completed"
     },
     {
+      "source": "src/ui/ui_run_comparison.py",
+      "doc": "markdown_docs/src/ui/ui_run_comparison.py.md",
+      "status": "completed"
+    },
+    {
       "source": "src/ui/ui_run_results.py",
       "doc": "markdown_docs/src/ui/ui_run_results.py.md",
       "status": "updated-2026-08-03"
@@ -716,51 +766,6 @@
     {
       "source": "src/vision_enricher.py",
       "doc": "markdown_docs/src/vision_enricher.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/rag_bundled.py",
-      "doc": "markdown_docs/src/rag_bundled.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/rag_learn.py",
-      "doc": "markdown_docs/src/rag_learn.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/ui/ui_run_comparison.py",
-      "doc": "markdown_docs/src/ui/ui_run_comparison.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/artifact_validation.py",
-      "doc": "markdown_docs/src/artifact_validation.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/flow_memory.py",
-      "doc": "markdown_docs/src/flow_memory.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/heatmap_alignment.py",
-      "doc": "markdown_docs/src/heatmap_alignment.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "scripts/map_3d/generate_3d_map.py",
-      "doc": "markdown_docs/scripts/map_3d/generate_3d_map.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "scripts/map_3d/audit_3d_map.py",
-      "doc": "markdown_docs/scripts/map_3d/audit_3d_map.py.md",
-      "status": "completed"
-    },
-    {
-      "source": "src/ci_ignore.py",
-      "doc": "markdown_docs/src/ci_ignore.py.md",
       "status": "completed"
     }
   ],
