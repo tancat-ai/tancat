@@ -217,12 +217,32 @@ class TestRenderShortcutBar:
 
         render_shortcut_bar([("1", "Select"), ("Q", "Quit")])
         captured = capsys.readouterr().out
-        assert "[1]Select" in captured
-        assert "[Q]Quit" in captured
+        assert "[1] Select" in captured
+        assert "[Q] Quit" in captured
         assert "├" in captured
         assert "┤" in captured
         assert "└" in captured
         assert "┘" in captured
+
+    def test_render_shortcuts_wraps_when_too_many_buttons(self, capsys: pytest.CaptureFixture) -> None:
+        from src.cli.retro_ui import render_shortcuts
+
+        buttons = [(str(i), f"Option {i}") for i in range(1, 13)]
+        render_shortcuts(buttons)
+        captured = capsys.readouterr().out
+        # Every button is present — nothing is truncated/dropped even when wrapped.
+        for i in range(1, 13):
+            assert f"[{i}] Option {i}" in captured
+        # Wrapping produces more than one content line (each starts with the border).
+        content_lines = [ln for ln in captured.splitlines() if ln.startswith("│")]
+        assert len(content_lines) >= 2
+
+    def test_render_shortcuts_empty_entries_no_crash(self, capsys: pytest.CaptureFixture) -> None:
+        from src.cli.retro_ui import render_shortcuts
+
+        render_shortcuts([])
+        captured = capsys.readouterr().out
+        assert "┌" in captured or "└" in captured  # border still drawn
 
 
 # ── Color module phosphor functions ────────────────────────────────────────

@@ -108,6 +108,25 @@ def _visible_len(text: str) -> int:
     return len(re.sub(r"\033\[\d+(;\d+)*m", "", text))
 
 
+def _inner_width() -> int:
+    """Usable width inside a 1-column box border (terminal width - 2)."""
+    return max(20, _terminal_width() - 2)
+
+
+def _truncate_middle(text: str, max_len: int) -> str:
+    """Truncate *text* to *max_len* visible chars, keeping the start readable.
+
+    Preserves the tail when the result is shorter than *max_len* (i.e. the
+    full text fits) so nothing is lost.  Only shrinks when genuinely too wide.
+    """
+    if _visible_len(text) <= max_len:
+        return text
+    if max_len <= 4:
+        return text[:max_len]
+    keep = max_len - 3
+    return text[:keep] + "..."
+
+
 # ── Screen layout ──────────────────────────────────────────────────────────
 
 
@@ -245,39 +264,72 @@ def render_state(state_lines: list[str]) -> None:
 
 
 def render_shortcut_bar(shortcuts: list[tuple[str, str]]) -> None:
-    """Render a bottom shortcut bar with key-action pairs in green.
+    """Deprecated thin bar.  Prefer :func:`render_shortcuts` for the
+    action-buttons layout.  Kept for backwards compatibility and tests.
+    """
+    render_shortcuts(shortcuts)
+
+
+def render_shortcuts(entries: list[tuple[str, str]]) -> None:
+    """Render a bottom row of key-action "buttons" in green box-drawing.
+
+    Each entry is a ``(key, label)`` pair rendered as an ``[key] Label``
+    button.  Buttons flow horizontally and wrap to additional lines when they
+    do not fit on one line — nothing is ever dropped, so every action stays
+    visible and usable even when there are many of them.
 
     Args:
-        shortcuts: List of (key, label) pairs.
-            e.g. ``[("1", "Select"), ("Q", "Quit"), ("H", "Help")]``
+        entries: List of (key, label) pairs, e.g.
+            ``[("M", "Main Menu"), ("B", "Back"), ("Q", "Quit")]``
 
-    Example output::
+    Example output (fits one line)::
 
         ├─────────────────────────────────────────────────────────────┤
-        │  [1]Select  [Q]Quit  [H]Help  [Enter]Confirm               │
+        │  [M] Main Menu   [B] Back   [Q] Quit                       │
         └─────────────────────────────────────────────────────────────┘
+
+    Wraps to a second line when the buttons do not fit on one line.
     """
-    width = _effective_width()
-    inner = width - 2
+    inner = _inner_width()
+    usable = inner - 2  # one space of padding on each side inside the border
+    top = _color_line(BOX.tee_r + BOX.h_line * inner + BOX.tee_l)
+    bottom = _color_line(BOX.corner_bl + BOX.h_line * inner + BOX.corner_br)
+    rows = _shortcut_button_rows(entries, usable)
 
-    # Build plain shortcut text first, then color the whole line
-    parts: list[str] = []
-    for key, label in shortcuts:
-        parts.append(f"[{key}]{label}")
-    shortcut_text = "  ".join(parts)
+    print(top, flush=True)
+    for row in rows:
+        print(_color_line(BOX.v_line + row.ljust(inner) + BOX.v_line), flush=True)
+    print(bottom, flush=True)
 
-    # Truncate at word boundaries to avoid cutting shortcuts in half
-    if len(shortcut_text) > inner:
-        truncated = shortcut_text[: inner - 3]
-        last_space = truncated.rfind("  ")
-        if last_space > 0:
-            truncated = truncated[:last_space]
-        shortcut_text = truncated + "..."
-    padded = shortcut_text + " " * (inner - len(shortcut_text))
 
-    print(_color_line(BOX.tee_r + BOX.h_line * inner + BOX.tee_l), flush=True)
-    print(_color_line(BOX.v_line + " " + padded + BOX.v_line), flush=True)
-    print(_color_line(BOX.corner_bl + BOX.h_line * inner + BOX.corner_br), flush=True)
+def _shortcut_button_rows(entries: list[tuple[str, str]], usable: int) -> list[str]:
+    """Lay out ``[key] Label`` buttons into rows that fit *usable* columns.
+
+    Buttons are packed greedily onto each row and wrapped to the next row
+    when the next button would not fit.  A row is never wider than *usable*.
+    """
+    buttons: list[str] = []
+    for key, label in entries:
+        if not key:
+            continue
+        buttons.append(f"[{key}] {label}" if label else f"[{key}]")
+
+    rows: list[str] = []
+    row_parts: list[str] = []
+    current_len = 0
+    for btn in buttons:
+        btn_len = _visible_len(btn)
+        add = btn_len if current_len == 0 else 2 + btn_len
+        if current_len and current_len + add > usable:
+            rows.append(" " + _truncate_middle("  ".join(row_parts), usable))
+            row_parts = []
+            current_len = 0
+            add = btn_len
+        row_parts.append(btn)
+        current_len += add
+    if row_parts or not rows:
+        rows.append(" " + _truncate_middle("  ".join(row_parts), usable))
+    return rows
 
 
 def render_separator() -> None:

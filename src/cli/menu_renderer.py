@@ -30,7 +30,7 @@ from .retro_ui import (
     prompt_non_empty,
     render_header,
     render_menu,
-    render_shortcut_bar,
+    render_shortcuts,
 )
 
 # ── Default selected index (persist across screen redraws) ─────────────────
@@ -43,6 +43,44 @@ def _next_selected() -> int:
     idx = _default_selected[0]
     _default_selected[0] = 0  # reset after use
     return idx
+
+
+# ── Navigation stack (back / main-menu actions) ────────────────────────────
+
+# Module-level so the stack survives across menu redraws within a process.
+# Each entry is the display name of a sub-menu screen; the implicit base is
+# the main menu ("Main Menu"), which is always available to return to.
+_menu_stack: list[str] = []
+
+
+def push_menu(name: str) -> None:
+    """Push a sub-menu name onto the navigation stack (call on entry)."""
+    _menu_stack.append(name)
+
+
+def pop_menu() -> str | None:
+    """Pop and return the most recent sub-menu name, or None at the main menu."""
+    if not _menu_stack:
+        return None
+    return _menu_stack.pop()
+
+
+def _reset_menu_stack() -> None:
+    """Clear the stack (main menu only — nothing sits above it)."""
+    _menu_stack.clear()
+
+
+# ── Back-sentinels (unique per sub-menu so callers can route correctly) ──
+
+# BACK_MAIN is returned by print_menu when the user chooses "Main Menu" from
+# depth ≥ 2; print_menu unwinds the navigation stack itself before returning
+# it, so callers can treat it exactly like any other negative abort value.
+BACK_MAIN = -100
+BACK_AUTH = -101
+BACK_JOURNEY = -102
+BACK_PACKAGE = -103
+BACK_LLM = -104
+BACK_CONSENT = -105
 
 
 # ── Header ─────────────────────────────────────────────────────────────────
@@ -152,6 +190,7 @@ def print_menu(
     options: list[str],
     prompt: str = "Choose an option",
     shortcuts: list[tuple[str, str]] | None = None,
+    back: int | None = None,
 ) -> int:
     """Print a numbered retro menu and return the selected index (0-based).
 
@@ -159,6 +198,20 @@ def print_menu(
     - Arrow keys: Up/Down to navigate, Enter to select
     - Numbered input: type ``1``, ``2``, etc. and press Enter
     - Shortcut keys: single-letter keys defined in *shortcuts*
+    - Navigation actions: ``B`` = go back one menu, ``M`` = go to main menu.
+      Returns ``back`` (a negative sentinel) when either is chosen, so the
+      caller can route navigation instead of treating it as a menu pick.
+
+    Args:
+        options: Menu item labels.
+        prompt: Section title shown above the menu.
+        shortcuts: Optional extra single-letter shortcuts for this screen.
+        back: Sentinel value (must be negative) returned when the user chooses
+            "Back" or "Main Menu".  Pass a unique negative per screen (e.g.
+            ``-101``) so the caller can tell which menu to return to.  When
+            ``None`` (the default), the Back/Main-Menu buttons are not shown
+            and only ``Q``/Quit is always available — useful for menus that
+            have no sensible "previous" screen.
     """
     first_render = True
     selected = 0
@@ -167,51 +220,36 @@ def print_menu(
             clear_screen()
         first_render = False
 
+        # ── Navigation buttons (Back / Main Menu) ───────────────────────
+        # Computed from the module navigation stack so they are correct no
+        # matter how deep the call site is nested.  Only shown when the menu
+        # registers a `back` sentinel (i.e. it has a sensible "previous").
+        nav_buttons: list[tuple[str, str]] = []
+        if back is not None and _menu_stack:
+            nav_buttons.append(("B", "Back"))
+            if len(_menu_stack) > 1:
+                nav_buttons.append(("M", "Main Menu"))
+
         render_menu(options, selected=selected)
         print()
         sys.stdout.flush()
 
-        def _format_shortcuts(entries: list[tuple[str, str]]) -> str:
-            return "  ".join(f"[{key}]{label}" for key, label in entries)
-
-        bar: list[tuple[str, str]] = []
-        for i, opt in enumerate(options):
-            label = opt.split(" (", 1)[0]
-            bar.append((str(i + 1), label))
-
-        if shortcuts:
-            existing_labels = {v.lower() for _, v in bar}
-            for s in shortcuts:
-                if s[1].lower() not in existing_labels:
-                    bar.append(s)
-                    existing_labels.add(s[1].lower())
-
-        existing_keys = {k for k, _ in bar}
-        existing_labels = {v.lower() for _, v in bar}
-        if "Q" not in existing_keys and "quit" not in existing_labels:
+        # ── Shortcut buttons: navigation + registered shortcuts + Quit ──
+        bar: list[tuple[str, str]] = list(nav_buttons)
+        taken = {key for key, _ in bar}
+        for key, label in shortcuts or []:
+            if key not in taken:
+                bar.append((key, label))
+                taken.add(key)
+        if "Q" not in taken:
             bar.append(("Q", "Quit"))
 
-        try:
-            inner = max(40, os.get_terminal_size().columns - 2)
-        except OSError:
-            inner = 78
-        if len(_format_shortcuts(bar)) > inner and shortcuts:
-            bar = bar[: len(options)] + [(key, key) for key, _ in shortcuts]
-            existing_keys = {k for k, _ in bar}
-            existing_labels = {v.lower() for _, v in bar}
-            if "Q" not in existing_keys and "quit" not in existing_labels:
-                bar.append(("Q", "Quit"))
-        if len(_format_shortcuts(bar)) > inner:
-            bar = bar[: len(options)]
-            existing_keys = {k for k, _ in bar}
-            existing_labels = {v.lower() for _, v in bar}
-            if "Q" not in existing_keys and "quit" not in existing_labels:
-                bar.append(("Q", "Quit"))
-
-        render_shortcut_bar(bar)
+        render_shortcuts(bar)
         print()
 
         if _running_in_git_bash():
+            # Piped/Git-Bash path (incl. scripts/cli_walkthrough.py, which keys
+            # its input on the "Enter selection:" marker). Prompt before input.
             try:
                 choice = input("   Enter selection: ").strip()
             except KeyboardInterrupt, EOFError:
@@ -248,14 +286,22 @@ def print_menu(
         if not choice:
             continue
 
+        # ── Single-character keys: navigation, quit, and shortcuts ──────
         if len(choice) == 1 and not choice.isdigit():
             upper = choice.upper()
-            # Always handle Q (Quit) immediately — do not trap it in shortcut loops
+            if back is not None and upper == "B" and _menu_stack:
+                _flush_msvcrt_buffer()
+                return back  # caller aborts; its pop_menu() restores the stack
+            if back is not None and upper == "M" and len(_menu_stack) > 1:
+                # Unwind every frame so the session lands on the main menu.
+                _flush_msvcrt_buffer()
+                _reset_menu_stack()
+                return BACK_MAIN
             if upper == "Q":
                 _flush_msvcrt_buffer()
                 print("\n  Quitting.")
                 return -1
-            # Check registered shortcuts (non-Quit)
+            # Registered single-letter shortcuts (e.g. provider / mode keys).
             if shortcuts:
                 for key, _label in shortcuts:
                     if key.upper() == upper:
@@ -264,6 +310,7 @@ def print_menu(
             print(yellow("  Invalid shortcut. Please try again."))
             continue
 
+        # ── Numeric selection (single or multi-digit) ──────────────────
         try:
             idx = int(choice) - 1
             if 0 <= idx < len(options):
@@ -389,8 +436,12 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
         [p[0] for p in providers],
         "Select LLM provider",
         shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("C", "OpenAI-Local"), ("A", "OpenAI")],
+        back=BACK_LLM,
     )
     if idx < 0:
+        # Back (BACK_LLM), Main Menu (BACK_MAIN), or Quit (-1): keep the
+        # caller's existing config untouched.  Stack cleanup belongs to the
+        # pusher (main.py's inline wrapper pops in a finally).
         return provider, base_url, model_name
 
     display_name, provider_key, default_url = providers[idx]
@@ -548,25 +599,42 @@ def parse_target_urls(base_url: str, urls_input: str) -> list[str]:
 
 
 def collect_consent_mode() -> str:
+    """Pick consent handling. Returns an empty string when backed out —
+    the caller keeps the current mode in that case."""
     idx = print_menu(
         ["auto-dismiss", "leave-as-is", "test-consent-flow"],
         "Consent handling",
+        back=BACK_CONSENT,
     )
+    if idx < 0:
+        return ""
     return ["auto-dismiss", "leave-as-is", "test-consent-flow"][idx]
 
 
 # ── Authentication / Journey (AI-009 Phase B) ────────────────────────────
 
 
-def collect_authentication() -> dict[str, str] | None:
-    """Let user define a credential profile. Returns dict or None to skip."""
+def collect_authentication() -> dict[str, str] | int | None:
+    """Let user define a credential profile.
+
+    Returns:
+        dict with label/username/password when configured,
+        ``None`` when the user explicitly skips,
+        a negative sentinel (BACK_AUTH / BACK_MAIN / -1) when the user backs
+        out or quits — the caller must then keep any existing profile.
+    """
     print_header("Authentication (optional)")
 
     choice = print_menu(
         ["Configure credentials", "Skip (no authentication needed)"],
         "Authentication",
         shortcuts=[("C", "Configure"), ("S", "Skip")],
+        back=BACK_AUTH,
     )
+    if choice < 0:
+        # Back / Main Menu / Quit — never wipe an existing profile (B: the
+        # pre-navigation behaviour cleared it, silently losing config).
+        return choice
     if choice == 1:
         print(yellow("  Skipping authentication setup."))
         return None
@@ -581,15 +649,26 @@ def collect_authentication() -> dict[str, str] | None:
 JOURNEY_STEP_ACTIONS = ["navigate", "click", "fill", "wait", "scrape"]
 
 
-def collect_journey_steps() -> list[dict[str, str]]:
-    """Interactive journey builder. Returns list of step dicts."""
+def collect_journey_steps() -> list[dict[str, str]] | int:
+    """Interactive journey builder.
+
+    Returns:
+        list of step dicts when the builder finishes (possibly empty after an
+        explicit skip), or a negative sentinel (BACK_JOURNEY / BACK_MAIN / -1)
+        when the user backs out or quits — the caller must then keep any
+        existing journey instead of overwriting it with a partial build.
+    """
     print_header("Journey Builder (optional)")
 
     choice = print_menu(
         ["Build journey steps", "Skip (use static URL scraping)"],
         "Journey scraping",
-        shortcuts=[("B", "Build"), ("S", "Skip")],
+        # NOTE: no "B" shortcut here — B is the Back key on this screen now.
+        shortcuts=[("S", "Skip")],
+        back=BACK_JOURNEY,
     )
+    if choice < 0:
+        return choice
     if choice == 1:
         print(yellow("  Skipping journey builder — using static URL scraping."))
         return []
@@ -622,17 +701,25 @@ def collect_journey_steps() -> list[dict[str, str]]:
             ["Add step", "Done building"],
             "Journey builder",
             shortcuts=[("A", "Add"), ("D", "Done")],
+            back=BACK_JOURNEY,
         )
+        if add_choice == BACK_JOURNEY:
+            # B on the builder's top screen: leave the builder, keeping the
+            # steps gathered so far for the caller to decide (sentinel tells
+            # main.py to preserve the previous journey instead).
+            return BACK_JOURNEY
         if add_choice == 1:
             break
         if add_choice < 0:
-            print(yellow("  Quitting journey builder."))
-            return steps
+            return add_choice
 
-        action_idx = print_menu(JOURNEY_STEP_ACTIONS, "Step type")
+        action_idx = print_menu(JOURNEY_STEP_ACTIONS, "Step type", back=BACK_JOURNEY)
+        if action_idx == BACK_JOURNEY:
+            # B inside the step-type picker returns to the builder loop,
+            # NOT out of the builder (this screen has no own stack frame).
+            continue
         if action_idx < 0:
-            print(yellow("  Quitting journey builder."))
-            return steps
+            return action_idx
         action = JOURNEY_STEP_ACTIONS[action_idx]
 
         new_step: dict[str, str] = {"action": action}
@@ -724,7 +811,8 @@ def select_saved_package(packages: list[dict[str, str]]) -> int:
         detail = f"{pkg['test_count']} tests, {pkg['run_count']} runs"
         items.append(f"{label} — {detail}")
 
-    idx = print_menu(items, "Select a saved package")
+    idx = print_menu(items, "Select a saved package", back=BACK_PACKAGE)
+    # Stack cleanup belongs to the pusher (main.py wrapper pops in finally).
     return idx
 
 
