@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import sqlite3
 import subprocess
 import uuid
@@ -379,6 +378,18 @@ def load_eval_history(
 # ---------------------------------------------------------------------------
 
 
+def rag_enabled_by_config() -> bool:
+    """Deprecated local mirror — kept for import compatibility.
+
+    The single source of truth now lives in
+    ``src.orchestrator.rag_enabled_by_config`` (B-036 semantics: missing
+    ``RAG_ENABLED`` means enabled; only ``=0`` opts out).
+    """
+    from src.orchestrator import rag_enabled_by_config as _pipeline_gate
+
+    return _pipeline_gate()
+
+
 class EvalRunner:
     """Unified eval harness runner.
 
@@ -539,7 +550,9 @@ class EvalRunner:
             # is the only supported selector for graph pipeline runs.
             pipeline_type = "graph" if self.use_graph else "linear"
             gen_mode = "regenerated" if self.regenerate else "captured"
-            rag_enabled = os.environ.get("RAG_ENABLED", "").strip() == "1"
+            # Record the pipeline's ACTUAL RAG gate (B-036: default-on),
+            # not raw env presence — see rag_enabled_by_config().
+            rag_enabled = rag_enabled_by_config()
             git_commit = _get_git_commit()
             provider, model = self._loaded_model_identity()
             temperature_sent, server_defaults, thinking = self._sampling_identity(self.use_graph)
