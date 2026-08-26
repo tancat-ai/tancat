@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-25 (AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
+Last updated: 2026-08-26 (AI-058 contrastive learned store proposed — METRIC-FIRST; AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
 
 ---
 
@@ -62,6 +62,74 @@ Last updated: 2026-08-25 (AI-057 llm_providers extensibility possibility logged;
 - Relationship to the dormant Phase 1 per-agent model config (`src/agents/` NOT BUILT scope) — is this the seam that finally delivers it?
 - Air-gap / no-egress interaction — providers must never phone home; how does an extensible registry preserve the wedge?
 **Not in scope now:** no code, no schema, no build. Captured so it resurfaces when provider churn makes it urgent. Folds into the AI-054 testing-strategy review's "what do we maintain" question.
+
+---
+
+## 🆕 AI-058 — Contrastive learned store: record BOTH positives and negatives, cross-reference at scoring
+
+**Status:** 🆕 new — proposed 2026-08-26. **METRIC-FIRST.** Do NOT build until the isolation harness (**AI-059**) exists and a cold-store baseline is captured. The feature is judged against that baseline.
+**Priority:** Medium (product-differentiation experiment, not a launch blocker — sequence after AI-055 and Phase 6 6c/6d).
+**Folds into:** AI-054 (testing-strategy review) + the AI-045 RAG/evidence thread.
+
+### Two separate concerns (2026-08-26 reframing)
+Keep AI-058 (production) distinct from **AI-059** (isolation):
+- **Production (AI-058):** does the user's suite get greener over time as the store warms, with no intervention? KPI is a **trend**, not a point. No golden snapshot exists in production — the only ground truth is whether the user accepted the test.
+- **Isolation (AI-059):** can we *attribute* improvement to the store? Lab condition — store is the only variable, deterministic mocks, auto-learn disabled during measurement. Deliberately NOT how production behaves. Mixing the two is the trap that blinded the golden-res accuracy metric.
+
+**The one-line version:** a human tester learns from mistakes — so should the generator. Add a **`learned_negative`** entry type alongside positives, record confirmed wrong locators, and cross-reference them at scoring time so the resolver down-weights elements that failed before (and up-weights what worked), mirroring how a person builds intuition per site.
+
+### Objective reframing (the 2026-08-26 eval finding that motivates this)
+- The current learned store is **positive-only and ingests ONLY passed steps** → it can only *reinforce* choices the pipeline already gets right. Structurally it **cannot** move resolution accuracy on a fixed golden benchmark, because the benchmark's error mass is exactly the data learning never observes. Worse, on this project's eval the learned descriptions have **0% overlap with golden descriptions** (LLM vocabulary vs hand-authored), and we measured **byte-identical** resolution accuracy with learned=0 vs learned=380 — confirming the point.
+- **Therefore the objective of learned/RAG is NOT "match the hand-authored golden locator."** That is a code-health gate (caught by the static eval). The learning objective is **end-to-end test success / progress**: how far through each generated test a run gets, how many tests go green on first generation, and how few self-heal iterations it takes. **Resolution accuracy is the wrong north-star for measuring learning.**
+- Consequence for this item: the measurement must track **per-test progress depth** and **pass/heal outcomes on novel stories**, not golden-key fidelity.
+
+### Target envelope via manual pass (infer-then-prune)
+A real tester validates *intent, not implementation*: "add item to cart" is satisfied by any working cart-add — we must NOT force "click the red dress". But we also must not let the model *game* the test (GOTO past a step, drop an assertion, pass trivially).
+- **Method:** generate v1 → a single human pass reviews each test, confirms validity, fixes gaps → that reviewed state becomes the **target envelope** (an *acceptance set*, not one locator).
+- **Infer-then-prune:** auto-infer the envelope from the first valid run, let the human prune — keep the manual pass light **until we understand whether learning is even working**; only then attempt an automated gate.
+- **Two guards for the strictness dialectic:**
+  - *Variety* ← positive learned store (description-keyed, already allows multiple valid locators/routes).
+  - *Integrity* ← a **test-integrity check** (not yet built): did the test perform the required actions (navigate/click/fill counts match the plan) and are its assertions non-trivial? Catches the "circumvent issues that should be there" gaming mode.
+
+### Metric (primary = A: `mean_pass_depth`)
+- `mean_pass_depth` = avg(steps before first failure ÷ total steps) per test — the headline, golden-free, matches "how far through each test".
+- Corroboration: `first_pass_green_rate` (reuse `test_pass_rate`), `false_positive_rate`, `self_heal_iterations_to_green` (new). Optional failure-class breakdown (existing `failure_classifier`) isolates locator-class depth loss from infra noise.
+- **Production:** trend of the above climbing across the user's runs. **Isolation (AI-059):** delta when only the store changes.
+
+### Open questions to grill before build
+- Which KPI is the real signal — `mean_pass_depth`, `first_pass_green_rate`, or `self_heal_iterations`? (Propose tracking all three; judge by signal-to-noise. The user's instinct that "how far through each test" is the objective is the leading candidate.)
+- **Recording gates for negatives (precision is everything):** locator-class failures only (`LocatorNotFoundError` / locator-timeout / hidden-element timeout, with a resolved selector present)? **Self-heal replacement pairs** (old selector = confirmed negative, new = reinforced positive — highest-precision signal, half already captured by `pattern_from_patch`)? How to **exclude infra flakes** (GPU contention, LLM timeout, navigation non-arrival) so they never become negatives?
+- Store shape: `learned_negative` entry type in existing store (reuse embedder/retrieval) vs separate collection. Lean: same store, `entry_type` filter.
+- Cross-reference: penalty mirroring `_learned_pattern_bonus` (−5/−10 × confidence×`hit_count`, capped below +80, keyed by description not globally). Review-time swap when top candidate has negative history and runner-up positive?
+- Integrity check: how to detect trivially-true assertions / skipped steps without flooding false alarms.
+
+### Estimated sessions
+- Metric harness (AI-059, prereq, ships first): ~1–1.5
+- Feature (store → gates → scorer penalty → tests): ~2–3
+
+---
+
+## 🆕 AI-059 — Learning-impact isolation harness (METRIC FIRST, ships before AI-058)
+
+**Status:** 🆕 new — proposed 2026-08-26. **Prerequisite spike for AI-058.** Build this before any AI-058 feature code; it establishes the cold-store baseline the feature is judged against.
+**Priority:** Medium (enables measurement of AI-058; without it, learning changes are unverifiable).
+**Folds into:** AI-054 testing-strategy + AI-058.
+
+**One-line:** a lab that makes **store state the single variable** so we can attribute test-progress changes to the learned/RAG store — independent of production behavior.
+
+### Design
+- **Controlled A/B:** same story set + same site snapshot + same model/temp/thinking; the **store is the only independent variable**. Legs: golden-only → golden+positives → golden+pos+negatives.
+- **Store hygiene during measurement (the key gotcha):** disable evidence auto-learn on the measured runs (a run would otherwise pollute the store), and **pre-seed each leg from a fixed store snapshot** (restore before each leg). Without this the legs contaminate each other.
+- **Sites:** deterministic mocks for the baseline (no live-site noise); spot-check 1–2 live sites for realism. Stories may be real/varied — only the *pair's inputs* are held constant, so no curated fixed benchmark is needed.
+- **Extraction:** compute `mean_pass_depth`, `first_pass_green_rate`, `false_positive_rate`, and (phase 2) `self_heal_iterations_to_green` from the run's `.evidence.json` sidecars — no golden keys.
+- **Output:** persist per-leg metrics so cold/warm/warm+neg are directly comparable (new `eval_runs` columns or a sibling table).
+- **Baseline gate:** capture the cold-store numbers FIRST; AI-058 ships only if `warm+neg > warm > cold` on `mean_pass_depth`.
+
+### Scope guard
+- This is NOT a production feature. It must not change generation behavior; it only instruments and measures. Keep it behind a `scripts/` harness + a `--metric` path, not in the user-facing flow.
+
+### Estimated sessions
+- ~1–1.5 (extraction + store-snapshot A/B loop + baseline capture). Phase 2 self-heal instrumentation adds ~0.5.
 
 ---
 
