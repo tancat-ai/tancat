@@ -64,6 +64,17 @@ class PipelineRunResult:
     pom_mode: bool = False
 
 
+def rag_enabled_by_config() -> bool:
+    """Return the configured RAG gate (B-036 Phase 1).
+
+    RAG is always-on by default: a missing ``RAG_ENABLED`` means ENABLED;
+    only ``RAG_ENABLED=0`` opts out.  Shared with the eval harness so run
+    records label RAG state identically to what the pipeline actually did
+    (the old ``env == "1"`` check mislabelled default-on runs as off).
+    """
+    return os.environ.get("RAG_ENABLED", "").strip() != "0"
+
+
 class TestOrchestrator:
     """Coordinate skeleton generation, scraping, and placeholder replacement."""
 
@@ -192,7 +203,7 @@ class TestOrchestrator:
         ``RAG_ENABLED=0`` stays honoured as an opt-out for one release
         before removal (see docs/specs/FEATURE_SPEC_B036_consumer_config.md).
         """
-        if os.getenv("RAG_ENABLED", "").strip() == "0":
+        if not rag_enabled_by_config():
             return None
         try:
             from src.rag_retriever import RAGRetriever
