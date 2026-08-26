@@ -33,6 +33,7 @@ from src.settings_store import save_setting, save_settings
 
 from .color import green, yellow
 from .menu_renderer import (
+    _reset_menu_stack,
     collect_authentication,
     collect_consent_mode,
     collect_journey_steps,
@@ -40,8 +41,10 @@ from .menu_renderer import (
     collect_user_story,
     configure_llm,
     list_saved_packages,
+    pop_menu,
     print_header,
     print_menu,
+    push_menu,
     read_optional,
     select_saved_package,
     show_package_metadata,
@@ -106,6 +109,7 @@ async def interactive_session() -> None:
     """Run the full interactive CLI session."""
     session = create_session()  # type: ignore[call-arg]
     _apply_session_llm_config(session)
+    _reset_menu_stack()
 
     while True:
         print_header("AI Playwright Test Generator")
@@ -230,11 +234,7 @@ async def interactive_session() -> None:
         elif menu_items[idx] in ("Enter Target URLs", "Re-enter Target URLs"):
             _collect_urls_inline(session)
         elif menu_items[idx] == "Consent Mode":
-            session.consent_mode = collect_consent_mode()
-            save_setting("consent_mode", session.consent_mode)  # B-036 Phase 4: persist
-            print(green(f"  ✓ Consent mode set to '{session.consent_mode}'"))
-            print("  Press Enter to continue...")
-            input()
+            _collect_consent_inline(session)
         elif menu_items[idx] == "POM Mode":
             session.pom_mode = not session.pom_mode
             save_setting("pom_mode", session.pom_mode)  # B-036 Phase 4: persist
@@ -328,6 +328,14 @@ def _apply_session_llm_config(session: Session) -> None:
 
 
 def _configure_llm_inline(session: Session) -> None:
+    push_menu("LLM Configuration")
+    try:
+        _configure_llm_inline_inner(session)
+    finally:
+        pop_menu()
+
+
+def _configure_llm_inline_inner(session: Session) -> None:
     provider, base_url, model = configure_llm(session.provider, session.provider_base_url, session.model_name)
     session.provider = provider
     session.provider_base_url = base_url
@@ -353,8 +361,34 @@ def _collect_urls_inline(session: Session) -> None:
     session.additional_urls = additional
 
 
+def _collect_consent_inline(session: Session) -> None:
+    push_menu("Consent Mode")
+    try:
+        mode = collect_consent_mode()
+        if isinstance(mode, str) and mode:
+            session.consent_mode = mode
+            save_setting("consent_mode", mode)  # B-036 Phase 4: persist
+            print(green(f"  ✓ Consent mode set to '{mode}'"))
+            print("  Press Enter to continue...")
+            input()
+        # Empty/negative result = backed out or quit — keep current mode.
+    finally:
+        pop_menu()
+
+
 def _collect_authentication_inline(session: Session) -> None:
+    push_menu("Authentication")
+    try:
+        _collect_authentication_inline_inner(session)
+    finally:
+        pop_menu()
+
+
+def _collect_authentication_inline_inner(session: Session) -> None:
     result = collect_authentication()
+    if isinstance(result, int):
+        # Back / Main Menu / Quit — keep any previously configured profile.
+        return
     if result is None:
         session.credential_profile = None
     else:
@@ -367,7 +401,18 @@ def _collect_authentication_inline(session: Session) -> None:
 
 
 def _collect_journey_inline(session: Session) -> None:
+    push_menu("Journey Builder")
+    try:
+        _collect_journey_inline_inner(session)
+    finally:
+        pop_menu()
+
+
+def _collect_journey_inline_inner(session: Session) -> None:
     raw_steps = collect_journey_steps()
+    if isinstance(raw_steps, int):
+        # Back / Main Menu / Quit — keep the previously configured journey.
+        return
     converted: list[JourneyStep] = []
     for s in raw_steps:
         converted.append(
@@ -395,36 +440,40 @@ def _load_saved_packages_inline(session: Session) -> None:
     from src.pipeline_artifact_manager import load_package_manifest
     from src.run_result_persistence import load_all_run_results
 
-    packages = list_saved_packages()
-    if not packages:
-        print(yellow("  No saved test packages found in generated_tests/"))
+    push_menu("Saved Packages")
+    try:
+        packages = list_saved_packages()
+        if not packages:
+            print(yellow("  No saved test packages found in generated_tests/"))
+            print("  Press Enter to continue...")
+            input()
+            return
+
+        idx = select_saved_package(packages)
+        if idx < 0:
+            return
+
+        package = packages[idx]
+        package_dir = Path(package["path"])
+        manifest = load_package_manifest(package_dir, reconstruct=True)
+        session.loaded_package_manifest = manifest
+        session.pipeline_saved_path = package_dir
+
+        # Load run history
+        run_results = load_all_run_results(package_dir)
+        session.loaded_package_run_results = run_results
+
+        print(green(f"  ✓ Loaded package: {manifest.package_name}"))
+        if manifest.source_story:
+            story = manifest.source_story[:80]
+            print(f"  Story : {story}...") if len(manifest.source_story) > 80 else print(f"  Story : {story}")
+        print(f"  Tests : {len(manifest.generated_test_files)}")
+        print(f"  Runs  : {len(run_results) if run_results else 0}")
+        print()
         print("  Press Enter to continue...")
         input()
-        return
-
-    idx = select_saved_package(packages)
-    if idx < 0:
-        return
-
-    package = packages[idx]
-    package_dir = Path(package["path"])
-    manifest = load_package_manifest(package_dir, reconstruct=True)
-    session.loaded_package_manifest = manifest
-    session.pipeline_saved_path = package_dir
-
-    # Load run history
-    run_results = load_all_run_results(package_dir)
-    session.loaded_package_run_results = run_results
-
-    print(green(f"  ✓ Loaded package: {manifest.package_name}"))
-    if manifest.source_story:
-        story = manifest.source_story[:80]
-        print(f"  Story : {story}...") if len(manifest.source_story) > 80 else print(f"  Story : {story}")
-    print(f"  Tests : {len(manifest.generated_test_files)}")
-    print(f"  Runs  : {len(run_results) if run_results else 0}")
-    print()
-    print("  Press Enter to continue...")
-    input()
+    finally:
+        pop_menu()
 
 
 def _show_package_metadata_inline(session: Session) -> None:
