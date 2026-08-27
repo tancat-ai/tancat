@@ -140,7 +140,7 @@ LangGraph: ingest → plan → existing linear scrape/resolve → integrity chec
 
 ## 🆕 AI-059 — Learning-impact isolation harness (METRIC FIRST, ships before AI-058)
 
-**Status:** 🆕 new — proposed 2026-08-26. **Prerequisite spike for AI-058.** Build this before any AI-058 feature code; it establishes the cold-store baseline the feature is judged against.
+**Status:** ✅ Complete (Deliverables 1–2 shipped 2026-08-27 — `f2f0b60` sentinel identity + controlled baseline; `c2af997` resolver usage trace). **Prerequisite spike for AI-058:** the isolation harness is in place and the cold-store baseline captured. **Deliverable 3** (opt-in production sentinel scoping, mirror of the lab sentinel) is tracked separately as a distinct 🆕 item (see the AI-059 lab hardening note below).
 **Priority:** Medium (enables measurement of AI-058; without it, learning changes are unverifiable).
 **Folds into:** AI-054 testing-strategy + AI-058.
 **Plan of record:** `docs/plans/AI-059_learning_impact_plan.md`; Session 1 record: `docs/sessions/2026-08-27_ai059_session1_controlled_baseline.md`.
