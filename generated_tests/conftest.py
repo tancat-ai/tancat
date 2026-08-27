@@ -83,10 +83,14 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
     # feed them to the local RAG store (dedup'd, site-scoped) so the next
     # generation for the same site resolves faster. Guarded: learning must
     # never break the test run, and a repeat is a no-op hit bump.
-    # ``RAG_ENABLED=0`` opts out of the write leg too — CI (``learn: true``)
-    # is flow-memory only, so a runner never pulls the ~80 MB embedder
-    # model (docs/ci.md §8). The flow-memory leg below is UNAFFECTED.
-    if status == "passed" and os.environ.get("RAG_ENABLED", "1") != "0":
+    # ``RAG_ENABLED=0`` opts out of the RAG write leg. AI-059's explicit
+    # ``AI059_DISABLE_AUTO_LEARN=1`` gate opts out of BOTH write legs while
+    # preserving RAG reads for warm measurement legs.
+    if (
+        status == "passed"
+        and os.environ.get("AI059_DISABLE_AUTO_LEARN", "0") != "1"
+        and os.environ.get("RAG_ENABLED", "1") != "0"
+    ):
         try:
             from src.rag_learn import learn_from_evidence
 
@@ -98,10 +102,10 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
             pass
     # AI-042: learn cross-site flow transitions from the same passing run
     # (login → dashboard → cart → checkout navigation shape generalizes
-    # across sites even though locators don't). Same best-effort contract —
-    # and always on for passing steps: CI's ``learn: true`` persists THIS
-    # leg (flow memory only; the RAG leg stays off in CI).
-    if status == "passed":
+    # across sites even though locators don't). Same best-effort contract;
+    # AI-059 disables this write leg explicitly to keep comparison legs
+    # independent.
+    if status == "passed" and os.environ.get("AI059_DISABLE_AUTO_LEARN", "0") != "1":
         try:
             from src.flow_memory import FlowMemoryStore
 

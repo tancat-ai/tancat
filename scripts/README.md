@@ -23,6 +23,7 @@ Utility and automation scripts for the AI-Playwright-Test-Generator project.
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
 | `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |
+| `eval/learning_impact.py` | AI-059 sidecar metrics and controlled cold/warm store comparison | Nothing (metrics) / deterministic mock runner (baseline) |
 | `map_3d/*.py` | 3D documentation map generation | Nothing |
 
 ---
@@ -212,6 +213,29 @@ python scripts/eval/eval_harness.py dataset --validate         # Validate golden
 **Maintenance:** Golden keys decay — re-validate locators every 3-6 months.
 
 Full usage guide: `scripts/eval/README.md`
+
+### AI-059 learning-impact metrics
+
+The metric path is read-only and consumes existing evidence sidecars. Ratios
+are `0.0..1.0`; false positives require a manual-review annotation:
+
+```bash
+python scripts/eval/learning_impact.py metrics --evidence-dir evidence
+```
+
+The controlled baseline path runs the same command against independently
+restored cold/warm snapshots, disables auto-learning with
+`AI059_DISABLE_AUTO_LEARN=1`, and writes one metrics file per leg:
+
+```bash
+python scripts/eval/learning_impact.py baseline \\
+  --cold-snapshot lab/stores/golden.db \\
+  --warm-positive-snapshot lab/stores/golden-positive.db \\
+  --store-target evidence/rag_store.db \\
+  --pipeline linear --temperature 0 --thinking off \\
+  --provider openai-local \\
+  --command python -m pytest generated_tests/{leg}
+```
 
 ---
 

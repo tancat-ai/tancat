@@ -7,10 +7,12 @@ Skip insertion to ``skip_manager``. Role mapping to ``role_mapper``.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
@@ -1282,8 +1284,21 @@ class PlaceholderOrchestrator:
         # RAG retrieval: fetch golden patterns for scoring bonus
         golden_patterns = self._retrieve_golden_patterns(action, description)
         # AI-035 Phase 2: scope the learned-pattern bonus to this site.
+        # AI-059 lab hardening: when a lab sentinel is set, use it as the site
+        # identity instead of the URL-derived host:port hash. The sentinel is a
+        # deterministic hash of a *structured* lab identity (site + input/edit
+        # version + story set), so distinct experimental cells stay isolated
+        # and reruns of the same cell are comparable. Prefer the identity
+        # string (AI059_LAB_SITE_IDENTITY); a raw AI059_LAB_SITE_HASH is also
+        # accepted for back-compat. Production runs leave both unset,
+        # preserving the existing host:port scoping.
         site = None
-        if current_url:
+        identity = os.environ.get("AI059_LAB_SITE_IDENTITY")
+        if identity:
+            site = site_hash(identity)
+        elif os.environ.get("AI059_LAB_SITE_HASH"):
+            site = os.environ["AI059_LAB_SITE_HASH"]
+        if site is None and current_url:
             domain = domain_from_url(current_url)
             site = site_hash(domain) if domain else None
 
@@ -1367,7 +1382,43 @@ class PlaceholderOrchestrator:
         if self._rag_retriever is None:
             return None
         patterns = self._rag_retriever.retrieve(description, action_type=action)
+        self._write_rag_diagnostic(action, description, patterns)
         return patterns if patterns else None
+
+    @staticmethod
+    def _write_rag_diagnostic(action: str, description: str, patterns: list[Any]) -> None:
+        """Optionally append retrieval details for an AI-059 lab run.
+
+        Diagnostics are opt-in and file-backed so production runs retain their
+        existing behavior and cost. The lab runner sets the path per leg.
+        """
+        path_text = os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip()
+        if not path_text:
+            return
+        payload = {
+            "action": action,
+            "description": description,
+            "results": [
+                {
+                    "description": str(getattr(pattern, "description", "")),
+                    "selector": str(getattr(pattern, "selector", "")),
+                    "action_type": str(getattr(pattern, "action_type", "")),
+                    "confidence": float(getattr(pattern, "confidence", 0.0)),
+                    "source": str(getattr(pattern, "source", "")),
+                    "page": str(getattr(pattern, "page", "")),
+                    "site_hash": str(getattr(pattern, "site_hash", "")),
+                }
+                for pattern in patterns
+            ],
+        }
+        try:
+            path = Path(path_text)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError, TypeError, ValueError:
+            # Diagnostics must never affect resolution.
+            return
 
     def _is_page_state_assertion(self, description: str) -> bool:
         """Check if an ASSERT description refers to a page state rather than an element.
