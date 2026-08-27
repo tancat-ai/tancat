@@ -35,7 +35,7 @@ from src.pom_helpers import (
     get_pom_instance_name,
     get_pom_method_call,
 )
-from src.rag_learn import domain_from_url, site_hash
+from src.rag_learn import effective_site_identity, site_hash
 from src.role_mapper import (
     get_effective_role,
     is_display_role,
@@ -1290,8 +1290,11 @@ class PlaceholderOrchestrator:
         # version + story set), so distinct experimental cells stay isolated
         # and reruns of the same cell are comparable. Prefer the identity
         # string (AI059_LAB_SITE_IDENTITY); a raw AI059_LAB_SITE_HASH is also
-        # accepted for back-compat. Production runs leave both unset,
-        # preserving the existing host:port scoping.
+        # accepted for back-compat.
+        # AI-061: an opt-in production scope (AITEST_RAG_SCOPE) is honored as a
+        # fallback before the host:port hash, so two projects on the same port
+        # stay isolated. Production runs with neither set preserve the existing
+        # host:port scoping (B-047).
         site = None
         identity = os.environ.get("AI059_LAB_SITE_IDENTITY")
         if identity:
@@ -1299,8 +1302,8 @@ class PlaceholderOrchestrator:
         elif os.environ.get("AI059_LAB_SITE_HASH"):
             site = os.environ["AI059_LAB_SITE_HASH"]
         if site is None and current_url:
-            domain = domain_from_url(current_url)
-            site = site_hash(domain) if domain else None
+            identity = effective_site_identity(current_url)
+            site = site_hash(identity) if identity else None
 
         matched_element = await self._element_matcher.find_best_element_for_current_page(
             action,

@@ -36,6 +36,74 @@ def test_rag_diagnostics_are_opt_in_and_jsonl(tmp_path: Path, monkeypatch: Any) 
     assert row["results"][0]["selector"] == "#add"
 
 
+def test_effective_site_identity_honors_opt_in_scope(monkeypatch: Any) -> None:
+    # AI-061: an opt-in AITEST_RAG_SCOPE key must participate in the RAG site
+    # identity so two projects on the same host:port stay isolated, while an
+    # unset scope preserves the legacy host[:port] behavior (B-047).
+    from src.rag_learn import effective_site_identity, site_hash
+
+    monkeypatch.delenv("AITEST_RAG_SCOPE", raising=False)
+    assert effective_site_identity("http://localhost:8781/x.html") == "localhost:8781"
+
+    monkeypatch.setenv("AITEST_RAG_SCOPE", "proj-a")
+    # Scope overrides host:port and is namespaced so it can't collide with a
+    # real domain string that happens to equal the scope value.
+    assert effective_site_identity("http://localhost:8781/x.html") == "scope:proj-a"
+    assert site_hash("scope:proj-a") != site_hash("localhost:8781")
+
+
+def test_learn_scopes_by_opt_in_scope_not_host_port(monkeypatch: Any) -> None:
+    # AI-061: a learned pattern written under a scope key must be tagged with
+    # the scope identity, not the host:port hash — proving two projects on the
+    # same port no longer bleed into each other.
+    from src.rag_learn import _step_to_pattern, site_hash
+
+    step = {
+        "type": "click",
+        "label": "Add to cart",
+        "locator": "#add",
+        "url": "http://localhost:8781/generated_tests/mock.html",
+        "result": {"status": "passed"},
+    }
+    monkeypatch.delenv("AITEST_RAG_SCOPE", raising=False)
+    base = _step_to_pattern(step)
+    assert base is not None
+    assert base.site_hash == site_hash("localhost:8781")
+
+    monkeypatch.setenv("AITEST_RAG_SCOPE", "proj-a")
+    scoped = _step_to_pattern(step)
+    assert scoped is not None
+    assert scoped.site_hash == site_hash("scope:proj-a")
+    assert scoped.site_hash != base.site_hash
+
+
+def test_scope_key_isolates_learned_patterns_between_projects(monkeypatch: Any) -> None:
+    # End-to-end-at-unit-level: a learned pattern scoped to one project is
+    # eligible + applied only when the resolver runs under the SAME scope.
+    from src.rag_learn import effective_site_identity, site_hash
+    from src.rag_retriever import RAGRetriever
+    from src.rag_store import RetrievedPattern
+
+    url = "http://localhost:8781/generated_tests/mock.html"
+    monkeypatch.setenv("AITEST_RAG_SCOPE", "proj-a")
+    site_a = site_hash(effective_site_identity(url))
+    learned_a = RetrievedPattern("Email", "#email", "FILL", 1.0, source="learned", site_hash=site_a)
+
+    retriever = RAGRetriever(store=None)
+    usage = retriever.pattern_usage([learned_a], site_a, "#email")
+    assert usage[0]["eligible"] is True
+    assert usage[0]["matched"] is True
+    assert usage[0]["bonus"] == 5
+
+    # A different scope → different site identity → the pattern is NOT eligible.
+    monkeypatch.setenv("AITEST_RAG_SCOPE", "proj-b")
+    site_b = site_hash(effective_site_identity(url))
+    assert site_b != site_a
+    usage_b = retriever.pattern_usage([learned_a], site_b, "#email")
+    assert usage_b[0]["eligible"] is False
+    assert usage_b[0]["bonus"] == 0
+
+
 def test_pattern_usage_reports_eligible_match_and_bonus() -> None:
     # Exercises the Deliverable-2 usage tracer directly: for each retrieved
     # pattern it must report eligibility (site gate), whether it matched the
