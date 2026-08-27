@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (89) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-27 12:11 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (89) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-27 20:44 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (31)</h2>
+    <h2>To Do (30)</h2>
     
     <div class="">
     <div class="card">
@@ -219,13 +219,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Low (architecture experiment; not a current product blocker).</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L112" target="_blank">BACKLOG.md:112</a></div>
-</div>
-<div class="card">
-    <div class="card-id">AI-059</div>
-    <div class="card-title">Learning-impact isolation harness (METRIC FIRST, ships before AI-058)</div>
-    <div class="card-meta"><span>Medium (enables measurement of AI-058; without it, learning changes are unverifiable).</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L141" target="_blank">BACKLOG.md:141</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-046</div>
@@ -352,8 +345,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (86)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (86)</button>
+    <h2>Done (87)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (87)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -502,6 +495,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium-High (deferred)</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L708" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:708</a></div>
+</div>
+<div class="card">
+    <div class="card-id">AI-059</div>
+    <div class="card-title">Learning-impact isolation harness (METRIC FIRST, ships before AI-058)</div>
+    <div class="card-meta"><span>Medium (enables measurement of AI-058; without it, learning changes are unverifiable).</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L141" target="_blank">BACKLOG.md:141</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-050</div>
@@ -929,7 +929,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "86";
+    var count = "87";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
