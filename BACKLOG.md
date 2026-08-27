@@ -3198,3 +3198,22 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 - Add an explicit **project/scope key** (user-supplied, or derived from the project directory) that participates in the identity, so two projects on the same port stay isolated.
 - Keep B-047 port-keeping for the eval's concurrent mocks.
 - The AI-059 lab already uses a fixed sentinel (`ai059-lab:ecommerce` via `AI059_LAB_SITE_HASH` + `rebuild-warm`) — mirror that pattern for opt-in production scoping.
+
+---
+
+## 🆕 AI-062 — RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)
+
+**Status:** 🟡 ready-for-agent — feature shipped 2026-08-27 (`2e0f936`); the *measurement* (run with `AI059_RAG_DIAGNOSTICS_PATH` set, aggregate `decisive`-rate) is the remaining step. Do NOT rebalance scoring or build AI-058 until that number is read.
+**Priority:** Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.
+**Depends on:** AI-059 (usage trace), AI-061 (scope). Folds into: AI-035 self-learning RAG, AI-058 contrastive learned store.
+
+**One-line:** we can see a pattern was *retrieved* and *applied* (`bonus>0`), but not whether it *changed the winning element*. `2e0f936` adds a counterfactual `decisive` flag (re-resolve with RAG stripped; `True` when the no-RAG winner differs) + `counterfactual_selector`. Now measure the decisive-rate before touching `SAME_SITE_LEARNED_BONUS` / `GOLDEN_PATTERN_BONUS` or building AI-058.
+
+### Why it matters
+- `SAME_SITE_LEARNED_BONUS = 5` vs structural scores that reach `+80` — so the bonus only decides when the top two candidates are within 5 points. Most "applied" bonuses are likely cosmetic (pad an already-winning element), not causal.
+- **Root-cause finding (from building this):** `PlaceholderScorer.compute_element_score` adds the golden/learned bonus ONLY on the slow semantic path. The haystack fast path (description substring-matches an element — the common case) returns *before* the bonus section, so the bonus is silently never applied there. Expected signature of an inert pattern: `bonus>0` with `decisive:False`.
+
+### Next step (gated)
+- Run a real pipeline (mock site, `AI059_RAG_DIAGNOSTICS_PATH` set, a populated learned store) and aggregate: what % of `bonus>0` usage lines are `decisive=True`? If ~0%, the fast-path omission is the bug to fix (apply the bonus before the early return), not a magnitude problem. Then re-measure; only then judge AI-058.
+
+---
