@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,33 @@ _STEP_TYPE_TO_ACTION = {
 # Only fully-passing steps are verified. "partial_pass" means a fallback was
 # used — the locator is less certain, so it is not learned.
 _LEARNED_STATUS = "passed"
+
+
+#: Opt-in production scope key (AI-061). When set, it participates in the RAG
+#: site identity so two distinct projects served on the same host:port stay
+#: isolated instead of bleeding learned/golden bonuses into each other. Unset
+#: preserves the legacy host[:port] scoping (B-047 port-keeping).
+RAG_SCOPE_ENV = "AITEST_RAG_SCOPE"
+
+
+def effective_site_identity(base_url: str = "") -> str:
+    """Resolve the RAG site identity for scoping, honoring an opt-in scope key.
+
+    AI-061: when ``AITEST_RAG_SCOPE`` is set, the identity is ``scope:<value>``
+    so two projects on the same ``host:port`` (e.g. two different localhost
+    projects, or ``lv_insurance`` vs a solo ``ecommerce`` run both on
+    ``localhost:8781``) stay isolated. When unset, falls back to the legacy
+    ``host[:port]`` identity from :func:`domain_from_url` (B-047 port keeping),
+    unchanged.
+
+    The same identity string is used at BOTH learn time (this module) and
+    resolve time (``PlaceholderOrchestrator``) so a pattern learned under a
+    scope is only applied when the resolver runs under the same scope.
+    """
+    scope = os.environ.get(RAG_SCOPE_ENV, "").strip()
+    if scope:
+        return f"scope:{scope}"
+    return domain_from_url(base_url)
 
 
 def site_hash(site_identity: str) -> str:
@@ -94,15 +122,15 @@ def _step_to_pattern(step: dict[str, Any]) -> LearnedPattern | None:
         return None
 
     step_url = str(step.get("url", "") or "")
-    domain = domain_from_url(step_url)
-    if not domain:
+    identity = effective_site_identity(step_url)
+    if not identity:
         return None
 
     return LearnedPattern(
         action_type=action,
         description=label,
         locator=locator,
-        site_hash=site_hash(domain),
+        site_hash=site_hash(identity),
     )
 
 
@@ -326,8 +354,8 @@ def pattern_from_patch(
     locator = _selector_from_code(new_text)
     if not locator:
         return None
-    domain = domain_from_url(base_url)
-    if not domain:
+    identity = effective_site_identity(base_url)
+    if not identity:
         return None
     if not description:
         description = _description_from_evidence(_selector_from_code(old_text), evidence_steps)
@@ -337,7 +365,7 @@ def pattern_from_patch(
         action_type=action,
         description=description,
         locator=locator,
-        site_hash=site_hash(domain),
+        site_hash=site_hash(identity),
         confidence=1.0,
         source="self_healing",
     )
