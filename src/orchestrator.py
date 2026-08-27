@@ -127,10 +127,12 @@ class TestOrchestrator:
         # RAG: optionally wire retrieval-augmented scoring
         rag_retriever = self._build_rag_retriever()
         # B-036 Phase 2: first-run bundled auto-seed (idempotent marker).
-        # Guarded — a failure (offline embedder download, corrupt store)
-        # must never block generation; the resolver simply runs without
-        # the RAG bonus and retries the seed on the next run.
-        if rag_retriever is not None:
+        # AI-059 disables this write during controlled measurement so the
+        # restored snapshot remains the only store input. Guarded — a failure
+        # (offline embedder download, corrupt store) must never block
+        # generation; the resolver simply runs without the RAG bonus and
+        # retries the seed on the next run.
+        if rag_retriever is not None and os.environ.get("AI059_DISABLE_AUTO_LEARN", "0") != "1":
             try:
                 from src.rag_bundled import ensure_bundled_seeded
 

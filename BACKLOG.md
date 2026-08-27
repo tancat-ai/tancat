@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-26 (AI-058 contrastive learned store proposed — METRIC-FIRST; AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
+Last updated: 2026-08-27 (AI-060 hybrid LangGraph orchestration experiment added; AI-058 contrastive learned store proposed — METRIC-FIRST; AI-059 harness baseline captured; AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
 
 ---
 
@@ -109,11 +109,41 @@ A real tester validates *intent, not implementation*: "add item to cart" is sati
 
 ---
 
+## 🆕 AI-060 — Hybrid LangGraph orchestration around the linear resolver
+
+**Status:** 🆕 new — proposed 2026-08-27. **EXPERIMENT ONLY.** Do not replace the proven linear pipeline until a controlled graph-vs-linear comparison is complete.
+**Priority:** Low (architecture experiment; not a current product blocker).
+**Depends on:** AI-059 measurement harness and a trustworthy cold/warm baseline; folds into AI-054 pipeline consolidation review.
+
+**The one-line version:** combine LangGraph's stateful routing, validation, retry, and human-checkpoint capabilities with LangChain-style Runnables inside nodes, while retaining the existing linear scraper/resolver as the stable execution seam.
+
+### Proposed shape
+
+```text
+LangGraph: ingest → plan → existing linear scrape/resolve → integrity check → repair/retry → export
+                                      └─ RAG retriever shared by both paths
+```
+
+- Keep the current linear pipeline as the production baseline.
+- Use LangChain Runnable composition for focused prompt → model → parser / retrieval subchains inside graph nodes; do not duplicate locator-resolution logic.
+- Add graph-level integrity validation and explicit retry/human-review routing, especially for skipped or weakened assertions.
+- Compare the architecture independently from store warmth: `linear+cold`, `linear+warm`, `graph+cold`, `graph+warm` using identical stories, mock sites, model/settings, snapshots, and evidence metrics.
+- Record whether any gain comes from orchestration, RAG warmth, or integrity checks; no negative-learning implementation is implied by this item.
+
+**Decision gate:** only consider graph participation in the user-facing flow if it improves reviewed `mean_pass_depth` and integrity-adjusted outcomes without unacceptable latency/regression. Otherwise keep LangGraph experimental and linear as the product path.
+
+**Open questions:** should the graph wrap the whole pipeline or only validation/repair; which state/checkpoint data is durable; how much extra model latency is acceptable; can graph and linear share one resolver without divergent behavior; how should graph-specific RAG retrieval be isolated in the A/B harness?
+
+**Estimated sessions:** 1–2 (design + controlled comparison; no production replacement in this item).
+
+---
+
 ## 🆕 AI-059 — Learning-impact isolation harness (METRIC FIRST, ships before AI-058)
 
 **Status:** 🆕 new — proposed 2026-08-26. **Prerequisite spike for AI-058.** Build this before any AI-058 feature code; it establishes the cold-store baseline the feature is judged against.
 **Priority:** Medium (enables measurement of AI-058; without it, learning changes are unverifiable).
 **Folds into:** AI-054 testing-strategy + AI-058.
+**Plan of record:** `docs/plans/AI-059_learning_impact_plan.md`; Session 1 record: `docs/sessions/2026-08-27_ai059_session1_controlled_baseline.md`.
 
 **One-line:** a lab that makes **store state the single variable** so we can attribute test-progress changes to the learned/RAG store — independent of production behavior.
 
@@ -3147,3 +3177,24 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 10 runs using `gh run view` JSON output.
 
 
+
+---
+
+## 🆕 AI-061 — Production project-scoped RAG identity (isolation gap)
+
+**Status:** 🆕 new — identified during AI-059 Session 1 (2026-08-27). Not blocking; hardening.
+**Priority:** Low–Medium. Affects real multi-project / multi-user localhost usage. The AI-059 lab is already protected by a sentinel (Deliverable 3), so this is the production counterpart.
+**Depends on:** none. Folds into: AI-035 self-learning RAG, B-047 port-aware site hashing.
+
+**One-line:** the learned-pattern store scopes by `site_hash = sha256(host[:port])` only, so two different projects (or a user's new project) served on the same `localhost:PORT` share one hash and **bleed** patterns into each other; `lv_insurance` and a solo `ecommerce` run also both map to `localhost:8781` inside the eval.
+
+### Problem
+- `src/rag_learn.site_hash` uses only `host[:port]` (B-047 keeps the port so concurrent mocks separate).
+- Two logical sites on the same port → identical `site_hash` → learned/golden bonuses apply across both.
+- `localhost` vs `127.0.0.1` are *different* strings → spurious separation; order-dependent mock port assignment makes a mock's hash change between build configs.
+- The collision only affects the RAG learned-pattern store's scoping (a derived, lossy index). Source-of-truth run/evidence data keeps full `page_url` + `run_id` (`sqlite_persistence.evidence_index`, `evidence_tracker`), so data is fully recoverable/re-scoped.
+
+### Fix
+- Add an explicit **project/scope key** (user-supplied, or derived from the project directory) that participates in the identity, so two projects on the same port stay isolated.
+- Keep B-047 port-keeping for the eval's concurrent mocks.
+- The AI-059 lab already uses a fixed sentinel (`ai059-lab:ecommerce` via `AI059_LAB_SITE_HASH` + `rebuild-warm`) — mirror that pattern for opt-in production scoping.

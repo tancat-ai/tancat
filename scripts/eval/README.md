@@ -18,6 +18,9 @@ The eval harness has **three distinct modes** — use the right one for your que
 ## Quick Start
 
 ```bash
+# AI-059: read-only learning-impact metrics from existing sidecars
+python scripts/eval/learning_impact.py metrics --evidence-dir evidence
+
 # CI gate — what pre-commit runs (fast, offline, deterministic)
 python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
 
@@ -39,6 +42,23 @@ python scripts/eval/eval_harness.py dataset --validate
 ```
 
 ---
+
+## AI-059 Learning-Impact Harness
+
+`learning_impact.py metrics` computes golden-free metrics from evidence sidecars:
+`mean_pass_depth`, `first_pass_green_rate`, `false_positive_rate`, and the
+locator/assertion/navigation/infrastructure-timeout breakdown. Ratios are
+`0.0..1.0`; false positives require an explicit manual-review annotation.
+
+The `baseline` command runs one fixed command per store leg (cold,
+`warm-positive`, and optionally `warm-positive-negative`), restores each
+snapshot first, disables auto-learning with `AI059_DISABLE_AUTO_LEARN=1`, and
+writes independent `metrics.json` files plus `baseline_report.json`. Optional
+CLI metadata flags record pipeline/mode/provider/model/temperature/thinking. Each leg
+also records opt-in retrieval details in `rag_diagnostics.jsonl`. RAG reads
+remain enabled for warm legs. Use deterministic mock-site commands and have
+the fixture honor `AI059_EVIDENCE_DIR` (or use the `{evidence_dir}` token) to
+route sidecars to the current leg.
 
 ## Mode: `static` — CI Regression Gate
 
