@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (89) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-27 20:44 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (89) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-27 21:20 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (30)</h2>
+    <h2>To Do (29)</h2>
     
     <div class="">
     <div class="card">
@@ -315,13 +315,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L3172" target="_blank">BACKLOG.md:3172</a></div>
 </div>
-<div class="card">
-    <div class="card-id">AI-061</div>
-    <div class="card-title">Production project-scoped RAG identity (isolation gap)</div>
-    <div class="card-meta"><span>Low–Medium. Affects real multi-project / multi-user localhost usage. The AI-059 lab is already protected by a sentinel (Deliverable 3), so this is the production counterpart.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3183" target="_blank">BACKLOG.md:3183</a></div>
-</div>
     </div>
 </div>
     <div class="column progress">
@@ -345,8 +338,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (87)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (87)</button>
+    <h2>Done (88)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (88)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -922,6 +915,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L2605" target="_blank">BACKLOG.md:2605</a></div>
 </div>
+<div class="card">
+    <div class="card-id">AI-061</div>
+    <div class="card-title">Production project-scoped RAG identity (isolation gap)</div>
+    <div class="card-meta"><span>Low–Medium. Affects real multi-project / multi-user localhost usage. The AI-059 lab is already protected by a sentinel (Deliverable 3), so this is the production counterpart.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L3183" target="_blank">BACKLOG.md:3183</a></div>
+</div>
     </div>
 </div>
 </div>
@@ -929,7 +929,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "87";
+    var count = "88";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');

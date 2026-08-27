@@ -3182,7 +3182,7 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 
 ## 🆕 AI-061 — Production project-scoped RAG identity (isolation gap)
 
-**Status:** 🆕 new — identified during AI-059 Session 1 (2026-08-27). Not blocking; hardening.
+**Status:** ✅ Complete (shipped 2026-08-27 — `c0b8820`). Opt-in `AITEST_RAG_SCOPE` isolates projects on the same `host:PORT`; legacy `host[:port]` scoping (B-047) preserved when unset. Not blocking; hardening.
 **Priority:** Low–Medium. Affects real multi-project / multi-user localhost usage. The AI-059 lab is already protected by a sentinel (Deliverable 3), so this is the production counterpart.
 **Depends on:** none. Folds into: AI-035 self-learning RAG, B-047 port-aware site hashing.
 
