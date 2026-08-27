@@ -1333,7 +1333,37 @@ class PlaceholderOrchestrator:
             if golden_patterns and self._rag_retriever is not None:
                 winner_selector = str(matched_element.get("selector", "") or "").strip()
                 usage = self._rag_retriever.pattern_usage(golden_patterns, site or "", winner_selector)
-                self._write_rag_usage_diagnostic(action, description, usage)
+                # AI-059 effect trace: did the RAG bonus actually DECIDE the
+                # winner? Resolve the same placeholder with RAG bonuses stripped
+                # and compare the chosen selector. ``decisive`` is True when the
+                # no-RAG counterfactual would have picked a different element —
+                # i.e. the retrieved/learned pattern changed the outcome, not
+                # just padded an already-winning element. Only computed when
+                # diagnostics are opted in (extra scoring pass is wasted cost
+                # otherwise). pages_data is already in memory, so this is a
+                # pure re-rank with no extra scraping.
+                decisive = None
+                counterfactual_selector = None
+                if os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip():
+                    cf = await self._element_matcher.find_best_element_for_current_page(
+                        action,
+                        description,
+                        current_url,
+                        pages_to_search,
+                        excluded_selectors=excluded or None,
+                        resolved_steps=resolved_steps,
+                        golden_patterns=None,
+                        site_hash="",
+                    )
+                    counterfactual_selector = str(cf.get("selector", "")).strip() if cf is not None else None
+                    decisive = counterfactual_selector is None or counterfactual_selector != winner_selector
+                self._write_rag_usage_diagnostic(
+                    action,
+                    description,
+                    usage,
+                    decisive=decisive,
+                    counterfactual_selector=counterfactual_selector,
+                )
             # AI-052: with an observed trail, element scoping must not depend on
             # URL inference at all — the trail drives transitions. The keyword
             # guesser also has a side effect here (_ensure_scraped of a guessed
@@ -1433,15 +1463,24 @@ class PlaceholderOrchestrator:
             return
 
     @staticmethod
-    def _write_rag_usage_diagnostic(action: str, description: str, usage: list[Any]) -> None:
+    def _write_rag_usage_diagnostic(
+        action: str,
+        description: str,
+        usage: list[Any],
+        decisive: bool | None = None,
+        counterfactual_selector: str | None = None,
+    ) -> None:
         """Optionally append per-pattern usage records for an AI-059 lab run.
 
         ``usage`` is the list returned by ``RAGRetriever.pattern_usage`` — one
         record per retrieved pattern answering whether it was ``eligible`` for
         this run's site, whether it ``matched`` the winning element, and the
-        ``bonus`` points it contributed. Correlate with the retrieval line via
-        ``action`` + ``description``. Opt-in via AI059_RAG_DIAGNOSTICS_PATH and
-        fully wrapped so diagnostics never affect resolution.
+        ``bonus`` points it contributed. ``decisive`` / ``counterfactual_selector``
+        answer the deeper question — did the RAG bonus actually *change* the
+        winning element? (True when a no-RAG re-resolution would pick a different
+        selector). Correlate with the retrieval line via ``action`` +
+        ``description``. Opt-in via AI059_RAG_DIAGNOSTICS_PATH and fully wrapped
+        so diagnostics never affect resolution.
         """
         path_text = os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip()
         if not path_text:
@@ -1449,6 +1488,8 @@ class PlaceholderOrchestrator:
         payload = {
             "action": action,
             "description": description,
+            "decisive": decisive,
+            "counterfactual_selector": counterfactual_selector,
             "usage": [
                 {
                     "description": str(u.get("description", "")),

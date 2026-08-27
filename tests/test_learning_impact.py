@@ -36,6 +36,42 @@ def test_rag_diagnostics_are_opt_in_and_jsonl(tmp_path: Path, monkeypatch: Any) 
     assert row["results"][0]["selector"] == "#add"
 
 
+def test_rag_usage_diagnostic_records_decisive_and_counterfactual(tmp_path: Path, monkeypatch: Any) -> None:
+    # AI-059 effect trace: the usage line must also carry whether the RAG
+    # bonus actually DECIDED the winner (decisive) and what a no-RAG
+    # re-resolution would have picked (counterfactual_selector).
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    path = tmp_path / "rag.jsonl"
+    monkeypatch.setenv("AI059_RAG_DIAGNOSTICS_PATH", str(path))
+    usage = [
+        {
+            "description": "Add to cart",
+            "source": "learned",
+            "site_hash": "s",
+            "eligible": True,
+            "matched": True,
+            "bonus": 5,
+        }
+    ]
+    PlaceholderOrchestrator._write_rag_usage_diagnostic(
+        "CLICK",
+        "Add to cart",
+        usage,
+        decisive=True,
+        counterfactual_selector="#other",
+    )
+    row = json.loads(path.read_text(encoding="utf-8"))
+    assert row["decisive"] is True
+    assert row["counterfactual_selector"] == "#other"
+    assert row["usage"][0]["bonus"] == 5
+    # When no counterfactual was computed, the fields serialize as null.
+    PlaceholderOrchestrator._write_rag_usage_diagnostic("FILL", "Email", usage)
+    row2 = json.loads(path.read_text(encoding="utf-8").splitlines()[-1])
+    assert row2["decisive"] is None
+    assert row2["counterfactual_selector"] is None
+
+
 def test_effective_site_identity_honors_opt_in_scope(monkeypatch: Any) -> None:
     # AI-061: an opt-in AITEST_RAG_SCOPE key must participate in the RAG site
     # identity so two projects on the same host:port stay isolated, while an
