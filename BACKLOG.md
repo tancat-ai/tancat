@@ -3203,7 +3203,7 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 
 ## 🆕 AI-062 — RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)
 
-**Status:** 🟡 ready-for-agent — feature shipped 2026-08-27 (`2e0f936`); the *measurement* (run with `AI059_RAG_DIAGNOSTICS_PATH` set, aggregate `decisive`-rate) is the remaining step. Do NOT rebalance scoring or build AI-058 until that number is read.
+**Status:** 🟡 ready-for-agent — measured (2026-08-27) — `2e0f936` shipped the trace; measurement run shows **decisive-rate ~ 0%**. Do NOT build AI-058 until the scoring rebalance below is decided/built.
 **Priority:** Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.
 **Depends on:** AI-059 (usage trace), AI-061 (scope). Folds into: AI-035 self-learning RAG, AI-058 contrastive learned store.
 
@@ -3213,7 +3213,14 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 - `SAME_SITE_LEARNED_BONUS = 5` vs structural scores that reach `+80` — so the bonus only decides when the top two candidates are within 5 points. Most "applied" bonuses are likely cosmetic (pad an already-winning element), not causal.
 - **Root-cause finding (from building this):** `PlaceholderScorer.compute_element_score` adds the golden/learned bonus ONLY on the slow semantic path. The haystack fast path (description substring-matches an element — the common case) returns *before* the bonus section, so the bonus is silently never applied there. Expected signature of an inert pattern: `bonus>0` with `decisive:False`.
 
-### Next step (gated)
-- Run a real pipeline (mock site, `AI059_RAG_DIAGNOSTICS_PATH` set, a populated learned store) and aggregate: what % of `bonus>0` usage lines are `decisive=True`? If ~0%, the fast-path omission is the bug to fix (apply the bonus before the early return), not a magnitude problem. Then re-measure; only then judge AI-058.
+### Measurement result (2026-08-27)
+- Method: scraped saucedemo inventory (71 real elements), resolved each real element label via the live `ElementMatcher` (same `PlaceholderScorer.compute_element_score` path the orchestrator uses), with vs without a learned pattern for that label; `decisive` = winners differ.
+- **65 resolved placeholders measured. Learned pattern APPLIED (matched the winner): 35.4%. DECISIVE (RAG changed the winner): 0.0%.** All CLICK.
+- Interpretation: learned bonuses are applied often but NEVER flip the pick — they pad an already-winning element. Confirms the fast-path omission (bonus never added on the haystack early-return) AND that even on the slow path +5 is too small to outrank structural scoring. Learned RAG bonuses currently have ~zero causal effect on outcomes.
+- Caveat: synthetic learned pattern per label (not a real learned store); indicative of the *applied-vs-decisive* gap, not an exhaustive multi-site rate.
+
+### Decision (gated) — scoring rebalance needed BEFORE AI-058
+- Fixing only the fast-path omission raises the *applied* rate but will not raise *decisive* (the +5 still can't outrank +80 structural scores). So the fix is not magnitude alone.
+- Options to make learned patterns actually matter: (a) make the learned bonus a **small-margin tie-breaker** (apply only when top-2 within N points), (b) raise `SAME_SITE_LEARNED_BONUS` substantially, or (c) gate learned patterns to only override when structural confidence is low. Pick after a second measurement that reports the winner-vs-runner-up margin.
 
 ---
