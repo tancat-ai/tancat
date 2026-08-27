@@ -36,6 +36,64 @@ def test_rag_diagnostics_are_opt_in_and_jsonl(tmp_path: Path, monkeypatch: Any) 
     assert row["results"][0]["selector"] == "#add"
 
 
+def test_pattern_usage_reports_eligible_match_and_bonus() -> None:
+    # Exercises the Deliverable-2 usage tracer directly: for each retrieved
+    # pattern it must report eligibility (site gate), whether it matched the
+    # winner, and the bonus contributed — including legacy (empty site_hash)
+    # goldens, same-site learned, and cross-site non-matches.
+    from src.rag_retriever import RAGRetriever
+    from src.rag_store import RetrievedPattern
+
+    site = "site-abc"
+    cross = "other-site"
+    golden_same = RetrievedPattern("Add to cart", "#add", "CLICK", 0.9, source="golden", site_hash=site)
+    golden_cross = RetrievedPattern("Add to cart", "#add", "CLICK", 0.9, source="golden", site_hash=cross)
+    golden_legacy = RetrievedPattern("Add to cart", "#add", "CLICK", 0.9, source="golden")
+    learned_same = RetrievedPattern("Email", "#email", "FILL", 1.0, source="learned", site_hash=site)
+    learned_cross = RetrievedPattern("Email", "#email", "FILL", 1.0, source="learned", site_hash=cross)
+
+    retriever = RAGRetriever(store=None)
+
+    # Same-site golden: eligible + direct match → GOLDEN_PATTERN_BONUS * conf.
+    usage = retriever.pattern_usage([golden_same], site, "#add")
+    assert usage[0]["eligible"] is True
+    assert usage[0]["matched"] is True
+    assert usage[0]["bonus"] == 18  # 20 * 0.9
+
+    # Same-site learned: eligible + direct match → SAME_SITE_LEARNED_BONUS * conf.
+    usage = retriever.pattern_usage([learned_same], site, "#email")
+    assert usage[0]["eligible"] is True
+    assert usage[0]["matched"] is True
+    assert usage[0]["bonus"] == 5  # 5 * 1.0
+
+    # Cross-site golden: not eligible on this site.
+    usage = retriever.pattern_usage([golden_cross], site, "#add")
+    assert usage[0]["eligible"] is False
+    assert usage[0]["matched"] is False
+    assert usage[0]["bonus"] == 0
+
+    # Legacy golden (empty site_hash): site-agnostic → eligible everywhere.
+    usage = retriever.pattern_usage([golden_legacy], site, "#add")
+    assert usage[0]["eligible"] is True
+    assert usage[0]["matched"] is True
+    assert usage[0]["bonus"] == 18
+
+    # Cross-site learned: not eligible.
+    usage = retriever.pattern_usage([learned_cross], site, "#email")
+    assert usage[0]["eligible"] is False
+    assert usage[0]["bonus"] == 0
+
+    # Substring match scales the bonus by 0.5 * confidence.
+    usage = retriever.pattern_usage([golden_same], site, "div #add span")
+    assert usage[0]["eligible"] is True
+    assert usage[0]["matched"] is True
+    assert usage[0]["bonus"] == 9  # 20 * 0.5 * 0.9
+
+    # scoring_bonus_for delegates to pattern_usage and returns the first bonus.
+    bonus = retriever.scoring_bonus_for({"selector": "#add"}, [golden_same, learned_same], site)
+    assert bonus == 18.0
+
+
 def test_restore_store_snapshot_supports_files_and_empty_store(tmp_path: Path) -> None:
     snapshot = tmp_path / "golden.json"
     target = tmp_path / "active.json"
