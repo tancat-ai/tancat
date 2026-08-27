@@ -1322,6 +1322,15 @@ class PlaceholderOrchestrator:
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)
+            # AI-059 Deliverable 2: emit per-retrieved-pattern usage (eligible /
+            # matched / bonus) against the winning element's RAW candidate
+            # selector — opt-in via AI059_RAG_DIAGNOSTICS_PATH. We match on
+            # ``selector`` (the candidate's raw selector), NOT the repr'd robust
+            # locator, mirroring how PlaceholderScorer applies the bonus.
+            if golden_patterns and self._rag_retriever is not None:
+                winner_selector = str(matched_element.get("selector", "") or "").strip()
+                usage = self._rag_retriever.pattern_usage(golden_patterns, site or "", winner_selector)
+                self._write_rag_usage_diagnostic(action, description, usage)
             # AI-052: with an observed trail, element scoping must not depend on
             # URL inference at all — the trail drives transitions. The keyword
             # guesser also has a side effect here (_ensure_scraped of a guessed
@@ -1409,6 +1418,44 @@ class PlaceholderOrchestrator:
                     "site_hash": str(getattr(pattern, "site_hash", "")),
                 }
                 for pattern in patterns
+            ],
+        }
+        try:
+            path = Path(path_text)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError, TypeError, ValueError:
+            # Diagnostics must never affect resolution.
+            return
+
+    @staticmethod
+    def _write_rag_usage_diagnostic(action: str, description: str, usage: list[Any]) -> None:
+        """Optionally append per-pattern usage records for an AI-059 lab run.
+
+        ``usage`` is the list returned by ``RAGRetriever.pattern_usage`` — one
+        record per retrieved pattern answering whether it was ``eligible`` for
+        this run's site, whether it ``matched`` the winning element, and the
+        ``bonus`` points it contributed. Correlate with the retrieval line via
+        ``action`` + ``description``. Opt-in via AI059_RAG_DIAGNOSTICS_PATH and
+        fully wrapped so diagnostics never affect resolution.
+        """
+        path_text = os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip()
+        if not path_text:
+            return
+        payload = {
+            "action": action,
+            "description": description,
+            "usage": [
+                {
+                    "description": str(u.get("description", "")),
+                    "source": str(u.get("source", "")),
+                    "site_hash": str(u.get("site_hash", "")),
+                    "eligible": bool(u.get("eligible", False)),
+                    "matched": bool(u.get("matched", False)),
+                    "bonus": int(u.get("bonus", 0)),
+                }
+                for u in usage
             ],
         }
         try:
