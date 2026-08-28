@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-27 (AI-060 hybrid LangGraph orchestration experiment added; AI-058 contrastive learned store proposed — METRIC-FIRST; AI-059 harness baseline captured; AI-057 llm_providers extensibility possibility logged; AI-045 #4 PDF OCR wiring + dedup shipped 2026-08-24; ingestion spec + TanCat Cloud decision record added)
+Last updated: 2026-08-28 (AI-061 scope shipped, AI-062 effect trace + measured ~0% decisive-rate + fastpath rebalance shipped, AI-063 context-scoping logged, AI-058 Slice 1 shipped — contrastive learned store: learned_negative + net scoring; AI-059 harness + D1/D2 baseline complete 2026-08-27)
 
 ---
 
