@@ -115,7 +115,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (90) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-27 22:09 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (90) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (30) &mdash; 2026-08-28 15:11 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
@@ -318,7 +318,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column progress">
-    <h2>In Progress (3)</h2>
+    <h2>In Progress (2)</h2>
     
     <div class="">
     <div class="card">
@@ -335,18 +335,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L260" target="_blank">BACKLOG.md:260</a></div>
 </div>
-<div class="card">
-    <div class="card-id">AI-062</div>
-    <div class="card-title">RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)</div>
-    <div class="card-meta"><span>Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3204" target="_blank">BACKLOG.md:3204</a></div>
-</div>
     </div>
 </div>
     <div class="column done">
-    <h2>Done (88)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (88)</button>
+    <h2>Done (89)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (89)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -929,6 +922,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L3183" target="_blank">BACKLOG.md:3183</a></div>
 </div>
+<div class="card">
+    <div class="card-id">AI-062</div>
+    <div class="card-title">RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)</div>
+    <div class="card-meta"><span>Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L3204" target="_blank">BACKLOG.md:3204</a></div>
+</div>
     </div>
 </div>
 </div>
@@ -936,7 +936,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "88";
+    var count = "89";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
