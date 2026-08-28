@@ -3203,7 +3203,7 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 
 ## 🆕 AI-062 — RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)
 
-**Status:** 🟡 ready-for-agent — measured (2026-08-27) — `2e0f936` shipped the trace; measurement run shows **decisive-rate ~ 0%**. Do NOT build AI-058 until the scoring rebalance below is decided/built.
+**Status:** ✅ Complete (rebalance shipped 2026-08-28 — `d15d66c`): RAG bonus now applied on the haystack fast path; decisive-rate at the scoring level went 0–12% → 44–66% (fastpath) with 100% flip-correctness on the mocks; the magnitude bump (5→25) was tried and rejected (near-inert on 3 of 4 sites). AI-058 no longer blocked by scoring uncertainty.
 **Priority:** Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.
 **Depends on:** AI-059 (usage trace), AI-061 (scope). Folds into: AI-035 self-learning RAG, AI-058 contrastive learned store.
 
@@ -3219,8 +3219,11 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 - Interpretation: learned bonuses are applied often but NEVER flip the pick — they pad an already-winning element. Confirms the fast-path omission (bonus never added on the haystack early-return) AND that even on the slow path +5 is too small to outrank structural scoring. Learned RAG bonuses currently have ~zero causal effect on outcomes.
 - Caveat: synthetic learned pattern per label (not a real learned store); indicative of the *applied-vs-decisive* gap, not an exhaustive multi-site rate.
 
-### Decision (gated) — scoring rebalance needed BEFORE AI-058
-- Fixing only the fast-path omission raises the *applied* rate but will not raise *decisive* (the +5 still can't outrank +80 structural scores). So the fix is not magnitude alone.
-- Options to make learned patterns actually matter: (a) make the learned bonus a **small-margin tie-breaker** (apply only when top-2 within N points), (b) raise `SAME_SITE_LEARNED_BONUS` substantially, or (c) gate learned patterns to only override when structural confidence is low. Pick after a second measurement that reports the winner-vs-runner-up margin.
+### Resolution (2026-08-28) — fastpath shipped, magnitude rejected
+- **The earlier hypothesis was wrong**: fixing ONLY the fast-path omission DID raise *decisive* (and correctly). Live `verify_production` A/B (RAG on): decisive-rate 0% → 21% of applied bonuses; saucedemo execution identical (5 passed/1 skipped) both configs; the lone automationexercise difference was a generated-URL-assert flake with an identical click selector (not RAG-attributable).
+- **Mock flip-correctness** (vs eval golden keys on ecommerce/banking mocks): 100% of golden (5/5 + 2/2) and learned (4/4) fastpath flips landed on the golden-key element; ecommerce resolution accuracy 53.8% → 84.6% (golden store) and 46.2% → 76.9% (learned store). Banking was unchanged (0 learned flips — seed-coverage artifact: banking key descriptions don't overlap element labels).
+- **Magnitude (5→25) rejected**: near-inert on saucedemo, ecommerce, banking (0–5.2% delta); only automationexercise moved (0→5.2%). The fast-path omission, not the magnitude, was the whole story.
+- Shipped `d15d66c`: bonus applied pre-return on the fast path (both bonus methods are no-ops without RAG patterns/site scope → RAG-off mode untouched). Gates: 2876 passed, smoke 39/39, eval static 97.9% (RAG-off, unchanged), ruff + mypy clean.
+- **Next for AI-058**: proceed — the learned-store mechanism now demonstrably steers resolution correctly.
 
 ---
