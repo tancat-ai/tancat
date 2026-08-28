@@ -109,7 +109,23 @@ A real tester validates *intent, not implementation*: "add item to cart" is sati
 
 ---
 
-## 🆕 AI-060 — Hybrid LangGraph orchestration around the linear resolver
+## 🆕 AI-063 — Context-aware candidate scoping for ambiguous descriptions (back buttons, multi-vehicle add-driver)
+
+**Status:** 🆕 new — logged 2026-08-28 during AI-058 Slice 1 design. Not blocking; sibling of AI-058.
+**Priority:** Medium (only matters if the AI-058 A/B shows systematic mis-scoping on multi-section flows).
+**Depends on:** AI-058 Slice 2 measurement (does the LV-style multi-vehicle flow expose it?). Folds into: AI-054 pipeline consolidation review.
+
+**One-line:** the same description legitimately maps to DIFFERENT elements by context — LV mock has per-`data-vehicle` / per-`data-driver` "Add Driver" buttons and 18 "Back" controls (step-back vs back-to-start); the RAG scoring path sees only `(action, description, element, site)` and no step/section context, so "add driver" in a 1-vehicle test and after adding vehicle 2 share one key.
+
+### Why the store alone can't fix it
+- A negative on vehicle-2's add-driver only down-weights that exact `(desc, selector, site)` — vehicle-1's stays correct. Good (no cross-context bleed).
+- But **systematic mis-scoping** (resolver always picks vehicle-1's button for "add driver" in a 2-vehicle test because DOM order wins) can only be corrected AFTER repeated failures — slow and noisy. The right fix is resolution-time candidate scoping, not a store-key change (context tokens in keys fragment evidence and starve cold-start).
+
+### Fix sketch
+- Scope candidates at resolve time to the current section/vehicle using `data-vehicle` context, prior steps (`resolved_steps`), and/or the observed trail — unify the existing `section_scoper.scope_elements` into the actual candidate selection used by scoring.
+- Only build if AI-058 Slice 2's mock A/B measures a real mis-scoping cost on the LV-style flow.
+
+---
 
 **Status:** 🆕 new — proposed 2026-08-27. **EXPERIMENT ONLY.** Do not replace the proven linear pipeline until a controlled graph-vs-linear comparison is complete.
 **Priority:** Low (architecture experiment; not a current product blocker).

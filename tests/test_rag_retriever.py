@@ -84,6 +84,9 @@ class _InMemoryBackend:
         self._entries = [entry for entry in self._entries if entry[1].get("entry_type") in ("golden", "doc")]
         return before - len(self._entries)
 
+    def query_dedup_keys(self, entry_type: str) -> list[str]:
+        return []
+
     def find_learned(
         self,
         action_type: str,
@@ -100,16 +103,32 @@ class _InMemoryBackend:
                 return dict(meta)
         return None
 
+    def find_negative(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, object] | None:
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned_negative"
+                and meta.get("action_type") == action_type
+                and meta.get("description") == description
+                and meta.get("site_hash") == site_hash
+            ):
+                return dict(meta)
+        return None
+
     def increment_learned_hit(self, row: dict[str, object]) -> int:
         for _vec, meta, _text in self._entries:
             if (
-                meta.get("entry_type") == "learned"
-                and meta.get("action_type") == row.get("action_type")
+                meta.get("action_type") == row.get("action_type")
                 and meta.get("description") == row.get("description")
                 and meta.get("site_hash") == row.get("site_hash")
             ):
                 new_hit = int(meta.get("hit_count", 0)) + 1
                 meta["hit_count"] = new_hit
+                meta["last_seen"] = 1_700_000_000.0 + new_hit
                 return new_hit
         return 1
 
