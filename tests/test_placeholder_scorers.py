@@ -77,6 +77,29 @@ class TestComputeElementScore:
         assert score is not None
         assert score >= 105  # 100 base + 5 journey bonus
 
+    def test_rag_bonus_applies_on_haystack_fast_path(self) -> None:
+        # AI-062: the golden/learned bonus must apply on the haystack fast path
+        # too. Previously it was only added on the slow semantic path, so
+        # substring-matched resolutions (the common case) got the bonus in the
+        # usage trace but never in the actual score — the root cause of the
+        # ~0% decisive-rate. This pins the fix: a fast-path element with a
+        # matching golden pattern scores base + GOLDEN_PATTERN_BONUS.
+        el = _element({"text": "Add to cart", "selector": "#add-cart"})
+        base = PlaceholderScorer.compute_element_score("CLICK", "Add to cart", el, "#add-cart", match_threshold=1)
+        golden = RetrievedPattern("Add to cart", "#add-cart", "CLICK", 0.9, source="golden", site_hash="")
+        scored = PlaceholderScorer.compute_element_score(
+            "CLICK",
+            "Add to cart",
+            el,
+            "#add-cart",
+            match_threshold=1,
+            golden_patterns=[golden],
+            site_hash="abc123",
+        )
+        assert base is not None and scored is not None
+        assert base >= 100  # confirmed fast path
+        assert scored - base == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
+
     def test_product_id_bonus_on_add_to_cart(self) -> None:
         el = _element(
             {
