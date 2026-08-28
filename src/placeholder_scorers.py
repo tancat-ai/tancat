@@ -186,6 +186,16 @@ class PlaceholderScorer:
             if action == "CLICK":
                 haystack_score += PlaceholderScorer._hidden_element_penalty(action, element)
                 haystack_score += PlaceholderScorer._click_text_penalty(action, description, desc_words, element)
+            # AI-062: the RAG bonus applies on the fast path too. Previously it
+            # was only added on the slow semantic path, so substring-matched
+            # resolutions (the common haystack case) never received it —
+            # learned/golden patterns were 'applied' in the usage trace but
+            # never changed any winner. Safe: both bonus methods are no-ops
+            # without RAG patterns / site scope, so RAG-off mode is untouched.
+            if golden_patterns:
+                haystack_score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
+            if site_hash:
+                haystack_score += PlaceholderScorer._learned_pattern_bonus(element, golden_patterns, site_hash)
             return haystack_score if haystack_score >= match_threshold else None
 
         # --- Semantic score (slow path) ---
@@ -738,6 +748,9 @@ class PlaceholderScorer:
         full selector match → +SAME_SITE_LEARNED_BONUS (5) scaled by
         confidence; substring/tolerance match → half. Cross-site learned
         patterns get 0 — they could be actively wrong for this site.
+
+        AI-062 experimental: when AI062_LEARNED_BONUS env var is set, it
+        overrides the base bonus magnitude for measurement sweeps.
         """
         if not site_hash or not learned_patterns:
             return 0
