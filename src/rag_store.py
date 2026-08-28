@@ -147,9 +147,11 @@ class RetrievedPattern:
     selector: str
     action_type: str
     confidence: float
-    source: str = ""  # "golden", "doc", or "learned"
+    source: str = ""  # "golden", "doc", "learned", or "learned_negative"
     page: str = ""  # URL fragment for golden patterns
     site_hash: str = ""  # one-way site identity hash (learned patterns)
+    hit_count: int = 0  # evidence count (learned / learned_negative)
+    last_seen: float = 0.0  # wall-clock time of last record (recency tie-break)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +283,18 @@ class VectorStoreBackend(Protocol):
 
     def increment_learned_hit(self, row: dict[str, Any]) -> int:
         """Increment ``hit_count`` on an existing learned row; returns the new count."""
+        ...
+
+    def find_negative(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        """Find an existing ``learned_negative`` row by dedup key (AI-058).
+
+        Mirrors ``find_learned`` for the contrastive negative store.
+        """
         ...
 
 
@@ -587,16 +601,42 @@ class MilvusLiteBackend:
         )
         return rows[0] if rows else None
 
+    def find_negative(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        """Find an existing ``learned_negative`` row by dedup key (Milvus impl).
+
+        AI-058: mirrors ``find_learned`` but filters ``entry_type ==
+        'learned_negative'``. Returns the full row so the caller can upsert
+        it back with an incremented ``hit_count`` / fresh ``last_seen``.
+        """
+        rows = self._c.query(
+            _COLLECTION_NAME,
+            filter=(
+                "entry_type == 'learned_negative' "
+                f"and action_type == '{action_type}' "
+                f"and description == '{description}' "
+                f"and site_hash == '{site_hash}'"
+            ),
+            output_fields=["*"],
+            limit=1,
+        )
+        return rows[0] if rows else None
+
     def increment_learned_hit(self, row: dict[str, Any]) -> int:
         """Increment ``hit_count`` on an existing learned row (Milvus impl).
 
         Milvus upsert replaces the whole entity, so the full row from
         ``find_learned`` (which includes the vector) is written back with
-        ``hit_count + 1``. Returns the new count.
+        ``hit_count + 1`` and a fresh ``last_seen`` (AI-058 recency). Returns
+        the new count.
         """
         current = int(row.get("hit_count", 0))
         new_hit = current + 1
-        data = {**row, "hit_count": new_hit}
+        data = {**row, "hit_count": new_hit, "last_seen": time.time()}
         self._c.upsert(_COLLECTION_NAME, [data])
         return new_hit
 
@@ -764,6 +804,8 @@ class RAGStore:
                     source=md.get("entry_type", ""),
                     page=md.get("page", ""),
                     site_hash=md.get("site_hash", ""),
+                    hit_count=int(md.get("hit_count", 0) or 0),
+                    last_seen=float(md.get("last_seen", 0.0) or 0.0),
                 )
             )
 
@@ -825,6 +867,49 @@ class RAGStore:
                         "source": pattern.source,
                         "hit_count": 1,
                         "created_at": time.time(),
+                    },
+                )
+            ]
+        )
+        return ("inserted", 1)
+
+    def upsert_negative_pattern(self, pattern: LearnedPattern) -> tuple[str, int]:
+        """Insert or dedup a learned-NEGATIVE pattern (AI-058 contrastive store).
+
+        Mirrors :meth:`upsert_pattern` with ``entry_type="learned_negative"` —
+        dedup on ``(action_type, description, site_hash)``; a repeat bumps
+        ``hit_count`` and refreshes ``last_seen`` (recency tie-break). The
+        single-row-per-key invariant mirrors the positive store, so a
+        ``(description, selector, site)`` pair resolves to one net signal.
+        """
+        existing = self._backend.find_negative(
+            pattern.action_type,
+            pattern.description,
+            pattern.site_hash,
+        )
+        if existing is not None:
+            hit = self._backend.increment_learned_hit(existing)
+            return ("exists", hit)
+
+        self._ensure_embedder_match()
+        vector = self._embedder.embed(pattern.query_text)
+        now = time.time()
+        self._backend.upsert(
+            [
+                KnowledgeEntry(
+                    vector=vector,
+                    text=pattern.query_text,
+                    metadata={
+                        "entry_type": "learned_negative",
+                        "action_type": pattern.action_type,
+                        "description": pattern.description,
+                        "selector": pattern.locator,
+                        "site_hash": pattern.site_hash,
+                        "confidence": float(pattern.confidence),
+                        "source": pattern.source,
+                        "hit_count": 1,
+                        "created_at": now,
+                        "last_seen": now,
                     },
                 )
             ]

@@ -307,6 +307,98 @@ def test_build_lab_identity_isolates_experiment_cells() -> None:
     assert lab_site_hash(v1) == lab_site_hash(build_lab_identity(site="ecommerce", input_version="v1"))
 
 
+# ── AI-058: contrastive learned store (negatives) ──────────────────────────
+
+
+def test_upsert_negative_pattern_inserts_then_dedups() -> None:
+    from src.rag_learn import LearnedPattern
+    from src.rag_store import RAGStore
+
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    pat = LearnedPattern("CLICK", "Add to cart", "#wrong-add", "site-x", confidence=1.0, source="learned_negative")
+    assert store.upsert_negative_pattern(pat) == ("inserted", 1)
+    assert store.upsert_negative_pattern(pat) == ("exists", 2)
+    rows = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(rows) == 1
+    assert rows[0]["hit_count"] == 2
+    assert rows[0]["last_seen"] > 0
+    assert store.counts_by_type().get("learned_negative") == 1
+
+
+def test_learn_negatives_from_evidence_only_locator_failures() -> None:
+    from src.rag_learn import learn_negatives_from_evidence
+    from src.rag_store import RAGStore
+
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    locator_err = (
+        "TimeoutError: Timeout 5000ms exceeded.\nwaiting for locator('page.locator(\"#wrong-add\")') to be visible"
+    )
+    steps = [
+        # locator-class failure with a resolved selector -> negative
+        {
+            "type": "click",
+            "label": "Add to cart",
+            "locator": "#wrong-add",
+            "url": "http://localhost:8781/x.html",
+            "result": {"status": "failed", "error": locator_err},
+        },
+        # assertion failure -> NOT a locator negative (infra/assert excluded)
+        {
+            "type": "click",
+            "label": "Proceed",
+            "locator": "#proceed",
+            "url": "http://localhost:8781/x.html",
+            "result": {"status": "failed", "error": "AssertionError: expected text"},
+        },
+        # locator failure but NO resolved selector -> cannot key a negative
+        {
+            "type": "click",
+            "label": "Checkout",
+            "locator": "",
+            "url": "http://localhost:8781/x.html",
+            "result": {"status": "failed", "error": locator_err},
+        },
+        # passing step -> not a negative
+        {
+            "type": "click",
+            "label": "Pass",
+            "locator": "#ok",
+            "url": "http://localhost:8781/x.html",
+            "result": {"status": "passed"},
+        },
+    ]
+    result = learn_negatives_from_evidence(steps, store=store)
+    assert result == {"inserted": 1, "exists": 0}
+    negs = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(negs) == 1
+    assert negs[0]["selector"] == "#wrong-add"
+    assert negs[0]["source"] == "learned_negative"
+
+
+def test_learn_from_patch_records_old_selector_negative() -> None:
+    from src.rag_learn import learn_from_patch
+    from src.rag_store import RAGStore
+
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    result = learn_from_patch(
+        old_text='page.locator("#wrong-add").click()',
+        new_text='page.locator("#add-to-cart").click()',
+        base_url="http://localhost:8781/x.html",
+        description="Add to cart",
+        store=store,
+    )
+    assert result == {"inserted": 1, "exists": 0}
+    negs = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(negs) == 1
+    assert negs[0]["selector"] == "#wrong-add"
+    pos = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned"]
+    assert len(pos) == 1
+    assert pos[0]["selector"] == "#add-to-cart"
+
+
 class _FakeEmbedder:
     dimension = 384
 
@@ -345,7 +437,30 @@ class _FakeBackend(VectorStoreBackend):
                 return md
         return None
 
+    def find_negative(self, action_type: str, description: str, site_hash: str) -> dict[str, Any] | None:
+        for entry in self.entries:
+            md = entry.metadata
+            if (
+                md.get("entry_type") == "learned_negative"
+                and md.get("action_type") == action_type
+                and md.get("description") == description
+                and md.get("site_hash") == site_hash
+            ):
+                return md
+        return None
+
     def increment_learned_hit(self, row: dict) -> int:
+        for entry in self.entries:
+            md = entry.metadata
+            if (
+                md.get("action_type") == row.get("action_type")
+                and md.get("description") == row.get("description")
+                and md.get("site_hash") == row.get("site_hash")
+            ):
+                new_hit = int(md.get("hit_count", 0)) + 1
+                md["hit_count"] = new_hit
+                md["last_seen"] = 1_700_000_000.0 + new_hit
+                return new_hit
         return 1
 
     def search(self, query_vector: list[float], k: int) -> list:
@@ -358,7 +473,11 @@ class _FakeBackend(VectorStoreBackend):
         self.entries.clear()
 
     def counts_by_type(self) -> dict[str, int]:
-        return {}
+        counter: dict[str, int] = {}
+        for entry in self.entries:
+            et = str(entry.metadata.get("entry_type", "unknown"))
+            counter[et] = counter.get(et, 0) + 1
+        return counter
 
     def query_dedup_keys(self, entry_type: str) -> list[str]:
         return []

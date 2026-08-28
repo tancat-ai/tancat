@@ -892,3 +892,82 @@ class TestGoldenPatternBonus:
         assert base is not None and same is not None and cross is not None
         assert same - base == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
         assert cross == base  # cross-site golden adds nothing
+
+
+class TestLearnedNetEvidence:
+    """AI-058: learned positives MINUS negatives, majority + recency tie-break."""
+
+    @staticmethod
+    def _pat(selector: str, source: str, hit: int = 1, seen: float = 1.0, conf: float = 1.0) -> RetrievedPattern:
+        return RetrievedPattern(
+            "target",
+            selector,
+            "CLICK",
+            conf,
+            source=source,
+            site_hash="abc123",
+            hit_count=hit,
+            last_seen=seen,
+        )
+
+    def test_positive_only_bonus(self) -> None:
+        el = _element({"selector": "#ok"})
+        net = PlaceholderScorer._learned_net_evidence(el, [self._pat("#ok", "learned")], "abc123")
+        assert net == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+
+    def test_negative_only_penalizes(self) -> None:
+        el = _element({"selector": "#wrong"})
+        net = PlaceholderScorer._learned_net_evidence(el, [self._pat("#wrong", "learned_negative")], "abc123")
+        assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS
+
+    def test_negative_scales_with_hit_count_capped(self) -> None:
+        el = _element({"selector": "#wrong"})
+        net = PlaceholderScorer._learned_net_evidence(
+            el, [self._pat("#wrong", "learned_negative", hit=PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS)], "abc123"
+        )
+        expected = PlaceholderScorer.LEARNED_NEGATIVE_BONUS * PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS
+        assert net == -expected
+        # More hits beyond the cap do not increase the penalty further.
+        net2 = PlaceholderScorer._learned_net_evidence(el, [self._pat("#wrong", "learned_negative", hit=999)], "abc123")
+        assert net2 == net
+
+    def test_positive_majority_beats_negative(self) -> None:
+        el = _element({"selector": "#same"})
+        pats = [
+            self._pat("#same", "learned", hit=5, seen=100.0),
+            self._pat("#same", "learned_negative", hit=2, seen=200.0),
+        ]
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123")
+        assert net == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+
+    def test_negative_majority_penalizes(self) -> None:
+        el = _element({"selector": "#same"})
+        pats = [
+            self._pat("#same", "learned", hit=1, seen=10.0),
+            self._pat("#same", "learned_negative", hit=3, seen=20.0),
+        ]
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123")
+        assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 3
+
+    def test_tie_recency_wins(self) -> None:
+        el = _element({"selector": "#same"})
+        # Balanced evidence, but the negative is more recent -> conservative penalty.
+        pats = [
+            self._pat("#same", "learned", hit=2, seen=10.0),
+            self._pat("#same", "learned_negative", hit=2, seen=20.0),
+        ]
+        assert (
+            PlaceholderScorer._learned_net_evidence(el, pats, "abc123") == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 2
+        )
+        # Balanced evidence, positive more recent -> bonus.
+        pats2 = [
+            self._pat("#same", "learned", hit=2, seen=30.0),
+            self._pat("#same", "learned_negative", hit=2, seen=20.0),
+        ]
+        assert PlaceholderScorer._learned_net_evidence(el, pats2, "abc123") == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+
+    def test_net_ignores_cross_site(self) -> None:
+        el = _element({"selector": "#wrong"})
+        pats = [self._pat("#wrong", "learned_negative", seen=99.0)]
+        # Different site scope -> no net evidence.
+        assert PlaceholderScorer._learned_net_evidence(el, pats, "other-site") == 0

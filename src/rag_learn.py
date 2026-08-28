@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from src.failure_classifier import FailureCategory, classify_failure
 from src.rag_bundled import build_default_store
 from src.rag_store import LearnedPattern, RAGStore
 
@@ -134,6 +135,53 @@ def _step_to_pattern(step: dict[str, Any]) -> LearnedPattern | None:
     )
 
 
+#: Failure classes that make a failed step a CONFIRMED locator negative (AI-058).
+#: Everything else — assertion failures, strict violations, navigation errors,
+#: unknown/infra — must never poison the store: precision is everything.
+_LOCATOR_FAILURE_CATEGORIES: set[FailureCategory] = {FailureCategory.LOCATOR_TIMEOUT}
+
+
+def _step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None:
+    """Map one FAILED evidence step to a ``learned_negative`` pattern, or None.
+
+    AI-058 contrastive store: only **locator-class** failures (locator
+    timeout / element-not-found, classified by :func:`classify_failure`) that
+    carry a resolved selector and a site identity become negatives. Infra
+    flakes (LLM timeout, navigation non-arrival, assertion failures, unknown)
+    are excluded so they can never down-weight a healthy element. Mirrors
+    ``_step_to_pattern`` for positives (same dedup key + one-way hashing).
+    """
+    action = _STEP_TYPE_TO_ACTION.get(str(step.get("type", "")).lower())
+    if action is None:
+        return None
+    label = str(step.get("label", "") or "").strip()
+    locator = str(step.get("locator", "") or "").strip()
+    if not label or not locator:
+        return None
+    result = step.get("result") or {}
+    if str(result.get("status", "")) in ("passed", "partial_pass"):
+        return None
+    error = str(result.get("error", "") or "")
+    try:
+        detail = classify_failure(error)
+    except Exception:
+        return None
+    if detail.category not in _LOCATOR_FAILURE_CATEGORIES:
+        return None
+    step_url = str(step.get("url", "") or "")
+    identity = effective_site_identity(step_url)
+    if not identity:
+        return None
+    return LearnedPattern(
+        action_type=action,
+        description=label,
+        locator=locator,
+        site_hash=site_hash(identity),
+        confidence=0.9,
+        source="learned_negative",
+    )
+
+
 def learn_from_evidence(
     steps: list[dict[str, Any]],
     *,
@@ -173,6 +221,45 @@ def learn_from_evidence(
     if inserted or exists:
         logger.info(
             "Learned %d new pattern(s), %d already known (hit bumped)",
+            inserted,
+            exists,
+        )
+    return {"inserted": inserted, "exists": exists}
+
+
+def learn_negatives_from_evidence(
+    steps: list[dict[str, Any]],
+    *,
+    store: RAGStore | None = None,
+) -> dict[str, int]:
+    """Record ``learned_negative`` patterns from failed locator-class steps.
+
+    AI-058: the contrastive half of :func:`learn_from_evidence`. Converts each
+    FAILED step that classifies as a locator-class failure (with a resolved
+    selector) into a ``learned_negative`` entry so the resolver down-weights
+    elements that failed before. Infra flakes never reach the store.
+
+    Best-effort — a bad step can never break a run.
+    """
+    store = store or build_default_store()
+    inserted = 0
+    exists = 0
+    for step in steps:
+        pattern = _step_to_negative_pattern(step)
+        if pattern is None:
+            continue
+        try:
+            status, _hit = store.upsert_negative_pattern(pattern)
+        except Exception as exc:
+            logger.warning("Learned-negative record failed (non-fatal): %s", exc)
+            continue
+        if status == "inserted":
+            inserted += 1
+        else:
+            exists += 1
+    if inserted or exists:
+        logger.info(
+            "Learned %d negative pattern(s), %d already known (hit bumped)",
             inserted,
             exists,
         )
@@ -399,6 +486,23 @@ def learn_from_patch(
             return {"inserted": 0, "exists": 0}
         store = store or build_default_store()
         status, _hit = store.upsert_pattern(pattern)
+        # AI-058: the OLD selector is a CONFIRMED negative. The self-heal
+        # replacement pair (old selector failed → new selector verified) is the
+        # highest-precision contrastive signal the store can receive.
+        old_selector = _selector_from_code(old_text)
+        if old_selector:
+            negative = LearnedPattern(
+                action_type=pattern.action_type,
+                description=pattern.description,
+                locator=old_selector,
+                site_hash=pattern.site_hash,
+                confidence=1.0,
+                source="learned_negative",
+            )
+            try:
+                store.upsert_negative_pattern(negative)
+            except Exception as exc:
+                logger.warning("Self-healing negative write failed (non-fatal): %s", exc)
         logger.info(
             "Learned self-healing pattern: %s '%s' -> %s (%s)",
             pattern.action_type,

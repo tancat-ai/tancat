@@ -22,6 +22,11 @@ class PlaceholderScorer:
     # _vision_enriched_bonus (+20).
     GOLDEN_PATTERN_BONUS: int = 20
     SAME_SITE_LEARNED_BONUS: int = 5  # AI-035/B-036 Phase 3: verified same-site learned patterns
+    # AI-058: negative evidence (confirmed-wrong locators) mirrors the positive
+    # bonus at equal magnitude, scaled by hit_count and capped so accumulated
+    # negatives can never outrank a strong structural match (+80).
+    LEARNED_NEGATIVE_BONUS: int = 5
+    LEARNED_NEGATIVE_MAX_HITS: int = 8  # |penalty| = 5 * 8 = 40 < 80
 
     # Penalty applied to hidden elements for non-ASSERT actions when
     # section scoping is active.  In the real pipeline, pages are scraped
@@ -195,7 +200,7 @@ class PlaceholderScorer:
             if golden_patterns:
                 haystack_score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
             if site_hash:
-                haystack_score += PlaceholderScorer._learned_pattern_bonus(element, golden_patterns, site_hash)
+                haystack_score += PlaceholderScorer._learned_net_evidence(element, golden_patterns, site_hash)
             return haystack_score if haystack_score >= match_threshold else None
 
         # --- Semantic score (slow path) ---
@@ -230,7 +235,7 @@ class PlaceholderScorer:
         if golden_patterns:
             score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
         if site_hash:
-            score += PlaceholderScorer._learned_pattern_bonus(element, golden_patterns, site_hash)
+            score += PlaceholderScorer._learned_net_evidence(element, golden_patterns, site_hash)
 
         return score if score >= match_threshold else None
 
@@ -769,6 +774,120 @@ class PlaceholderScorer:
             if element_selector in pattern.selector or pattern.selector in element_selector:
                 return int(PlaceholderScorer.SAME_SITE_LEARNED_BONUS * 0.5 * pattern.confidence)
         return 0
+
+    @staticmethod
+    def _learned_amount_for(element: dict[str, Any], pattern: Any, *, negative: bool) -> int:
+        """Contribution of ONE learned / learned_negative pattern to an element.
+
+        Full selector match → base × confidence; substring/tolerance → half.
+        Negative contributions scale by ``hit_count`` up to
+        ``LEARNED_NEGATIVE_MAX_HITS`` so a few failures matter but accumulated
+        negatives stay below the +80 structural tier.
+        """
+        base = PlaceholderScorer.LEARNED_NEGATIVE_BONUS if negative else PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+        conf = float(getattr(pattern, "confidence", 1.0))
+        element_selector = str(element.get("selector", "")).strip()
+        sel = str(getattr(pattern, "selector", ""))
+        if not sel:
+            return 0
+        if sel == element_selector:
+            amount = int(base * conf)
+        elif element_selector in sel or sel in element_selector:
+            amount = int(base * 0.5 * conf)
+        else:
+            return 0
+        if negative:
+            hits = min(int(getattr(pattern, "hit_count", 1) or 1), PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS)
+            amount *= hits
+            amount = min(amount, PlaceholderScorer.LEARNED_NEGATIVE_BONUS * PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS)
+        return amount
+
+    @staticmethod
+    def _learned_negative_penalty(
+        element: dict[str, Any],
+        patterns: list | None,
+        site_hash: str | None,
+    ) -> int:
+        """Raw accumulated negative penalty for a same-site learned_negative.
+
+        AI-058 mirror of ``_learned_pattern_bonus``: full match −5 × conf,
+        substring −2 × conf, scaled by ``hit_count`` up to
+        ``LEARNED_NEGATIVE_MAX_HITS``. Returns 0 when no negative matches.
+        """
+        if not site_hash or not patterns:
+            return 0
+        element_selector = str(element.get("selector", "")).strip()
+        if not element_selector:
+            return 0
+        total = 0
+        for pattern in patterns:
+            if getattr(pattern, "source", "") != "learned_negative":
+                continue
+            if getattr(pattern, "site_hash", "") != site_hash:
+                continue
+            if not getattr(pattern, "selector", ""):
+                continue
+            total += PlaceholderScorer._learned_amount_for(element, pattern, negative=True)
+        return total
+
+    @staticmethod
+    def _learned_net_evidence(
+        element: dict[str, Any],
+        patterns: list | None,
+        site_hash: str | None,
+    ) -> int:
+        """Net learned-pattern evidence: positives MINUS negatives (AI-058).
+
+        A ``(description, selector, site)`` pair resolves to ONE net signal:
+          - positives only  → +bonus (unchanged behavior)
+          - negatives only  → −penalty
+          - BOTH (the same element is in both stores — e.g. it worked before
+            the site changed): majority by ``hit_count``; on a tie the MORE
+            RECENT (``last_seen``) wins, and a genuinely ambiguous tie biases
+            conservative (a wrong pick costs a test failure; a skip is
+            recoverable via self-heal).
+        Returns 0 when no same-site learned / learned_negative pattern matches.
+        """
+        if not site_hash or not patterns:
+            return 0
+        element_selector = str(element.get("selector", "")).strip()
+        if not element_selector:
+            return 0
+
+        pos_pattern: Any | None = None
+        neg_pattern: Any | None = None
+        for pattern in patterns:
+            if getattr(pattern, "site_hash", "") != site_hash:
+                continue
+            sel = str(getattr(pattern, "selector", ""))
+            if not sel:
+                continue
+            if sel != element_selector and not (element_selector in sel or sel in element_selector):
+                continue
+            src = str(getattr(pattern, "source", ""))
+            if src == "learned" and pos_pattern is None:
+                pos_pattern = pattern
+            elif src == "learned_negative" and neg_pattern is None:
+                neg_pattern = pattern
+            if pos_pattern is not None and neg_pattern is not None:
+                break
+
+        pos_amt = PlaceholderScorer._learned_amount_for(element, pos_pattern, negative=False) if pos_pattern else 0
+        neg_amt = PlaceholderScorer._learned_amount_for(element, neg_pattern, negative=True) if neg_pattern else 0
+
+        if neg_pattern is None:
+            return pos_amt
+        if pos_pattern is None:
+            return -neg_amt
+        pos_hits = int(getattr(pos_pattern, "hit_count", 1) or 1)
+        neg_hits = int(getattr(neg_pattern, "hit_count", 1) or 1)
+        if pos_hits > neg_hits:
+            return pos_amt
+        if neg_hits > pos_hits:
+            return -neg_amt
+        pos_seen = float(getattr(pos_pattern, "last_seen", 0.0) or 0.0)
+        neg_seen = float(getattr(neg_pattern, "last_seen", 0.0) or 0.0)
+        return -neg_amt if neg_seen >= pos_seen else pos_amt
 
     # ------------------------------------------------------------------
     # B-014: ASSERT intent-aware scoring
