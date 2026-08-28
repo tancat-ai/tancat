@@ -67,7 +67,7 @@ Last updated: 2026-08-27 (AI-060 hybrid LangGraph orchestration experiment added
 
 ## 🆕 AI-058 — Contrastive learned store: record BOTH positives and negatives, cross-reference at scoring
 
-**Status:** 🆕 new — proposed 2026-08-26. **METRIC-FIRST.** Do NOT build until the isolation harness (**AI-059**) exists and a cold-store baseline is captured. The feature is judged against that baseline.
+**Status:** 🟡 ready-for-agent — **Slice 1 shipped 2026-08-28** (`9aa8bbc`): `learned_negative` store type + locator-class recording + net scoring (`_learned_net_evidence`). AI-059 prerequisite (harness + baseline) done. **METRIC-FIRST**: do not judge the feature until Slice 2's harness A/B measures the `mean_pass_depth` delta. Remaining: Slice 2 (wire negative recording into the evidence sidecar sweep + AI-059 harness A/B: negatives-on vs off on the mocks) → Slice 3 (description-keyed swap at scoring, self-heal integration, production trend).
 **Priority:** Medium (product-differentiation experiment, not a launch blocker — sequence after AI-055 and Phase 6 6c/6d).
 **Folds into:** AI-054 (testing-strategy review) + the AI-045 RAG/evidence thread.
 
