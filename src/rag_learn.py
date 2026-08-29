@@ -136,9 +136,19 @@ def _step_to_pattern(step: dict[str, Any]) -> LearnedPattern | None:
 
 
 #: Failure classes that make a failed step a CONFIRMED locator negative (AI-058).
-#: Everything else — assertion failures, strict violations, navigation errors,
-#: unknown/infra — must never poison the store: precision is everything.
+#: Everything else — strict violations, navigation errors, unknown/infra — must
+#: never poison the store: precision is everything.
 _LOCATOR_FAILURE_CATEGORIES: set[FailureCategory] = {FailureCategory.LOCATOR_TIMEOUT}
+
+#: AI-063: the *resolved-but-wrong* failure classes. These are NOT locator
+#: timeouts (the element was found and interacted with) — the step resolved to
+#: an element that EXISTS but is the WRONG pick, so its subsequent
+#: state-check/assertion failed. This is the "high-scoring locator that keeps
+#: failing" shape the user actually experiences: a locator scores highly
+#: (matched text/structure) but produces a bad outcome. An assertion failure
+#: WITH a resolved selector on the evidence step IS the wrong-element signal:
+#: the resolver picked that element and the check failed.
+_RESOLVED_WRONG_CATEGORIES: set[FailureCategory] = {FailureCategory.ASSERTION_FAILURE}
 
 
 def _step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None:
@@ -150,6 +160,13 @@ def _step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None:
     flakes (LLM timeout, navigation non-arrival, assertion failures, unknown)
     are excluded so they can never down-weight a healthy element. Mirrors
     ``_step_to_pattern`` for positives (same dedup key + one-way hashing).
+
+    AI-063 (resolved-but-wrong): an ``ASSERTION_FAILURE`` step that carried a
+    resolved selector is ALSO a negative — the element was picked, existed,
+    and failed its check. It gets a lower confidence (0.6 vs 0.9) because
+    "picked the wrong of several candidates" is a weaker signal than "the
+    element does not exist", and only accumulates authority via
+    ``hit_count`` (repeated failures) at scoring time.
     """
     action = _STEP_TYPE_TO_ACTION.get(str(step.get("type", "")).lower())
     if action is None:
@@ -166,7 +183,12 @@ def _step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None:
         detail = classify_failure(error)
     except Exception:
         return None
-    if detail.category not in _LOCATOR_FAILURE_CATEGORIES:
+    if detail.category in _LOCATOR_FAILURE_CATEGORIES:
+        confidence = 0.9
+    elif detail.category in _RESOLVED_WRONG_CATEGORIES:
+        # Resolved-but-wrong: the element existed and was picked, then failed.
+        confidence = 0.6
+    else:
         return None
     step_url = str(step.get("url", "") or "")
     identity = effective_site_identity(step_url)
@@ -177,7 +199,7 @@ def _step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None:
         description=label,
         locator=locator,
         site_hash=site_hash(identity),
-        confidence=0.9,
+        confidence=confidence,
         source="learned_negative",
     )
 
@@ -232,12 +254,19 @@ def learn_negatives_from_evidence(
     *,
     store: RAGStore | None = None,
 ) -> dict[str, int]:
-    """Record ``learned_negative`` patterns from failed locator-class steps.
+    """Record ``learned_negative`` patterns from failed steps.
 
     AI-058: the contrastive half of :func:`learn_from_evidence`. Converts each
     FAILED step that classifies as a locator-class failure (with a resolved
     selector) into a ``learned_negative`` entry so the resolver down-weights
     elements that failed before. Infra flakes never reach the store.
+
+    AI-063: also records *resolved-but-wrong* picks — an ``ASSERTION_FAILURE``
+    step that carried a resolved selector (the element was picked, existed,
+    and failed its check) — at lower confidence, so a high-scoring locator
+    that keeps producing bad outcomes is down-weighted. Step-scoped at match
+    time (``_step_scope_matches`` in the scorer) so a negative only applies
+    on the step it was recorded on.
 
     Best-effort — a bad step can never break a run.
     """
@@ -270,8 +299,10 @@ def learn_from_evidence_sidecars(
     evidence_dir: str | Path,
     *,
     store: RAGStore | None = None,
+    learn_negatives: bool = True,
 ) -> dict[str, int]:
-    """Sweep ``evidence/*.evidence.json`` sidecars and learn passed steps.
+    """Sweep ``evidence/*.evidence.json`` sidecars and learn both positives and
+    contrastive negatives (AI-058 Slice 2).
 
     B-047 deferred fix (parent-side sweep): the pytest subprocess hook
     (``generated_tests/conftest.py``) cannot open the Milvus-lite store while
@@ -281,28 +312,55 @@ def learn_from_evidence_sidecars(
     does the same learning IN the parent, after a subprocess run wrote its
     sidecars: no lock contention, same dedup + site scoping.
 
-    Mirrors the conftest gate exactly: only sidecars whose test fully passed
-    (``test.status == "passed"``) are learned; ``learn_from_evidence`` then
-    enforces the per-step ``result.status == "passed"`` filter.
+    Two paths, both mirroring the conftest gate:
+
+    * **Positives** — only sidecars whose test fully passed
+      (``test.status == "passed"``); ``learn_from_evidence`` then enforces the
+      per-step ``result.status == "passed"`` filter. Unchanged from Slice 1.
+    * **Contrastive negatives** — AI-058 Slice 2 + AI-063: sidecars whose test
+      did NOT pass are scanned for (a) CONFIRMED locator failures and (b)
+      *resolved-but-wrong* picks — failed ``ASSERTION`` steps that carried a
+      resolved selector — and recorded as ``learned_negative`` entries via
+      ``learn_negatives_from_evidence``. The class gate
+      (``classify_failure`` → ``LOCATOR_TIMEOUT``/``ASSERTION_FAILURE``)
+      excludes navigation / unknown / strict-violation + selector-less steps,
+      so infra flakes never poison the store.
 
     Never raises — learning is best-effort (corrupt sidecars are counted in
     ``errors`` and skipped, matching the "never break the run" contract).
 
     Returns:
-        ``{"sidecars": K, "inserted": N, "exists": M, "errors": E}`` — K
-        sidecar files scanned, N new patterns, M dedup'd repeats (hit
-        bumped), E unreadable/skipped files.
+        ``{"sidecars": K, "inserted": N, "exists": M, "errors": E,
+        "negatives_inserted": NI, "negatives_exists": NE}`` — K sidecar files
+        scanned, N/M new + dedup'd positive patterns, NI/NE new + dedup'd
+        negative patterns, E unreadable/skipped files.
     """
     sidecars = list(Path(evidence_dir).glob("*.evidence.json"))
-    totals = {"sidecars": len(sidecars), "inserted": 0, "exists": 0, "errors": 0}
+    totals: dict[str, int] = {
+        "sidecars": len(sidecars),
+        "inserted": 0,
+        "exists": 0,
+        "errors": 0,
+        "negatives_inserted": 0,
+        "negatives_exists": 0,
+    }
     for sidecar in sidecars:
         try:
             data = json.loads(sidecar.read_text(encoding="utf-8"))
-            if str((data.get("test") or {}).get("status", "")) != "passed":
-                continue
-            result = learn_from_evidence(data.get("steps") or [], store=store)
-            totals["inserted"] += result["inserted"]
-            totals["exists"] += result["exists"]
+            test_status = str((data.get("test") or {}).get("status", ""))
+            steps = data.get("steps") or []
+            if test_status == "passed":
+                # Positive path unchanged: only fully-passing tests feed the
+                # learned-positive store.
+                result = learn_from_evidence(steps, store=store)
+                totals["inserted"] += result["inserted"]
+                totals["exists"] += result["exists"]
+            elif learn_negatives:
+                # Failed / partial sidecars: learn contrastive negatives from
+                # their locator-class steps. The per-step gate excludes flakes.
+                neg = learn_negatives_from_evidence(steps, store=store)
+                totals["negatives_inserted"] += neg["inserted"]
+                totals["negatives_exists"] += neg["exists"]
         except Exception as exc:  # best-effort — never break the run
             totals["errors"] += 1
             logger.warning(

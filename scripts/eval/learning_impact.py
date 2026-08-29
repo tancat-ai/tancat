@@ -105,6 +105,7 @@ def _rebuild_warm_command(args: argparse.Namespace) -> int:
         args.evidence_dir,
         store=store,
         lab_site_identity=identity,
+        learn_negatives=not args.no_negatives,
     )
     payload = {
         "lab_site_identity": identity,
@@ -154,6 +155,13 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild.add_argument("--site", help="compose a structured identity from components")
     rebuild.add_argument("--input-version", help="site/edit version, e.g. v1/v2")
     rebuild.add_argument("--story-set", help="story-set label for this cell")
+    rebuild.add_argument(
+        "--no-negatives",
+        action="store_true",
+        help="AI-058 Slice 2: build the positives-only (warm-positive) control store; "
+        "omit to also ingest confirmed locator failures as learned_negative "
+        "(warm-positive-negative treatment store).",
+    )
     rebuild.set_defaults(handler=_rebuild_warm_command)
     return parser
 

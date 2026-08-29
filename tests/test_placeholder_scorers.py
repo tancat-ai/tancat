@@ -912,23 +912,33 @@ class TestLearnedNetEvidence:
 
     def test_positive_only_bonus(self) -> None:
         el = _element({"selector": "#ok"})
-        net = PlaceholderScorer._learned_net_evidence(el, [self._pat("#ok", "learned")], "abc123")
+        net = PlaceholderScorer._learned_net_evidence(
+            el, [self._pat("#ok", "learned")], "abc123", action="CLICK", description="target"
+        )
         assert net == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
 
     def test_negative_only_penalizes(self) -> None:
         el = _element({"selector": "#wrong"})
-        net = PlaceholderScorer._learned_net_evidence(el, [self._pat("#wrong", "learned_negative")], "abc123")
+        net = PlaceholderScorer._learned_net_evidence(
+            el, [self._pat("#wrong", "learned_negative")], "abc123", action="CLICK", description="target"
+        )
         assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS
 
     def test_negative_scales_with_hit_count_capped(self) -> None:
         el = _element({"selector": "#wrong"})
         net = PlaceholderScorer._learned_net_evidence(
-            el, [self._pat("#wrong", "learned_negative", hit=PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS)], "abc123"
+            el,
+            [self._pat("#wrong", "learned_negative", hit=PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS)],
+            "abc123",
+            action="CLICK",
+            description="target",
         )
         expected = PlaceholderScorer.LEARNED_NEGATIVE_BONUS * PlaceholderScorer.LEARNED_NEGATIVE_MAX_HITS
         assert net == -expected
         # More hits beyond the cap do not increase the penalty further.
-        net2 = PlaceholderScorer._learned_net_evidence(el, [self._pat("#wrong", "learned_negative", hit=999)], "abc123")
+        net2 = PlaceholderScorer._learned_net_evidence(
+            el, [self._pat("#wrong", "learned_negative", hit=999)], "abc123", action="CLICK", description="target"
+        )
         assert net2 == net
 
     def test_positive_majority_beats_negative(self) -> None:
@@ -937,7 +947,7 @@ class TestLearnedNetEvidence:
             self._pat("#same", "learned", hit=5, seen=100.0),
             self._pat("#same", "learned_negative", hit=2, seen=200.0),
         ]
-        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123")
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="target")
         assert net == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
 
     def test_negative_majority_penalizes(self) -> None:
@@ -946,7 +956,7 @@ class TestLearnedNetEvidence:
             self._pat("#same", "learned", hit=1, seen=10.0),
             self._pat("#same", "learned_negative", hit=3, seen=20.0),
         ]
-        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123")
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="target")
         assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 3
 
     def test_tie_recency_wins(self) -> None:
@@ -957,17 +967,93 @@ class TestLearnedNetEvidence:
             self._pat("#same", "learned_negative", hit=2, seen=20.0),
         ]
         assert (
-            PlaceholderScorer._learned_net_evidence(el, pats, "abc123") == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 2
+            PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="target")
+            == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 2
         )
         # Balanced evidence, positive more recent -> bonus.
         pats2 = [
             self._pat("#same", "learned", hit=2, seen=30.0),
             self._pat("#same", "learned_negative", hit=2, seen=20.0),
         ]
-        assert PlaceholderScorer._learned_net_evidence(el, pats2, "abc123") == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+        assert (
+            PlaceholderScorer._learned_net_evidence(el, pats2, "abc123", action="CLICK", description="target")
+            == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+        )
 
     def test_net_ignores_cross_site(self) -> None:
         el = _element({"selector": "#wrong"})
         pats = [self._pat("#wrong", "learned_negative", seen=99.0)]
         # Different site scope -> no net evidence.
-        assert PlaceholderScorer._learned_net_evidence(el, pats, "other-site") == 0
+        assert (
+            PlaceholderScorer._learned_net_evidence(el, pats, "other-site", action="CLICK", description="target") == 0
+        )
+
+    # ------------------------------------------------------------------
+    # AI-063: step-scoping — same locator is only penalized/bonused on the
+    # step whose (action, description) matches the stored pattern.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _pat_step(
+        selector: str, source: str, action: str, desc: str, hit: int = 1, seen: float = 1.0, conf: float = 1.0
+    ) -> RetrievedPattern:
+        return RetrievedPattern(
+            desc,
+            selector,
+            action,
+            conf,
+            source=source,
+            site_hash="abc123",
+            hit_count=hit,
+            last_seen=seen,
+        )
+
+    def test_negative_skipped_on_different_step(self) -> None:
+        """A "Cart link" negative must NOT penalize the same locator on the
+        "Add to cart" step — that is the AI-063 mis-scope trap."""
+        el = _element({"selector": '.add-to-cart.btn[data-product-id="1"]'})
+        pats = [
+            # Negative recorded for the "Cart link" step (same locator).
+            self._pat_step('.add-to-cart.btn[data-product-id="1"]', "learned_negative", "CLICK", "Cart link", hit=5)
+        ]
+        # Resolving the "Add to cart" step: the negative must NOT apply.
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="Add to cart")
+        assert net == 0
+        # Resolving the "Cart link" step: it DOES apply.
+        net2 = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="Cart link")
+        assert net2 == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS * 5
+
+    def test_positive_skipped_on_different_step(self) -> None:
+        """A positive recorded for "Add to cart" must NOT boost the same
+        locator on the "Cart link" step (mirror of the fix — otherwise a
+        positive would reinforce the wrong element on the wrong step)."""
+        el = _element({"selector": '.add-to-cart.btn[data-product-id="1"]'})
+        pats = [self._pat_step('.add-to-cart.btn[data-product-id="1"]', "learned", "CLICK", "Add to cart", hit=3)]
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="Cart link")
+        assert net == 0
+        net2 = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="CLICK", description="Add to cart")
+        assert net2 == PlaceholderScorer.SAME_SITE_LEARNED_BONUS
+
+    def test_step_scope_ignores_action_mismatch(self) -> None:
+        """Same description but different action type does not match either."""
+        el = _element({"selector": "#cart"})
+        pats = [self._pat_step("#cart", "learned_negative", "CLICK", "Cart link", hit=2)]
+        net = PlaceholderScorer._learned_net_evidence(el, pats, "abc123", action="ASSERT", description="Cart link")
+        assert net == 0
+
+    def test_step_scope_strips_action_prefix(self) -> None:
+        """The stored description carries the ``ACTION: `` prefix (query_text);
+        the matcher strips it for comparison."""
+        el = _element({"selector": "#cart"})
+        prefixed = RetrievedPattern(
+            "CLICK: Cart link",  # stored query_text form
+            "#cart",
+            "CLICK",
+            1.0,
+            source="learned_negative",
+            site_hash="abc123",
+            hit_count=1,
+            last_seen=1.0,
+        )
+        net = PlaceholderScorer._learned_net_evidence(el, [prefixed], "abc123", action="CLICK", description="Cart link")
+        assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS

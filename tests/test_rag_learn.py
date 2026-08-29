@@ -459,7 +459,14 @@ class TestLearnFromEvidenceSidecars:
             steps=[_step(label="username"), _step(label="password")],
         )
         result = learn_from_evidence_sidecars(tmp_path, store=store)
-        assert result == {"sidecars": 1, "inserted": 2, "exists": 0, "errors": 0}
+        assert result == {
+            "sidecars": 1,
+            "inserted": 2,
+            "exists": 0,
+            "errors": 0,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
+        }
         assert store.upsert_pattern.call_count == 2
 
     def test_skips_failed_sidecar(self, tmp_path: Path) -> None:
@@ -469,7 +476,14 @@ class TestLearnFromEvidenceSidecars:
         self._write_sidecar(tmp_path, "test_failed", status="failed")
         self._write_sidecar(tmp_path, "test_passed", status="passed")
         result = learn_from_evidence_sidecars(tmp_path, store=store)
-        assert result == {"sidecars": 2, "inserted": 1, "exists": 0, "errors": 0}
+        assert result == {
+            "sidecars": 2,
+            "inserted": 1,
+            "exists": 0,
+            "errors": 0,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
+        }
         assert store.upsert_pattern.call_count == 1
 
     def test_empty_dir_returns_zeros(self, tmp_path: Path) -> None:
@@ -478,6 +492,8 @@ class TestLearnFromEvidenceSidecars:
             "inserted": 0,
             "exists": 0,
             "errors": 0,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
         }
 
     def test_missing_dir_returns_zeros(self, tmp_path: Path) -> None:
@@ -486,6 +502,8 @@ class TestLearnFromEvidenceSidecars:
             "inserted": 0,
             "exists": 0,
             "errors": 0,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
         }
 
     def test_corrupt_sidecar_counted_not_raised(self, tmp_path: Path) -> None:
@@ -494,7 +512,109 @@ class TestLearnFromEvidenceSidecars:
         (tmp_path / "bad.evidence.json").write_text("{not json", encoding="utf-8")
         self._write_sidecar(tmp_path, "good", status="passed")
         result = learn_from_evidence_sidecars(tmp_path, store=store)
-        assert result == {"sidecars": 2, "inserted": 1, "exists": 0, "errors": 1}
+        assert result == {
+            "sidecars": 2,
+            "inserted": 1,
+            "exists": 0,
+            "errors": 1,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
+        }
+
+    def test_learns_negatives_from_failed_sidecar(self, tmp_path: Path) -> None:
+        """AI-058 Slice 2 + AI-063: a failed sidecar feeds learned_negative.
+
+        The sweep keeps the passed-only positive path untouched (the passed
+        sidecar still only yields positives) and additionally records
+        contrastive negatives: the locator timeout (confidence 0.9) and —
+        AI-063 — the resolved-but-wrong assertion failure (the element
+        ``#proceed`` existed, was picked, and failed its check; confidence
+        0.6). An infra/navigation failure is still excluded.
+        """
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        store.upsert_negative_pattern.return_value = ("inserted", 1)
+        locator_err = (
+            "TimeoutError: Timeout 5000ms exceeded.\nwaiting for locator('page.locator(\"#wrong-add\")') to be visible"
+        )
+        self._write_sidecar(
+            tmp_path,
+            "test_passed",
+            status="passed",
+            steps=[_step(label="username", locator="#user")],
+        )
+        self._write_sidecar(
+            tmp_path,
+            "test_failed",
+            status="failed",
+            steps=[
+                {
+                    "type": "click",
+                    "label": "Add to cart",
+                    "locator": "#wrong-add",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {"status": "failed", "error": locator_err},
+                },
+                {
+                    "type": "click",
+                    "label": "Proceed",
+                    "locator": "#proceed",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {"status": "failed", "error": "AssertionError: text mismatch"},
+                },
+                {
+                    "type": "navigate",
+                    "label": "Navigate to http://localhost:8781/x.html",
+                    "locator": "",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {"status": "failed", "error": "Connection refused"},
+                },
+            ],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result["inserted"] == 1
+        assert result["negatives_inserted"] == 2
+        assert result["negatives_exists"] == 0
+        # Two negatives: locator timeout (#wrong-add) + resolved-but-wrong (#proceed).
+        # The infra navigation failure is excluded (no locator, connection error).
+        assert store.upsert_negative_pattern.call_count == 2
+        neg_locators = sorted(call.args[0].locator for call in store.upsert_negative_pattern.call_args_list)
+        assert neg_locators == ["#proceed", "#wrong-add"]
+        lasts = {
+            call.args[0].locator: (call.args[0].source, call.args[0].confidence)
+            for call in store.upsert_negative_pattern.call_args_list
+        }
+        assert lasts["#wrong-add"] == ("learned_negative", 0.9)
+        assert lasts["#proceed"] == ("learned_negative", 0.6)
+        # Positive path unaffected: only the passed step learned a positive.
+        assert store.upsert_pattern.call_count == 1
+
+    def test_no_negatives_when_disabled(self, tmp_path: Path) -> None:
+        """The ``learn_negatives`` switch keeps the sweep positives-only."""
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        store.upsert_negative_pattern.return_value = ("inserted", 1)
+        locator_err = (
+            "TimeoutError: Timeout 5000ms exceeded.\nwaiting for locator('page.locator(\"#wrong-add\")') to be visible"
+        )
+        self._write_sidecar(
+            tmp_path,
+            "test_failed",
+            status="failed",
+            steps=[
+                {
+                    "type": "click",
+                    "label": "Add to cart",
+                    "locator": "#wrong-add",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {"status": "failed", "error": locator_err},
+                }
+            ],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store, learn_negatives=False)
+        assert result["negatives_inserted"] == 0
+        assert result["negatives_exists"] == 0
+        store.upsert_negative_pattern.assert_not_called()
 
     def test_dedup_repeat_bumps_hit_in_sweep(self, tmp_path: Path) -> None:
         store = MagicMock()
@@ -502,4 +622,104 @@ class TestLearnFromEvidenceSidecars:
         self._write_sidecar(tmp_path, "one", status="passed")
         self._write_sidecar(tmp_path, "two", status="passed")
         result = learn_from_evidence_sidecars(tmp_path, store=store)
-        assert result == {"sidecars": 2, "inserted": 1, "exists": 1, "errors": 0}
+        assert result == {
+            "sidecars": 2,
+            "inserted": 1,
+            "exists": 1,
+            "errors": 0,
+            "negatives_inserted": 0,
+            "negatives_exists": 0,
+        }
+
+    def test_learns_resolved_but_wrong_negative(self, tmp_path: Path) -> None:
+        """AI-063: a failed ASSERTION step that carried a resolved selector is
+        a *resolved-but-wrong* pick — the element existed and was picked, then
+        failed its check. It becomes a ``learned_negative`` at lower confidence
+        (0.6), step-scoped for the scorer."""
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", 1)
+        store.upsert_negative_pattern.return_value = ("inserted", 1)
+        self._write_sidecar(
+            tmp_path,
+            "test_failed_checkout",
+            status="failed",
+            steps=[
+                {
+                    "type": "click",
+                    "label": "Place Order",
+                    "locator": "#place-order",
+                    "url": "http://localhost:8781/checkout.html",
+                    "result": {"status": "passed"},
+                },
+                {
+                    "type": "assertion",
+                    "label": "order success message",
+                    "locator": "#order-error",
+                    "url": "http://localhost:8781/checkout.html",
+                    "result": {
+                        "status": "failed",
+                        "error": "AssertionError: expected 'Your order has been placed' but got 'Payment failed'",
+                    },
+                },
+            ],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result["negatives_inserted"] == 1
+        neg_pattern = store.upsert_negative_pattern.call_args.args[0]
+        assert neg_pattern.locator == "#order-error"
+        assert neg_pattern.source == "learned_negative"
+        assert neg_pattern.action_type == "ASSERT"
+        assert neg_pattern.description == "order success message"
+        assert neg_pattern.confidence == 0.6  # weaker than a hard locator timeout
+
+    def test_resolved_but_wrong_requires_resolved_selector(self, tmp_path: Path) -> None:
+        """An assertion failure with NO resolved locator cannot be a negative:
+        there is no element to down-weight."""
+        store = MagicMock()
+        store.upsert_negative_pattern.return_value = ("inserted", 1)
+        self._write_sidecar(
+            tmp_path,
+            "test_failed_selectorless",
+            status="failed",
+            steps=[
+                {
+                    "type": "assertion",
+                    "label": "page loaded",
+                    "locator": "",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {
+                        "status": "failed",
+                        "error": "AssertionError: expected page title",
+                    },
+                }
+            ],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result["negatives_inserted"] == 0
+        store.upsert_negative_pattern.assert_not_called()
+
+    def test_infra_flake_never_becomes_negative(self, tmp_path: Path) -> None:
+        """AI-063 guard: infra/unknown failures (not assertion, not locator)
+        must never enter the negative store — precision is everything."""
+        store = MagicMock()
+        store.upsert_negative_pattern.return_value = ("inserted", 1)
+        self._write_sidecar(
+            tmp_path,
+            "test_infra_flake",
+            status="failed",
+            steps=[
+                {
+                    "type": "navigate",
+                    "label": "Navigate to http://localhost:8781/x.html",
+                    "locator": "",
+                    "url": "http://localhost:8781/x.html",
+                    "result": {
+                        "status": "failed",
+                        "error": "Connection refused: navigation timed out after 30000ms",
+                    },
+                }
+            ],
+        )
+        result = learn_from_evidence_sidecars(tmp_path, store=store)
+        assert result["negatives_inserted"] == 0
+        store.upsert_negative_pattern.assert_not_called()

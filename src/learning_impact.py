@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.failure_classifier import FailureCategory, classify_failure
 from src.learning_metrics import LearningImpactMetrics, analyze_sidecars
 
 # These names are intentionally public.  Generated-test fixtures can consume
@@ -382,11 +383,68 @@ def _lab_pattern_for_step(step: dict[str, Any], sentinel: str) -> Any | None:
     )
 
 
+#: Failure classes that make a failed step a CONFIRMED locator negative (AI-058).
+#: Mirrors ``rag_learn._LOCATOR_FAILURE_CATEGORIES`` so the lab store and the
+#: production store agree on what counts as a locator failure.
+_LAB_LOCATOR_FAILURE_CATEGORIES: set[FailureCategory] = {FailureCategory.LOCATOR_TIMEOUT}
+
+#: AI-063 resolved-but-wrong classes — mirrors ``rag_learn._RESOLVED_WRONG_CATEGORIES``.
+_LAB_RESOLVED_WRONG_CATEGORIES: set[FailureCategory] = {FailureCategory.ASSERTION_FAILURE}
+
+
+def _lab_negative_pattern_for_step(step: dict[str, Any], sentinel: str) -> Any | None:
+    """Map one FAILED evidence step to a sentinel-scoped ``learned_negative``, or None.
+
+    AI-058 Slice 2: mirrors ``_lab_pattern_for_step`` (same action / label /
+    locator gate + sentinel scoping) but only a *locator-class* failure (a
+    non-passed step whose error classifies as ``LOCATOR_TIMEOUT``) becomes a
+    negative. Assertion / navigation / unknown + selector-less steps are
+    excluded so infra flakes never enter the lab negative store.
+
+    AI-063: a failed ``ASSERTION`` step that carried a resolved selector is
+    ALSO a negative (resolved-but-wrong) at lower confidence — the element was
+    picked, existed, and failed its check. Mirrors the production trigger so
+    the lab A/B evaluates the same signal the product would learn.
+    """
+    from src.rag_learn import LearnedPattern
+
+    action = _REBUILD_STEP_ACTION.get(str(step.get("type", "")).lower())
+    if action is None:
+        return None
+    label = str(step.get("label", "") or "").strip()
+    locator = str(step.get("locator", "") or "").strip()
+    if not label or not locator:
+        return None
+    result = step.get("result") or {}
+    if str(result.get("status", "")) in ("passed", "partial_pass"):
+        return None
+    error = str(result.get("error", "") or "")
+    try:
+        detail = classify_failure(error)
+    except Exception:
+        return None
+    if detail.category in _LAB_LOCATOR_FAILURE_CATEGORIES:
+        confidence = 0.9
+    elif detail.category in _LAB_RESOLVED_WRONG_CATEGORIES:
+        confidence = 0.6
+    else:
+        return None
+    return LearnedPattern(
+        action_type=action,
+        description=label,
+        locator=locator,
+        site_hash=sentinel,
+        confidence=confidence,
+        source="learned_negative",
+    )
+
+
 def rebuild_warm_store_from_evidence(
     evidence_dir: str | Path,
     *,
     store: Any,
     lab_site_identity: str = DEFAULT_LAB_SITE_IDENTITY,
+    learn_negatives: bool = True,
 ) -> dict[str, int]:
     """Re-derive a lab-scoped warm RAG store from source evidence sidecars.
 
@@ -395,40 +453,66 @@ def rebuild_warm_store_from_evidence(
     *lab_site_identity*, not the URL's host:port). This guarantees the warm
     store cannot collide with, or bleed into, a real localhost project or
     another eval mock that shares a port. The run-time resolver must use the
-    same sentinel via ``AI059_LAB_SITE_HASH`` for the bonus to apply.
+    same sentinel via ``AI059_LAB_SITE_HASH`` for the bonus / penalty to apply.
 
-    Only fully-passed steps are learned, mirroring the production gate. The
-    ``store`` is injectable so tests can use a fake backend (no Milvus or
+    **AI-058 Slice 2 (negative-aware rebuild):** when *learn_negatives* is set
+    (default), failed / partial sidecars are ALSO scanned for confirmed
+    locator-class failures and written as ``learned_negative`` entries tagged
+    with the SAME sentinel — ``hit_count`` / ``last_seen`` intact — so the
+    resolver can down-weight elements that failed before. The locator-class
+    gate (``classify_failure`` → ``LOCATOR_TIMEOUT``) excludes infra flakes.
+    This produces the ``warm-positive-negative`` store the A/B runner compares
+    against the positives-only ``warm-positive`` store.
+
+    The ``store`` is injectable so tests can use a fake backend (no Milvus or
     embedding model download required).
 
-    Returns ``{"inserted": N, "exists": M, "skipped": K}``.
+    Returns ``{"inserted": N, "exists": M, "skipped": K,
+    "negatives_inserted": NI, "negatives_exists": NE}``.
     """
     from src.rag_learn import site_hash
 
     sentinel = site_hash(lab_site_identity)
     sidecars = sorted(Path(evidence_dir).glob("*.evidence.json"))
     inserted = exists = skipped = 0
+    neg_inserted = neg_exists = 0
     for sidecar in sidecars:
         try:
             data = json.loads(sidecar.read_text(encoding="utf-8"))
         except Exception:
             skipped += 1
             continue
-        if str((data.get("test") or {}).get("status", "")) != "passed":
-            continue
+        test_status = str((data.get("test") or {}).get("status", ""))
         for step in data.get("steps") or []:
             result = step.get("result") or {}
-            if str(result.get("status", "")) != "passed":
-                continue
-            pattern = _lab_pattern_for_step(step, sentinel)
-            if pattern is None:
-                continue
-            status, _hit = store.upsert_pattern(pattern)
-            if status == "inserted":
-                inserted += 1
-            else:
-                exists += 1
-    return {"inserted": inserted, "exists": exists, "skipped": skipped}
+            if test_status == "passed":
+                if str(result.get("status", "")) != "passed":
+                    continue
+                pattern = _lab_pattern_for_step(step, sentinel)
+                if pattern is None:
+                    continue
+                status, _hit = store.upsert_pattern(pattern)
+                if status == "inserted":
+                    inserted += 1
+                else:
+                    exists += 1
+            elif learn_negatives:
+                # AI-058 Slice 2: contrastive negatives from locator failures.
+                neg = _lab_negative_pattern_for_step(step, sentinel)
+                if neg is None:
+                    continue
+                status, _hit = store.upsert_negative_pattern(neg)
+                if status == "inserted":
+                    neg_inserted += 1
+                else:
+                    neg_exists += 1
+    return {
+        "inserted": inserted,
+        "exists": exists,
+        "skipped": skipped,
+        "negatives_inserted": neg_inserted,
+        "negatives_exists": neg_exists,
+    }
 
 
 __all__ = [
