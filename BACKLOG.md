@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-29 (AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
+Last updated: 2026-08-29 (AI-064 opened — container-element haystack dominance, the #1 AI-058-gate blocker; AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
 
 ---
 
@@ -149,6 +149,25 @@ Code-complete; the live measurement A/B is the only outstanding acceptance step.
 - **Metric-first verdict (updated):** the acceptance gate (`warm+negatives > warm`) is **still OPEN**, but the blocker is now precise: (a) no *recoverable* wrong-element failure exists on the available mocks (banking = unrecoverable; ecommerce = golden-key tolerance gaps), and (b) selector-scoping (AI-063) makes applying negatives as-built unsafe. The Slice-2 *code* is verified end-to-end on real failure data; the *feature's metric lift* is unproven because no recoverable failure exists to demonstrate it. Do NOT proceed to Slice 3, do NOT touch scoring, do NOT fix scoping inside Slice 2. Full record: `docs/sessions/2026-08-29_ai058_slice2_negatives_handoff.md`.
 
 ---
+
+## 🆕 AI-064 — Container-element haystack dominance: `main`/page-aggregate text outranks specific candidates (blocks AI-058 measurement)
+
+**Status:** 🟡 ready-for-agent → **FIX IMPLEMENTED 2026-08-29** (uncommitted): `PlaceholderScorer._container_aggregate_penalty` — (a) a generic container (`main`/`body`/`div`/`section`/`nav`/`header`/`footer`/`article`/`form`) that matched only via MERGED descendant text gets −40 on the haystack fast path (skipped for page-level ASSERTs via `PAGE_LEVEL_ASSERT_TERMS`; only tag/role-verified containers — an empty role is never a container signal); (b) for CLICK, a non-interactive **prose text-run** (`p`/`h1-6`/`li` with no link/button role/href) also gets −40 so a real interactive target always wins (this fixed the follow-on where `.text-center` won "Transfer Money" after `main` was penalized). Verified: "payment success message" with both `#payment-error` and `#success-title` → `#success-title` (was `main`); banking "Transfer Money" → `#transfer-link` (was `main:has-text(...)` then `.text-center`). Eval static 97.9% (no regression), 2905 pytest (+5), ruff + mypy clean. A/B cold re-run: banking 0.900→0.960 cold, CLICK main-has-text failures eliminated; full 3-leg re-run in progress.
+**Priority:** High — it is the #1 blocker for demonstrating the AI-058 `mean_pass_depth` lift (mocks resolve to `main`, so a learned negative never gets a chance to flip a specific candidate), and it degrades real resolution quality too (any description that happens to appear in page text resolves to the container instead of the element).
+**Folds into:** AI-054 pipeline consolidation; unblocks AI-058 metric gate. Distinct from AI-063 (negative scoping) — this is about the BASE scorer letting a container win.
+
+**One-line:** `_build_haystack` for a `main`/`body`/`div`/`section` container includes ALL descendant text, so the container is textually the best match for any description that appears anywhere on the page — the fast path returns ~100 for it and the specific element (exact id/text match) loses.
+
+### Fix sketch (scorer-only — no pipeline / pipeline-trace changes)
+- In `_haystack_score` / the compute fast path, **container tags** (`main`, `body`, `div`, `section`, `nav`, `header`, `footer`, `article`) should not win on aggregate text alone.
+- Prefer (a) excluding container elements' merged text from haystack fast-path wins, or (b) applying a container penalty so a specific element (exact id / short text / role / href match) beats the container, or (c) only allowing a container to win when it is the *only* candidate and the action tolerates a page-level target (e.g. page-state ASSERT).
+- Must NOT break: page-state/URL assertions that legitimately target `main`/page level, and the existing eval static 97.9% baseline (guard via eval static + full suite).
+
+### Acceptance
+- `debug.py score <page> --desc X` (page with 2+ specific candidates) → resolves to a SPECIFIC candidate, not `main`, when the description matches that candidate exactly.
+- The banking "Transfer Money" step resolves to a real transfer link (or honestly skips) instead of `main:has-text(...)`.
+- Eval static ≥ baseline, full suite green, no scoring regression on the 8 datasets.
+
 
 ## 🆕 AI-063 — Context-aware candidate scoping for ambiguous descriptions (back buttons, multi-vehicle add-driver)
 

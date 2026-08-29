@@ -184,6 +184,14 @@ class PlaceholderScorer:
         desc_words = SemanticMatcher.get_words(description)
         if haystack and normalized_desc in haystack:
             haystack_score = PlaceholderScorer._haystack_score(action, description, element)
+            # AI-064: container fast-path penalty. A generic container's
+            # haystack is the MERGED text of all descendants, so it matches
+            # any description that appears anywhere on the page and ties the
+            # specific element at 100 — then wins the tie-break (longest
+            # text). A container should NOT win on aggregate text alone; the
+            # element the description actually names (exact id/short text)
+            # must beat it. Page-level ASSERTs keep their sanctioned path.
+            haystack_score += PlaceholderScorer._container_aggregate_penalty(action, description, element)
             # CLICK gates that the slow path applies must apply to the fast
             # path too — a short description like "OK" can match a substring
             # inside a hidden input's haystack ("csrfmiddlewareTOKen") and
@@ -266,6 +274,83 @@ class PlaceholderScorer:
         raw = " ".join(parts)
         # Split camelCase so "usageType" in name → "usage Type" in haystack
         return SemanticMatcher._split_camel_case(raw)
+
+    @staticmethod
+    def _container_aggregate_penalty(action: str, description: str, element: dict[str, Any]) -> int:
+        """AI-064: penalize a generic container that matched only via merged text.
+
+        A ``main``/``body``/``div``/``section``/``nav``/``form`` container's
+        haystack is the concatenated text of every descendant, so it matches
+        ANY description that appears anywhere on the page and ties the actual
+        element at 100 — then wins the tie-break on text length. That is the
+        "container-element haystack dominance" that made the banking
+        ``main:has-text(...)`` failures look unrecoverable (the resolver only
+        "saw" the container) and masked real candidates like ``#success-title``.
+
+        For CLICK actions the same fast-path flaw lets a **prose paragraph**
+        (``<p>``/``<h1-6>``/``<li>`` with no link/button semantics) win a click
+        because its text contains the description — after the container
+        penalty pushed ``main`` down, banking "Transfer Money" resolved to
+        ``.text-center`` instead of ``#transfer-link``. Non-interactive
+        text-runs are penalized for CLICK so a real interactive target
+        (link/button/input) wins.
+
+        Penalty design (safe by construction):
+        - Containers: penalized for all actions EXCEPT page-level ASSERTs
+          ("home page loaded", "order summary displayed" — sanctioned path via
+          ``_page_level_assert_bonus``).
+        - CLICK: additionally penalize non-interactive prose text-runs, so a
+          link/button/input always beats text.
+        - Magnitude −40 is large enough that a container's flat 100 drops below
+          a specific element's 100+structural/href/role bonuses, but a page with
+          NO specific candidate still keeps the container above ``match_threshold``
+          (typically 0) as a last resort — honest degrade, not a hard removal.
+        """
+        tag = str(element.get("tag", "")).strip().lower()
+        role = str(element.get("role", "")).strip().lower()
+        computed_role = str(element.get("computed_role", "")).strip().lower()
+        href = str(element.get("href", "")).strip()
+        text = str(element.get("text", "")).strip()
+        _generic_container_tags = {"main", "body", "div", "section", "nav", "header", "footer", "article", "form"}
+        _generic_container_roles = {
+            "main",
+            "contentinfo",
+            "banner",
+            "navigation",
+            "region",
+            "generic",
+            "group",
+            "article",
+        }
+        is_tag_container = tag in _generic_container_tags
+        # An EMPTY role/computed_role is NOT a container signal — only an
+        # explicitly-computed generic/container role counts, so a real button
+        # or link with no computed_role (common in unit fixtures and lean
+        # scrapes) is never penalized.
+        is_role_container = (role in _generic_container_roles or computed_role in _generic_container_roles) and (
+            bool(role) or bool(computed_role)
+        )
+        penalized = is_tag_container or is_role_container
+        if action == "CLICK":
+            # A real interactive target (link/button/input/… with href or an
+            # interactive role) is never penalized — it has its own channel.
+            interactive_roles = {"button", "link", "a", "submit", "radio", "checkbox", "option", "menuitem", "tab"}
+            interactive_tags = {"button", "a", "input", "select", "textarea", "option"}
+            if href or role in interactive_roles or computed_role in interactive_roles or tag in interactive_tags:
+                return 0
+            if not text:
+                return 0
+            # Prose text-run that only matched via its text -> not a click target.
+            if tag in {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li"} or role in {"paragraph", "heading"}:
+                penalized = True
+        if not penalized:
+            return 0
+        # Page-level ASSERTs keep their sanctioned page-level path.
+        if action == "ASSERT":
+            lowered = description.replace("_", " ").lower()
+            if any(term in lowered for term in PlaceholderScorer.PAGE_LEVEL_ASSERT_TERMS):
+                return 0
+        return -40
 
     @staticmethod
     def _is_fillable(element: dict[str, Any]) -> bool:
