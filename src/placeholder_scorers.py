@@ -200,7 +200,9 @@ class PlaceholderScorer:
             if golden_patterns:
                 haystack_score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
             if site_hash:
-                haystack_score += PlaceholderScorer._learned_net_evidence(element, golden_patterns, site_hash)
+                haystack_score += PlaceholderScorer._learned_net_evidence(
+                    element, golden_patterns, site_hash, action=action, description=description
+                )
             return haystack_score if haystack_score >= match_threshold else None
 
         # --- Semantic score (slow path) ---
@@ -235,7 +237,9 @@ class PlaceholderScorer:
         if golden_patterns:
             score += PlaceholderScorer._golden_pattern_bonus(element, golden_patterns, site_hash)
         if site_hash:
-            score += PlaceholderScorer._learned_net_evidence(element, golden_patterns, site_hash)
+            score += PlaceholderScorer._learned_net_evidence(
+                element, golden_patterns, site_hash, action=action, description=description
+            )
 
         return score if score >= match_threshold else None
 
@@ -803,16 +807,54 @@ class PlaceholderScorer:
         return amount
 
     @staticmethod
+    def _step_scope_matches(pattern: Any, *, action: str, description: str) -> bool:
+        """AI-063: does a learned/negative pattern apply to the CURRENT step?
+
+        A pattern is step-scoped by ``(action_type, description)`` — it only
+        feeds the score of the step it was recorded on. Previously the matcher
+        keyed on ``selector + site_hash`` only, so one locator's learned
+        signal bled onto EVERY step sharing that locator: the add-to-cart
+        button is the *correct* pick for the "Add to cart" step but the
+        *wrong* pick for the "Cart link" step, and a selector-scoped positive
+        reinforced exactly that wrong pick (and a negative would have
+        penalized the correct one).
+
+        Matching is exact after normalization (strip the stored ``ACTION: ``
+        prefix, lowercase) — precision first. A pattern with NO step identity
+        (empty action + description, legacy entries) applies everywhere to
+        keep pre-AI-063 stores working; a pattern that names another step is
+        skipped entirely (safe direction — a miss costs nothing, a mis-scope
+        costs a wrong resolution).
+        """
+        pat_action = str(getattr(pattern, "action_type", "") or "").strip()
+        pat_desc = str(getattr(pattern, "description", "") or "").strip()
+        if not pat_action and not pat_desc:
+            return True  # legacy / unlabeled: selector+site scope only
+        if pat_action and pat_action.upper() != str(action or "").strip().upper():
+            return False
+        if not pat_desc:
+            return True
+        # Stored description is the query text "CLICK: Add to cart" (action
+        # prefix included). Strip it, then compare case-insensitively.
+        stripped = re.sub(rf"^{re.escape(pat_action)}\s*:\s*", "", pat_desc, flags=re.I)
+        return stripped.strip().lower() == str(description or "").strip().lower()
+
+    @staticmethod
     def _learned_negative_penalty(
         element: dict[str, Any],
         patterns: list | None,
         site_hash: str | None,
+        *,
+        action: str,
+        description: str,
     ) -> int:
         """Raw accumulated negative penalty for a same-site learned_negative.
 
         AI-058 mirror of ``_learned_pattern_bonus``: full match −5 × conf,
         substring −2 × conf, scaled by ``hit_count`` up to
         ``LEARNED_NEGATIVE_MAX_HITS``. Returns 0 when no negative matches.
+        AI-063: a negative only applies on the step it was recorded on
+        (``action`` + ``description`` must match the stored step identity).
         """
         if not site_hash or not patterns:
             return 0
@@ -827,6 +869,8 @@ class PlaceholderScorer:
                 continue
             if not getattr(pattern, "selector", ""):
                 continue
+            if not PlaceholderScorer._step_scope_matches(pattern, action=action, description=description):
+                continue
             total += PlaceholderScorer._learned_amount_for(element, pattern, negative=True)
         return total
 
@@ -835,10 +879,14 @@ class PlaceholderScorer:
         element: dict[str, Any],
         patterns: list | None,
         site_hash: str | None,
+        *,
+        action: str,
+        description: str,
     ) -> int:
         """Net learned-pattern evidence: positives MINUS negatives (AI-058).
 
-        A ``(description, selector, site)`` pair resolves to ONE net signal:
+        A ``(action, description, selector, site)`` pair resolves to ONE net
+        signal (AI-063 step scoping):
           - positives only  → +bonus (unchanged behavior)
           - negatives only  → −penalty
           - BOTH (the same element is in both stores — e.g. it worked before
@@ -846,7 +894,8 @@ class PlaceholderScorer:
             RECENT (``last_seen``) wins, and a genuinely ambiguous tie biases
             conservative (a wrong pick costs a test failure; a skip is
             recoverable via self-heal).
-        Returns 0 when no same-site learned / learned_negative pattern matches.
+        Returns 0 when no same-site learned / learned_negative pattern matches
+        the current step (``action`` + ``description``).
         """
         if not site_hash or not patterns:
             return 0
@@ -858,6 +907,8 @@ class PlaceholderScorer:
         neg_pattern: Any | None = None
         for pattern in patterns:
             if getattr(pattern, "site_hash", "") != site_hash:
+                continue
+            if not PlaceholderScorer._step_scope_matches(pattern, action=action, description=description):
                 continue
             sel = str(getattr(pattern, "selector", ""))
             if not sel:

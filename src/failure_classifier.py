@@ -54,6 +54,13 @@ _LOCATOR_TIMEOUT_RE = re.compile(
     r"timeouterror",
     re.IGNORECASE,
 )
+# EvidenceTracker output: "Locator.wait_for: Timeout 5000ms exceeded" (no
+# ``TimeoutError:`` prefix, sync Playwright API). The failure is still a
+# locator timeout — the element was never found/visible.
+_WAIT_FOR_TIMEOUT_RE = re.compile(
+    r"\blocator\.wait_for\b.*\btimeout[^\n]*exceeded",
+    re.IGNORECASE,
+)
 _WAITING_FOR_RE = re.compile(
     r"waiting\s+for",
     re.IGNORECASE,
@@ -121,6 +128,20 @@ def classify_failure(error_message: str) -> FailureDetail:
 
     # Check for locator timeout: TimeoutError + waiting for
     if _LOCATOR_TIMEOUT_RE.search(error_message) and _WAITING_FOR_RE.search(error_message):
+        raw_locator = _extract_locator(error_message)
+        return FailureDetail(
+            category=FailureCategory.LOCATOR_TIMEOUT,
+            raw_locator=raw_locator,
+            failure_url=None,
+            line_number=None,
+            error_message=error_message,
+        )
+
+    # EvidenceTracker sync timeout: "Locator.wait_for: Timeout 5000ms exceeded"
+    # — no ``TimeoutError:`` prefix, but still a locator-class timeout. Without
+    # this, real assertion-step locator failures classify as OTHER and never
+    # become learned negatives (AI-063 resolved-but-wrong).
+    if _WAIT_FOR_TIMEOUT_RE.search(error_message):
         raw_locator = _extract_locator(error_message)
         return FailureDetail(
             category=FailureCategory.LOCATOR_TIMEOUT,

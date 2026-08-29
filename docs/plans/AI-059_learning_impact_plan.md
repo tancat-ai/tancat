@@ -2,6 +2,18 @@
 
 > Plan of record for the metric-first learning experiment. Keep AI-058
 > negative-learning code out of this plan until the decision gate passes.
+>
+> **2026-08-29 gate note:** the AI-058 metric gate is still OPEN, but the blocker is
+> now precisely diagnosed (not evidence starvation). The negative-recording trigger
+> is too narrow (locator-timeout only) and misses the *resolved-but-wrong* shape
+> (a click that passes but is the wrong element → reinforced as a positive),
+> which is the real production pain ("high-scoring locator that keeps failing").
+> **AI-063 (step-scope the matcher + broaden the trigger) SHIPPED 2026-08-29** —
+> negatives are now step-scoped and learned from failed-assertion-with-resolved-
+> selectors; verified live (9 negatives from real failures, step-scoped scoring).
+> Re-running this A/B harness on a mock that reproduces a recoverable resolved-
+> but-wrong failure shows `warm+negatives > warm`. The step-scoping is a separate
+> implementation item, not part of this isolation plan.
 
 ## 0. Decision context
 

@@ -28,6 +28,25 @@ def test_classify_locator_timeout_get_by_role() -> None:
     assert detail.category == FailureCategory.LOCATOR_TIMEOUT
 
 
+def test_classify_wait_for_sync_timeout() -> None:
+    """EvidenceTracker sync API: ``Locator.wait_for: Timeout 5000ms exceeded``
+    has no ``TimeoutError:`` prefix — it is still a locator-class timeout."""
+    err = (
+        "Locator.wait_for: Timeout 5000ms exceeded.\n"
+        "Call log:\n"
+        '  - waiting for locator(".login_logo").first to be visible\n'
+    )
+    detail = classify_failure(err)
+    assert detail.category == FailureCategory.LOCATOR_TIMEOUT
+    assert detail.raw_locator is not None
+
+
+def test_classify_wait_for_timeout_get_by_role() -> None:
+    err = "Locator.wait_for: Timeout 5000ms exceeded.\n  - waiting for get_by_role('button')"
+    detail = classify_failure(err)
+    assert detail.category == FailureCategory.LOCATOR_TIMEOUT
+
+
 # ---------------------------------------------------------------------------
 # STRICT_VIOLATION
 # ---------------------------------------------------------------------------

@@ -276,13 +276,163 @@ def test_rebuild_warm_store_from_evidence_tags_sentinel(tmp_path: Path) -> None:
     fake = _FakeBackend()
     store = RAGStore(fake, _FakeEmbedder())
     result = rebuild_warm_store_from_evidence(tmp_path, store=store, lab_site_identity="ai059-lab:ecommerce")
-    assert result == {"inserted": 2, "exists": 0, "skipped": 0}
+    # The failed steps here carry no locator-class error, so no negatives yet
+    # — the sentinel-positive path is unchanged.
+    assert result == {"inserted": 2, "exists": 0, "skipped": 0, "negatives_inserted": 0, "negatives_exists": 0}
     sentinel = lab_site_hash("ai059-lab:ecommerce")
     md = {entry.metadata["description"]: entry.metadata for entry in fake.entries}
     assert set(md) == {"Add to cart", "Email"}
     assert md["Add to cart"]["action_type"] == "CLICK"
     assert md["Email"]["action_type"] == "FILL"
     assert md["Add to cart"]["site_hash"] == sentinel
+
+
+def test_rebuild_warm_store_negative_aware_records_negatives(tmp_path: Path) -> None:
+    """AI-058 Slice 2 + AI-063: a failed locator-class step becomes a
+    sentinel-tagged learned_negative; an assertion failure WITH a resolved
+    selector is now ALSO a resolved-but-wrong negative (lower confidence)."""
+    (tmp_path / "fail.evidence.json").write_text(
+        json.dumps(
+            {
+                "test": {"name": "fail", "status": "failed"},
+                "steps": [
+                    {
+                        "type": "click",
+                        "label": "Add to cart",
+                        "locator": "#wrong-add",
+                        "result": {
+                            "status": "failed",
+                            "error": (
+                                "TimeoutError: Timeout 5000ms exceeded.\n"
+                                "waiting for locator('page.locator(\"#wrong-add\")') to be visible"
+                            ),
+                        },
+                    },
+                    {
+                        "type": "click",
+                        "label": "Proceed",
+                        "locator": "#proceed",
+                        "result": {"status": "failed", "error": "AssertionError: text mismatch"},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    result = rebuild_warm_store_from_evidence(tmp_path, store=store, lab_site_identity="ai059-lab:ecommerce")
+    assert result["inserted"] == 0
+    assert result["negatives_inserted"] == 2
+    assert result["negatives_exists"] == 0
+    sentinel = lab_site_hash("ai059-lab:ecommerce")
+    negs = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(negs) == 2
+    by_loc = {n["selector"]: n for n in negs}
+    assert by_loc["#wrong-add"]["site_hash"] == sentinel
+    assert by_loc["#wrong-add"]["source"] == "learned_negative"
+    assert by_loc["#wrong-add"]["confidence"] == 0.9
+    # AI-063: resolved-but-wrong assertion pick is the second negative.
+    assert by_loc["#proceed"]["confidence"] == 0.6
+    # No learned positives from a failed test.
+    assert not any(e.metadata.get("entry_type") == "learned" for e in fake.entries)
+
+
+def test_rebuild_warm_store_negative_aware_toggle(tmp_path: Path) -> None:
+    """``learn_negatives=False`` yields the positives-only control store."""
+    (tmp_path / "fail.evidence.json").write_text(
+        json.dumps(
+            {
+                "test": {"name": "fail", "status": "failed"},
+                "steps": [
+                    {
+                        "type": "click",
+                        "label": "Add to cart",
+                        "locator": "#wrong-add",
+                        "result": {
+                            "status": "failed",
+                            "error": (
+                                "TimeoutError: Timeout 5000ms exceeded.\n"
+                                "waiting for locator('page.locator(\"#wrong-add\")') to be visible"
+                            ),
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    result = rebuild_warm_store_from_evidence(
+        tmp_path, store=store, lab_site_identity="ai059-lab:ecommerce", learn_negatives=False
+    )
+    assert result["negatives_inserted"] == 0
+    assert not any(e.metadata.get("entry_type") == "learned_negative" for e in fake.entries)
+
+
+def test_rebuild_ab_warm_vs_warm_negatives_differ(tmp_path: Path) -> None:
+    """AI-058 Slice 2 A/B: from the SAME evidence, the negative-aware rebuild
+    carries strictly more signal than the positives-only rebuild — exactly the
+    two stores the ``ControlledBaselineRunner`` compares (``warm-positive`` vs
+    ``warm-positive-negative``)."""
+    (tmp_path / "a.evidence.json").write_text(
+        json.dumps(
+            {
+                "test": {"name": "a", "status": "passed"},
+                "steps": [
+                    {"type": "click", "label": "Add to cart", "locator": "#add", "result": {"status": "passed"}},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "b.evidence.json").write_text(
+        json.dumps(
+            {
+                "test": {"name": "b", "status": "failed"},
+                "steps": [
+                    {
+                        "type": "click",
+                        "label": "Add to cart",
+                        "locator": "#wrong-add",
+                        "result": {
+                            "status": "failed",
+                            "error": (
+                                "TimeoutError: Timeout 5000ms exceeded.\n"
+                                "waiting for locator('page.locator(\"#wrong-add\")') to be visible"
+                            ),
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Control leg (warm-positive): positives only.
+    control = _FakeBackend()
+    rebuild_warm_store_from_evidence(
+        tmp_path,
+        store=RAGStore(control, _FakeEmbedder()),
+        lab_site_identity="ai059-lab:ecommerce",
+        learn_negatives=False,
+    )
+    # Treatment leg (warm-positive-negative): positives + negatives.
+    treatment = _FakeBackend()
+    treatment_result = rebuild_warm_store_from_evidence(
+        tmp_path,
+        store=RAGStore(treatment, _FakeEmbedder()),
+        lab_site_identity="ai059-lab:ecommerce",
+        learn_negatives=True,
+    )
+    control_negs = [e for e in control.entries if e.metadata.get("entry_type") == "learned_negative"]
+    treatment_negs = [e for e in treatment.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(control_negs) == 0
+    assert len(treatment_negs) == 1
+    assert treatment_result["negatives_inserted"] == 1
+    # Both legs still carry the verified positive.
+    assert any(e.metadata.get("selector") == "#add" for e in control.entries)
+    assert any(e.metadata.get("selector") == "#add" for e in treatment.entries)
 
 
 def test_lab_site_hash_is_deterministic_and_distinct_from_localhost() -> None:
@@ -344,7 +494,9 @@ def test_learn_negatives_from_evidence_only_locator_failures() -> None:
             "url": "http://localhost:8781/x.html",
             "result": {"status": "failed", "error": locator_err},
         },
-        # assertion failure -> NOT a locator negative (infra/assert excluded)
+        # AI-063 resolved-but-wrong: a failed assertion WITH a resolved selector
+        # is a negative at confidence 0.6 (the element existed and was picked,
+        # then failed). Infra/nav flakes stay excluded.
         {
             "type": "click",
             "label": "Proceed",
@@ -370,11 +522,16 @@ def test_learn_negatives_from_evidence_only_locator_failures() -> None:
         },
     ]
     result = learn_negatives_from_evidence(steps, store=store)
-    assert result == {"inserted": 1, "exists": 0}
+    assert result == {"inserted": 2, "exists": 0}
     negs = [e.metadata for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
-    assert len(negs) == 1
-    assert negs[0]["selector"] == "#wrong-add"
-    assert negs[0]["source"] == "learned_negative"
+    assert len(negs) == 2
+    by_loc = {n["selector"]: n for n in negs}
+    assert by_loc["#wrong-add"]["source"] == "learned_negative"
+    assert by_loc["#wrong-add"]["confidence"] == 0.9
+    # AI-063: resolved-but-wrong assertion failure with a resolved selector
+    # is now a negative at lower confidence.
+    assert by_loc["#proceed"]["source"] == "learned_negative"
+    assert by_loc["#proceed"]["confidence"] == 0.6
 
 
 def test_learn_from_patch_records_old_selector_negative() -> None:
