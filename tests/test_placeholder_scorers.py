@@ -100,6 +100,104 @@ class TestComputeElementScore:
         assert base >= 100  # confirmed fast path
         assert scored - base == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
 
+    def test_container_haystack_penalized_specific_element_wins(self) -> None:
+        """AI-064: a generic container ('main') matching via merged page text
+        must NOT win over the specific element the description names."""
+        main_el = _element(
+            {
+                "text": "Payment Sent Successfully! Payment failed. Please try again.",
+                "role": "main",
+                "tag": "main",
+                "selector": "main",
+            }
+        )
+        specific = _element(
+            {
+                "text": "Payment Sent Successfully!",
+                "role": "heading",
+                "tag": "h1",
+                "selector": "#success-title",
+                "id": "success-title",
+            }
+        )
+        main_score = PlaceholderScorer.compute_element_score(
+            "ASSERT", "payment success message", main_el, "main", match_threshold=1
+        )
+        specific_score = PlaceholderScorer.compute_element_score(
+            "ASSERT", "payment success message", specific, "#success-title", match_threshold=1
+        )
+        assert specific_score is not None and main_score is not None
+        assert specific_score > main_score  # the specific candidate wins the ranking
+
+    def test_container_penalty_spares_interactive_element(self) -> None:
+        """AI-064 guard: a button/link with no container role is never penalized
+        (empty computed_role is NOT a container signal)."""
+        btn = _element({"text": "Pay Bill", "role": "button", "tag": "button", "selector": "#pay-bill"})
+        score = PlaceholderScorer.compute_element_score("CLICK", "Pay Bill", btn, "#pay-bill", match_threshold=1)
+        assert score is not None and score >= 100
+
+    def test_click_prose_penalized_link_wins(self) -> None:
+        """AI-064: for CLICK, a prose paragraph that merely CONTAINS the
+        description must not win over the real interactive target (link)."""
+        prose = _element(
+            {
+                "text": "Welcome to Mock Bank Sign in to view your accounts transfer money and pay bills",
+                "role": "paragraph",
+                "tag": "p",
+                "selector": ".text-center",
+            }
+        )
+        link = _element(
+            {
+                "text": "Transfer Money",
+                "role": "link",
+                "tag": "a",
+                "selector": "#transfer-link",
+                "href": "/transfer.html",
+                "id": "transfer-link",
+            }
+        )
+        prose_score = PlaceholderScorer.compute_element_score(
+            "CLICK", "Transfer Money", prose, ".text-center", match_threshold=1
+        )
+        link_score = PlaceholderScorer.compute_element_score(
+            "CLICK", "Transfer Money", link, "#transfer-link", match_threshold=1
+        )
+        assert prose_score is not None and link_score is not None
+        assert link_score > prose_score  # interactive target beats prose text-run
+
+    def test_click_interactive_never_penalized(self) -> None:
+        """AI-064 guard: an anchor/button with href stays unpenalized even when
+        its text overlaps the description."""
+        link = _element(
+            {
+                "text": "Transfer Money",
+                "role": "link",
+                "tag": "a",
+                "selector": "#transfer-link",
+                "href": "/transfer.html",
+            }
+        )
+        score = PlaceholderScorer.compute_element_score(
+            "CLICK", "Transfer Money", link, "#transfer-link", match_threshold=1
+        )
+        assert score is not None and score >= 100
+
+    def test_container_penalty_spares_page_level_assert(self) -> None:
+        """AI-064 guard: page-level ASSERTs (description contains a
+        PAGE_LEVEL_ASSERT_TERM like 'order summary') keep their sanctioned
+        page-level path — the container is not penalized there."""
+        main_el = _element({"text": "Order summary displayed below", "role": "main", "tag": "main", "selector": "main"})
+        score = PlaceholderScorer.compute_element_score(
+            "ASSERT", "order summary displayed", main_el, "main", match_threshold=1
+        )
+        assert score is not None and score >= 100
+        # Same container + a NON-page-level description -> penalized.
+        penalized = PlaceholderScorer.compute_element_score(
+            "CLICK", "place order button", main_el, "main", match_threshold=1
+        )
+        assert penalized is None or penalized < 100
+
     def test_product_id_bonus_on_add_to_cart(self) -> None:
         el = _element(
             {
