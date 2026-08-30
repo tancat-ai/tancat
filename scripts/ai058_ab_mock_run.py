@@ -124,6 +124,15 @@ DATASETS = {
         "real_site": True,
         "url": "https://www.saucedemo.com",
     },
+    "eval-010": {
+        # Controlled ambiguous mock: the success-message step has 2+ candidates
+        # (hidden #order-error trap vs visible #order-success-title), the one
+        # scenario where a step-scoped negative can flip the pick and move
+        # mean_pass_depth (AI-058 metric gate).
+        "lab": "ai059-lab:ambiguous",
+        "mock_dir": "mock_sites/ambiguous",
+        "url": "http://localhost:8781/index.html",
+    },
 }
 DATASET_ID = os.environ.get("AI058_DATASET", "eval-006")
 DS = DATASETS[DATASET_ID]
