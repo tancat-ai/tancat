@@ -18,9 +18,6 @@ The eval harness has **three distinct modes** — use the right one for your que
 ## Quick Start
 
 ```bash
-# AI-059: read-only learning-impact metrics from existing sidecars
-python scripts/eval/learning_impact.py metrics --evidence-dir evidence
-
 # CI gate — what pre-commit runs (fast, offline, deterministic)
 python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
 
@@ -31,10 +28,11 @@ RAG_ENABLED=1 python scripts/eval/eval_resolver.py --mode static
 # Full E2E — needs running servers
 python scripts/eval/eval_harness.py run --mode full
 
-# Save baseline
-python scripts/eval/eval_harness.py baseline --save
+# AI-059: read-only learning-impact metrics from existing sidecars
+python scripts/eval/learning_impact.py metrics --evidence-dir evidence
 
-# Compare current vs baseline
+# Save / compare baseline
+python scripts/eval/eval_harness.py baseline --save
 python scripts/eval/eval_harness.py compare
 
 # Validate golden keys
@@ -60,10 +58,32 @@ remain enabled for warm legs. Use deterministic mock-site commands and have
 the fixture honor `AI059_EVIDENCE_DIR` (or use the `{evidence_dir}` token) to
 route sidecars to the current leg.
 
+### Negative-learning A/B tooling (AI-058 / AI-063 / AI-064)
+
+The contrastive learned-store work (record `learned_negative` entries, apply a
+step-scoped penalty at resolve time) is measured by deterministic drivers that
+**do not touch the eval gate or any committed dataset**:
+
+| Script | Purpose | Isolation |
+|--------|---------|-----------|
+| `scripts/ai058_ab_mock_run.py` | Live 3-leg cold/warm/warm+neg A/B against a real mock | Own temp dir + `AITEST_STORAGE_ROOT`, auto-learn off |
+| `scripts/ai058_seeded_ab.py` | Seed ONE known negative into a temp store; verify round-trip + step-scoped score | Same hermetic discipline |
+| `scripts/ai058_resolver_ab.py` | **Deterministic** resolver flip on the frozen `scraped_pages/` pool (no LLM, no mock server) — the strongest proof | Reads gitignored `scraped_pages/`; skips cleanly if absent (CI) |
+
+Key finding (2026-08-29): the step-scoped negative is proven at the scorer and
+resolver level (wrong pick down-weighted on its own step, never leaks to other
+steps), but a *generation-level* `mean_pass_depth` lift cannot be forced on any
+clean mock — the observed-trail page scoping (AI-052) plus container/prose
+penalties (AI-064) make the resolver pick the correct element before the
+negative ever matters, except in the historical cross-page context where the
+correct page wasn't in the pool. See `docs/sessions/2026-08-29_ai058_slice2_negatives_handoff.md` §8.
+
+---
+
 ## Mode: `static` — CI Regression Gate
 
 **Purpose:** Catch code changes that break parsing, extraction, or captured output format.
-**Runs:** Fast (<1s). No browser, no LLM, no scraping.
+**Runs:** Fast (<2s). No browser, no LLM, no scraping.
 
 Validates pre-captured pipeline outputs (`scripts/eval/captures/*_code.py`) against golden
 answer keys. If your code change breaks locator extraction, skeleton parsing, or evidence
@@ -100,6 +120,10 @@ python scripts/eval/eval_resolver.py --mode live
 - Testing RAG effectiveness
 - Changing resolver/scorer logic
 - Validating new golden keys against actual resolver behavior
+
+> ⚠️ `scraped_pages/` is **gitignored** — these dumps are generated locally.
+> In CI they are absent, so tests/scripts that read them must skip cleanly
+> when missing (e.g. `scripts/ai058_resolver_ab.py`).
 
 ---
 
@@ -150,6 +174,10 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 5. Run `python scripts/eval/eval_harness.py dataset --validate`
 6. Scrape pages: `python scripts/eval/eval_resolver.py --mode live`
 
+> ⚠️ A new JSON in `dataset/` is globbed by the static gate — it needs a
+> matching captured-code file, or the aggregate drops. Keep throwaway A/B
+> stories OUT of this directory (inline them in the driver script instead).
+
 ---
 
 ## Metrics
@@ -170,26 +198,17 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 
 ---
 
-## Current Baseline (stateful scraped data)
+## Current Baseline
 
 | Metric | Value |
 |--------|-------|
-| Stories | 4 |
-| Placeholders | 43 |
-| Resolution accuracy (CI gate, captured code) | 81.4% |
-| Resolution accuracy (resolver, RAG off) | 41.9% |
-| Resolution accuracy (resolver, RAG on) | **53.5%** |
-| RAG improvement | **+11.6pp** |
-| Skeleton completeness | 100.0% |
+| Stories | 8 |
+| Placeholders | 96 |
+| Resolution accuracy (static — CI gate) | **97.9%** (94/96) |
 
-### Per-site breakdown (resolver, RAG on vs off)
-
-| Site | RAG off | RAG on | Δ |
-|------|---------|--------|---|
-| saucedemo | 45.0% | 55.0% | +10.0pp |
-| automationexercise | 25.0% | 37.5% | +12.5pp |
-| demoqa | 62.5% | 75.0% | +12.5pp |
-| theinternet | 28.6% | 42.9% | +14.3pp |
+Per-story (static, RAG-off frozen dumps): saucedemo 20/20, automationexercise 8/8,
+demoqa 8/8, theinternet 7/7, lv_insurance 24/24, ecommerce 14/16 (88%), banking 13/13,
+banking-eval-008 0/0 (no captured code → counted as 0).
 
 Baseline file: `scripts/eval/baseline.json`
 
