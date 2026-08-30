@@ -435,6 +435,75 @@ def test_rebuild_ab_warm_vs_warm_negatives_differ(tmp_path: Path) -> None:
     assert any(e.metadata.get("selector") == "#add" for e in treatment.entries)
 
 
+def test_seeded_negative_roundtrips_and_flips_step_scoped_score() -> None:
+    """AI-064/AI-058 seeded-store A/B mechanism (the deterministic core of
+    ``scripts/ai058_seeded_ab.py``): a single hand-seeded learned_negative for
+    the exact (ASSERT, 'payment success message') step survives insertion,
+    retrieves site-scoped, and down-weights the wrong locator on ITS step
+    while leaving the correct alternative unscathed."""
+    from src.placeholder_scorers import PlaceholderScorer
+    from src.rag_learn import LearnedPattern
+    from src.rag_store import RAGStore
+
+    fake = _FakeBackend()
+    store = RAGStore(fake, _FakeEmbedder())
+    sentinel = lab_site_hash("ai059-lab:banking")
+
+    # Seed EXACTLY one negative: the recurring banking wrong pick.
+    store.upsert_negative_pattern(
+        LearnedPattern(
+            action_type="ASSERT",
+            description="payment success message",
+            locator="#payment-error",
+            site_hash=sentinel,
+            confidence=1.0,
+            source="learned_negative",
+        )
+    )
+    negs = [e for e in fake.entries if e.metadata.get("entry_type") == "learned_negative"]
+    assert len(negs) == 1
+    assert negs[0].metadata["selector"] == "#payment-error"
+
+    # The dedup row (what retrieval's site/step gate would find) is present.
+    found = store._backend.find_negative("ASSERT", "payment success message", sentinel)
+    assert found is not None
+    assert found.get("selector") == "#payment-error"
+
+    # Step-scoped score via a RetrievedPattern built from the stored metadata
+    # (equivalent to what RAGStore.retrieve returns with a real embedder).
+    from src.rag_store import RetrievedPattern
+
+    pats = [
+        RetrievedPattern(
+            description=negs[0].metadata.get("text", "ASSERT: payment success message"),
+            selector=negs[0].metadata["selector"],
+            action_type=negs[0].metadata.get("action_type", "ASSERT"),
+            confidence=float(negs[0].metadata.get("confidence", 1.0)),
+            source=negs[0].metadata.get("source", "learned_negative"),
+            site_hash=negs[0].metadata.get("site_hash", ""),
+            hit_count=int(negs[0].metadata.get("hit_count", 1) or 1),
+        )
+    ]
+
+    # Step-scoped score: penalty on the wrong pick's own step.
+    wrong_net = PlaceholderScorer._learned_net_evidence(
+        {"selector": "#payment-error"},
+        pats,
+        sentinel,
+        action="ASSERT",
+        description="payment success message",
+    )
+    correct_net = PlaceholderScorer._learned_net_evidence(
+        {"selector": "#payment-success-title"},
+        pats,
+        sentinel,
+        action="ASSERT",
+        description="payment success message",
+    )
+    assert wrong_net < 0  # the wrong locator is down-weighted
+    assert correct_net == 0  # the correct alternative is unscathed
+
+
 def test_lab_site_hash_is_deterministic_and_distinct_from_localhost() -> None:
     assert lab_site_hash("ai059-lab:ecommerce") == lab_site_hash("ai059-lab:ecommerce")
     from src.rag_learn import site_hash as url_site_hash
