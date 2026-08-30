@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.learning_impact import (
     BaselineLeg,
     ControlledBaselineRunner,
@@ -510,19 +512,23 @@ def test_resolver_ab_downweights_wrong_pick_on_own_step() -> None:
     wrong hidden ``#payment-error`` first; with the seeded negative its score
     drops and the correct title is unscathed; a different step is unchanged.
     Mirrors ``scripts/ai058_resolver_ab.py`` with a fake embedder (no model).
+
+    The frozen ``scraped_pages/`` dumps are gitignored (CI-only artifact);
+    skip cleanly when absent (CI) and run fully when present (local/eval).
     """
     from src.placeholder_resolver import PlaceholderResolver
 
+    _pay_dump = Path("scripts/eval/scraped_pages/http_localhost_8781_payments.html.json")
+    _ok_dump = Path("scripts/eval/scraped_pages/http_localhost_8781_payment_success.html.json")
+    if not (_pay_dump.exists() and _ok_dump.exists()):
+        pytest.skip("frozen scraped_pages/ dumps not present (gitignored; regenerate via eval_resolver --mode live)")
+
     sentinel = lab_site_hash("ai059-lab:banking")
     # Frozen payments-page pool: has the wrong #payment-error, NO success title.
-    payments = json.loads(
-        Path("scripts/eval/scraped_pages/http_localhost_8781_payments.html.json").read_text(encoding="utf-8")
-    )
+    payments = json.loads(_pay_dump.read_text(encoding="utf-8"))
     pool = payments if isinstance(payments, list) else payments["elements"]
     pool = [dict(e) for e in pool]
-    success = json.loads(
-        Path("scripts/eval/scraped_pages/http_localhost_8781_payment_success.html.json").read_text(encoding="utf-8")
-    )
+    success = json.loads(_ok_dump.read_text(encoding="utf-8"))
     success_pool = success if isinstance(success, list) else success["elements"]
     from src.rag_store import RetrievedPattern
 
