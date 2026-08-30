@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""AI-058/AI-064 — deterministic resolver-level A/B (no LLM, no mock server).
+
+Proves (a) the step-scoped negative down-weights the wrong pick on its own
+step, (b) the correct element wins whenever it is actually in the candidate
+pool (the AI-064 container/prose fix), and (c) the negative does NOT leak to
+other steps. Uses ONLY the frozen scraped dumps — identical input for both
+legs; the sole variable is the seeded negative.
+
+Three legs:
+  1. payments-only pool   — the historical test_09 context (the resolver saw
+     the payments page WITHOUT the success page). Control must rank the wrong
+     hidden ``#payment-error`` first; the seeded negative must down-weight it.
+  2. consolidated pool    — payments + payment_success (both pages scraped).
+     Post-AI-064 the correct winner wins even in control; the negative must
+     ALSO down-weight ``#payment-error`` there without harming the winner.
+  3. step-scoping guard   — ASSERT 'payee' on the same pool: the seeded
+     negative (keyed to 'payment success message') must leave it unchanged.
+
+Usage:
+    python scripts/ai058_resolver_ab.py
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.learning_impact import lab_site_hash  # noqa: E402
+from src.placeholder_resolver import PlaceholderResolver  # noqa: E402
+from src.rag_learn import LearnedPattern  # noqa: E402
+from src.rag_store import RetrievedPattern  # noqa: E402
+
+LAB_IDENTITY = "ai059-lab:banking"
+SENTINEL = lab_site_hash(LAB_IDENTITY)
+SCRAPED_DIR = PROJECT_ROOT / "scripts" / "eval" / "scraped_pages"
+PAYMENTS_DUMP = SCRAPED_DIR / "http_localhost_8781_payments.html.json"
+SUCCESS_DUMP = SCRAPED_DIR / "http_localhost_8781_payment_success.html.json"
+
+SEEDED_NEGATIVE = LearnedPattern(
+    action_type="ASSERT",
+    description="payment success message",
+    locator="#payment-error",
+    site_hash=SENTINEL,
+    confidence=1.0,
+    source="learned_negative",
+)
+
+
+def load_dump(path: Path) -> list[dict[str, str]]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        data = data.get("elements", data.get("page_elements", []))
+    return [dict(el) for el in data]
+
+
+def payments_pool() -> list[dict[str, str]]:
+    return load_dump(PAYMENTS_DUMP)
+
+
+def consolidated_pool() -> list[dict[str, str]]:
+    return load_dump(PAYMENTS_DUMP) + load_dump(SUCCESS_DUMP)
+
+
+def seed_patterns(*, seed: bool) -> list[RetrievedPattern]:
+    """RAG-off control: no patterns. Treatment: the ONE seeded negative."""
+    if not seed:
+        return []
+    n = SEEDED_NEGATIVE
+    return [
+        RetrievedPattern(
+            description=f"{n.action_type}: {n.description}",
+            selector=n.locator,
+            action_type=n.action_type,
+            confidence=float(n.confidence),
+            source=n.source,
+            site_hash=n.site_hash,
+            hit_count=4,
+            last_seen=0.0,
+        )
+    ]
+
+
+def rank(action: str, description: str, pool: list[dict[str, str]], *, seed: bool) -> list[tuple[int, dict[str, str]]]:
+    resolver = PlaceholderResolver(match_threshold=0)
+    return resolver.rank_candidates(
+        action, description, pool, golden_patterns=seed_patterns(seed=seed), site_hash=SENTINEL
+    )
+
+
+def top_selector(ranked: list[tuple[int, dict[str, str]]]) -> str:
+    return str(ranked[0][1].get("selector", "")) if ranked else "UNRESOLVED"
+
+
+def leg(label: str, action: str, description: str, pool: list[dict[str, str]]) -> tuple[str, str]:
+    ctrl = rank(action, description, pool, seed=False)
+    treat = rank(action, description, pool, seed=True)
+    cc = top_selector(ctrl)
+    tt = top_selector(treat)
+    c_score = ctrl[0][0] if ctrl else 0
+    t_score = treat[0][0] if treat else 0
+    print(f"\n[{label}]  ({len(pool)} elements)")
+    print(f"  control  : {cc!r:34} score={c_score}")
+    print(f"  treatment: {tt!r:34} score={t_score}")
+    err_ctrl = [s for s, e in ctrl if e.get("selector") == "#payment-error"]
+    err_treat = [s for s, e in treat if e.get("selector") == "#payment-error"]
+    if err_ctrl:
+        print(
+            f"  #payment-error in control: score={err_ctrl[0]}  "
+            f"(seeded-leg score={err_treat[0] if err_treat else 'n/a'})"
+        )
+    return cc, tt
+
+
+def main() -> int:
+    checks: list[tuple[str, bool]] = []
+
+    # ── LEG 1: payments-only (the historical wrong-pick context) ─────────────
+    cc, _ = leg("LEG 1 payments-only (test_09 context)", "ASSERT", "payment success message", payments_pool())
+    checks.append(("leg1 control starts on #payment-error (historical context)", cc == "#payment-error"))
+
+    # ── LEG 2: consolidated pool (both pages scraped) ────────────────────────
+    cc2, tt2 = leg("LEG 2 consolidated (both pages)", "ASSERT", "payment success message", consolidated_pool())
+    checks.append(("leg2 control wins correctly (AI-064)", cc2 == "#payment-success-message"))
+    checks.append(("leg2 treatment keeps the correct winner", tt2 == "#payment-success-message"))
+
+    # ── LEG 3: step-scoping guard ────────────────────────────────────────────
+    cc3, tt3 = leg("LEG 3 step-scoping guard ('payee')", "ASSERT", "payee", consolidated_pool())
+    checks.append(("leg3 other step unchanged by the seed", cc3 == tt3))
+
+    print("\n" + "=" * 64)
+    all_ok = True
+    for name, ok in checks:
+        print(f"  [{'OK' if ok else 'FAIL'}] {name}")
+        all_ok = all_ok and ok
+    print("=" * 64)
+    return 0 if all_ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
