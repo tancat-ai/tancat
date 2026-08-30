@@ -504,6 +504,70 @@ def test_seeded_negative_roundtrips_and_flips_step_scoped_score() -> None:
     assert correct_net == 0  # the correct alternative is unscathed
 
 
+def test_resolver_ab_downweights_wrong_pick_on_own_step() -> None:
+    """AI-064/AI-058 resolver-level A/B (deterministic, no LLM): on the frozen
+    payments-only pool (the historical test_09 context), control ranks the
+    wrong hidden ``#payment-error`` first; with the seeded negative its score
+    drops and the correct title is unscathed; a different step is unchanged.
+    Mirrors ``scripts/ai058_resolver_ab.py`` with a fake embedder (no model).
+    """
+    from src.placeholder_resolver import PlaceholderResolver
+
+    sentinel = lab_site_hash("ai059-lab:banking")
+    # Frozen payments-page pool: has the wrong #payment-error, NO success title.
+    payments = json.loads(
+        Path("scripts/eval/scraped_pages/http_localhost_8781_payments.html.json").read_text(encoding="utf-8")
+    )
+    pool = payments if isinstance(payments, list) else payments["elements"]
+    pool = [dict(e) for e in pool]
+    success = json.loads(
+        Path("scripts/eval/scraped_pages/http_localhost_8781_payment_success.html.json").read_text(encoding="utf-8")
+    )
+    success_pool = success if isinstance(success, list) else success["elements"]
+    from src.rag_store import RetrievedPattern
+
+    seed_pat = [
+        RetrievedPattern(
+            description="ASSERT: payment success message",
+            selector="#payment-error",
+            action_type="ASSERT",
+            confidence=1.0,
+            source="learned_negative",
+            site_hash=sentinel,
+            hit_count=4,
+            last_seen=0.0,
+        )
+    ]
+
+    resolver = PlaceholderResolver(match_threshold=0)
+    ctrl = resolver.rank_candidates("ASSERT", "payment success message", pool, golden_patterns=None, site_hash=sentinel)
+    treat = resolver.rank_candidates(
+        "ASSERT", "payment success message", pool, golden_patterns=seed_pat, site_hash=sentinel
+    )
+    ctrl_top = ctrl[0][1]["selector"]
+    treat_err = [s for s, e in treat if e["selector"] == "#payment-error"]
+    ctrl_err = [s for s, e in ctrl if e["selector"] == "#payment-error"]
+    assert ctrl_top == "#payment-error"  # historical wrong-pick context reproduced
+    assert ctrl_err and treat_err
+    assert treat_err[0] < ctrl_err[0]  # seeded negative down-weights it
+
+    # Consolidated pool (both pages): the correct winner is unscathed.
+    both = pool + [dict(e) for e in success_pool]
+    ctrl2 = resolver.rank_candidates(
+        "ASSERT", "payment success message", both, golden_patterns=None, site_hash=sentinel
+    )
+    treat2 = resolver.rank_candidates(
+        "ASSERT", "payment success message", both, golden_patterns=seed_pat, site_hash=sentinel
+    )
+    assert ctrl2[0][1]["selector"] == "#payment-success-message"
+    assert treat2[0][1]["selector"] == "#payment-success-message"
+
+    # Step-scoping guard: a different step ('payee') is unchanged by the seed.
+    ctrl3 = resolver.rank_candidates("ASSERT", "payee", both, golden_patterns=None, site_hash=sentinel)
+    treat3 = resolver.rank_candidates("ASSERT", "payee", both, golden_patterns=seed_pat, site_hash=sentinel)
+    assert [e["selector"] for _, e in ctrl3] == [e["selector"] for _, e in treat3]
+
+
 def test_lab_site_hash_is_deterministic_and_distinct_from_localhost() -> None:
     assert lab_site_hash("ai059-lab:ecommerce") == lab_site_hash("ai059-lab:ecommerce")
     from src.rag_learn import site_hash as url_site_hash
