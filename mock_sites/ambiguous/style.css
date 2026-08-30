@@ -1,0 +1,56 @@
+/* Minimal shared styling for the ambiguous mock (mirrors mock_sites/banking). */
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  margin: 0;
+  background: #f5f6f8;
+  color: #2c3e50;
+}
+header {
+  background: #2c3e50;
+  color: #fff;
+  padding: 12px 24px;
+}
+header .brand {
+  font-weight: 600;
+  font-size: 18px;
+}
+main {
+  padding: 24px;
+}
+h1.title {
+  margin-bottom: 4px;
+}
+.text-center {
+  text-align: center;
+}
+.btn {
+  display: inline-block;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+  color: #fff;
+}
+.btn-primary {
+  background: #2980b9;
+}
+.btn-default {
+  background: #7f8c8d;
+}
+label {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+input, select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  margin-top: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}

@@ -27,6 +27,7 @@ exercised across as much product range as possible.
 | 0 | Insurance (multi-step form) | ✅ have | `generated_tests/mock_insurance_site.html` | multi-step form, validation |
 | 1 | E-commerce (multi-page) | ✅ built 2026-08-03 | `mock_sites/ecommerce/` | home → category → product → add-to-cart **modal** → cart → checkout; **injectable consent/ad overlay** (`?overlay=consent|ad`) for the B-029 race |
 | 2 | Banking / fintech | ✅ built 2026-08-07 | `mock_sites/banking/` | login, accounts, transfers, payments, multi-user |
+| 2b | Ambiguous (negative-learning) | ✅ built 2026-08-30 | `mock_sites/ambiguous/` | **measurement target**: the success-message step has 2+ candidates — a visible text-overlap TRAP (`#order-note`) alongside the correct `#order-success-message` — the one shape where a step-scoped learned negative can flip the pick (AI-058 metric gate) |
 | 3 | Booking / travel | 🆕 | `mock_sites/booking/` | search, date pickers, booking lifecycle |
 | 4 | Healthcare | 🆕 | `mock_sites/healthcare/` | patient intake forms, appointment CRUD |
 | 5 | Enterprise / HR | 🆕 | `mock_sites/hr/` | org hierarchy, multi-role, admin |

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Mock Store - Order</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <span class="brand">Mock Store</span>
+  </header>
+
+  <main>
+    <h1 class="title">Order an Item</h1>
+    <p class="text-center">Pick a quantity and place your order.</p>
+
+    <div style="max-width: 420px; margin: 24px auto; background: #fff; padding: 24px; border-radius: 8px; border: 1px solid #eee;">
+      <form id="order-form">
+        <label for="item">Item</label>
+        <select id="item" name="item" required>
+          <option value="blue-top">Blue Top</option>
+          <option value="grey-hoodie">Grey Hoodie</option>
+        </select>
+
+        <label for="quantity">Quantity</label>
+        <input type="number" id="quantity" name="quantity" min="1" step="1" value="1" required />
+
+        <button type="submit" class="btn btn-primary" id="place-order"
+          style="margin-top: 16px; width: 100%;">Place Order</button>
+      </form>
+      <!--
+        AMBIGUOUS MOCK TRAP: this hidden error element carries text that
+        semantically overlaps with "order success message" ("Your order ...").
+        It exists to reproduce the real banking #payment-error trap: a
+        high-scoring candidate that is NOT the success element. A learned
+        negative on this selector (step-scoped to the success-message step)
+        must demote it so the resolver picks #order-success-title instead.
+      -->
+      <p id="order-error" class="error-message" style="display: none; color: #c0392b; margin-top: 8px;">
+        Your order could not be completed. Please fill in all fields and try again.
+      </p>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+      document.getElementById("order-form").addEventListener("submit", function (event) {
+        event.preventDefault();
+        var qty = parseInt(document.getElementById("quantity").value, 10);
+        var item = document.getElementById("item").value;
+        if (!qty || qty < 1) {
+          document.getElementById("order-error").style.display = "block";
+          return;
+        }
+        window.location.href = "success.html?item=" + encodeURIComponent(item) + "&qty=" + qty;
+      });
+    })();
+  </script>
+</body>
+</html>
