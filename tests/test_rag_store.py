@@ -156,6 +156,28 @@ class InMemoryBackend:
                 return dict(meta)
         return None
 
+    def find_negative(
+        self,
+        action_type: str,
+        description: str,
+        site_hash: str,
+    ) -> dict[str, Any] | None:
+        """Mirrors ``find_learned`` for the contrastive negative store (AI-058).
+
+        Present so ``InMemoryBackend`` satisfies the ``VectorStoreBackend``
+        protocol (which gained ``find_negative``); the in-memory fake has no
+        negative rows, so it always returns ``None``.
+        """
+        for _vec, meta, _text in self._entries:
+            if (
+                meta.get("entry_type") == "learned_negative"
+                and meta.get("action_type") == action_type
+                and meta.get("description") == description
+                and meta.get("site_hash") == site_hash
+            ):
+                return dict(meta)
+        return None
+
     def increment_learned_hit(self, row: dict[str, Any]) -> int:
         for _vec, meta, _text in self._entries:
             if (
@@ -489,6 +511,35 @@ class TestRAGStorePopulated:
         assert rag_store.add_docs([chunk]) == (0, 1)
         # Store holds exactly one row.
         assert rag_store.counts_by_type().get("doc") == 1
+
+    def test_add_docs_changed_chunk_lingers_alongside_old(self, rag_store: RAGStore) -> None:
+        """Documented behavior (stale-lingering-on-append).
+
+        When a chunk's *content changes* (same source + heading, different text),
+        its dedup key changes, so the new version is added **alongside** the old
+        one — the old one is *not* removed.  Re-ingesting an updated file by
+        *appending* to a live store therefore leaves both versions present and
+        RAG can retrieve the stale one.
+
+        The intended mitigation is the **rebuild path** (``rebuild_store`` deletes
+        the whole store and rebuilds), which is what ``rag_ingest.py --pdfs``
+        does — so a full rebuild is clean.  This test pins the append behavior so
+        it stays a known, intended thing.
+        """
+        from src.pdf_ingest import doc_chunk_key
+
+        old = DocChunk(text="version one", source="guide.md", heading_path="Intro")
+        old.dedup_key = doc_chunk_key(old)
+        new = DocChunk(text="version two", source="guide.md", heading_path="Intro")
+        new.dedup_key = doc_chunk_key(new)
+        assert old.dedup_key != new.dedup_key  # changed content → different key
+
+        assert rag_store.add_docs([old]) == (1, 0)
+        # Appending the changed chunk does NOT skip it (different key) and does
+        # NOT remove the old one.
+        assert rag_store.add_docs([new]) == (1, 0)
+        # Both versions linger in the store.
+        assert rag_store.counts_by_type().get("doc") == 2
 
     def test_add_docs_mixed_new_and_dup(self, rag_store: RAGStore) -> None:
         from src.pdf_ingest import doc_chunk_key

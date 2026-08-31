@@ -5,9 +5,23 @@ Last updated: 2026-08-29 (AI-064 opened — container-element haystack dominance
 
 ---
 
-## 🆕 AI-055 — Ingestion Improvements (Local): tiered CPU-first OCR + format scope + quality summary
+## ✅ AI-055 — Ingestion Improvements (Local): tiered CPU-first OCR + format scope + quality summary + cause-differentiated warning
 
-**Status:** 🆕 new — spec written 2026-08-24 (Draft, §9 open questions to grill before build): `docs/specs/FEATURE_SPEC_ingestion_local.md`
+**Status:** ✅ **Core built 2026-08-25** — tier-1 CPU OCR backend, extended `get_ocr_backend()`, `[ocr]` extra, ingestion quality summary, format scope, **cause-differentiated skip warning** (with install fix), and the **CI regression test** are all built + tested. **Remaining (follow-up):** wire per-page OCR into the generation pipeline's direct-doc parse (protected file — needs sign-off); optional most-recent sidecar manifest for investigation. Roadmap ref: `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → #16.
+**Built (this session, 2026-08-25):**
+- ✅ Tier-1 CPU OCR backend (`RapidOCRBackend` + `AutoOcrBackend` in `src/ocr_backends.py`); `get_ocr_backend()` extended (auto/cpu/high-accuracy/power); legacy names still map correctly.
+- ✅ `[ocr]` optional extra in `pyproject.toml` (fixed a `oocr`→`ocr` typo that would have broken `uv sync --extra ocr`).
+- ✅ Ingestion quality summary in `src/rag_bundled.py` + `scripts/rag_ingest.py`: per-doc outcome, page text/OCR/skip counts, dedup new-vs-present, actionable suggestion.
+- ✅ **Cause-differentiated skip warning** (the trust signal): a skipped page surfaces as `[WARN] <doc>: N page(s) (cause) -> NOT digested` and **does not hide behind an overall green result**. Causes: `no_engine` (shows the exact install fix `uv sync --extra ocr` + docs link) / `ocr_no_text` (no install fix shown — wrong fix) / `ocr_failed`. Serves the use case: a scanned doc in a bigger pack that gets a positive result is still flagged as **not digested** + the one-line fix.
+- ✅ **CI regression test** (`test_lv_docs_no_pages_skipped_regression`) — the durable form of the ingestion tracking; LV docs must ingest with 0 pages skipped, or CI goes red before the regression ships.
+- ✅ **Dedup-key source-in-hash guarantee** tests (two different docs with identical text never dedup against each other) + stale-lingering-on-append behavior documented.
+- ✅ Full gate green: 2960 tests pass, ruff check + format clean, mypy clean (src/ cli/ + staged), smoke 39/39, eval static ≥79%.
+- ⚠️ **Known ceiling (documented, not a bug):** page-OCR handles *text* in images, **not** tables/graphs rendered as images. Traceability of an image-graph figure is not possible — see the traceability roadmap item (16b) + `docs/specs/SESSION_SPEC_test_to_doc_traceability.md`.
+
+**Remaining (follow-up, needs sign-off for the protected-file one):**
+- [ ] Wire per-page OCR into the generation pipeline's direct-doc parse (`pipeline_graph.py _parse_document` currently uses whole-doc `parse_pdf`, not per-page `parse_page`). Reuse the `ingest_pdf` loop. *(Touches a protected file.)*
+- [ ] Optional: most-recent sidecar manifest in `evidence/` (resolved tier + `ocr_engine_installed` flag + per-doc skipped pages) for bug investigation.
+
 **Priority:** Medium (commercial trust + domain accuracy) — pre-launch
 **Folds in / continues:** AI-045 #4 (PDF OCR *wiring* + dedup — shipped 2026-08-24). This is the *product* layer on top of that wiring: make it work everywhere (CPU-first), promise a defined format scope, and tell the customer what happened.
 

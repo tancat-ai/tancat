@@ -1,4 +1,4 @@
-"""Unit tests for ``src/rag_bundled.py`` (B-036 Phase 2 bundled pack + auto-seed)."""
+"""Unit tests for ``src/rag_bundled.py`` (B-036 Phase 2 bundled pack + auto-seed + AI-055 ingestion summary)."""
 
 from __future__ import annotations
 
@@ -10,9 +10,16 @@ import pytest
 
 from src.rag_bundled import (
     BUNDLED_PACK_VERSION,
+    SUPPORTED_FORMATS,
+    DocSummary,
+    IngestionSummary,
     build_bundled_docs,
     build_bundled_patterns,
+    build_summary,
     bundled_marker_path,
+    check_supported_formats,
+    doc_outcome_from_pages,
+    doc_summaries_from_page_report,
     ensure_bundled_seeded,
     prune_learned,
     store_stats,
@@ -169,3 +176,206 @@ class TestStoreStatsAndPrune:
         store.delete_learned.return_value = 3
         assert prune_learned(store) == 3
         store.delete_learned.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# AI-055 ingestion quality summary
+# ---------------------------------------------------------------------------
+
+
+class TestDocOutcomeFromPages:
+    """Per-doc outcome derivation from page counts."""
+
+    def test_all_text_is_full(self) -> None:
+        assert doc_outcome_from_pages(5, 5, 0, 0) == "full"
+
+    def test_all_ocr_is_full(self) -> None:
+        """A fully-OCR'd doc (no native text) is still full — OCR is success."""
+        assert doc_outcome_from_pages(5, 0, 5, 0) == "full"
+
+    def test_some_skipped_is_partial(self) -> None:
+        assert doc_outcome_from_pages(5, 3, 1, 1) == "partial"
+
+    def test_no_pages_read_is_skipped(self) -> None:
+        assert doc_outcome_from_pages(5, 0, 0, 5) == "skipped"
+        assert doc_outcome_from_pages(0, 0, 0, 0) == "skipped"
+
+
+class TestDocSummariesFromPageReport:
+    """Build per-doc summaries from the per-page report."""
+
+    def test_single_doc_full(self) -> None:
+        report = [
+            ("policy.pdf", 1, "text", ""),
+            ("policy.pdf", 2, "text", ""),
+            ("policy.pdf", 3, "ocr", ""),
+        ]
+        summaries = doc_summaries_from_page_report(report)
+        assert len(summaries) == 1
+        s = summaries[0]
+        assert s.source == "policy.pdf"
+        assert s.outcome == "full"
+        assert s.pages_text == 2
+        assert s.pages_ocr == 1
+        assert s.pages_skipped == 0
+        assert s.skipped_pages == []
+
+    def test_multiple_docs_mixed(self) -> None:
+        report = [
+            ("a.pdf", 1, "text", ""),
+            ("a.pdf", 2, "skipped", "no_engine"),
+            ("b.pdf", 1, "ocr", ""),
+            ("b.pdf", 2, "ocr", ""),
+        ]
+        summaries = {s.source: s for s in doc_summaries_from_page_report(report)}
+        assert summaries["a.pdf"].outcome == "partial"
+        assert summaries["a.pdf"].pages_skipped == 1
+        assert summaries["a.pdf"].skipped_pages == [(2, "no_engine")]
+        assert summaries["b.pdf"].outcome == "full"
+        assert summaries["b.pdf"].pages_ocr == 2
+
+
+class TestCheckSupportedFormats:
+    """Format scope: pdf + md in; unknown rejected loudly."""
+
+    def test_supported_pdf_and_md(self) -> None:
+        supported, rejected = check_supported_formats(["a.pdf", "b.md"])
+        assert [str(p) for p in supported] == ["a.pdf", "b.md"]
+        assert rejected == []
+
+    def test_unknown_format_rejected(self) -> None:
+        supported, rejected = check_supported_formats(["a.pdf", "report.docx", "notes.txt"])
+        assert [str(p) for p in supported] == ["a.pdf"]
+        assert sorted(rejected) == ["notes.txt", "report.docx"]
+
+    def test_case_insensitive_extension(self) -> None:
+        supported, rejected = check_supported_formats(["A.PDF", "B.MD"])
+        assert len(supported) == 2
+        assert rejected == []
+
+    def test_supported_formats_constant(self) -> None:
+        assert SUPPORTED_FORMATS == (".pdf", ".md")
+
+
+class TestBuildSummary:
+    """Aggregated ingestion summary + actionable suggestion."""
+
+    def test_all_full_no_suggestion(self) -> None:
+        report = [("a.pdf", 1, "text", ""), ("a.pdf", 2, "text", "")]
+        summary = build_summary(report, chunks_new=3, chunks_present=0)
+        assert summary.docs_full == 1
+        assert summary.docs_partial == 0
+        assert summary.suggestion == ""
+
+    def test_no_engine_skip_gives_install_suggestion(self) -> None:
+        # a.pdf: 1 text + 1 skipped (no engine) → partial.  b.pdf: 1 ocr + 1
+        # skipped (no engine) → partial.  The suggestion names the install fix.
+        report = [
+            ("a.pdf", 1, "text", ""),
+            ("a.pdf", 2, "skipped", "no_engine"),
+            ("b.pdf", 1, "ocr", ""),
+            ("b.pdf", 2, "skipped", "no_engine"),
+        ]
+        summary = build_summary(report, chunks_new=2, chunks_present=0)
+        assert summary.docs_partial == 2
+        assert "uv sync --extra ocr" in summary.suggestion
+        assert "a.pdf" in summary.suggestion
+
+    def test_ocr_no_text_skip_gives_re_run_suggestion(self) -> None:
+        # Skipped because OCR ran but couldn't read → suggest a clearer scan / higher tier.
+        report = [
+            ("a.pdf", 1, "text", ""),
+            ("a.pdf", 2, "skipped", "ocr_no_text"),
+        ]
+        summary = build_summary(report, chunks_new=1, chunks_present=0)
+        assert summary.docs_partial == 1
+        assert "high-accuracy" in summary.suggestion
+        assert "uv sync --extra ocr" not in summary.suggestion
+
+    def test_dedup_transparency(self) -> None:
+        report = [("a.pdf", 1, "text", "")]
+        summary = build_summary(report, chunks_new=2, chunks_present=10)
+        assert summary.chunks_new == 2
+        assert summary.chunks_present == 10
+        assert summary.chunks_total == 12
+        rendered = summary.render()
+        assert "already present / deduped" in rendered
+
+    def test_skipped_formats_reported(self) -> None:
+        report = [("a.pdf", 1, "text", "")]
+        summary = build_summary(report, chunks_new=1, chunks_present=0, skipped_formats=["report.docx"])
+        rendered = summary.render()
+        assert "unsupported format: report.docx" in rendered
+
+    def test_unreadable_docs_added_as_skipped(self) -> None:
+        report = [("a.pdf", 1, "text", "")]
+        summary = build_summary(report, chunks_new=1, chunks_present=0, unreadable_docs=["broken.pdf"])
+        skipped = [d for d in summary.docs if d.outcome == "skipped"]
+        assert any(d.source == "broken.pdf" for d in skipped)
+
+    def test_render_full_summary_no_engine_shows_fix(self) -> None:
+        # a.pdf: text + ocr → full.  b.pdf: text + skipped (no engine) → partial.
+        # The rendered output must show the [WARN] line AND the install fix.
+        report = [
+            ("a.pdf", 1, "text", ""),
+            ("a.pdf", 2, "ocr", ""),
+            ("b.pdf", 1, "text", ""),
+            ("b.pdf", 2, "skipped", "no_engine"),
+        ]
+        summary = build_summary(report, chunks_new=4, chunks_present=0, skipped_formats=["c.docx"])
+        rendered = summary.render()
+        assert "Ingestion summary (2 docs):" in rendered
+        assert "fully ingested" in rendered
+        # The skipped doc is surfaced distinctly (must not hide behind a green result)
+        assert "[WARN] b.pdf" in rendered
+        assert "NOT digested" in rendered
+        # The cause is "no_engine" → the install fix is shown
+        assert "uv sync --extra ocr" in rendered
+        assert "unsupported format: c.docx" in rendered
+        assert "Suggested:" in rendered
+
+    def test_render_no_engine_skip_shows_install_fix(self) -> None:
+        # A single fully-scanned doc (all pages skipped, no engine) → outcome
+        # "skipped" (not "partial").  The [WARN] line + install fix must show so
+        # the user knows the doc was NOT digested and how to fix it.
+        report = [
+            ("scan.pdf", 1, "skipped", "no_engine"),
+            ("scan.pdf", 2, "skipped", "no_engine"),
+        ]
+        summary = build_summary(report, chunks_new=0, chunks_present=0)
+        rendered = summary.render()
+        assert "[WARN] scan.pdf" in rendered
+        assert "OCR engine NOT installed" in rendered
+        assert "uv sync --extra ocr" in rendered
+        assert "Suggested:" in rendered
+
+    def test_render_ocr_no_text_skip_no_install_fix(self) -> None:
+        # Skipped because OCR ran but couldn't read → NOT the "install" cause,
+        # so the install fix must NOT be shown (it would be a wrong fix).
+        report = [
+            ("scan.pdf", 1, "text", ""),
+            ("scan.pdf", 2, "skipped", "ocr_no_text"),
+        ]
+        summary = build_summary(report, chunks_new=1, chunks_present=0)
+        rendered = summary.render()
+        assert "[WARN] scan.pdf" in rendered
+        assert "OCR ran but could not read" in rendered
+        assert "uv sync --extra ocr" not in rendered
+
+
+class TestDocSummaryDataclass:
+    def test_default_fields(self) -> None:
+        d = DocSummary(source="x.pdf", outcome="full")
+        assert d.pages_total == 0
+        assert d.pages_text == 0
+        assert d.pages_ocr == 0
+        assert d.pages_skipped == 0
+        assert d.skip_reason == ""
+
+    def test_ingestion_summary_defaults(self) -> None:
+        s = IngestionSummary()
+        assert s.docs == []
+        assert s.chunks_new == 0
+        assert s.chunks_present == 0
+        assert s.skipped_formats == []
+        assert s.suggestion == ""

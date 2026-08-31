@@ -165,9 +165,11 @@ class TestOcrBackendIntegration:
         import src.ocr_backends as ocr
 
         # Autouse fixture guarantees no settings file — env is the fallback.
+        # AI-055: ``pymupdf`` (the legacy default) now resolves to the ``auto``
+        # tier (tier-0 whole-doc + tier-1 CPU OCR for image-only pages).
         monkeypatch.setenv("OCR_BACKEND", "pymupdf")
         backend = ocr.get_ocr_backend()
-        assert isinstance(backend, ocr.PyMuPDFBackend)
+        assert isinstance(backend, ocr.AutoOcrBackend)
 
 
 class TestSessionSeeding:

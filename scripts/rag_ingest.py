@@ -85,19 +85,24 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-def _build_ocr_fallback() -> Callable[[Path, int], str] | None:
-    """Build a page-scoped OCR fallback for image-only PDF pages.
+def _build_ocr_fallback() -> Callable[[Path, int], str]:
+    """Build a page-scoped OCR fallback for image-only PDF pages (AI-055).
 
     Consults the configured OCR backend (persisted setting > ``OCR_BACKEND``
-    env > pymupdf default).  Only the GPU Unlimited-OCR backend can actually
-    OCR a rasterised page, so a fallback is returned only when that backend
-    is configured *and* available in this environment.  Otherwise ``None`` —
-    image-only pages are then skipped with a loud warning (not silently).
+    env > ``auto`` default) and returns its ``parse_page`` — the per-page
+    image-only hook.  With AI-055 tiering, the ``auto`` (default) backend
+    routes image-only pages to the **tier-1 CPU OCR** (RapidOCR) when it is
+    installed, so a scanned page is handled on any machine.  When no OCR tier
+    is available, ``parse_page`` returns empty and the production ingest path
+    skips the page with a loud WARNING (never fails ingestion for a missing
+    optional tier — graceful degradation).
+
+    Returns the backend's ``parse_page`` bound method (always callable); the
+    empty-string return when no OCR is available is handled by the ingest
+    path, not by returning ``None`` here.
     """
     backend: OcrBackend = get_ocr_backend()
-    if backend.name == "unlimited-ocr" and backend.available:
-        return backend.parse_page
-    return None
+    return backend.parse_page
 
 
 # ---------------------------------------------------------------------------
@@ -326,9 +331,40 @@ def _run(argv: list[str] | None = None) -> dict[str, object]:
             docs_chunks = load_docs(docs_dir)
 
         if args.pdfs:
-            pdf_chunks = ingest_pdf_directory(pdfs_dir, ocr_fallback=_build_ocr_fallback())
+            # AI-055: format scope — reject unsupported formats loudly, and
+            # collect the per-page report for the ingestion quality summary.
+            from src.rag_bundled import (  # noqa: PLC0415 - AI-055 section
+                build_summary,
+                check_supported_formats,
+            )
 
-        result.update(rebuild_store(patterns, docs_chunks, pdf_chunks))
+            # The --pdfs dir is expected to hold PDFs.  Any non-PDF/MD file in
+            # it is reported loudly (loud > silent) in the summary rather than
+            # silently ignored.  ingest_pdf_directory itself only ingests
+            # *.pdf (markdown is handled by --docs from a separate dir).
+            all_files = sorted(pdfs_dir.glob("*"))
+            _supported, rejected = check_supported_formats(all_files)
+            pdf_report: list[tuple[str, int, str, str]] = []
+            pdf_chunks = ingest_pdf_directory(
+                pdfs_dir,
+                ocr_fallback=_build_ocr_fallback(),
+                page_report=pdf_report,
+            )
+
+            # rebuild_store reports new-vs-present (dedup) per source type
+            rebuild_result = rebuild_store(patterns, docs_chunks, pdf_chunks)
+            result.update(rebuild_result)
+
+            # AI-055 ingestion quality summary (the trust signal)
+            summary = build_summary(
+                page_report=pdf_report,
+                chunks_new=int(rebuild_result.get("pdfs", 0)),
+                chunks_present=int(rebuild_result.get("pdfs_skipped", 0)),
+                skipped_formats=rejected,
+            )
+            result["summary"] = summary
+            print()
+            print(summary.render())
 
     if args.bundled:
         result["bundled"] = ensure_bundled_seeded(force=args.force)
