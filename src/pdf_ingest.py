@@ -328,6 +328,7 @@ def ingest_pdf(
     filepath: Path,
     *,
     ocr_fallback: Callable[[Path, int], str] | None = None,
+    page_report: list[tuple[int, str, str]] | None = None,
 ) -> list[DocChunk]:
     """Ingest a single PDF file into DocChunks.
 
@@ -339,9 +340,21 @@ def ingest_pdf(
         ocr_fallback: Optional page-scoped OCR hook for image-only pages.
             Called as ``ocr_fallback(filepath, page_number_1indexed)`` and
             should return extracted text (may be empty).  When provided, an
-            image-only page is sent to OCR instead of being skipped.  When
-            ``None``, image-only pages are skipped with a loud WARNING hinting
-            at ``OCR_BACKEND=unlimited-ocr``.
+            image-only page is sent to OCR instead of being skipped.  With
+            AI-055 tiering the hook routes to the **tier-1 CPU OCR** (RapidOCR)
+            when installed.  When the hook returns empty, the page is skipped
+            with a loud WARNING.
+        page_report: Optional list that receives one
+            ``(page_number, outcome, reason)`` tuple per page, where outcome is
+            ``"text"`` (PyMuPDF text), ``"ocr"`` (extracted via the OCR
+            fallback), or ``"skipped"`` (image-only, no OCR text).  For a
+            skipped page, ``reason`` is one of ``"no_engine"`` (the OCR hook
+            was not provided — the ``[ocr]`` extra is not installed),
+            ``"ocr_no_text"`` (the OCR hook ran but could not read the page),
+            or ``"ocr_failed"`` (the OCR hook raised).  For text/ocr pages,
+            ``reason`` is ``""``.  Used by the ingestion quality summary
+            (AI-055) to produce a cause-differentiated warning.  When ``None``,
+            no per-page reporting.
 
     Returns:
         List of ``DocChunk`` objects ready for ``RAGStore.add_docs()``.
@@ -375,6 +388,8 @@ def ingest_pdf(
                         page_num + 1,
                         exc_info=True,
                     )
+                    if page_report is not None:
+                        page_report.append((page_num + 1, "skipped", "ocr_failed"))
                     continue
                 if ocr_text and ocr_text.strip():
                     all_text += ocr_text.strip() + "\n\n"
@@ -384,25 +399,34 @@ def ingest_pdf(
                         page_num + 1,
                         len(ocr_text.strip()),
                     )
+                    if page_report is not None:
+                        page_report.append((page_num + 1, "ocr", ""))
                 else:
                     logger.warning(
                         "  %s: page %d OCR returned no text — page skipped",
                         source,
                         page_num + 1,
                     )
+                    if page_report is not None:
+                        page_report.append((page_num + 1, "skipped", "ocr_no_text"))
             else:
                 logger.warning(
                     "  %s: page %d skipped (%d chars, likely image-only). "
-                    "Set OCR_BACKEND=unlimited-ocr to extract scanned pages.",
+                    "Install the [ocr] extra (rapidocr_onnxruntime) or set "
+                    "OCR_BACKEND=cpu to extract scanned pages on CPU.",
                     source,
                     page_num + 1,
                     len(quick_text),
                 )
+                if page_report is not None:
+                    page_report.append((page_num + 1, "skipped", "no_engine"))
             continue
 
         # Extract text with heading markers
         page_text = _extract_page_text_with_headings(page)
         all_text += page_text + "\n\n"
+        if page_report is not None:
+            page_report.append((page_num + 1, "text", ""))
 
         # Extract tables
         page_tables = _extract_tables_page(page)
@@ -440,6 +464,7 @@ def ingest_pdf_directory(
     directory: Path,
     *,
     ocr_fallback: Callable[[Path, int], str] | None = None,
+    page_report: list[tuple[str, int, str, str]] | None = None,
 ) -> list[DocChunk]:
     """Ingest all PDFs in a directory.
 
@@ -447,6 +472,13 @@ def ingest_pdf_directory(
         directory: Path to a directory containing PDF files.
         ocr_fallback: Page-scoped OCR hook threaded through to
             :func:`ingest_pdf` for each file (see its docstring).
+        page_report: Optional list that receives one
+            ``(source_name, page_number, outcome, reason)`` tuple per page
+            across all files (AI-055 ingestion quality summary).  ``outcome``
+            and ``reason`` have the same meaning as in :func:`ingest_pdf` —
+            for a skipped page, ``reason`` is ``"no_engine"`` / ``"ocr_no_text"``
+            / ``"ocr_failed"``; for text/ocr pages it is ``""``.  When ``None``,
+            no per-page reporting.
 
     Returns:
         Combined list of ``DocChunk`` objects from all PDFs.
@@ -459,7 +491,11 @@ def ingest_pdf_directory(
         return all_chunks
 
     for fpath in pdf_files:
-        chunks = ingest_pdf(fpath, ocr_fallback=ocr_fallback)
+        per_file_report: list[tuple[int, str, str]] = []
+        chunks = ingest_pdf(fpath, ocr_fallback=ocr_fallback, page_report=per_file_report)
+        if page_report is not None:
+            for page_num, outcome, reason in per_file_report:
+                page_report.append((fpath.name, page_num, outcome, reason))
         all_chunks.extend(chunks)
 
     logger.info(

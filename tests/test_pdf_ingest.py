@@ -377,6 +377,39 @@ class TestIngestPdfDirectory:
         assert "0042748-2025-car-ipid.pdf" in sources
         assert "40383-2025-Cover-and-limits-v4-1.pdf" in sources
 
+    def test_lv_docs_no_pages_skipped_regression(self) -> None:
+        """CI regression guard (the durable form of the ingestion tracking).
+
+        The LV car-insurance docs all have native text (zero full-page scans),
+        so they must ingest with **0 pages skipped**.  This locks in "the LV
+        docs fully ingest cleanly" as a known-good baseline.  If a future
+        change (e.g. a change to MIN_PAGE_CHARS, a broken OCR hook, or an
+        accidental skip) causes the LV docs to lose pages, this test goes red
+        in CI *before* the regression ships — which is the whole point of
+        "tracking → issues found" (it catches the problem automatically,
+        without a human reading a warning).
+
+        Uses the real OCR backend (so the engine-installed state is real), and
+        skips if the LV docs aren't present (consistent with test_all_pdfs).
+        """
+        directory = Path("docs/rag_corpus/lv_docs")
+        if not directory.exists():
+            pytest.skip("Directory not available")
+        # The real backend — auto (tier-0 PyMuPDF + tier-1 CPU OCR when installed).
+        from src.ocr_backends import get_ocr_backend
+
+        backend = get_ocr_backend()
+        report: list[tuple[str, int, str, str]] = []
+        ingest_pdf_directory(
+            directory,
+            ocr_fallback=backend.parse_page,
+            page_report=report,
+        )
+        skipped = [(src, page, reason) for src, page, outcome, reason in report if outcome == "skipped"]
+        assert skipped == [], f"LV docs skipped pages (regression): {skipped}"
+        # Sanity: we actually ingested something (not an empty/silent pass).
+        assert len(report) > 0
+
     def test_empty_directory(self, tmp_path: Path) -> None:
         chunks = ingest_pdf_directory(tmp_path)
         assert chunks == []
@@ -386,7 +419,12 @@ class TestIngestPdfDirectory:
         (tmp_path / "a.pdf").write_bytes(b"%PDF-1.4 fake")
         seen: list[bool] = []
 
-        def fake_ingest(path: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None) -> list[DocChunk]:
+        def fake_ingest(
+            path: Path,
+            *,
+            ocr_fallback: Callable[[Path, int], str] | None = None,
+            page_report: list[tuple[int, str]] | None = None,
+        ) -> list[DocChunk]:
             seen.append(ocr_fallback is not None)
             return []
 
@@ -394,6 +432,86 @@ class TestIngestPdfDirectory:
         ingest_pdf_directory(tmp_path, ocr_fallback=lambda _p, _n: "")
         # The fallback closure was provided (not None) and threaded through.
         assert seen == [True]
+
+
+class TestDocChunkKey:
+    """The dedup key ``sha256(source \x00 heading_path \x00 normalised text)``.
+
+    The guarantee these lock in: two *different* docs can **never** dedup
+    against each other, because the ``source`` (filename) is part of the hash.
+    A doc can only dedup against *itself* (same source + heading + content),
+    which is what makes re-ingestion idempotent.
+    """
+
+    def test_same_chunk_same_key(self) -> None:
+        """Identical chunk fields produce identical keys (idempotent re-ingest)."""
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="Cover section", source="a.pdf", heading_path="Cover")
+        b = DocChunk(text="Cover section", source="a.pdf", heading_path="Cover")
+        assert doc_chunk_key(a) == doc_chunk_key(b)
+        assert doc_chunk_key(a) != ""  # computed (not empty)
+
+    def test_different_source_different_key_even_with_identical_text(self) -> None:
+        """Two different docs with byte-identical text do NOT dedup against
+        each other — the filename is in the hash.  This is the guarantee that
+        prevents 'Doc B incorrectly chunks to Doc A and no issue is seen.'
+        """
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="Same body text here", source="35880-2023-car-tc.pdf", heading_path="Cover")
+        b = DocChunk(text="Same body text here", source="40383-2025-Cover-and-limits-v4-1.pdf", heading_path="Cover")
+        assert doc_chunk_key(a) != doc_chunk_key(b)
+
+    def test_different_text_different_key_same_source(self) -> None:
+        """Two chunks from the same doc with different content have different keys."""
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="Section one", source="a.pdf", heading_path="One")
+        b = DocChunk(text="Section two", source="a.pdf", heading_path="One")
+        assert doc_chunk_key(a) != doc_chunk_key(b)
+
+    def test_different_heading_path_different_key(self) -> None:
+        """Same source + text under different heading paths have different keys."""
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="Body", source="a.pdf", heading_path="Intro")
+        b = DocChunk(text="Body", source="a.pdf", heading_path="Conclusion")
+        assert doc_chunk_key(a) != doc_chunk_key(b)
+
+    def test_normalisation_ignores_whitespace(self) -> None:
+        """Chunks differing only in whitespace normalise to the same key."""
+        from src.pdf_ingest import doc_chunk_key
+
+        a = DocChunk(text="same   text", source="a.pdf", heading_path="H")
+        b = DocChunk(text="same text", source="a.pdf", heading_path="H")
+        assert doc_chunk_key(a) == doc_chunk_key(b)
+
+    def test_field_boundary_separators_prevent_collision(self) -> None:
+        """The \x00 separators prevent field-boundary collisions: a source ending
+        in a space + heading starting in a space can't collide with the reverse.
+        """
+        from src.pdf_ingest import doc_chunk_key
+
+        # source="x " + heading="y"  vs  source="x" + heading=" y" + same text
+        a = DocChunk(text="T", source="x ", heading_path="y")
+        b = DocChunk(text="T", source="x", heading_path=" y")
+        assert doc_chunk_key(a) != doc_chunk_key(b)
+
+    def test_dedup_key_set_on_ingested_chunks(self, tmp_path: Path) -> None:
+        """ingest_pdf_directory produces chunks with a non-empty dedup key set."""
+        import fitz
+
+        pdf = tmp_path / "a.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text(fitz.Point(72, 72), "This is a real text page with enough characters.")
+        doc.save(str(pdf))
+        doc.close()
+
+        chunks = ingest_pdf_directory(tmp_path)
+        for c in chunks:
+            assert c.dedup_key != ""  # every chunk has a computed dedup key
 
 
 # ---------------------------------------------------------------------------
@@ -453,8 +571,71 @@ class TestIngestPdfOcrFallback:
         with caplog.at_level("WARNING", logger="src.pdf_ingest"):
             chunks = ingest_pdf(pdf)  # no fallback
 
-        assert any("unlimited-ocr" in rec.message for rec in caplog.records if rec.levelname == "WARNING")
+        # AI-055: the WARNING now points at the CPU OCR tier ([ocr] extra / OCR_BACKEND=cpu).
+        assert any(
+            "[ocr]" in rec.message or "OCR_BACKEND=cpu" in rec.message
+            for rec in caplog.records
+            if rec.levelname == "WARNING"
+        )
         assert chunks == []
+
+    def test_page_report_records_outcomes(self, tmp_path: Path) -> None:
+        """AI-055: page_report receives one (page, outcome, reason) tuple per page."""
+        pdf = tmp_path / "mixed.pdf"
+        # A real text page (>= MIN_PAGE_CHARS) → "text" with reason "".
+        _write_text_pdf(pdf, "This is a real text page with enough characters to be kept.")
+        report: list[tuple[int, str, str]] = []
+        ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "", page_report=report)
+        assert report == [(1, "text", "")]
+
+    def test_page_report_ocr_outcome(self, tmp_path: Path) -> None:
+        """AI-055: an image-only page extracted via OCR is reported "ocr"."""
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+        report: list[tuple[int, str, str]] = []
+        ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "OCR TEXT", page_report=report)
+        assert report == [(1, "ocr", "")]
+
+    def test_page_report_skipped_ocr_no_text_reason(self, tmp_path: Path) -> None:
+        """AI-055: OCR ran but returned no text → "skipped" with reason "ocr_no_text"."""
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+        report: list[tuple[int, str, str]] = []
+        ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "", page_report=report)
+        assert report == [(1, "skipped", "ocr_no_text")]
+
+    def test_page_report_skipped_no_engine_reason(self, tmp_path: Path) -> None:
+        """AI-055: no OCR fallback provided (engine not installed) → reason "no_engine"."""
+        pdf = tmp_path / "scanned.pdf"
+        _write_image_only_pdf(pdf)
+        report: list[tuple[int, str, str]] = []
+        ingest_pdf(pdf, page_report=report)  # no ocr_fallback → no_engine
+        assert report == [(1, "skipped", "no_engine")]
+
+    def test_page_report_optional_none(self, tmp_path: Path) -> None:
+        """AI-055: page_report defaults to None (no reporting) — no crash."""
+        pdf = tmp_path / "text.pdf"
+        _write_text_pdf(pdf, "This is a real text page with enough characters to be kept.")
+        chunks = ingest_pdf(pdf)  # no page_report
+        assert any("enough characters" in c.text for c in chunks)
+
+
+class TestIngestPdfDirectoryPageReport:
+    """AI-055: ingest_pdf_directory threads page_report (source, page, outcome, reason)."""
+
+    def test_directory_page_report_includes_source(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "a.pdf"
+        _write_text_pdf(pdf, "This is a real text page with enough characters to be kept.")
+        report: list[tuple[str, int, str, str]] = []
+        ingest_pdf_directory(tmp_path, page_report=report)
+        assert report == [("a.pdf", 1, "text", "")]
+
+    def test_directory_page_report_carries_skip_reason(self, tmp_path: Path) -> None:
+        pdf = tmp_path / "scan.pdf"
+        _write_image_only_pdf(pdf)
+        report: list[tuple[str, int, str, str]] = []
+        ingest_pdf_directory(tmp_path, page_report=report)  # no ocr_fallback → no_engine
+        assert report == [("scan.pdf", 1, "skipped", "no_engine")]
 
     def test_fallback_returns_empty_warns(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         pdf = tmp_path / "scanned.pdf"
