@@ -3333,3 +3333,19 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 - **Next for AI-058**: proceed — the learned-store mechanism now demonstrably steers resolution correctly.
 
 ---
+
+## 🟡 AI-065 — Citation/rationale token-overhead watch (16b D8) — MEASUREMENT, no build yet
+
+**Status:** 🟡 ready-for-agent (measurement only — no code change authorised yet)
+**Priority:** Low (watch item — act only if the numbers say so).
+**Depends on:** 16b Phase 3 (citations per criterion) existing to measure.
+**Roadmap ref:** `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → **16b** decision D8; full spec `docs/specs/FEATURE_SPEC_test_to_document_traceability.md` §7.
+
+**One-line:** 16b's per-criterion `source_refs` + `justification` add prompt/output tokens to every generation run. D8 mandated tracking so overhead is seen in numbers, not vibes.
+
+**Watch triggers (any one → open a sizing/scoping ticket):**
+- citation+rationale tokens add >15% to mean generation-token cost in the eval harness measurement
+- generation latency regresses beyond noise on the eval datasets
+- rationale text repeatedly hits the ~400-char cap (sign the cap is too tight or the model is rambling)
+
+**Response options if triggered (in order):** tighten the rationale cap → drop rationale to pointer-only `PRIVACY_MODE`-style display → move to structured refs (D8's option C). Do **not** silently raise caps or drop verification.

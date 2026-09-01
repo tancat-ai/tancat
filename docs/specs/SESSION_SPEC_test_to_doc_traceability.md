@@ -1,7 +1,7 @@
 # Test-to-Document Traceability - Session/Spec Notes
 
 **Created:** 2026-08-25
-**Status:** Session notes - **to go over in a dedicated spec session** (not yet a full spec)
+**Status:** **SUPERSEDED 2026-09-01** by `FEATURE_SPEC_test_to_document_traceability.md` (dedicated spec session complete; decisions D1-D12 + four refinements locked). Kept as historical raw material only — do not implement from this doc.
 **Priority:** High (core of the trust story)
 **Roadmap ref:** `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` -> Tier 5 -> item **16b** (Test-to-Document Traceability)
 **Depends on:** AI-055 (source/heading_path on chunks - built 2026-08-25), Phase 3 RAG (shipped), the Ingestion Agent (existing, **protected file**)
