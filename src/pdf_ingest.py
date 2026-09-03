@@ -460,6 +460,121 @@ def ingest_pdf(
     return chunks
 
 
+def ingest_pdf_page_aware(
+    filepath: Path,
+    *,
+    ocr_fallback: Callable[[Path, int], str] | None = None,
+) -> list[DocChunk]:
+    """Ingest a single PDF into page-tagged DocChunks (16b Phase 2).
+
+    Unlike :func:`ingest_pdf` which concatenates all pages into one text
+    blob and loses page boundaries, this function chunks **per page** so
+    every ``DocChunk`` carries its physical PDF page index and printed
+    page label.  This is the foundation for whole-document generation
+    with page-level citations.
+
+    Args:
+        filepath: Path to the PDF file.
+        ocr_fallback: Optional page-scoped OCR hook for image-only pages.
+            Called as ``ocr_fallback(filepath, page_number_1indexed)``.
+
+    Returns:
+        List of ``DocChunk`` objects with ``page``, ``page_label``, and
+        ``route`` fields populated for every chunk.
+    """
+    source = filepath.name
+
+    try:
+        doc = _import_fitz().open(str(filepath))
+    except Exception:
+        logger.error("Failed to open PDF: %s", filepath)
+        return []
+
+    doc_title = source.replace(".pdf", "")
+    page_count = doc.page_count
+    all_chunks: list[DocChunk] = []
+
+    for page_num in range(page_count):
+        page = doc[page_num]
+        page_index = page_num + 1  # 1-indexed
+        # Get the printed page label (e.g. "5") if the PDF has one
+        page_label = ""
+        try:
+            page_label = page.get_label() or ""
+        except Exception:
+            pass
+
+        # Quick check: pages with too few characters are image-only.
+        quick_text = page.get_text()
+        if len(quick_text) < MIN_PAGE_CHARS:
+            if ocr_fallback is not None:
+                try:
+                    ocr_text = ocr_fallback(filepath, page_num + 1)
+                except Exception:
+                    logger.warning(
+                        "  %s: page %d OCR fallback failed — page skipped",
+                        source,
+                        page_num + 1,
+                        exc_info=True,
+                    )
+                    continue
+                if ocr_text and ocr_text.strip():
+                    # OCR route — chunk this page's text with route="ocr"
+                    page_chunks = _chunk_text(
+                        ocr_text.strip(),
+                        source,
+                        doc_title,
+                    )
+                    for chunk in page_chunks:
+                        chunk.page = page_index
+                        chunk.page_label = page_label
+                        chunk.route = "ocr"
+                        chunk.dedup_key = doc_chunk_key(chunk)
+                    all_chunks.extend(page_chunks)
+                else:
+                    logger.warning(
+                        "  %s: page %d OCR returned no text — page skipped",
+                        source,
+                        page_num + 1,
+                    )
+            else:
+                logger.warning(
+                    "  %s: page %d skipped (%d chars, likely image-only).",
+                    source,
+                    page_num + 1,
+                    len(quick_text),
+                )
+            continue
+
+        # Extract text with heading markers
+        page_text = _extract_page_text_with_headings(page)
+        if not page_text.strip():
+            continue
+
+        # Chunk this page's text with route="text"
+        page_chunks = _chunk_text(
+            page_text,
+            source,
+            doc_title,
+        )
+        for chunk in page_chunks:
+            chunk.page = page_index
+            chunk.page_label = page_label
+            chunk.route = "text"
+            chunk.dedup_key = doc_chunk_key(chunk)
+        all_chunks.extend(page_chunks)
+
+    doc.close()
+
+    logger.info(
+        "  %s → %d page-tagged chunk(s) from %d pages (16b page-aware)",
+        source,
+        len(all_chunks),
+        page_count,
+    )
+    return all_chunks
+
+
 def ingest_pdf_directory(
     directory: Path,
     *,

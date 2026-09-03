@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -126,6 +127,14 @@ class PipelineGraph:
 
         Only runs when ``input_mode == "document"`` (routed by ``_route_entry``).
         Uses the configured OCR backend (``OCR_BACKEND`` env var, default: pymupdf).
+
+        16b Phase 2 (merged with AI-055 wiring — D2: protected file touched once):
+        PDF documents are now parsed **page-aware** via
+        :func:`src.pdf_ingest.ingest_pdf_page_aware`, so every chunk carries
+        its physical page index and printed page label.  The full document
+        text is fed into ``user_story`` (removes the 500-char ceiling), and
+        page-tagged chunks are stored in ``raw_document_text`` for citation
+        verification in Phase 3.
         """
         from pathlib import Path
 
@@ -138,13 +147,49 @@ class PipelineGraph:
         if not source_path.exists():
             return {"errors": [f"Document not found: {state.document_source}"]}
 
-        backend = get_ocr_backend()
+        # 16b Phase 2 — page-aware PDF parsing (merged with AI-055 per-page OCR)
+        if source_path.suffix.lower() == ".pdf":
+            from src.pdf_ingest import ingest_pdf_page_aware
 
+            # Use the tier-1 CPU OCR backend as the fallback for scanned pages
+            ocr_backend = get_ocr_backend()
+            ocr_hook: Callable[[Path, int], str] | None = None
+            if ocr_backend.available:
+
+                def ocr_hook(path: Path, page_num: int) -> str:  # type: ignore[redefinition]
+                    return ocr_backend.parse_page(path, page_num)
+
+            try:
+                page_chunks = ingest_pdf_page_aware(source_path, ocr_fallback=ocr_hook)
+            except Exception as e:
+                logger.warning("Page-aware PDF parsing failed: %s", e)
+                return {"errors": [f"Document parsing failed: {e}"]}
+
+            if not page_chunks:
+                return {"errors": ["Document is empty — nothing to analyse"]}
+
+            # Build full text from page-tagged chunks (removes 500-char ceiling)
+            full_text = "\n\n".join(c.text for c in page_chunks)
+
+            logger.info(
+                "Parsed document (page-aware): %d chunks, %d chars from %s",
+                len(page_chunks),
+                len(full_text),
+                state.document_source,
+            )
+
+            return {
+                "raw_document_text": full_text,
+                # Feed the FULL document text into user_story (16b Phase 2)
+                # — removes the 500-char ceiling that prevented boundary figures
+                # deep in a policy from appearing in generated tests.
+                "user_story": full_text,
+            }
+
+        # Non-PDF documents (Markdown) — use the OCR backend as before
+        backend = get_ocr_backend()
         try:
-            if source_path.suffix.lower() == ".pdf":
-                raw_text = backend.parse_pdf(source_path)
-            else:
-                raw_text = backend.parse_markdown(source_path)
+            raw_text = backend.parse_markdown(source_path)
         except Exception as e:
             logger.warning("Document parsing failed (%s backend): %s", backend.name, e)
             return {"errors": [f"Document parsing failed: {e}"]}
@@ -161,9 +206,7 @@ class PipelineGraph:
 
         return {
             "raw_document_text": raw_text,
-            # Seed user_story with first 500 chars for backward compat
-            # with the existing Ingestion Agent text-analysis path.
-            "user_story": raw_text[:500],
+            "user_story": raw_text,
         }
 
     async def _ingest(self, state: PipelineState) -> dict[str, Any]:

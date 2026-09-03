@@ -389,17 +389,28 @@ class TestParseDocumentWithOcrBackend:
 
     @pytest.mark.asyncio
     async def test_pdf_uses_ocr_backend(self, graph: PipelineGraph) -> None:
-        """PDF parsing goes through the OCR backend, not direct ingest_pdf."""
+        """PDF parsing goes through page-aware ingestion (16b Phase 2)."""
+        from src.rag_store import DocChunk
+
         with tempfile.NamedTemporaryFile(mode="w", suffix=".pdf", delete=False, encoding="utf-8") as f:
             f.write("%PDF-1.4\nfake pdf\n%%EOF")
             f.flush()
             path = f.name
 
         try:
-            with patch(
-                "src.ocr_backends.PyMuPDFBackend.parse_pdf",
-                return_value="OCR'd content from backend",
-            ) as mock_parse:
+            with (
+                patch(
+                    "src.pdf_ingest.ingest_pdf_page_aware",
+                    return_value=[
+                        DocChunk(text="OCR'd content from backend", source="spec.pdf", page=1, route="text"),
+                    ],
+                ) as mock_ingest,
+                patch("src.ocr_backends.get_ocr_backend") as mock_backend,
+            ):
+                mock_ocr = MagicMock()
+                mock_ocr.available.return_value = False
+                mock_backend.return_value = mock_ocr
+
                 from src.agents.pipeline_state import PipelineState
 
                 state = PipelineState(
@@ -408,7 +419,7 @@ class TestParseDocumentWithOcrBackend:
                 )
                 result = await graph._parse_document(state)
 
-                mock_parse.assert_called_once()
+                mock_ingest.assert_called_once()
                 assert "OCR'd content" in result["raw_document_text"]
         finally:
             Path(path).unlink(missing_ok=True)
@@ -435,17 +446,24 @@ class TestParseDocumentWithOcrBackend:
 
     @pytest.mark.asyncio
     async def test_backend_error_returns_error(self, graph: PipelineGraph) -> None:
-        """OCR backend failure returns structured error."""
+        """Page-aware ingestion failure returns structured error (16b Phase 2)."""
         with tempfile.NamedTemporaryFile(mode="w", suffix=".pdf", delete=False, encoding="utf-8") as f:
             f.write("junk")
             f.flush()
             path = f.name
 
         try:
-            with patch(
-                "src.ocr_backends.PyMuPDFBackend.parse_pdf",
-                side_effect=RuntimeError("Corrupt PDF"),
+            with (
+                patch(
+                    "src.pdf_ingest.ingest_pdf_page_aware",
+                    side_effect=RuntimeError("Corrupt PDF"),
+                ),
+                patch("src.ocr_backends.get_ocr_backend") as mock_backend,
             ):
+                mock_ocr = MagicMock()
+                mock_ocr.available.return_value = False
+                mock_backend.return_value = mock_ocr
+
                 from src.agents.pipeline_state import PipelineState
 
                 state = PipelineState(

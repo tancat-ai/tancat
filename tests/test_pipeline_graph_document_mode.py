@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -193,14 +193,23 @@ class TestParseDocumentNode:
 
     @pytest.mark.asyncio
     async def test_pdf_file_calls_ingest_pdf(self, graph: PipelineGraph) -> None:
-        """Verify PDF path goes through the OCR backend adapter."""
+        """Verify PDF path goes through page-aware ingestion (16b Phase 2)."""
+        from src.rag_store import DocChunk
+
         with (
             patch("pathlib.Path.exists", return_value=True),
             patch(
-                "src.ocr_backends.PyMuPDFBackend.parse_pdf",
-                return_value="Extracted PDF content.",
-            ) as mock_parse,
+                "src.pdf_ingest.ingest_pdf_page_aware",
+                return_value=[
+                    DocChunk(text="Extracted PDF content.", source="spec.pdf", page=1, route="text"),
+                ],
+            ) as mock_ingest,
+            patch("src.ocr_backends.get_ocr_backend") as mock_backend,
         ):
+            mock_ocr = MagicMock()
+            mock_ocr.available.return_value = False
+            mock_backend.return_value = mock_ocr
+
             state = PipelineState(
                 input_mode="document",
                 document_source="/fake/spec.pdf",
@@ -208,7 +217,7 @@ class TestParseDocumentNode:
             with patch.object(Path, "suffix", new=".pdf"):
                 result = await graph._parse_document(state)
 
-            mock_parse.assert_called_once()
+            mock_ingest.assert_called_once()
             assert "raw_document_text" in result
             assert "Extracted PDF" in result["raw_document_text"]
 
@@ -217,10 +226,15 @@ class TestParseDocumentNode:
         with (
             patch("pathlib.Path.exists", return_value=True),
             patch(
-                "src.ocr_backends.PyMuPDFBackend.parse_pdf",
+                "src.pdf_ingest.ingest_pdf_page_aware",
                 side_effect=RuntimeError("Corrupt PDF"),
             ),
+            patch("src.ocr_backends.get_ocr_backend") as mock_backend,
         ):
+            mock_ocr = MagicMock()
+            mock_ocr.available.return_value = False
+            mock_backend.return_value = mock_ocr
+
             state = PipelineState(
                 input_mode="document",
                 document_source="/fake/broken.pdf",

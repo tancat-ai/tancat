@@ -73,6 +73,12 @@ class Criterion:
     needs_clarification: bool = False
     clarification_question: str = ""
     prerequisite_refs: list[str] = field(default_factory=list)
+    # ── 16b provenance (Phase 1 — data model) ─────────────────────
+    #: Citations linking this criterion to verified document locations.
+    #: Empty = no document provenance (pasted/typed requirements path).
+    source_refs: list[Any] = field(default_factory=list)  # list[SourceRef] (forward ref)
+    #: LLM rationale grounded in citations (≤ ~400 chars). Empty for unresolved.
+    justification: str = ""
 
 
 @dataclass
@@ -137,11 +143,28 @@ class PipelineState:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> PipelineState:
         """Deserialize from a checkpoint dict."""
+        from src.source_refs import SourceRef
+
+        def _deserialize_criterion(c: Any) -> Any:
+            """Deserialize a criterion, handling source_refs (16b Phase 1)."""
+            if not isinstance(c, dict):
+                return c
+            # Handle source_refs: list of dicts → list of SourceRef
+            source_refs = c.get("source_refs", [])
+            if source_refs and isinstance(source_refs[0], dict):
+                c["source_refs"] = [SourceRef.from_dict(r) for r in source_refs]
+            return Criterion(**c)
+
         analysis = data.pop("story_analysis", None)
         story_analysis = None
         if analysis and isinstance(analysis, dict):
             criteria_list = analysis.pop("criteria", [])
-            criteria = [Criterion(**c) if isinstance(c, dict) else c for c in criteria_list]
+            criteria = [_deserialize_criterion(c) for c in criteria_list]
             story_analysis = StoryAnalysis(criteria=criteria, **analysis)
+
+        # Also handle test_conditions (16b Phase 1)
+        test_conditions = data.get("test_conditions", [])
+        if test_conditions and isinstance(test_conditions[0], dict):
+            data["test_conditions"] = [_deserialize_criterion(c) for c in test_conditions]
 
         return cls(story_analysis=story_analysis, **data)
