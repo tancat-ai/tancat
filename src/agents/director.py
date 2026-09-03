@@ -91,6 +91,9 @@ class QADirectorAgent:
                     needs_clarification=needs_clarification,
                     clarification_question=clarification or criterion.clarification_question,
                     prerequisite_refs=prerequisite_refs,
+                    # 16b D12 — carry provenance through the QA Director hop
+                    source_refs=list(criterion.source_refs),
+                    justification=criterion.justification,
                 )
             )
 

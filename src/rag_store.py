@@ -87,6 +87,13 @@ class DocChunk:
     source: str = ""  # e.g. "playwright-locators.md"
     heading_path: str = ""  # e.g. "Locators > Best Practices"
     dedup_key: str = ""  # sha256(source \x00 heading_path \x00 normalised text)
+    # ── 16b provenance (Phase 1 — stop discarding provenance) ─────
+    #: Physical PDF page index (1-indexed). 0 = not a PDF / unknown.
+    page: int = 0
+    #: Printed page label (e.g. "5"). "" if the page has no label.
+    page_label: str = ""
+    #: Parse route: "text" (PyMuPDF extraction) | "ocr" (OCR fallback).
+    route: str = "text"
 
 
 @dataclass(slots=True)
@@ -152,6 +159,15 @@ class RetrievedPattern:
     site_hash: str = ""  # one-way site identity hash (learned patterns)
     hit_count: int = 0  # evidence count (learned / learned_negative)
     last_seen: float = 0.0  # wall-clock time of last record (recency tie-break)
+    # ── 16b provenance (Phase 1 — carry doc identity through retrieval) ─
+    #: Document source (filename) for doc chunks.
+    doc_source: str = ""
+    #: Physical PDF page index (1-indexed). 0 = not a PDF / unknown.
+    doc_page: int = 0
+    #: Printed page label.
+    doc_page_label: str = ""
+    #: Parse route: "text" | "ocr".
+    doc_route: str = "text"
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +777,10 @@ class RAGStore:
                     "source": c.source,
                     "heading_path": c.heading_path,
                     "dedup_key": c.dedup_key,
+                    # 16b Phase 1 — carry provenance through the store
+                    "doc_page": c.page,
+                    "doc_page_label": c.page_label,
+                    "doc_route": c.route,
                 },
             )
             for vec, c in zip(vectors, new_chunks, strict=True)
@@ -806,6 +826,11 @@ class RAGStore:
                     site_hash=md.get("site_hash", ""),
                     hit_count=int(md.get("hit_count", 0) or 0),
                     last_seen=float(md.get("last_seen", 0.0) or 0.0),
+                    # 16b Phase 1 — carry doc provenance through retrieval
+                    doc_source=md.get("source", ""),
+                    doc_page=int(md.get("doc_page", 0) or 0),
+                    doc_page_label=md.get("doc_page_label", ""),
+                    doc_route=md.get("doc_route", "text"),
                 )
             )
 
