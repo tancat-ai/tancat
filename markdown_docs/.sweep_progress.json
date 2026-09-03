@@ -1,6 +1,6 @@
 {
-  "total": 153,
-  "completed": 141,
+  "total": 156,
+  "completed": 144,
   "pending": 12,
   "files": [
     {
@@ -766,6 +766,21 @@
     {
       "source": "src/vision_enricher.py",
       "doc": "markdown_docs/src/vision_enricher.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/source_refs.py",
+      "doc": "markdown_docs/src/source_refs.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/citation_verifier.py",
+      "doc": "markdown_docs/src/citation_verifier.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/citation_surfaces.py",
+      "doc": "markdown_docs/src/citation_surfaces.py.md",
       "status": "completed"
     }
   ],
