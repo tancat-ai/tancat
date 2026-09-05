@@ -229,3 +229,9 @@ Eliminated everything else, with evidence:
 3. Skeleton-call caching (optional follow-up — needs protected-file sign-off for `src/test_generator.py`; the `LLMCache` module is ready).
 4. 6e doc tails: §9 decisions folded into the spec, recommended-models doc table (6d tail), published benchmark table seeded + kanban regeneration, session-doc fold into BACKLOG AI-045 + roadmap Phase 6.
 5. Golden keys decay again in ~3–6 months — re-run `scripts/eval/revalidate_goldens.py` then (AGENTS.md §12 maintenance).
+
+## Post-ship housekeeping (2026-09-05)
+
+- **Graphify:** full `graphify update .` run — 903/903 files, 20605 nodes / 35876 edges / 1364 communities; `callflow.html` regenerated. graphify was NOT used during the session (all findings came from direct code reading — correct for line-level bugs). AGENTS.md gained §12b "Knowledge Graph — when to use" (orientation tool, never truth; `graphify update .` before querying; gitignored).
+- **llm-benchmarks:** launcher/llmctl Stop-bug fixes (log rotation, orphan detection, unconditional image kill, stale-pidfile honesty) remain uncommitted in that repo — user's call to commit there.
+- **Untracked debris:** `training_data/model_baseline_qwen38_retest_20260904.json` — not from this session; left for the user.
