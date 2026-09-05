@@ -231,9 +231,7 @@ Code-complete; the live measurement A/B is the only outstanding acceptance step.
 
 ---
 
-**Status:** 🆕 new — proposed 2026-08-27. **EXPERIMENT ONLY.** Do not replace the proven linear pipeline until a controlled graph-vs-linear comparison is complete.
-**Priority:** Low (architecture experiment; not a current product blocker).
-**Depends on:** AI-059 measurement harness and a trustworthy cold/warm baseline; folds into AI-054 pipeline consolidation review.
+**Status:** 🆕 → **SUPERSEDED 2026-09-05 — merged into ROADMAP §12d** (Hybrid — LangGraph-orchestrated linear pipeline). One-line pointer only, per AGENTS.md §10. The full item (proposed shape, decision gate, open questions, today's updated data) lives there: `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` §12d.
 
 **The one-line version:** combine LangGraph's stateful routing, validation, retry, and human-checkpoint capabilities with LangChain-style Runnables inside nodes, while retaining the existing linear scraper/resolver as the stable execution seam.
 
@@ -289,6 +287,7 @@ LangGraph: ingest → plan → existing linear scrape/resolve → integrity chec
 **Priority:** Medium — mostly strategy/coverage; the one buildable piece is (5).
 
 ### 1. One pipeline? — LINEAR vs LANGGRAPH (⏸️ UNDECIDED — pending research)
+**→ CONSOLIDATED 2026-09-05 into ROADMAP §12d (Hybrid — LangGraph-orchestrated linear pipeline).** The decision record + data (historic 88.1-vs-32.8 inflated by the fixed mock-ensure bug; clean −9.8pp; demoqa story-bleed root-caused) live there. This section stays as the research-summary history + the open research needs:
 **Decision owner:** user — undecided until more data.
 **What we know (recorded):** linear is the production default; the LangGraph multi-agent path (Planner→Generator→Validator, `src/agents/`) is built + unit-tested but **dormant — not wired into the user flow** and never made default because eval results were worse. The decisive comparison (`docs/sessions/2026-07-29_eval_baseline_restoration.md`): **linear 88.1% vs graph 32.8%**, BUT that session concluded the gap is **not the architecture** — graph generates more comprehensive skeletons (more steps; e.g. LV Insurance 90–102 steps) that the **journey scraper can't keep up with** (multi-step SPA forms, hidden sections). Recorded verdict: *"Once the scraper can click through form sections, the graph pipeline should match or beat linear."*
 **Research the user needs before deciding:** (a) deep-dive the two pipelines' real benefits/limitations (per-site, not just the headline number — the 2026-07-29 table shows graph *won* on automationexercise +12pp); (b) **market direction** — how AI test-generation is evolving and what's best for our customers (multi-agent/agent-orchestration trends vs robust single-pass); (c) what a customer actually buys (breadth of coverage vs reliability/speed).
@@ -2260,8 +2259,8 @@ per row.
 
 ## 📌 LangGraph Pipeline — Dormant / Not Wired into User Flow (documented 2026-08-01)
 
-**Status:** 📌 Documented — no code change required
-**Related:** Phase 1 Multi-Agent (ROADMAP), `src/agents/pipeline_graph.py`
+**Status:** 📌 Documented — no code change required (code-state note; the hybrid plan lives in ROADMAP §12d)
+**Related:** Phase 1 Multi-Agent (ROADMAP §12 → hybrid §12d), `src/agents/pipeline_graph.py`
 
 **Finding (2026-08-01):** The Phase 1 Multi-Agent LangGraph pipeline
 (`PipelineGraph`, `TestOrchestrator.run_pipeline_via_graph()`) is built and
