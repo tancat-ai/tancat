@@ -223,12 +223,24 @@ Eliminated everything else, with evidence:
 2. **Keep the new build** → accept that greedy output shifted → this is a re-baseline decision (user said no to that for the bells-and-whistles run; a re-baseline would be a deliberate, separate decision).
 
 
-## What remains
-1. **Human review of the diff → commit** (ship-it skill: smoke → ruff → mypy → pytest → review → commit → push → CI).
-2. **verify_production verdict is FAIL on automationexercise** (scraper subprocess timeout, pre-existing class — NOT this session's diff; see the verify note above). Decide: re-run on a quiet box, or open a scraper-timeout item.
-3. Skeleton-call caching (optional follow-up — needs protected-file sign-off for `src/test_generator.py`; the `LLMCache` module is ready).
-4. 6e doc tails: §9 decisions folded into the spec, recommended-models doc table (6d tail), published benchmark table seeded + kanban regeneration, session-doc fold into BACKLOG AI-045 + roadmap Phase 6.
-5. Golden keys decay again in ~3–6 months — re-run `scripts/eval/revalidate_goldens.py` then (AGENTS.md §12 maintenance).
+## NEXT SESSION — where to pick up (fresh-context entry point)
+
+> Session closed 2026-09-05, 6 commits on main, all CI green, working tree clean
+> (only pre-existing untracked `training_data/model_baseline_qwen38_retest_20260904.json` — not from this session).
+> This handoff + AGENTS.md are the sources; read AGENTS.md §10/§12b/§12c for doc + search tooling rules.
+
+**High-priority pickups (choose one):**
+1. **Hybrid pipeline spec (graph-as-orchestrator)** — the consolidated decision record lives in ROADMAP §12d; write `docs/specs/FEATURE_SPEC_hybrid_pipeline.md` before any build (graph Planner/QA-Director in → linear core → graph Validator integrity gate out). Data: mainline linear 54.9% vs graph 45.1% (clean, mock-parity fixed); demoqa story-bleed is the concrete weakness the validator seam fixes; graph wins the multi-step LV form.
+2. **B-048 code guard** (BACKLOG) — the RAG-store seeding gap is repaired manually + tracked; implement one of the two candidate guards (`learning_impact` sentinel-scoped lab store, or `ensure_bundled_seeded` re-seeds when golden count == 0) + verification.
+3. **automationexercise scraper-timeout item** — `verify_production` FAILs on AE (untouched code: `stateful_scraper.py:82` / `journey_executor.subprocess_run` networkidle + 120–150s wall-clock caps). Open a BACKLOG bug (B-049) if it persists; candidate fix: journey loads away from `networkidle`, or a larger still-bounded wall-clock.
+
+**Lower-priority / scheduled:**
+4. Skeleton-call caching (needs sign-off on protected `src/test_generator.py`; `LLMCache` is ready).
+5. 6e doc tails: §9 decisions folded into the spec; recommended-models table (6d tail); seed the published benchmark table.
+6. **Golden-key maintenance** (~3–6 months): re-run `scripts/eval/revalidate_goldens.py` (AGENTS.md §12).
+7. Eval-informed backlog still open: AI-058 metric gate, AI-054 §5 export gate, AI-065 citation token watch.
+
+**Dev-tool state for the next session:** zvec-grep daemon (`zg server on`, :7999, wired into .mcp.json) + fresh graphify graph (20,605 nodes) — `zg index` / `graphify update .` before trusting either after new code. LM Studio: reference build `b10618-eb25b7263` = the generation engine (fork `b1-c28d538` costs ~6pp).
 
 ## Post-ship housekeeping (2026-09-05)
 
