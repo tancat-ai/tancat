@@ -21,7 +21,9 @@
           "description": "home page loaded",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
-          "tolerance_selectors": ["expect(page).to_have_url"],
+          "tolerance_selectors": [
+            "expect(page).to_have_url"
+          ],
           "expected_page": "https://automationexercise.com"
         }
       ]
@@ -33,7 +35,10 @@
           "action": "CLICK",
           "description": "Products link",
           "expected_locator": "a[href=\"/products\"]",
-          "tolerance_selectors": ["a.products_link"],
+          "tolerance_selectors": [
+            "a.products_link",
+            "a[href=\"/products\"]"
+          ],
           "expected_page": "https://automationexercise.com"
         },
         {
@@ -41,7 +46,10 @@
           "description": "products page title",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "h2"],
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "h2"
+          ],
           "expected_page": "https://automationexercise.com/products"
         }
       ]
@@ -53,7 +61,9 @@
           "action": "CLICK",
           "description": "Add to cart",
           "expected_locator": ".add-to-cart.btn",
-          "tolerance_selectors": [".add-to-cart.btn[data-product-id=\"1\"]"],
+          "tolerance_selectors": [
+            ".add-to-cart.btn[data-product-id=\"1\"]"
+          ],
           "expected_page": "https://automationexercise.com/products"
         }
       ]
@@ -65,7 +75,11 @@
           "action": "ASSERT",
           "description": "add to cart confirmation",
           "expected_locator": "[data-product-id=\"11\"]",
-          "tolerance_selectors": [".text-center", ".modal-body", "[data-product-id]"],
+          "tolerance_selectors": [
+            ".text-center",
+            ".modal-body",
+            "[data-product-id]"
+          ],
           "expected_page": "https://automationexercise.com/products"
         }
       ]
@@ -77,7 +91,10 @@
           "action": "CLICK",
           "description": "Cart link",
           "expected_locator": "a[href=\"/view_cart\"]",
-          "tolerance_selectors": [".cart"],
+          "tolerance_selectors": [
+            ".cart",
+            "a[href=\"/view_cart\"]"
+          ],
           "expected_page": "https://automationexercise.com/products"
         },
         {
@@ -85,7 +102,10 @@
           "description": "cart page title",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "#cart_item"],
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#cart_item"
+          ],
           "expected_page": "https://automationexercise.com/view_cart"
         }
       ]
@@ -97,7 +117,10 @@
           "action": "ASSERT",
           "description": "product name and price",
           "expected_locator": ".cart_total_price",
-          "tolerance_selectors": ["#cart_item", ".cart_table"],
+          "tolerance_selectors": [
+            "#cart_item",
+            ".cart_table"
+          ],
           "expected_page": "https://automationexercise.com/view_cart"
         }
       ]

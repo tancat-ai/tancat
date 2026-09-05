@@ -219,7 +219,8 @@
           "description": "Products link",
           "expected_locator": "a[href=\"/products\"]",
           "tolerance_selectors": [
-            "a.products_link"
+            "a.products_link",
+            "a[href=\"/products\"]"
           ],
           "generated_locator": "a[href=\"/products\"]",
           "matched": true
@@ -262,7 +263,8 @@
           "description": "Cart link",
           "expected_locator": "a[href=\"/view_cart\"]",
           "tolerance_selectors": [
-            ".cart"
+            ".cart",
+            "a[href=\"/view_cart\"]"
           ],
           "generated_locator": "a[href=\"/view_cart\"]",
           "matched": true
@@ -386,7 +388,8 @@
           "description": "all elements listing",
           "expected_locator": ".heading",
           "tolerance_selectors": [
-            "h3:has-text(\"All Elements\")"
+            "h3:has-text(\"All Elements\")",
+            "h1.heading"
           ],
           "generated_locator": ".heading",
           "matched": true
@@ -440,7 +443,7 @@
           "tolerance_selectors": [
             "h4:has-text(\"Result\")"
           ],
-          "generated_locator": "#result",
+          "generated_locator": "h4:has-text(\"Result:\")",
           "matched": true
         }
       ],
@@ -665,6 +668,357 @@
           "matched": true
         }
       ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-006",
+      "site": "ecommerce_mock",
+      "total_criteria": 8,
+      "criteria_with_skeletons": 8,
+      "resolutions": [
+        {
+          "action": "ASSERT",
+          "description": "home page loaded",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "tolerance_selectors": [
+            "expect(page).to_have_url"
+          ],
+          "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart",
+          "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
+          "tolerance_selectors": [
+            ".add-to-cart.btn",
+            "[data-product-id]"
+          ],
+          "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "add to cart confirmation",
+          "expected_locator": ".text-center",
+          "tolerance_selectors": [
+            ".modal-body",
+            ".modal-title",
+            "#cartModal"
+          ],
+          "generated_locator": "p.text-center",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Cart link",
+          "expected_locator": "a[href=\"/cart.html\"]",
+          "tolerance_selectors": [
+            ".cart"
+          ],
+          "generated_locator": "a[href=\"/cart.html\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#cart_items"
+          ],
+          "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_locator": ".cart_total_price",
+          "tolerance_selectors": [
+            ".cart_price",
+            ".cart_description",
+            "#cart_items"
+          ],
+          "generated_locator": "p.cart_price",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Proceed To Checkout",
+          "expected_locator": "a[href=\"/checkout.html\"]",
+          "tolerance_selectors": [
+            "a.check_out",
+            ".check_out"
+          ],
+          "generated_locator": "a[href=\"/checkout.html\"]",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "checkout page title",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#checkout-form"
+          ],
+          "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "name",
+          "expected_locator": "#name",
+          "tolerance_selectors": [
+            "input[name=\"name\"]"
+          ],
+          "generated_locator": "#name",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_locator": "#email",
+          "tolerance_selectors": [
+            "input[type=\"email\"]"
+          ],
+          "generated_locator": "#email",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "address",
+          "expected_locator": "#address",
+          "tolerance_selectors": [
+            "input[name=\"address\"]"
+          ],
+          "generated_locator": "#address",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "city",
+          "expected_locator": "#city",
+          "tolerance_selectors": [
+            "input[name=\"city\"]"
+          ],
+          "generated_locator": "#city",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "zip code",
+          "expected_locator": "#zip",
+          "tolerance_selectors": [
+            "input[name=\"zip\"]"
+          ],
+          "generated_locator": "#zip",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "card number",
+          "expected_locator": "#card-number",
+          "tolerance_selectors": [
+            "input[name=\"card_number\"]"
+          ],
+          "generated_locator": "#cvv",
+          "matched": false
+        },
+        {
+          "action": "CLICK",
+          "description": "Place Order",
+          "expected_locator": "#place-order",
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "generated_locator": "#place-order",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "order success message",
+          "expected_locator": "#success-title",
+          "tolerance_selectors": [
+            ".text-center",
+            "h1"
+          ],
+          "generated_locator": "#place-order",
+          "matched": false
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-007",
+      "site": "banking_mock",
+      "total_criteria": 8,
+      "criteria_with_skeletons": 8,
+      "resolutions": [
+        {
+          "action": "ASSERT",
+          "description": "bank sign-in page loaded",
+          "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#user-name"
+          ],
+          "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "username",
+          "expected_locator": "#user-name",
+          "tolerance_selectors": [
+            "input[name=\"username\"]"
+          ],
+          "generated_locator": "#user-name",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "password",
+          "expected_locator": "#password",
+          "tolerance_selectors": [
+            "input[name=\"password\"]"
+          ],
+          "generated_locator": "#password",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "sign in button",
+          "expected_locator": "#login-button",
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "generated_locator": "#login-button",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "account balances visible",
+          "expected_locator": ".account_balance",
+          "tolerance_selectors": [
+            ".account-card",
+            "#accounts-list"
+          ],
+          "generated_locator": "p.account_balance",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Money link",
+          "expected_locator": "#transfer-link",
+          "tolerance_selectors": [
+            "a[href=\"/transfer.html\"]",
+            "a[href=\"transfer.html\"]"
+          ],
+          "generated_locator": "#transfer-link",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "amount",
+          "expected_locator": "#amount",
+          "tolerance_selectors": [
+            "input[name=\"amount\"]"
+          ],
+          "generated_locator": "#amount",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Funds button",
+          "expected_locator": "#transfer-submit",
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "generated_locator": "#transfer-submit",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "transfer success message",
+          "expected_locator": "#transfer-success-title",
+          "tolerance_selectors": [
+            "#transfer-success-message",
+            "h1"
+          ],
+          "generated_locator": "#transfer-success-title",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay a Bill link",
+          "expected_locator": "#pay-bill-link",
+          "tolerance_selectors": [
+            "a[href=\"/payments.html\"]",
+            "a[href=\"payments.html\"]"
+          ],
+          "generated_locator": "a[href=\"/payments.html\"]",
+          "matched": true
+        },
+        {
+          "action": "FILL",
+          "description": "payment amount",
+          "expected_locator": "#payment-amount",
+          "tolerance_selectors": [
+            "input[name=\"payment_amount\"]"
+          ],
+          "generated_locator": "#payment-amount",
+          "matched": true
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay Bill button",
+          "expected_locator": "#pay-bill",
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "generated_locator": "#pay-bill",
+          "matched": true
+        },
+        {
+          "action": "ASSERT",
+          "description": "payment success message",
+          "expected_locator": "#payment-success-title",
+          "tolerance_selectors": [
+            "#payment-success-message",
+            "h1"
+          ],
+          "generated_locator": "#payment-success-title",
+          "matched": true
+        }
+      ],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-008",
+      "site": "banking_mock",
+      "total_criteria": 9,
+      "criteria_with_skeletons": 0,
+      "resolutions": [],
+      "tests_executed": 0,
+      "tests_passed": 0,
+      "tests_false_positive": 0,
+      "generation_duration_s": 0.0
+    },
+    {
+      "story_id": "eval-010",
+      "site": "ambiguous_mock",
+      "total_criteria": 4,
+      "criteria_with_skeletons": 0,
+      "resolutions": [],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,

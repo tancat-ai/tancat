@@ -157,9 +157,25 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 - Use `document-manager` skill to generate/update
 - Check `markdown_docs/.sweep_progress.json` for coverage status
 
+### Work tracking — split of responsibility
+
+Two files track active work; each owns a different class of item. **This split is the single source of truth for where an item lives.**
+
+| File | Owns | Examples |
+|------|------|----------|
+| `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` | **Big features / phases** (multi-session, spec-backed, portfolio/GTM) | Phase 1–8, AI-010/011/026/028/029, traceability 16b, AI-042/043/044 |
+| `BACKLOG.md` | **Fixes and smaller changes** (bugs B-xxx, focused improvements, experiments, watch-items) | B-030 family, AI-058/061/062/063/064/065, AI-054 |
+
+**Rules (enforced to stop the muddle):**
+- ✅ **One canonical location per item.** The full item (status, scope, decisions, session log) lives in exactly one of the two files.
+- ✅ The *other* file may reference it, but **only as a one-line pointer** ("see AI-063 in BACKLOG.md") — **never** a second copy of status, checkboxes, or session history.
+- ❌ **NEVER maintain the same item's status in both files** — that is what caused the 2026-09 drift (a spec line claimed Phase 6 "6b–6i shipped" while BACKLOG correctly kept 6c/6d/6e/6h open). Status lives in the owner file; everything else points.
+- ✅ When an item is big enough to earn roadmap treatment, move it to the roadmap and leave a one-line pointer in BACKLOG (and vice-versa for a feature that shrinks to a fix).
+- ✅ **Verify shipped-ness against the code, not the docs** — a "shipped" checkbox with no matching code is a doc bug; check the code before trusting or propagating a status line.
+
 ### Kanban Board
 
-- **`BACKLOG.md` is the single source of truth** for active work (bugs, improvements, features).
+- **`BACKLOG.md` is the source of truth for bug/fix/small-change tracking** (the roadmap owns big features — see the split above).
 - **`kanban.html` is a generated view** — never edit it directly. It's regenerated from `BACKLOG.md`.
 - After updating `BACKLOG.md`, run `python scripts/maintenance/kanban.py` to regenerate.
 - Commit `BACKLOG.md` and `kanban.html` together.
@@ -167,6 +183,7 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 
 ### Backlog & Roadmap Sync
 - ✅ Status updates (`BACKLOG.md`, `ROADMAP_ROADTO_PRODUCTION.md`) happen ONLY during ship-it — never mid-session
+- ✅ Update the item's status in **its owner file only**; keep any pointer in the other file to one line
 - ❌ NEVER mark an item `✅ Complete` before it's committed, pushed, and CI green
 - See ship-it skill §3 for the full housekeeping checklist
 

@@ -118,9 +118,9 @@ async def interactive_session() -> None:
         menu_items: list[str] = []
 
         if not session.raw_requirements:
-            menu_items.extend(["Configure LLM", "Enter User Story"])
+            menu_items.extend(["Configure LLM", "Check LLM", "Enter User Story"])
         else:
-            menu_items.extend(["Re-configure LLM"])
+            menu_items.extend(["Re-configure LLM", "Check LLM"])
             if not session.starting_url:
                 menu_items.append("Enter Target URLs")
             else:
@@ -229,6 +229,8 @@ async def interactive_session() -> None:
         # Route to handler
         if idx == 0 and (menu_items[0] == "Configure LLM" or menu_items[0] == "Re-configure LLM"):
             _configure_llm_inline(session)
+        elif menu_items[idx] == "Check LLM":
+            _check_llm_inline(session)
         elif menu_items[idx] == "Enter User Story":
             _collect_user_story_inline(session)
         elif menu_items[idx] in ("Enter Target URLs", "Re-enter Target URLs"):
@@ -333,6 +335,35 @@ def _configure_llm_inline(session: Session) -> None:
         _configure_llm_inline_inner(session)
     finally:
         pop_menu()
+
+
+def _check_llm_inline(session: Session) -> None:
+    """Phase 6d — BYO-LLM health check (CLI). Runs the same probe as the UI.
+
+    Uses the session's configured provider/base_url/model (what the user will
+    actually generate with) and prints a ✓/✗ report + actionable errors.
+    """
+    if not session.provider:
+        print(yellow("  No LLM provider configured yet — choose 'Configure LLM' first."))
+        print("  Press Enter to continue...")
+        input()
+        return
+
+    from src.llm_health import build_client, check_llm, render_report
+
+    print("  Checking LLM endpoint…\n")
+    client = build_client(
+        session.provider, base_url=session.provider_base_url or None, model=session.model_name or None
+    )
+    result = check_llm(client, requested_model=session.model_name or None)
+    print(render_report(result))
+    print()
+    if result.ok:
+        print(green("  ✓ LLM is ready — proceed to enter a user story."))
+    else:
+        print(yellow("  Fix the issues above, then run 'Check LLM' again."))
+    print("  Press Enter to continue...")
+    input()
 
 
 def _configure_llm_inline_inner(session: Session) -> None:

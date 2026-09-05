@@ -218,3 +218,53 @@ class SidebarConfig:
                 except Exception as exc:
                     st.sidebar.error(f"Prune failed: {exc}")
                 st.session_state[prune_key] = False
+
+    @staticmethod
+    def render_license_usage() -> None:
+        """Phase 6e — license status banner + Usage panel (sidebar).
+
+        Purely local: reads the offline license state and the local usage
+        meter. Never blocks the OSS core — it informs (and nudges).
+        """
+        try:
+            from src.licensing.license import license_status
+            from src.usage_meter import UsageMeter
+
+            status = license_status()
+            meter = UsageMeter()
+            summary = meter.summary()
+        except Exception:  # pragma: no cover - defensive
+            return
+
+        st.sidebar.divider()
+        st.sidebar.subheader("License & Usage")
+
+        if status.status in ("valid",):
+            st.sidebar.success(status.headline)
+        elif status.status in ("expired_grace",):
+            st.sidebar.warning(status.headline)
+        elif status.status in ("expired_blocked", "invalid"):
+            st.sidebar.error(status.headline)
+        else:
+            st.sidebar.info(status.headline)
+
+        runs = summary.runs_used
+        runs_limit = summary.runs_limit
+        exports = summary.exports_used
+        exports_limit = summary.exports_limit
+
+        def _line(label: str, used: int, limit: int | None) -> str:
+            if limit is None:
+                return f"{label}: {used} (unlimited)"
+            return f"{label}: {used}/{limit} this month"
+
+        st.sidebar.caption(_line("Runs", runs, runs_limit))
+        st.sidebar.caption(_line("Evidence exports", exports, exports_limit))
+        if summary.storage_bytes:
+            mb = summary.storage_bytes / (1024 * 1024)
+            st.sidebar.caption(f"Storage: {mb:.1f} MB")
+        if summary.enforcement_on and (summary.runs_remaining == 0 or summary.exports_remaining == 0):
+            st.sidebar.warning(
+                "Free-tier limit reached. Upgrade for unlimited runs/exports, or set "
+                "AITEST_ENFORCE_FREE_TIER=0 to disable the cap (self-hosted)."
+            )

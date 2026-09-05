@@ -98,7 +98,29 @@ class SemanticCandidateRanker:
         *,
         timeout: float = DEFAULT_RESOLUTION_TIMEOUT,
         enable_thinking: bool | None = False,
+        cache: Any | None = None,
     ) -> None:
+        # Phase 6h — LLM-call cache for the expensive resolution calls (spec
+        # §5.10). A subtle sentinel: ``cache=None`` means "use the env default"
+        # (AITEST_LLM_CACHE, on by default); pass ``cache=LLMCache(enabled=False)``
+        # or set AITEST_LLM_CACHE=0 to disable. Wrapping the generator here
+        # (instead of editing the two call sites) keeps the cache transparent:
+        # a hit returns byte-identical text (temp 0) and the timeout/error
+        # handling below is untouched.
+        if cache is None:
+            from src.llm_cache import LLMCache
+
+            self._cache = LLMCache()
+        else:
+            self._cache = cache
+        if generator is not None and self._cache.enabled:
+            from src.llm_cache import CachingGenerator
+
+            # Only wrap a **real** client (LLMClient exposes ``.model``) — test
+            # fakes / stubs without model identity stay unwrapped so recording
+            # and timeout tests observe the generator directly.
+            if hasattr(generator, "model") and not isinstance(generator, CachingGenerator):
+                generator = CachingGenerator(generator, self._cache)
         self.generator = generator
         self.timeout = timeout
         # Explicit pipeline decision (2026-08-18): resolution is a structured

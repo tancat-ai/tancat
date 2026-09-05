@@ -20,6 +20,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 from xml.etree.ElementTree import Element, SubElement, tostring
@@ -119,6 +120,7 @@ def export_csv(
     csv_text = buf.getvalue()
     if output is not None:
         Path(output).write_text(csv_text, encoding="utf-8-sig")
+        _meter_record("csv", output)
         return str(output)
 
     return csv_text
@@ -183,6 +185,7 @@ def export_ndjson(
 
     if output is not None:
         Path(output).write_text(ndjson_text, encoding="utf-8")
+        _meter_record("ndjson", output)
         return str(output)
 
     return ndjson_text
@@ -295,6 +298,7 @@ def export_junit_xml(
 
     if output is not None:
         Path(output).write_text(xml_text, encoding="utf-8")
+        _meter_record("junit", output)
         return str(output)
 
     return xml_text
@@ -355,3 +359,18 @@ def _first_step_error(sidecar: dict | None) -> str:
         if failure_note:
             return str(failure_note)
     return ""
+
+
+def _meter_record(format_name: str, output: str | Path) -> None:
+    """Best-effort record of one evidence export in the usage ledger.
+
+    Phase 6e — metering must never break an export: any failure here is
+    swallowed (a log line at most). The ledger lives inside the storage
+    evidence dir; reads/writes are local, no network.
+    """
+    try:
+        from src.usage_meter import UsageMeter
+
+        UsageMeter().record_export(format_name, str(output))
+    except Exception as exc:  # pragma: no cover - defensive
+        logging.getLogger(__name__).warning("Usage meter could not record export: %s", exc)
