@@ -831,6 +831,12 @@ class EvalRunner:
             try:
                 start = datetime.now(UTC).timestamp()
 
+                # Mock-site stories need :8781 served (same contract as the
+                # linear path — see ``_regenerate_code``). Without this the graph
+                # regeneration scrapes a dead port and mock datasets score ~0x,
+                # polluting the graph-vs-linear comparison.
+                self._ensure_mock_serves(self._story_mock_dirs.get(story_id))
+
                 # Fresh orchestrator per story
                 client = LLMClient()
                 generator = TestGenerator(client=client)

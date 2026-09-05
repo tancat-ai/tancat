@@ -20,7 +20,10 @@
           "description": "store home page loaded",
           "expected_type": "url_assertion",
           "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
-          "tolerance_selectors": ["expect(page).to_have_url", "#order-form"],
+          "tolerance_selectors": [
+            "expect(page).to_have_url",
+            "#order-form"
+          ],
           "expected_page": "http://localhost:8781/index.html"
         }
       ]
@@ -32,7 +35,9 @@
           "action": "FILL",
           "description": "quantity",
           "expected_locator": "#quantity",
-          "tolerance_selectors": ["input[name=\"quantity\"]"],
+          "tolerance_selectors": [
+            "input[name=\"quantity\"]"
+          ],
           "expected_page": "http://localhost:8781/index.html"
         }
       ]
@@ -44,8 +49,10 @@
           "action": "CLICK",
           "description": "Place Order button",
           "expected_locator": "#place-order",
-          "tolerance_selectors": ["button[type=\"submit\"]"],
-          "expected_page": "http://localhost:8781/success.html"
+          "tolerance_selectors": [
+            "button[type=\"submit\"]"
+          ],
+          "expected_page": "http://localhost:8781/index.html"
         }
       ]
     },
@@ -56,7 +63,10 @@
           "action": "ASSERT",
           "description": "order success message",
           "expected_locator": "#order-success-title",
-          "tolerance_selectors": ["#order-success-message", "h1"],
+          "tolerance_selectors": [
+            "#order-success-message",
+            "h1"
+          ],
           "expected_page": "http://localhost:8781/success.html"
         }
       ]

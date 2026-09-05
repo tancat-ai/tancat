@@ -1,0 +1,449 @@
+{
+  "ran_at": "2026-09-04T14:16:21.161298+00:00",
+  "datasets": [
+    {
+      "dataset_id": "eval-001",
+      "site": "saucedemo",
+      "base_url": "https://www.saucedemo.com",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:00.845410+00:00",
+      "goldens_checked": 6,
+      "goldens_matched": 6,
+      "stateful_skipped": 14,
+      "pages_checked": [
+        "https://www.saucedemo.com"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "ASSERT",
+          "description": "product list",
+          "expected_page": "https://www.saucedemo.com/inventory.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Add to cart (Backpack)",
+          "expected_page": "https://www.saucedemo.com/inventory.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "cart badge updated",
+          "expected_page": "https://www.saucedemo.com/inventory.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Cart icon",
+          "expected_page": "https://www.saucedemo.com/inventory.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "Cart Summary",
+          "expected_page": "https://www.saucedemo.com/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "backpack item in cart",
+          "expected_page": "https://www.saucedemo.com/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Checkout",
+          "expected_page": "https://www.saucedemo.com/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "Checkout Info form",
+          "expected_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "First Name",
+          "expected_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "Last Name",
+          "expected_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "Zip/Postal Code",
+          "expected_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Continue",
+          "expected_page": "https://www.saucedemo.com/checkout-step-one.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Finish",
+          "expected_page": "https://www.saucedemo.com/checkout-step-two.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "Thank You page",
+          "expected_page": "https://www.saucedemo.com/checkout-complete.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-002",
+      "site": "automationexercise",
+      "base_url": "https://automationexercise.com",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:06.261656+00:00",
+      "goldens_checked": 6,
+      "goldens_matched": 6,
+      "stateful_skipped": 2,
+      "pages_checked": [
+        "https://automationexercise.com",
+        "https://automationexercise.com/products"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_page": "https://automationexercise.com/view_cart",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_page": "https://automationexercise.com/view_cart",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-003",
+      "site": "demoqa",
+      "base_url": "https://demoqa.com/automation-practice-form",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:09.523232+00:00",
+      "goldens_checked": 7,
+      "goldens_matched": 7,
+      "stateful_skipped": 1,
+      "pages_checked": [
+        "https://demoqa.com/automation-practice-form"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "ASSERT",
+          "description": "submission success message",
+          "expected_page": "https://demoqa.com/automation-practice-form",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-004",
+      "site": "theinternet",
+      "base_url": "https://the-internet.herokuapp.com",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:12.857885+00:00",
+      "goldens_checked": 7,
+      "goldens_matched": 7,
+      "stateful_skipped": 0,
+      "pages_checked": [
+        "https://the-internet.herokuapp.com",
+        "https://the-internet.herokuapp.com/javascript_alerts"
+      ],
+      "missing": [],
+      "stateful": []
+    },
+    {
+      "dataset_id": "eval-005",
+      "site": "lv_insurance",
+      "base_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+      "kind": "static-only",
+      "status": "static-only",
+      "checked_at": "2026-09-04T14:16:12.927633+00:00",
+      "goldens_checked": 24,
+      "goldens_matched": null,
+      "pages_checked": [],
+      "missing": [],
+      "note": "No local mock or public site \u2014 validated via frozen captures (see eval harness)."
+    },
+    {
+      "dataset_id": "eval-006",
+      "site": "ecommerce_mock",
+      "base_url": "http://localhost:8791",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:14.433827+00:00",
+      "goldens_checked": 4,
+      "goldens_matched": 4,
+      "stateful_skipped": 12,
+      "pages_checked": [
+        "http://localhost:8791/index.html"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "ASSERT",
+          "description": "cart page title",
+          "expected_page": "http://localhost:8791/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "product name and price",
+          "expected_page": "http://localhost:8791/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Proceed To Checkout",
+          "expected_page": "http://localhost:8791/cart.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "checkout page title",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "name",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "email address",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "address",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "city",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "zip code",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "card number",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Place Order",
+          "expected_page": "http://localhost:8791/checkout.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "order success message",
+          "expected_page": "http://localhost:8791/checkout_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-007",
+      "site": "banking_mock",
+      "base_url": "http://localhost:8791",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:16.261527+00:00",
+      "goldens_checked": 3,
+      "goldens_matched": 3,
+      "stateful_skipped": 10,
+      "pages_checked": [
+        "http://localhost:8791/index.html"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "CLICK",
+          "description": "sign in button",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "account balances visible",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Money link",
+          "expected_page": "http://localhost:8791/transfer.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "amount",
+          "expected_page": "http://localhost:8791/transfer.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Funds button",
+          "expected_page": "http://localhost:8791/transfer_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "transfer success message",
+          "expected_page": "http://localhost:8791/transfer_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay a Bill link",
+          "expected_page": "http://localhost:8791/payments.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "payment amount",
+          "expected_page": "http://localhost:8791/payments.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay Bill button",
+          "expected_page": "http://localhost:8791/payment_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "payment success message",
+          "expected_page": "http://localhost:8791/payment_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-008",
+      "site": "banking_mock",
+      "base_url": "http://localhost:8791",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:18.491807+00:00",
+      "goldens_checked": 3,
+      "goldens_matched": 3,
+      "stateful_skipped": 10,
+      "pages_checked": [
+        "http://localhost:8791/index.html"
+      ],
+      "missing": [],
+      "stateful": [
+        {
+          "action": "CLICK",
+          "description": "sign in button",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "accounts dashboard loaded",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "GOTO",
+          "description": "go to the transfer page",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "amount",
+          "expected_page": "http://localhost:8791/transfer.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Transfer Funds button",
+          "expected_page": "http://localhost:8791/transfer_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "transfer success message",
+          "expected_page": "http://localhost:8791/transfer_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "GOTO",
+          "description": "navigate to bill payments",
+          "expected_page": "http://localhost:8791/dashboard.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "FILL",
+          "description": "payment amount",
+          "expected_page": "http://localhost:8791/payments.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "CLICK",
+          "description": "Pay Bill button",
+          "expected_page": "http://localhost:8791/payment_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        },
+        {
+          "action": "ASSERT",
+          "description": "payment success message",
+          "expected_page": "http://localhost:8791/payment_success.html",
+          "reason": "stateful page / post-submit element \u2014 validated via the harness execution path"
+        }
+      ]
+    },
+    {
+      "dataset_id": "eval-010",
+      "site": "ambiguous_mock",
+      "base_url": "http://localhost:8791",
+      "kind": "live",
+      "status": "ok",
+      "checked_at": "2026-09-04T14:16:20.834428+00:00",
+      "goldens_checked": 4,
+      "goldens_matched": 4,
+      "stateful_skipped": 0,
+      "pages_checked": [
+        "http://localhost:8791/index.html",
+        "http://localhost:8791/success.html"
+      ],
+      "missing": [],
+      "stateful": []
+    }
+  ]
+}

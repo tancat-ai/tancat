@@ -108,6 +108,37 @@ def _count_skips(code: str) -> int:
     return sum(1 for line in code.splitlines() if "pytest.skip(" in line)
 
 
+def _license_usage_section() -> dict[str, Any]:
+    """License + usage visibility for ``--json`` (Phase 6e).
+
+    Offline and best-effort: a failure to read the meter never fails the
+    generate (the meter already degrades to zeros internally).
+    """
+    try:
+        from src.usage_meter import UsageMeter
+
+        meter = UsageMeter()
+        return {
+            "license": {
+                "status": meter.summary().license_status,
+                "tier": meter.summary().tier,
+                "token_present": _license_token_present(),
+            },
+            "usage": meter.summary().to_dict(),
+        }
+    except Exception as exc:  # pragma: no cover - defensive
+        return {"license": {"status": "unknown", "tier": "free", "error": str(exc)}, "usage": {}}
+
+
+def _license_token_present() -> bool:
+    try:
+        from src.licensing.license import load_license
+
+        return bool(load_license())
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 async def _run_pipeline_async(
     *,
     story: str,
@@ -225,6 +256,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     base_url = args.llm_base_url or get_provider_defaults(provider)[0]
     model_name = args.model or get_provider_defaults(provider)[1]
 
+    # --- license validation (Phase 6e, spec §5.4) ---------------------------
+    # Report-only by default (open-core adoption on-ramp — §9 Q1). Paid
+    # deployments set AITEST_ENFORCE_LICENSING=1 for a hard gate: generation is
+    # refused only when a license token is present but unusable (expired beyond
+    # grace / invalid signature) — the free tier always remains legitimate.
+    license_section = _license_usage_section()
+    if os.environ.get("AITEST_ENFORCE_LICENSING", "0") == "1":
+        lstat = license_section.get("license", {})
+        if lstat.get("status") in ("expired_blocked", "invalid") and lstat.get("token_present"):
+            print(
+                f"ERROR: license '{lstat.get('status')}' — set a valid AITEST_LICENSE_KEY "
+                "(or AITEST_LICENSE_FILE) or clear AITEST_ENFORCE_LICENSING.",
+                file=sys.stderr,
+            )
+            return EXIT_CONFIG_ERROR
+
     # --- workspace isolation (AI-029) --------------------------------------
     init_storage(root=Path(args.storage_root) if args.storage_root else None, workspace=args.workspace)
 
@@ -297,6 +344,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "provider": provider,
         "model": model_name,
         "duration_s": duration_s,
+        **license_section,
     }
 
     if args.json:

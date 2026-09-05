@@ -274,3 +274,23 @@ def test_ensure_mock_serves_swaps_per_directory(monkeypatch: pytest.MonkeyPatch)
         runner._ensure_mock_serves("/mock/b")  # noqa: SLF001
         assert _FakeMockServer.started == ["/mock/a", "/mock/b"]
         assert _FakeMockServer.stopped == 1
+
+
+def test_graph_regeneration_mock_parity_source_guard() -> None:
+    """Parity fix (2026-09-05): the graph regeneration path must ensure the
+    mock server per story exactly like the linear path — otherwise mock
+    datasets scrape a dead :8781 and the graph-vs-linear eval comparison is
+    polluted (likely component of the historical graph-32.8% gap, AI-054).
+
+    Static contract: both _regenerate_code AND _regenerate_code_via_graph
+    must call the same mock-ensure. A future refactor that drops the call
+    from either path fails this test at collection time."""
+    from pathlib import Path
+
+    src = Path("scripts/eval/eval_runner.py").read_text(encoding="utf-8")
+    contracts = [
+        src.split("def _regenerate_code(", 1)[1].split("\n    def ", 1)[0],
+        src.split("def _regenerate_code_via_graph(", 1)[1].split("\n    def ", 1)[0],
+    ]
+    for body in contracts:
+        assert "self._ensure_mock_serves(self._story_mock_dirs.get(story_id))" in body

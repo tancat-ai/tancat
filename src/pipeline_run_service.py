@@ -65,6 +65,17 @@ class PipelineRunService:
         persist: bool = False,
     ) -> PipelineExecutionResult:
         """Run a saved generated test file and return parsed results."""
+        # Phase 6e — free-tier run gate: a free deployment is capped at
+        # AITEST_FREE_TIER_RUNS runs per 30 days; paid tiers are unlimited.
+        try:
+            from src.usage_meter import FreeTierLimitError, UsageMeter
+
+            UsageMeter().assert_run_allowed()
+        except FreeTierLimitError as exc:
+            raise FreeTierLimitError(
+                f"{exc}\nSet AITEST_ENFORCE_FREE_TIER=0 to disable the free-tier cap "
+                "(self-hosted deployments), or install a paid license to lift it."
+            ) from exc
         failed_nodeids = get_failed_nodeids(previous_run.results) if rerun_failed_only and previous_run else []
         pytest_command = build_pytest_run_command(saved_path, failed_nodeids=failed_nodeids or None)
         command = [sys.executable, "-m", *pytest_command]

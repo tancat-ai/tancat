@@ -205,6 +205,30 @@ _stored_model = str(load_setting(SETTING_MODEL_NAME, "") or "")
 if model_name != _stored_model:
     save_setting(SETTING_MODEL_NAME, model_name)
 
+# Phase 6d — BYO-LLM health check: first-run "check my LLM" probe. Reuses the
+# same LLMClient construction path as generation so "what the user configured"
+# is exactly "what the probe checks". Runs on click; the report is cached in
+# session state so the result survives the Streamlit rerun that follows a click.
+if st.sidebar.button("🩺 Check My LLM", use_container_width=True, key="check_my_llm_btn"):
+    from src.llm_health import build_client, check_llm, render_report
+
+    with st.sidebar.spinner("Checking LLM endpoint…"):
+        _hc_client = build_client(provider, base_url=provider_base_url, model=model_name)
+        _hc_result = check_llm(_hc_client, requested_model=model_name)
+    st.session_state["llm_health_report"] = render_report(_hc_result)
+    st.session_state["llm_health_ok"] = _hc_result.ok
+
+if st.session_state.get("llm_health_report") is not None:
+    _hc_report = st.session_state["llm_health_report"]
+    if st.session_state.get("llm_health_ok"):
+        st.sidebar.success("LLM connected.")
+    else:
+        st.sidebar.error("LLM check failed — see details.")
+    st.sidebar.code(_hc_report, language=None)
+
+# Phase 6e — license status banner + local Usage panel (offline).
+SidebarConfig.render_license_usage()
+
 # B-036 Phase 4: persisted Settings panel (OCR backend, workspace, RAG
 # learned-pattern stats). Re-initialises storage immediately when the
 # workspace setting changed, so evidence/tests land in the right place.

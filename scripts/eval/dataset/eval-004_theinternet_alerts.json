@@ -19,7 +19,10 @@
           "action": "ASSERT",
           "description": "all elements listing",
           "expected_locator": ".heading",
-          "tolerance_selectors": ["h3:has-text(\"All Elements\")"],
+          "tolerance_selectors": [
+            "h3:has-text(\"All Elements\")",
+            "h1.heading"
+          ],
           "expected_page": "https://the-internet.herokuapp.com"
         }
       ]
@@ -38,7 +41,9 @@
           "action": "ASSERT",
           "description": "alert demonstration header",
           "expected_locator": "h3:has-text(\"JavaScript Alerts\")",
-          "tolerance_selectors": ["h3"],
+          "tolerance_selectors": [
+            "h3"
+          ],
           "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
         }
       ]
@@ -81,7 +86,9 @@
           "action": "ASSERT",
           "description": "result message text",
           "expected_locator": "#result",
-          "tolerance_selectors": ["h4:has-text(\"Result\")"],
+          "tolerance_selectors": [
+            "h4:has-text(\"Result\")"
+          ],
           "expected_page": "https://the-internet.herokuapp.com/javascript_alerts"
         }
       ]

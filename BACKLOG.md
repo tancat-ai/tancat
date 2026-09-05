@@ -1,7 +1,21 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-08-29 (AI-064 opened — container-element haystack dominance, the #1 AI-058-gate blocker; AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
+Last updated: 2026-09-05 (SHIPPED — Phase 6 Part 1 6a–6i code-complete: 6c/6d/6e/6h/6i built + gated in this session; roadmap Phase 6 owns the full status. Full-eval investigation closed: RAG-store wipe root-caused and repaired (see B-048), eval-harness graph mock-parity fixed, controlled fork-vs-mainline + graph-vs-linear comparisons recorded in eval_runs; B-048 opened — RAG store seeding gap: AI-059 lab rebuild wiped the production store 2026-08-31 while the seed marker survived → all evals since measured with golden RAG bonus = 0, explaining the 48.7%→42.5% drop; store re-seeded manually `rag_ingest.py --bundled --force`; 6c/6d/6e/6h/6i code-built + gated, handoff `docs/sessions/2026-09-04_phase6_6c_6d_6e_6h_6i_handoff.md`; AI-064 opened — container-element haystack dominance, the #1 AI-058-gate blocker; AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
+
+---
+
+## 🆕 B-048 — RAG store seeding gap: AI-059 lab rebuild wipes patterns, stale marker blocks re-seed
+
+**Status:** 🟡 ready-for-agent — opened 2026-09-05 from the full-eval investigation (root cause of the 48.7% → 42.5% regeneration-accuracy drop). **Manual repair APPLIED 2026-09-05** (store re-seeded: 113 golden + docs, marker refreshed); **the code guard is NOT built yet** — that is this item's work.
+**Priority:** High — data-integrity / measurement-silence class. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn't use RAG.
+**One-line:** `src/learning_impact.py:115` `shutil.rmtree(target)` (the AI-059 lab warm-store rebuild) wiped the PRODUCTION RAG store on 2026-08-31, but the idempotent seed marker (`evidence/.rag_bundled_seeded.json`, `seeded_at 2026-08-20`) survived → `ensure_bundled_seeded()` skips re-seeding forever → golden/learned patterns absent until a manual `rag_ingest.py --bundled --force`.
+**Fix (two one-line candidates — do either or both, then verify with the eval):**
+- [ ] (a) **Sentinel-scope the lab wipe:** `rebuild_warm_store_from_evidence` must operate on the lab-store path (`AI059_LAB_SITE_HASH` companion), never the production `get_storage().rag_path()`, or refuse when the target is the production store unless an explicit override is passed.
+- [ ] (b) **Marker truth:** `ensure_bundled_seeded()` re-seeds when the store is pattern-less (golden count == 0) even if the marker exists, then refreshes the marker — the marker should mean "seeded AND store non-empty", not "seeded once ever".
+**Found (2026-09-05):** full-eval repeat runs 48.7% and 42.5% (per-dataset numbers deterministic across runs ⇒ systematic, not LLM variance); store query showed `{doc: 66}` — zero golden/learned; store dir mtime 2026-08-31 14:43 vs marker 2026-08-20. **Repaired:** `rag_ingest.py --bundled --force` → `{golden: 113, doc: 101}` verified, marker refreshed. **Controlled-verification done:** mainline build + restored store = **54.9%** (the reference band) — hypothesis confirmed; fork build + restored store = 48.7% (−6.2pp build cost, separate finding).
+**Verification for the fix:** after a lab rebuild, store pattern counts remain ≥ 113 golden; a fresh full eval (`--mode full --regenerate`, settings per the session handoff) shows resolution accuracy recovering toward the 53–54% band.
+**Session record:** `docs/sessions/2026-09-04_phase6_6c_6d_6e_6h_6i_handoff.md` (root-cause finding section).
 
 ---
 
@@ -365,7 +379,7 @@ We don't need dedicated flakiness runs constantly. **Test trigger:** measure fla
 
 ## 🆕 AI-045 — Commercial-readiness gaps for Phase 6 (from competitive research + code audit)
 
-**Status:** 🟡 ready-for-agent — priority list folded into the Phase 6 spec as the 6a–6i build order (`docs/specs/FEATURE_SPEC_phase6_saas.md`, WRITTEN 2026-08-17 — Draft, §9 open questions to grill before 6a/6e build)
+**Status:** 🟡 ready-for-agent — priority list folded into the Phase 6 spec as the 6a–6i build order (`docs/specs/FEATURE_SPEC_phase6_saas.md`, WRITTEN 2026-08-17 — Draft, §9 open questions to grill before 6a/6e build). **Phase 6 status → ROADMAP §13: Part 1 (6a–6i) code-complete 2026-09-05** (one-line pointer per AGENTS.md §10; full status lives in the roadmap item + evaluator records).
 **Priority:** High — commercial viability blockers, not nice-to-haves
 **Cross-ref:** `docs/plans/RESEARCH_SAAS_AND_LAUNCH.md` §8 (full audit with per-item severity); `docs/plans/RESEARCH_COMPETITIVE_LANDSCAPE.md` (why air-gap/no-egress is the wedge)
 **Source:** code audit 2026-08-17 (read `rag_store.py`, `pdf_ingest.py`, `rag_bundled.py`, `llm_client.py`, `prompt_safety.py`, `secure_config.py`, `verify_production.py`, eval baseline)

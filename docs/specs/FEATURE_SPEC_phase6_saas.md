@@ -265,7 +265,7 @@ Nothing sends telemetry, update checks, or PyPI/uv calls at runtime (verified by
 ## 10. Definition of Done
 
 - **6a** shipped: `src/url_guard.py` + wiring at every navigation entry point (UI, CLI, CI driver, generated-package path), redirect hook, `scripts/audit_egress.py` + CI gate, `docs/security/egress-audit.md` published; unit + integration + regression tests green; `verify_production.py` green.
-- **6b–6i** shipped per §6 table, each with its gate; free-tier wording updated in `ROADMAP_ROADTO_PRODUCTION.md` §13 ("3 generations" → runs/credits) and `BACKLOG.md` AI-045 closed item-by-item.
+- **6b–6i** each shipped with its §6 gate (this is the *definition of done*, not a status record — as of **2026-09-05 all of 6a–6i are code-verified**: 6a/6b/6f/6g shipped 2026-08-17+ and 6c/6d/6e/6h/6i built + gated this session; the remaining Part-1 gap is per-deployment user auth, spec §9 Q7 — an identity decision, deliberately outside 6a–6i). **Canonical status lives in `BACKLOG.md` AI-045 + the roadmap Phase 6 item — this spec does not track shipped-ness.** Free-tier wording updated in `ROADMAP_ROADTO_PRODUCTION.md` §13 ("3 generations" → runs/credits).
 - License machinery: vendor-side `scripts/license_gen.py` + runtime validation, fully offline, with an end-to-end license test.
 - No new outbound-HTTP call sites introduced by Part 1 (audit gate enforces).
 - Open questions §9 grilled and resolved (folded into the spec body or recorded as decisions).

@@ -493,9 +493,16 @@ class MilvusLiteBackend:
     # -- operations ----------------------------------------------------------
 
     def upsert(self, entries: list[KnowledgeEntry]) -> int:
-        """Insert or update entries. Returns number inserted."""
+        """Insert or update entries. Returns number inserted.
+
+        Phase 6c: serialised behind the cross-process RAG write lock —
+        Milvus Lite is single-writer and concurrent ``MilvusClient``
+        processes corrupt the store on ``manifest.json.tmp``.
+        """
         if not entries:
             return 0
+        from src.rag_store_lock import store_lock
+
         data = [
             {
                 "vector": e.vector,
@@ -504,11 +511,12 @@ class MilvusLiteBackend:
             }
             for e in entries
         ]
-        result = self._c.insert(_COLLECTION_NAME, data)
-        # Note: explicit flush() is omitted — it triggers a known
-        # milvus-lite race condition on Windows (manifest.json.tmp
-        # already exists).  Search triggers auto-flush.
-        return result["insert_count"]
+        with store_lock(self._db_path):
+            result = self._c.insert(_COLLECTION_NAME, data)
+            # Note: explicit flush() is omitted — it triggers a known
+            # milvus-lite race condition on Windows (manifest.json.tmp
+            # already exists).  Search triggers auto-flush.
+            return result["insert_count"]
 
     def search(self, query_vector: list[float], k: int) -> list[SearchHit]:
         """Search for the k nearest neighbours."""
@@ -586,7 +594,10 @@ class MilvusLiteBackend:
         ids = [row["id"] for row in rows if str(row.get("entry_type", "")) not in ("golden", "doc")]
         if not ids:
             return 0
-        result = self._c.delete(_COLLECTION_NAME, ids=ids)
+        from src.rag_store_lock import store_lock
+
+        with store_lock(self._db_path):
+            result = self._c.delete(_COLLECTION_NAME, ids=ids)
         if isinstance(result, dict):
             return int(result.get("delete_count", len(ids)))
         # Backward-compat: older Milvus returns the deleted primary keys.
@@ -653,7 +664,10 @@ class MilvusLiteBackend:
         current = int(row.get("hit_count", 0))
         new_hit = current + 1
         data = {**row, "hit_count": new_hit, "last_seen": time.time()}
-        self._c.upsert(_COLLECTION_NAME, [data])
+        from src.rag_store_lock import store_lock
+
+        with store_lock(self._db_path):
+            self._c.upsert(_COLLECTION_NAME, [data])
         return new_hit
 
     def clear(self) -> None:
