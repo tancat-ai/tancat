@@ -1,6 +1,6 @@
 {
-  "total": 156,
-  "completed": 144,
+  "total": 163,
+  "completed": 151,
   "pending": 12,
   "files": [
     {
@@ -782,7 +782,42 @@
       "source": "src/citation_surfaces.py",
       "doc": "markdown_docs/src/citation_surfaces.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/llm_health.py",
+      "doc": "markdown_docs/src/llm_health.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/llm_cache.py",
+      "doc": "markdown_docs/src/llm_cache.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/rag_store_lock.py",
+      "doc": "markdown_docs/src/rag_store_lock.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/usage_meter.py",
+      "doc": "markdown_docs/src/usage_meter.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/licensing/__init__.py",
+      "doc": "markdown_docs/src/licensing/__init__.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/licensing/license.py",
+      "doc": "markdown_docs/src/licensing/license.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/licensing/tiers.py",
+      "doc": "markdown_docs/src/licensing/tiers.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-08-24T01:52:44.971182+00:00"
+  "last_updated": "2026-09-05T18:54:20.714067+00:00"
 }

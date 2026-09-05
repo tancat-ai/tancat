@@ -88,6 +88,17 @@ Test packages produced by the tool. Each package contains:
 
 ## Documentation Coverage
 
+## Phase 6 — Commercialisation (Part 1)
+
+| Module | Role |
+|--------|------|
+| `src/licensing/license.py` | Offline ed25519 license sign/verify, 7-day grace, vendored public key, `feature_enabled` |
+| `src/licensing/tiers.py` | Data-driven free/self-serve/pro/airgap tier table (claims + limits, env-overridable) |
+| `src/usage_meter.py` | 30-day runs/exports meter on run_results.sqlite + ledger; free-tier cap + upgrade prompt |
+| `src/llm_health.py` | BYO-LLM first-run health probe (reachability → key → model → capability) |
+| `src/llm_cache.py` | Disk TTL cache for expensive deterministic LLM calls (resolution ranking) |
+| `src/rag_store_lock.py` | Cross-process advisory write lock for the single-writer Milvus RAG store |
+
 | Directory | Files | Status |
 |-----------|-------|--------|
 | `src/` (root) | 61 | ✅ Complete |
@@ -97,7 +108,7 @@ Test packages produced by the tool. Each package contains:
 | `src/llm_providers/` | 1 | ✅ Complete |
 | `scripts/` (eval + verify_production + archived debug) | 10 | ✅ Complete |
 | `cli/` | 4 | ✅ Complete |
-| **Total** | **135** | **✅ Complete** |
+| **Total** | **142** | **✅ Complete** |
 
 > Updated 2026-08-03 (document-manager sweep): 12 `src/` docs refreshed for the
 > saucedemo checkout cluster fixes (soft-404, stateful routing, dead-page/
@@ -113,3 +124,5 @@ See `markdown_docs/.sweep_progress.json` for per-file completion status.
 
 *Generated: 2026-07-08*  
 *Updated: 2026-07-23 — Phase 1c LangGraph agents (state, planner, generator, validator, graph)*
+
+*Updated: 2026-09-05 — Phase 6 Part 1 docs added: licensing (license/tiers/__init__), usage_meter, llm_health, llm_cache, rag_store_lock (document-manager sweep per AGENTS.md §10).*
