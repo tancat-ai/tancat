@@ -277,6 +277,24 @@ python scripts/eval/eval_harness.py dataset --validate         # Validate golden
 
 ---
 
+## 12b. Knowledge Graph (graphify) — when to use
+
+`graphify-out/graph.json` is a gitignored, LLM-extracted **view** of the repo — orientation, never truth. It is a generated artifact, not a source of truth (same discipline as §10 "verify shipped-ness against the code").
+
+**Reach for it when the question is graph-shaped:**
+- "what is X connected to / what depends on X" — impact before editing a shared module (`graphify_query` BFS, or `affected`)
+- "explain the <area>" — orientation before deep code reading (`graphify_explain` / `graphify_path`)
+- architecture-path questions ("how does A reach B?") — `graphify_path` DFS
+
+**Never trust it for precision:** line-level bugs, exact wiring, or any answer where a stale extraction would mislead — verify against code before acting. This session's bug hunts (skeleton story-bleed, mock-ensure parity, launcher kill path) all needed direct code reading; graphify pointed at neighborhoods, not lines.
+
+**Maintenance:**
+- `graphify update .` after any session that adds/removes `src/` modules, then regenerate `graphify-out/callflow.html` (uncommitted — gitignored)
+- `graphify update` is code-only (no LLM needed); semantic extraction/build needs an LLM key (`DEEPSEEK_API_KEY` or `GEMINI_API_KEY`)
+- `graphify-out/` is gitignored — never commit it
+
+---
+
 ## 13. Known Issues — Placeholder Resolution
 
 | Symptom | Status |
