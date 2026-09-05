@@ -295,6 +295,20 @@ python scripts/eval/eval_harness.py dataset --validate         # Validate golden
 
 ---
 
+## 12c. zvec-grep (zg) — local semantic search, adopted 2026-09-05
+
+`zg` is a local-first search layer (ripgrep + BM25 + vector) over the whole workspace — source AND the big markdown docs (specs/sessions/BACKLOG) where plain grep fails on prose-shaped questions. Index lives in `.zvec-grep/` (gitignored, regenerable, ~115 MB incl. the local `potion-retrieval-32m` embedding model).
+
+**Use it for content-shaped questions** — "where does X get discussed/implemented", "the rag store seeding marker wipe problem" — `zg query "<question>" --limit N`. Complements graphify (§12b: structure/impact) — same discipline: **hits are leads, verify against code before acting**.
+
+**Maintenance / operations:**
+- Re-index after sessions that move code: `zg index` (incremental, ~60s; embedding `local/potion-retrieval-32m`, stays local — remote embeddings need explicit `zg auth`)
+- Shared MCP daemon: `zg server on` (loopback :7999, agent toolset) — wired into `.mcp.json` as `zvec-grep` (`zg server --stdio`, lazy; **`.mcp.json` is gitignored** — recreatable: add `{"mcpServers":{"zvec-grep":{"command":"zg","args":["server","--stdio"],"lifecycle":"lazy"}}}`)
+- `.zvec-grep/` is gitignored — never commit it; Node 22+ is a dev-tool runtime only
+- Server auth: token file or `ZVEC_GREP_SERVER_TOKEN` if the loopback daemon needs locking down
+
+---
+
 ## 13. Known Issues — Placeholder Resolution
 
 | Symptom | Status |
