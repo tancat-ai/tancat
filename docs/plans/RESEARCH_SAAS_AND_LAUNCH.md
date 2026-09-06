@@ -210,7 +210,7 @@ embedding model changes? are the guard rails enough? what's the latency?").
 |----------|---------------|-----|----------|
 | Prompt injection | `src/agents/prompt_safety.py` wraps user input in `<user_input>` XML tags (PEP 750 t-strings) for agent prompts. | Coverage is per-prompt — audit every prompt path (skeleton gen, resolver, semantic ranker); AGENTS.md bans XML tags in skeleton prompts — resolve this tension. | Medium |
 | SSRF | **Not implemented.** Only a `localhost:3000` config default for mock sites. | No private-IP blocklist, no `169.254.169.254` metadata guard, no URL-scheme restriction. §3 flags it; v1 per-company promised "warning + cheap blocklist" — neither exists. | **High** — the no-egress/security claim is a sales cornerstone |
-| Credential redaction in evidence | Fernet-encrypted settings store; CI/CD reads env (D4). | **Screenshot redaction of passwords unverified** (fields filled via `fill()` — do screenshots mask inputs?). Needs a test + redaction pass (§4). | High |
+| Credential redaction in evidence | Fernet-encrypted settings store; CI/CD reads env (D4). | **RESOLVED 2026-08-25** — `src/credential_redaction.py` (`masked_screenshot_page`) blanks credential fields during evidence screenshots; wired into `EvidenceTracker` (`evidence_tracker.py:346`) as AI-045 §8.4 #5. Verified shipped by the 2026-09-06 audit. | ~~High~~ Closed |
 | Sandboxing | Generated tests run via real Playwright against real sites — by design. | No sandbox/dependency isolation; acceptable for v1 per-company (their infra), a hard requirement for multi-tenant (D3, deferred). | Low (v1) |
 
 ### 8.5 Latency
