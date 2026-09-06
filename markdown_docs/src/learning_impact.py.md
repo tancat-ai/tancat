@@ -18,3 +18,10 @@ empty cold store. Each leg also writes opt-in RAG retrieval diagnostics to
 `rag_diagnostics.jsonl`, including query descriptions, result sources,
 selectors, confidence, and site hashes. This module is not imported by the
 production generation path.
+
+**B-048 (2026-09-06):** `restore_store_snapshot` now refuses any target that
+is, contains, or lies inside the production RAG store
+(`get_storage().rag_path()`) or its `.embedder.json` companion — the AI-059
+lab rebuild wiped the production store this way on 2026-08-31. Pass
+`allow_production_store=True` for a deliberate, production-aware lab run.
+Guard tests: `tests/test_learning_impact.py` (`test_restore_refuses_*`).

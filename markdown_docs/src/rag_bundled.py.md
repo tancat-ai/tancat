@@ -26,10 +26,18 @@ it for its power-user CLI.
 - **Doc chunks**: curated Playwright docs from `docs/rag_corpus/playwright/`
   (27 chunks, heading-chunked at `##` boundaries).
 
-### First-run auto-seed (idempotent)
+### First-run auto-seed (idempotent, self-healing)
 `ensure_bundled_seeded()` runs automatically from `TestOrchestrator.__init__`
 (when the retriever is built) and via `rag_ingest.py --bundled`. A versioned
 marker file at `evidence/.rag_bundled_seeded.json` makes re-runs a no-op.
+
+**B-048 (2026-09-06) — marker truth:** the marker now means "seeded AND the
+store holds golden patterns". If the marker survives while the store is
+pattern-less (the AI-059 lab-wipe signature: `{golden: 0, doc: 66}`), the pack
+is re-added and the result reports `"status": "reseeded"` — a measurement can
+never silently run against a pattern-less store again. Guarded lab wipe:
+`src/learning_impact.restore_store_snapshot` refuses production-store targets
+(see that module's doc).
 
 ## Functions
 
@@ -50,7 +58,7 @@ marker file at `evidence/.rag_bundled_seeded.json` makes re-runs a no-op.
 |----------|-----------|---------|---------|
 | `bundled_marker_path` | `(storage=None)` | `Path` | Marker path in the evidence dir |
 | `build_default_store` | `()` | `RAGStore` | Production store (lazy embedder + lazy Milvus client) |
-| `ensure_bundled_seeded` | `(store=None, *, marker_path=None, force=False)` | `dict[str, object]` | Idempotent seed → `{"status": "skipped"\|"seeded"\|"marked", "golden": N, "docs": M}` |
+| `ensure_bundled_seeded` | `(store=None, *, marker_path=None, force=False)` | `dict[str, object]` | Idempotent, self-healing seed → `{"status": "skipped"\|"seeded"\|"reseeded"\|"marked", "golden": N, "docs": M}` (`reseeded` = stale marker on a pattern-less store, B-048) |
 | `store_stats` | `(store=None)` | `dict[str, int]` | Per-`entry_type` counts + `total` |
 | `prune_learned` | `(store=None)` | `int` | Delete learned patterns, keep golden/docs |
 

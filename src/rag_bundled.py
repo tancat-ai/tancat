@@ -294,21 +294,28 @@ def ensure_bundled_seeded(
     marker_path: Path | None = None,
     force: bool = False,
 ) -> dict[str, object]:
-    """Seed the RAG store from the bundled pack — idempotent, first-run only.
+    """Seed the RAG store from the bundled pack — idempotent, self-healing.
 
-    Behaviour:
+    Behaviour (B-048 marker truth: the marker means "seeded AND the store
+    holds golden patterns", never "seeded once ever"):
 
-    * Marker present (and not ``force``) → ``{"status": "skipped"}`` — a
-      no-op; this is the steady state for every run after the first.
-    * Store empty → bundled patterns + docs are added, marker written →
-      ``{"status": "seeded", "golden": N, "docs": M}``.
-    * Store already populated (e.g. a power user manually ingested) →
-      marker written without adding anything → ``{"status": "marked"}``.
-    * ``force`` → the bundled pack is (re-)added regardless of marker or
-      store contents (an explicit power-user action, e.g. after a prune).
-      Repeated forced runs duplicate entries (Milvus auto-ids) — harmless
-      to scoring (a direct match returns once) but prefer a ``--golden``
-      rebuild for a clean store.
+    * Marker present **and** the store holds golden patterns (and not
+      ``force``) → ``{"status": "skipped"}`` — a no-op; the steady state.
+    * Marker present but the store is pattern-less (``golden == 0`` — the
+      AI-059 lab-wipe signature: the marker survived an external wipe while
+      the store lost its golden pack) → the bundled pack is re-added and the
+      marker refreshed → ``{"status": "reseeded", ...}``. A measurement can
+      never silently run against a pattern-less store again.
+    * No marker, empty store → bundled patterns + docs added, marker written
+      → ``{"status": "seeded", "golden": N, "docs": M}``.
+    * No marker, store already populated with golden patterns (e.g. a power
+      user manually ingested) → marker written without adding anything →
+      ``{"status": "marked"}``.
+    * ``force`` → the bundled pack is (re-)added regardless of marker,
+      golden count, or store contents (an explicit power-user action, e.g.
+      after a prune). Repeated forced runs duplicate entries (Milvus
+      auto-ids) — harmless to scoring (a direct match returns once) but
+      prefer a ``--golden`` rebuild for a clean store.
 
     Failures propagate to the caller (the orchestrator wraps this in a
     try/except so RAG can never block generation).
@@ -316,24 +323,32 @@ def ensure_bundled_seeded(
     Args:
         store: Injectable store (tests); defaults to the production store.
         marker_path: Injectable marker path (tests); defaults to evidence dir.
-        force: Re-seed even when the marker exists or the store is populated.
+        force: Re-seed even when the marker exists and the store is populated.
     """
     marker = marker_path or bundled_marker_path()
-    if marker.exists() and not force:
-        logger.debug("Bundled RAG pack already seeded (marker: %s) — skipping", marker)
-        return {"status": "skipped", "golden": 0, "docs": 0, "version": BUNDLED_PACK_VERSION}
-
     if store is None:
         store = build_default_store()
 
-    if store.is_empty or force:
+    counts = store.counts_by_type() or {}
+    golden_count = int(counts.get("golden", 0) or 0)
+
+    if marker.exists() and not force and golden_count > 0:
+        logger.debug("Bundled RAG pack already seeded (marker: %s) — skipping", marker)
+        return {"status": "skipped", "golden": 0, "docs": 0, "version": BUNDLED_PACK_VERSION}
+
+    # Marker survives, golden pack gone: the B-048 wipe signature. Re-seed
+    # and surface it as "reseeded" so callers/logs can flag the anomaly.
+    stale_marker = marker.exists() and not force and golden_count == 0
+
+    if store.is_empty or force or golden_count == 0:
         patterns = build_bundled_patterns()
         doc_chunks = build_bundled_docs()
         golden = store.add_patterns(patterns)
         docs, _docs_skipped = store.add_docs(doc_chunks)
-        status = "seeded"
+        status = "reseeded" if stale_marker else "seeded"
         logger.info(
-            "Auto-seeded bundled RAG pack: %d golden patterns, %d doc chunks",
+            "%s bundled RAG pack: %d golden patterns, %d doc chunks",
+            "Re-seeded (stale seed marker on a pattern-less store — B-048)" if stale_marker else "Auto-seeded",
             golden,
             docs,
         )

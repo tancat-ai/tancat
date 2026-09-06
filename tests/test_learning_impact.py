@@ -214,6 +214,83 @@ def test_restore_store_snapshot_supports_files_and_empty_store(tmp_path: Path) -
     assert not target.with_name(target.name + ".embedder.json").exists()
 
 
+# ---------------------------------------------------------------------------
+# B-048 — the lab wipe must never touch the production RAG store
+# ---------------------------------------------------------------------------
+
+
+class _FakeProductionStorage:
+    """Storage stub whose rag_path() points inside ``tmp_path``."""
+
+    def __init__(self, evidence_dir: Path) -> None:
+        self._evidence_dir = evidence_dir
+
+    def rag_path(self) -> Path:
+        return self._evidence_dir / "rag_store.db"
+
+
+def test_restore_refuses_production_store_target(tmp_path: Path, monkeypatch: Any) -> None:
+    """The exact B-048 incident: target == production rag_path → refuse, no wipe."""
+    evidence = tmp_path / "evidence"
+    production = evidence / "rag_store.db"
+    production.mkdir(parents=True)
+    (production / "milvus.db").write_text("golden patterns", encoding="utf-8")
+    monkeypatch.setattr("src.storage.get_storage", lambda: _FakeProductionStorage(evidence))
+
+    with pytest.raises(ValueError, match="production RAG store"):
+        restore_store_snapshot(None, production)
+    # Nothing was deleted — the golden pack survives.
+    assert (production / "milvus.db").exists()
+
+
+def test_restore_refuses_ancestor_of_production_store(tmp_path: Path, monkeypatch: Any) -> None:
+    """Wiping evidence/ (or the storage root) kills the store too → refuse."""
+    evidence = tmp_path / "evidence"
+    (evidence / "rag_store.db").mkdir(parents=True)
+    monkeypatch.setattr("src.storage.get_storage", lambda: _FakeProductionStorage(evidence))
+
+    with pytest.raises(ValueError, match="production RAG store"):
+        restore_store_snapshot(None, evidence)
+
+
+def test_restore_refuses_production_embedder_companion(tmp_path: Path, monkeypatch: Any) -> None:
+    evidence = tmp_path / "evidence"
+    production = evidence / "rag_store.db"
+    production.mkdir(parents=True)
+    monkeypatch.setattr("src.storage.get_storage", lambda: _FakeProductionStorage(evidence))
+
+    companion = Path(str(production) + ".embedder.json")
+    companion.write_text("stamp", encoding="utf-8")
+    with pytest.raises(ValueError, match="production RAG store"):
+        restore_store_snapshot(None, companion)
+    assert companion.exists()
+
+
+def test_restore_production_override_restores_deliberately(tmp_path: Path, monkeypatch: Any) -> None:
+    """allow_production_store=True is the explicit, documented escape hatch."""
+    evidence = tmp_path / "evidence"
+    production = evidence / "rag_store.db"
+    production.mkdir(parents=True)
+    (production / "stale.db").write_text("stale", encoding="utf-8")
+    monkeypatch.setattr("src.storage.get_storage", lambda: _FakeProductionStorage(evidence))
+
+    snapshot = tmp_path / "golden_snapshot.json"
+    snapshot.write_text("golden", encoding="utf-8")
+    restore_store_snapshot(snapshot, production, allow_production_store=True)
+    assert production.is_file()
+    assert production.read_text(encoding="utf-8") == "golden"
+
+
+def test_restore_unrelated_targets_are_untouched_by_guard(tmp_path: Path) -> None:
+    """Lab/tmp targets nowhere near the production store keep working."""
+    snapshot = tmp_path / "snap.json"
+    snapshot.write_text("golden", encoding="utf-8")
+    target = tmp_path / "lab_store.db"
+    target.write_text("stale", encoding="utf-8")
+    restore_store_snapshot(snapshot, target)
+    assert target.read_text(encoding="utf-8") == "golden"
+
+
 def test_measurement_environment_disables_learning_without_disabling_rag() -> None:
     env = measurement_environment({"RAG_ENABLED": "1"})
     assert env["AI059_DISABLE_AUTO_LEARN"] == "1"
