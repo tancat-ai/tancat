@@ -102,11 +102,6 @@ module = "streamlit.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "map_3d.generate_3d_map"
-ignore_missing_imports = true
-disable_error_code = ["assignment", "arg-type", "no-untyped-def"]
-
-[[tool.mypy.overrides]]
 module = "pymilvus.*"
 ignore_missing_imports = true
 

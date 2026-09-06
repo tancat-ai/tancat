@@ -1,14 +1,63 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-05 (SHIPPED — Phase 6 Part 1 6a–6i code-complete: 6c/6d/6e/6h/6i built + gated in this session; roadmap Phase 6 owns the full status. Full-eval investigation closed: RAG-store wipe root-caused and repaired (see B-048), eval-harness graph mock-parity fixed, controlled fork-vs-mainline + graph-vs-linear comparisons recorded in eval_runs; B-048 opened — RAG store seeding gap: AI-059 lab rebuild wiped the production store 2026-08-31 while the seed marker survived → all evals since measured with golden RAG bonus = 0, explaining the 48.7%→42.5% drop; store re-seeded manually `rag_ingest.py --bundled --force`; 6c/6d/6e/6h/6i code-built + gated, handoff `docs/sessions/2026-09-04_phase6_6c_6d_6e_6h_6i_handoff.md`; AI-064 opened — container-element haystack dominance, the #1 AI-058-gate blocker; AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
+Last updated: 2026-09-06 (AUDIT FOLLOW-UPS: B-050/B-051/B-052/B-053 opened from the 2026-09-06 security+commercial audit; B-048 flagged 🚩 PRE-LAUNCH BLOCKER; screenshot credential redaction verified SHIPPED (`src/credential_redaction.py`, 2026-08-25) — `RESEARCH_SAAS_AND_LAUNCH.md` §8.4 row corrected; mypy `map_3d` override removed. AE scraper-timeout re-verified 2026-09-06: does NOT persist (plain 18.4s / stateful subprocess 15.4s vs the 120s cap) — B-049 NOT opened. `verify_production automationexercise` run 2026-09-06 (LM Studio up): FAIL 11/13 but NO timeout — the 2 failed gates are 2 unresolved ASSERT placeholders ('confirmation popup', 'added product details') → honest skips; execution 5 passed / 2 skipped / 93.5s live. Remaining AE gap = known ASSERT-resolution class (AI-058/AI-064), not a scraper bug. Prior: SHIPPED — Phase 6 Part 1 6a–6i code-complete: 6c/6d/6e/6h/6i built + gated in this session; roadmap Phase 6 owns the full status. Full-eval investigation closed: RAG-store wipe root-caused and repaired (see B-048), eval-harness graph mock-parity fixed, controlled fork-vs-mainline + graph-vs-linear comparisons recorded in eval_runs; B-048 opened — RAG store seeding gap: AI-059 lab rebuild wiped the production store 2026-08-31 while the seed marker survived → all evals since measured with golden RAG bonus = 0, explaining the 48.7%→42.5% drop; store re-seeded manually `rag_ingest.py --bundled --force`; 6c/6d/6e/6h/6i code-built + gated, handoff `docs/sessions/2026-09-04_phase6_6c_6d_6e_6h_6i_handoff.md`; AI-064 opened — container-element haystack dominance, the #1 AI-058-gate blocker; AI-058 Slice 2 re-tested live; AI-063 step-scoping + resolved-but-wrong trigger SHIPPED and verified live: 9 real negatives, exact retrieval, step-scoped scoring; hidden Locator.wait_for classifier gap fixed; **A/B harness bug fixed — driver conftest always wrote `passed`, so every prior A/B was blind; real statuses + real negatives now record**; full A/B re-runs (banking/trap) confirm all legs identical — metric gate blocked by THREE resolver-infrastructure issues (single-candidate failures, `main`-haystack dominance, page-context assignment), NOT the store; 2898 pytest + eval static 97.9%; AI-058 Slice 1 shipped — contrastive learned store; AI-059 harness + D1/D2 baseline complete 2026-08-27)
 
 ---
+
+## 🆕 B-050 — License trust root overridable via env var (`AITEST_LICENSE_PUBKEY`) weakens tier enforcement
+
+**Status:** 🆕 new — opened 2026-09-06 from the security/commercial audit (owner approved logging).
+**Priority:** Medium — commercial integrity, not a classic vulnerability.
+**One-line:** `src/licensing/license.py:71` ships the vendored ed25519 public key, but `AITEST_LICENSE_PUBKEY` lets any **stock** build swap the trust root via an env var — no code modification required — so self-signed licenses unlock full-tier features without the "fork" the open-core posture accepted.
+**Decision needed (pick one):**
+- [ ] Remove the override entirely;
+- [ ] Move it to a config file (visible, deliberate, fork-like act) instead of a silent env var;
+- [ ] Document it as a sanctioned self-host knob in the tier table + spec §5.4.
+**Related:** `docs/security/license-key-ops.md` (B-053) documents the interplay.
+**Estimated sessions:** 0.5
+
+---
+
+## 🆕 B-051 — Free-tier metering is trivially resettable (local sqlite + ledger)
+
+**Status:** 🆕 new — opened 2026-09-06 from the security/commercial audit.
+**Priority:** Low — accepted-for-v1; must be **documented honestly**, not silently left.
+**One-line:** `src/usage_meter.py` keeps the 30-day runs/exports windows in local `run_results.sqlite` + a local export ledger — deleting the store resets the free-tier caps, so enforcement is honour-based on tampered deployments.
+**Actions:**
+- [ ] Add an honesty note to the tier/usage docs + GTM copy (never imply stronger enforcement than exists).
+- [ ] (Later, gated on need) tamper-evident local ledger (e.g. HMAC-chained entries) if/when metering becomes revenue-critical.
+**Estimated sessions:** 0.25 (docs)
+
+---
+
+## ❓ B-052 — Prompt-injection exposure of skeleton/resolver prompts — UNDERSTAND FIRST, no action yet
+
+**Status:** ❓ needs-info — opened 2026-09-06 from the security audit. **Owner asked to understand the topic before anything is built — research/learning item only.**
+**What the audit observed (unedited):** `src/agents/prompt_safety.py` wraps user input in `<user_input>` XML tags for agent prompts, but coverage is per-prompt; the skeleton-generation and resolver prompts consume **scraped DOM text** (attacker-influenced if a customer points the tool at a hostile page) and are not uniformly wrapped. There is also a documented tension: AGENTS.md §8 bans XML tags in skeleton prompts while the agent-side safety wrapper relies on them.
+**What to learn before deciding anything (reading/research only, NO code):**
+1. Blast radius in THIS pipeline: hostile page text steers the LLM toward a dangerous placeholder or generated-test action — what is actually reachable, given Phase 2 resolves against real DOM and generated tests execute for real?
+2. Why does AGENTS.md §8 ban XML tags in skeleton prompts (historical: local models copy tags verbatim?) — does that ban still hold, and how does it compose with wrapper-based defence?
+3. What do comparable tools (or the literature) do about scraped-content injection in code-generating agents?
+**Deliverable of this item:** a short written note (`docs/security/prompt-injection-notes.md` or a session doc) answering 1–3 + a recommendation (wrap / sanitise / accept-and-document). Implementation is a separate, future item.
+**Estimated sessions:** 0.5–1 (research)
+
+---
+
+## ✅ B-053 — License key-ops documentation (single-operator signing key: backup, rotation, revocation)
+
+**Status:** ✅ **Complete 2026-09-06** — `docs/security/license-key-ops.md` created and committed. Covers generation, storage (private key never in repo), two-location backup + tested recovery, rotation-as-release (vendored pubkey ⇒ rotation ships with a product release), revocation-by-short-expiry (offline ⇒ no CRL), and the `AITEST_LICENSE_PUBKEY` interplay → B-050. Keep the doc current when the licensing surface changes.
+**Priority:** Medium — must exist before the first paying customer.
+**One-line:** the ed25519 signing key is held by one operation ("Cat Tan Operations") with no documented backup/rotation/revocation plan; **loss** = cannot issue licenses, **leak** = anyone can mint licenses forever; offline licenses cannot be revoked except by expiry.
+**Estimated sessions:** done (0.25)
+
+---
+
 
 ## 🆕 B-048 — RAG store seeding gap: AI-059 lab rebuild wipes patterns, stale marker blocks re-seed
 
 **Status:** 🟡 ready-for-agent — opened 2026-09-05 from the full-eval investigation (root cause of the 48.7% → 42.5% regeneration-accuracy drop). **Manual repair APPLIED 2026-09-05** (store re-seeded: 113 golden + docs, marker refreshed); **the code guard is NOT built yet** — that is this item's work.
-**Priority:** High — data-integrity / measurement-silence class. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn't use RAG.
+**Priority:** High — data-integrity / measurement-silence class. **🚩 PRE-LAUNCH BLOCKER (flagged 2026-09-06, owner review):** measurement integrity is launch-gating — every shipped eval/learning claim is only as good as the store it measures against, and the static gate cannot see this failure. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn't use RAG.
 **One-line:** `src/learning_impact.py:115` `shutil.rmtree(target)` (the AI-059 lab warm-store rebuild) wiped the PRODUCTION RAG store on 2026-08-31, but the idempotent seed marker (`evidence/.rag_bundled_seeded.json`, `seeded_at 2026-08-20`) survived → `ensure_bundled_seeded()` skips re-seeding forever → golden/learned patterns absent until a manual `rag_ingest.py --bundled --force`.
 **Fix (two one-line candidates — do either or both, then verify with the eval):**
 - [ ] (a) **Sentinel-scope the lab wipe:** `rebuild_warm_store_from_evidence` must operate on the lab-store path (`AI059_LAB_SITE_HASH` companion), never the production `get_storage().rag_path()`, or refuse when the target is the production store unless an explicit override is passed.
