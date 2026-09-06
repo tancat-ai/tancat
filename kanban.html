@@ -115,7 +115,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (97) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (32) &mdash; 2026-09-06 11:25 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (97) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (32) &mdash; 2026-09-06 13:17 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
@@ -317,7 +317,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column progress">
-    <h2>In Progress (7)</h2>
+    <h2>In Progress (6)</h2>
     
     <div class="">
     <div class="card">
@@ -333,13 +333,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium (commercial trust + domain accuracy) — pre-launch</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L788" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:788</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-048</div>
-    <div class="card-title">RAG store seeding gap: AI-059 lab rebuild wipes patterns, stale marker blocks re-seed</div>
-    <div class="card-meta"><span>High — data-integrity / measurement-silence class. **🚩 PRE-LAUNCH BLOCKER (flagged 2026-09-06, owner review):** measurement integrity is launch-gating — every shipped eval/learning claim is only as good as the store it measures against, and the static gate cannot see this failure. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn&#x27;t use RAG.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L57" target="_blank">BACKLOG.md:57</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-058</div>
@@ -371,8 +364,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (93)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (93)</button>
+    <h2>Done (94)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (94)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -535,6 +528,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium — must exist before the first paying customer.</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L47" target="_blank">BACKLOG.md:47</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-048</div>
+    <div class="card-title">RAG store seeding gap: AI-059 lab rebuild wipes patterns, stale marker blocks re-seed</div>
+    <div class="card-meta"><span>High — data-integrity / measurement-silence class. **🚩 PRE-LAUNCH BLOCKER (flagged 2026-09-06, owner review):** measurement integrity is launch-gating — every shipped eval/learning claim is only as good as the store it measures against, and the static gate cannot see this failure. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn&#x27;t use RAG.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L57" target="_blank">BACKLOG.md:57</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-055</div>
@@ -996,7 +996,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "93";
+    var count = "94";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');

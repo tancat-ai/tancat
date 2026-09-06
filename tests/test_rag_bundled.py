@@ -95,10 +95,48 @@ class TestEnsureBundledSeeded:
         marker = tmp_path / ".rag_bundled_seeded.json"
         marker.write_text(json.dumps({"version": 1}))
         store = MagicMock()
+        store.counts_by_type.return_value = {"golden": 113, "doc": 101}
         result = ensure_bundled_seeded(store=store, marker_path=marker)
         assert result["status"] == "skipped"
         store.add_patterns.assert_not_called()
         store.add_docs.assert_not_called()
+
+    def test_stale_marker_on_pattern_less_store_reseeds(self, tmp_path: Path) -> None:
+        """B-048: the wipe signature — marker survived, golden pack gone.
+
+        The wiped store still held doc chunks ({doc: 66}), so ``is_empty``
+        alone cannot detect it; the golden count is the truth signal.
+        """
+        marker = tmp_path / ".rag_bundled_seeded.json"
+        marker.write_text(json.dumps({"version": 1, "seeded_at": "2026-08-20T00:00:00"}))
+        store = MagicMock()
+        store.is_empty = False  # docs survived the wipe
+        store.counts_by_type.return_value = {"golden": 0, "doc": 66}
+        store.add_patterns.return_value = 113
+        store.add_docs.return_value = (101, 0)
+        result = ensure_bundled_seeded(store=store, marker_path=marker)
+        assert result["status"] == "reseeded"
+        assert result["golden"] == 113
+        store.add_patterns.assert_called_once()
+        store.add_docs.assert_called_once()
+        # The marker is refreshed so the anomaly is not re-reported forever.
+        assert marker.exists()
+
+    def test_docs_only_store_without_marker_seeds_golden(self, tmp_path: Path) -> None:
+        """B-048 latent variant: no marker + docs-only store must not just 'mark'.
+
+        The old "marked" branch would leave a golden-less store permanent.
+        """
+        marker = tmp_path / ".rag_bundled_seeded.json"
+        store = MagicMock()
+        store.is_empty = False
+        store.counts_by_type.return_value = {"golden": 0, "doc": 5}
+        store.add_patterns.return_value = 113
+        store.add_docs.return_value = (27, 0)
+        result = ensure_bundled_seeded(store=store, marker_path=marker)
+        assert result["status"] == "seeded"
+        store.add_patterns.assert_called_once()
+        assert marker.exists()
 
     def test_seeds_empty_store_and_writes_marker(self, tmp_path: Path) -> None:
         marker = tmp_path / ".rag_bundled_seeded.json"
@@ -118,6 +156,7 @@ class TestEnsureBundledSeeded:
         marker = tmp_path / ".rag_bundled_seeded.json"
         store = MagicMock()
         store.is_empty = False
+        store.counts_by_type.return_value = {"golden": 67, "doc": 27}
         result = ensure_bundled_seeded(store=store, marker_path=marker)
         assert result["status"] == "marked"
         store.add_patterns.assert_not_called()

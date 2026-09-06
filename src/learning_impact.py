@@ -94,14 +94,64 @@ class ControlledBaselineReport:
         }
 
 
-def restore_store_snapshot(snapshot: Path | None, target: Path) -> None:
+def _refuse_production_store_target(target: Path) -> None:
+    """Raise when ``target`` would destroy the production RAG store (B-048).
+
+    The 2026-08-31 AI-059 lab rebuild passed the production store path as the
+    restore target and ``shutil.rmtree`` erased the golden/learned patterns
+    while the seed marker survived. The guard refuses any target that IS the
+    production ``rag_path`` (or its ``.embedder.json`` companion), is an
+    ANCESTOR of it (wiping ``evidence/`` or the storage root), or lies INSIDE
+    it. ``restore_store_snapshot`` exposes ``allow_production_store=True`` for
+    a deliberate, production-aware lab run.
+    """
+    from src.storage import get_storage
+
+    try:
+        production = get_storage().rag_path()
+    except Exception:  # pragma: no cover - storage backends resolve statically
+        return
+    try:
+        resolved = target.resolve()
+        production_resolved = Path(production).resolve()
+    except OSError:  # pragma: no cover - unresolvable paths
+        return
+    companion = Path(str(production_resolved) + ".embedder.json")
+    endangered = (production_resolved, companion)
+
+    def _within(child: Path, ancestor: Path) -> bool:
+        return child == ancestor or ancestor in child.parents
+
+    # Target IS the store/companion; or target sits INSIDE it; or target is
+    # an ANCESTOR of it (wiping evidence/ or the storage root kills the store).
+    if any(_within(resolved, p) or _within(p, resolved) for p in endangered):
+        raise ValueError(
+            "restore_store_snapshot refuses to touch the production RAG store "
+            f"({production_resolved}); pass allow_production_store=True only "
+            "for a deliberate, production-aware lab run (B-048)."
+        )
+
+
+def restore_store_snapshot(
+    snapshot: Path | None,
+    target: Path,
+    *,
+    allow_production_store: bool = False,
+) -> None:
     """Restore ``target`` from ``snapshot`` or make the target empty.
 
     Restoration is performed before every leg.  Existing targets are removed
     first, including a directory containing a SQLite store.  A snapshot is
     copied rather than moved, so all legs remain repeatable.
+
+    **B-048 guard:** the wipe is refused when ``target`` is (or contains) the
+    production RAG store, unless ``allow_production_store=True`` is passed —
+    a stale seed marker must never again be the only thing standing between
+    the lab and the golden pack.
     """
     target = Path(target)
+    if not allow_production_store:
+        _refuse_production_store_target(target)
     snapshot_path = Path(snapshot) if snapshot is not None else None
     if snapshot_path is not None and not snapshot_path.exists():
         raise FileNotFoundError(f"store snapshot does not exist: {snapshot_path}")
