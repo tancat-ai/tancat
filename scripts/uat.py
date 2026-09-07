@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified UAT runner for AI-Playwright-Test-Generator.
+"""Unified UAT runner for tancat-ai/tancat.
 
 End-to-end pipeline validation against real websites. Produces human-readable
 output and machine-readable JSON for CI/regression comparison.
@@ -537,7 +537,7 @@ def summarize_results(results: list[SiteResult]) -> tuple[int, int, int]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Unified UAT runner for AI-Playwright-Test-Generator",
+        description="Unified UAT runner for tancat-ai/tancat",
     )
 
     parser.add_argument(

@@ -1,6 +1,6 @@
-# Architecture Overview: AI-Playwright-Test-Generator
+# Architecture Overview: tancat-ai/tancat
 
-This document provides a high-level architectural overview of the AI-Playwright-Test-Generator, detailing its modular structure, component interactions, and core data pipelines.
+This document provides a high-level architectural overview of the tancat-ai/tancat, detailing its modular structure, component interactions, and core data pipelines.
 
 ## 1. High-Level Summary
 

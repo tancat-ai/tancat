@@ -1,4 +1,4 @@
-"""Code validation utilities for the AI-Playwright-Test-Generator.
+"""Code validation utilities for the tancat-ai/tancat.
 
 This module provides functions to validate generated Python code
 before it is saved or executed, catching syntax errors early.

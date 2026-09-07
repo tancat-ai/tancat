@@ -1,6 +1,6 @@
 # Mock Site Catalog
 
-Local, deterministic test targets for the AI-Playwright-Test-Generator pipeline.
+Local, deterministic test targets for the tancat-ai/tancat pipeline.
 Each mock is a self-contained site we own — **no ads, no consent dialogs, no
 third-party dependency, no decay** — and each covers a distinct *product shape*
 so the pipeline (scraper → resolver → generator → executor → evidence) is

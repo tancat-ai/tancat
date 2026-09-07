@@ -1,4 +1,4 @@
-# AI-Playwright-Test-Generator
+# tancat-ai/tancat
 
 Paste a user story → get executable Playwright pytest tests with real DOM selectors.
 
@@ -6,7 +6,7 @@ Powered by local LLMs — no cloud API keys needed.
 
 | Metric | Status |
 |--------|--------|
-| CI/CD Pipeline | [![CI](https://github.com/lacattano/AI-Playwright-Test-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/AI-Playwright-Test-Generator/actions) |
+| CI/CD Pipeline | [![CI](https://github.com/lacattano/tancat-ai/tancat/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/tancat-ai/tancat/actions) |
 | Python Version | ![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg) |
 | License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | Code Quality | [![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://github.com/astral-sh/ruff) |
@@ -20,7 +20,7 @@ Powered by local LLMs — no cloud API keys needed.
   The GIF renders on the repo page — recruiters/clients see it without clicking anything.
 -->
 
-▶️ **Watch the 3-minute walkthrough:** [Loom — AI-Playwright-Test-Generator](https://www.loom.com/share/YOUR_VIDEO_ID_HERE)
+▶️ **Watch the 3-minute walkthrough:** [Loom — tancat-ai/tancat](https://www.loom.com/share/YOUR_VIDEO_ID_HERE)
 
 ![Demo — paste a user story, get running Playwright tests](docs/demo/demo.gif)
 

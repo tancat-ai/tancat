@@ -1,4 +1,4 @@
-# AI-Playwright-Test-Generator — Documentation Index
+# tancat-ai/tancat — Documentation Index
 
 > Auto-generated documentation sweep — 135 source files across `src/`, `cli/`, `scripts/`
 

@@ -376,7 +376,7 @@ def main():
             '      <div class="emoji">&#x1F389;</div>\n',
             "      <h2>Want to try one?</h2>\n",
             "      <p>Give me a user story and I'll generate the tests live. Or check out the repo:</p>\n",
-            '      <a class="link" href="https://github.com/lacattano/AI-Playwright-Test-Generator">github.com/lacattano/AI-Playwright-Test-Generator</a>\n',
+            '      <a class="link" href="https://github.com/lacattano/tancat-ai/tancat">github.com/lacattano/tancat-ai/tancat</a>\n',
             "    </div>\n\n",
             "  </div>\n</div>\n\n",
             '<div class="swipe-hint">swipe or tap arrows</div>\n\n',

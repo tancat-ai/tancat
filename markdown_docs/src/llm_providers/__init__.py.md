@@ -2,7 +2,7 @@
 
 ## Overview
 
-This module provides a unified interface for interacting with different LLM backends in the AI-Playwright-Test-Generator project. It implements a provider abstraction pattern that supports multiple LLM services through a common interface.
+This module provides a unified interface for interacting with different LLM backends in the tancat-ai/tancat project. It implements a provider abstraction pattern that supports multiple LLM services through a common interface.
 
 **Supported Providers:**
 - Ollama (native API)

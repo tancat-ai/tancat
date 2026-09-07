@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for AI-Playwright-Test-Generator (product image).
+# Multi-stage Dockerfile for tancat-ai/tancat (product image).
 #
 # Fixed 2026-08-15 (latent flaws documented in the Phase 7a BACKLOG entry,
 # all three proven in Dockerfile.action):

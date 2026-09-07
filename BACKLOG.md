@@ -2118,32 +2118,30 @@ is bitsandbytes-based QLoRA (4-bit).
 
 ---
 
-## 👤 AI-039 — Repo Rename: TanCat (DEFERRED)
+## 🟡 AI-039 — Brand Rename to TanCat (BUILD DONE 2026-09-06 — NOT COMMITTED; GitHub org/repo is a remote action)
 
-**Status:** 👤 ready-for-human — deferred by decision 2026-08-01; revisit at launch readiness
-**Priority:** Medium — GTM (Phase 8)
+**Status:** 🟡 working-tree rename **DONE 2026-09-06** (distribution name `playwright-test-generator` → `tancat` in `pyproject.toml`; all active display strings → `tancat-ai/tancat`; `uv.lock` regenerated via `uv lock`; **no import-path rename was needed** — code imports `src`/`cli`, not `playwright_test_generator`); **NOT COMMITTED** (user reviews the diff per AGENTS.md §11). **GitHub org/repo rename is a git-remote action** (create org `tancat-ai` + rename the product repo on GitHub + the thin public Action repo `tancat-ai/ai-test-generator`) — not part of the working-tree diff. Companies House **deferred** (no funds this month; user unemployed 18 months — ~£150 yr-1 is a large investment; incorporate once there's income or solid projections).
+**Priority:** High — GTM (Phase 8 launch prerequisite; must precede first PyPI publish)
 **Estimated sessions:** 0.5
 
-> **Why deferred:** Renaming the repo + PyPI package is disruptive once the package is
-> published (users, CI, docs links depend on the name) and carries zero functional value
-> pre-launch. Parked until the product is ready for launch; branding decisions (TanCat
-> product name, Cat Tan Operations Ltd, domains) stay as decided.
+> **Name layers (confirmed with user 2026-09-06 — keep separate, do not conflate):**
+> - **Legal entity** = **Cat Tan Operations Ltd** (holding company; to be incorporated with Companies House — NOT yet registered).
+> - **Product** = **TanCat** (what customers interact with: `pip install tancat`, `tancat.dev`, UI, GitHub org, trademark).
+> - **GitHub account** = user's account / a `tancat`-branded org.
 
-**What:** Rename GitHub repo from `AI-Playwright-Test-Generator` to `tancat`.
-Update all internal references: `pyproject.toml` (PyPI package name), README,
-docs headers, script docstrings, CI badge URL. Regenerate graphify output.
+**What (build, per spec):** update `pyproject.toml` (PyPI name `tancat`), README, docs headers, script docstrings, CI badge URL; create GitHub org `tancat-ai`; rename product repo under it (repo name may be `tancat` — repo names don't collide with usernames); thin public Action repo `tancat-ai/ai-test-generator`. Regenerate graphify output.
 
-**Product name:** TanCat (`pip install tancat` / `uv add tancat`)
-**Holding company:** Cat Tan Operations Ltd (cattanooperations.co.uk)
-**Domains acquired:** tancat.dev, cattanooperations.co.uk, cattanooperations.com
+**Live name-check results (2026-09-06):** PyPI `tancat` **available** (404) · PyPI `tancat-ai` available (404) · GitHub user/org `tancat` **TAKEN** (dormant squatter account, 0 repos / 1 star / no activity) → use a variant for the **org handle** (`tancat-ai`, verified free); GitHub `tancat-ai` **available** (404) · UK IPO trademark search for "TanCat" **bot-gated for automation — user must run manually** (`trademarks.ipo.gov.uk/ipo-tmtext`) · **Cat Tan Operations Ltd NOT registered** on Companies House (no exact "CAT TAN OPERATIONS LTD" in the register) — the roadmap's "registered holding company" was inaccurate; the company must be incorporated (CH) to make the name real.
+
+**Decision gates (user, before build):** (1) incorporate **Cat Tan Operations Ltd** with Companies House now or later (trademark applicant + invoicing + GitHub-org ownership all flow from it; landing page "© Cat Tan Operations Ltd" must be true); (2) GitHub org handle = `tancat-ai` (my pick) or other; (3) PyPI name = `tancat` (free, verified) or `tancat-ai`.
 
 **Launch-batch dependencies (grilled 2026-08-13, Phase 7 CI/CD):** the rename is the same
 launch-readiness gate that governs the Phase 7 GitHub Action extraction — at launch,
 extract a **thin public Action repo** (`action.yml` + `entrypoint.sh` + `Dockerfile`) whose
 image installs the product from PyPI (the product repo stays private). The rename
-determines the Action's owner reference (`tancat/ai-test-generator@v1`) and the PyPI
+determines the Action's owner reference (`tancat-ai/ai-test-generator@v1`) and the PyPI
 package name — both are post-rename constants. Spec: `docs/specs/FEATURE_SPEC_phase7_ci_cd_integration.md`
-§Q4; keep `ci_generate.py` imports package-relative (`playwright_test_generator.…`) so the
+§Q4; keep `ci_generate.py` imports package-relative so the
 extraction is copy-paste, not refactor. GitHub Marketplace requires a **public** repo +
 semver release tags (same-repo listing is allowed but the thin-repo split is cleaner);
 AWS/Azure marketplaces consume the Docker image/AMI, not the repo layout.
