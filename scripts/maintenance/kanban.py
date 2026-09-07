@@ -523,9 +523,13 @@ def check_mode() -> int:
     new_html = generate_html(items, _source_timestamp())
     existing = KANBAN_PATH.read_text(encoding="utf-8")
 
-    # Normalize timestamps before comparing
-    new_normalized = re.sub(r"Generated from.*?</p>", "Generated from BACKLOG.md</p>", new_html)
-    existing_normalized = re.sub(r"Generated from.*?</p>", "Generated from BACKLOG.md</p>", existing)
+    # Normalize the "Generated from ... <timestamp></p>" line before comparing.
+    # Strip the whole line to a canonical form so a wall-clock/min-advance in the
+    # embedded timestamp (source-file mtime or regen time) can never make the check
+    # flaky — only the item content (counts + rows) is compared.
+    _norm = re.compile(r"Generated from.*?</p>", re.DOTALL)
+    new_normalized = _norm.sub("Generated from BACKLOG.md</p>", new_html)
+    existing_normalized = _norm.sub("Generated from BACKLOG.md</p>", existing)
 
     if new_normalized.strip() != existing_normalized.strip():
         print("ERROR: kanban.html is stale. Run: python scripts/maintenance/kanban.py")

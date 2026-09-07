@@ -115,7 +115,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (100) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (32) &mdash; 2026-09-06 22:55 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (100) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (32) &mdash; 2026-09-07 13:29 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
@@ -331,7 +331,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column progress">
-    <h2>In Progress (6)</h2>
+    <h2>In Progress (5)</h2>
     
     <div class="">
     <div class="card">
@@ -363,13 +363,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L461" target="_blank">BACKLOG.md:461</a></div>
 </div>
 <div class="card">
-    <div class="card-id">AI-039</div>
-    <div class="card-title">Brand Rename to TanCat (BUILD DONE 2026-09-06 — NOT COMMITTED; GitHub org/repo is a remote action)</div>
-    <div class="card-meta"><span>High — GTM (Phase 8 launch prerequisite; must precede first PyPI publish)</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2121" target="_blank">BACKLOG.md:2121</a></div>
-</div>
-<div class="card">
     <div class="card-id">AI-065</div>
     <div class="card-title">Citation/rationale token-overhead watch (16b D8) — MEASUREMENT, no build yet</div>
     <div class="card-meta"><span>Low (watch item — act only if the numbers say so).</span>
@@ -379,8 +372,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (95)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (95)</button>
+    <h2>Done (96)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (96)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -911,6 +904,13 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L1955" target="_blank">BACKLOG.md:1955</a></div>
 </div>
 <div class="card">
+    <div class="card-id">AI-039</div>
+    <div class="card-title">Brand Rename to TanCat (SHIPPED 2026-09-06 — working-tree rename committed; GitHub org/repo + PyPI publish are follow-on remote actions)</div>
+    <div class="card-meta"><span>High — GTM (Phase 8 launch prerequisite; must precede first PyPI publish)</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L2121" target="_blank">BACKLOG.md:2121</a></div>
+</div>
+<div class="card">
     <div class="card-id">AI-033</div>
     <div class="card-title">Python T-String (PEP 750) Upgrade — ANALYSIS COMPLETE + PROMPT LAYER MIGRATED</div>
     <div class="card-meta"><span>Medium — technical debt / future-proofing</span>
@@ -1017,7 +1017,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "95";
+    var count = "96";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
