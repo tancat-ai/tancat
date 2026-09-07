@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "playwright-test-generator"
+name = "tancat"
 version = "0.1.0"
 description = "AI-powered Playwright test generator using local LLMs (llama.cpp, Ollama, LM Studio)"
 readme = "README.md"

@@ -3,7 +3,7 @@
 ## Changes Made
 
 ### B-007 — Duplicate Error Panels ✅
-Removed error detail rendering from [display_coverage()](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/streamlit_app.py#125-187) — errors now appear **only** in [display_run_button()](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/streamlit_app.py#61-123).
+Removed error detail rendering from [display_coverage()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py#125-187) — errors now appear **only** in [display_run_button()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py#61-123).
 
 ```diff:streamlit_app.py
 #!/usr/bin/env python3
@@ -1414,9 +1414,9 @@ if __name__ == "__main__":
 ---
 
 ### B-006 — Parser Banner Regression Tests ✅  
-Added 2 new tests in [TestB006BannerRegression](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/tests/test_pytest_output_parser.py#245-304):
-- [test_b006_mixed_pass_fail_banner_correct](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/tests/test_pytest_output_parser.py#252-288) — 1 passed / 3 failed scenario
-- [test_b006_all_fail_banner](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/tests/test_pytest_output_parser.py#289-304) — 0 passed / 2 failed scenario
+Added 2 new tests in [TestB006BannerRegression](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#245-304):
+- [test_b006_mixed_pass_fail_banner_correct](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#252-288) — 1 passed / 3 failed scenario
+- [test_b006_all_fail_banner](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#289-304) — 0 passed / 2 failed scenario
 
 ```diff:test_pytest_output_parser.py
 """
@@ -1970,7 +1970,7 @@ t.py::test_b FAILED [100%]
 
 ---
 
-### AI-003 — [.env.example](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/.env.example) Updated ✅
+### AI-003 — [.env.example](file:///c:/Users/l_a_c/code/tancat-ai/tancat/.env.example) Updated ✅
 Added `OLLAMA_TIMEOUT=300` with explanatory comment.
 
 ```diff:.env.example
@@ -2015,7 +2015,7 @@ PLAYWRIGHT_HEADLESS=true
 ---
 
 ### AI-009 — Multi-Page Scraper UI ✅
-Wired [scrape_multiple_pages()](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/src/page_context_scraper.py#382-461) into [streamlit_app.py](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/streamlit_app.py):
+Wired [scrape_multiple_pages()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/src/page_context_scraper.py#382-461) into [streamlit_app.py](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py):
 - Added expander "➕ Add more pages to scrape (optional)" with URL text area
 - Conditional scraping: multi-page when additional URLs provided, single-page otherwise
 - Per-page sidebar feedback showing element counts per URL

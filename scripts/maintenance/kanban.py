@@ -298,7 +298,7 @@ def generate_html(items: list[dict], source_updated: str) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kanban \u2014 AI-Playwright-Test-Generator</title>
+<title>Kanban \u2014 tancat-ai/tancat</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{

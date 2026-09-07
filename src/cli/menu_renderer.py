@@ -88,7 +88,7 @@ BACK_CONSENT = -105
 
 def print_header(title: str, subtitle: str = "") -> None:
     """Print a CHOICE-style section header with box-drawing borders."""
-    if title == "AI Playwright Test Generator":
+    if title == "TanCat":
         subtitle = subtitle or "Generate Playwright tests from user stories with AI"
     clear_screen()
     render_header(title, subtitle)

@@ -2451,7 +2451,7 @@ Catches `OSError` / `io.UnsupportedOperation` silently when stdout is already a 
 
 ## Overview
 
-This module provides a unified interface for interacting with different LLM backends in the AI-Playwright-Test-Generator project. It implements a provider abstraction pattern that supports multiple LLM services through a common interface.
+This module provides a unified interface for interacting with different LLM backends in the tancat-ai/tancat project. It implements a provider abstraction pattern that supports multiple LLM services through a common interface.
 
 **Supported Providers:**
 - Ollama (native API)
@@ -13702,7 +13702,7 @@ Vision-based element enrichment service. Uses vision-capable LLMs to analyze cro
 
 ## High-Level Purpose
 
-This file serves as the package initializer for the `src` package within the **AI-Playwright-Test-Generator** project. It contains no executable code, imports, or submodule declarations. Its sole content is a module-level docstring that describes the package as the *"Source module for Playwright test generator."*
+This file serves as the package initializer for the `src` package within the **tancat-ai/tancat** project. It contains no executable code, imports, or submodule declarations. Its sole content is a module-level docstring that describes the package as the *"Source module for Playwright test generator."*
 
 ## File Content (verbatim)
 
@@ -13756,7 +13756,7 @@ This file serves as the package initializer for the `src` package within the **A
 
 
 
-# AI-Playwright-Test-Generator — Documentation Index
+# tancat-ai/tancat — Documentation Index
 
 > Auto-generated documentation sweep — 135 source files across `src/`, `cli/`, `scripts/`
 

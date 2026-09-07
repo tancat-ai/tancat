@@ -245,7 +245,7 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="eval_harness",
-        description="Automated Evaluation Harness for AI-Playwright-Test-Generator",
+        description="Automated Evaluation Harness for tancat-ai/tancat",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
 

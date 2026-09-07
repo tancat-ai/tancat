@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project sanitizer script for AI-Playwright-Test-Generator.
+"""Project sanitizer script for tancat-ai/tancat.
 
 Automates project cleanup:
 1. Auto-move misplaced test files into /tests/
@@ -288,7 +288,7 @@ def audit_graph_freshness() -> list[str]:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Project sanitizer for AI-Playwright-Test-Generator.",
+        description="Project sanitizer for tancat-ai/tancat.",
     )
     parser.add_argument(
         "--check-only",

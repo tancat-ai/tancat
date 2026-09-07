@@ -1,5 +1,5 @@
 """
-LLM Provider implementations for AI-Playwright-Test-Generator.
+LLM Provider implementations for tancat-ai/tancat.
 
 This module provides a unified interface for interacting with different LLM backends:
 - Ollama (native API)

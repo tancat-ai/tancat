@@ -2,7 +2,7 @@
 
 ## High-Level Purpose
 
-This file serves as the package initializer for the `src` package within the **AI-Playwright-Test-Generator** project. It contains no executable code, imports, or submodule declarations. Its sole content is a module-level docstring that describes the package as the *"Source module for Playwright test generator."*
+This file serves as the package initializer for the `src` package within the **tancat-ai/tancat** project. It contains no executable code, imports, or submodule declarations. Its sole content is a module-level docstring that describes the package as the *"Source module for Playwright test generator."*
 
 ## File Content (verbatim)
 

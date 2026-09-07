@@ -112,7 +112,7 @@ async def interactive_session() -> None:
     _reset_menu_stack()
 
     while True:
-        print_header("AI Playwright Test Generator")
+        print_header("TanCat")
 
         # Build dynamic menu based on session state
         menu_items: list[str] = []

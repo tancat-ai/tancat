@@ -77,7 +77,7 @@ Examples:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Unified debug entry point for AI-Playwright-Test-Generator",
+        description="Unified debug entry point for tancat-ai/tancat",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=USAGE_EPILOG,
     )

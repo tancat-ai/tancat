@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified debug CLI for AI-Playwright-Test-Generator.
+"""Unified debug CLI for tancat-ai/tancat.
 
 Quick diagnostic commands for pipeline debugging. All commands are callable
 without IDE interaction.
@@ -431,7 +431,7 @@ async def _do_pipeline(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="debug",
-        description="Unified debug CLI for AI-Playwright-Test-Generator",
+        description="Unified debug CLI for tancat-ai/tancat",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Commands:

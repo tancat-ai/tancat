@@ -1,6 +1,6 @@
 """Build an instruction-tuning dataset from the project's generated tests.
 
-Converts the AI-Playwright-Test-Generator pipeline's artifacts
+Converts the tancat-ai/tancat pipeline's artifacts
 (``generated_tests/<pkg>/scrape_manifest.json`` + ``package_manifest.json``)
 into an **Alpaca-format JSONL** dataset suitable for direct upload into
 Unsloth Studio (or any SFT trainer):

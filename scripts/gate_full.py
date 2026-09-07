@@ -166,7 +166,7 @@ def main() -> int:
         gates = [g for g in gates if g[0] <= 3]
 
     print("=" * 72)
-    print("FULL VERIFICATION GATE — AI-Playwright-Test-Generator")
+    print("FULL VERIFICATION GATE — tancat-ai/tancat")
     print(f"mode: {'OFFLINE (gates 1-3)' if args.offline else 'FULL (gates 1-5)'}")
     print("=" * 72)
 

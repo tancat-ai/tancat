@@ -1,6 +1,6 @@
 # scripts/
 
-Utility and automation scripts for the AI-Playwright-Test-Generator project.
+Utility and automation scripts for the tancat-ai/tancat project.
 
 ## Quick Reference
 

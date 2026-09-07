@@ -1,4 +1,4 @@
-# AI-Playwright-Test-Generator
+# tancat-ai/tancat
 
 A tool that generates Playwright Python test scripts from user stories using a local LLM. Takes acceptance criteria, scrapes target pages, resolves placeholders against scraped DOM data, and outputs runnable pytest tests.
 

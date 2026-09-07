@@ -42,7 +42,7 @@ tool's opinion. CI never mutates silently.
 ## 2. GitHub Action
 
 ```yaml
-- uses: AI-Playwright-Test-Generator/ai-test-generator@v1   # (or ./, in-repo)
+- uses: tancat-ai/tancat/ai-test-generator@v1   # (or ./, in-repo)
   with:
     mode: generate-and-run
     story: |

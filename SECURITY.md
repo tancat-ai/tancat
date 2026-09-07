@@ -23,7 +23,7 @@ and patched before public disclosure. This protects users who may be running the
 **Option 1 — GitHub Private Vulnerability Reporting (preferred)**
 
 Use GitHub's built-in private reporting:
-[Report a vulnerability](https://github.com/lacattano/AI-Playwright-Test-Generator/security/advisories/new)
+[Report a vulnerability](https://github.com/lacattano/tancat-ai/tancat/security/advisories/new)
 
 **Option 2 — Email**
 

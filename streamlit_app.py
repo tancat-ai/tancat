@@ -61,7 +61,7 @@ from src.ui_pipeline import (
     test_table_rows,
 )
 
-st.set_page_config(page_title="AI Playwright Generator", page_icon="assets/logo.png", layout="wide")
+st.set_page_config(page_title="TanCat — AI Playwright Test Generator", page_icon="assets/logo.png", layout="wide")
 
 
 def _init_session_state() -> None:
@@ -310,7 +310,7 @@ def _render_logo_header() -> None:
                 <img src="data:image/png;base64,{_logo_b64}"
                      style="width:100px;height:100px;object-fit:contain;flex-shrink:0;border-radius:12px;" />
                 <div>
-                    <h1 style="margin:0;font-size:2.5rem;">AI Playwright Test Generator</h1>
+                    <h1 style="margin:0;font-size:2.5rem;">TanCat</h1>
                     <p style="margin:4px 0 0 0;color:#ccc;font-size:1rem;">
                         Generate placeholder-first pytest sync Playwright tests,
                         then resolve them against scraped pages.
@@ -320,7 +320,7 @@ def _render_logo_header() -> None:
             unsafe_allow_html=True,
         )
     else:
-        st.title("AI Playwright Test Generator")
+        st.title("TanCat")
         st.markdown("Generate placeholder-first pytest sync Playwright tests, then resolve them against scraped pages.")
 
 

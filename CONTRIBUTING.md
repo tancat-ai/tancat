@@ -27,7 +27,7 @@ By participating you agree to abide by its terms. Please be respectful and const
 ## How to Report a Bug
 
 1. **Search existing issues first** — your bug may already be reported.
-2. If not, open a [Bug Report issue](https://github.com/lacattano/AI-Playwright-Test-Generator/issues/new?template=bug_report.md).
+2. If not, open a [Bug Report issue](https://github.com/lacattano/tancat-ai/tancat/issues/new?template=bug_report.md).
 3. Include:
    - A clear, descriptive title
    - Steps to reproduce the problem
@@ -39,7 +39,7 @@ By participating you agree to abide by its terms. Please be respectful and const
 
 ## How to Request a Feature
 
-1. Open a [Feature Request issue](https://github.com/lacattano/AI-Playwright-Test-Generator/issues/new?template=feature_request.md).
+1. Open a [Feature Request issue](https://github.com/lacattano/tancat-ai/tancat/issues/new?template=feature_request.md).
 2. Describe the problem you are trying to solve, not just the solution you have in mind.
 3. If you plan to implement it yourself, say so — we will prioritise reviewing it.
 
@@ -57,8 +57,8 @@ If you discover a security vulnerability, please do **not** open a public issue.
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/<your-username>/AI-Playwright-Test-Generator
-cd AI-Playwright-Test-Generator
+git clone https://github.com/<your-username>/tancat-ai/tancat
+cd tancat-ai/tancat
 
 # 2. Install dependencies (do NOT use pip)
 uv sync
@@ -168,5 +168,5 @@ Do not use:
 
 ## Questions?
 
-Open a [Discussion](https://github.com/lacattano/AI-Playwright-Test-Generator/discussions) 
+Open a [Discussion](https://github.com/lacattano/tancat-ai/tancat/discussions) 
 for anything that does not fit a bug report or feature request.

@@ -1,4 +1,4 @@
-# AGENTS.md — AI-Playwright-Test-Generator
+# AGENTS.md — tancat-ai/tancat
 
 > Single source of truth for AI assistants. Read `.clinerules` for session/MCP rules.
 > Historical & reference sections moved to `docs/reference/agents_archive.md`.
