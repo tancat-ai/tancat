@@ -66,17 +66,13 @@ _Last updated header continued: 2026-09-06 (AI-064 verified COMPLETE — fix com
 **Estimated sessions:** 1–2 (trail-scoped candidate selection + regression test).
 
 ---
-## 🆕 B-050 — License trust root overridable via env var (`AITEST_LICENSE_PUBKEY`) weakens tier enforcement
+## ✅ B-050 — License trust root overridable via env var (`AITEST_LICENSE_PUBKEY`) weakens tier enforcement
 
-**Status:** 🆕 new — opened 2026-09-06 from the security/commercial audit (owner approved logging).
+**Status:** ✅ **Fixed 2026-09-06** — **option 1 (remove the override entirely)** implemented on-book. The customer-settable trust root is gone: the trust root is always the vendored key, rotation ships with a product release. Verified live: an attacker self-signed `pro` token is now `invalid`, and setting `AITEST_LICENSE_PUBKEY` is ignored. Suite 3104/0, ruff + mypy clean, smoke 39/39 (egress 0 flagged).
 **Priority:** Medium — commercial integrity, not a classic vulnerability.
-**One-line:** `src/licensing/license.py:71` ships the vendored ed25519 public key, but `AITEST_LICENSE_PUBKEY` lets any **stock** build swap the trust root via an env var — no code modification required — so self-signed licenses unlock full-tier features without the "fork" the open-core posture accepted.
-**Decision needed (pick one):**
-- [ ] Remove the override entirely;
-- [ ] Move it to a config file (visible, deliberate, fork-like act) instead of a silent env var;
-- [ ] Document it as a sanctioned self-host knob in the tier table + spec §5.4.
+**One-line (resolved):** `src/licensing/license.py` shipped the vendored ed25519 public key but read `AITEST_LICENSE_PUBKEY`, letting any **stock** build swap the trust root via an env var — no code change — so self-signed licenses unlocked full-tier without the "fork" the open-core posture accepted. **Decision: option 1 — remove the override entirely.** The trust root must not be customer-settable (the industry rule: if offline, vend the key with no override and rotate via release). `vendor_public_key()` now always returns `VENDORED_PUBLIC_KEY_B64`; `verify_license()` uses the constant; the 3 end-to-end tests that pointed the deployment at a test key now monkeypatch the vendored constant (still exercising the real load/verify path). Docs updated (key-ops §1/§7, spec §5.4, markdown doc). **Note:** the env var was originally built for *per-customer signing keypairs* — if that need is real later, the on-book path is server-issued offline-verified (a separate item), not resurrecting the env var.
 **Related:** `docs/security/license-key-ops.md` (B-053) documents the interplay.
-**Estimated sessions:** 0.5
+**Estimated sessions:** 0.5 (spent)
 
 ---
 

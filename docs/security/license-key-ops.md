@@ -9,7 +9,7 @@
 ## 1. What exists today
 
 - **Offline ed25519 signing.** Keys are generated and tokens signed via `python scripts/license_gen.py` (`gen-keys` / `sign`). **No network calls are involved in validation** — the egress audit guarantees the licensing path adds zero outbound HTTP.
-- **Vendored public key.** `src/licensing/license.py` ships `VENDORED_PUBLIC_KEY_B64`; deployments can override it with the `AITEST_LICENSE_PUBKEY` env var. That override weakens stock-build enforcement (a stock build can swap the trust root without a code change) — policy decision tracked as **B-050**.
+- **Vendored public key.** `src/licensing/license.py` ships `VENDORED_PUBLIC_KEY_B64`; it is the trust root for all stock builds and is **not overridable by the customer** (B-050, resolved: the customer-settable trust root was removed). The trust root must not be customer-settable — otherwise a stock build could self-sign its way into paid tier without a fork. Rotation ships with a product release (§5).
 - **Token:** `payload_b64 "." signature_b64` (custom format, `cryptography`'s ed25519 primitive). Payload carries `deployment_id`, `tier`, `claims`, `issued_at`, `expires_at`, `issuer`.
 
 ## 2. The single-operator risk (why this doc exists)
@@ -53,6 +53,6 @@ There is no CRL/OCSP possibility in an air-gapped design. Revocation is achieved
 
 ## 7. Related items
 
-- **B-050** — `AITEST_LICENSE_PUBKEY` override policy (remove / file-based / document).
+- **B-050** — RESOLVED: the `AITEST_LICENSE_PUBKEY` customer-settable trust root was removed; the trust root is always the vendored key. If per-customer signing keypairs are needed, the on-book path is server-issued offline-verified (a separate item), not a customer-settable key.
 - **B-051** — free-tier metering is local and resettable; document honestly.
 - Spec: `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4 (license design contract).

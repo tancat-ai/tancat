@@ -135,7 +135,7 @@ Nothing sends telemetry, update checks, or PyPI/uv calls at runtime (verified by
 **Current state:** nothing exists. `src/secure_config.py` manages `~/.ai-test-gen/config.enc` (Fernet, machine-derived key) — the sanctioned local secret store. Env-var override pattern already used throughout (`AITEST_*`, `LLM_*`).
 
 **Design:**
-- **Token:** ed25519-signed JWT-ish payload (no JWT library needed — hand-rolled base64 + `cryptography` ed25519, matching the existing dependency): `{deployment_id, tier, claims[], issued_at, expires_at, issuer}`. Signing key held by Cat Tan Operations (issuer); the public key ships in the deployment (vendored constant + config override `AITEST_LICENSE_PUBKEY`).
+- **Token:** ed25519-signed JWT-ish payload (no JWT library needed — hand-rolled base64 + `cryptography` ed25519, matching the existing dependency): `{deployment_id, tier, claims[], issued_at, expires_at, issuer}`. Signing key held by Cat Tan Operations (issuer); the public key ships in the deployment (vendored constant — the trust root for all stock builds, deliberately not customer-settable, B-050; rotation ships with a product release).
 - **Validation:** at app startup and before any CI generate/run (`scripts/ci_generate.py` gets `--license` or reads env `AITEST_LICENSE_KEY`/`AITEST_LICENSE_FILE`). **Zero network calls.** Checks: signature, expiry, tier claims well-formed.
 - **Grace period:** expired → 7-day grace with a visible banner + log warning; after grace, new generations and CI runs blocked, evidence/export stays read-only. (Number is a proposal — grill.)
 - **What it authorises:** tier + feature claims (see 5.5), deployment id (surfaced in the UI "About" and in evidence report headers), expiry. **No seat counts** (per-deployment pricing, D2).

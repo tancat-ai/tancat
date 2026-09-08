@@ -4,8 +4,9 @@
 Held by Cat Tan Operations — this script is **not** part of the product
 runtime. It creates the seller's ed25519 signing key and signs license tokens
 for a deployment. The corresponding public key ships in the deployment (vendored
-in ``src/licensing/license.py`` by default, overridable per deployment via
-``AITEST_LICENSE_PUBKEY`` for a per-customer key).
+in ``src/licensing/license.py``). It is the trust root for all stock builds and
+is deliberately not overridable by the customer (B-050); rotation ships with a
+product release (docs/security/license-key-ops.md).
 
 Usage::
 
@@ -53,7 +54,9 @@ def _gen_keys(keys_dir: Path) -> str:
     pub = priv.public_key()
     pub_b64 = base64.b64encode(pub.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)).decode()
     print(f"Private key written: {key_path}")
-    print(f"Public key (embed in deployment, or set AITEST_LICENSE_PUBKEY):\n    {pub_b64}")
+    print(
+        f"Public key (vendored trust root — embed in src/licensing/license.py;\n    rotation ships with a product release):\n    {pub_b64}"
+    )
     return pub_b64
 
 

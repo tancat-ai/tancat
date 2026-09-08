@@ -48,7 +48,7 @@ demoted to free with a warning (never hard-fails validity). `now`/`grace_days` o
 - `feature_enabled(feature, tier=None, now=None) -> bool` — claim check. A blocked/invalid
   license is NOT a downgrade of the OSS core — only CI/headless runs are withheld until a valid
   license exists (spec §5.4: license presence is an upgrade, never a lockout).
-- `vendor_public_key() -> str` — vendored public key, `AITEST_LICENSE_PUBKEY` override wins.
+- `vendor_public_key() -> str` — the trust root, always the vendored key (not customer-settable, B-050).
 
 ## How It Works (internals)
 

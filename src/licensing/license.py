@@ -66,8 +66,11 @@ __all__ = [
 GRACE_DAYS: int = 7
 
 # The deployment's shipped public key. The vendor holds the signing key (Cat
-# Tan Operations); this public key ships in the repo and can be overridden per
-# deployment via AITEST_LICENSE_PUBKEY (base64 raw ed25519 public key).
+# Tan Operations); this public key ships in the repo and is the trust root for
+# all stock builds. It is deliberately NOT overridable by the customer: the
+# trust root must not be customer-settable (that would let a stock build
+# self-sign its way into paid tier without a fork). Rotation ships with a
+# product release (docs/security/license-key-ops.md). See B-050.
 VENDORED_PUBLIC_KEY_B64 = "QOzKE23yF9PBbrlN//ncQVPL+DIONBk8/bEo02IIz7w="
 
 
@@ -217,8 +220,13 @@ def _decode_public_key(public_key_b64: str) -> ed25519.Ed25519PublicKey:
 
 
 def vendor_public_key() -> str:
-    """The deployment's default public key (env override wins)."""
-    return os.environ.get("AITEST_LICENSE_PUBKEY", VENDORED_PUBLIC_KEY_B64)
+    """The deployment's trust root — always the vendored key.
+
+    Deliberately not overridable by the customer (B-050): the trust root must
+    not be customer-settable, or a stock build could self-sign its way into
+    paid tier. Rotation ships with a product release.
+    """
+    return VENDORED_PUBLIC_KEY_B64
 
 
 def verify_license(
@@ -232,7 +240,7 @@ def verify_license(
     if not token or not token.strip():
         return LicenseResult(LicenseStatus.UNLICENSED, reason="No license key configured — running on the free tier.")
 
-    pk_b64 = public_key or vendor_public_key()
+    pk_b64 = public_key or VENDORED_PUBLIC_KEY_B64
     try:
         pub = _decode_public_key(pk_b64)
     except LicenseValidationError as exc:
