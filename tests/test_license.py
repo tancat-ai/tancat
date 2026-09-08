@@ -1,7 +1,8 @@
 """Phase 6e — offline ed25519 license + tier tests.
 
 Hermetic: sign/verify roundtrip, tamper rejection, expiry + grace, tier claims,
-unlicensed = free tier, env override of the public key. No network.
+unlicensed = free tier. No network. The trust root is the vendored constant
+(B-050: not customer-settable); end-to-end tests monkeypatch that constant.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from src.licensing import license as _license_module
 from src.licensing.license import (
     GRACE_DAYS,
     LicenseClaims,
@@ -175,9 +177,10 @@ def test_unlicensed_effective_tier_is_free(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_feature_enabled_by_tier(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    # Valid pro license (env inline) → POM enabled.
+    # Valid pro license (env inline) → POM enabled. B-050: trust root is the
+    # vendored constant (not customer-settable), so patch it to the test key.
     priv, pub = _keypair()
-    monkeypatch.setenv("AITEST_LICENSE_PUBKEY", pub)
+    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)
     token = _make_token(priv, _claims(tier="pro"))
     monkeypatch.setenv("AITEST_LICENSE_KEY", token)
     assert feature_enabled("pom") is True
@@ -200,7 +203,7 @@ def test_license_key_file_loaded(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     token = _make_token(priv, _claims(tier="airgap"))
     key_file = tmp_path / "license.key"
     key_file.write_text(token + "\n", encoding="utf-8")
-    monkeypatch.setenv("AITEST_LICENSE_PUBKEY", pub)
+    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)  # B-050
     monkeypatch.setenv("AITEST_LICENSE_FILE", str(key_file))
     result = license_status()
     assert result.status == LicenseStatus.VALID

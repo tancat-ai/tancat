@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
+from src.licensing import license as _license_module
 from src.licensing.license import LicenseClaims, sign_license
 from src.usage_meter import FreeTierLimitError, UsageMeter, monthly_window
 
@@ -162,7 +163,9 @@ def _paid_license(monkeypatch: pytest.MonkeyPatch, tier: str = "self-serve") -> 
         raw,
     )
     monkeypatch.setenv("AITEST_LICENSE_KEY", token)
-    monkeypatch.setenv("AITEST_LICENSE_PUBKEY", pub_b64)
+    # B-050: trust root is the vendored constant (not customer-settable); patch
+    # it to the test key so the self-signed token verifies end-to-end.
+    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub_b64)
 
 
 def test_paid_tier_has_no_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
