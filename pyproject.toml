@@ -31,6 +31,14 @@ dependencies = [
     "langgraph>=1.2.9",
 ]
 
+# Console entry point (B-057): without this, `pip install tancat` / `uv tool
+# install tancat` gives a package with no runnable command.  `main()` at
+# cli.main:main is sync (it wraps asyncio.run(interactive_session())) and
+# re-exports the real implementation from src.cli.main, so installing yields a
+# working `tancat` interactive CLI.
+[project.scripts]
+tancat = "cli.main:main"
+
 [project.optional-dependencies]
 pdf = [
     "PyMuPDF>=1.28.0",
