@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html class="scroll-smooth" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TanCat - The AI test generator where your data never leaves your deployment</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: {
+      colors: { midnight:'#070b10',darkslate:'#0d131b',cardbg:'#111823',amberGlow:'#f59e0b',amberBright:'#fbbf24',cyberBlue:'#38bdf8',neonViolet:'#818cf8',accentPink:'#f43f5e' },
+      fontFamily: { sans:['Inter','system-ui','-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','sans-serif'],mono:['JetBrains Mono','Fira Code','SFMono-Regular','Menlo','Monaco','Consolas','monospace'],serif:['Newsreader','Playfair Display','Georgia','serif'] },
+      boxShadow: { 'amber-glow':'0 0 45px -10px rgba(245,158,11,0.35)','cyber-glow':'0 0 50px -12px rgba(56,189,248,0.25)','neon-glow':'0 0 35px -8px rgba(129,140,248,0.3)' }
+    } }
+  }
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,600&display=swap');
+  body{background-color:#070b10;color:#e2e8f0;overflow-x:hidden}
+  .film-grain{background-image:radial-gradient(rgba(245,158,11,0.04) 1px,transparent 0);background-size:24px 24px}
+  @keyframes pulseAura{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:.75;transform:scale(1.03)}}
+  .amber-radiance{animation:pulseAura 8s ease-in-out infinite}
+  .code-glow{box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 20px 40px -15px rgba(0,0,0,.8)}
+</style>
+</head>
+<body class="font-sans antialiased selection:bg-amber-500/30 selection:text-amber-200 film-grain min-h-screen">
+<header class="sticky top-0 z-50 backdrop-blur-xl bg-midnight/80 border-b border-slate-800/80">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+<a class="flex items-center gap-3 group" href="#">
+  <img alt="TanCat logo" class="w-9 h-9 rounded-lg object-contain" src="logo_transparent.png"/>
+  <div class="flex items-baseline gap-1">
+    <span class="font-black text-xl tracking-tight text-white">Tan<span class="text-amber-400">Cat</span></span>
+    <span class="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">tancat-0.1.0</span>
+  </div>
+</a>
+<nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+  <a class="hover:text-amber-400 transition-colors" href="#how-it-works">How It Works</a>
+  <a class="hover:text-amber-400 transition-colors" href="#pipeline">Interactive Pipeline</a>
+  <a class="hover:text-amber-400 transition-colors" href="#regulated">Regulated Defense</a>
+  <a class="flex items-center gap-1.5 hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Egress Audit: LLM + Target Only</a>
+  <a class="hover:text-amber-400 transition-colors" href="#pricing">Pricing</a>
+</nav>
+<div class="flex items-center gap-3">
+  <a class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 bg-slate-900/60 text-xs font-mono text-slate-300 hover:text-white transition-all" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank">GitHub</a>
+  <a class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg shadow-amber-glow hover:brightness-110 active:scale-95 transition-all" href="#quickstart">Deploy Local</a>
+</div>
+</div>
+</header>
+<section class="relative pt-12 pb-24 lg:pt-20 lg:pb-32 overflow-hidden">
+<div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[850px] h-[550px] bg-gradient-to-tr from-amber-500/20 via-neonViolet/15 to-cyberBlue/10 blur-[130px] pointer-events-none amber-radiance"></div>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+<div class="text-center max-w-3xl mx-auto mb-10">
+  <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono tracking-wide uppercase mb-6 shadow-sm">
+    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> BYO-LLM &middot; BOUNDED EGRESS &middot; AIR-GAP READY
+  </div>
+  <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">The AI test generator where your data <br class="hidden sm:inline"/><span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-cyberBlue">never leaves your deployment.</span></h1>
+  <p class="mt-4 text-base sm:text-lg text-slate-400 font-normal leading-relaxed max-w-2xl mx-auto">Paste a user story <span class="text-slate-200">&rarr;</span> generate executable Playwright <code class="text-amber-300 font-mono text-xs bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">pytest</code> tests from <strong class="text-white font-medium">your own</strong> LLM, on <strong class="text-white font-medium">your own</strong> infra. It even learns from your reference docs &mdash; and they stay in-house.</p>
+  <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:brightness-110 shadow-amber-glow active:scale-95 transition-all flex items-center gap-2" href="#quickstart">Get Started (Free &amp; Local) <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg></a>
+    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/90 border border-slate-800 hover:border-slate-600 hover:text-white hover:bg-slate-800/80 transition-all flex items-center gap-2.5" href="https://www.loom.com/share/YOUR_VIDEO_ID_HERE" rel="noopener noreferrer" target="_blank"><span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-amber-400">&#9654;</span> Watch 3-Min Walkthrough</a>
+  </div>
+</div>
+<div class="mt-12 relative max-w-5xl mx-auto">
+<div class="absolute -inset-1.5 bg-gradient-to-r from-amber-500/40 via-neonViolet/30 to-cyberBlue/40 rounded-3xl blur-xl opacity-70"></div>
+<div class="relative rounded-2xl overflow-hidden border border-amber-500/30 bg-slate-950 shadow-2xl">
+  <div class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
+    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-500/80"></span><span class="w-3 h-3 rounded-full bg-amber-500/80"></span><span class="w-3 h-3 rounded-full bg-emerald-500/80"></span><span class="ml-2 text-slate-300 text-xs font-medium tracking-wider">tancat-ui // mission-control :: localhost:8501</span></div>
+    <div class="flex items-center gap-2 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+      <button class="px-3 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5" id="btn-tab-ui" onclick="switchHeroView('ui')" type="button"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Product UI</button>
+      <button class="px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center gap-1.5" id="btn-tab-mascot" onclick="switchHeroView('mascot')" type="button">&#127912; Noir Art</button>
+    </div>
+    <div class="hidden sm:flex items-center gap-3"><span class="inline-flex items-center gap-1 text-emerald-400 font-mono text-[11px]"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Egress: LLM + Target Only</span><span class="text-slate-500">|</span><span class="text-amber-400 font-mono text-[11px]">LLM: llama.cpp / Ollama :8080</span></div>
+  </div>
+  <div class="relative aspect-video max-h-[520px] w-full overflow-hidden bg-slate-950" id="view-product-ui">
+    <img alt="Real TanCat Streamlit App UI: AI Playwright Test Generator with target URL, parse mode, URL guard, max pages, and site health check." class="w-full h-full object-cover object-top" loading="eager" src="streamlit_real_1280x820.png"/>
+    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent pointer-events-none"></div>
+    <div class="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-between gap-3 bg-slate-950/85 backdrop-blur-md border border-slate-800 p-3 rounded-xl">
+      <div class="flex items-center gap-2.5"><span class="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">Streamlit Web UI</span><span class="text-xs text-slate-300 font-mono">Real product capture - launch_ui.sh output</span></div>
+      <div class="text-[11px] font-mono text-slate-400">No telemetry &middot; 100% private</div>
+    </div>
+  </div>
+  <div class="relative aspect-video max-h-[520px] w-full overflow-hidden bg-slate-950 hidden" id="view-mascot-art">
+    <img alt="Neon-noir illustration: orange tabby cat in retro sunglasses in a mid-century deckchair on a high-tech balcony overlooking a glowing cyberpunk metropolis in amber, cobalt blue, and neon magenta." class="w-full h-full object-cover object-center" loading="eager" src="https://lh3.googleusercontent.com/aida/AEtjO1WgM_b8az8Fdz5xFPfdHjOe02aiFte2xMKZVvAmGKSyBPAl84c8Owcztx6SQSspbONNmPq1snwgX5WTX8SAoURMUlX8AO-r6zHumgp3qZwX-1Zle6scR4ySYXCZm2rmoQZXYbuKCpmvL55hqKx9tOgC2gjJ0M-pnISdQ2sTebfs0DdeifVLQfAj158OE-jVavlW59_swJVqN_A1wnuJMXV3nXPy4icw34UOTtbYXj5SnrXsGkuPo9mwA8PJ"/>
+    <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-85 pointer-events-none"></div>
+    <div class="absolute inset-0 bg-gradient-to-r from-slate-950/40 via-transparent to-slate-950/40 pointer-events-none"></div>
+    <div class="absolute bottom-5 left-5 right-5 sm:right-auto bg-slate-950/85 backdrop-blur-md border border-amber-500/30 p-3 sm:px-4 sm:py-2.5 rounded-xl flex items-center gap-3 max-w-md shadow-2xl">
+      <div class="p-2 rounded-lg bg-amber-500/20 text-amber-300 font-mono text-base">&#9728;</div>
+      <div><p class="text-xs font-semibold text-white tracking-wide">Sit back on the deck while TanCat tests.</p><p class="text-[11px] text-slate-400 font-mono">Private execution. Real DOM ground truth.</p></div>
+    </div>
+  </div>
+  <script>function switchHeroView(v){var ui=document.getElementById('view-product-ui'),ma=document.getElementById('view-mascot-art'),bu=document.getElementById('btn-tab-ui'),bm=document.getElementById('btn-tab-mascot');var a='px-3 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5',i='px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center gap-1.5';if(v==='ui'){ui.classList.remove('hidden');ma.classList.add('hidden');bu.className=a;bm.className=i}else{ui.classList.add('hidden');ma.classList.remove('hidden');bm.className=a;bu.className=i}}</script>
+  <div class="bg-darkslate border-t border-slate-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-xs">
+    <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto text-slate-300"><span class="text-amber-400 font-bold">$</span><code class="text-amber-200">git clone https://github.com/tancat-ai/tancat &amp;&amp; cd tancat &amp;&amp; uv sync</code></div>
+    <button class="w-full md:w-auto shrink-0 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg border border-slate-700 transition-colors flex items-center justify-center gap-2" onclick="navigator.clipboard.writeText('git clone https://github.com/tancat-ai/tancat && cd tancat && uv sync && bash launch_ui.sh');this.innerText='Copied!';setTimeout(function(){this.innerText='Copy Command'},2000)"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Copy Command</button>
+  </div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-16 border-y border-slate-800/80 bg-slate-950/60 relative" id="how-it-works">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="text-center max-w-2xl mx-auto mb-12">
+  <span class="text-xs font-mono text-amber-400 uppercase tracking-widest">How It Works</span>
+  <h2 class="text-2xl sm:text-3xl font-bold text-white mt-2">Story &rarr; Generate &rarr; Run &rarr; Evidence &rarr; Export</h2>
+  <p class="text-slate-400 text-sm mt-3">One seamless loop that completes end-to-end, with locators taken from the real rendered DOM &mdash; not guessed.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-amber-500/40 transition-all group">
+    <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono font-bold flex items-center justify-center mb-4">1</div>
+    <h3 class="text-base font-semibold text-white group-hover:text-amber-300 transition-colors">Paste a User Story</h3>
+    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Plain language Jira ticket, user acceptance criteria, or markdown spec. That's the only input &mdash; no syntax to learn or test framework to master.</p>
+    <div class="mt-4 text-[11px] font-mono text-slate-500 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80">&ldquo;As an admin, clicking 'Revoke Token' opens confirm modal.&rdquo;</div>
+  </div>
+  <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-cyberBlue/40 transition-all group">
+    <div class="w-8 h-8 rounded-lg bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue font-mono font-bold flex items-center justify-center mb-4">2</div>
+    <h3 class="text-base font-semibold text-white group-hover:text-cyberBlue transition-colors">Generate against the live DOM</h3>
+    <p class="text-xs text-slate-400 mt-2 leading-relaxed">TanCat launches headless Chromium, inspects real DOM nodes, builds a page skeleton, and feeds exact attributes to your offline LLM. Score-gated resolution - no hallucinated IDs.</p>
+    <div class="mt-4 text-[11px] font-mono text-slate-500 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80">Resolved: button[data-testid="revoke-access-confirm"]</div>
+  </div>
+  <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-emerald-400/40 transition-all group">
+    <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-bold flex items-center justify-center mb-4">3</div>
+    <h3 class="text-base font-semibold text-white group-hover:text-emerald-300 transition-colors">Run, Evidence, Export</h3>
+    <p class="text-xs text-slate-400 mt-2 leading-relaxed">TanCat executes the generated test, records screenshots, and writes out evidence in the shape each role needs: a suite heatmap for the product owner, a Gantt timeline for the test manager, and JUnit/HTML/CSV for the rest.</p>
+    <div class="mt-4 text-[11px] font-mono text-emerald-400/80 bg-emerald-950/20 p-2.5 rounded-lg border border-emerald-800/40 flex items-center justify-between"><span>PASSED 1/1 (0.84s)</span><span class="text-slate-400">test_report.html</span></div>
+  </div>
+</div>
+</div>
+</section>
+<section class="py-20 lg:py-28 relative" id="pipeline">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12">
+  <div><span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Live DOM Resolution Engine</span><h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">See how plain English becomes ground-truth Pytest.</h2></div>
+  <p class="text-sm text-slate-400 max-w-md mt-4 md:mt-0">Locators aren't guessed. TanCat scrapes the live DOM and resolves against real attributes &mdash; with score-gated confidence &mdash; before it prompts, so every selector traces back to the rendered page.</p>
+</div>
+<div class="rounded-2xl border border-slate-800 bg-cardbg shadow-2xl overflow-hidden code-glow">
+  <div class="bg-slate-900 border-b border-slate-800 px-5 py-3 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3"><span class="px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs font-medium">Session: #TAN-8921</span><span class="text-xs text-slate-400 font-mono hidden sm:inline">Target: https://staging.internal.bank/portal/checkout</span></div>
+    <div class="flex items-center gap-2 text-xs font-mono"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> DOM Synthesized</span><span class="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px]">[Interactive Demo - Example BYO Model: Llama-3-70B-Q4 / Ollama / llama.cpp]</span></div>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-800">
+    <div class="lg:col-span-3 p-5 bg-slate-950/40">
+      <div class="flex items-center justify-between mb-3"><span class="text-xs font-mono font-semibold text-slate-300 uppercase tracking-wider">1. Input User Story</span><span class="text-[11px] font-mono text-slate-500">Jira Acceptance</span></div>
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 text-xs font-mono text-slate-300 space-y-3 leading-relaxed"><p class="text-amber-400 font-semibold"># Feature: High-Value Wire Confirmation</p><p class="text-slate-400">1. Navigate to /transfers/wire<br/>2. Input amount: <span class="text-cyan-300">&ldquo;50000&rdquo;</span><br/>3. Select beneficiary: <span class="text-cyan-300">&ldquo;Escrow Alpha&rdquo;</span><br/>4. Click &ldquo;Submit Wire&rdquo;<br/>5. Verify 2FA modal with ID <span class="text-amber-300">#two-factor-dialog</span></p></div>
+      <div class="mt-4 p-3 bg-slate-900/40 rounded-xl border border-dashed border-slate-800 text-[11px] text-slate-400 space-y-1.5"><div class="text-slate-300 font-medium">Auto-Extracted Intent:</div><div class="text-emerald-400 font-mono">&#10003; form_fill(amount, beneficiary)</div><div class="text-emerald-400 font-mono">&#10003; action_click(submit_button)</div><div class="text-emerald-400 font-mono">&#10003; assert_visible(modal_overlay)</div></div>
+    </div>
+    <div class="lg:col-span-4 p-5 bg-midnight">
+      <div class="flex items-center justify-between mb-3"><span class="text-xs font-mono font-semibold text-cyberBlue uppercase tracking-wider">2. Live Scraped DOM Tree</span><span class="text-[11px] font-mono text-slate-500">Chromium v126</span></div>
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 font-mono text-[11px] space-y-2 overflow-x-auto text-slate-300">
+        <div class="text-slate-500">&lt;form id="wire-transfer-form" data-state="ready"&gt;</div>
+        <div class="pl-3 border-l border-slate-800 py-1 space-y-1">
+          <div><span class="text-slate-500">&lt;input</span> <span class="text-amber-400">name=</span><span class="text-emerald-400">&ldquo;transfer_amt&rdquo;</span> <span class="text-cyberBlue">data-testid=</span><span class="text-emerald-400">&ldquo;wire-amount-input&rdquo;</span> <span class="text-slate-500">/&gt;</span></div>
+          <div class="text-[10px] text-emerald-400/80 pl-2">&#8627; Resolved: [data-testid="wire-amount-input"] (Score: 0.99)</div>
+          <div class="pt-1"><span class="text-slate-500">&lt;button</span> <span class="text-amber-400">type=</span><span class="text-emerald-400">&ldquo;button&rdquo;</span> <span class="text-cyberBlue">id=</span><span class="text-emerald-400">&ldquo;submit-wire-btn&rdquo;</span> <span class="text-slate-500">&gt;</span> <span class="text-slate-200">Submit Wire</span> <span class="text-slate-500">&lt;/button&gt;</span></div>
+          <div class="text-[10px] text-emerald-400/80 pl-2">&#8627; Resolved: #submit-wire-btn (Unique XPath, Safe)</div>
+        </div>
+        <div class="text-slate-500">&lt;/form&gt;</div>
+        <div class="text-slate-500 mt-2">&lt;dialog id="two-factor-dialog" class="modal-open"&gt;...&lt;/dialog&gt;</div>
+      </div>
+      <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 px-1"><span>Ground-truth resolution:</span><span class="text-emerald-400 font-semibold">Deterministic (score-gated)</span></div>
+    </div>
+    <div class="lg:col-span-5 p-5 bg-cardbg">
+      <div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><span class="text-xs font-mono font-semibold text-amber-300 uppercase tracking-wider">3. Playwright Pytest</span><span class="px-1.5 py-0.5 text-[10px] font-mono bg-emerald-500/20 text-emerald-400 rounded">PASSED</span></div><div class="flex gap-2"><span class="text-[11px] font-mono text-slate-300 border-b border-amber-400 pb-0.5">test_wire.py</span><span class="text-[11px] font-mono text-slate-500">junit.xml</span><span class="text-[11px] font-mono text-slate-500">report.html</span></div></div>
+      <pre class="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 overflow-x-auto leading-relaxed"><code><span class="text-neonViolet">import</span> pytest
+<span class="text-neonViolet">from</span> playwright.sync_api <span class="text-neonViolet">import</span> Page, expect
+
+<span class="text-amber-400">@pytest.mark.egress_gated</span>
+<span class="text-cyberBlue">def</span> <span class="text-amber-300">test_wire_confirmation_modal</span>(page: Page):
+    page.goto(<span class="text-emerald-300">"/transfers/wire"</span>)
+    page.locator(<span class="text-emerald-300">'[data-testid="wire-amount-input"]'</span>).fill(<span class="text-emerald-300">"50000"</span>)
+    page.locator(<span class="text-emerald-300">'select[name="beneficiary"]'</span>).select_option(<span class="text-emerald-300">"escrow_alpha"</span>)
+    page.locator(<span class="text-emerald-300">'#submit-wire-btn'</span>).click()
+    modal = page.locator(<span class="text-emerald-300">'dialog#two-factor-dialog'</span>)
+    expect(modal).to_be_visible()
+    expect(modal).to_contain_text(<span class="text-emerald-300">"Confirm Authorization"</span>)</code></pre>
+      <div class="mt-3 p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between text-xs font-mono"><span class="text-emerald-400 flex items-center gap-1.5"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Execution completed in 0.62s</span><span class="text-slate-400">Evidence saved: ./evidence/wire_01.tar.gz</span></div>
+    </div>
+  </div>
+</div>
+</div>
+</section>
+<section class="py-20 border-t border-slate-800 bg-midnight relative" id="regulated">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="text-center max-w-3xl mx-auto mb-16">
+  <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Security &amp; Architecture</span>
+  <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Built for the regulated buyer.</h2>
+  <p class="text-slate-400 text-sm mt-3">Every incumbent cloud SaaS routes your app's DOM through multi-tenant external servers. TanCat deploys on your infra, pointed at your local LLM, keeping sensitive customer data isolated.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
+  <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-amber-500/40 transition-all group flex flex-col justify-between">
+    <div><div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#129426;</div><h3 class="text-lg font-bold text-white group-hover:text-amber-300 transition-colors">BYO-LLM Architecture</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Native compatibility with <strong class="text-slate-200">llama.cpp</strong>, <strong class="text-slate-200">Ollama</strong>, <strong class="text-slate-200">LM Studio</strong>, or an in-cluster private vLLM endpoint. Swap models anytime with zero vendor lock-in.</p></div>
+    <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-amber-400/90">ENV: TANCAT_LLM_URL=http://127.0.0.1:8080/v1</div>
+  </div>
+  <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-cyberBlue/40 transition-all group flex flex-col justify-between">
+    <div><div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#128737;</div><h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Bounded Egress (Verified in CI)</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Runtime outbound calls strictly limited to your local/self-hosted LLM endpoint and your target application. Verified by static code inspection in CI via <code class="text-cyberBlue font-mono text-[11px]">python scripts/audit_egress.py</code> (AST call-site static inspection) wired into smoke tests and CI.</p></div>
+    <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Audit Gate: PASSING</div>
+  </div>
+  <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-neonViolet/40 transition-all group flex flex-col justify-between">
+    <div><div class="w-12 h-12 rounded-xl bg-neonViolet/10 border border-neonViolet/30 text-neonViolet flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#129665;</div><h3 class="text-lg font-bold text-white group-hover:text-neonViolet transition-colors">Self-Healing Locators</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">When design teams alter markup or CSS class names, TanCat calculates semantic affinity to reconcile and heal broken locators in staging before CI turns red.</p></div>
+    <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-neonViolet">Self-healing locators that dynamically recover from UI refactors and markup drift without test rot.</div>
+  </div>
+  <div class="md:col-span-3 lg:col-span-3 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-amber-500/40 transition-all group">
+    <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#128202;</div>
+    <h3 class="text-lg font-bold text-white group-hover:text-amber-300 transition-colors">Audit-Grade Evidence Bundles</h3>
+    <p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Real evidence, not just a vague checkmark. HTML, CSV, NDJSON, and JUnit XML test reports with deterministic DOM execution bundles.</p>
+    <div class="mt-4 flex gap-2"><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">HTML Reports</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">CSV Logs</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">NDJSON</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">JUnit XML</span></div>
+  </div>
+  <div class="md:col-span-3 lg:col-span-3 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-cyberBlue/40 transition-all group">
+    <div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#9881;</div>
+    <h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Native CI/CD Action &amp; POM Mode</h3>
+    <p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Organizes test code into maintainable <strong class="text-slate-200">Page-Object-Model (POM)</strong> python classes automatically. Drop our reusable GitHub Action or GitLab Runner into your existing pipelines in minutes.</p>
+    <div class="mt-4 flex gap-2"><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">GitHub Actions</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">GitLab CI</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">POM Pattern</span></div>
+  </div>
+</div>
+</div>
+</section>
+<section class="py-20 bg-slate-950 relative overflow-hidden" id="egress-audit">
+<div class="absolute right-0 top-1/2 -translate-y-1/2 w-96 h-96 bg-emerald-500/10 blur-3xl pointer-events-none"></div>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-cardbg to-slate-950 p-8 sm:p-12 shadow-2xl relative">
+<div class="flex flex-col lg:flex-row items-center justify-between gap-10">
+  <div class="max-w-2xl">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono mb-4"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Egress Audit Verified (Automated CI Gate)</div>
+    <h2 class="text-2xl sm:text-3xl font-bold text-white leading-snug">The runtime makes outbound calls only to <span class="text-emerald-400">your LLM endpoint</span> and <span class="text-amber-400">your own target site</span>.</h2>
+    <p class="text-slate-400 text-sm mt-4 leading-relaxed">No PyPI background calls at runtime. No tracking beacons. No model weights downloaded at runtime. Enforced via <code class="text-emerald-300 font-mono text-xs">python scripts/audit_egress.py</code> AST static inspection in CI. The LLM traffic is constrained to your trusted endpoint and target traffic is strictly SSRF-guarded.</p>
+    <div class="mt-6 flex flex-wrap items-center gap-4">
+      <a class="px-5 py-2.5 rounded-xl font-medium text-xs text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-2 transition-all" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">Read the Published Egress Audit <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></a>
+      <a class="px-5 py-2.5 rounded-xl font-medium text-xs text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center gap-2 transition-all" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank">Security Policy <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></a>
+    </div>
+  </div>
+  <div class="w-full lg:w-96 bg-midnight border border-slate-800 p-5 rounded-2xl font-mono text-xs text-slate-300 shadow-inner">
+    <div class="text-[11px] text-slate-400 pb-2 border-b border-slate-800 flex justify-between"><span>BOUNDED EGRESS TOPOLOGY</span><span class="text-emerald-400">ISOLATED</span></div>
+    <div class="py-4 space-y-3 text-center">
+      <div class="p-2.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300 font-semibold">TanCat Engine (Your Host)</div>
+      <div class="flex items-center justify-center gap-2 text-slate-500 text-[10px]"><span>&#8597; AST audited / localhost / private IP</span></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="p-2 rounded bg-slate-900 border border-slate-800 text-[11px]"><span class="text-slate-400 block text-[9px]">IN-PERIMETER</span><span class="text-cyan-400 font-medium">Local LLM</span></div>
+        <div class="p-2 rounded bg-slate-900 border border-slate-800 text-[11px]"><span class="text-slate-400 block text-[9px]">IN-PERIMETER</span><span class="text-emerald-400 font-medium">Target App DOM</span></div>
+      </div>
+      <div class="pt-2 text-[10px] text-rose-400/90 border-t border-slate-800/80 flex items-center justify-center gap-1.5"><span class="font-bold">&#10005;</span> Product runtime egress: LLM + target only</div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</section>
+<section class="py-20 border-t border-slate-800 bg-midnight relative" id="pricing">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="text-center max-w-3xl mx-auto mb-16">
+  <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Predictable Model</span>
+  <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Per deployment, not per seat.</h2>
+  <p class="text-slate-400 text-sm mt-3">Deploy it once per company, per infra. You should never be penalized when your entire QA and dev squad writes reliable tests.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+  <div class="bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between">
+    <div><div class="text-xs font-mono uppercase text-slate-400 tracking-wider">Developer / OSS</div><h3 class="text-xl font-bold text-white mt-1">Free Community</h3><p class="text-slate-400 text-xs mt-2">For solo developers, or for local debugging.</p>
+    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-slate-700 pl-2">Anchor: Mabl 500-credit trial; testRigor free trial</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">$0</span><span class="text-slate-400 text-xs font-mono"> / forever</span></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">25 runs / 10 exports per 30 days</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">BYO-LLM, bounded egress</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">HTML / CSV / NDJSON evidence</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Playwright Pytest test generator</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="#quickstart">Install Locally</a></div>
+  </div>
+  <div class="bg-gradient-to-b from-cardbg to-slate-950 rounded-2xl p-7 border-2 border-amber-500/60 shadow-amber-glow transition-all flex flex-col justify-between relative">
+    <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-amber-400 text-slate-950 text-[10px] font-mono font-bold uppercase rounded-full tracking-wider shadow-sm">Most Popular</div>
+    <div><div class="text-xs font-mono uppercase text-amber-400 tracking-wider">Engineering Team</div><h3 class="text-xl font-bold text-white mt-1">Pro Deployment</h3><p class="text-slate-400 text-xs mt-2">Unlimited internal runs across your sprint teams and staging CI pipelines.</p>
+    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-amber-500/40 pl-2">Anchor: testRigor $450/mo Pro; Mabl $499/mo</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">~$299-499</span><span class="text-slate-400 text-xs font-mono"> / deployment</span></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited team test runs</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">POM mode &amp; multi-site suites</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">CI/CD Action (GitHub/GitLab)</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Self-healing + RAG DOM memory</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Priority security patch queue</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:brightness-110 shadow-md transition-all" href="#quickstart">Deploy Pro Stack</a></div>
+  </div>
+  <div class="bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between">
+    <div><div class="text-xs font-mono uppercase text-cyberBlue tracking-wider">Regulated Enterprise</div><h3 class="text-xl font-bold text-white mt-1">Air-Gap / Defense</h3><p class="text-slate-400 text-xs mt-2">For banking, healthcare, aerospace, and government zero-trust environments.</p>
+    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-cyberBlue/40 pl-2">Anchor: Mabl Private ~$900/mo; QA Wolf $8k/mo+, $90k median ACV</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">~$1-3k</span><span class="text-slate-400 text-xs font-mono"> / deployment</span></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Strict private-network / air-gap license</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Contractual egress-limitation SLA</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Custom auditor evidence reporting</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Dedicated engineer onboarding &amp; SLA</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank">Talk to Enterprise Security</a></div>
+  </div>
+</div>
+<div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing benchmarked against public vendor tiers (testRigor, Mabl, QA Wolf) in RESEARCH_COMPETITIVE_LANDSCAPE.md &sect;4.2. The differentiated revenue is the air-gap premium tier. Contact sales for multi-cluster enterprise licensing.</div>
+</div>
+</section>
+<section class="py-20 bg-slate-950 border-t border-slate-800 relative" id="quickstart">
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="mb-10 text-center">
+  <span class="text-xs font-mono text-amber-400 uppercase tracking-wider">Fast Setup</span>
+  <h2 class="text-3xl font-bold text-white mt-1">Clone + uv sync + run</h2>
+  <p class="text-slate-400 text-xs mt-2">TanCat uses <code class="text-amber-300 font-mono">uv</code> for fast, reproducible dependencies.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+  <div class="md:col-span-7 bg-midnight border border-slate-800 rounded-2xl p-5 font-mono text-xs text-slate-300 shadow-xl">
+    <div class="flex items-center justify-between pb-3 border-b border-slate-800/80 text-slate-500"><span class="text-amber-400 font-semibold"># Terminal (macOS / Linux / WSL2)</span><span class="text-[11px]">bash</span></div>
+    <div class="py-4 space-y-3 leading-relaxed">
+      <div><span class="text-slate-500"># 1. Prerequisites: Python 3.14+, uv, local LLM server</span><br/><span class="text-slate-500"># (llama.cpp @ localhost:8080, Ollama, or LM Studio)</span></div>
+      <div class="pt-1"><span class="text-slate-500"># 2. Clone and prepare dependencies</span><br/><span class="text-amber-400 font-bold">$ </span><span class="text-white">git clone https://github.com/tancat-ai/tancat</span><br/><span class="text-amber-400 font-bold">$ </span><span class="text-white">cd tancat</span><br/><span class="text-amber-400 font-bold">$ </span><span class="text-cyan-300">uv sync</span><br/><span class="text-amber-400 font-bold">$ </span><span class="text-cyan-300">playwright install chromium</span></div>
+      <div class="pt-2"><span class="text-slate-500"># 3. Launch the visual mission control</span><br/><span class="text-amber-400 font-bold">$ </span><span class="text-emerald-400 font-medium">bash launch_ui.sh</span><br/><span class="text-slate-500"># (or headless CLI: bash launch_cli.sh)</span></div>
+    </div>
+  </div>
+  <div class="md:col-span-5 flex flex-col justify-between bg-cardbg border border-slate-800 rounded-2xl p-6">
+    <div><h4 class="text-sm font-bold text-white font-mono">What you need</h4>
+    <ul class="mt-4 space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-start gap-2"><span class="text-amber-400 font-bold">&bull;</span><span>Python 3.14+ runtime with <code class="text-cyan-300">uv</code></span></li><li class="flex items-start gap-2"><span class="text-amber-400 font-bold">&bull;</span><span>Local OpenAI-compatible API endpoint (llama.cpp, Ollama, or LM Studio)</span></li><li class="flex items-start gap-2"><span class="text-amber-400 font-bold">&bull;</span><span>Chromium browser binary (installed by playwright)</span></li><li class="flex items-start gap-2"><span class="text-amber-400 font-bold">&bull;</span><span>Target staging URL or localhost dev server</span></li></ul></div>
+    <div class="pt-6 border-t border-slate-800 font-mono text-xs"><span class="text-slate-500 block mb-2 font-medium">Next Documentation Steps:</span>
+    <div class="flex flex-col gap-1.5 text-amber-300">
+      <a class="hover:underline flex items-center justify-between" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank"><span>GitHub Repository</span><span>&rarr;</span></a>
+      <a class="hover:underline flex items-center justify-between" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank"><span>Security &amp; Egress Paper</span><span>&rarr;</span></a>
+      <a class="hover:underline flex items-center justify-between" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank"><span>Security Policy</span><span>&rarr;</span></a>
+    </div></div>
+  </div>
+</div>
+</div>
+</section>
+<footer class="bg-midnight border-t border-slate-800/80 py-12 text-slate-400 text-xs">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
+  <div class="flex items-center gap-3">
+    <img alt="TanCat logo" class="w-6 h-6 rounded object-contain" src="logo_transparent.png"/>
+    <p class="font-mono text-slate-400">&copy; TanCat. The AI test generator where your data never leaves your deployment.</p>
+  </div>
+  <div class="flex items-center gap-6 font-mono text-slate-400">
+    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank">GitHub</a>
+    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">Egress Audit</a>
+    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank">Security</a>
+    <a class="hover:text-amber-400 transition-colors" href="https://www.loom.com/share/YOUR_VIDEO_ID_HERE" rel="noopener noreferrer" target="_blank">Walkthrough</a>
+    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/LICENSE" rel="noopener noreferrer" target="_blank">License (Apache-2.0)</a>
+  </div>
+</div>
+</footer>
+</body></html>
