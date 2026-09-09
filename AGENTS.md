@@ -207,6 +207,20 @@ Two files track active work; each owns a different class of item. **This split i
 - **Check class name consistency** — import name must match class name
 - **Coverage mapping**: number-based (TC-001 → `test_01_*`) before keyword fallback
 
+### Answer style — keep it short and plain (ASD-STE100 / Simplified Technical English)
+
+The user switches off on long-winded answers. Follow this for **every** response:
+
+- **Answer first, then (only if needed) why.** Lead with the direct answer / the thing to do. No preamble.
+- **Kill the preamble-faf.** Do NOT open with "I'm glad…", "this is a concrete plan…", "I have to be honest…", "let me walk through it precisely", "I don't want to rubber-stamp…". Just start.
+- **Short sentences. Common words. One idea per sentence.** ASD-STE100 style: no "utilize / leverage / facilitate / aforementioned / in order to" → use "use / help / do / that / to". No nested clauses.
+- **Bullets over paragraphs.** A list of short items beats a wall of text.
+- **No bolded signposts or section headers on a short answer.** Don't turn a 4-line answer into a 60-line one with headers.
+- **Length cap:** most answers ≤ ~150 words. Only go longer when the task genuinely requires it (a code change, a real list, a multi-part plan) — and even then, keep each line short.
+- **One recommendation, not five options with a "bottom line."** Pick the answer. If you must give options, ≤3, each one line.
+- **No "the one thing I want to be clear about"** closing paragraphs. End when the answer is complete.
+- **Honesty rule is NOT relaxed by brevity.** Still flag real errors / don't rubber-stamp / don't dodge — but do it in 1-2 short lines, not a long aside.
+
 ---
 
 ## 12. Debugging & UAT
