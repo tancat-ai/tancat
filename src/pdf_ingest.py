@@ -347,14 +347,16 @@ def ingest_pdf(
         page_report: Optional list that receives one
             ``(page_number, outcome, reason)`` tuple per page, where outcome is
             ``"text"`` (PyMuPDF text), ``"ocr"`` (extracted via the OCR
-            fallback), or ``"skipped"`` (image-only, no OCR text).  For a
-            skipped page, ``reason`` is one of ``"no_engine"`` (the OCR hook
-            was not provided — the ``[ocr]`` extra is not installed),
-            ``"ocr_no_text"`` (the OCR hook ran but could not read the page),
-            or ``"ocr_failed"`` (the OCR hook raised).  For text/ocr pages,
-            ``reason`` is ``""``.  Used by the ingestion quality summary
-            (AI-055) to produce a cause-differentiated warning.  When ``None``,
-            no per-page reporting.
+            fallback), ``"empty"`` (page was checked via OCR but no usable
+            content found — the page is genuinely blank or the OCR could not
+            read it), or ``"skipped"`` (page was NOT checked — the OCR hook
+            was not provided, i.e. the ``[ocr]`` extra is not installed).
+            For an empty page, ``reason`` is one of ``"ocr_no_text"`` (the OCR
+            hook ran but returned nothing) or ``"ocr_failed"`` (the OCR hook
+            raised).  For a skipped page, ``reason`` is ``"no_engine"``.
+            For text/ocr pages, ``reason`` is ``""``.  Used by the ingestion
+            quality summary (AI-055) to produce a cause-differentiated
+            warning.  When ``None``, no per-page reporting.
 
     Returns:
         List of ``DocChunk`` objects ready for ``RAGStore.add_docs()``.
@@ -383,13 +385,13 @@ def ingest_pdf(
                     ocr_text = ocr_fallback(filepath, page_num + 1)
                 except Exception:
                     logger.warning(
-                        "  %s: page %d OCR fallback failed — page skipped",
+                        "  %s: page %d OCR fallback failed — page empty (checked, no content)",
                         source,
                         page_num + 1,
                         exc_info=True,
                     )
                     if page_report is not None:
-                        page_report.append((page_num + 1, "skipped", "ocr_failed"))
+                        page_report.append((page_num + 1, "empty", "ocr_failed"))
                     continue
                 if ocr_text and ocr_text.strip():
                     all_text += ocr_text.strip() + "\n\n"
@@ -403,12 +405,12 @@ def ingest_pdf(
                         page_report.append((page_num + 1, "ocr", ""))
                 else:
                     logger.warning(
-                        "  %s: page %d OCR returned no text — page skipped",
+                        "  %s: page %d OCR returned no text — page empty (checked, no content)",
                         source,
                         page_num + 1,
                     )
                     if page_report is not None:
-                        page_report.append((page_num + 1, "skipped", "ocr_no_text"))
+                        page_report.append((page_num + 1, "empty", "ocr_no_text"))
             else:
                 logger.warning(
                     "  %s: page %d skipped (%d chars, likely image-only). "
@@ -512,7 +514,7 @@ def ingest_pdf_page_aware(
                     ocr_text = ocr_fallback(filepath, page_num + 1)
                 except Exception:
                     logger.warning(
-                        "  %s: page %d OCR fallback failed — page skipped",
+                        "  %s: page %d OCR fallback failed — page empty (checked, no content)",
                         source,
                         page_num + 1,
                         exc_info=True,
@@ -533,7 +535,7 @@ def ingest_pdf_page_aware(
                     all_chunks.extend(page_chunks)
                 else:
                     logger.warning(
-                        "  %s: page %d OCR returned no text — page skipped",
+                        "  %s: page %d OCR returned no text — page empty (checked, no content)",
                         source,
                         page_num + 1,
                     )
