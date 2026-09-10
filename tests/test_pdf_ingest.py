@@ -381,13 +381,14 @@ class TestIngestPdfDirectory:
         """CI regression guard (the durable form of the ingestion tracking).
 
         The LV car-insurance docs all have native text (zero full-page scans),
-        so they must ingest with **0 pages skipped**.  This locks in "the LV
-        docs fully ingest cleanly" as a known-good baseline.  If a future
-        change (e.g. a change to MIN_PAGE_CHARS, a broken OCR hook, or an
-        accidental skip) causes the LV docs to lose pages, this test goes red
-        in CI *before* the regression ships — which is the whole point of
-        "tracking → issues found" (it catches the problem automatically,
-        without a human reading a warning).
+        so they must ingest with **0 pages skipped** (not checked).  Pages that
+        were checked via OCR but found to be genuinely empty (e.g. a blank page)
+        are reported as ``"empty"``, not ``"skipped"`` — so this assertion
+        correctly allows blank pages while still catching a regression where a
+        real content page is lost (reported as ``"skipped"`` with reason
+        ``"no_engine"``).  If a future change (e.g. a change to MIN_PAGE_CHARS,
+        a broken OCR hook, or an accidental skip) causes the LV docs to lose
+        pages, this test goes red in CI *before* the regression ships.
 
         Uses the real OCR backend (so the engine-installed state is real), and
         skips if the LV docs aren't present (consistent with test_all_pdfs).
@@ -405,8 +406,10 @@ class TestIngestPdfDirectory:
             ocr_fallback=backend.parse_page,
             page_report=report,
         )
+        # "skipped" = page NOT checked (no_engine). "empty" = checked, no content.
+        # We assert 0 skipped (0 pages lost/not checked).
         skipped = [(src, page, reason) for src, page, outcome, reason in report if outcome == "skipped"]
-        assert skipped == [], f"LV docs skipped pages (regression): {skipped}"
+        assert skipped == [], f"LV docs skipped pages (not checked — regression): {skipped}"
         # Sanity: we actually ingested something (not an empty/silent pass).
         assert len(report) > 0
 
@@ -596,13 +599,17 @@ class TestIngestPdfOcrFallback:
         ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "OCR TEXT", page_report=report)
         assert report == [(1, "ocr", "")]
 
-    def test_page_report_skipped_ocr_no_text_reason(self, tmp_path: Path) -> None:
-        """AI-055: OCR ran but returned no text → "skipped" with reason "ocr_no_text"."""
+    def test_page_report_empty_ocr_no_text_reason(self, tmp_path: Path) -> None:
+        """AI-055: OCR ran but returned no text → "empty" with reason "ocr_no_text".
+
+        The page WAS checked (OCR ran) but no usable content was found.
+        This is distinct from "skipped" (page not checked at all).
+        """
         pdf = tmp_path / "scanned.pdf"
         _write_image_only_pdf(pdf)
         report: list[tuple[int, str, str]] = []
         ingest_pdf(pdf, ocr_fallback=lambda _p, _n: "", page_report=report)
-        assert report == [(1, "skipped", "ocr_no_text")]
+        assert report == [(1, "empty", "ocr_no_text")]
 
     def test_page_report_skipped_no_engine_reason(self, tmp_path: Path) -> None:
         """AI-055: no OCR fallback provided (engine not installed) → reason "no_engine"."""

@@ -925,6 +925,37 @@ so most of the existing browser pipeline applies directly.
 
 ---
 
+### FC-06 — VLM-Powered Table OCR (customer model, no separate model)
+
+**Priority:** Future
+**Status:** `[ ]` Not started (researched 2026-09-07)
+**Impact:** Scanned/image-only PDF pages that the current PyMuPDF + OCR path skips.
+Uses the customer's already-loaded LM Studio model as a vision-language model — zero
+new dependencies, works air-gapped, no PyTorch, no 1-2 GB model download.
+
+**Background:** Page 23 of `35880-2023-car-tc.pdf` (car T&C) is near-empty (2 chars,
+0 images, 0 drawings) — confirmed blank, not a missed table. The current OCR gap is
+for genuinely scanned pages in customer-uploaded policy PDFs. Research compared
+Docling (MIT, CPU-supported, 1-2 GB models), PaddleOCR PP-StructureV3 (Apache, best
+accuracy, CPU very slow), LlamaParse (cloud-only, privacy risk), pdfplumber/Tabula
+(text-layer only). VLM approach reuses the customer's model.
+
+**What's needed:**
+- [ ] `ChatMessage.content` -> `str | list[ContentPart]` (text + image_url parts)
+- [ ] `render_page_to_image()` in `pdf_ingest.py` (PyMuPDF rasterize, already in `ocr_backends.py`)
+- [ ] VLM table extraction path: try customer model, fall back to existing OCR
+- [ ] Vision-capability detection (probe with a test image, degrade gracefully if text-only)
+- [ ] Integration test with a vision model loaded in LM Studio
+
+**Vision-capable models that work:** Qwen2.5-VL, Qwen2-VL, LLaVA, InternVL, Phi-3.5-vision, Mistral PixRag
+
+**Not required for launch** — the current path handles digital PDFs. This closes the
+gap for scanned policy documents.
+
+**Estimated sessions:** 1-2
+
+---
+
 ## Tier 7 — User Documentation & Onboarding
 
 **Priority:** Deferred — gated on the paid/free tier split (Phase 6 SaaS / Phase 8 GTM).
@@ -1062,6 +1093,7 @@ limits, is cacheable, and safe for retries.
 | 20 | FC-02 API Testing | Expansion | `[ ]` Not started | 1-2 |
 | 21 | FC-03 .NET Testing | Expansion | `[ ]` Not started | 2-3 |
 | 22 | FC-04 Dashboard Testing | Expansion | `[ ]` Not started | 1-2 |
+| 22b | FC-06 VLM Table OCR (customer model) | Expansion | `[ ]` Not started (researched 2026-09-07) — not required for launch | 1-2 |
 | 23 | UD-01/02 User Docs & UI Onboarding | Product | `[ ]` Deferred — gated on paid/free tier split (Phase 6/8); see Tier 7 | 3-5 |
 | 24 | AI-042 Cross-Site Flow Memory | ML | `[x]` Complete 2026-08-12. `src/flow_memory.py` (learner + store + GOTO/URL-assert consumption), route canonicalization (view_cart/basket→cart, inventory→products — learned analog of url_resolver aliases), 34 tests, seeded from 908 real sidecars → 89 patterns / 6 sites / 5 cross-site. Eval holdout: 0 → 3/4 non-home URL asserts resolvable with target-site evidence excluded. See Tier 4 §16. | 2-3 |
 | 25 | AI-043 Output Artifact Quality Gate | Infra | `[x]` Complete 2026-08-11. L1/2 + gates shipped 2026-08-10/11 (`src/artifact_validation.py`, golden fixtures, smoke Gate 0; caught + fixed negative-y bbox bug). L3 shipped 2026-08-11 (`src/heatmap_alignment.py` — live overlay↔page alignment, `validate_report_artifacts.py --full`, 21 tests incl. live mock). See Tier 3 §17. | 2-3 |
