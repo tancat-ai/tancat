@@ -1,6 +1,6 @@
 {
-  "total": 164,
-  "completed": 152,
+  "total": 165,
+  "completed": 153,
   "pending": 12,
   "files": [
     {
@@ -822,7 +822,12 @@
       "source": "src/evidence_image.py",
       "doc": "markdown_docs/src/evidence_image.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/verify_baseline.py",
+      "doc": "markdown_docs/src/verify_baseline.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-09-11T14:47:48.798545+00:00"
+  "last_updated": "2026-09-11T17:07:34.631867+00:00"
 }

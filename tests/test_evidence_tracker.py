@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from playwright.sync_api import Page
 
 from src.evidence_tracker import EvidenceTracker
 
@@ -304,7 +305,7 @@ class _StaticPage:
 
 def test_b029_navigation_verified_when_url_changes(tmp_path: Any) -> None:
 
-    tracker = EvidenceTracker(_UrlFlipPage(), "t", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(cast(Page, _UrlFlipPage()), "t", evidence_root=Path(tmp_path))
     # href on a different path + URL changes → no raise, step stays passed.
     tracker._record_step("click", "Cart", locator='a[href="/cart"]')
     tracker._verify_click_navigation('a[href="/cart"]', "Cart", {"href": "/cart"}, "https://example.com/start")
@@ -312,7 +313,7 @@ def test_b029_navigation_verified_when_url_changes(tmp_path: Any) -> None:
 
 
 def test_b029_same_page_and_non_link_hrefs_skipped(tmp_path: Any) -> None:
-    tracker = EvidenceTracker(_StaticPage(), "t", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(cast(Page, _StaticPage()), "t", evidence_root=Path(tmp_path))
     # Anchor / javascript: / no-href links never require navigation.
     for href in (None, "", "#section", "javascript:void(0)", "/start"):
         tracker._verify_click_navigation("x", "Click", {"href": href}, "https://example.com/start")
@@ -321,7 +322,7 @@ def test_b029_same_page_and_non_link_hrefs_skipped(tmp_path: Any) -> None:
 def test_b029_swallowed_click_amended_to_failure(tmp_path: Any) -> None:
     from src.evidence_tracker import _LocatorNotFoundError
 
-    tracker = EvidenceTracker(_StaticPage(), "t", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(cast(Page, _StaticPage()), "t", evidence_root=Path(tmp_path))
     tracker._record_step("click", "Cart", locator='a[href="/cart"]')
     with pytest.raises(_LocatorNotFoundError, match="did not navigate"):
         tracker._verify_click_navigation('a[href="/cart"]', "Cart", {"href": "/cart"}, "https://example.com/start")

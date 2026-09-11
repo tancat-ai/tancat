@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (105) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (33) &mdash; 2026-09-11 15:30 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (105) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (33) &mdash; 2026-09-11 20:42 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (35)</h2>
+    <h2>To Do (33)</h2>
     
     <div class="">
     <div class="card">
@@ -191,20 +191,6 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Deferred (same gate)</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L1000" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:1000</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-058</div>
-    <div class="card-title">`verify_production` is permanently RED with no expected-failure baseline (every session re-litigates it)</div>
-    <div class="card-meta"><span>Medium — it is the documented &quot;single source of truth: does the product work?&quot; gate, yet it always fails, so the verdict carries no signal and trains everyone to ignore it.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L8" target="_blank">BACKLOG.md:8</a></div>
-</div>
-<div class="card">
-    <div class="card-id">B-059</div>
-    <div class="card-title">4 real mypy errors in `tests/`: invisible to CI, but they reject a local pre-commit commit</div>
-    <div class="card-meta"><span>Low–Medium — no product impact, but a genuine developer-experience trap: CI&#x27;s MyPy gate runs **`mypy src/ cli/`** only (clean — 156 files), while the pre-commit `mypy` hook excludes just `scripts/` + `fixtures/`, so it type-checks `tests/` as well. Editing any of these files therefore gets rejected locally for errors CI would never flag.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L23" target="_blank">BACKLOG.md:23</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-056</div>
@@ -399,8 +385,8 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (98)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (98)</button>
+    <h2>Done (100)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (100)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -556,6 +542,20 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>**High** (core of the trust story) — pre-launch</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L840" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:840</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-058</div>
+    <div class="card-title">`verify_production` is permanently RED with no expected-failure baseline (every session re-litigates it)</div>
+    <div class="card-meta"><span>Medium — it is the documented &quot;single source of truth: does the product work?&quot; gate, yet it always fails, so the verdict carries no signal and trains everyone to ignore it.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L8" target="_blank">BACKLOG.md:8</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-059</div>
+    <div class="card-title">4 real mypy errors in `tests/`: invisible to CI, but they reject a local pre-commit commit</div>
+    <div class="card-meta"><span>Low–Medium — no product impact, but a genuine developer-experience trap: CI&#x27;s MyPy gate runs **`mypy src/ cli/`** only (clean — 156 files), while the pre-commit `mypy` hook excludes just `scripts/` + `fixtures/`, so it type-checks `tests/` as well. Editing any of these files therefore gets rejected locally for errors CI would never flag.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L23" target="_blank">BACKLOG.md:23</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-057</div>
@@ -1058,7 +1058,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "98";
+    var count = "100";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');

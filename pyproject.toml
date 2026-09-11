@@ -92,6 +92,12 @@ known-first-party = ["src", "cli"]
 [tool.mypy]
 python_version = "3.14"
 exclude = ["generated_tests", "exported_tests", "scripts", "scratch", "fixtures"]
+# `scripts/` is excluded from checking, but tests/ import a few script-local
+# helpers via a runtime sys.path insert (eval_runner, eval_metrics,
+# golden_validator in scripts/eval/; verify_production in scripts/). Adding the
+# dirs to mypy_path resolves those imports statically instead of suppressing
+# them — the scripts themselves are still not type-checked.
+mypy_path = ["scripts/eval", "scripts"]
 warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = true
