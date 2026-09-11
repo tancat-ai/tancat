@@ -7,7 +7,7 @@ Runtime evidence tracker — records each test step (navigate, click, fill, asse
 ## Module Metadata
 
 - **Lines:** 426
-- **Imports:** `re`, `time`, `pathlib.Path`, `typing.Any`, `playwright.sync_api.Page`, `src.evidence_serializer`, `src.failure_reporter`, `src.hover_click_utils`, `src.locator_fallback`
+- **Imports:** `re`, `time`, `pathlib.Path`, `typing.Any`, `playwright.sync_api.Page`, `src.config`, `src.evidence_serializer`, `src.failure_reporter`, `src.hover_click_utils`, `src.locator_fallback`
 
 ## Class: `EvidenceTracker`
 
@@ -38,7 +38,7 @@ Captures tag, id, data-testid, bounding box, and viewport percentages for an ele
 ### `_record_step(step_type, label, locator, value, take_screenshot, error, matched_text, fallback_used, fallback_chain, elapsed_ms)`
 Core recording method. Builds step dict with:
 - Incremental `step_run_count` from previous runs
-- Full-page screenshot when requested
+- Full-page screenshot when requested, captured in the configured evidence image format — lossless WebP by default (`src.config.evidence_image_extension()` / `evidence_image_format()`, override with `AITEST_EVIDENCE_IMAGE_FORMAT=png`). Credential fields are masked for the duration of the capture.
 - Element metadata (bbox, tag, attributes)
 - Failure diagnosis via `FailureReporter.diagnose_failure()` on error
 - Status: `"passed"`, `"partial_pass"` (when fallback used), `"failed"`

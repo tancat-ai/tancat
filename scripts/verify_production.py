@@ -411,7 +411,9 @@ async def verify_site(
     evidence_dir = output_dir / "evidence"
     if evidence_dir.exists():
         evidence_files = list(evidence_dir.glob("*.json"))
-        screenshot_files = list(output_dir.rglob("*.png"))
+        # Evidence screenshots default to lossless WebP; PNG is still accepted
+        # (AITEST_EVIDENCE_IMAGE_FORMAT=png, or evidence captured pre-2026-09-11).
+        screenshot_files = [p for ext in ("*.webp", "*.png") for p in output_dir.rglob(ext)]
 
         ok = len(evidence_files) > 0
         result.gates.append(Gate("Evidence JSON generated", ok, f"{len(evidence_files)} file(s)"))

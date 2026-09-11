@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import Page
 
+from src.config import evidence_image_extension
 from src.credential_redaction import (
     is_sensitive_field,
     masked_screenshot_page,
@@ -15,6 +16,7 @@ from src.credential_redaction import (
     redact_url_credentials,
     redact_value,
 )
+from src.evidence_image import write_evidence_image
 from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
@@ -314,7 +316,7 @@ class EvidenceTracker:
 
         screenshot_path = None
         if take_screenshot:
-            screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}.png"
+            screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}{evidence_image_extension()}"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
                 # Evidence must reflect the settled page. Product grids use
@@ -344,7 +346,17 @@ class EvidenceTracker:
                 # duration of the capture, then restore — evidence screenshots
                 # must never contain typed secrets in the clear.
                 with masked_screenshot_page(self.page):
-                    self.page.screenshot(path=str(screenshot_full_path), full_page=True)
+                    screenshot_bytes = self.page.screenshot(full_page=True)
+                    if isinstance(screenshot_bytes, bytes):
+                        # Re-encode with Pillow: Chromium's WebP *lossless* encoder
+                        # emits files ~4x larger than its PNG output
+                        # (src/evidence_image.py).
+                        write_evidence_image(screenshot_bytes, screenshot_full_path)
+                    else:
+                        # Capture backends that only support path-based capture —
+                        # and test doubles that return a sentinel — write through
+                        # Playwright instead.
+                        self.page.screenshot(path=str(screenshot_full_path), full_page=True)
                 screenshot_path = f"evidence/{screenshot_name}"
             except Exception as exc:
                 # Evidence collection must never break test execution, but a

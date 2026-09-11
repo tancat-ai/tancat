@@ -23,7 +23,9 @@ from src.config import (
     SCREENSHOT_DIR,
     STORAGE_MODE,
     ScreenshotNaming,
+    evidence_image_extension,
 )
+from src.evidence_image import encode_evidence_image
 from src.failure_classifier import FailureCategory, classify_failure
 from src.pytest_output_parser import RunResult, TestResult
 
@@ -100,6 +102,9 @@ class ScreenshotCapturer:
         """Capture screenshot from page."""
         try:
             screenshot_bytes = page.screenshot(full_page=True)
+            # Pillow re-encode: Chromium's native WebP lossless is ~4x larger
+            # than its PNG (see src/evidence_image.py).
+            screenshot_bytes = encode_evidence_image(screenshot_bytes)
             filename = self._generate_filename(test_case, capture_stage, step_description)
             filepath = self._save_screenshot(screenshot_bytes, filename, test_case.title)
             file_size = os.path.getsize(filepath)
@@ -129,12 +134,12 @@ class ScreenshotCapturer:
         convention = getattr(self, "naming_convention", ScreenshotNaming.HYBRID)
 
         if convention == ScreenshotNaming.SEQUENTIAL:
-            filename = f"{capture_stage}_{case_number}.png"
+            filename = f"{capture_stage}_{case_number}{evidence_image_extension()}"
         elif convention == ScreenshotNaming.DESCRIPTIVE:
-            filename = f"{base}_{timestamp}.png"
+            filename = f"{base}_{timestamp}{evidence_image_extension()}"
         else:
             descriptive_part = base[:20].rstrip("_")
-            filename = f"{descriptive_part}_{case_number}_{timestamp}.png"
+            filename = f"{descriptive_part}_{case_number}_{timestamp}{evidence_image_extension()}"
 
         return filename
 
