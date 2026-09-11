@@ -232,10 +232,12 @@ The user switches off on long-winded answers. Follow this for **every** response
 | Smoke | `python scripts/smoke.py` | Offline: resolver, parser, imports | <1s |
 | Unit | `pytest -q --tb=short` | Internal modules with mocks | ~10s |
 | **Production** | `python scripts/verify_production.py` | **Full pipeline → execute → validate evidence** | ~60s |
+| **Production (baseline)** | `python scripts/verify_production.py --baseline` | **Same run, regression verdict vs. the known-red set** | ~5–15 min |
 | **Eval harness** | `python scripts/eval/eval_harness.py run --mode static` | **Resolution accuracy vs. golden keys (79.1% baseline)** | <1s |
 
 - ✅ Run smoke → pytest → **verify_production** before declaring a feature done
 - ✅ `verify_production.py` is the single source of truth: "does the product work?"
+- ✅ It is permanently RED on the known unresolved-ASSERT class, so its raw verdict has no signal. Run `python scripts/verify_production.py --baseline` for a regression verdict: known-red gates/tests are tolerated, only NEW gate failures / NEW failing tests / over-ceiling unresolved counts fail. Baseline file: `scripts/verify_production_baseline.json` (B-058). Re-record with `--save-baseline` after the ASSERT class (AI-058 / AI-064 / B-054 / B-055) is closed; CI job `verify-baseline` validates the file offline.
 - ✅ It generates real tests, runs them against live sites, and validates evidence output
 - ✅ Run **eval harness** before shipping changes to pipeline/resolver/prompt files — catches regression
 - ✅ Eval harness is a *pre-commit quality gate*, not part of ship-it skill
@@ -350,5 +352,5 @@ Single-context — `CONTEXT.md` at repo root + `docs/adr/` for ADRs. See `docs/a
 
 ---
 
-*Last updated: 2026-06-20*
+*Last updated: 2026-09-11*
 *Historical/reference sections: `docs/reference/agents_archive.md`*
