@@ -213,6 +213,12 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/ cli/
 
+      # Pre-commit parity: the local mypy hook type-checks tests/ too, so a
+      # change that CI's src/cli-only gate would happily accept must not be
+      # able to break a local commit (B-059).
+      - name: Run mypy (tests/ + full tree, pre-commit parity)
+        run: uv run mypy . --ignore-missing-imports
+
   # ── Gate 2b: Eval static (offline resolver regression, ~0.5s) ─────────
   # Runs in parallel with the other gates. Static mode is fully offline
   # (golden-key resolution against scraped datasets — no browser, no LLM,
@@ -245,6 +251,41 @@ jobs:
 
       - name: Run eval harness (static mode)
         run: uv run python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
+
+  # ── Gate 2c: Expected-red baseline integrity (offline, <1s) ──────────
+  # verify_production itself needs an LLM + live sites, so it cannot run on
+  # CI runners. This job instead validates the recorded expected-red baseline
+  # (scripts/verify_production_baseline.json) so it cannot silently rot:
+  # a malformed file, an unknown site, or a missing entry fails here. The
+  # actual live run is a local pre-release gate — use
+  # `python scripts/verify_production.py --baseline scripts/verify_production_baseline.json`
+  # to get a regression verdict (only NEW failures fail).
+  verify-baseline:
+    name: Verify Baseline Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    needs: smoke
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Validate expected-red baseline
+        run: uv run python scripts/verify_production.py --check-baseline
 
   # ── Gate 3: Test execution (needs lint + type-check green) ────────────
   test:

@@ -18,7 +18,7 @@ one file always run in a single xdist worker (``--dist=loadfile``).
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 
 import pytest
@@ -46,7 +46,7 @@ def mock_site() -> Iterator[None]:
 
 
 @pytest.fixture(scope="module")
-def browser(mock_site: None) -> Browser:
+def browser(mock_site: None) -> Generator[Browser]:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         yield browser
