@@ -61,6 +61,7 @@ Menu-driven terminal interface with retro CHOICE-style rendering:
 | **Pipeline** | `orchestrator.py`, `pipeline_models.py`, `pipeline_writer.py`, `pipeline_artifact_manager.py`, `pipeline_run_service.py`, `pipeline_report_service.py`, `ui_pipeline.py` | Core pipeline orchestration and artifact management |
 | **Execution** | `pytest_output_parser.py`, `run_utils.py`, `screenshot_capture.py`, `evidence_tracker.py`, `evidence_serializer.py`, `evidence_loader.py`, `evidence_report.py`, `state_tracker.py` | Test execution and evidence collection |
 | **Failure Handling** | `failure_classifier.py`, `failure_reporter.py` | Failure categorisation and diagnostics |
+| **Verification** | `verify_baseline.py` | B-058 — expected-red baseline for `scripts/verify_production.py`: records the known gate/test failures and returns a regression-vs-known verdict |
 | **Reports** | `report_builder.py`, `report_formatters.py`, `report_utils.py`, `export_service.py` | Report generation and export |
 | **Persistence** | `run_result_persistence.py`, `sqlite_persistence.py`, `run_history_chart.py`, `run_history_cli.py` | SQLite-backed run history and charting |
 | **Visualisation** | `gantt_utils.py`, `heatmap_utils.py`, `coverage_utils.py`, `run_history_chart.py` | Gantt charts, heatmaps, coverage analysis |
@@ -101,14 +102,14 @@ Test packages produced by the tool. Each package contains:
 
 | Directory | Files | Status |
 |-----------|-------|--------|
-| `src/` (root) | 61 | ✅ Complete |
+| `src/` (root) | 62 | ✅ Complete |
 | `src/agents/` | 5 | ✅ Complete |
 | `src/cli/` | 15 | ✅ Complete |
 | `src/ui/` | 10 | ✅ Complete |
 | `src/llm_providers/` | 1 | ✅ Complete |
 | `scripts/` (eval + verify_production + archived debug) | 10 | ✅ Complete |
 | `cli/` | 4 | ✅ Complete |
-| **Total** | **142** | **✅ Complete** |
+| **Total** | **143** | **✅ Complete** |
 
 > Updated 2026-08-03 (document-manager sweep): 12 `src/` docs refreshed for the
 > saucedemo checkout cluster fixes (soft-404, stateful routing, dead-page/
