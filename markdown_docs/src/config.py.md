@@ -2,7 +2,7 @@
 
 ## High-Level Purpose
 
-`src/config.py` centralizes project-wide configuration values and enum types for the AI Playwright Test Generator. It provides stable, typed names for analysis modes, report formats, input detection behavior, screenshot capture depth, screenshot naming style, output directories, and Jira project defaults.
+`src/config.py` centralizes project-wide configuration values and enum types for the AI Playwright Test Generator. It provides stable, typed names for analysis modes, report formats, input detection behavior, screenshot capture depth, screenshot naming style, evidence screenshot image format, output directories, and Jira project defaults.
 
 The module is intentionally lightweight: it has no runtime functions, no classes with custom behavior, and no direct dependencies on other project modules. Its main role is to expose shared constants and `Enum` definitions that other parts of the application can import instead of duplicating string literals.
 
@@ -132,9 +132,9 @@ Defines available screenshot filename strategies.
 
 Members:
 
-- `SEQUENTIAL: ScreenshotNaming` - Sequential numeric naming, such as `test_entry_001.png`.
-- `DESCRIPTIVE: ScreenshotNaming` - Descriptive timestamp-style naming, such as `login_success_20260303.png`.
-- `HYBRID: ScreenshotNaming` - Descriptive plus sequence/timestamp-style naming, such as `login_success_001_20260303.png`.
+- `SEQUENTIAL: ScreenshotNaming` - Sequential numeric naming, such as `test_entry_001.webp`.
+- `DESCRIPTIVE: ScreenshotNaming` - Descriptive timestamp-style naming, such as `login_success_20260303.webp`.
+- `HYBRID: ScreenshotNaming` - Descriptive plus sequence/timestamp-style naming, such as `login_success_001_20260303.webp`.
 
 Constructor parameters and return value:
 
@@ -164,12 +164,28 @@ STORAGE_MODE: str = "filesystem"
 NAMING_CONVENTION: ScreenshotNaming = ScreenshotNaming.HYBRID
 CAPTURE_LEVEL: CaptureLevel = CaptureLevel.STANDARD
 SCREENSHOT_DIR: str = "screenshots"
+EVIDENCE_IMAGE_FORMAT_DEFAULT: Literal["webp", "png"] = "webp"
 ```
 
 - `STORAGE_MODE: str` - Selects screenshot storage backend. Current default is `"filesystem"`.
 - `NAMING_CONVENTION: ScreenshotNaming` - Selects the default screenshot naming strategy. Current default is `ScreenshotNaming.HYBRID`.
 - `CAPTURE_LEVEL: CaptureLevel` - Selects screenshot capture depth. Current default is `CaptureLevel.STANDARD`.
 - `SCREENSHOT_DIR: str` - Directory name for screenshot output. Current default is `"screenshots"`.
+- `EVIDENCE_IMAGE_FORMAT_DEFAULT: Literal["webp", "png"]` - Default image format for captured evidence screenshots. Current default is `"webp"`.
+
+### Evidence Screenshot Format
+
+```python
+def evidence_image_format() -> Literal["webp", "png"]: ...
+def evidence_image_extension() -> str: ...
+```
+
+- `evidence_image_format()` - Returns the evidence screenshot format, honouring the `AITEST_EVIDENCE_IMAGE_FORMAT` environment variable. An unsupported or empty value (for example `gif`, `bmp`, or whitespace) falls back to `"webp"`, so a bad setting can never break evidence capture.
+- `evidence_image_extension()` - Returns the file extension matching `evidence_image_format()`, such as `".webp"`.
+- **Why WebP by default:** the encode is *lossless* (`src/evidence_image.py` encodes with Pillow), so evidence remains pixel-identical — evidence is an audit artifact, so fidelity is never traded for size — while roughly halving the footprint. Verified live on the same suite against the same site: `PNG 2501 KB -> WebP 1279 KB` across 17 screenshots (51% of PNG, 49% smaller).
+- **Do NOT capture with Playwright's `type="webp"`:** Chromium's WebP *lossless* encoder emitted files **4.2x larger** than its own PNG output for the real saucedemo login page (`111.8 KB` vs `26.5 KB` at 1280x720). The capture paths therefore take a PNG screenshot and re-encode it with Pillow.
+- Set `AITEST_EVIDENCE_IMAGE_FORMAT=png` to force PNG.
+- **Consumers:** the runtime `src/evidence_tracker.py` capture path and the CLI `src/cli/evidence_generator.py` both read these helpers, and `scripts/verify_production.py` counts evidence screenshots of either extension.
 
 ### LLM Analysis Configuration
 
@@ -208,6 +224,10 @@ Each enum member stores a lowercase string value. This makes enum values suitabl
 ### Environment Override at Import Time
 
 `JIRA_PROJECT_KEY` is read from the process environment when the module is imported. This supports local or deployment-specific Jira configuration without requiring a separate configuration file.
+
+### Per-Call Environment Read
+
+`evidence_image_format()` reads `AITEST_EVIDENCE_IMAGE_FORMAT` on every call rather than at import time. This deliberately differs from `JIRA_PROJECT_KEY`: tests and long-running processes can switch the evidence format mid-process, and an unsupported value degrades to the default instead of raising.
 
 ### Module-Level Defaults
 

@@ -1,6 +1,6 @@
 {
-  "total": 163,
-  "completed": 151,
+  "total": 164,
+  "completed": 152,
   "pending": 12,
   "files": [
     {
@@ -817,7 +817,12 @@
       "source": "src/licensing/tiers.py",
       "doc": "markdown_docs/src/licensing/tiers.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/evidence_image.py",
+      "doc": "markdown_docs/src/evidence_image.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-09-05T18:54:20.714067+00:00"
+  "last_updated": "2026-09-11T14:47:48.798545+00:00"
 }
