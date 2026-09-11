@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from streamlit.testing.v1 import AppTest
 
+APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
+
 
 @pytest.fixture(scope="module")
 def _app_test() -> Generator[AppTest]:
@@ -28,7 +30,7 @@ def _app_test() -> Generator[AppTest]:
         patch("streamlit_app.LLMClient", new=mock_llm),
         patch.object(Path, "exists", _fake_exists),
     ):
-        at = AppTest.from_file("streamlit_app.py")
+        at = AppTest.from_file(APP_PATH)
         at.run(timeout=20)
         yield at
 
