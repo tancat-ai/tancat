@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "recorded": "2026-09-11",
+  "recorded_commit": "2d01f79",
+  "note": "Expected-red baseline for scripts/verify_production.py. verify_production has been continuously RED since 2026-08-01: each site fails the gates 'Pipeline resolved all placeholders' and 'No pytest.skip' because ASSERT targets cannot be resolved and the pipeline emits honest pytest.skip() lines. This is the known ASSERT-resolution class tracked as AI-058 / AI-064 / B-054 / B-055 — not a scraper or deps bug. Two variance tolerances, both derived from real runs, keep the verdict meaningful: (1) max_unresolved_placeholders is a CEILING, not the exact count — across 67 historical runs the per-site count of emitted pytest.skip lines ranged 0-4 (26x0, 19x1, 19x2, 1x3, 2x4), so the ceiling is 2x the observed max; (2) expected_failing_tests lists the ASSERT-heavy criteria that sometimes resolve-but-wrong instead of skipping (the same class) — a failure in any OTHER test is a regression. Use `python scripts/verify_production.py --baseline scripts/verify_production_baseline.json` for a regression verdict: only NEW gate failures, NEW failing tests, or an unresolved count above the ceiling fail. Re-record with `--save-baseline` after the resolver family closes the class.",
+  "sites": {
+    "saucedemo": {
+      "known_failing_gates": [
+        "No pytest.skip",
+        "Pipeline resolved all placeholders"
+      ],
+      "max_unresolved_placeholders": 8,
+      "known_unresolved_placeholders": [
+        "item in cart",
+        "checkout form loaded",
+        "success message",
+        "add to cart button",
+        "submit button"
+      ],
+      "expected_failing_tests": [
+        "test_04",
+        "test_06"
+      ],
+      "expected_min_tests": 5
+    },
+    "automationexercise": {
+      "known_failing_gates": [
+        "No pytest.skip",
+        "Pipeline resolved all placeholders"
+      ],
+      "max_unresolved_placeholders": 8,
+      "known_unresolved_placeholders": [
+        "confirmation popup",
+        "product in cart",
+        "added product"
+      ],
+      "expected_failing_tests": [
+        "test_04",
+        "test_06",
+        "test_07"
+      ],
+      "expected_min_tests": 5
+    }
+  }
+}

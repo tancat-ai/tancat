@@ -43,13 +43,22 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.verify_baseline import (  # noqa: E402
+    BaselineComparison,
+    compare_run,
+    load_baseline,
+    stable_gate_key,
+)
+
+DEFAULT_BASELINE_PATH = PROJECT_ROOT / "scripts" / "verify_production_baseline.json"
 
 # ---------------------------------------------------------------------------
 # Sites
@@ -83,7 +92,18 @@ AUTOMATIONEXERCISE_CONDITIONS = (
     "7. Click 'Proceed to checkout' and verify the checkout page loads"
 )
 
-SITES = {
+
+class SiteConfig(TypedDict):
+    """Per-site configuration for the verification run."""
+
+    url: str
+    user_story: str
+    conditions: str
+    expected_min_tests: int
+    expected_min_evidence_steps: int
+
+
+SITES: dict[str, SiteConfig] = {
     "saucedemo": {
         "url": "https://www.saucedemo.com",
         "user_story": SAUCEDEMO_STORY,
@@ -147,6 +167,11 @@ class Gate:
     passed: bool
     detail: str = ""
 
+    @property
+    def key(self) -> str:
+        """Stable identity — strips the dynamic duration/provider suffix."""
+        return stable_gate_key(self.name)
+
 
 @dataclass
 class SiteVerification:
@@ -155,6 +180,8 @@ class SiteVerification:
     generated_code: str = ""
     output_dir: Path | None = None
     error: str = ""
+    unresolved_placeholders: list[str] = field(default_factory=list)
+    failed_tests: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> int:
@@ -289,6 +316,7 @@ async def verify_site(
     pipeline_result = orchestrator.last_result
     if pipeline_result:
         unresolved = pipeline_result.unresolved_placeholders
+        result.unresolved_placeholders = list(unresolved)
         ok = len(unresolved) == 0
         result.gates.append(Gate("Pipeline resolved all placeholders", ok, f"{len(unresolved)} unresolved"))
         print(f"  [{'OK' if ok else 'FAIL'}] Pipeline unresolved: {len(unresolved)}")
@@ -319,7 +347,12 @@ async def verify_site(
 
     # Execute the generated tests
     print(f"\n  [RUN] Executing tests against {site_id}...")
-    exec_timeout = max(60, min(300, len(test_funcs) * 30))
+    # Per-suite cap. Live sites plus LLM-variance in the generated waits mean a
+    # 7-test suite can legitimately exceed the old 30s/test budget (observed:
+    # automationexercise 7 tests ran past 210s while every test passed or was
+    # skipped — tests 05/06 alone took 54.6s each). 60s/test with a 120s floor
+    # keeps a runaway suite bounded without failing a healthy slow run.
+    exec_timeout = max(120, min(600, len(test_funcs) * 60))
     try:
         run_start = time.time()
         proc = subprocess.run(
@@ -370,6 +403,7 @@ async def verify_site(
                 ", ".join(detail_parts) if detail_parts else f"exit {proc.returncode}",
             )
         )
+        result.failed_tests = _parse_failed_tests(proc.stdout)
         print(f"  [{'OK' if run_pass else 'FAIL'}] Execution: {', '.join(detail_parts)}, {run_duration:.1f}s")
 
         if not run_pass and verbose:
@@ -396,11 +430,25 @@ async def verify_site(
         # informative instead of a bare "timeout" gate.
         partial_stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
         (output_dir / "pytest_output.txt").write_text(partial_stdout, encoding="utf-8")
+        result.failed_tests = _parse_failed_tests(partial_stdout)
         evidence_files = (
             list((output_dir / "evidence").glob("*.evidence.json")) if (output_dir / "evidence").exists() else []
         )
         run_duration = time.time() - run_start
-        detail = f"timed out after {exec_timeout:.0f}s — {len(evidence_files)}/{len(test_funcs)} tests completed"
+        # Count only tests whose evidence sidecar records a terminal status;
+        # the in-flight test's sidecar exists but still reads "running".
+        completed = 0
+        for ef in evidence_files:
+            try:
+                status = json.loads(ef.read_text(encoding="utf-8")).get("test", {}).get("status", "")
+            except json.JSONDecodeError, OSError:
+                status = ""
+            if status in ("passed", "failed", "skipped"):
+                completed += 1
+        detail = (
+            f"timed out after {exec_timeout:.0f}s — {completed}/{len(test_funcs)} tests completed "
+            f"({len(evidence_files)} evidence file(s))"
+        )
         result.gates.append(Gate("Test execution", False, detail))
         print(f"  [FAIL] Execution: {detail} ({run_duration:.1f}s)")
     except Exception as e:
@@ -474,12 +522,176 @@ def parse_args() -> Any:
     parser.add_argument("--headed", action="store_true", help="Show browser")
     parser.add_argument("--verbose", "-v", action="store_true", help="Print generated code and test output")
     parser.add_argument("--keep", action="store_true", help="Keep output directories (default: delete on pass)")
+    parser.add_argument(
+        "--baseline",
+        nargs="?",
+        const=str(DEFAULT_BASELINE_PATH),
+        default=None,
+        metavar="FILE",
+        help=(
+            "Compare the run against a recorded expected-red baseline and fail only on NEW failures "
+            f"(default file: {DEFAULT_BASELINE_PATH.name})"
+        ),
+    )
+    parser.add_argument(
+        "--save-baseline",
+        nargs="?",
+        const=str(DEFAULT_BASELINE_PATH),
+        default=None,
+        metavar="FILE",
+        help="Record the current run as the expected-red baseline, then exit",
+    )
+    parser.add_argument(
+        "--check-baseline",
+        nargs="?",
+        const=str(DEFAULT_BASELINE_PATH),
+        default=None,
+        metavar="FILE",
+        help="Validate the baseline file offline (no pipeline run) — used by CI",
+    )
     return parser.parse_args()
+
+
+def _check_baseline(path: Path) -> int:
+    """Offline validation of a baseline file — no LLM, no browser."""
+    print(f"Validating expected-red baseline: {path}")
+    try:
+        baseline = load_baseline(path)
+    except (OSError, ValueError) as exc:
+        print(f"  [FAIL] {exc}")
+        return 1
+
+    unknown = sorted(s for s in baseline.sites if s not in SITES)
+    if unknown:
+        print(f"  [FAIL] baseline references unknown site(s): {', '.join(unknown)}")
+        return 1
+    missing = sorted(s for s in SITES if s not in baseline.sites)
+    if missing:
+        print(f"  [WARN] baseline has no entry for: {', '.join(missing)}")
+
+    print(f"  [OK] {len(baseline.sites)} site(s) — recorded {baseline.recorded} @ {baseline.recorded_commit}")
+    for site_id, entry in baseline.sites.items():
+        gates = ", ".join(entry.known_failing_gates) or "(none)"
+        fragile = ", ".join(entry.expected_failing_tests) or "(none)"
+        print(
+            f"    - {site_id}: known-red=[{gates}], unresolved ceiling={entry.max_unresolved_placeholders}, "
+            f"expected-failing tests=[{fragile}]"
+        )
+    return 0
+
+
+def _parse_failed_tests(stdout: str) -> list[str]:
+    """Extract failed test short names from pytest output.
+
+    Matches the short-summary ``FAILED <path>::<name>`` lines; the name is
+    truncated at any ``[...]`` parametrisation.
+    """
+    names: list[str] = []
+    for match in re.finditer(r"^FAILED\s+\S+::(\w+)", stdout, re.M):
+        name = match.group(1)
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _unresolved_descriptions(skip_lines: list[str]) -> list[str]:
+    """Extract the quoted placeholder descriptions from emitted pytest.skip lines."""
+    seen: set[str] = set()
+    descriptions: list[str] = []
+    for line in skip_lines:
+        for desc in re.findall(r"'([^']+)'", line):
+            if desc not in seen:
+                seen.add(desc)
+                descriptions.append(desc)
+    return descriptions
+
+
+def _recorded_commit() -> str:
+    """Return the short HEAD sha, or ``"unknown"`` when not in a git checkout."""
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=str(PROJECT_ROOT),
+        )
+        if proc.returncode == 0:
+            return proc.stdout.strip()
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _write_baseline(path: Path, results: list[SiteVerification]) -> None:
+    """Write the current run as the expected-red baseline JSON."""
+    sites: dict[str, Any] = {}
+    for r in results:
+        # A re-recorded baseline keeps headroom: the emitted-skip count is
+        # LLM-variance driven, so the ceiling is 2x the observed count (floor 2).
+        unresolved_count = len(r.unresolved_placeholders)
+        sites[r.site_id] = {
+            "known_failing_gates": [g.key for g in r.gates if not g.passed],
+            "max_unresolved_placeholders": max(2, unresolved_count * 2),
+            "known_unresolved_placeholders": _unresolved_descriptions(r.unresolved_placeholders),
+            "expected_failing_tests": list(r.failed_tests),
+            "expected_min_tests": SITES[r.site_id]["expected_min_tests"],
+        }
+    payload: dict[str, Any] = {
+        "version": 1,
+        "recorded": datetime.now().strftime("%Y-%m-%d"),
+        "recorded_commit": _recorded_commit(),
+        "note": (
+            "Expected-red baseline for scripts/verify_production.py. Only NEW gate failures, NEW failing "
+            "tests, or an unresolved count above the ceiling fail the gate. Re-record with "
+            "--save-baseline after the unresolved-ASSERT class (AI-058 / AI-064 / B-054 / B-055) is closed."
+        ),
+        "sites": sites,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(f"\n  [SAVED] expected-red baseline written to {path}")
+
+
+def _run_pairs(r: SiteVerification) -> list[tuple[str, bool]]:
+    return [(g.name, g.passed) for g in r.gates]
+
+
+def _print_baseline_comparison(comparison: BaselineComparison) -> None:
+    print(f"\n{'=' * 60}")
+    print("EXPECTED-RED BASELINE COMPARISON")
+    print(f"{'=' * 60}")
+    for site in comparison.sites:
+        print(f"\n  [{site.site_id}]")
+        if site.tolerated_failures:
+            print(f"    [known-red] tolerated: {', '.join(site.tolerated_failures)}")
+        print(f"    [unresolved] {site.unresolved_count} / budget {site.unresolved_budget}")
+        if site.tolerated_failed_tests:
+            print(f"    [known-red] tolerated failing test(s): {', '.join(site.tolerated_failed_tests)}")
+        for name in site.fixed_gates:
+            print(f"    [IMPROVED ] known-red gate now passes: {name}")
+        for name in site.new_failures:
+            print(f"    [REGRESSED] NEW failure: {name}")
+        for name in site.new_failed_tests:
+            print(f"    [REGRESSED] NEW failing test: {name}")
+    if comparison.new_failures or comparison.new_failed_tests:
+        print("\n  NEW failures (not in baseline):")
+        for name in comparison.new_failures:
+            print(f"    - {name}")
+        for name in comparison.new_failed_tests:
+            print(f"    - test {name}")
+    if comparison.fixed_gates:
+        print("\n  IMPROVEMENTS (re-record the baseline to lock them in):")
+        for name in comparison.fixed_gates:
+            print(f"    - {name}")
 
 
 async def main() -> int:
     args = parse_args()
     load_dotenv()
+
+    if args.check_baseline:
+        return _check_baseline(Path(args.check_baseline))
 
     if args.headed:
         import os
@@ -527,28 +739,70 @@ async def main() -> int:
     print(f"\n{'=' * 60}")
     print(f"TOTAL: {total_passed}/{total_checks} gates passed ({total_failed} failed)")
 
-    # Cleanup
-    if not args.keep:
-        for r in results:
-            if r.output_dir and r.output_dir.exists():
-                if total_failed == 0:
-                    # Clean up on full success
-                    import shutil as _shutil
+    # Record the run as the expected-red baseline, if asked, then stop — the
+    # baseline file (not the run dirs) is the artifact of a save.
+    if args.save_baseline:
+        _write_baseline(Path(args.save_baseline), results)
+        if not args.keep:
+            import shutil as _shutil
 
+            for r in results:
+                if r.output_dir and r.output_dir.exists():
                     _shutil.rmtree(r.output_dir, ignore_errors=True)
-                else:
-                    print(f"  [KEPT] {r.output_dir} (failed — keep for debugging)")
-
-    if total_failed > 0:
         print(f"\n{'=' * 60}")
-        print("VERDICT: FAIL — Do NOT ship. Fix the failing gates above.")
-        print(f"{'=' * 60}")
-        return 1
-    else:
-        print(f"\n{'=' * 60}")
-        print("VERDICT: PASS — Product is working as intended.")
+        print("VERDICT: BASELINE SAVED — expected-red state recorded.")
         print(f"{'=' * 60}")
         return 0
+
+    # Compare against the expected-red baseline, if asked.
+    comparison: BaselineComparison | None = None
+    if args.baseline:
+        baseline_path = Path(args.baseline)
+        try:
+            baseline = load_baseline(baseline_path)
+        except (OSError, ValueError) as exc:
+            print(f"\n[ERROR] Could not load baseline: {exc}")
+            return 1
+        runs = {r.site_id: (_run_pairs(r), r.unresolved_placeholders, r.failed_tests) for r in results}
+        comparison = compare_run(baseline, runs)
+        _print_baseline_comparison(comparison)
+
+    regressed = comparison.regressed if comparison is not None else total_failed > 0
+
+    # Cleanup — expected-red runs are the norm, so delete them; only keep a
+    # directory when the run regressed (or the caller passed --keep).
+    if not args.keep:
+        import shutil as _shutil
+
+        for r in results:
+            if r.output_dir and r.output_dir.exists():
+                if not regressed:
+                    _shutil.rmtree(r.output_dir, ignore_errors=True)
+                else:
+                    print(f"  [KEPT] {r.output_dir} (regressed — keep for debugging)")
+
+    if regressed:
+        print(f"\n{'=' * 60}")
+        if comparison is not None:
+            print("VERDICT: FAIL — NEW failure(s) vs the expected-red baseline.")
+        else:
+            print("VERDICT: FAIL — Do NOT ship. Fix the failing gates above.")
+        print(f"{'=' * 60}")
+        return 1
+    if comparison is not None:
+        tolerated_gates = len(comparison.tolerated_failures)
+        tolerated_tests = sum(len(s.tolerated_failed_tests) for s in comparison.sites)
+        print(f"\n{'=' * 60}")
+        print(
+            f"VERDICT: PASS (baseline) — {tolerated_gates} known-red gate failure(s) "
+            f"and {tolerated_tests} known-fragile failing test(s) tolerated, 0 new."
+        )
+        print(f"{'=' * 60}")
+        return 0
+    print(f"\n{'=' * 60}")
+    print("VERDICT: PASS — Product is working as intended.")
+    print(f"{'=' * 60}")
+    return 0
 
 
 if __name__ == "__main__":
