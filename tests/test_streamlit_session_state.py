@@ -5,10 +5,13 @@ Verifies that user input survives Streamlit reruns.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from streamlit.testing.v1 import AppTest
+
+APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
 
 @pytest.fixture(scope="module")
@@ -18,7 +21,7 @@ def app_test() -> AppTest:
         patch("pathlib.Path.exists", return_value=False),
         patch("src.llm_client.LLMClient", autospec=True),
     ):
-        at = AppTest.from_file("streamlit_app.py")
+        at = AppTest.from_file(APP_PATH)
         return at
 
 
