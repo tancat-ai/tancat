@@ -75,7 +75,35 @@ class SiteConfig:
     expected_min_criteria: int = 1
 
 
+# NOTE: "tancat" targets a LOCAL serve of the landing page (landing/) by default —
+# we develop UAT against a target we control. To test the live site instead, change
+# url to "https://tancat.dev" (start the serve first: cd landing && python -m http.server 8079).
 SITES: dict[str, SiteConfig] = {
+    "tancat": SiteConfig(
+        name="tancat.dev (landing page, local serve)",
+        url="http://localhost:8079/",
+        user_story=(
+            "As a prospective customer, I want to browse the TanCat landing page — the "
+            "public website for our AI Playwright test generator software — so that I can "
+            "understand what the product is, how it works, and how to buy or install it."
+        ),
+        conditions=(
+            "1. Navigate to the TanCat landing page and verify the headline 'The AI test generator where your data never leaves your deployment' is visible\n"
+            "2. Click the 'How It Works' link in the header navigation\n"
+            "3. Verify the 'How It Works' section with the 'Story → Generate → Run → Evidence → Export' heading is visible\n"
+            "4. Click the 'Pricing' link in the header navigation\n"
+            "5. Verify the 'Per deployment, not per seat' pricing section is visible\n"
+            "6. Scroll back to the top and click the 'Noir Art' button in the hero panel\n"
+            "7. Verify the noir artwork panel is shown and its image loads (no blank panel)\n"
+            "8. Click the 'Copy Command' button and verify the visible install command contains 'git clone https://github.com/tancat-ai/tancat'\n"
+            "9. Verify the 'Watch 3-Min Walkthrough' button in the hero links to a real video: assert its href attribute does NOT contain the placeholder text 'YOUR_VIDEO_ID_HERE'\n"
+            "10. Verify the 'Buy Pro' button in the pricing section links to a real purchase URL: assert its href attribute does NOT contain 'TBD'\n"
+            "11. Verify the 'Buy Air-Gap' button in the pricing section links to a real purchase URL: assert its href attribute does NOT contain 'TBD'\n"
+            "12. Verify the 'Walkthrough' link in the footer links to a real video: assert its href attribute does NOT contain the placeholder text 'YOUR_VIDEO_ID_HERE'\n"
+            "(Total: 12 criteria)\n"
+        ),
+        expected_min_criteria=12,
+    ),
     "automationexercise": SiteConfig(
         name="automationexercise.com",
         url="https://automationexercise.com",

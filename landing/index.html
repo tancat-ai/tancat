@@ -64,15 +64,14 @@
 <div class="absolute -inset-1.5 bg-gradient-to-r from-amber-500/40 via-neonViolet/30 to-cyberBlue/40 rounded-3xl blur-xl opacity-70"></div>
 <div class="relative rounded-2xl overflow-hidden border border-amber-500/30 bg-slate-950 shadow-2xl">
   <div class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-400">
-    <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-rose-500/80"></span><span class="w-3 h-3 rounded-full bg-amber-500/80"></span><span class="w-3 h-3 rounded-full bg-emerald-500/80"></span><span class="ml-2 text-slate-300 text-xs font-medium tracking-wider">tancat-ui // mission-control :: localhost:8501</span></div>
-    <div class="flex items-center gap-2 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
-      <button class="px-3 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5" id="btn-tab-ui" onclick="switchHeroView('ui')" type="button"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Product UI</button>
-      <button class="px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center gap-1.5" id="btn-tab-mascot" onclick="switchHeroView('mascot')" type="button">&#127912; Noir Art</button>
+    <div class="flex items-center gap-2 min-w-0"><span class="w-3 h-3 rounded-full bg-rose-500/80 shrink-0"></span><span class="w-3 h-3 rounded-full bg-amber-500/80 shrink-0"></span><span class="w-3 h-3 rounded-full bg-emerald-500/80 shrink-0"></span><span class="ml-2 text-slate-300 text-xs font-medium tracking-wider truncate">TanCat &mdash; Product UI</span></div>
+    <div class="flex items-center gap-1 sm:gap-2 bg-slate-950/80 p-1 rounded-lg border border-slate-800 shrink-0">
+      <button class="px-2.5 sm:px-3 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5" id="btn-tab-ui" onclick="switchHeroView('ui')" type="button"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Product UI</button>
+      <button class="px-2.5 sm:px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center gap-1.5" id="btn-tab-mascot" onclick="switchHeroView('mascot')" type="button">&#127912; Noir Art</button>
     </div>
-    <div class="hidden sm:flex items-center gap-3"><span class="inline-flex items-center gap-1 text-emerald-400 font-mono text-[11px]"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Egress: LLM + Target Only</span><span class="text-slate-500">|</span><span class="text-amber-400 font-mono text-[11px]">LLM: llama.cpp / Ollama :8080</span></div>
   </div>
   <div class="relative aspect-video max-h-[520px] w-full overflow-hidden bg-slate-950" id="view-product-ui">
-    <img alt="Real TanCat Streamlit App UI: AI Playwright Test Generator with target URL, parse mode, URL guard, max pages, and site health check." class="w-full h-full object-cover object-top" loading="eager" src="streamlit_real_1280x820.png"/>
+    <img alt="Real TanCat Streamlit App UI: AI Playwright Test Generator with target URL, parse mode, URL guard, max pages, and site health check." class="w-full h-full object-contain" loading="eager" src="streamlit_real_1280x820.png"/>
     <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent pointer-events-none"></div>
     <div class="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-between gap-3 bg-slate-950/85 backdrop-blur-md border border-slate-800 p-3 rounded-xl">
       <div class="flex items-center gap-2.5"><span class="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">Streamlit Web UI</span><span class="text-xs text-slate-300 font-mono">Real product capture - launch_ui.sh output</span></div>
@@ -90,7 +89,7 @@
   </div>
   <script>function switchHeroView(v){var ui=document.getElementById('view-product-ui'),ma=document.getElementById('view-mascot-art'),bu=document.getElementById('btn-tab-ui'),bm=document.getElementById('btn-tab-mascot');var a='px-3 py-1 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5',i='px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center gap-1.5';if(v==='ui'){ui.classList.remove('hidden');ma.classList.add('hidden');bu.className=a;bm.className=i}else{ui.classList.add('hidden');ma.classList.remove('hidden');bm.className=a;bu.className=i}}</script>
   <div class="bg-darkslate border-t border-slate-800 p-4 flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-xs">
-    <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto text-slate-300"><span class="text-amber-400 font-bold">$</span><code class="text-amber-200">git clone https://github.com/tancat-ai/tancat &amp;&amp; cd tancat &amp;&amp; uv sync</code></div>
+    <div class="flex items-center gap-3 w-full md:w-auto overflow-x-auto text-slate-300"><span class="text-amber-400 font-bold">$</span><code class="text-amber-200 break-all">git clone https://github.com/tancat-ai/tancat &amp;&amp; cd tancat &amp;&amp; uv sync &amp;&amp; bash launch_ui.sh</code></div>
     <button class="w-full md:w-auto shrink-0 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg border border-slate-700 transition-colors flex items-center justify-center gap-2" onclick="navigator.clipboard.writeText('git clone https://github.com/tancat-ai/tancat && cd tancat && uv sync && bash launch_ui.sh');this.innerText='Copied!';setTimeout(function(){this.innerText='Copy Command'},2000)"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg> Copy Command</button>
   </div>
 </div>
@@ -108,7 +107,7 @@
   <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-amber-500/40 transition-all group">
     <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 font-mono font-bold flex items-center justify-center mb-4">1</div>
     <h3 class="text-base font-semibold text-white group-hover:text-amber-300 transition-colors">Paste a User Story</h3>
-    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Plain language Jira ticket, user acceptance criteria, or markdown spec. That's the only input &mdash; no syntax to learn or test framework to master.</p>
+    <p class="text-xs text-slate-400 mt-2 leading-relaxed">Plain language Jira ticket, user acceptance criteria, or markdown spec. That's the only input &mdash; no syntax to learn or test framework to master. Or upload a spec doc &mdash; the LLM learns from it, and it stays in-house.</p>
     <div class="mt-4 text-[11px] font-mono text-slate-500 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80">&ldquo;As an admin, clicking 'Revoke Token' opens confirm modal.&rdquo;</div>
   </div>
   <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-cyberBlue/40 transition-all group">
