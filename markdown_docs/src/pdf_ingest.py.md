@@ -13,8 +13,8 @@ Extracts text, headings, and tables from PDFs into `DocChunk` objects for RAG in
 - Stable **dedup key** computed per chunk so re-ingestion is idempotent (AI-045 #4)
 
 ## Functions
-- `ingest_pdf(path: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None) -> list[DocChunk]` — extract single PDF; `ocr_fallback` is called for image-only pages
-- `ingest_pdf_directory(directory: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None) -> list[DocChunk]` — extract all PDFs in directory (threads `ocr_fallback` through)
+- `ingest_pdf(path: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None, page_report: list[tuple[int, str, str]] | None = None) -> list[DocChunk]` — extract single PDF; `ocr_fallback` is called for image-only pages; `page_report` receives one `(page_number, outcome, reason)` tuple per page (AI-055 quality summary)
+- `ingest_pdf_directory(directory: Path, *, ocr_fallback: Callable[[Path, int], str] | None = None, page_report: list[tuple[str, int, str, str]] | None = None) -> list[DocChunk]` — extract all PDFs in directory (threads `ocr_fallback` and `page_report` through)
 - `doc_chunk_key(chunk: DocChunk) -> str` — stable sha256 dedup key (`source \x00 heading_path \x00 normalised_text`)
 - `_normalise_for_dedup(text: str) -> str` — collapse whitespace + strip + lower (for the dedup key)
 
@@ -42,3 +42,20 @@ Private `_`-helpers — the module's real logic (6 items). Grouped under the pub
 ### Internal utilities
 - `_extract_headings(page: fitz.Page) -> list[tuple[float, str]]` (function) — Return heading candidates sorted by vertical position (y coordinate).
 - `_is_table_section(text: str) -> bool` (function) — Check if a section is primarily a markdown table.
+
+## Page Report Outcome Semantics (AI-055)
+
+`page_report` receives one tuple per page. The `outcome` field distinguishes what happened to each page:
+
+| Outcome | Meaning | Reason |
+|---------|---------|--------|
+| `"text"` | Page checked via PyMuPDF, content found | `""` |
+| `"ocr"` | Page checked via OCR fallback, content found | `""` |
+| `"empty"` | Page **was checked** via OCR but no usable content found (genuinely blank or unreadable) | `"ocr_no_text"` or `"ocr_failed"` |
+| `"skipped"` | Page was **NOT checked** at all (no OCR engine available) | `"no_engine"` |
+
+The distinction between `"empty"` and `"skipped"` matters for the CI regression
+test (`test_lv_docs_no_pages_skipped_regression`): it asserts 0 `"skipped"`
+(0 pages not checked) while allowing `"empty"` pages. A blank page is checked
+(OCR ran) → `"empty"`. A lost content page (no engine) → `"skipped"` → test
+goes red.
