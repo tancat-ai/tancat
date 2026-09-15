@@ -231,6 +231,11 @@ def learn_from_evidence(
         result = step.get("result") or {}
         if str(result.get("status", "")) != _LEARNED_STATUS:
             continue
+        # AI-067: never learn a pattern from a step that ran on a different page
+        # than the one it was resolved against — the locator may only "work"
+        # because a page-level container happened to match there.
+        if result.get("page_mismatch"):
+            continue
         pattern = _step_to_pattern(step)
         if pattern is None:
             continue

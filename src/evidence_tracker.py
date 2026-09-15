@@ -26,6 +26,34 @@ from src.storage import get_storage
 logger = logging.getLogger(__name__)
 
 
+def _same_page(expected: str, actual: str) -> bool:
+    """Return True when two URLs address the same page.
+
+    Compares scheme + host + path only, ignoring query and fragment: SPA mocks
+    encode state in the query (``success.html?item=blue-top``) and a differing
+    query is not evidence of a different page. Trailing slashes are ignored.
+    Anything unparseable counts as a match so a parse failure never raises a
+    false mismatch.
+    """
+
+    if not expected or not actual:
+        return True
+
+    def _key(url: str) -> tuple[str, str, str]:
+        parsed = urlparse(str(url))
+        return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/") or "/")
+
+    try:
+        left, right = _key(expected), _key(actual)
+    except Exception:
+        return True
+    # No host on either side means this is not a comparable absolute URL —
+    # fail open rather than raising a false mismatch.
+    if not left[1] or not right[1]:
+        return True
+    return left == right
+
+
 class _LocatorNotFoundError(RuntimeError):
     """Raised when a click target does not exist on the current page.
 
@@ -67,6 +95,11 @@ class EvidenceTracker:
 
         self.steps: list[dict[str, Any]] = []
         self.start_time = time.time()
+        # AI-067: the page a step actually RAN on — captured before the action,
+        # because a click legitimately navigates away from the page its locator
+        # was resolved against. Compared with ``expected_page`` in
+        # ``_record_step``.
+        self._step_entry_url: str = ""
 
         # Determine evidence directory: per-test package takes precedence
         if test_package_dir is not None:
@@ -290,10 +323,16 @@ class EvidenceTracker:
         elapsed_ms: int | None = None,
         fast_fail: bool = False,
         element_metadata: dict[str, Any] | None = None,
+        expected_page: str = "",
     ) -> None:
         """Record one evidence step.
 
         Args:
+            expected_page: The page this step's locator was resolved against.
+                When the step actually runs somewhere else the mismatch is
+                recorded on the step result (``page_mismatch``) so a wrong-page
+                resolution is visible instead of silently passing. Empty means
+                "not checked".
             fast_fail: True when the step failed because the locator does not
                 exist on the current page. Skips the expensive element-metadata
                 capture (waits ~5s per Playwright call on a missing element),
@@ -413,6 +452,15 @@ class EvidenceTracker:
             result["fallback_used"] = True
             result["fallback_chain"] = fallback_chain or []
 
+        # AI-067: flag a step that ran on a page other than the one its locator
+        # was resolved against. The trail/scope can be wrong even when an
+        # element resolves (a page-level container matches anything), so the
+        # mismatch must be recorded rather than passing silently.
+        if expected_page:
+            actual_page = self._step_entry_url or self._safe_page_url()
+            if not _same_page(expected_page, actual_page):
+                result["page_mismatch"] = {"expected": expected_page, "actual": actual_page}
+
         self.steps.append(
             {
                 "step": step_idx + 1,
@@ -497,7 +545,7 @@ class EvidenceTracker:
             )
             raise
 
-    def fill(self, locator: str, value: str, label: str = "") -> None:
+    def fill(self, locator: str, value: str, label: str = "", expected_page: str = "") -> None:
         # AI-045 §8.4: classify the field BEFORE filling. Sensitive fields get
         # their value replaced by the redaction marker in BOTH evidence
         # channels (sidecar ``value`` + any label that embeds it). Detection
@@ -513,6 +561,7 @@ class EvidenceTracker:
             # (e.g. "Fill password with 'hunter2'") — scrub it defensively.
             label = redact_text(label, value) if sensitive else label
         _t0 = time.time()
+        self._step_entry_url = self._safe_page_url()
         try:
             # B-045: native <select> elements reject .fill() ("Element is not an
             # <input>, <textarea> or [contenteditable]"). The banking mock is the
@@ -525,7 +574,12 @@ class EvidenceTracker:
             else:
                 self.page.locator(locator).fill(value)
             self._record_step(
-                "fill", label, locator=locator, value=safe_value, elapsed_ms=int((time.time() - _t0) * 1000)
+                "fill",
+                label,
+                locator=locator,
+                value=safe_value,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
         except Exception as e:
             self._record_step(
@@ -535,6 +589,7 @@ class EvidenceTracker:
                 value=safe_value,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 
@@ -588,7 +643,7 @@ class EvidenceTracker:
         except Exception:
             return ""
 
-    def click(self, locator: str, label: str = "") -> None:
+    def click(self, locator: str, label: str = "", expected_page: str = "") -> None:
         """Click an element, with layered fallback strategies.
 
         Strategy (Tier 2 — Locator Scoring + Controlled Fallback):
@@ -602,6 +657,7 @@ class EvidenceTracker:
         if not label:
             label = f"Click {locator}"
         _t0 = time.time()
+        self._step_entry_url = self._safe_page_url()
         try:
             # Always click `first` to avoid strict-mode failures when a locator is
             # valid but matches multiple elements (common on e-commerce grids).
@@ -632,6 +688,7 @@ class EvidenceTracker:
                             locator=locator,
                             elapsed_ms=int((time.time() - _t0) * 1000),
                             element_metadata={"note": "modal already dismissed — no-op"},
+                            expected_page=expected_page,
                         )
                         return
                     raise _LocatorNotFoundError(
@@ -648,6 +705,7 @@ class EvidenceTracker:
                     error=str(sys.exc_info()[1]),
                     elapsed_ms=int((time.time() - _t0) * 1000),
                     fast_fail=True,
+                    expected_page=expected_page,
                 )
                 raise
             # Proactively dismiss consent/ad overlays AND confirmation modals
@@ -684,6 +742,7 @@ class EvidenceTracker:
                     take_screenshot=True,
                     elapsed_ms=int((time.time() - _t0) * 1000),
                     element_metadata=el_metadata,
+                    expected_page=expected_page,
                 )
                 self._verify_click_navigation(locator, label, el_metadata, original_url)
                 return
@@ -709,6 +768,7 @@ class EvidenceTracker:
                             take_screenshot=True,
                             elapsed_ms=int((time.time() - _t0) * 1000),
                             element_metadata=el_metadata,
+                            expected_page=expected_page,
                         )
                         self._verify_click_navigation(locator, label, el_metadata, original_url)
                         return
@@ -742,6 +802,7 @@ class EvidenceTracker:
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 
@@ -829,10 +890,11 @@ class EvidenceTracker:
         result["failure_note"] = error
         self._persist_sidecar("running")
 
-    def assert_visible(self, locator: str, label: str = "") -> None:
+    def assert_visible(self, locator: str, label: str = "", expected_page: str = "") -> None:
         if not label:
             label = f"Assert visible: {locator}"
         _t0 = time.time()
+        self._step_entry_url = self._safe_page_url()
         try:
             # Use `first` to avoid strict-mode violations when multiple elements
             # match (common with overlays/duplicate buttons in e-commerce UIs).
@@ -846,6 +908,7 @@ class EvidenceTracker:
                 take_screenshot=True,
                 matched_text=matched_text,
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
         except Exception as e:
             self._record_step(
@@ -855,12 +918,13 @@ class EvidenceTracker:
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 
     # --- B-020: Additional assertion methods ---
 
-    def assert_hidden(self, locator: str, label: str = "") -> None:
+    def assert_hidden(self, locator: str, label: str = "", expected_page: str = "") -> None:
         """Assert the element is hidden or detached — a state-ABSENCE check.
 
         For polarity ASSERTs like "popup closed" / "item removed": Playwright's
@@ -870,6 +934,7 @@ class EvidenceTracker:
         if not label:
             label = f"Assert hidden: {locator}"
         _t0 = time.time()
+        self._step_entry_url = self._safe_page_url()
         try:
             self.page.locator(locator).first.wait_for(state="hidden", timeout=5000)
             self._record_step(
@@ -879,6 +944,7 @@ class EvidenceTracker:
                 take_screenshot=True,
                 matched_text=None,
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
         except Exception as e:
             self._record_step(
@@ -888,6 +954,7 @@ class EvidenceTracker:
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 

@@ -935,11 +935,14 @@ def test_02_add_item(page):
     # B-021: "products page loaded" is a page-state assertion — now resolved
     # as a URL assertion (expect(page).to_have_url(...)) instead of pytest.skip.
     assert "to_have_url" in final_code
-    # Concrete placeholders SHOULD resolve correctly using stateful scraping data
+    # Concrete placeholders SHOULD resolve correctly using stateful scraping data.
+    # AI-067: the emitted call also carries ``expected_page`` — the page the
+    # locator was resolved against — so the evidence sidecar can flag a step
+    # that runs somewhere else. The label/selector check is unchanged.
     assert (
-        "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack')"
-        in final_code
-    )
+        "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack'"
+    ) in final_code
+    assert "expected_page='https://www.saucedemo.com" in final_code
     # AI-052 S4: keyword-URL inference is gone — without an observed trail the
     # resolver cannot know that login lands on /inventory.html, so the
     # "shopping cart link" click is not evidenced there. The navigation-intent
