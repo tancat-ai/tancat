@@ -89,6 +89,14 @@ Full directory tree: see `docs/reference/agents_archive.md` §4.
 
 ## 6. Environment & Run Commands
 
+### Inference hardware (local LLM)
+
+- Machine: AMD Strix Halo / Radeon 8060S — **64GB unified memory**
+- GPU/VRAM commit: ~**48GB** of the unified pool
+- Qwen 27B (Q4_K_XL) + KV cache: ~**36GB** typical → ~12GB headroom
+- Served by `llama-server` (llama.cpp, Vulkan build) on **:8080** — OpenAI-compatible; `.env` has `LLM_PROVIDER=openai-local`
+- Launcher/builds live in `C:\Users\l_a_c\llama.ccp config\` (PowerShell launchers + rolling build updates) — **outside this repo**
+
 ```bash
 # Setup
 uv sync && .venv\Scripts\activate && playwright install chromium
