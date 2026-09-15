@@ -196,10 +196,25 @@ def _build_step_row_html(step: dict[str, Any], idx: int) -> str:
 
     elapsed_html = f"<span style='color:#9ca3af;font-size:11px;'>{elapsed_str}</span>" if elapsed_str else ""
 
+    # AI-067: a step can pass while running on a page other than the one its
+    # locator was resolved against. That is a silent sequence difference, so it
+    # gets a visible marker instead of a plain green row.
+    mismatch_html = ""
+    mismatch = result.get("page_mismatch")
+    if isinstance(mismatch, dict) and mismatch:
+        expected_url = escape_html(str(mismatch.get("expected", "")))
+        actual_url = escape_html(str(mismatch.get("actual", "")))
+        mismatch_html = (
+            f" · <span title='resolved for {expected_url}, ran on {actual_url}' "
+            "style='color:#b45309;background:#fef3c7;border:1px solid #fcd34d;"
+            "padding:1px 6px;border-radius:10px;font-weight:600;font-size:10px;'>"
+            "wrong page</span>"
+        )
+
     meta_html = f"""
     <div style='margin-top:3px;font-size:11px;color:#6b7280;display:flex;flex-wrap:wrap;align-items:center;gap:2px;'>
       <code style='background:#f3f4f6;padding:1px 4px;border-radius:3px;'>{escape_html(type_key)}</code> ·
-      {status_html}{locator_html}{matched_html}{elapsed_html}
+      {status_html}{locator_html}{matched_html}{elapsed_html}{mismatch_html}
     </div>"""
 
     # ── failure detail ────────────────────────────────────────────────

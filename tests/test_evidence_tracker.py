@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from playwright.sync_api import Page
 
-from src.evidence_tracker import EvidenceTracker
+from src.evidence_tracker import EvidenceTracker, _same_page
 
 
 def test_evidence_tracker_records_navigation(tmp_path: Any) -> None:
@@ -473,3 +473,98 @@ def test_metadata_scroll_probe_failure_falls_back_to_bbox(tmp_path: Any) -> None
     meta = tracker._get_element_metadata("#btn")
     assert 0.0 <= meta["viewport_pct"]["x"] <= 100.0
     assert 0.0 <= meta["viewport_pct"]["y"] <= 100.0
+
+
+# ── AI-067: page-mismatch detection ──────────────────────────────────────
+
+
+class TestSamePage:
+    """``_same_page`` compares scheme+host+path, ignoring query and fragment."""
+
+    def test_ignores_query_and_trailing_slash(self) -> None:
+        assert _same_page("http://a/cart.html?item=1", "http://a/cart.html")
+        assert _same_page("http://a/cart.html/", "http://a/cart.html")
+        # scheme and host are case-insensitive; the path is not.
+        assert _same_page("HTTP://A/cart.html", "http://a/cart.html")
+        assert not _same_page("http://a/Cart.html", "http://a/cart.html")
+
+    def test_different_path_is_a_mismatch(self) -> None:
+        assert not _same_page("http://a/dashboard.html", "http://a/index.html")
+
+    def test_different_host_is_a_mismatch(self) -> None:
+        assert not _same_page("http://a/x", "http://b/x")
+
+    def test_unparseable_counts_as_match(self) -> None:
+        """A degenerate or unparseable value must never raise a false alarm."""
+        assert _same_page(None, "http://a/x")  # type: ignore[arg-type]
+        assert _same_page("", "http://a/x")
+        assert _same_page("not-a-url", "http://a/x")
+
+
+def test_step_on_expected_page_records_no_mismatch(tmp_path: Any) -> None:
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/dashboard.html"
+    tracker = EvidenceTracker(page_mock, "t_ok", evidence_root=Path(tmp_path))
+
+    tracker.assert_visible("#acct", label="dashboard loaded", expected_page="https://example.com/dashboard.html")
+
+    assert "page_mismatch" not in tracker.steps[-1]["result"]
+
+
+def test_step_on_other_page_records_mismatch(tmp_path: Any) -> None:
+    """The step still passes — the mismatch is recorded, not raised."""
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/success.html"
+    tracker = EvidenceTracker(page_mock, "t_bad", evidence_root=Path(tmp_path))
+
+    tracker.assert_visible("#acct", label="order page", expected_page="https://example.com/index.html")
+
+    result = tracker.steps[-1]["result"]
+    assert result["status"] == "passed"
+    assert result["page_mismatch"] == {
+        "expected": "https://example.com/index.html",
+        "actual": "https://example.com/success.html",
+    }
+
+
+def test_no_expected_page_records_no_mismatch(tmp_path: Any) -> None:
+    """Empty expectation means "not checked" — no field at all."""
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/anything.html"
+    tracker = EvidenceTracker(page_mock, "t_skip", evidence_root=Path(tmp_path))
+
+    tracker.assert_visible("#x", label="whatever")
+
+    assert "page_mismatch" not in tracker.steps[-1]["result"]
+
+
+def test_click_on_other_page_records_mismatch(tmp_path: Any) -> None:
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/checkout.html"
+    tracker = EvidenceTracker(page_mock, "t_click", evidence_root=Path(tmp_path))
+
+    tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
+
+    assert tracker.steps[-1]["result"]["page_mismatch"]["actual"].endswith("checkout.html")
+
+
+def test_page_is_compared_before_the_action(tmp_path: Any) -> None:
+    """The step RUNS on the page it starts on.
+
+    A click that navigates would otherwise look like a wrong-page step, because
+    the URL after the action is the landing page. The expectation is therefore
+    compared against the page captured before the action.
+    """
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/index.html"
+    tracker = EvidenceTracker(page_mock, "t_before", evidence_root=Path(tmp_path))
+
+    def _redirect(*_args: Any, **_kwargs: Any) -> None:
+        page_mock.url = "https://example.com/dashboard.html"
+
+    page_mock.locator.return_value.first.wait_for.side_effect = _redirect
+    tracker.assert_visible("#x", label="loaded", expected_page="https://example.com/index.html")
+
+    assert "page_mismatch" not in tracker.steps[-1]["result"]
+    # ...and the landing page is still recorded on the step for the report.
+    assert tracker.steps[-1]["url"] == "https://example.com/dashboard.html"
