@@ -259,7 +259,66 @@ def _assertion_type_to_et_method(assertion_type: str) -> str:
     return _ASSERTION_TO_ET_METHOD.get(assertion_type, "assert_visible")
 
 
+#: Tracker methods that accept ``expected_page``. The emitted call must match,
+#: or the generated test raises TypeError at run time. Kept in step with
+#: EvidenceTracker: click / fill / assert_visible / assert_hidden are the only
+#: ones this pipeline emits (toHaveText is remapped to assert_visible).
+_EXPECTED_PAGE_METHODS = frozenset({"click", "fill", "assert_visible", "assert_hidden"})
+
+
 def replace_token_in_line(
+    line: str,
+    action: str,
+    token: str,
+    resolved_value: str,
+    duplicate_selectors: set[str],
+    description: str = "",
+    fill_value: str = "",
+    assertion_type: str = "toBeVisible",
+    expected_page: str = "",
+) -> str:
+    """Replace a single placeholder token within a code line.
+
+    Args:
+        assertion_type: B-020 assertion type for ASSERT actions
+            (e.g. "toBeVisible", "toHaveText", "toContainText").
+            Default is "toBeVisible" for backward compatibility.
+        expected_page: The page this placeholder was resolved against, emitted
+            as ``expected_page=`` so the evidence sidecar can flag a step that
+            runs somewhere else (AI-067). Empty means "do not check".
+    """
+    emitted = _replace_token_in_line_impl(
+        line,
+        action,
+        token,
+        resolved_value,
+        duplicate_selectors,
+        description,
+        fill_value=fill_value,
+        assertion_type=assertion_type,
+    )
+    return _annotate_expected_page(emitted, expected_page)
+
+
+def _annotate_expected_page(emitted: str, expected_page: str) -> str:
+    """Attach ``expected_page`` to an emitted tracker call when it is supported.
+
+    Only tracker calls are annotated. ``pytest.skip(...)`` lines and plain
+    locator lines are returned untouched, as are methods that do not accept the
+    argument, so the emitted test can never fail on an unexpected keyword.
+    """
+    if not expected_page:
+        return emitted
+    stripped = emitted.strip()
+    if not stripped.startswith("evidence_tracker.") or not stripped.endswith(")"):
+        return emitted
+    method = stripped[len("evidence_tracker.") :].split("(", 1)[0].strip()
+    if method not in _EXPECTED_PAGE_METHODS:
+        return emitted
+    return f"{emitted.rstrip()[:-1]}, expected_page={expected_page!r})"
+
+
+def _replace_token_in_line_impl(
     line: str,
     action: str,
     token: str,

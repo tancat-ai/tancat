@@ -879,7 +879,16 @@ class PlaceholderOrchestrator:
                             landed = canon(next_url)
                             if landed:
                                 last_verified_url = landed
-                                if obs is None or canon(obs.to_url) != landed:
+                                # B-060: a MISSING observation is not divergence.
+                                # The trail legitimately has no entry for an
+                                # unmatched GOTO (see _map_trail_to_placeholders:
+                                # "unmatched GOTOs → no scraping step produced"),
+                                # and latching here pinned every later step to the
+                                # start page — banking lost 7 steps to one missing
+                                # note. Only a note that actually DISAGREES with
+                                # where we landed proves our route differs from
+                                # the observed one.
+                                if obs is not None and canon(obs.to_url) != landed:
                                     diverged = True
                     elif next_url:
                         current_url = next_url
@@ -1029,6 +1038,7 @@ class PlaceholderOrchestrator:
                     description,
                     fill_value=fill_value,
                     assertion_type=assertion_type or "toBeVisible",
+                    expected_page=current_url or "",
                 )
             final_lines.append(updated_line)
 

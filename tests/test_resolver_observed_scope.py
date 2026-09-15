@@ -658,6 +658,47 @@ def test_divergence_latches_trail_no_longer_trusted() -> None:
     assert "#react-burger-menu-btn" not in code
 
 
+def test_missing_trail_note_does_not_latch_divergence() -> None:
+    """B-060: a GOTO with NO observation is not evidence of divergence.
+
+    ``_map_trail_to_placeholders`` deliberately leaves a GOTO unmatched when
+    discovery produced no ``navigate`` step for it. The old latch read that
+    absence as divergence and pinned every later step to the start page — so a
+    dashboard assert resolved against the login page and the rest of the
+    journey skipped. Only a note that DISAGREES may latch.
+    """
+    data: dict[str, list[dict[str, Any]]] = {
+        SEED: [_el("#login-button", "login button")],
+        INVENTORY: [_el("#accounts-list", "Your accounts")],
+    }
+    # No 'navigate' step for the GOTO -> the placeholder gets no observation.
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0, "click", description="login button", from_url=SEED, to_url=INVENTORY, navigated=True, scraped=True
+            ),
+            ObservedStep(
+                1,
+                "scrape",
+                description="accounts dashboard loaded",
+                from_url=INVENTORY,
+                to_url=INVENTORY,
+                scraped=True,
+            ),
+        ]
+    )
+    skeleton, journey = _build(
+        "test_missing_note",
+        [("GOTO", "home"), ("CLICK", "login button"), ("ASSERT", "accounts dashboard loaded")],
+    )
+    code = _resolve(skeleton, [journey], data, {"test_missing_note": trail})
+    # The discriminator: with the old latch the assert is declared UNRESOLVED
+    # and a consolidated skip is inserted at the top of the test — the exact
+    # banking symptom. With the fix it resolves on the dashboard page.
+    assert "unresolved placeholders" not in code, code
+    assert "#accounts-list" in code
+
+
 # ── Index alignment (plan open question #1) ───────────────────────────────
 
 

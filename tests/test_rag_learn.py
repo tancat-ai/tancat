@@ -71,13 +71,14 @@ def _step(
     locator: str | None = "#user-name",
     status: str = "passed",
     url: str = "https://www.saucedemo.com/",
+    result_extra: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return {
         "type": step_type,
         "label": label,
         "locator": locator,
         "url": url,
-        "result": {"status": status},
+        "result": {"status": status, **(result_extra or {})},
     }
 
 
@@ -723,3 +724,26 @@ class TestLearnFromEvidenceSidecars:
         result = learn_from_evidence_sidecars(tmp_path, store=store)
         assert result["negatives_inserted"] == 0
         store.upsert_negative_pattern.assert_not_called()
+
+
+class TestPageMismatchIsNotLearned:
+    """AI-067: a step that ran on a different page than it was resolved for must
+    not become a golden pattern — its locator may only "work" there because a
+    page-level container happened to match."""
+
+    def test_mismatched_step_is_skipped(self) -> None:
+        store = MagicMock()
+        steps = [_step(result_extra={"page_mismatch": {"expected": "https://a/x", "actual": "https://a/y"}})]
+
+        result = learn_from_evidence(steps, store=store)
+
+        assert result == {"inserted": 0, "exists": 0}
+        store.upsert_pattern.assert_not_called()
+
+    def test_matching_step_is_still_learned(self) -> None:
+        store = MagicMock()
+        store.upsert_pattern.return_value = ("inserted", True)
+
+        result = learn_from_evidence([_step()], store=store)
+
+        assert result == {"inserted": 1, "exists": 0}
