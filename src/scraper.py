@@ -10,13 +10,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from playwright.sync_api import Page, sync_playwright
 
 from src.accessibility_enricher import AccessibilityEnricher
 from src.aria_parser import parse_aria_snapshot
 from src.element_enricher import ElementEnricher
+from src.locator_builder import build_dot_classes
 from src.url_guard import UrlGuard, UrlGuardError
 
 
@@ -58,6 +59,16 @@ def _selector_from_locator(locator: Any, index: int) -> str:
     try:
         selector = locator.evaluate(
             """(node) => {
+                const BS = String.fromCharCode(92);
+                const QUOTE = String.fromCharCode(34);
+                const escClass = (c) => {
+                    const body = c.replace(/[^a-zA-Z0-9_-]/g, (ch) => BS + ch);
+                    const first = c.charCodeAt(0);
+                    if (first >= 48 && first <= 57) {
+                        return BS + ("0000" + first.toString(16)).slice(-6) + body.slice(1);
+                    }
+                    return body;
+                };
                 const tag = node.tagName.toLowerCase();
                 if (node.id) return `#${node.id}`;
                 for (const attr of ["data-testid", "data-test", "data-qa"]) {
@@ -66,23 +77,29 @@ def _selector_from_locator(locator: Any, index: int) -> str:
                 }
                 const productId = node.getAttribute("data-product-id");
                 if (productId) {
-                    const classes = Array.from(node.classList || []).filter(Boolean).join(".");
+                    const classes = Array.from(node.classList || []).filter(Boolean).map(escClass).join(".");
                     return classes ? `${tag}.${classes}[data-product-id="${productId}"]` : `${tag}[data-product-id="${productId}"]`;
                 }
                 if (tag === "a") {
+                    // CSS attribute selectors match the LITERAL attribute value,
+                    // so emit the raw href as written in the markup — never a
+                    // parsed path (B-065: a[href="/x"] never matches
+                    // href="https://host/x").
                     const href = node.getAttribute("href");
-                    if (href && !href.startsWith("#") && !href.startsWith("javascript:")) {
-                        try {
-                            const parsed = new URL(href, window.location.href);
-                            return `a[href="${parsed.pathname || href}"]`;
-                        } catch {
-                            return `a[href="${href}"]`;
-                        }
+                    if (
+                        href
+                        && !href.startsWith("#")
+                        && !href.startsWith("javascript:")
+                        && !href.startsWith("mailto:")
+                        && !href.startsWith("tel:")
+                        && !href.includes(QUOTE)
+                    ) {
+                        return `a[href="${href}"]`;
                     }
                 }
                 const name = node.getAttribute("name");
                 if (name) return `${tag}[name="${name}"]`;
-                const classes = Array.from(node.classList || []).filter(Boolean).join(".");
+                const classes = Array.from(node.classList || []).filter(Boolean).map(escClass).join(".");
                 if (classes) return `.${classes}`;
                 return tag;
             }"""
@@ -610,27 +627,32 @@ class PageScraper:
                     classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
                     tag_name = tag.name
                     if classes:
-                        class_part = "." + ".".join(part for part in classes.split() if part)
+                        class_part = build_dot_classes(classes)
                         selector = f'{tag_name}{class_part}[{attribute}="{val}"]'
                     else:
                         selector = f'{tag_name}[{attribute}="{val}"]'
                     break
 
         # 4. href for links
+        # CSS attribute selectors match the LITERAL attribute value, so use the
+        # raw href exactly as written in the markup. Emitting the parsed path
+        # (the old behaviour) made absolute links unmatchable — B-065.
         if not selector and tag.name == "a" and href:
-            href_path = urlparse(href).path or href
-            selector = f'a[href="{href_path}"]'
+            raw_href = str(tag.get("href", "")).strip()
+            if raw_href and '"' not in raw_href:
+                selector = f'a[href="{raw_href}"]'
 
         # 5. Name attribute
         if not selector and tag.get("name"):
             selector = f'{tag.name}[name="{tag.get("name")}"]'
 
-        # 6. Class names
+        # 6. Class names (each token CSS-escaped so Tailwind variant classes
+        # like hover:text-amber-200 stay a single matchable class — B-065)
         if not selector:
             class_list = tag.get("class")
             classes = " ".join(class_list) if isinstance(class_list, list) else str(class_list or "")
             if classes:
-                selector = "." + ".".join(part for part in classes.split() if part)
+                selector = build_dot_classes(classes)
 
         # 7. Tag name fallback
         if not selector:
@@ -725,6 +747,7 @@ class PageScraper:
             "tag": tag.name,
             "role": str(tag.get("role", tag.get("type", tag.name))),
             "href": href,
+            "raw_href": str(tag.get("href", "")).strip(),
             "title": str(tag.get("title", "")).strip(),
             "aria_label": str(tag.get("aria-label", "")).strip(),
             "data_test": str(tag.get("data-test", "")).strip(),
