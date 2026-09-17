@@ -171,3 +171,94 @@ def test_soft_404_false_for_empty_final_url() -> None:
 def test_soft_404_ignores_trailing_slash_differences() -> None:
     assert PageScraper._is_soft_404("https://example.com/", "https://example.com/") is False
     assert PageScraper._is_soft_404("https://example.com/foo/", "https://example.com/foo") is False
+
+
+# ── B-065: Unmatchable selectors (Tailwind variants, href host) ─────────────
+
+
+def test_extract_elements_keeps_absolute_href_in_link_selector() -> None:
+    """Absolute hrefs must stay absolute in the selector.
+
+    CSS attribute selectors match the literal attribute value, so the old
+    behaviour (parsed path only) produced a[href="/tancat-ai/..."] which never
+    matched href="https://github.com/tancat-ai/..." (B-065).
+    """
+    scraper = PageScraper()
+    html = """
+    <html><body>
+      <a href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md">Egress Audit</a>
+    </body></html>
+    """
+    elements = scraper._extract_elements_from_html(html, base_url="http://localhost:8079/")
+    link = next(
+        e
+        for e in elements
+        if e["href"] == "https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md"
+    )
+    assert link["selector"] == 'a[href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md"]'
+    assert link["raw_href"] == "https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md"
+    from bs4 import BeautifulSoup
+
+    assert len(BeautifulSoup(html, "html.parser").select(link["selector"])) == 1
+
+
+def test_extract_elements_relative_href_selector_unchanged() -> None:
+    """Relative hrefs already matched the attribute value — keep that behaviour."""
+    scraper = PageScraper()
+    html = """
+    <html><body>
+      <a href="/view_cart">Cart</a>
+    </body></html>
+    """
+    elements = scraper._extract_elements_from_html(html, base_url="https://example.com/")
+    assert elements[0]["selector"] == 'a[href="/view_cart"]'
+    assert elements[0]["raw_href"] == "/view_cart"
+
+
+def test_extract_elements_mailto_link_falls_back_to_class() -> None:
+    """Non-navigable hrefs (mailto/tel/fragments) keep the class fallback."""
+    scraper = PageScraper()
+    html = """
+    <html><body>
+      <a href="mailto:hello@tancat.dev" class="mail-link">hello</a>
+    </body></html>
+    """
+    elements = scraper._extract_elements_from_html(html)
+    link = next(e for e in elements if e.get("raw_href") == "mailto:hello@tancat.dev")
+    assert link["selector"] == ".mail-link"
+
+
+def test_extract_elements_escapes_tailwind_variant_classes() -> None:
+    """hover:/sm:/md: variant classes stay single matchable classes.
+
+    Unescaped, .hover:text-amber-200 parses as the class .hover plus a
+    pseudo-class and matches nothing (B-065).
+    """
+    scraper = PageScraper()
+    html = """
+    <html><body>
+      <div class="mt-2 block font-mono hover:text-amber-200 py-3.5 w-1/2">Buy Pro</div>
+    </body></html>
+    """
+    elements = scraper._extract_elements_from_html(html)
+    card = next(e for e in elements if e.get("classes") and "hover:text-amber-200" in e["classes"])
+    assert card["selector"] == ".mt-2.block.font-mono.hover\\:text-amber-200.py-3\\.5.w-1\\/2"
+    from bs4 import BeautifulSoup
+
+    assert len(BeautifulSoup(html, "html.parser").select(card["selector"])) == 1
+
+
+def test_extract_elements_escapes_leading_digit_classes() -> None:
+    """Classes starting with a digit (3xl:) use the six-digit unicode escape."""
+    scraper = PageScraper()
+    html = """
+    <html><body>
+      <h2 class="3xl:flex items-center">Regulated buyer</h2>
+    </body></html>
+    """
+    elements = scraper._extract_elements_from_html(html)
+    heading = next(e for e in elements if e.get("tag") == "h2")
+    assert heading["selector"] == ".\\000033xl\\:flex.items-center"
+    from bs4 import BeautifulSoup
+
+    assert len(BeautifulSoup(html, "html.parser").select(heading["selector"])) == 1
