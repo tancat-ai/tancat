@@ -8,10 +8,44 @@ from __future__ import annotations
 
 import re
 
+# Matches a dot-class token including CSS escapes (e.g. ``hover\:text-amber-200``,
+# ``py-3\.5``, ``\000033xl``) so escaped tokens survive re-extraction from a
+# selector string. Legacy unescaped tokens degrade to the pre-escape behaviour.
+_CLASS_TOKEN_RE = re.compile(r"\.((?:[\w-]|\\.)+)")
+
 
 def _css_escape_id(value: str) -> str:
     """Escape a value for safe use as a CSS ID selector."""
     return re.sub(r"[^a-zA-Z0-9_-]", r"\\\g<0>", value)
+
+
+def _css_escape_class_token(token: str) -> str:
+    """Escape a single CSS class name for use inside a class selector.
+
+    Tailwind-style variant classes (``hover:text-amber-200``, ``sm:text-3xl``)
+    and fractional utilities (``py-3.5``, ``w-1/2``) contain characters with
+    special meaning in CSS. Unescaped, ``.hover:text-amber-200`` parses as the
+    class ``.hover`` plus a pseudo-class and matches nothing (B-065).
+
+    A leading digit needs the zero-padded six-digit unicode escape
+    (``3xl`` → ``\\000033xl``): a bare ``\\3`` would parse as the escape
+    for U+0003.
+    """
+
+    def esc(value: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_-]", lambda m: "\\" + m.group(0), value)
+
+    if token[:1].isdigit():
+        return "\\" + format(ord(token[0]), "06x") + esc(token[1:])
+    return esc(token)
+
+
+def build_dot_classes(classes: str) -> str:
+    """Build a dot-class selector (``.a.b.c``) with every class CSS-escaped."""
+    tokens = [token for token in classes.split() if token]
+    if not tokens:
+        return ""
+    return "." + ".".join(_css_escape_class_token(token) for token in tokens)
 
 
 def build_robust_locator(element: dict) -> str | None:
@@ -65,12 +99,18 @@ def build_robust_locator(element: dict) -> str | None:
     if id_match:
         return f"#{_css_escape_id(id_match.group(1))}"
 
-    # Priority 2: href-based locator for anchor elements
+    # Priority 2: href-based locator for anchor elements.
+    # CSS attribute selectors match the LITERAL attribute value, so prefer the
+    # raw href exactly as written in the markup. The normalised absolute URL in
+    # ``href`` only matches when the markup itself is absolute (B-065).
     if role in ("a", "link"):
         href_match = re.search(r'\[href=["\']([^"\']+)["\']\]', selector)
         if href_match:
             escaped_href = href_match.group(1).replace('"', '\\"')
             return f'a[href="{escaped_href}"]'
+        raw_href = str(element.get("raw_href", "")).strip()
+        if raw_href and '"' not in raw_href:
+            return f'a[href="{raw_href}"]'
         if href:
             escaped_href = href.replace('"', '\\"')
             return f'a[href="{escaped_href}"]'
@@ -80,7 +120,7 @@ def build_robust_locator(element: dict) -> str | None:
     if data_attr_matches:
         data_parts = [f'[data-{attr_name}="{attr_value}"]' for attr_name, attr_value in data_attr_matches]
         if useful_class_terms:
-            class_part = "." + ".".join(sorted(useful_class_terms))
+            class_part = "." + ".".join(_css_escape_class_token(t) for t in sorted(useful_class_terms))
             return class_part + "".join(data_parts)
         return "".join(data_parts)
 
@@ -95,8 +135,18 @@ def build_robust_locator(element: dict) -> str | None:
         if element_name:
             return f'input[name="{element_name}"]'
 
-    # Priority 4: Class-based without brittle framework prefixes
-    selector_class_matches = re.findall(r"\.([\w-]+)", selector)
+    # Priority 4: Class-based without brittle framework prefixes.
+    # Prefer the element's own classes (lossless, escaped here). The
+    # selector-string fallback covers elements without a classes key (e.g.
+    # ARIA-synthesised containers); its tokens are already escaped by the
+    # scraper builders.
+    if useful_class_terms:
+        class_part = "." + ".".join(_css_escape_class_token(t) for t in sorted(useful_class_terms))
+        if tag_prefix:
+            return f"{tag_prefix}{class_part}"
+        return class_part
+
+    selector_class_matches = _CLASS_TOKEN_RE.findall(selector)
     if selector_class_matches:
         clean_classes = [
             c
@@ -108,12 +158,6 @@ def build_robust_locator(element: dict) -> str | None:
             if tag_prefix:
                 return f"{tag_prefix}{class_part}"
             return class_part
-
-    if useful_class_terms:
-        class_part = "." + ".".join(sorted(useful_class_terms))
-        if tag_prefix:
-            return f"{tag_prefix}{class_part}"
-        return class_part
 
     # Priority 5: Text-based locator (fallback)
     if text:

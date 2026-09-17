@@ -7,6 +7,243 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
+## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
+
+**Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*.
+**Priority:** high — the feature did nothing at all, on every suite, while still burning ~20+ minutes.
+**One-line:** `SelfHealingRunner._extract_test_function` matched the raw pytest node id against the source:
+```python
+escaped = re.escape(test_name)  # test_t31_link\[chromium\]
+pattern = re.compile(rf"(def {escaped}\(.*?\).*?)(?=\ndef \w|\Z)", re.DOTALL)
+```
+pytest-playwright runs every test once per browser, so the node id is `test_t31_link[chromium]` — but the source only ever says `def test_t31_link(...)`. **Every** extraction failed, so `_review_and_suggest` returned `None` before calling the LLM, every failure counted as `unfixable`, `fixed_this_iteration == 0`, and the loop broke on iteration 1 having called the model **zero** times.
+**Evidence:** `WARNING: Could not extract test function 'test_t31_egress_audit_link_resolves[chromium]' from source`, returned in **0.0s** (no LLM call). After the fix, the same call reaches the model and returns in **19.8s**. The package's test file was never modified (`mtime` 19:42 while the run finished 22:15) — nothing was ever patched.
+**Fix:** strip the parametrisation suffix before matching (`test_name.split("[", 1)[0]`). 3 new tests in `tests/test_self_healing.py` (suffix stripped, sibling not matched).
+**Note:** this bug also HID the next two (B-068, B-070) — they only became visible once the reviewer was actually called.
+
+---
+
+## 🆕 B-068 — The self-heal reviewer is given no page elements, so it (correctly) refuses to fix anything
+
+**Status:** 🆕 new — exposed 2026-09-15 by B-067's fix. Not fixed.
+**Priority:** high — locator repair is the whole point of self-healing, and the model cannot propose a better selector without candidates.
+**One-line:** `_review_and_suggest` builds element context only when `detail.failure_url in self._scraped_data`, but (a) the UI constructs `SelfHealingRunner(max_iterations=3)` — **no `scraped_data`**, so `self._scraped_data == {}` (`src/ui/ui_run_results.py:1110`), and (b) `classify_failure` sets `failure_url=None` on **every** code path in `src/failure_classifier.py` (lines 124/135/149/160/174). So the context is always empty.
+**Evidence — the model says so itself.** Verbatim reviewer response for a real failure:
+> *"…the element is not found within 30 seconds. **Since no scraped page elements are available**, it is impossible to verify if the link exists under a different selector … Without page data to identify an alternative locator, this cannot be fixed automatically."*
+
+returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. The prompt instructs the model to set `fixable: false` below 0.5 confidence, so **every** failure is declined.
+**The data exists and is simply not passed in:** `scrape_manifest.json` in the package carries full element records (selector, text, tag, role, href, classes, aria, accessible_name) — `pages_scraped`. Feeding `SelfHealingRunner(scraped_data=...)` from that manifest (and/or deriving `failure_url` from the evidence sidecar, which `_failure_context` already knows how to read) would give the reviewer real candidates.
+**Estimated sessions:** 0.5 (plumb the manifest into the runner; assert the prompt contains element context).
+
+---
+
+## 🆕 B-069 — False passes: the run reports ✅ for things that are broken (17 tests assert the same element)
+
+**Status:** 🆕 new — found 2026-09-15 from the 48-test landing-page run (report claims 23 failed / 25 passed). Not fixed.
+**Priority:** high — this is the most dangerous failure mode for a test generator: green tests that verify nothing, which manufacture confidence instead of evidence.
+**One-line:** when the resolver cannot find a real match it falls back to a nearby element that IS present, the assertion passes, and the test reports success for a condition it never checked. **17 assertions across 17 different tests all target `#contact`**, for descriptions as unrelated as "How It Works heading", "first header nav link scrolls to section", "licence link resolves", "meta description tag", "Open Graph title and image" and "every image has a non-empty alt".
+**Worked examples (all ✅ in `report_local.md`)**
+| Test | What it actually does | Truth |
+|---|---|---|
+| `t23_first_header_nav_link_scrolls_to_section` | clicks **`#btn-tab-ui`** (the hero "Product UI" toggle — not a nav link), then asserts `#contact` is visible | verifies nothing |
+| `t19_watch_3_min_walkthrough_…_live_video_url` | asserts a **paragraph** is visible; never reads the button's `href` | href is `YOUR_VIDEO_ID_HERE` |
+| `t08_no_broken_images` | asserts `#btn-tab-mascot` is visible — examines no image | the noir image 403s |
+| `t09_noir_art_…_loaded_artwork` | clicks the toggle, then asserts **the toggle it just clicked** is visible | artwork is blank |
+| `t40_meta_description` | asserts `#contact` is visible | no meta description exists |
+| `t45_privacy_policy_link_in_footer` | asserts an element containing "Security **Policy**" | no privacy link exists |
+**Consequence:** the run reports green for the broken noir image, the `TBD` purchase links, the missing meta description, missing Open Graph tags, and missing privacy/terms links — i.e. exactly the items a customer would care about. Alongside this there is the mirror-image class (false FAILURES: 14 of the 23 reds are generator defects — B-065's unmatchable selectors — not page defects), so the headline "23 failed / 25 passed" is misleading in **both** directions.
+**Why it matters for AI-067:** the `expected_page` marker added earlier would flag some of these (the assert ran on the expected page), but it cannot detect a *wrong element on the right page* — which is most of this list.
+**Options**
+- [ ] **A — require evidence for the assertion:** when the resolved locator came from the fallback/last-resort path (no text/structure match), mark the step `unverified` and do NOT emit a passing assertion — emit `pytest.skip` with the reason instead. Turns false greens into honest skips.
+- [ ] **B — assert the description is actually reflected:** for href/attribute assertions ("no TBD in hrefs", "href is a live video") the emitted check must read the attribute, not assert visibility of a container. The skeleton prompt already produces bare `{{ASSERT:…}}` placeholders, so the resolver has to classify assert *kind* (visibility vs attribute vs count) — see the existing `assertion_type` plumbing.
+- [ ] **C — surface it:** count "assertions that matched a generic container" in the report (AI-067 badge gives the pattern) so a human can spot-check.
+- Recommendation: **A + B**. A stops the false greens immediately; B fixes the underlying assertion-kind gap.
+**Estimated sessions:** 1–1.5.
+
+---
+
+## 🆕 B-070 — Self-healing re-runs the whole suite even when it fixes nothing (~1 hour of no-op work)
+
+**Status:** 🆕 new — found 2026-09-15. Not fixed.
+**Priority:** medium — it is the "took a really long time" half of the report, and it scales badly: the bigger the suite, the worse the no-op.
+**One-line:** `heal()` runs the full suite, and when `fixed_this_iteration == 0` it `break`s and then runs **the whole suite again** for the final state (`final_run = self._run_pytest(test_path, current_test_names)` where `current_test_names` is still `None` = all tests). On a 48-test suite at ~11 minutes per run, a self-heal that fixes nothing costs ~22 minutes; with 3 iterations of partial progress it approaches an hour.
+**Evidence:** the 48-test suite needs **673s** per full run; the reported self-heal spanned 21:16 → 22:15 with the test file never modified.
+**Options**
+- [ ] **A — skip the final run when nothing was applied:** if `report.patches` is empty, reuse the last `run_result` instead of re-running (`remaining` is already known from iteration 1). Saves a full suite pass in the common no-fix case.
+- [ ] **B — never run the full suite to re-check a subset:** once failures are known, keep passing `current_test_names = [failed names]` into the final run (today it is only assigned at the *end* of the loop body, so the `break` path leaves it as `None`).
+- [ ] **C — stop early on a non-locator failure mix:** if every failure pre-screens as unfixable, return before the LLM loop.
+- Recommendation: **A + B** — both are small and together remove the wasted pass.
+**Estimated sessions:** 0.25–0.5.
+
+---
+
+## 🆕 B-071 — Streamlit file-watcher floods the log with `ModuleNotFoundError: torchvision` (the existing config key does not stop it)
+
+**Status:** 🆕 new — diagnosed 2026-09-15. Cosmetic.
+**Priority:** low — Streamlit catches the exceptions, so nothing breaks; but hundreds of tracebacks per session slow startup and bury real errors in the log.
+**One-line:** `local_sources_watcher.get_module_paths` walks imported modules and calls `hasattr(m, "__path__")`, which triggers `transformers`' lazy submodule imports; every vision model (videomae, vilt, vitmatte, vitpose, yolos, zoedepth, …) imports `torchvision`, which is not installed → one traceback per submodule.
+**The existing mitigation does not work.** `.streamlit/config.toml` already sets `folderWatchBlacklist = [".venv"]` with a B-041 comment claiming it stops this. It does not: the noise comes from **module introspection**, not directory scanning, so a folder blacklist cannot prevent it — and the user still sees it with the key set.
+**Options**
+- [ ] **A — `server.fileWatcherType = "none"`:** removes the noise completely; costs auto-rerun on source edits (the app still reruns on interaction).
+- [ ] **B — keep the watcher, silence the source:** leave it and note in the log/docs that these tracebacks are expected and harmless.
+- [ ] **C — avoid the import:** make the `transformers` import lazy/zombie (only inside the embedder call) so the watcher is less likely to walk it — narrow, and the RAG still imports it in a normal session.
+- Recommendation: **A**, with the existing misleading `folderWatchBlacklist` comment corrected either way.
+**Estimated sessions:** 0.25.
+
+---
+
+## 🆕 B-072 — `target="_blank"` link tests fail the post-click navigation check (new-tab navigation is invisible to the page under test)
+
+**Status:** 🆕 new — found 2026-09-17 by the B-065 acceptance re-run (`test_20260917_020353_*`, 4 failed / 31 passed). Not fixed.
+**Priority:** medium — it is the only remaining selector-adjacent failure class after B-065, and every external link on a real page uses `target="_blank"`, so this will bite every landing-page-style story.
+**One-line:** links with `target="_blank"` open a NEW tab on click; the click succeeds (B-065 fixed the selectors) but the evidence tracker's post-click check still sees the ORIGINAL page, so it raises `_LocatorNotFoundError: Click 'GitHub' succeeded but the page did not navigate (still on http://localhost:8079/)`.
+**Evidence:** 4/4 re-run failures are exactly this: `test_tc01_20_github_link_resolves_to_correct_url`, `test_tc01_21_published_egress_audit_link_resolves`, `test_tc01_22_security_policy_link_resolves_without_404`, `test_tc01_23_license_link_resolves` — all four target links in `landing/index.html` carry `target="_blank"` (lines 40, 44, 225, 226, 297, 298). The links themselves are live (HTTP 200) — these are false FAILURES, the mirror of B-065's false passes.
+**Options**
+- [ ] **A — follow the new page:** when the clicked element has `target="_blank"` (or the context menu is "open in new tab"), wait for the `page.context.on("page")` new-tab event, and run the post-click verification (URL / status / `expected_page`) against the NEW page; close it afterwards.
+- [ ] **B — verify without navigating:** for "link resolves / does not 404" criteria, read the resolved href and check it with a direct HTTP request (context.request.get) instead of clicking — no tab juggling, and it also covers links the resolver can't safely click.
+- Recommendation: **B for resolve/404 criteria, A for true navigation criteria** — the criterion kind already exists in the assertion plumbing (see B-069 option B).
+**Estimated sessions:** 0.5.
+
+---
+
+## ✅ B-064 — Generated suites were killed by a flat 600s pytest ceiling (48-test run died at 10:00; needs 11:13)
+
+**Status:** ✅ **Fixed 2026-09-15** — the ceiling now scales with the suite. Reported from the UI as *"Failed to run generated tests: … timed out after 600 seconds"*.
+**Priority:** high — a correct, healthy suite was thrown away, so the user saw a failure that had nothing to do with their tests.
+**One-line:** `PIPELINE_TEST_TIMEOUT` defaulted to a flat **600s** in two places (`PipelineRunService`, `SelfHealing`). That was chosen when suites were "9+ tests". A 48-test story needs **673s**, so `subprocess.run(timeout=600)` raised `TimeoutExpired` and the whole run was discarded.
+
+**Measured cost breakdown (why 48 tests cannot fit in 600s)**
+
+| Per unit | Cost | Source |
+|---|---|---|
+| one evidence step | **~5s** | full-page screenshot + lossless WebP re-encode |
+| steps per test | **2.25** | 108 `evidence_tracker.*` calls / 48 tests |
+| per test | **~17s** | 3 tests measured at 51.6s |
+| whole suite | **673s** | the run that was killed |
+
+The dominant cost is the encode, not the capture: viewport screenshot 0.11s, **full-page screenshot 0.56s**, but **Pillow PNG→WebP lossless re-encode 2.9–4.0s** for this page (6533px tall → 1016 KB PNG).
+
+**Fix (shipped)**
+1. `resolve_test_timeout(path)` in `src/pipeline_run_service.py`: `PIPELINE_TEST_TIMEOUT` still wins when set; otherwise `max(600, 25 × test_count)`. The 48-test package now resolves to **1200s**; a 2-test package stays at the 600s floor. `src/self_healing.py` calls the same helper instead of duplicating the flat default.
+2. `src/evidence_image.py`: encode with `method=2` (Pillow's default is 4). Measured on a real capture: **2.08s vs 2.87s, and a smaller file (843 KB vs 879 KB)** — a straight win, lossless either way.
+
+**Verified:** the same 48-test suite now completes — **23 failed, 25 passed in 673.02s**, inside the 1200s ceiling. 6 new tests in `tests/test_pipeline_run_service.py` (floor, scaling, env override, file vs directory counting).
+**Still open (separate item):** the per-step ~5s is inherent to full-page evidence capture. Bounding the capture height (or skipping the screenshot for passing steps) would cut the suite cost several-fold, but it changes what the evidence shows — a product decision, not taken here.
+
+---
+
+## 🆕 B-065 — The resolver emits selectors that cannot match anything (found by the landing-page run)
+
+**Status:** ✅ **Fixed 2026-09-17** (acceptance re-run verified; 0 selector reds; 4 remaining reds = new-tab class B-072; 12 false greens = B-069 session 2). Commit pending.
+**Priority:** high — these are silent, deterministic wrong answers on a plain static page. The page is healthy; the selectors are not.
+**One-line:** two distinct defects in the selector the scraper builds for an element, both producing a selector that matches **zero** elements.
+
+**Defect 1 — `a[href]` loses the host, so absolute links are unmatchable.** `src/scraper.py` (~line 76):
+```js
+const parsed = new URL(href, window.location.href);
+return `a[href="${parsed.pathname || href}"]`;   // path only — scheme+host dropped
+```
+Real element: `href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md"`. Generated: `a[href="/tancat-ai/tancat/blob/main/docs/security/egress-audit.md"]`. An attribute selector matches the **literal attribute**, so this never matches. Evidence: `test_t31_egress_audit_link_resolves` failed even though the link returns **200**; same for `test_t32` (Security Policy) and `test_t33` (Licence) — all three links are live (verified by HTTP). Fix: keep the absolute href, or match on the parsed form (`.pathname` comparison) rather than an attribute selector.
+
+**Defect 2 — Tailwind variant classes (`hover:`, `sm:`) are mangled into classes that do not exist.** Real element classes: `mt-2 block text-lg font-bold text-amber-300 font-mono hover:text-amber-200 transition-colors`. Generated selector: `.block.font-bold.font-mono.hover.mt-2.text-amber-300.text-lg.transition-colors` — note `.hover`. `hover` is not a class; `hover:text-amber-200` is a single token that was split on `:`. Verified in the browser: `document.querySelector(thatSelector)` → **null**, and **0 of 7** `h2`s match the sibling selector `h2.font-extrabold.mt-2.sm.text-3xl.text-white` (also built from `sm:`-bearing classes). Because Tailwind is used throughout modern sites, this silently breaks any generated locator that falls back to classes.
+
+**Amplifier — the same selector was reused for two different descriptions.** `test_t03` ("Built for the regulated buyer" → capability cards) and `test_t35` ("Contact us section") both emitted `h2.font-extrabold.mt-2.sm.text-3xl.text-white`. One of them is the same element as the regulated-buyer heading, and neither matched. Worth checking whether the class-based fallback is too permissive when several elements share a utility-class chain.
+**Evidence:** `generated_tests/test_20260915_194227_…/` — 23 failed / 25 passed; the landing page itself passes 24 of the 35 criteria (the failures that are genuinely the page's are the TBD/loom placeholders, the 403 noir image, and the missing metadata/legal links — see the separate findings from the same audit).
+**Estimated sessions:** 0.5–1 (fix both builders + tests over a Tailwind-style fixture).
+
+---
+
+## 🆕 B-066 — A bare `uv sync` (or any `uv run`) silently REMOVES the optional extras → the recurring `fitz` failure
+
+**Status:** 🆕 new — diagnosed 2026-09-15; docs corrected this session, durable fix not yet chosen.
+**Priority:** medium — it makes the local suite permanently red for no product reason, and it wastes a debugging session every time someone meets it.
+**One-line:** CI's pytest job runs `uv sync --frozen --all-extras` (`.github/workflows/ci.yml:313`), but the documented local setup was a bare `uv sync` and the pre-commit hooks run bare `uv run`. An unqualified sync makes the environment match the **default** dependency set, which **uninstalls `pymupdf` and `rapidocr-onnxruntime`** from the `[pdf]` / `[ocr]` optional extras — and `tests/test_ocr_backends.py` then fails with `ModuleNotFoundError: No module named 'fitz'`. CI is green because it installs the extras; local runs go red.
+**Evidence:** installing `uv sync --extra pdf` makes the suite green (3178 passed); the next `git commit` (pre-commit `uv run`) strips it again and the same test fails; `uv sync --all-extras` → 38/38 OCR tests pass and the full suite is 3189/0.
+**Docs corrected this session:** `AGENTS.md` §6 and `CONTRIBUTING.md` now say `uv sync --all-extras` with the reason inline. `README.md` deliberately still shows a bare `uv sync` — that section is the *product install* for customers, who do not need the test extras.
+**Durable fix (pick one)**
+- [ ] **A — hooks install the extras:** change the three `uv run` hooks in `.pre-commit-config.yaml` to `uv run --all-extras`, so the hook environment matches CI.
+- [ ] **B — the tests skip when the extra is absent:** `pytest.importorskip("fitz")` in `tests/test_ocr_backends.py`. Standard for an optional dependency, and it protects a contributor on a default install — but it hides the coverage gap silently if CI ever stops installing extras.
+- Recommendation: **A**, with **B** as a belt-and-braces follow-up.
+**Estimated sessions:** 0.25.
+
+---
+
+## 🆕 B-063 — Numbered criteria are silently TRUNCATED at the first heading line (35 criteria → 5)
+
+**Status:** 🆕 new — found 2026-09-15 while preparing a 35-criterion landing-page story. Not fixed.
+**Priority:** high — headings are a normal way to write a spec. Nothing warns the user that 30 of their criteria were thrown away; they just get fewer tests.
+**One-line:** `SpecAnalyzer._extract_numbered_criteria` **breaks out of its loop** on the first non-empty line that is not numbered and does not start with `-`:
+```python
+for line in section.splitlines():
+    m = re.match(r"^\s*(\d+)\.\s+(.*\S)\s*$", line)
+    if not m:
+        # Stop once we leave a numbered list after having started one.
+        if criteria and line.strip() and not line.lstrip().startswith("-"):
+            break  # <-- a section heading kills every criterion after it
+        continue
+    criteria.append(m.group(2).strip())
+```
+A group heading such as `IMAGES` is non-empty, non-numbered and does not start with `-`, so it terminates collection. Any blank line is fine (skipped) — only a heading or a line of prose is fatal.
+
+**Reproduction (2026-09-15):** the same 35 numbered criteria, run through the full UI path (`parse_requirements_text` → `analyze`):
+
+| Story form | Conditions derived |
+|---|---|
+| 35 criteria **with** group headings (`CONTENT AND STRUCTURE`, `IMAGES`, `PRICING`, …) | **5** — stops at the first heading |
+| The same 35 criteria with the headings removed | **35** |
+
+The first heading sits after criterion 5, which is exactly where collection stopped.
+
+**Why the break exists:** to stop at the end of the criteria list (e.g. a trailing "Notes:" section) instead of swallowing numbered lines from unrelated prose. The intent is right; the trigger is far too eager — it treats a *single* heading line as end-of-list.
+
+**Options (pick one)**
+- [ ] **A — tolerate isolated interruptions (recommended):** keep scanning after a non-numbered line; break only after several consecutive non-numbered, non-empty lines (e.g. 3). Headings, blank lines and the odd sentence between criteria then survive, while a genuinely different section still ends the list.
+- [ ] **B — never break:** collect every `N.` line in the document. Simplest and most predictable, but can pull in numbered lines from a trailing non-criteria section.
+- [ ] **C — heading-aware:** treat a short line with no trailing punctuation (or an ALL-CAPS line) as a group heading and continue past it. Narrower, but adds heuristics about what a heading looks like.
+
+**Recommended:** **A**, plus a unit test with a headed list (the exact shape above).
+**Related:** **B-062** is the sibling failure (prose with *no* criteria collapses to one test); this is numbered criteria *with* headings. Both present as "your story produced far fewer tests than it describes".
+**Note:** the `(Total: N criteria)` footer does not cause a problem — it is non-numbered, so the loop breaks there, after every criterion has been collected.
+**Estimated sessions:** 0.25 (one guarded loop + tests).
+
+---
+
+## 🆕 B-062 — A normal prose user story collapses to exactly ONE test (multi-concern guard only looks for quantity words)
+
+**Status:** 🆕 new — root-caused 2026-09-15, reproduced end-to-end. Not fixed.
+**Priority:** high — this is the *default* experience for a customer who writes a story the way a human writes one. One test for a whole landing page is not a useful product.
+**One-line:** `parse_requirements_text()` wraps any unparsed prose as a single numbered item (`1. <whole story>`); `SpecAnalyzer.analyze()` then sees exactly one numbered criterion and takes the deterministic 1:1 path, so the story becomes **one** condition → **one** test. The guard meant to catch this — `_has_multi_concern_signal` — only matches eight **quantity** phrases (`maximum`, `max quantity`, `max items`, `how many`, ` max `, `limit`, ` at least `, ` at most `). A story with no quantity words never trips it, so it is never handed to the LLM splitter.
+
+**Reproduction (2026-09-15, real LLM on :8080)** — the reported story:
+```
+this is the landing page for our software, check it describes the software shows images,
+pricing and a demo that can be watched. there should be clickable links to the free version,
+the paid version. contact us for the enterprize version. wording shouild be clear and links
+should be live.
+```
+| Step | Result |
+|---|---|
+| `parse_requirements_text(story)` | `criteria = "1. <whole story>"` — one wrapped item |
+| `_has_multi_concern_signal(that item)` | **False** (no quantity word present) |
+| `SpecAnalyzer().analyze(criteria)` — the UI path | **1 condition** → 1 test |
+| `SpecAnalyzer().analyze(story)` — bypassing the wrapper | **12 conditions** (the LLM splitter handles it fine) |
+
+So the splitter is not the problem and the LLM is not the problem: the input never reaches it. Same for the secondary fallback `_conservative_sentence_split`, which is gated on the same signal.
+
+**Why the guard is too narrow:** `_has_multi_concern_signal` was added for the B-027 regression (a wrapping of unstructured input as `1. <whole story>`). It catches *quantity* concerns but not the far more common shape — a prose sentence that lists several distinct checks (`shows images, pricing and a demo`, `clickable links to the free version, the paid version`). Note the story above contains **three** such lists and still scores no signal.
+
+**Options (pick one; do not stack them)**
+- [ ] **A — widen the guard**: also treat as multi-concern when the wrapped item is long (e.g. > ~200 chars) or contains coordinating lists (`and` / comma-enumeration) and multiple test verbs (`check`, `verify`, `should`, `shows`, `links`, `can be`). Cheapest, deterministic, no extra LLM call.
+- [ ] **B — route any single wrapped item to the LLM** when the *source* was the unstructured wrapper (the parser already knows it fell back), regardless of content. Most faithful to "the LLM is the primary splitter"; costs one LLM call on every unstructured story.
+- [ ] **C — surface it to the user**: when only one condition is derived from a story longer than N characters, show a warning ("we found one criterion — did you mean to list acceptance criteria?") and offer the numbered-criteria template. This does not fix the count but stops the silent surprise.
+- Recommendation: **A + C**. A fixes the common case deterministically; C removes the silent failure for everything else. B alone would spend an LLM call on every run.
+
+**Workaround for a user today (verified):** write numbered acceptance criteria — `1. …`, `2. …` — plus a `(Total: N criteria)` line. That takes the deterministic path and yields one condition per criterion (the landing-page story already in `scripts/uat.py` under the `tancat` target is a good template: 12 criteria → 12 conditions).
+**Related:** `_conservative_sentence_split` (added for "LLM collapse") is gated on the same narrow signal, so it cannot fire here either — widening the signal fixes both paths.
+**Estimated sessions:** 0.5 (widen the signal + tests + a UI warning).
+
+---
+
 ## 🆕 AI-067 — Wrong-page steps pass silently: record the page a locator was resolved for and flag a mismatch
 
 **Status:** ✅ **Done 2026-09-15** — built, verified end-to-end, and shipped. Gates: 3178 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%. Verified on a live banking run: 43 emitted calls carried `expected_page`, and the 39-step suite flagged **2 steps, 0 false alarms** (both genuine — the resolver expected the login page for the "Transfer Money" click while the test was on the dashboard).
