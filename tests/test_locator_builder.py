@@ -150,9 +150,11 @@ def test_robust_locator_relative_href_prefers_raw_attribute() -> None:
         "id": "",
         "aria_label": "",
     }
-    assert build_robust_locator(element) == 'a[href="/about"]'
+    locator = build_robust_locator(element)
+    assert locator is not None
+    assert locator == 'a[href="/about"]'
     html = '<a href="/about" class="about-link">About</a>'
-    assert len(BeautifulSoup(html, "html.parser").select(build_robust_locator(element))) == 1
+    assert len(BeautifulSoup(html, "html.parser").select(locator)) == 1
 
 
 def test_robust_locator_href_from_selector_regex_wins() -> None:
