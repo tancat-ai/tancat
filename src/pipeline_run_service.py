@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -11,6 +12,44 @@ from pathlib import Path
 from src.pytest_output_parser import RunResult, TestResult, format_pytest_output_for_display, parse_pytest_output
 from src.run_result_persistence import persist_run_result
 from src.run_utils import build_pytest_run_command, get_failed_nodeids
+
+#: Hard-ceiling floor for a generated suite, in seconds.
+_TEST_TIMEOUT_FLOOR = 600
+
+#: Seconds allowed per generated test on top of the floor. A generated test
+#: re-navigates and records evidence per step, and each evidence step captures a
+#: full-page screenshot plus a lossless WebP re-encode — ~5s per step, ~2.5 steps
+#: per test, so ~17s per test measured on a long local page. A flat 600s ceiling
+#: killed a healthy 48-test suite; scaling keeps big stories runnable while still
+#: bounding a genuinely stuck run.
+_TEST_TIMEOUT_PER_TEST = 25
+
+
+def count_generated_tests(test_path: str | Path) -> int:
+    """Count ``def test_...`` functions in a generated test file or package dir."""
+    path = Path(test_path)
+    files = sorted(path.glob("test_*.py")) if path.is_dir() else [path]
+    total = 0
+    for file in files:
+        try:
+            total += len(re.findall(r"^\s*def test_\w+", file.read_text(encoding="utf-8"), re.M))
+        except OSError:
+            continue
+    return total
+
+
+def resolve_test_timeout(test_path: str | Path) -> int:
+    """Hard pytest timeout for a generated suite, in seconds.
+
+    ``PIPELINE_TEST_TIMEOUT`` wins when set (unchanged back-compat). Otherwise
+    the ceiling scales with the number of tests: a flat 600s was fine for the 9
+    tests it was chosen for, but a 48-test story needs ~15 minutes of evidence
+    capture alone and was being killed mid-run.
+    """
+    override = os.environ.get("PIPELINE_TEST_TIMEOUT", "").strip()
+    if override:
+        return int(override)
+    return max(_TEST_TIMEOUT_FLOOR, _TEST_TIMEOUT_PER_TEST * count_generated_tests(test_path))
 
 
 def merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult:
@@ -95,10 +134,9 @@ class PipelineRunService:
         env["PYTHONPATH"] = os.pathsep.join([project_root, package_dir, env.get("PYTHONPATH", "")])
 
         # Enforce a hard timeout so the CLI never hangs forever on stuck tests.
-        # Default 10 minutes: live-site suites with browser startup, evidence
-        # tracking and 9+ tests routinely exceed 5 minutes. Configurable via
-        # PIPELINE_TEST_TIMEOUT.
-        timeout_secs = int(os.environ.get("PIPELINE_TEST_TIMEOUT", "600"))
+        # Scales with the suite (see ``resolve_test_timeout``); configurable via
+        # PIPELINE_TEST_TIMEOUT, which overrides the scaling.
+        timeout_secs = resolve_test_timeout(saved_path)
 
         completed = subprocess.run(
             command,

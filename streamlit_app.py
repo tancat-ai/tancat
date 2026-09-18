@@ -511,13 +511,32 @@ def generator_page() -> None:
             build_table_col, table_state_col = st.columns([1, 2])
             with build_table_col:
                 if st.button("Expand Conditions into Test Rows", type="secondary"):
+                    # AI-034 Phase 2: expansion makes ONE LLM call per condition.
+                    # On a local model that is ~10s each, all on this thread — so
+                    # without visible progress the button looks dead for minutes.
+                    # st.status streams each condition to the user as it runs.
+                    conditions = list(getattr(st.session_state.test_plan, "conditions", []) or [])
                     try:
-                        st.session_state.test_table = build_test_table(
-                            plan=st.session_state.test_plan,
-                            provider=provider,
-                            provider_base_url=provider_base_url,
-                            model_name=model_name,
-                        )
+                        with st.status(
+                            f"Expanding {len(conditions)} condition(s) into test rows…",
+                            expanded=False,
+                        ) as status:
+
+                            def _on_condition(index: int, total: int) -> None:
+                                status.update(label=f"Expanding condition {index} of {total}…")
+
+                            table = build_test_table(
+                                plan=st.session_state.test_plan,
+                                provider=provider,
+                                provider_base_url=provider_base_url,
+                                model_name=model_name,
+                                on_condition=_on_condition,
+                            )
+                            status.update(
+                                label=f"Expanded {len(conditions)} condition(s) into {len(table.rows)} test row(s)",
+                                state="complete",
+                            )
+                        st.session_state.test_table = table
                         st.session_state.pipeline_error = ""
                         st.rerun()
                     except Exception as exc:
