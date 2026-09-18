@@ -106,6 +106,55 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ---
 
+## 🆕 B-073 — Extend eval harness with AXI-style cost, duration, and turn metrics (research: axi.md 2026-09-18)
+
+**Status:** 🆕 new — identified via AXI.md research. Not started.
+**Priority:** medium — gives us a commercial story to tell customers.
+**One-line:** AXI benchmarked cost, duration, and turns per task across 490 runs. We benchmark resolution accuracy only — we need to add cost per task (tokens), duration, and turns to our eval harness.
+**Context:** AXI (https://axi.md/) proved that principled CLI beats both raw CLI and MCP across every metric: 100% success at $0.074/task, 21.5s, 4.5 turns vs MCP at $0.100/task, 26.0s, 6.2 turns.
+**Action:**
+- [ ] **Add token counting** to eval harness: count input + output tokens per story→test generation
+- [ ] **Add duration tracking:** wall-clock per criterion count (e.g., 12s per criterion)
+- [ ] **Add turns tracking:** LLM calls per story decomposition
+- [ ] **Add success rate per story type** (not just overall accuracy)
+- [ ] **Record results in `docs/plans/NEXT_SESSIONS_IMPROVEMENTS.md` §8 Appendix**
+**Why:** without cost/duration/turns, we cannot compare our tool to raw LLM+Playwright or to commercial competitors. AXI gave us the framework — we need to populate it with our own data.
+**Estimated sessions:** 0.5–1.
+
+---
+
+## 🆕 B-074 — Make `tancat` CLI follow AXI principles (content-first, definitive states, contextual disclosure)
+
+**Status:** 🆕 new — identified via AXI.md research. Not started.
+**Priority:** medium — improves the user experience for both agents and humans using the CLI.
+**One-line:** AXI principles 2, 4, 5, 8, 9 apply directly to our `tancat` CLI: content-first invocation, definitive empty states, contextual help, pre-computed summaries.
+**Action:**
+- [ ] **Principle 8 (Content first):** bare `tancat` invocation shows last-run status, not help text
+- [ ] **Principle 5 (Definitive empty states):** every command outputs explicit counts: "0 tests generated", "48 tests: 43 passed, 3 failed, 2 unverified"
+- [ ] **Principle 9 (Contextual disclosure):** after generation, suggest next steps: "run pytest generated_tests/", "review evidence", "self-heal"
+- [ ] **Principle 10 (Consistent help):** add concise `--help` per subcommand
+- [ ] **Principle 2 (Minimal schemas):** evidence output gains `--fields / --compact` option
+- [ ] **Principle 4 (Pre-computed aggregates):** add summary line to JSON/HTML reports
+**Why:** our CLI is the interface between the product and both agents and humans. Following AXI principles makes it more usable and more cost-efficient.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-075 — Consider exposing `tancat` as MCP server (ambient context principle)
+
+**Status:** 🆕 new — identified via AXI.md research. Longer-term research item.
+**Priority:** low — future architecture consideration, not for immediate session.
+**One-line:** AXI principle 7 (Ambient context) suggests tools should integrate into agent sessions natively. Our product could expose `generate_test` and `self_heal` as MCP tools.
+**Context:** AXI principle 7 recommends installing into agent session hooks or skills so state is visible before the agent acts. MCP server would let AI coding assistants call `tancat.generate_test(story="...")` and `tancat.self_heal(test_path="...")` directly.
+**Action:**
+- [ ] **Research:** prototype minimal MCP server wrapping core `tancat` functions
+- [ ] **Evaluate:** token cost vs benefit (MCP schema overhead ~185K/task vs AXI's ~79K — but if our tool is the target, not the interface, this may be acceptable)
+- [ ] **Decision:** only if gates 1–2 pass (trust established)
+**Why:** MCP integration could make our tool a first-class citizen in agent ecosystems — but only once the output is trustworthy (B-069, B-068 resolved).
+**Estimated sessions:** 0.25–0.5 (research only).
+
+---
+
 ## ✅ B-064 — Generated suites were killed by a flat 600s pytest ceiling (48-test run died at 10:00; needs 11:13)
 
 **Status:** ✅ **Fixed 2026-09-15** — the ceiling now scales with the suite. Reported from the UI as *"Failed to run generated tests: … timed out after 600 seconds"*. Note: the timeout-scaling half (`resolve_test_timeout` + the `SelfHealing` mirror) was lost from the working tree (a reset) and was restored from the 2026-09-15 session record on 2026-09-18; the `method=2` encode half shipped separately as f838978.
