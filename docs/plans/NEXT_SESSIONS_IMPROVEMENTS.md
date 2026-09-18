@@ -285,6 +285,79 @@ Record one row per session so drift is visible. All numbers from live regenerati
 
 ---
 
+## 8. Part D — AXI.md research (2026-09-18)
+
+> **Source:** https://axi.md/ — *AXI: Agent eXperience Interface*, 10 design principles for agent-ergonomic CLI.
+> **Benchmark:** 490 browser runs + 425 GitHub runs. AXI achieves **100% task success at $0.074/task, 21.5s, 4.5 turns** — the only condition leading on all four metrics.
+> **Key finding:** A principled CLI beats both raw CLI and MCP. MCP uses 2.3× more input tokens (185K vs 79K per task). The gap is not protocol choice — it is design.
+
+### D1. The 10 AXI principles (condensed)
+
+| # | Principle | One-line |
+|---|-----------|----------|
+| 1 | Token-efficient output | TOON format → ~40% savings vs JSON |
+| 2 | Minimal default schemas | 3–4 fields per item, not 10+ |
+| 3 | Content truncation | Truncate with size hints + `--full` escape hatch |
+| 4 | Pre-computed aggregates | Include `totalCount`, CI summaries inline |
+| 5 | Definitive empty states | Explicit "0 results", never ambiguous empty |
+| 6 | Structured errors & exit codes | Idempotent mutations, no prompts, fail loud on unknown flags |
+| 7 | Ambient context | Session hooks/skills load relevant state before the agent acts |
+| 8 | Content first | No args → live data, not help text |
+| 9 | Contextual disclosure | Next-step suggestions after each output |
+| 10 | Consistent help | Concise `--help` per subcommand |
+
+### D2. Direct opportunities for TanCat
+
+**A. Extend the eval harness with AXI-style metrics** — → **B-073**
+
+Today the harness tracks only resolution accuracy. AXI benchmarked cost, duration, and turns. We should add:
+- **Cost per task:** token count per story→test generation (equivalent to AXI's $/task)
+- **Success rate:** resolution accuracy per story type (not just overall)
+- **Duration:** wall-clock per criterion count
+- **Turns:** LLM calls per story decomposition
+
+This gives us a commercial story: AXI proved CLI beats MCP at lower cost — we can prove our tool beats raw LLM+Playwright at lower cost per test.
+
+**B. Make `tancat` CLI AXI-compliant** — → **B-074**
+
+| Principle | Current gap | Action |
+|-----------|-------------|--------|
+| 8 (Content first) | Bare `tancat` shows help, not live state | Show last-run status on bare invocation |
+| 5 (Definitive empty states) | Empty test runs can be ambiguous | Always show explicit counts: "0 tests generated", "0 failures" |
+| 9 (Contextual disclosure) | No next-step suggestions after generation | Suggest: "run pytest --generated", "review evidence", "self-heal" |
+| 10 (Help) | CLI help may be verbose per subcommand | Add concise `--help` per subcommand |
+| 2 (Minimal schemas) | Evidence sidecars carry excess data | Provide `--fields` / `--compact` option on evidence output |
+| 4 (Pre-computed aggregates) | Reports lack totals upfront | Add summary line: `Tests: 48 (43 passed, 3 failed, 2 unverified)` |
+
+**C. Agent-to-agent pipeline (longer term)** — → **B-075**
+
+| Principle | Application | Action |
+|-----------|-------------|--------|
+| 6 (Structured errors) | Pipeline errors opaque between Planner→Generator→Validator | Standardise error codes |
+| 2 (Minimal schemas) | Inter-agent messages carry full context | Pass only required fields between stages |
+| 7 (Ambient context) | No session-wide state at start | Expose `tancat` as MCP server: `generate_test(story=...)`, `self_heal(test_path=...)` |
+
+### D3. AXI lens on existing backlog items
+
+| Backlog | AXI Principle | Connection |
+|---------|--------------|------------|
+| B-069 (False greens) | 5 (Definitive empty states) | False greens = ambiguous "success" — make passing definitive |
+| B-068 (Self-heal no data) | 4 (Pre-computed aggregates) | Scrape manifest is pre-computed data not being passed in |
+| B-065 (Selector builders) | 2 (Minimal schemas) | Correct minimal selectors vs over-fetching |
+| B-062/B-063 (Parsing) | 3 (Content truncation) | Stories with headings = un-truncated context needed |
+| B-071 (Streamlit spam) | 6 (Structured errors) | Torchvision noise = unstructured error output |
+
+### D4. Recommendation
+
+AXI validates that principled CLI design beats both raw CLI and MCP. Our product is a CLI+UI that generates tests for agents (and for humans). The biggest takeaways:
+
+1. **Measure cost-per-task like AXI did** — extend eval harness with token/cost metrics (B-073)
+2. **Apply AXI principles to `tancat` CLI** — content-first, definitive states, contextual help (B-074)
+3. **Fix B-069/B-068 through AXI lens** — definitive pass/fail, pre-computed context
+4. **Consider MCP server** — ambient context principle (B-075, longer term)
+
+---
+
 ## 7. Appendix B — BACKLOG references
 
 | Id | Item | Status at time of writing |

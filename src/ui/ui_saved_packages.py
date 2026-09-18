@@ -156,6 +156,7 @@ class SavedPackagePanel:
 
         history = st.session_state.get("loaded_package_history")
         if history:
+            st.sidebar.subheader("📊 Historical Aggregates (all saved runs)")
             st.sidebar.metric("Total Runs", history.get("total_runs", 0))
             st.sidebar.metric("Total Passed", history.get("total_passed", 0))
             st.sidebar.metric("Total Failed", history.get("total_failed", 0))
