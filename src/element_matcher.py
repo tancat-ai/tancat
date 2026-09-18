@@ -1270,11 +1270,13 @@ class ElementMatcher:
             return matched_element
 
         logger.warning(
-            "[B-020] ASSERT '%s': LLM semantic pass failed, falling back to top scorer",
+            "[B-020] ASSERT '%s': LLM semantic pass failed, falling back to top scorer — UNVERIFIED",
             description,
         )
-        fallback = dict(all_ranked[0][1])
+        # B-069: create fallback dict with unverified flag (type: dict[str, Any] to allow bool)
+        fallback = dict(all_ranked[0][1])  # type: dict[str, Any]
         fallback["assertion_type"] = "toBeVisible"
+        fallback["unverified"] = True
         return fallback
 
 
