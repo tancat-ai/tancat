@@ -6,7 +6,13 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
-from src.pipeline_run_service import PipelineRunService
+import pytest
+
+from src.pipeline_run_service import (
+    PipelineRunService,
+    count_generated_tests,
+    resolve_test_timeout,
+)
 from src.pytest_output_parser import RunResult, TestResult
 
 
@@ -148,3 +154,49 @@ def test_run_saved_test_does_not_chain_on_preview_runs() -> None:
         service.run_saved_test("generated_tests/test_demo.py", cwd=".", persist=False)
 
     mock_learn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Suite-scaled pytest timeout
+# ---------------------------------------------------------------------------
+
+
+def _write_package(tmp_path: Path, tests_per_file: int, files: int = 1) -> Path:
+    for i in range(files):
+        body = "\n".join(f"def test_{i}_{j}():\n    assert True" for j in range(tests_per_file))
+        (tmp_path / f"test_mod_{i}.py").write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def test_count_generated_tests_single_file(tmp_path: Path) -> None:
+    pkg = _write_package(tmp_path, tests_per_file=3)
+    assert count_generated_tests(pkg / "test_mod_0.py") == 3
+
+
+def test_count_generated_tests_package_directory(tmp_path: Path) -> None:
+    pkg = _write_package(tmp_path, tests_per_file=4, files=3)
+    assert count_generated_tests(pkg) == 12
+
+
+def test_count_generated_tests_missing_path_is_zero(tmp_path: Path) -> None:
+    assert count_generated_tests(tmp_path / "nope.py") == 0
+
+
+def test_timeout_has_a_floor_for_small_suites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PIPELINE_TEST_TIMEOUT", raising=False)
+    pkg = _write_package(tmp_path, tests_per_file=2)
+    assert resolve_test_timeout(pkg) == 600
+
+
+def test_timeout_scales_with_a_large_suite(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A flat 600s ceiling killed a healthy 48-test suite whose per-step evidence
+    capture alone runs to ~10 minutes."""
+    monkeypatch.delenv("PIPELINE_TEST_TIMEOUT", raising=False)
+    pkg = _write_package(tmp_path, tests_per_file=48)
+    assert resolve_test_timeout(pkg) == 1200
+
+
+def test_timeout_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PIPELINE_TEST_TIMEOUT", "900")
+    pkg = _write_package(tmp_path, tests_per_file=48)
+    assert resolve_test_timeout(pkg) == 900

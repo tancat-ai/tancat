@@ -18,7 +18,7 @@ from src.pytest_output_parser import RunResult
 from src.spec_analyzer import SpecAnalyzer, TestCondition
 from src.test_generator import TestGenerator
 from src.test_plan import TestPlan, build_story_ref
-from src.test_table import TestTable, TestTableExpander, build_table
+from src.test_table import ProgressCallback, TestTable, TestTableExpander, build_table
 
 # Backwards-compatible alias used by streamlit_app and tests.
 _get_provider_defaults = get_provider_defaults
@@ -114,15 +114,21 @@ def build_test_table(
     provider: str,
     provider_base_url: str,
     model_name: str,
+    on_condition: ProgressCallback | None = None,
 ) -> TestTable:
     """Expand a reviewed plan into a Test Table (one row per test scenario).
 
     Shared by both the Streamlit UI and the CLI (AI-034 Phase 2). Falls back to
     one deterministic row per condition when the LLM is unavailable.
+
+    Args:
+        on_condition: Optional ``(index_1_based, total)`` progress hook forwarded
+            to the expander, which makes one LLM call per condition. Without it a
+            caller sees no output for the whole loop.
     """
     client = LLMClient(provider=provider, model=model_name, base_url=provider_base_url)
     expander = TestTableExpander(llm_client=client)
-    return build_table(plan.conditions, expander=expander)
+    return build_table(plan.conditions, expander=expander, on_condition=on_condition)
 
 
 def plan_rows_from_plan(plan: TestPlan, test_table: TestTable | None = None) -> list[dict[str, object]]:
