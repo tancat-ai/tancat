@@ -159,7 +159,7 @@ _ASSERTION_TO_ET_METHOD: dict[str, str] = {
     "toHaveValue": "assert_value",
     "toHaveCount": "assert_count",
     "toHaveClass": "assert_visible",  # no dedicated method yet, fall back
-    "toHaveAttribute": "assert_visible",  # no dedicated method yet, fall back
+    "toHaveAttribute": "assert_attribute",  # B-069: read attribute, not visibility
     "toBeHidden": "assert_hidden",  # polarity: "popup closed" / "item removed"
 }
 
@@ -256,7 +256,8 @@ def _normalize_test_function_names(code: str) -> str:
 
 def _assertion_type_to_et_method(assertion_type: str) -> str:
     """Map a Playwright assertion type to the corresponding evidence_tracker method."""
-    return _ASSERTION_TO_ET_METHOD.get(assertion_type, "assert_visible")
+    base_type = assertion_type.split(":", 1)[0]
+    return _ASSERTION_TO_ET_METHOD.get(base_type, "assert_visible")
 
 
 #: Tracker methods that accept ``expected_page``. The emitted call must match,
@@ -386,15 +387,36 @@ def _replace_token_in_line_impl(
         # but we only have (selector, label) from the resolver. Fall back to assert_visible.
         if et_method in ("assert_text", "assert_text_contains"):
             et_method = "assert_visible"
+        # B-069 part b: attribute assertions (href/alt/meta) must pass the
+        # attribute name to assert_attribute — extract from assertion_type
+        # (e.g., "toHaveAttribute:href") or fall back to parsing description.
+        attr_name = None
+        if et_method == "assert_attribute":
+            if ":" in assertion_type:
+                attr_name = assertion_type.split(":", 1)[1]
+            else:
+                # Derive from description keywords as fallback
+                lowered = description.lower()
+                attr_name = (
+                    "href"
+                    if "href" in lowered
+                    else ("alt" if "alt" in lowered else ("content" if "meta" in lowered else ""))
+                )
         if stripped == token:
+            if et_method == "assert_attribute":
+                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
+            if et_method == "assert_attribute":
+                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         locator_only_patterns = {
             f"page.locator({token})",
             f"self.page.locator({token})",
         }
         if stripped in locator_only_patterns:
+            if et_method == "assert_attribute":
+                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         return line.replace(token, resolved_value)
 
