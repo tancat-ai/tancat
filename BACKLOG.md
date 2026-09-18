@@ -9,7 +9,7 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
-**Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*.
+**Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.
 **Priority:** high — the feature did nothing at all, on every suite, while still burning ~20+ minutes.
 **One-line:** `SelfHealingRunner._extract_test_function` matched the raw pytest node id against the source:
 ```python
@@ -108,7 +108,7 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ## ✅ B-064 — Generated suites were killed by a flat 600s pytest ceiling (48-test run died at 10:00; needs 11:13)
 
-**Status:** ✅ **Fixed 2026-09-15** — the ceiling now scales with the suite. Reported from the UI as *"Failed to run generated tests: … timed out after 600 seconds"*.
+**Status:** ✅ **Fixed 2026-09-15** — the ceiling now scales with the suite. Reported from the UI as *"Failed to run generated tests: … timed out after 600 seconds"*. Note: the timeout-scaling half (`resolve_test_timeout` + the `SelfHealing` mirror) was lost from the working tree (a reset) and was restored from the 2026-09-15 session record on 2026-09-18; the `method=2` encode half shipped separately as f838978.
 **Priority:** high — a correct, healthy suite was thrown away, so the user saw a failure that had nothing to do with their tests.
 **One-line:** `PIPELINE_TEST_TIMEOUT` defaulted to a flat **600s** in two places (`PipelineRunService`, `SelfHealing`). That was chosen when suites were "9+ tests". A 48-test story needs **673s**, so `subprocess.run(timeout=600)` raised `TimeoutExpired` and the whole run was discarded.
 
@@ -134,7 +134,7 @@ The dominant cost is the encode, not the capture: viewport screenshot 0.11s, **f
 
 ## 🆕 B-065 — The resolver emits selectors that cannot match anything (found by the landing-page run)
 
-**Status:** ✅ **Fixed 2026-09-17** (acceptance re-run verified; 0 selector reds; 4 remaining reds = new-tab class B-072; 12 false greens = B-069 session 2). Commit pending.
+**Status:** ✅ **Fixed 2026-09-17** (acceptance re-run verified; 0 selector reds; 4 remaining reds = new-tab class B-072; 12 false greens = B-069 session 2). Shipped 2026-09-18 (78de983 + f13c34f).
 **Priority:** high — these are silent, deterministic wrong answers on a plain static page. The page is healthy; the selectors are not.
 **One-line:** two distinct defects in the selector the scraper builds for an element, both producing a selector that matches **zero** elements.
 
@@ -2705,6 +2705,14 @@ per row.
 - **UAT** — `scripts/uat/uat_test_table.py` (real LLM): 2 conditions → 8 rows → 8
   skeleton functions (1:1, no skips). UI-verified: 9 rows → 9 test functions, live run.
 - **Regressions:** none — full suite 1998 passed, static eval 100%.
+- **Phase 2 follow-up (2026-09-18, UI fix):** the expand button made one LLM call per
+  condition with no output in between, so it looked dead for minutes; it now streams
+  `Expanding condition N of M…` via `st.status` (an `on_condition` progress callback
+  threaded through `build_test_table` → `build_table` → `expand_conditions`). The
+  per-call LLM budget also dropped from a 300s hardcode to a bounded
+  `DEFAULT_EXPANSION_TIMEOUT = 60` so one degenerating response cannot freeze the
+  caller. 6 new tests. Restored from the 2026-09-15 session record — the change had
+  been lost from the working tree while the B-064/B-067 fixes went with it.
 
 ---
 

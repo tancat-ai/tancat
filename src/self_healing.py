@@ -16,7 +16,6 @@ from __future__ import annotations
 import glob
 import json
 import logging
-import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -323,10 +322,13 @@ class SelfHealingRunner:
         import subprocess
         import sys
 
-        # Mirror PipelineRunService's timeout (PIPELINE_TEST_TIMEOUT, default
-        # 600s). A hardcoded 300s here silently times out suites that take
-        # longer, which then masquerades as "no failures" (empty RunResult).
-        timeout_secs = int(os.environ.get("PIPELINE_TEST_TIMEOUT", "600"))
+        # Mirror PipelineRunService's timeout. A hardcoded 300s here silently
+        # timed out suites that take longer, which then masqueraded as "no
+        # failures" (empty RunResult). Scales with the suite; PIPELINE_TEST_TIMEOUT
+        # overrides.
+        from src.pipeline_run_service import resolve_test_timeout
+
+        timeout_secs = resolve_test_timeout(test_path)
 
         cmd = [
             sys.executable,
@@ -482,8 +484,18 @@ Analyze this failure and suggest a fix."""
 
     @staticmethod
     def _extract_test_function(source: str, test_name: str) -> str | None:
-        """Extract a single test function from the test file source."""
-        escaped = re.escape(test_name)
+        """Extract a single test function from the test file source.
+
+        ``test_name`` arrives as a pytest node id, so it may carry pytest's
+        parametrisation suffix — pytest-playwright runs every test once per
+        browser, giving ``test_t01_hero[chromium]``. The source only ever says
+        ``def test_t01_hero(...)``, so the suffix must be stripped or the match
+        fails and self-healing silently does nothing for every test.
+        """
+        base_name = test_name.split("[", 1)[0].strip()
+        if not base_name:
+            return None
+        escaped = re.escape(base_name)
         pattern = re.compile(rf"(def {escaped}\(.*?\).*?)(?=\ndef \w|\Z)", re.DOTALL)
         match = pattern.search(source)
         if not match:

@@ -438,3 +438,58 @@ def test_table_to_conditions_intent_is_valid_literal() -> None:
 def test_table_to_conditions_source_tracks_condition_ref() -> None:
     conditions = table_to_conditions(_confirmed_table())
     assert conditions[0].source == "Test Table row for condition TC01.03"
+
+
+# ---------------------------------------------------------------------------
+# Bounded per-condition timeout + progress callback
+# ---------------------------------------------------------------------------
+
+
+def test_expansion_timeout_default_is_bounded() -> None:
+    """One degenerating response must not freeze the caller for minutes.
+
+    The expander runs on the Streamlit main thread and makes one call per
+    condition; a 300s per-call ceiling meant a single looping response could
+    stall the UI for five minutes.
+    """
+    from src.test_table import DEFAULT_EXPANSION_TIMEOUT
+
+    assert DEFAULT_EXPANSION_TIMEOUT <= 60
+    expander = TestTableExpander(llm_client=_mock_llm("[]"))
+    assert expander.timeout == DEFAULT_EXPANSION_TIMEOUT
+
+
+def test_expansion_timeout_is_passed_to_the_llm() -> None:
+    mock_llm = _mock_llm("[]")
+    expander = TestTableExpander(llm_client=mock_llm, timeout=5)
+    expander.expand_condition(_condition())
+    assert mock_llm.generate_test.call_args.kwargs["timeout"] == 5
+
+
+def test_expand_conditions_reports_progress_per_condition() -> None:
+    """The caller gets (index, total) before each condition, so a progress
+    indicator can be shown instead of the loop appearing to hang."""
+    mock_llm = _mock_llm("[]")
+    expander = TestTableExpander(llm_client=mock_llm)
+    seen: list[tuple[int, int]] = []
+
+    expander.expand_conditions(
+        [_condition("TC01.01"), _condition("TC01.02"), _condition("TC01.03")],
+        on_condition=lambda index, total: seen.append((index, total)),
+    )
+
+    assert seen == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_build_table_forwards_progress_callback() -> None:
+    mock_llm = _mock_llm("[]")
+    expander = TestTableExpander(llm_client=mock_llm)
+    seen: list[tuple[int, int]] = []
+
+    build_table(
+        [_condition("TC01.01"), _condition("TC01.02")],
+        expander=expander,
+        on_condition=lambda index, total: seen.append((index, total)),
+    )
+
+    assert seen == [(1, 2), (2, 2)]

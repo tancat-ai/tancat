@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Literal, cast
 
@@ -28,6 +28,18 @@ TestAction = Literal["SELECT", "CLICK", "FILL", "ASSERT", "NAVIGATE"]
 
 #: Hard ceiling on rows the LLM may produce for a single condition.
 DEFAULT_MAX_ROWS_PER_CONDITION = 10
+
+#: Per-condition LLM budget for Test Table expansion, in seconds.
+#: Deliberately short: the caller runs on the Streamlit main thread, so one
+#: degenerating response (repeated n-grams / template loops) must not freeze the
+#: UI for minutes. Expansion is one call per condition and the expander already
+#: degrades to one deterministic row per condition on timeout, so a short budget
+#: loses nothing but a slow answer. On the reference local model a condition
+#: normally answers in 7-30s.
+DEFAULT_EXPANSION_TIMEOUT = 60
+
+#: Called before each condition is expanded: ``(index_1_based, total)``.
+ProgressCallback = Callable[[int, int], None]
 
 _VALID_ACTIONS: frozenset[str] = frozenset({"SELECT", "CLICK", "FILL", "ASSERT", "NAVIGATE"})
 _ACTION_ALIASES: dict[str, str] = {
@@ -293,10 +305,18 @@ class TestTableExpander:
         llm_client: LLMClient | None = None,
         *,
         max_rows_per_condition: int = DEFAULT_MAX_ROWS_PER_CONDITION,
+        timeout: int = DEFAULT_EXPANSION_TIMEOUT,
     ) -> None:
-        """Initialize the expander with an LLM client and row cap."""
+        """Initialize the expander with an LLM client, row cap and per-call budget.
+
+        Args:
+            timeout: Seconds allowed per condition. Kept short so a degenerating
+                response cannot freeze the caller — see
+                :data:`DEFAULT_EXPANSION_TIMEOUT`.
+        """
         self.llm_client = llm_client or LLMClient()
         self.max_rows_per_condition = max(1, int(max_rows_per_condition))
+        self.timeout = max(1, int(timeout))
 
     def expand_condition(self, condition: TestCondition) -> list[TestRow]:
         """Expand one condition into test rows (ids assigned later by the table builder).
@@ -310,10 +330,24 @@ class TestTableExpander:
             return [single_row_for_condition(condition)]
         return rows
 
-    def expand_conditions(self, conditions: Sequence[TestCondition]) -> list[TestRow]:
-        """Expand many conditions into a flat row list with stable sequential ids."""
+    def expand_conditions(
+        self,
+        conditions: Sequence[TestCondition],
+        *,
+        on_condition: ProgressCallback | None = None,
+    ) -> list[TestRow]:
+        """Expand many conditions into a flat row list with stable sequential ids.
+
+        Args:
+            on_condition: Called as ``(index_1_based, total)`` before each
+                condition is expanded, so a caller can report progress instead of
+                appearing to hang for the whole loop.
+        """
         expanded: list[TestRow] = []
-        for condition in conditions:
+        total = len(conditions)
+        for index, condition in enumerate(conditions, start=1):
+            if on_condition is not None:
+                on_condition(index, total)
             expanded.extend(self.expand_condition(condition))
         return _assign_row_ids(expanded)
 
@@ -328,7 +362,7 @@ class TestTableExpander:
             response = self.llm_client.generate_test(
                 prompt=prompt,
                 system_prompt=self.SYSTEM_PROMPT,
-                timeout=300,
+                timeout=self.timeout,
             )
         except Exception:
             return []
@@ -400,13 +434,21 @@ class TestTableExpander:
 def build_table(
     conditions: Sequence[TestCondition],
     expander: TestTableExpander | None = None,
+    *,
+    on_condition: ProgressCallback | None = None,
 ) -> TestTable:
     """Expand conditions and build a TestTable with sequential row ids.
 
     Rows start fully confirmed — the tester can unconfirm or edit before sign-off.
+
+    Args:
+        on_condition: Optional progress hook, called once per condition with
+            ``(index_1_based, total)`` before that condition is expanded. Lets a
+            caller (the Streamlit UI) show progress during what is otherwise a
+            silent N-call loop.
     """
     expander = expander or TestTableExpander()
-    rows = expander.expand_conditions(list(conditions))
+    rows = expander.expand_conditions(list(conditions), on_condition=on_condition)
     return TestTable.from_rows(rows)
 
 

@@ -78,6 +78,58 @@ def test_build_test_table_expands_plan_via_expander() -> None:
     assert result.rows == table.rows
 
 
+def test_build_test_table_forwards_progress_callback() -> None:
+    """The UI's progress hook must reach the expander, which makes one LLM call
+    per condition — otherwise the button looks dead for the whole loop."""
+    table = _table()
+    seen: list[tuple[int, int]] = []
+
+    def progress(index: int, total: int) -> None:
+        seen.append((index, total))
+
+    with (
+        patch("src.ui_pipeline.LLMClient"),
+        patch("src.ui_pipeline.TestTableExpander") as mock_expander_cls,
+    ):
+        mock_expander = MagicMock()
+
+        def fake_expand(conditions: object, *, on_condition: object = None) -> object:
+            if callable(on_condition):
+                on_condition(1, 2)
+                on_condition(2, 2)
+            return table.rows
+
+        mock_expander.expand_conditions.side_effect = fake_expand
+        mock_expander_cls.return_value = mock_expander
+
+        build_test_table(
+            plan=_plan(),
+            provider="openai-local",
+            provider_base_url="http://localhost:8080/v1",
+            model_name="local",
+            on_condition=progress,
+        )
+
+    assert seen == [(1, 2), (2, 2)]
+    assert mock_expander.expand_conditions.call_args.kwargs["on_condition"] is progress
+
+
+def test_build_test_table_without_callback_still_works() -> None:
+    with (
+        patch("src.ui_pipeline.LLMClient"),
+        patch("src.ui_pipeline.TestTableExpander") as mock_expander_cls,
+    ):
+        mock_expander_cls.return_value.expand_conditions.return_value = _table().rows
+        result = build_test_table(
+            plan=_plan(),
+            provider="ollama",
+            provider_base_url="http://localhost:11434",
+            model_name="qwen3",
+        )
+    assert result.rows == _table().rows
+    assert mock_expander_cls.return_value.expand_conditions.call_args.kwargs["on_condition"] is None
+
+
 def test_build_test_table_empty_plan_yields_empty_table() -> None:
     empty_plan = TestPlan.from_conditions(story_ref="s", sprint="Backlog", conditions=[])
     with (

@@ -129,6 +129,33 @@ def test_decorated(page: Page, evidence_tracker):
         assert result is not None
         assert "evidence_tracker.navigate" in result
 
+    def test_strips_pytest_playwright_parametrisation_suffix(self) -> None:
+        """pytest-playwright runs every test once per browser, so the node id is
+        ``test_x[chromium]`` while the source only says ``def test_x(...)``.
+        Matching the raw node id failed for EVERY test, so the reviewer was never
+        called and self-healing silently fixed nothing."""
+        source = """
+def test_t31_link(page: Page, evidence_tracker):
+    evidence_tracker.click('#a', label='a')
+"""
+        result = SelfHealingRunner._extract_test_function(source, "test_t31_link[chromium]")
+        assert result is not None
+        assert "evidence_tracker.click" in result
+
+    def test_parametrisation_suffix_does_not_match_a_sibling(self) -> None:
+        source = """
+def test_alpha(page: Page):
+    pass
+
+
+def test_beta(page: Page):
+    pass
+"""
+        result = SelfHealingRunner._extract_test_function(source, "test_beta[firefox]")
+        assert result is not None
+        assert "test_beta" in result
+        assert "test_alpha" not in result
+
 
 class TestFormatElementsForPrompt:
     def test_empty_list(self) -> None:
