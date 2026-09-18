@@ -48,7 +48,12 @@ def encode_evidence_image(png_bytes: bytes, image_format: str | None = None) -> 
             image: Image.Image = opened
             if image.mode not in ("RGB", "RGBA"):
                 image = image.convert("RGB")
-            image.save(buffer, format="WEBP", lossless=True, quality=100)
+            # method=2 (Pillow's default is 4). Measured on a real 6533px full-page
+            # evidence capture: method=2 encoded in 2.08s vs 2.87s at the default
+            # and produced a *smaller* file (843 KB vs 879 KB). Evidence capture is
+            # the dominant per-step cost in a generated suite, so this is a straight
+            # win — the output stays lossless and pixel-identical either way.
+            image.save(buffer, format="WEBP", lossless=True, quality=100, method=2)
         return buffer.getvalue()
     except Exception:
         return png_bytes
