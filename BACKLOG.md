@@ -37,11 +37,12 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ---
 
-## 🆕 B-069 — False passes: the run reports ✅ for things that are broken (17 tests assert the same element)
+## ✅ B-069 — False passes: the run reports ✅ for things that were never checked
 
-**Status:** 🆕 new — found 2026-09-15 from the 48-test landing-page run (report claims 23 failed / 25 passed). Not fixed.
+**Status:** ✅ **Fixed 2026-09-19** (f324b39). Part (a) done — fallback-resolved assertions emit `pytest.skip` instead of passing assert; part (b) follow-up (attribute conditions must read the attribute, not assert container visibility).
 **Priority:** high — this is the most dangerous failure mode for a test generator: green tests that verify nothing, which manufacture confidence instead of evidence.
 **One-line:** when the resolver cannot find a real match it falls back to a nearby element that IS present, the assertion passes, and the test reports success for a condition it never checked. **17 assertions across 17 different tests all target `#contact`**, for descriptions as unrelated as "How It Works heading", "first header nav link scrolls to section", "licence link resolves", "meta description tag", "Open Graph title and image" and "every image has a non-empty alt".
+**Fix (part a):** `src/element_matcher.py` — the fallback result now carries `unverified=True`. `src/placeholder_orchestrator.py` — all three resolution paths (batch, deferred-batch, single-page) check for `unverified=True` and emit `pytest.skip("Assertion for '...' could not be verified on this page")` instead of a passing assert against a generic container.
 **Worked examples (all ✅ in `report_local.md`)**
 | Test | What it actually does | Truth |
 |---|---|---|
@@ -54,7 +55,7 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 **Consequence:** the run reports green for the broken noir image, the `TBD` purchase links, the missing meta description, missing Open Graph tags, and missing privacy/terms links — i.e. exactly the items a customer would care about. Alongside this there is the mirror-image class (false FAILURES: 14 of the 23 reds are generator defects — B-065's unmatchable selectors — not page defects), so the headline "23 failed / 25 passed" is misleading in **both** directions.
 **Why it matters for AI-067:** the `expected_page` marker added earlier would flag some of these (the assert ran on the expected page), but it cannot detect a *wrong element on the right page* — which is most of this list.
 **Options**
-- [ ] **A — require evidence for the assertion:** when the resolved locator came from the fallback/last-resort path (no text/structure match), mark the step `unverified` and do NOT emit a passing assertion — emit `pytest.skip` with the reason instead. Turns false greens into honest skips.
+- [x] **A — require evidence for the assertion:** when the resolved locator came from the fallback/last-resort path (no text/structure match), mark the step `unverified` and do NOT emit a passing assertion — emit `pytest.skip` with the reason instead. Turns false greens into honest skips. **Done 2026-09-19 (f324b39).**
 - [ ] **B — assert the description is actually reflected:** for href/attribute assertions ("no TBD in hrefs", "href is a live video") the emitted check must read the attribute, not assert visibility of a container. The skeleton prompt already produces bare `{{ASSERT:…}}` placeholders, so the resolver has to classify assert *kind* (visibility vs attribute vs count) — see the existing `assertion_type` plumbing.
 - [ ] **C — surface it:** count "assertions that matched a generic container" in the report (AI-067 badge gives the pattern) so a human can spot-check.
 - Recommendation: **A + B**. A stops the false greens immediately; B fixes the underlying assertion-kind gap.

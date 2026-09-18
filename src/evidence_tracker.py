@@ -1160,6 +1160,36 @@ class EvidenceTracker:
             )
             raise
 
+    def assert_attribute(self, locator: str, attribute: str, label: str = "") -> None:
+        """Assert an element's attribute is present and non-empty (B-069 part b)."""
+        if not label:
+            label = f"Assert attribute {attribute}: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="attached", timeout=5000)
+            actual = loc.get_attribute(attribute) or ""
+            if not actual:
+                raise AssertionError(f"Expected non-empty attribute '{attribute}' on {locator} but got empty")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=f"{attribute}={actual}",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
     def assert_empty(self, locator: str, label: str = "") -> None:
         """Assert an element has no text and no child elements."""
         if not label:

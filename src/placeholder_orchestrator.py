@@ -97,6 +97,28 @@ def polarity_assertion_type(description: str) -> str | None:
     return None
 
 
+def attribute_assertion_type(description: str) -> str | None:
+    """Return structured assertion type for attribute-condition ASSERT descriptions.
+
+    "href does not contain TBD" / "every image has a non-empty alt" / "meta
+    description" must read the element's attribute rather than assert
+    container visibility (B-069 part b).
+    """
+    lowered = description.replace("_", " ").lower()
+    # Attribute names mapped from keywords in description
+    if "href" in lowered:
+        return "toHaveAttribute:href"
+    if "alt" in lowered:
+        return "toHaveAttribute:alt"
+    if "meta" in lowered or ("description" in lowered and "tag" in lowered):
+        return "toHaveAttribute:content"
+    if "video" in lowered and "url" in lowered:
+        return "toHaveAttribute:href"
+    if "title" in lowered and ("og" in lowered or "open graph" in lowered or "meta" in lowered):
+        return "toHaveAttribute:content"
+    return None
+
+
 class PlaceholderOrchestrator:
     """Coordinate placeholder resolution, scraping, and page artifact generation.
 
@@ -1163,6 +1185,7 @@ class PlaceholderOrchestrator:
                     assertion_type = matched.get("assertion_type")
                     if action == "ASSERT":
                         assertion_type = polarity_assertion_type(description) or assertion_type
+                        assertion_type = attribute_assertion_type(description) or assertion_type
 
                     line_resolutions.setdefault(placeholder.line_number, []).append(
                         (
@@ -1428,8 +1451,12 @@ class PlaceholderOrchestrator:
             assertion_type = matched_element.get("assertion_type") if action == "ASSERT" else None
             # Assertion-state polarity: "popup closed" / "item removed" assert
             # ABSENCE — emit assert_hidden(...) instead of assert_visible(...).
+            # B-069 part b: attribute conditions (href, alt, meta) must read
+            # the attribute, not assert container visibility.
             if action == "ASSERT":
-                assertion_type = polarity_assertion_type(description) or assertion_type
+                assertion_type = (
+                    attribute_assertion_type(description) or polarity_assertion_type(description) or assertion_type
+                )
             return selector, next_url, assertion_type
 
         error_msg = f"Locator for '{description}' not found on scraped pages."
