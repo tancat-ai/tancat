@@ -956,7 +956,14 @@ class PlaceholderOrchestrator:
                 if matched is not None:
                     selector = matched.get("selector", "")
                     at = matched.get("assertion_type")
-                    resolved_value = repr(selector) if selector else f'pytest.skip("No match for: {description}")'
+                    # B-069: fallback-resolved assertions are not trustworthy. Emit an honest skip
+                    # instead of a passing assert against a generic container.
+                    if matched.get("unverified") is True:
+                        resolved_value = (
+                            f"pytest.skip(\"Assertion for '{description}' could not be verified on this page\")"
+                        )
+                    else:
+                        resolved_value = repr(selector) if selector else f'pytest.skip("No match for: {description}")'
                     line_resolutions.setdefault(use.line_number, []).append(
                         (use.token, action, resolved_value, description, fill_value, fallback_url, at)
                     )
@@ -1130,6 +1137,25 @@ class PlaceholderOrchestrator:
                 matched = batch_results[i] if i < len(batch_results) else None
 
                 if matched is not None:
+                    # B-069: fallback-resolved assertions are unverified. Emit an honest
+                    # skip instead of a passing assert against a generic container.
+                    if matched.get("unverified") is True:
+                        resolved_value = (
+                            f"pytest.skip(\"Assertion for '{description}' could not be verified on this page\")"
+                        )
+                        line_resolutions.setdefault(placeholder.line_number, []).append(
+                            (
+                                placeholder.token,
+                                action,
+                                resolved_value,
+                                description,
+                                fill_value,
+                                url,
+                                None,
+                            )
+                        )
+                        continue
+
                     robust_selector = build_robust_locator(matched)
                     if not robust_selector:
                         robust_selector = str(matched.get("selector", "")).strip()
@@ -1327,6 +1353,16 @@ class PlaceholderOrchestrator:
         )
 
         if matched_element is not None:
+            # B-069: fallback-resolved assertions are unverified — never emit a
+            # passing assert against a generic container; emit an honest skip.
+            if matched_element.get("unverified") is True:
+                desc = description or "unknown"
+                return (
+                    f"pytest.skip(\"Assertion for '{desc}' could not be verified — resolved to generic fallback\")",
+                    None,
+                    None,
+                )
+
             if matched_out is not None:
                 matched_out["element"] = matched_element
             self._verify_page_context(description, matched_element, current_url, scraped_data)
