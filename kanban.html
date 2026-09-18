@@ -115,11 +115,11 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (122) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (33) &mdash; 2026-09-18 14:17 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (122) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> (33) &mdash; 2026-09-18 19:11 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
-    <h2>To Do (45)</h2>
+    <h2>To Do (44)</h2>
     
     <div class="">
     <div class="card">
@@ -200,230 +200,223 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L26" target="_blank">BACKLOG.md:26</a></div>
 </div>
 <div class="card">
-    <div class="card-id">B-069</div>
-    <div class="card-title">False passes: the run reports ✅ for things that are broken (17 tests assert the same element)</div>
-    <div class="card-meta"><span>high — this is the most dangerous failure mode for a test generator: green tests that verify nothing, which manufacture confidence instead of evidence.</span>
-<span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L40" target="_blank">BACKLOG.md:40</a></div>
-</div>
-<div class="card">
     <div class="card-id">B-070</div>
     <div class="card-title">Self-healing re-runs the whole suite even when it fixes nothing (~1 hour of no-op work)</div>
     <div class="card-meta"><span>medium — it is the &quot;took a really long time&quot; half of the report, and it scales badly: the bigger the suite, the worse the no-op.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L65" target="_blank">BACKLOG.md:65</a></div>
+<a class="card-link" href="BACKLOG.md#L66" target="_blank">BACKLOG.md:66</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-071</div>
     <div class="card-title">Streamlit file-watcher floods the log with `ModuleNotFoundError: torchvision` (the existing config key does not stop it)</div>
     <div class="card-meta"><span>low — Streamlit catches the exceptions, so nothing breaks; but hundreds of tracebacks per session slow startup and bury real errors in the log.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L80" target="_blank">BACKLOG.md:80</a></div>
+<a class="card-link" href="BACKLOG.md#L81" target="_blank">BACKLOG.md:81</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-072</div>
     <div class="card-title">`target=&quot;_blank&quot;` link tests fail the post-click navigation check (new-tab navigation is invisible to the page under test)</div>
     <div class="card-meta"><span>medium — it is the only remaining selector-adjacent failure class after B-065, and every external link on a real page uses `target=&quot;_blank&quot;`, so this will bite every landing-page-style story.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L95" target="_blank">BACKLOG.md:95</a></div>
+<a class="card-link" href="BACKLOG.md#L96" target="_blank">BACKLOG.md:96</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-073</div>
     <div class="card-title">Extend eval harness with AXI-style cost, duration, and turn metrics (research: axi.md 2026-09-18)</div>
     <div class="card-meta"><span>medium — gives us a commercial story to tell customers.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L109" target="_blank">BACKLOG.md:109</a></div>
+<a class="card-link" href="BACKLOG.md#L110" target="_blank">BACKLOG.md:110</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-074</div>
     <div class="card-title">Make `tancat` CLI follow AXI principles (content-first, definitive states, contextual disclosure)</div>
     <div class="card-meta"><span>medium — improves the user experience for both agents and humans using the CLI.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L126" target="_blank">BACKLOG.md:126</a></div>
+<a class="card-link" href="BACKLOG.md#L127" target="_blank">BACKLOG.md:127</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-075</div>
     <div class="card-title">Consider exposing `tancat` as MCP server (ambient context principle)</div>
     <div class="card-meta"><span>low — future architecture consideration, not for immediate session.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L143" target="_blank">BACKLOG.md:143</a></div>
+<a class="card-link" href="BACKLOG.md#L144" target="_blank">BACKLOG.md:144</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-066</div>
     <div class="card-title">A bare `uv sync` (or any `uv run`) silently REMOVES the optional extras → the recurring `fitz` failure</div>
     <div class="card-meta"><span>medium — it makes the local suite permanently red for no product reason, and it wastes a debugging session every time someone meets it.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L205" target="_blank">BACKLOG.md:205</a></div>
+<a class="card-link" href="BACKLOG.md#L206" target="_blank">BACKLOG.md:206</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-063</div>
     <div class="card-title">Numbered criteria are silently TRUNCATED at the first heading line (35 criteria → 5)</div>
     <div class="card-meta"><span>high — headings are a normal way to write a spec. Nothing warns the user that 30 of their criteria were thrown away; they just get fewer tests.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L220" target="_blank">BACKLOG.md:220</a></div>
+<a class="card-link" href="BACKLOG.md#L221" target="_blank">BACKLOG.md:221</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-062</div>
     <div class="card-title">A normal prose user story collapses to exactly ONE test (multi-concern guard only looks for quantity words)</div>
     <div class="card-meta"><span>high — this is the *default* experience for a customer who writes a story the way a human writes one. One test for a whole landing page is not a useful product.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L260" target="_blank">BACKLOG.md:260</a></div>
+<a class="card-link" href="BACKLOG.md#L261" target="_blank">BACKLOG.md:261</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-061</div>
     <div class="card-title">`eval_harness --regenerate` can report `Tests executed: 0` two different ways</div>
     <div class="card-meta"><span>Low–Medium — dev-tooling. The danger is that `Tests executed: 0` looks identical to &quot;the run produced no tests&quot;, so a red suite can be mistaken for a green/no-op one, and vice versa.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L317" target="_blank">BACKLOG.md:317</a></div>
+<a class="card-link" href="BACKLOG.md#L318" target="_blank">BACKLOG.md:318</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-056</div>
     <div class="card-title">kanban-freshness hook flaky under `git commit` (passes via `--check` / `pre-commit run`)</div>
     <div class="card-meta"><span>Low — dev-tooling friction (does not affect the product or CI gates; the CI Kanban Freshness gate itself passed on the rename commit — the flake is the *local* `git commit` pre-commit hook).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L417" target="_blank">BACKLOG.md:417</a></div>
+<a class="card-link" href="BACKLOG.md#L418" target="_blank">BACKLOG.md:418</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-054</div>
     <div class="card-title">Single-candidate unrecoverable resolution: page rendered as one text block → specific target never enters the candidate pool</div>
     <div class="card-meta"><span>High — one of the two remaining blockers for closing the AI-058 `mean_pass_depth` metric gate (AI-064 removed the other; B-055 is the third).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L432" target="_blank">BACKLOG.md:432</a></div>
+<a class="card-link" href="BACKLOG.md#L433" target="_blank">BACKLOG.md:433</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-055</div>
     <div class="card-title">Page-context/trail mis-assignment: steps resolved against the wrong page object&#x27;s candidate pool</div>
     <div class="card-meta"><span>High — one of the two remaining blockers for closing the AI-058 metric gate.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L448" target="_blank">BACKLOG.md:448</a></div>
+<a class="card-link" href="BACKLOG.md#L449" target="_blank">BACKLOG.md:449</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-051</div>
     <div class="card-title">Free-tier metering is trivially resettable (local sqlite + ledger)</div>
     <div class="card-meta"><span>Low — accepted-for-v1; must be **documented honestly**, not silently left.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L473" target="_blank">BACKLOG.md:473</a></div>
+<a class="card-link" href="BACKLOG.md#L474" target="_blank">BACKLOG.md:474</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-052</div>
     <div class="card-title">Prompt-injection exposure of skeleton/resolver prompts — UNDERSTAND FIRST, no action yet</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L485" target="_blank">BACKLOG.md:485</a></div>
+<a class="card-link" href="BACKLOG.md#L486" target="_blank">BACKLOG.md:486</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-056</div>
     <div class="card-title">TanCat Cloud (Ingestion Service) — separate product, post-launch</div>
     <div class="card-meta"><span>Low (post-launch) — record now, spec properly after local product ships</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L560" target="_blank">BACKLOG.md:560</a></div>
+<a class="card-link" href="BACKLOG.md#L561" target="_blank">BACKLOG.md:561</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-057</div>
     <div class="card-title">`llm_providers` extensibility for easy provider/model addition (POSSIBILITY — needs investigation)</div>
     <div class="card-meta"><span>TBD (future — as provider/model/API churn demands)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L580" target="_blank">BACKLOG.md:580</a></div>
+<a class="card-link" href="BACKLOG.md#L581" target="_blank">BACKLOG.md:581</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-046</div>
     <div class="card-title">Qwen3.8-27B skeleton/resolution regression (vs 3.6)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L860" target="_blank">BACKLOG.md:860</a></div>
+<a class="card-link" href="BACKLOG.md#L861" target="_blank">BACKLOG.md:861</a></div>
 </div>
 <div class="card">
     <div class="card-id">REF-001</div>
     <div class="card-title">Rename `src/ui_pipeline.py` / rethink `src/ui/` naming</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2171" target="_blank">BACKLOG.md:2171</a></div>
+<a class="card-link" href="BACKLOG.md#L2172" target="_blank">BACKLOG.md:2172</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-037</div>
     <div class="card-title">LV Insurance Resolution Gap Optimization</div>
     <div class="card-meta"><span>Medium (Tier 2 — Resolver Accuracy)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2188" target="_blank">BACKLOG.md:2188</a></div>
+<a class="card-link" href="BACKLOG.md#L2189" target="_blank">BACKLOG.md:2189</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-038</div>
     <div class="card-title">Unlimited OCR ROCm/AMD Compatibility Test</div>
     <div class="card-meta"><span>Low — future enhancement</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2326" target="_blank">BACKLOG.md:2326</a></div>
+<a class="card-link" href="BACKLOG.md#L2327" target="_blank">BACKLOG.md:2327</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-041</div>
     <div class="card-title">Unsloth Studio QLoRA Training Run (❌ FAILED / CLOSED 2026-08-11; DEFERRED indefinitely 2026-08-15)</div>
     <div class="card-meta"><span>High — the payoff for AI-040&#x27;s corpus + baseline</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2494" target="_blank">BACKLOG.md:2494</a></div>
+<a class="card-link" href="BACKLOG.md#L2495" target="_blank">BACKLOG.md:2495</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-006</div>
     <div class="card-title">Test fixture library</div>
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3186" target="_blank">BACKLOG.md:3186</a></div>
+<a class="card-link" href="BACKLOG.md#L3187" target="_blank">BACKLOG.md:3187</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-007</div>
     <div class="card-title">Remove `_generate_test_content()` from CLI orchestrator</div>
     <div class="card-meta"><span>Low</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3191" target="_blank">BACKLOG.md:3191</a></div>
+<a class="card-link" href="BACKLOG.md#L3192" target="_blank">BACKLOG.md:3192</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-066</div>
     <div class="card-title">Post-launch: ColBERT-style late-interaction embeddings (`MultiVectorEncoder`) for RAG retrieval</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3203" target="_blank">BACKLOG.md:3203</a></div>
+<a class="card-link" href="BACKLOG.md#L3204" target="_blank">BACKLOG.md:3204</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-025</div>
     <div class="card-title">Visual Regression Detection (Planning Required)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3257" target="_blank">BACKLOG.md:3257</a></div>
+<a class="card-link" href="BACKLOG.md#L3258" target="_blank">BACKLOG.md:3258</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-013</div>
     <div class="card-title">Coverage Gap Report with Gap Explanations</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3327" target="_blank">BACKLOG.md:3327</a></div>
+<a class="card-link" href="BACKLOG.md#L3328" target="_blank">BACKLOG.md:3328</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-014</div>
     <div class="card-title">Test Execution Time Gantt Chart</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3350" target="_blank">BACKLOG.md:3350</a></div>
+<a class="card-link" href="BACKLOG.md#L3351" target="_blank">BACKLOG.md:3351</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-015</div>
     <div class="card-title">Test Coverage Heat Map</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3373" target="_blank">BACKLOG.md:3373</a></div>
+<a class="card-link" href="BACKLOG.md#L3374" target="_blank">BACKLOG.md:3374</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-003</div>
     <div class="card-title">SQLite Migration Validation</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3795" target="_blank">BACKLOG.md:3795</a></div>
+<a class="card-link" href="BACKLOG.md#L3796" target="_blank">BACKLOG.md:3796</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-004</div>
     <div class="card-title">Graph-Store Compiler Check</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3803" target="_blank">BACKLOG.md:3803</a></div>
+<a class="card-link" href="BACKLOG.md#L3804" target="_blank">BACKLOG.md:3804</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-005</div>
     <div class="card-title">Eval Harness Freeze Gate (Phase 5)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3812" target="_blank">BACKLOG.md:3812</a></div>
+<a class="card-link" href="BACKLOG.md#L3813" target="_blank">BACKLOG.md:3813</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-006</div>
     <div class="card-title">Performance Regression Gate</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3820" target="_blank">BACKLOG.md:3820</a></div>
+<a class="card-link" href="BACKLOG.md#L3821" target="_blank">BACKLOG.md:3821</a></div>
 </div>
     </div>
 </div>
@@ -450,27 +443,27 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-title">Contrastive learned store: record BOTH positives and negatives, cross-reference at scoring</div>
     <div class="card-meta"><span>Medium (product-differentiation experiment, not a launch blocker — sequence after AI-055 and Phase 6 6c/6d).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L596" target="_blank">BACKLOG.md:596</a></div>
+<a class="card-link" href="BACKLOG.md#L597" target="_blank">BACKLOG.md:597</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-045</div>
     <div class="card-title">Commercial-readiness gaps for Phase 6 (from competitive research + code audit)</div>
     <div class="card-meta"><span>High — commercial viability blockers, not nice-to-haves</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L881" target="_blank">BACKLOG.md:881</a></div>
+<a class="card-link" href="BACKLOG.md#L882" target="_blank">BACKLOG.md:882</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-065</div>
     <div class="card-title">Citation/rationale token-overhead watch (16b D8) — MEASUREMENT, no build yet</div>
     <div class="card-meta"><span>Low (watch item — act only if the numbers say so).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3879" target="_blank">BACKLOG.md:3879</a></div>
+<a class="card-link" href="BACKLOG.md#L3880" target="_blank">BACKLOG.md:3880</a></div>
 </div>
     </div>
 </div>
     <div class="column done">
-    <h2>Done (105)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (105)</button>
+    <h2>Done (106)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (106)</button>
     <div id="done-section" class="done-section">
     <div class="card">
     <div class="card-id">B-014</div>
@@ -478,7 +471,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>High</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L35" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:35</a>
-<a class="card-link" href="BACKLOG.md#L1900" target="_blank">BACKLOG.md:1900</a></div>
+<a class="card-link" href="BACKLOG.md#L1901" target="_blank">BACKLOG.md:1901</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-015</div>
@@ -486,7 +479,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L60" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:60</a>
-<a class="card-link" href="BACKLOG.md#L3485" target="_blank">BACKLOG.md:3485</a></div>
+<a class="card-link" href="BACKLOG.md#L3486" target="_blank">BACKLOG.md:3486</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-022</div>
@@ -494,7 +487,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>High</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L84" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:84</a>
-<a class="card-link" href="BACKLOG.md#L2125" target="_blank">BACKLOG.md:2125</a></div>
+<a class="card-link" href="BACKLOG.md#L2126" target="_blank">BACKLOG.md:2126</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-023</div>
@@ -502,7 +495,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Low</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L109" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:109</a>
-<a class="card-link" href="BACKLOG.md#L2103" target="_blank">BACKLOG.md:2103</a></div>
+<a class="card-link" href="BACKLOG.md#L2104" target="_blank">BACKLOG.md:2104</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-010</div>
@@ -510,7 +503,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L129" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:129</a>
-<a class="card-link" href="BACKLOG.md#L3260" target="_blank">BACKLOG.md:3260</a></div>
+<a class="card-link" href="BACKLOG.md#L3261" target="_blank">BACKLOG.md:3261</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-011</div>
@@ -518,7 +511,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L149" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:149</a>
-<a class="card-link" href="BACKLOG.md#L3276" target="_blank">BACKLOG.md:3276</a></div>
+<a class="card-link" href="BACKLOG.md#L3277" target="_blank">BACKLOG.md:3277</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-026</div>
@@ -526,7 +519,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L170" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:170</a>
-<a class="card-link" href="BACKLOG.md#L2818" target="_blank">BACKLOG.md:2818</a></div>
+<a class="card-link" href="BACKLOG.md#L2819" target="_blank">BACKLOG.md:2819</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-028</div>
@@ -555,7 +548,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L286" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:286</a>
-<a class="card-link" href="BACKLOG.md#L3293" target="_blank">BACKLOG.md:3293</a></div>
+<a class="card-link" href="BACKLOG.md#L3294" target="_blank">BACKLOG.md:3294</a></div>
 </div>
 <div class="card">
     <div class="card-id">PHASE-4</div>
@@ -604,7 +597,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>High</span>
 <span class="source-badge roadmap">ROADMAP</span>
 <a class="card-link" href="docs\plans\ROADMAP_ROADTO_PRODUCTION.md#L602" target="_blank">docs\plans\ROADMAP_ROADTO_PRODUCTION.md:602</a>
-<a class="card-link" href="BACKLOG.md#L2731" target="_blank">BACKLOG.md:2731</a></div>
+<a class="card-link" href="BACKLOG.md#L2732" target="_blank">BACKLOG.md:2732</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-042</div>
@@ -635,539 +628,546 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <a class="card-link" href="BACKLOG.md#L10" target="_blank">BACKLOG.md:10</a></div>
 </div>
 <div class="card">
+    <div class="card-id">B-069</div>
+    <div class="card-title">False passes: the run reports ✅ for things that were never checked</div>
+    <div class="card-meta"><span>high — this is the most dangerous failure mode for a test generator: green tests that verify nothing, which manufacture confidence instead of evidence.</span>
+<span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L40" target="_blank">BACKLOG.md:40</a></div>
+</div>
+<div class="card">
     <div class="card-id">B-064</div>
     <div class="card-title">Generated suites were killed by a flat 600s pytest ceiling (48-test run died at 10:00; needs 11:13)</div>
     <div class="card-meta"><span>high — a correct, healthy suite was thrown away, so the user saw a failure that had nothing to do with their tests.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L158" target="_blank">BACKLOG.md:158</a></div>
+<a class="card-link" href="BACKLOG.md#L159" target="_blank">BACKLOG.md:159</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-065</div>
     <div class="card-title">The resolver emits selectors that cannot match anything (found by the landing-page run)</div>
     <div class="card-meta"><span>high — these are silent, deterministic wrong answers on a plain static page. The page is healthy; the selectors are not.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L184" target="_blank">BACKLOG.md:184</a></div>
+<a class="card-link" href="BACKLOG.md#L185" target="_blank">BACKLOG.md:185</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-067</div>
     <div class="card-title">Wrong-page steps pass silently: record the page a locator was resolved for and flag a mismatch</div>
     <div class="card-meta"><span>Medium — it is a *diagnostic* fix for the class that keeps being misread as model failure (see B-060). It does not change resolution.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L296" target="_blank">BACKLOG.md:296</a></div>
+<a class="card-link" href="BACKLOG.md#L297" target="_blank">BACKLOG.md:297</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-060</div>
     <div class="card-title">Mock page scoping: the AI-052 divergence latch fires on a MISSING trail observation, not a divergence</div>
     <div class="card-meta"><span>High — it silently dead-ends most steps on the mock sites, and it is the reason banking looked like an LLM/model failure for weeks.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L328" target="_blank">BACKLOG.md:328</a></div>
+<a class="card-link" href="BACKLOG.md#L329" target="_blank">BACKLOG.md:329</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-058</div>
     <div class="card-title">`verify_production` is permanently RED with no expected-failure baseline (every session re-litigates it)</div>
     <div class="card-meta"><span>Medium — it is the documented &quot;single source of truth: does the product work?&quot; gate, yet it always fails, so the verdict carries no signal and trains everyone to ignore it.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L371" target="_blank">BACKLOG.md:371</a></div>
+<a class="card-link" href="BACKLOG.md#L372" target="_blank">BACKLOG.md:372</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-059</div>
     <div class="card-title">4 real mypy errors in `tests/`: invisible to CI, but they reject a local pre-commit commit</div>
     <div class="card-meta"><span>Low–Medium — no product impact, but a genuine developer-experience trap: CI&#x27;s MyPy gate runs **`mypy src/ cli/`** only (clean — 156 files), while the pre-commit `mypy` hook excludes just `scripts/` + `fixtures/`, so it type-checks `tests/` as well. Editing any of these files therefore gets rejected locally for errors CI would never flag.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L386" target="_blank">BACKLOG.md:386</a></div>
+<a class="card-link" href="BACKLOG.md#L387" target="_blank">BACKLOG.md:387</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-057</div>
     <div class="card-title">PyPI console entry point: `tancat` package now yields a runnable CLI</div>
     <div class="card-meta"><span>Medium — customer-visible (a package with no runnable command looks broken on install).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L402" target="_blank">BACKLOG.md:402</a></div>
+<a class="card-link" href="BACKLOG.md#L403" target="_blank">BACKLOG.md:403</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-050</div>
     <div class="card-title">License trust root overridable via env var (`AITEST_LICENSE_PUBKEY`) weakens tier enforcement</div>
     <div class="card-meta"><span>Medium — commercial integrity, not a classic vulnerability.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L463" target="_blank">BACKLOG.md:463</a></div>
+<a class="card-link" href="BACKLOG.md#L464" target="_blank">BACKLOG.md:464</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-053</div>
     <div class="card-title">License key-ops documentation (single-operator signing key: backup, rotation, revocation)</div>
     <div class="card-meta"><span>Medium — must exist before the first paying customer.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L498" target="_blank">BACKLOG.md:498</a></div>
+<a class="card-link" href="BACKLOG.md#L499" target="_blank">BACKLOG.md:499</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-048</div>
     <div class="card-title">RAG store seeding gap: AI-059 lab rebuild wipes patterns, stale marker blocks re-seed</div>
     <div class="card-meta"><span>High — data-integrity / measurement-silence class. **🚩 PRE-LAUNCH BLOCKER (flagged 2026-09-06, owner review):** measurement integrity is launch-gating — every shipped eval/learning claim is only as good as the store it measures against, and the static gate cannot see this failure. The store ran pattern-less for a week+ and every full eval measured with the golden RAG bonus = 0 (the Aug reference band 53.2–54.1% resolved WITH the golden patterns). The static gate (97.9%) never catches it — static mode doesn&#x27;t use RAG.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L508" target="_blank">BACKLOG.md:508</a></div>
+<a class="card-link" href="BACKLOG.md#L509" target="_blank">BACKLOG.md:509</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-055</div>
     <div class="card-title">Ingestion Improvements (Local): tiered CPU-first OCR + format scope + quality summary + cause-differentiated warning</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L522" target="_blank">BACKLOG.md:522</a></div>
+<a class="card-link" href="BACKLOG.md#L523" target="_blank">BACKLOG.md:523</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-064</div>
     <div class="card-title">Container-element haystack dominance: `main`/page-aggregate text outranks specific candidates (blocks AI-058 measurement)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L687" target="_blank">BACKLOG.md:687</a></div>
+<a class="card-link" href="BACKLOG.md#L688" target="_blank">BACKLOG.md:688</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-063</div>
     <div class="card-title">Context-aware candidate scoping for ambiguous descriptions (back buttons, multi-vehicle add-driver)</div>
     <div class="card-meta"><span>High (this is the change that turns AI-058 negatives from dead weight into a real &quot;don&#x27;t re-pick this failing locator&quot; memory — the user-facing pain).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L709" target="_blank">BACKLOG.md:709</a></div>
+<a class="card-link" href="BACKLOG.md#L710" target="_blank">BACKLOG.md:710</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-059</div>
     <div class="card-title">Learning-impact isolation harness (METRIC FIRST, ships before AI-058)</div>
     <div class="card-meta"><span>Medium (enables measurement of AI-058; without it, learning changes are unverifiable).</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L761" target="_blank">BACKLOG.md:761</a></div>
+<a class="card-link" href="BACKLOG.md#L762" target="_blank">BACKLOG.md:762</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-050</div>
     <div class="card-title">Thinking models burn the token budget on reasoning and return EMPTY content: the real cause of the `got=0` collapse and the resolution timeouts (✅ COMPLETE 2026-08-19)</div>
     <div class="card-meta"><span>Critical — this invalidated the &quot;156k config collapses generation&quot; hypothesis AND retroactively explains AI-049&#x27;s timeouts: resolution calls spent 160–310s thinking, far past any timeout.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L828" target="_blank">BACKLOG.md:828</a></div>
+<a class="card-link" href="BACKLOG.md#L829" target="_blank">BACKLOG.md:829</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-049</div>
     <div class="card-title">Resolution LLM timeout hard-coded at 45s + silent failure: flat-0% eval sites (✅ COMPLETE 2026-08-19)</div>
     <div class="card-meta"><span>High — this silently polluted every eval leg on a loaded server (run C: 27 timeouts, run E: 7), making the 3.6-vs-3.8 comparison invalid and producing flat-0% sites that looked like model/config behavior.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L840" target="_blank">BACKLOG.md:840</a></div>
+<a class="card-link" href="BACKLOG.md#L841" target="_blank">BACKLOG.md:841</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-048</div>
     <div class="card-title">Linear pipeline delivered NO temperature: sampling config silently governed generation (✅ FIXED 2026-08-18)</div>
     <div class="card-meta"><span>High — this was the *unrecorded confound* behind AI-046 (and a day+ of 3.6-vs-3.8 investigation)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L851" target="_blank">BACKLOG.md:851</a></div>
+<a class="card-link" href="BACKLOG.md#L852" target="_blank">BACKLOG.md:852</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-047</div>
     <div class="card-title">Eval harness mock-server bug: mock stories 0% in regenerate mode (✅ FIXED 2026-08-18)</div>
     <div class="card-meta"><span>Medium — eval infrastructure; polluted the 3.8/3.6 A/B headline (3 mock stories dragged resolution to 31.2%)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L873" target="_blank">BACKLOG.md:873</a></div>
+<a class="card-link" href="BACKLOG.md#L874" target="_blank">BACKLOG.md:874</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-051</div>
     <div class="card-title">B-021 post-action URL assertions emit the base/starting URL, not the landing page (login redirect unaccounted) — FIXED 2026-08-23</div>
     <div class="card-meta"><span>Medium — pipeline-generation quality; makes generated tests fail-safe at runtime but produces false-red tests for redirecting flows.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L905" target="_blank">BACKLOG.md:905</a></div>
+<a class="card-link" href="BACKLOG.md#L906" target="_blank">BACKLOG.md:906</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-053</div>
     <div class="card-title">`uat.py --all-sites --save` persists only the last site (✅ COMPLETE 2026-08-23)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L919" target="_blank">BACKLOG.md:919</a></div>
+<a class="card-link" href="BACKLOG.md#L920" target="_blank">BACKLOG.md:920</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-052</div>
     <div class="card-title">Resolver page-scope enforcement: locator resolved for a page the test isn&#x27;t on (wrong-page add-to-cart) — SHIPPED 2026-08-23</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L925" target="_blank">BACKLOG.md:925</a></div>
+<a class="card-link" href="BACKLOG.md#L926" target="_blank">BACKLOG.md:926</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-032</div>
     <div class="card-title">Semantic Scraper Transition (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1140" target="_blank">BACKLOG.md:1140</a></div>
+<a class="card-link" href="BACKLOG.md#L1141" target="_blank">BACKLOG.md:1141</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-024</div>
     <div class="card-title">`&lt;select&gt;` elements use placeholder text instead of label for accessible_name (✅ FIXED 2026-07-23)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1165" target="_blank">BACKLOG.md:1165</a></div>
+<a class="card-link" href="BACKLOG.md#L1166" target="_blank">BACKLOG.md:1166</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-025</div>
     <div class="card-title">Parent div click targets lose to child heading elements in scoring (FIXED)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1196" target="_blank">BACKLOG.md:1196</a></div>
+<a class="card-link" href="BACKLOG.md#L1197" target="_blank">BACKLOG.md:1197</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-026</div>
     <div class="card-title">Resolver locator format mismatch — correct element, wrong selector syntax (FIXED)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1227" target="_blank">BACKLOG.md:1227</a></div>
+<a class="card-link" href="BACKLOG.md#L1228" target="_blank">BACKLOG.md:1228</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-031</div>
     <div class="card-title">Eval Harness: Resolver Accuracy Improvement Sprint (PARTIALLY COMPLETE 2026-07-26)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1245" target="_blank">BACKLOG.md:1245</a></div>
+<a class="card-link" href="BACKLOG.md#L1246" target="_blank">BACKLOG.md:1246</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-030</div>
     <div class="card-title">LV Insurance Mock Site &amp; Ingestion Agent Foundation (COMPLETE 2026-07-26)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1259" target="_blank">BACKLOG.md:1259</a></div>
+<a class="card-link" href="BACKLOG.md#L1260" target="_blank">BACKLOG.md:1260</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-001</div>
     <div class="card-title">Consolidate CI/CD Pipeline</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1277" target="_blank">BACKLOG.md:1277</a></div>
+<a class="card-link" href="BACKLOG.md#L1278" target="_blank">BACKLOG.md:1278</a></div>
 </div>
 <div class="card">
     <div class="card-id">CI-002</div>
     <div class="card-title">Fix project_sanitizer bugs</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1288" target="_blank">BACKLOG.md:1288</a></div>
+<a class="card-link" href="BACKLOG.md#L1289" target="_blank">BACKLOG.md:1289</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-027</div>
     <div class="card-title">Visual Element Enrichment</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1314" target="_blank">BACKLOG.md:1314</a></div>
+<a class="card-link" href="BACKLOG.md#L1315" target="_blank">BACKLOG.md:1315</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-001</div>
     <div class="card-title">LLM generates async standalone tests instead of pytest sync</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1328" target="_blank">BACKLOG.md:1328</a></div>
+<a class="card-link" href="BACKLOG.md#L1329" target="_blank">BACKLOG.md:1329</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-002</div>
     <div class="card-title">LLM output occasionally has all imports on one line</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1331" target="_blank">BACKLOG.md:1331</a></div>
+<a class="card-link" href="BACKLOG.md#L1332" target="_blank">BACKLOG.md:1332</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-003</div>
     <div class="card-title">Generated tests not saved to `generated_tests/` automatically</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1334" target="_blank">BACKLOG.md:1334</a></div>
+<a class="card-link" href="BACKLOG.md#L1335" target="_blank">BACKLOG.md:1335</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-005</div>
     <div class="card-title">`launch_ui.sh` starts mock server (not appropriate for general use)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1337" target="_blank">BACKLOG.md:1337</a></div>
+<a class="card-link" href="BACKLOG.md#L1338" target="_blank">BACKLOG.md:1338</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-006</div>
     <div class="card-title">Parser banner wrong when mix of pass/fail</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1340" target="_blank">BACKLOG.md:1340</a></div>
+<a class="card-link" href="BACKLOG.md#L1341" target="_blank">BACKLOG.md:1341</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-007</div>
     <div class="card-title">Error panels duplicated in results view</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1344" target="_blank">BACKLOG.md:1344</a></div>
+<a class="card-link" href="BACKLOG.md#L1345" target="_blank">BACKLOG.md:1345</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-009</div>
     <div class="card-title">No ast.parse() validation before saving generated test files</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1348" target="_blank">BACKLOG.md:1348</a></div>
+<a class="card-link" href="BACKLOG.md#L1349" target="_blank">BACKLOG.md:1349</a></div>
 </div>
 <div class="card">
     <div class="card-id">BREAK-1</div>
     <div class="card-title">`src/pytest_output_parser.py` missing (CI BLOCKER)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1353" target="_blank">BACKLOG.md:1353</a></div>
+<a class="card-link" href="BACKLOG.md#L1354" target="_blank">BACKLOG.md:1354</a></div>
 </div>
 <div class="card">
     <div class="card-id">BREAK-2</div>
     <div class="card-title">Session state wipe blanks run results panel</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1356" target="_blank">BACKLOG.md:1356</a></div>
+<a class="card-link" href="BACKLOG.md#L1357" target="_blank">BACKLOG.md:1357</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-008</div>
     <div class="card-title">Run Status column shows ⏳ for all rows (never updates)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1359" target="_blank">BACKLOG.md:1359</a></div>
+<a class="card-link" href="BACKLOG.md#L1360" target="_blank">BACKLOG.md:1360</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-010</div>
     <div class="card-title">POM AttributeError: &#x27;navigate&#x27; vs &#x27;goto&#x27;</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1362" target="_blank">BACKLOG.md:1362</a></div>
+<a class="card-link" href="BACKLOG.md#L1363" target="_blank">BACKLOG.md:1363</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-011</div>
     <div class="card-title">LLM Placeholder Syntax Error</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1365" target="_blank">BACKLOG.md:1365</a></div>
+<a class="card-link" href="BACKLOG.md#L1366" target="_blank">BACKLOG.md:1366</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-045</div>
     <div class="card-title">Banking mock surfaces: 404-page pollution, ecommerce-only login/success transitions, role-worded nav fast-matches, fill-on-select</div>
     <div class="card-meta"><span>High — 5 site-agnostic pipeline gaps the banking mock made deterministic</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1421" target="_blank">BACKLOG.md:1421</a></div>
+<a class="card-link" href="BACKLOG.md#L1422" target="_blank">BACKLOG.md:1422</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-042</div>
     <div class="card-title">Locator-repair patch dedents the replacement line to module scope (collection crash)</div>
     <div class="card-meta"><span>High — every &quot;🔧 Fix Locator&quot; patch can silently break the whole suite at COLLECTION time</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1438" target="_blank">BACKLOG.md:1438</a></div>
+<a class="card-link" href="BACKLOG.md#L1439" target="_blank">BACKLOG.md:1439</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-043</div>
     <div class="card-title">Sidebar package dropdown reports 0 runs when real run history exists</div>
     <div class="card-meta"><span>Medium — the dropdown&#x27;s run count actively misleads</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1448" target="_blank">BACKLOG.md:1448</a></div>
+<a class="card-link" href="BACKLOG.md#L1449" target="_blank">BACKLOG.md:1449</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-039</div>
     <div class="card-title">Self-healing blind to its own most common failure mode</div>
     <div class="card-meta"><span>High — discovered while live-testing the AI-035 self-healing loop against the e-commerce mock; without this fix the loop can never fix anything.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1458" target="_blank">BACKLOG.md:1458</a></div>
+<a class="card-link" href="BACKLOG.md#L1459" target="_blank">BACKLOG.md:1459</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-037</div>
     <div class="card-title">E-commerce mock surfaces: empty-cart element resolution + the cvc/skip family</div>
     <div class="card-meta"><span>Medium — the mock made both failures deterministic; fixes lift eval-006 execution to 8/8</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1473" target="_blank">BACKLOG.md:1473</a></div>
+<a class="card-link" href="BACKLOG.md#L1474" target="_blank">BACKLOG.md:1474</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-036</div>
     <div class="card-title">Consumer config architecture: env-var feature gates don&#x27;t fit the product</div>
     <div class="card-meta"><span>Medium — blocks RAG-resolution fix (B-030 family) from reaching consumers</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1488" target="_blank">BACKLOG.md:1488</a></div>
+<a class="card-link" href="BACKLOG.md#L1489" target="_blank">BACKLOG.md:1489</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-035</div>
     <div class="card-title">Evidence sidecar written only at test END; killed/timed-out tests leave orphaned screenshots with no record</div>
     <div class="card-meta"><span>Medium — evidence silently vanishes for the exact runs that need it (failures)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1508" target="_blank">BACKLOG.md:1508</a></div>
+<a class="card-link" href="BACKLOG.md#L1509" target="_blank">BACKLOG.md:1509</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-034</div>
     <div class="card-title">`evidence/run_results.sqlite` is corrupted — UI evidence page will crash</div>
     <div class="card-meta"><span>High — live in the working environment right now</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1523" target="_blank">BACKLOG.md:1523</a></div>
+<a class="card-link" href="BACKLOG.md#L1524" target="_blank">BACKLOG.md:1524</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-033</div>
     <div class="card-title">Evidence gaps: failures leave no diagnostic artifacts; clicks never screenshot</div>
     <div class="card-meta"><span>Medium — evidence is the product&#x27;s audit trail; a failed step currently records *nothing* visible</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1535" target="_blank">BACKLOG.md:1535</a></div>
+<a class="card-link" href="BACKLOG.md#L1536" target="_blank">BACKLOG.md:1536</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-032</div>
     <div class="card-title">Export run-history DB copy orphaned since AI-012 (`playwright_tests.db` never created)</div>
     <div class="card-meta"><span>Low — silent no-op, no crash</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1550" target="_blank">BACKLOG.md:1550</a></div>
+<a class="card-link" href="BACKLOG.md#L1551" target="_blank">BACKLOG.md:1551</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-031</div>
     <div class="card-title">Export feature produces non-runnable/broken suites; never validated end-to-end</div>
     <div class="card-meta"><span>High — claimed shipped (UI button + CLI step), but no export has ever been verified by running the exported suite</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1560" target="_blank">BACKLOG.md:1560</a></div>
+<a class="card-link" href="BACKLOG.md#L1561" target="_blank">BACKLOG.md:1561</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-030</div>
     <div class="card-title">&quot;Check Out&quot; resolves to wrapper div `#do_action` instead of the real button `.btn.btn-default.check_out`</div>
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1583" target="_blank">BACKLOG.md:1583</a></div>
+<a class="card-link" href="BACKLOG.md#L1584" target="_blank">BACKLOG.md:1584</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-029</div>
     <div class="card-title">Tracker records &quot;passed&quot; for clicks that never navigated (ad-overlay swallow) — no post-click URL verification</div>
     <div class="card-meta"><span>High — caused all 4 checkout-cluster failures (t10-t13) in `test_20260803_101815_...`</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1591" target="_blank">BACKLOG.md:1591</a></div>
+<a class="card-link" href="BACKLOG.md#L1592" target="_blank">BACKLOG.md:1592</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-028</div>
     <div class="card-title">Journey discovery selects cart nav link for product / add-to-cart actions</div>
     <div class="card-meta"><span>High — cascades: wrong click → missing pages → unresolved placeholders → skips/fails</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1609" target="_blank">BACKLOG.md:1609</a></div>
+<a class="card-link" href="BACKLOG.md#L1610" target="_blank">BACKLOG.md:1610</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-004</div>
     <div class="card-title">Ambiguous locators when same label exists on multiple forms (✅ FIXED by architecture evolution)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1686" target="_blank">BACKLOG.md:1686</a></div>
+<a class="card-link" href="BACKLOG.md#L1687" target="_blank">BACKLOG.md:1687</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-012</div>
     <div class="card-title">Pass 1 false positive: &quot;add to cart&quot; matches cart nav link</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1689" target="_blank">BACKLOG.md:1689</a></div>
+<a class="card-link" href="BACKLOG.md#L1690" target="_blank">BACKLOG.md:1690</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-013</div>
     <div class="card-title">Journey discovery stops one page short for checkout-step-two</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1760" target="_blank">BACKLOG.md:1760</a></div>
+<a class="card-link" href="BACKLOG.md#L1761" target="_blank">BACKLOG.md:1761</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-016</div>
     <div class="card-title">text_matches_description() fails on synonyms</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1774" target="_blank">BACKLOG.md:1774</a></div>
+<a class="card-link" href="BACKLOG.md#L1775" target="_blank">BACKLOG.md:1775</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-017</div>
     <div class="card-title">FILL placeholders on unreachable pages fail to resolve</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1838" target="_blank">BACKLOG.md:1838</a></div>
+<a class="card-link" href="BACKLOG.md#L1839" target="_blank">BACKLOG.md:1839</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-018</div>
     <div class="card-title">Resolver gap: login elements fail in resolver but succeed in journey</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L1870" target="_blank">BACKLOG.md:1870</a></div>
+<a class="card-link" href="BACKLOG.md#L1871" target="_blank">BACKLOG.md:1871</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-019</div>
     <div class="card-title">Scraper misses heading text on JS-rendered pages (✅ FIXED by AI-032 Semantic Scraper)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2006" target="_blank">BACKLOG.md:2006</a></div>
+<a class="card-link" href="BACKLOG.md#L2007" target="_blank">BACKLOG.md:2007</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-020</div>
     <div class="card-title">LLM-Assisted ASSERT Resolution</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2033" target="_blank">BACKLOG.md:2033</a></div>
+<a class="card-link" href="BACKLOG.md#L2034" target="_blank">BACKLOG.md:2034</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-021</div>
     <div class="card-title">Page-state assertions fail to resolve (e.g., &quot;home page visible&quot;)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2077" target="_blank">BACKLOG.md:2077</a></div>
+<a class="card-link" href="BACKLOG.md#L2078" target="_blank">BACKLOG.md:2078</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-040</div>
     <div class="card-title">Fine-Tuning Dataset Generation Tooling (TOOLING COMPLETE 2026-08-09 — training is AI-041)</div>
     <div class="card-meta"><span>Medium — enables the Qwen training effort referenced by AI-038</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2377" target="_blank">BACKLOG.md:2377</a></div>
+<a class="card-link" href="BACKLOG.md#L2378" target="_blank">BACKLOG.md:2378</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-039</div>
     <div class="card-title">Brand Rename to TanCat (SHIPPED 2026-09-06 — working-tree rename committed; GitHub org/repo + PyPI publish are follow-on remote actions)</div>
     <div class="card-meta"><span>High — GTM (Phase 8 launch prerequisite; must precede first PyPI publish)</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2543" target="_blank">BACKLOG.md:2543</a></div>
+<a class="card-link" href="BACKLOG.md#L2544" target="_blank">BACKLOG.md:2544</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-033</div>
     <div class="card-title">Python T-String (PEP 750) Upgrade — ANALYSIS COMPLETE + PROMPT LAYER MIGRATED</div>
     <div class="card-meta"><span>Medium — technical debt / future-proofing</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2573" target="_blank">BACKLOG.md:2573</a></div>
+<a class="card-link" href="BACKLOG.md#L2574" target="_blank">BACKLOG.md:2574</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-027</div>
     <div class="card-title">Requirements with distinct concerns generate single test case instead of multiple (FIXED 2026-08-01)</div>
     <div class="card-meta"><span>Medium</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2683" target="_blank">BACKLOG.md:2683</a></div>
+<a class="card-link" href="BACKLOG.md#L2684" target="_blank">BACKLOG.md:2684</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-009</div>
     <div class="card-title">Multi-Page Scraping ✅ Phase A COMPLETE, ✅ Phase B COMPLETE</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2801" target="_blank">BACKLOG.md:2801</a></div>
+<a class="card-link" href="BACKLOG.md#L2802" target="_blank">BACKLOG.md:2802</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-016</div>
     <div class="card-title">Spec Analysis Stage (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2916" target="_blank">BACKLOG.md:2916</a></div>
+<a class="card-link" href="BACKLOG.md#L2917" target="_blank">BACKLOG.md:2917</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-017</div>
     <div class="card-title">Living Test Plan UI (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2951" target="_blank">BACKLOG.md:2951</a></div>
+<a class="card-link" href="BACKLOG.md#L2952" target="_blank">BACKLOG.md:2952</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-018</div>
     <div class="card-title">Evidence Tracker Module (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L2981" target="_blank">BACKLOG.md:2981</a></div>
+<a class="card-link" href="BACKLOG.md#L2982" target="_blank">BACKLOG.md:2982</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-020</div>
     <div class="card-title">Annotated Screenshot Evidence View (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3049" target="_blank">BACKLOG.md:3049</a></div>
+<a class="card-link" href="BACKLOG.md#L3050" target="_blank">BACKLOG.md:3050</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-021</div>
     <div class="card-title">Gantt Timeline in Evidence Bundle (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3088" target="_blank">BACKLOG.md:3088</a></div>
+<a class="card-link" href="BACKLOG.md#L3089" target="_blank">BACKLOG.md:3089</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-022</div>
     <div class="card-title">Coverage Heat Map (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3120" target="_blank">BACKLOG.md:3120</a></div>
+<a class="card-link" href="BACKLOG.md#L3121" target="_blank">BACKLOG.md:3121</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-002</div>
     <div class="card-title">User Story Parser Module (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3170" target="_blank">BACKLOG.md:3170</a></div>
+<a class="card-link" href="BACKLOG.md#L3171" target="_blank">BACKLOG.md:3171</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-005</div>
     <div class="card-title">Move coverage helpers to `src/coverage_utils.py` (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3175" target="_blank">BACKLOG.md:3175</a></div>
+<a class="card-link" href="BACKLOG.md#L3176" target="_blank">BACKLOG.md:3176</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-004</div>
     <div class="card-title">Phase C Run Now gaps (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3179" target="_blank">BACKLOG.md:3179</a></div>
+<a class="card-link" href="BACKLOG.md#L3180" target="_blank">BACKLOG.md:3180</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-023</div>
     <div class="card-title">Interactive Locator Repair Loop (COMPLETE)</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3222" target="_blank">BACKLOG.md:3222</a></div>
+<a class="card-link" href="BACKLOG.md#L3223" target="_blank">BACKLOG.md:3223</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-024</div>
     <div class="card-title">Accessibility Tree Enrichment</div>
     <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3253" target="_blank">BACKLOG.md:3253</a></div>
+<a class="card-link" href="BACKLOG.md#L3254" target="_blank">BACKLOG.md:3254</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-061</div>
     <div class="card-title">Production project-scoped RAG identity (isolation gap)</div>
     <div class="card-meta"><span>Low–Medium. Affects real multi-project / multi-user localhost usage. The AI-059 lab is already protected by a sentinel (Deliverable 3), so this is the production counterpart.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3831" target="_blank">BACKLOG.md:3831</a></div>
+<a class="card-link" href="BACKLOG.md#L3832" target="_blank">BACKLOG.md:3832</a></div>
 </div>
 <div class="card">
     <div class="card-id">AI-062</div>
     <div class="card-title">RAG bonus effect trace (does the bonus actually decide?) (MEASUREMENT, prerequisite for any scoring rebalance / AI-058)</div>
     <div class="card-meta"><span>Medium. Decides whether learned/golden RAG bonuses are worth expanding (AI-058) or need a scoring fix first.</span>
 <span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L3852" target="_blank">BACKLOG.md:3852</a></div>
+<a class="card-link" href="BACKLOG.md#L3853" target="_blank">BACKLOG.md:3853</a></div>
 </div>
     </div>
 </div>
@@ -1176,7 +1176,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "105";
+    var count = "106";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
