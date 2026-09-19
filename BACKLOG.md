@@ -156,6 +156,28 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ---
 
+## 🆕 B-076 — `compare_model_baselines.py` silently drops a story when two sites share a 60-char story prefix
+
+**Status:** 🆕 new — found 2026-09-19 while running a KV-cache (f16 vs q8_0) quality A/B from the `llm-benchmarks` repo. Not fixed.
+**Priority:** medium — it can hide the *exact* signal a quality regression shows up as. The FP4-KV study in `llm-benchmarks/evidence/fp4-2026-09-12/` concluded from **one** regressed story, so a comparator that can silently skip a story is a real risk to that class of finding.
+**One-line:** `_index()` (~line 63) builds `{story_head: row}`, but `story_head` is only the first 60 characters of the story — so two *different* stories on *different sites* that share an opening phrase collapse into one dict entry and one of them is never compared.
+**Evidence:** a 35-story eval reports **"34 matched"**. Both baselines have 35 `per_story` entries and 35 unique `(site, story_head)` pairs, but only **34 unique `story_head` values**:
+```
+COLLIDING story_head: 'As a user, I want to attempt login with incorrect credential'
+    site=theinternet    expected_criteria=6
+    site=banking_mock   expected_criteria=7
+```
+`compare_model_baselines.py --before <f16> --after <q8_0>` printed `story-level: 34 matched, 0 regressed, 0 improved, 0 unmatched` — the arithmetic (34 + 0 ≠ 35) is the tell.
+**Fix:** key the index on `(site, story_head)`, which is already present in every row and is unique:
+```python
+def _index(data: dict) -> dict:
+    return {(str(row.get("site", "")), str(row.get("story_head", ""))): row for row in data.get("per_story", [])}
+```
+(adjust the two call sites / the unmatched-name rendering accordingly). Optional hardening: if `len(index) != len(per_story)`, raise or warn rather than silently shrinking — the same class of bug is invisible otherwise.
+**Estimated sessions:** 0.1 (one-line key change + a unit test that two same-prefix/different-site stories both appear).
+
+---
+
 ## ✅ B-064 — Generated suites were killed by a flat 600s pytest ceiling (48-test run died at 10:00; needs 11:13)
 
 **Status:** ✅ **Fixed 2026-09-15** — the ceiling now scales with the suite. Reported from the UI as *"Failed to run generated tests: … timed out after 600 seconds"*. Note: the timeout-scaling half (`resolve_test_timeout` + the `SelfHealing` mirror) was lost from the working tree (a reset) and was restored from the 2026-09-15 session record on 2026-09-18; the `method=2` encode half shipped separately as f838978.
