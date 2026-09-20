@@ -954,6 +954,63 @@ gap for scanned policy documents.
 
 **Estimated sessions:** 1-2
 
+### FC-07 — Agent-Callable Run & Compare (headless verb + MCP wrapper)
+
+**Priority:** Future — next up among the Tier 6 expansions
+**Status:** `[ ]` Not started
+**Spec:** `docs/specs/FEATURE_SPEC_FC07_agent_surface.md` (canonical — decisions D1–D14, open questions Q1/Q3/Q5)
+**Impact:** Makes the product callable from an agent loop without a human at the UI. The
+commercial hook is a re-run that costs **$0 in LLM tokens** and is **comparable by
+construction** — fresh ad-hoc checks are neither. Reuses every existing outer-loop stage.
+
+**Why this sits in Tier 6:** the test *target* is unchanged (still browser E2E) — only the
+*caller* is new. Grouped with the expansions because that, not the engine, is what changes.
+
+**The claim:** an agent can already drive a browser itself, so "tancat checks better" is not
+winnable. The winnable claim is **the agent checks once; tancat makes it permanent.** An
+agent's verification is throwaway; a generated suite is an asset that re-runs forever at
+zero LLM tokens and can be diffed run-over-run.
+
+**The scenario:** a user's agent has written the app and its unit tests, as we do when
+developing this repo. The user says *"check nothing has broken."* The agent re-runs the
+existing generated suite, gets a delta against a **named baseline**, and answers.
+
+**Gate (narrow — this reports trust, it does not need it):** the run path never touches the
+resolver, so it is **not** gated on the known-red ASSERT class. It is gated on three things:
+skips must be visible (a 30%-skipped suite must never read as "all verified"), flaky vs
+regression must be right, and baseline selection must be right.
+
+**What already exists (verified by code audit — no protected files change):**
+- `src/pipeline_run_service.py` — `PipelineRunService.run_saved_test()` executes and parses
+- `src/pytest_output_parser.py` — `parse_pytest_output()`
+- `src/run_result_persistence.py` — `persist_run_result()`, `RunComparison` (`regressed` /
+  `new_failures` / `improved`), `get_flaky_tests()`, `compare_latest_runs()`
+- `src/run_history_cli.py` / `run_history_chart.py` / `src/ui/ui_run_comparison.py` — human views
+- `scripts/ci_generate.py` — the headless precedent (argparse, `--json`, exit codes 0/1/2)
+- **Baseline precedent:** `scripts/verify_production_baseline.json` (version / recorded /
+  `recorded_commit` / note) and the eval harness `baseline --save` + `compare` pair
+
+**What's new:**
+- [ ] `tancat run --json` — non-interactive, flag-complete, zero prompts (there is no run verb today)
+- [ ] **Versioned JSON envelope** with a single `verdict` field (`clean`/`improved`/`regression`/`error`/`unknown`) + golden fixture
+- [ ] **Exit codes:** 0 clean, 1 regression, 2 config, **3 infrastructure error** — a timeout must never read as clean
+- [ ] **Labelled baselines, not positional.** `--baseline <tag>` (e.g. `save:before-work`); a baseline carries provenance (label, date, commit, note) and is **always named in the output** — the user must know what they are comparing to. Falls back to same-suite last run, else `unknown`
+- [ ] **`removed` bucket.** `RunComparison` has `improved` / `regressed` / `new_failures` but **no `removed`** — a deleted (even failing) test currently produces no signal, so a gutted suite can report `clean`
+- [ ] **Warn when the baseline itself was not clean** — "no new regressions" against a red baseline is misleading
+- [ ] **Flaky is a sibling bucket, never a regression** — false alarms destroy trust fastest
+- [ ] Classified, capped failure lines (not raw pytest logs); `--fields` / `--compact`
+- [ ] `usage.llm_tokens` reported honestly in every envelope
+- [ ] Async job handle (`--async` + `tancat run-status`) for multi-minute suites
+- [ ] `tancat mcp --stdio` — ≤3 tools, **subprocess wrapper over the CLI only**, never imports internals
+
+**Guard rails that must survive the new front end:** danger-zone allow-list, consent,
+credential redaction, free-tier metering, workspace isolation.
+
+**Tactical sub-items (BACKLOG-owned — do not duplicate status here):** B-073 (cost/turn
+metrics), B-074 (AXI CLI principles), B-075 (MCP research prototype).
+
+**Estimated sessions:** FC-07a run verb + envelope 1-2 · FC-07b baseline model + removed/flaky 1 · FC-07c MCP 0.5-1 · FC-07d async 0.5-1
+
 ---
 
 ## Tier 7 — User Documentation & Onboarding
@@ -1098,8 +1155,9 @@ limits, is cacheable, and safe for retries.
 | 24 | AI-042 Cross-Site Flow Memory | ML | `[x]` Complete 2026-08-12. `src/flow_memory.py` (learner + store + GOTO/URL-assert consumption), route canonicalization (view_cart/basket→cart, inventory→products — learned analog of url_resolver aliases), 34 tests, seeded from 908 real sidecars → 89 patterns / 6 sites / 5 cross-site. Eval holdout: 0 → 3/4 non-home URL asserts resolvable with target-site evidence excluded. See Tier 4 §16. | 2-3 |
 | 25 | AI-043 Output Artifact Quality Gate | Infra | `[x]` Complete 2026-08-11. L1/2 + gates shipped 2026-08-10/11 (`src/artifact_validation.py`, golden fixtures, smoke Gate 0; caught + fixed negative-y bbox bug). L3 shipped 2026-08-11 (`src/heatmap_alignment.py` — live overlay↔page alignment, `validate_report_artifacts.py --full`, 21 tests incl. live mock). See Tier 3 §17. | 2-3 |
 | 26 | AI-044 Visual Grounding (vision element location) | ML | `[ ]` **DEFERRED 2026-08-13** — off-the-shelf GUI-grounding models (UGround / OS-Atlas / UI-TARS) cover the core task; AI-041 dependency dead (training failed). Slim AI-044-B (off-the-shelf integration, 1-2 sessions) if wanted. See Tier 4 §18. | 5-8 |
+| 27 | FC-07 Agent-Callable Run & Compare | Expansion | `[ ]` Not started (added 2026-09-20) — spec `FEATURE_SPEC_FC07_agent_surface.md`; next up among the Tier 6 expansions | 2.5-5 |
 
-**Total estimated sessions:** 41-60 (+2 for AI-012, +3 for Phase 1 doc-mode, +2-3 for AI-042, +2-3 for AI-043, +5-8 for AI-044)
+**Total estimated sessions:** 41-60 (+2 for AI-012, +3 for Phase 1 doc-mode, +2-3 for AI-042, +2-3 for AI-043, +5-8 for AI-044, +2.5-5 for FC-07)
 
 ---
 
