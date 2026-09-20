@@ -127,6 +127,55 @@ REFLECTION RULES (when PREVIOUS FIX ATTEMPTS are provided):
 
 
 # ---------------------------------------------------------------------------
+# Scrape manifest loading (B-068)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_url(url: str) -> str:
+    """Normalise a URL for scraped-page lookup.
+
+    Strips the fragment (``#pricing`` variants are the same DOM), the query
+    string, and trailing slashes, so ``http://x:8080/`` matches
+    ``http://x:8080`` and ``http://x:8080/#pricing``.
+    """
+    return url.split("#", 1)[0].split("?", 1)[0].rstrip("/")
+
+
+def load_scraped_manifest(package_dir: str | Path) -> dict[str, list[dict[str, Any]]]:
+    """Load ``url -> elements`` from a package's ``scrape_manifest.json``.
+
+    The manifest records every page the pipeline scraped with full element
+    records (selector, text, role, href, classes, aria, accessible name).
+    The self-heal reviewer can only propose real selectors when its prompt
+    carries these candidates (B-068). Keys are normalised via
+    :func:`_normalize_url`; the first page wins per URL (fragment variants
+    share the DOM and the plain URL is the goto target). Returns an empty
+    dict when the manifest is missing or unreadable — healing must never
+    break because of a stale or half-written manifest.
+    """
+    manifest_path = Path(package_dir) / "scrape_manifest.json"
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except OSError, json.JSONDecodeError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    pages = data.get("pages_scraped")
+    if not isinstance(pages, list):
+        return {}
+    result: dict[str, list[dict[str, Any]]] = {}
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        url = str(page.get("url", "") or "")
+        elements = page.get("elements")
+        if not url or not isinstance(elements, list):
+            continue
+        result.setdefault(_normalize_url(url), [e for e in elements if isinstance(e, dict)])
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Self-Healing Runner
 # ---------------------------------------------------------------------------
 
@@ -195,16 +244,27 @@ class SelfHealingRunner:
         if not test_path.exists():
             raise FileNotFoundError(f"Test file not found: {test_file}")
 
+        # B-068: the UI/CLI construct the runner with no scraped_data, so the
+        # reviewer prompt always said "(no scraped data available)". Load the
+        # package's own scrape manifest when nothing was injected (tests and
+        # callers can still inject their own via the constructor).
+        if not self._scraped_data:
+            self._scraped_data = load_scraped_manifest(test_path.parent)
+            if self._scraped_data:
+                _progress(f"Loaded scraped elements for {len(self._scraped_data)} page(s) for reviewer context")
+
         report = HealingReport()
         current_test_names = test_names  # None means "all tests"
         # Track per-test attempt history across iterations for reflection
         per_test_attempts: dict[str, list[dict[str, str]]] = {}
+        last_run: RunResult | None = None  # B-070: reused when no patch was applied
 
         for iteration in range(1, self.max_iterations + 1):
             _progress(f"Healing iteration {iteration}/{self.max_iterations} — running tests...")
 
             # 1. Run tests
             run_result = self._run_pytest(test_path, current_test_names)
+            last_run = run_result
             failed = [r for r in run_result.results if r.status == "failed"]
 
             if not failed:
@@ -249,7 +309,7 @@ class SelfHealingRunner:
 
                 # Get prior attempts for this test (reflection context)
                 prior = per_test_attempts.get(result.name, [])
-                patch = self._review_and_suggest(result, detail, test_source, prior_attempts=prior)
+                patch = self._review_and_suggest(result, detail, test_source, test_path=test_path, prior_attempts=prior)
                 report.total_llm_calls += 1  # Count each LLM reviewer call
 
                 if patch is None:
@@ -289,15 +349,25 @@ class SelfHealingRunner:
 
             report.fixed += fixed_this_iteration
 
+            # 4. Scope the next pass (and the final re-check) to the tests
+            # that failed in THIS iteration — even when nothing was fixed,
+            # so a no-op heal never re-runs the whole suite (B-070).
+            current_test_names = [r.name for r in failed]
+
             if fixed_this_iteration == 0:
                 logger.info("No fixable failures — stopping")
                 break
 
-            # 4. Re-run only previously-failed tests
-            current_test_names = [r.name for r in failed]
-
-        # Final state
-        final_run = self._run_pytest(test_path, current_test_names)
+        # Final state (B-070): when no patch was applied the test file is
+        # unchanged since the last run — reuse those results instead of
+        # burning another full-suite pass (~11 min on a 48-test suite).
+        if report.patches:
+            final_run = self._run_pytest(test_path, current_test_names)
+        elif last_run is not None:
+            final_run = last_run
+            _progress("No patches applied — reusing last run results (no extra test pass)")
+        else:
+            final_run = self._run_pytest(test_path, current_test_names)
         report.remaining = len([r for r in final_run.results if r.status == "failed"])
         report.iterations = iteration
         report.final_results = final_run.results
@@ -334,7 +404,6 @@ class SelfHealingRunner:
             sys.executable,
             "-m",
             "pytest",
-            str(test_path.absolute()),
             "-v",
             "--tb=short",
             "--no-header",
@@ -344,8 +413,16 @@ class SelfHealingRunner:
             "addopts=",  # Override pytest.ini addopts (disables xdist parallel mode outside uv)
         ]
         if test_names:
+            # Exact nodeid selection (B-070): one -k flag per name is wrong —
+            # pytest keeps only the LAST -k flag, and -k matching is
+            # substring-based, so a subset re-run could silently run the
+            # wrong tests. `file::name` selects exactly that test (all of
+            # its browser parametrisations). The bare file arg must NOT also
+            # be passed — pytest would run the union (the whole file).
             for name in test_names:
-                cmd.extend(["-k", name])
+                cmd.append(f"{test_path.absolute()}::{name.split('[', 1)[0]}")
+        else:
+            cmd.append(str(test_path.absolute()))
 
         try:
             proc = subprocess.run(
@@ -420,6 +497,7 @@ class SelfHealingRunner:
         result: TestResult,
         detail: FailureDetail,
         test_source: str,
+        test_path: Path | None = None,
         prior_attempts: list[dict[str, str]] | None = None,
     ) -> AppliedPatch | None:
         """Send failure context to the LLM reviewer and parse the suggested patch.
@@ -428,6 +506,10 @@ class SelfHealingRunner:
             result: The failed test result.
             detail: Classified failure details.
             test_source: Full test file source code.
+            test_path: Path of the test file — used to derive the failure
+                URL from the evidence sidecar / package manifest (B-068).
+                Optional for direct-call compatibility; without it only the
+                test's own ``page.goto`` is considered.
             prior_attempts: Previous fix attempts for this test (for reflection).
                 Each entry: {strategy, old_text, new_text, diagnosis}.
         """
@@ -437,11 +519,18 @@ class SelfHealingRunner:
             logger.warning("Could not extract test function '%s' from source", result.name)
             return None
 
-        # Get scraped elements for the failure URL if available
-        elements_context = ""
-        if detail.failure_url and detail.failure_url in self._scraped_data:
-            elements = self._scraped_data[detail.failure_url][:30]
-            elements_context = self._format_elements_for_prompt(elements)
+        # Get scraped elements for the failure URL if available (B-068).
+        # classify_failure only sees the error text, so detail.failure_url is
+        # usually None — derive the URL from the evidence sidecar, the
+        # package manifest, or the test's own page.goto.
+        failure_url = detail.failure_url or self._derive_failure_url(test_path, result.name, test_func)
+        elements = self._elements_for_url(failure_url)
+        elements_context = self._format_elements_for_prompt(elements) if elements else ""
+        elements_header = (
+            f"SCRAPED PAGE ELEMENTS for {failure_url} (selectors, text, roles):"
+            if elements
+            else "SCRAPED PAGE ELEMENTS (selectors, text, roles):"
+        )
 
         # Build prior attempts section for reflection
         prior_section = ""
@@ -465,7 +554,7 @@ class SelfHealingRunner:
 ERROR MESSAGE:
 {result.error_message or detail.error_message}
 
-{prior_section}SCRAPED PAGE ELEMENTS (selectors, text, roles):
+{prior_section}{elements_header}
 {elements_context or "(no scraped data available for this page)"}
 
 Analyze this failure and suggest a fix."""
@@ -481,6 +570,47 @@ Analyze this failure and suggest a fix."""
             logger.warning("LLM reviewer failed: %s", e)
             self._llm_failures.append(result.name)
             return None
+
+    def _derive_failure_url(
+        self,
+        test_path: Path | None,
+        result_name: str,
+        test_func: str,
+    ) -> str:
+        """Best-effort URL of the page a test failed on (B-068).
+
+        ``classify_failure`` only sees the error text, so its
+        ``failure_url`` is always None. The evidence sidecar records the
+        real ``page.url`` at failure time; the package manifest's
+        ``starting_url`` and the test's own ``page.goto`` are fallbacks
+        (``_evidence_context`` already chains sidecar -> manifest).
+        Returns "" when no source yields a URL.
+        """
+        if test_path is not None:
+            try:
+                _, url = self._evidence_context(test_path, result_name)
+                if url:
+                    return url
+            except Exception:
+                pass
+        match = re.search(r"page\.goto\(\s*['\"]([^'\"]+)['\"]", test_func)
+        if match:
+            return match.group(1)
+        return ""
+
+    def _elements_for_url(self, url: str) -> list[dict[str, Any]]:
+        """Scraped element candidates for a URL (B-068).
+
+        Tolerates fragment / query / trailing-slash differences: manifest
+        keys are normalised by :func:`load_scraped_manifest`, while
+        explicitly injected ``scraped_data`` may use raw URLs, so the raw
+        key is tried first.
+        """
+        if not url:
+            return []
+        if url in self._scraped_data:
+            return self._scraped_data[url]
+        return self._scraped_data.get(_normalize_url(url), [])
 
     @staticmethod
     def _extract_test_function(source: str, test_name: str) -> str | None:
@@ -736,4 +866,4 @@ Analyze this failure and suggest a fix."""
             return False
 
 
-__all__ = ["AppliedPatch", "HealingReport", "SelfHealingRunner"]
+__all__ = ["AppliedPatch", "HealingReport", "SelfHealingRunner", "load_scraped_manifest"]
