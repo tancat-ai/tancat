@@ -1160,8 +1160,39 @@ class EvidenceTracker:
             )
             raise
 
-    def assert_attribute(self, locator: str, attribute: str, label: str = "") -> None:
-        """Assert an element's attribute is present and non-empty (B-069 part b)."""
+    @staticmethod
+    def _attribute_violations(value: str, *, forbidden: tuple[str, ...] = (), must_be_url: bool = False) -> list[str]:
+        """B-069 part b: predicate violations for an attribute value.
+
+        A value violates the condition when it contains any forbidden
+        substring (case-insensitive) or, when ``must_be_url``, is not an
+        http(s) URL.
+        """
+        violations: list[str] = []
+        lowered = value.lower()
+        for token in forbidden:
+            if token in lowered:
+                violations.append(f"contains forbidden '{token}'")
+        if must_be_url and not lowered.startswith(("http://", "https://")):
+            violations.append("is not an http(s) URL")
+        return violations
+
+    def assert_attribute(
+        self,
+        locator: str,
+        attribute: str,
+        label: str = "",
+        *,
+        forbidden: tuple[str, ...] = (),
+        must_be_url: bool = False,
+    ) -> None:
+        """Assert an element's attribute is present and non-empty (B-069 part b).
+
+        When ``forbidden`` is given, the value must not contain any of those
+        substrings (case-insensitive) — a "live" href that still says ``TBD``
+        or ``YOUR_VIDEO_ID_HERE`` fails instead of passing. When
+        ``must_be_url`` is given, the value must be an http(s) URL.
+        """
         if not label:
             label = f"Assert attribute {attribute}: {locator}"
         _t0 = time.time()
@@ -1171,6 +1202,12 @@ class EvidenceTracker:
             actual = loc.get_attribute(attribute) or ""
             if not actual:
                 raise AssertionError(f"Expected non-empty attribute '{attribute}' on {locator} but got empty")
+            violations = self._attribute_violations(actual, forbidden=forbidden, must_be_url=must_be_url)
+            if violations:
+                raise AssertionError(
+                    f"Attribute '{attribute}' on {locator} violates the condition: "
+                    f"{'; '.join(violations)} (value={actual!r})"
+                )
             self._record_step(
                 "assertion",
                 label,
@@ -1184,6 +1221,114 @@ class EvidenceTracker:
                 "assertion",
                 label,
                 locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_no_forbidden(
+        self,
+        selector: str,
+        forbidden: str,
+        label: str = "",
+        attribute: str | None = None,
+    ) -> None:
+        """Assert NO element matching ``selector`` contains ``forbidden`` (B-069 part b).
+
+        Page-level integrity check that needs no element resolution —
+        "no TBD in links" inspects every ``<a>`` href, "no TBD in buttons"
+        inspects every button's text. Case-insensitive. Zero matching
+        elements passes vacuously (the condition holds trivially) and the
+        count is recorded for the evidence.
+        """
+        if not label:
+            label = f"No '{forbidden}' in {selector}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(selector)
+            count = loc.count()
+            offenders: list[str] = []
+            for i in range(count):
+                element = loc.nth(i)
+                raw = element.get_attribute(attribute) if attribute else None
+                value = (raw if raw is not None else element.text_content() or "").strip()
+                if value and forbidden.lower() in value.lower():
+                    offenders.append(value[:80])
+            if offenders:
+                raise AssertionError(
+                    f"Found {len(offenders)} element(s) matching {selector} containing '{forbidden}': {offenders[:3]}"
+                )
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
+                take_screenshot=True,
+                matched_text=f"{count} element(s), none contain '{forbidden}'",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_attribute_all(
+        self,
+        selector: str,
+        attribute: str,
+        label: str = "",
+        *,
+        forbidden: tuple[str, ...] = (),
+        must_be_url: bool = False,
+    ) -> None:
+        """Assert EVERY element matching ``selector`` has a non-empty ``attribute`` (B-069 part b).
+
+        "all images have alt" → every ``<img>`` must carry a non-empty alt.
+        Zero matching elements FAILS — the condition expects the elements to
+        exist. ``forbidden`` / ``must_be_url`` apply the same predicates as
+        :meth:`assert_attribute` to every value.
+        """
+        if not label:
+            label = f"All {selector} have {attribute}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(selector)
+            count = loc.count()
+            if count == 0:
+                raise AssertionError(f"Expected elements matching {selector} but found none")
+            bad: list[str] = []
+            for i in range(count):
+                element = loc.nth(i)
+                value = element.get_attribute(attribute) or ""
+                if not value:
+                    bad.append(f"#{i}: empty")
+                    continue
+                violations = self._attribute_violations(value, forbidden=forbidden, must_be_url=must_be_url)
+                if violations:
+                    bad.append(f"#{i}: {'; '.join(violations)}")
+            if bad:
+                raise AssertionError(
+                    f"{len(bad)}/{count} element(s) matching {selector} fail attribute '{attribute}': {bad[:3]}"
+                )
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
+                take_screenshot=True,
+                matched_text=f"{count} element(s), all have non-empty '{attribute}'",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),

@@ -282,6 +282,7 @@ Record one row per session so drift is visible. All numbers from live regenerati
 | 2026-09-15 | 35-criterion landing-page story, 48 tests, local page | — (not measured on this run) | ~10 of 25 passes | 23 (18 ours, 5 real) | 673–1002s | baseline for this plan |
 | 2026-09-15 | eval harness static (frozen captures) | 97.9% | 0 | — | <1s | **not** a live-regeneration measure |
 | 2026-09-17 | **B-065 fix** — same story re-generated (35 tests), local page | — | **12 of 31 passes** (B-069 class unchanged) | 4 — **all** `target="_blank"` nav checks (B-072, new item); **0 selector failures** | 437s | Session 1 done: B-065's 18 selector reds → 0. All 4 remaining reds are the new new-tab class; the page's real defects are hidden by the 12 false greens → Session 2 (B-069) unblocks honest reporting. Re-run hit a 2h server-wedge detour (agent + pipeline share one llama.cpp slot) — see `docs/sessions/2026-09-16_b065_rerun_llm_stall.md` |
+| 2026-09-19 | **B-069 (a+b) shipped** — 14-criterion story via `ci_generate.py` BLOCKED (27B stalled ×2 on the skeleton prompt, 600s timeouts); live replay of the **exact emitted calls** on the real landing page instead | — (no fresh live regeneration) | **0 of the 09-17 false-green classes remain green** — TBD purchase hrefs ×2, `YOUR_VIDEO_ID_HERE` video ×2, "no TBD in links", "all anchor links valid" (4/24 placeholder hrefs) all now FAIL with precise diagnostics | TBD/placeholder criteria red (honest) | n/a | Session 2 done (a+b): `attribute_predicate` + `count_assertion_from_description` + `assert_no_forbidden`/`assert_attribute_all`; 48 tests, 3198 pytest, smoke 39/39, eval static 97.9%. Full-LLM re-run pending a healthy model — story saved at `scratch/b069b_story.md` |
 
 ---
 
@@ -369,7 +370,7 @@ AXI validates that principled CLI design beats both raw CLI and MCP. Our product
 | B-066 | Bare `uv sync` / `uv run` strips optional extras | open |
 | B-067 | Self-healing no-op on `[chromium]` node ids | ✅ fixed |
 | B-068 | Self-heal reviewer given no page elements | open |
-| B-069 | False passes — 17 tests assert the same element | open |
+| B-069 | False passes — 17 tests assert the same element | ✅ complete 2026-09-19 (a: f324b39 · b: attribute predicates + page-level count checks; full-LLM re-run pending model health) |
 | B-070 | Self-heal re-runs the whole suite when it fixes nothing | open |
 | B-071 | Streamlit watcher `torchvision` traceback spam | open |
 | B-072 | `target="_blank"` link tests fail post-click navigation check | open — found 2026-09-17 by the B-065 re-run |
