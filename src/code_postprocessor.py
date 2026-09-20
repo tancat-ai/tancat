@@ -8,6 +8,7 @@ Orchestrates normalization by delegating to specialised sub-modules:
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from .code_normalizer import (
     convert_standalone_placeholders,
@@ -162,6 +163,126 @@ _ASSERTION_TO_ET_METHOD: dict[str, str] = {
     "toHaveAttribute": "assert_attribute",  # B-069: read attribute, not visibility
     "toBeHidden": "assert_hidden",  # polarity: "popup closed" / "item removed"
 }
+
+
+# B-069 part b — attribute predicates and page-level count assertions.
+# A green test must have actually checked the condition: "href does not
+# contain TBD" checked by assert_visible() is a false green; the emitted
+# check must read the attribute and test the predicate in the description.
+
+#: Placeholder tokens that must never appear in a "live" attribute value.
+_PLACEHOLDER_FORBIDDEN: tuple[str, ...] = ("tbd", "your_", "lorem", "placeholder", "todo")
+
+#: Words that cannot be the forbidden word of a "no <word> in ..." check.
+_NOT_FORBIDDEN_WORDS: frozenset[str] = frozenset({"longer", "more", "less", "horizontal", "visible", "broken", "long"})
+
+#: Element-kind vocabulary for page-level count checks (singular key →
+#: (css selector, attribute to inspect — None means text content)).
+_COUNT_ELEMENT_KINDS: dict[str, tuple[str, str | None]] = {
+    "link": ("a", "href"),
+    "image": ("img", "alt"),
+    "button": ("button", None),
+    "heading": ("h1, h2, h3, h4, h5, h6", None),
+}
+
+
+@dataclass(frozen=True)
+class CountAssertion:
+    """A page-level assertion that needs no element resolution (B-069 part b).
+
+    "no TBD in links" → no ``<a>`` href may contain "tbd".
+    "all images have alt" → every ``<img>`` has a non-empty alt.
+    "all anchor links valid" → every ``<a>`` href is non-empty and not a
+    placeholder.
+    """
+
+    method: str  # "assert_no_forbidden" or "assert_attribute_all"
+    selector: str  # CSS selector for the element class
+    argument: str  # forbidden word (no_forbidden) or attribute name (attribute_all)
+    attribute: str | None = None  # attribute to inspect (None = text content)
+    forbidden: tuple[str, ...] = ()  # additional placeholder substrings to reject
+    must_be_url: bool = False
+
+
+def attribute_predicate(description: str, attribute: str) -> tuple[bool, tuple[str, ...]]:
+    """Derive ``(must_be_url, forbidden)`` for a per-element attribute assertion.
+
+    - ``must_be_url``: the value must be an http(s) URL — when the attribute
+      is href and the description says live/valid/url/resolves.
+    - ``forbidden``: lowercase substrings that must NOT appear in the value —
+      taken from the description ("does not contain TBD") and, when the value
+      must be live, from the placeholder vocabulary.
+    """
+    lowered = description.lower()
+    forbidden: list[str] = []
+    m = re.search(r"\b(?:does not contain|without|no)\s+([a-z0-9_\-\.]+)", lowered)
+    if m:
+        word = m.group(1)
+        if word not in _NOT_FORBIDDEN_WORDS:
+            forbidden.append(word)
+    if any(term in lowered for term in ("live", "valid", "resolv")):
+        for token in _PLACEHOLDER_FORBIDDEN:
+            if token not in forbidden:
+                forbidden.append(token)
+    must_be_url = attribute == "href" and any(term in lowered for term in ("url", "live", "valid", "resolv"))
+    return must_be_url, tuple(forbidden)
+
+
+def count_assertion_from_description(description: str) -> CountAssertion | None:
+    """Classify page-level count assertions that need no element resolution.
+
+    - "no TBD in links" → every ``<a>`` href must not contain "tbd".
+    - "no lorem ipsum in buttons" → no button text may contain "lorem".
+    - "all images have alt" → every ``<img>`` has a non-empty alt.
+    - "all anchor links valid" → every ``<a>`` href is non-empty and not a
+      placeholder.
+
+    Returns ``None`` when the description is not a page-level count check —
+    the normal element-resolution path applies.
+    """
+    lowered = description.lower()
+    m = re.search(
+        r"\bno\s+([a-z0-9_\-\.]+(?:\s+[a-z0-9_\-\.]+)?)\s+in\s+(links?|images?|buttons?|headings?)\b", lowered
+    )
+    if m:
+        word = m.group(1).split()[0]  # "lorem ipsum" → "lorem" (substring check)
+        kind = m.group(2).rstrip("s")
+        if word in _NOT_FORBIDDEN_WORDS:
+            return None
+        selector, attribute = _COUNT_ELEMENT_KINDS[kind]
+        return CountAssertion("assert_no_forbidden", selector, word, attribute)
+    m = re.search(
+        r"\b(?:all|every)\s+(?:anchor\s+|external\s+)?(links?|images?|buttons?|headings?)\s+(?:have|has)\s+(?:a\s+)?(?:non-?empty\s+)?([a-z_]+)",
+        lowered,
+    )
+    if m:
+        kind = m.group(1).rstrip("s")
+        attr = m.group(2)
+        if kind not in _COUNT_ELEMENT_KINDS or attr not in ("alt", "href", "src", "title", "value", "content"):
+            return None
+        selector, _ = _COUNT_ELEMENT_KINDS[kind]
+        return CountAssertion("assert_attribute_all", selector, attr, attr)
+    if re.search(r"\b(?:all|every)\s+(?:anchor\s+|external\s+)?(links?)\s+(?:are\s+|is\s+)?valid\b", lowered):
+        return CountAssertion("assert_attribute_all", "a", "href", "href", forbidden=_PLACEHOLDER_FORBIDDEN)
+    return None
+
+
+def _emit_count_assertion(indent: str, check: CountAssertion, description: str) -> str:
+    """Emit the page-level count-assertion tracker call (B-069 part b)."""
+    label = repr(description)
+    if check.method == "assert_no_forbidden":
+        if check.attribute:
+            return (
+                f"{indent}evidence_tracker.assert_no_forbidden({check.selector!r}, {check.argument!r}, "
+                f"label={label}, attribute={check.attribute!r})"
+            )
+        return f"{indent}evidence_tracker.assert_no_forbidden({check.selector!r}, {check.argument!r}, label={label})"
+    call = f"{indent}evidence_tracker.assert_attribute_all({check.selector!r}, {check.argument!r}, label={label}"
+    if check.forbidden:
+        call += f", forbidden={check.forbidden!r}"
+    if check.must_be_url:
+        call += ", must_be_url=True"
+    return call + ")"
 
 
 def _strip_module_level_statements(code: str) -> str:
@@ -339,6 +460,14 @@ def _replace_token_in_line_impl(
     stripped = line.strip()
     indent = line[: len(line) - len(line.lstrip())]
 
+    # B-069 part b: page-level count assertions ("no TBD in links",
+    # "all images have alt") need no element — emit the structural check
+    # directly, before the unverified-skip path can replace the line.
+    if action == "ASSERT":
+        count_check = count_assertion_from_description(description)
+        if count_check is not None:
+            return _emit_count_assertion(indent, count_check, description)
+
     if "pytest.skip" in resolved_value:
         return f"{indent}{resolved_value}"
 
@@ -388,9 +517,11 @@ def _replace_token_in_line_impl(
         if et_method in ("assert_text", "assert_text_contains"):
             et_method = "assert_visible"
         # B-069 part b: attribute assertions (href/alt/meta) must pass the
-        # attribute name to assert_attribute — extract from assertion_type
-        # (e.g., "toHaveAttribute:href") or fall back to parsing description.
-        attr_name = None
+        # attribute name + predicate to assert_attribute — extract the name
+        # from assertion_type (e.g., "toHaveAttribute:href") or fall back to
+        # parsing the description; the predicate (must_be_url / forbidden)
+        # comes from the description so "does not contain TBD" cannot pass.
+        attr_call = None
         if et_method == "assert_attribute":
             if ":" in assertion_type:
                 attr_name = assertion_type.split(":", 1)[1]
@@ -402,13 +533,22 @@ def _replace_token_in_line_impl(
                     if "href" in lowered
                     else ("alt" if "alt" in lowered else ("content" if "meta" in lowered else ""))
                 )
+            must_be_url, forbidden = attribute_predicate(description, attr_name)
+            extra = ""
+            if must_be_url:
+                extra += ", must_be_url=True"
+            if forbidden:
+                extra += f", forbidden={forbidden!r}"
+            attr_call = (
+                f"evidence_tracker.assert_attribute({assert_value}, {attr_name!r}, label={repr(step_label)}{extra})"
+            )
         if stripped == token:
             if et_method == "assert_attribute":
-                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
+                return f"{indent}{attr_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
             if et_method == "assert_attribute":
-                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
+                return f"{indent}{attr_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         locator_only_patterns = {
             f"page.locator({token})",
@@ -416,7 +556,7 @@ def _replace_token_in_line_impl(
         }
         if stripped in locator_only_patterns:
             if et_method == "assert_attribute":
-                return f"{indent}evidence_tracker.{et_method}({assert_value}, {attr_name!r}, label={repr(step_label)})"
+                return f"{indent}{attr_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         return line.replace(token, resolved_value)
 
