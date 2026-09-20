@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from src.pytest_output_parser import TestResult
+from src.pytest_output_parser import RunResult, TestResult
 from src.rag_learn import site_hash
 from src.rag_store import LearnedPattern
 from src.self_healing import (
     AppliedPatch,
     HealingReport,
     SelfHealingRunner,
+    load_scraped_manifest,
 )
 
 # ---------------------------------------------------------------------------
@@ -303,6 +305,34 @@ class TestRunPytest:
         result = SelfHealingRunner._run_pytest(test_file, test_names=["test_a"])
         # Should only run test_a
         assert result.total >= 1
+        assert result.failed == 0
+
+    def test_runs_multiple_specific_tests(self, tmp_path: Path) -> None:
+        """B-070 regression: multiple names must ALL run.
+
+        The old code emitted one -k flag per name, but pytest keeps only the
+        LAST -k flag — a 2-failure subset re-run silently executed 1 test.
+        """
+        test_file = tmp_path / "test_multi.py"
+        test_file.write_text(
+            "def test_a():\n    assert True\n\ndef test_b():\n    assert True\n\ndef test_c():\n    assert True\n",
+            encoding="utf-8",
+        )
+        result = SelfHealingRunner._run_pytest(test_file, test_names=["test_a", "test_b"])
+        assert result.total == 2
+        assert result.failed == 0
+
+    def test_name_selection_is_exact_not_substring(self, tmp_path: Path) -> None:
+        """B-070 regression: -k matching is substring-based, so selecting
+        ``test_a`` with -k would also run ``test_ab``. Nodeid selection must
+        be exact."""
+        test_file = tmp_path / "test_sub.py"
+        test_file.write_text(
+            "def test_a():\n    assert True\n\ndef test_ab():\n    assert True\n",
+            encoding="utf-8",
+        )
+        result = SelfHealingRunner._run_pytest(test_file, test_names=["test_a"])
+        assert result.total == 1
         assert result.failed == 0
 
 
@@ -1241,3 +1271,392 @@ class TestLearnFromPatchRunner:
 
     def test_healing_report_learned_defaults_zero(self) -> None:
         assert HealingReport().learned == 0
+
+
+# ---------------------------------------------------------------------------
+# B-068 — the reviewer gets real page elements from the scrape manifest
+# ---------------------------------------------------------------------------
+
+
+def _make_manifest(base_url: str, pages: list[tuple[str, list[dict[str, Any]]]]) -> dict[str, Any]:
+    """Build a scrape_manifest.json-shaped dict (same shape the pipeline writes)."""
+    return {
+        "generated_at": "2026-01-01T00:00:00",
+        "base_url": base_url,
+        "pages_scraped": [
+            {"url": url, "element_count": len(elements), "elements": elements} for url, elements in pages
+        ],
+    }
+
+
+class TestLoadScrapedManifest:
+    def test_loads_pages_scraped_by_url(self, tmp_path: Path) -> None:
+        (tmp_path / "scrape_manifest.json").write_text(
+            json.dumps(
+                _make_manifest(
+                    "http://x/",
+                    [("http://x/", [{"selector": "a", "text": "hi"}]), ("http://x/login", [{"selector": "b"}])],
+                )
+            ),
+            encoding="utf-8",
+        )
+        data = load_scraped_manifest(tmp_path)
+        assert set(data) == {"http://x", "http://x/login"}
+        assert data["http://x"] == [{"selector": "a", "text": "hi"}]
+        assert data["http://x/login"] == [{"selector": "b"}]
+
+    def test_fragment_variants_collide_first_wins(self, tmp_path: Path) -> None:
+        (tmp_path / "scrape_manifest.json").write_text(
+            json.dumps(
+                _make_manifest(
+                    "http://x/",
+                    [("http://x/", [{"selector": "base"}]), ("http://x/#pricing", [{"selector": "frag"}])],
+                )
+            ),
+            encoding="utf-8",
+        )
+        # #pricing is the same DOM as the base page — first (plain) page wins
+        assert load_scraped_manifest(tmp_path) == {"http://x": [{"selector": "base"}]}
+
+    def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        assert load_scraped_manifest(tmp_path) == {}
+
+    def test_corrupt_json_returns_empty(self, tmp_path: Path) -> None:
+        (tmp_path / "scrape_manifest.json").write_text("{not json", encoding="utf-8")
+        assert load_scraped_manifest(tmp_path) == {}
+
+    def test_malformed_entries_skipped(self, tmp_path: Path) -> None:
+        data = {
+            "pages_scraped": [
+                "junk",
+                {"url": "", "elements": [{"selector": "a"}]},
+                {"url": "http://x", "elements": "not-a-list"},
+                {"url": "http://ok", "elements": [{"selector": "good"}, "junk-elem"]},
+            ]
+        }
+        (tmp_path / "scrape_manifest.json").write_text(json.dumps(data), encoding="utf-8")
+        assert load_scraped_manifest(tmp_path) == {"http://ok": [{"selector": "good"}]}
+
+    def test_pages_scraped_not_a_list_returns_empty(self, tmp_path: Path) -> None:
+        (tmp_path / "scrape_manifest.json").write_text(
+            json.dumps({"pages_scraped": {"url": "http://x"}}), encoding="utf-8"
+        )
+        assert load_scraped_manifest(tmp_path) == {}
+
+
+class TestElementsForUrl:
+    @staticmethod
+    def _runner(scraped: dict[str, list[dict[str, Any]]]) -> SelfHealingRunner:
+        return SelfHealingRunner(llm_client=MagicMock(), scraped_data=scraped)
+
+    def test_exact_match(self) -> None:
+        runner = self._runner({"http://x/": [{"selector": "a"}]})
+        assert runner._elements_for_url("http://x/") == [{"selector": "a"}]
+
+    def test_normalised_match_tolerates_fragment_and_slash(self) -> None:
+        runner = self._runner({"http://x": [{"selector": "a"}]})
+        assert runner._elements_for_url("http://x/#pricing") == [{"selector": "a"}]
+        assert runner._elements_for_url("http://x/") == [{"selector": "a"}]
+
+    def test_injected_raw_key_preferred_over_normalised(self) -> None:
+        runner = self._runner({"http://x/": [{"selector": "raw"}], "http://x": [{"selector": "norm"}]})
+        assert runner._elements_for_url("http://x/") == [{"selector": "raw"}]
+
+    def test_no_match_or_empty_url_returns_empty(self) -> None:
+        runner = self._runner({"http://x": [{"selector": "a"}]})
+        assert runner._elements_for_url("http://y") == []
+        assert runner._elements_for_url("") == []
+
+
+class TestDeriveFailureUrl:
+    def test_from_evidence_sidecar(self, tmp_path: Path) -> None:
+        (tmp_path / "evidence").mkdir()
+        (tmp_path / "evidence" / "test_a[chromium].evidence.json").write_text(
+            json.dumps({"page": {"url": "http://localhost:8079/pricing"}, "steps": []}),
+            encoding="utf-8",
+        )
+        runner = SelfHealingRunner(llm_client=MagicMock())
+        url = runner._derive_failure_url(tmp_path / "test_a.py", "test_a", "def test_a():\n    pass\n")
+        assert url == "http://localhost:8079/pricing"
+
+    def test_fallback_to_page_goto(self, tmp_path: Path) -> None:
+        runner = SelfHealingRunner(llm_client=MagicMock())
+        func = 'def test_b(page):\n    page.goto("http://localhost:1234/cart.html")\n'
+        url = runner._derive_failure_url(tmp_path / "test_b.py", "test_b", func)
+        assert url == "http://localhost:1234/cart.html"
+
+    def test_sidecar_beats_goto(self, tmp_path: Path) -> None:
+        (tmp_path / "evidence").mkdir()
+        (tmp_path / "evidence" / "test_c.evidence.json").write_text(
+            json.dumps({"page": {"url": "http://localhost:1/"}, "steps": []}), encoding="utf-8"
+        )
+        func = 'def test_c(page):\n    page.goto("http://localhost:2/")\n'
+        runner = SelfHealingRunner(llm_client=MagicMock())
+        assert runner._derive_failure_url(tmp_path / "test_c.py", "test_c", func) == "http://localhost:1/"
+
+    def test_empty_when_no_sources(self, tmp_path: Path) -> None:
+        runner = SelfHealingRunner(llm_client=MagicMock())
+        assert runner._derive_failure_url(tmp_path / "test_z.py", "test_z", "def test_z():\n    pass\n") == ""
+
+    def test_none_test_path_uses_goto_only(self) -> None:
+        runner = SelfHealingRunner(llm_client=MagicMock())
+        func = 'def test_d(page):\n    page.goto("http://localhost:9/")\n'
+        assert runner._derive_failure_url(None, "test_d", func) == "http://localhost:9/"
+
+
+class TestHealFeedsScrapedElements:
+    """B-068 acceptance: the reviewer prompt carries real element context."""
+
+    FAILING_TEST = (
+        "def test_broken():\n"
+        '    raise TimeoutError("page.wait_for_selector: Timeout 30000ms exceeded. '
+        "waiting for locator('#broken-btn')\")\n"
+    )
+    UNFIXABLE = json.dumps(
+        {
+            "fixable": False,
+            "diagnosis": "cannot fix",
+            "strategy": "skip_test",
+            "old_line": "",
+            "new_line": "",
+            "confidence": 0.1,
+        }
+    )
+
+    @staticmethod
+    def _write_failing_package(package: Path, base_url: str) -> Path:
+        test_file = package / "test_pkg.py"
+        test_file.write_text(TestHealFeedsScrapedElements.FAILING_TEST, encoding="utf-8")
+        (package / "scrape_manifest.json").write_text(
+            json.dumps(
+                _make_manifest(
+                    base_url,
+                    [
+                        (
+                            base_url,
+                            [
+                                {
+                                    "selector": "a#hero-marker",
+                                    "text": "B068_MARKER_TEXT",
+                                    "role": "a",
+                                    "id": "hero-marker",
+                                }
+                            ],
+                        )
+                    ],
+                )
+            ),
+            encoding="utf-8",
+        )
+        return test_file
+
+    def test_prompt_contains_manifest_elements(self, tmp_path: Path) -> None:
+        """Auto-loaded manifest (no scraped_data injected) feeds the prompt."""
+        test_file = self._write_failing_package(tmp_path, "http://localhost:9901/")
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self.UNFIXABLE
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=1)
+        runner.heal(test_file)
+
+        prompt = mock_llm.generate_test.call_args.kwargs["prompt"]
+        assert "B068_MARKER_TEXT" in prompt
+        assert "a#hero-marker" in prompt
+        assert "http://localhost:9901" in prompt
+        assert "(no scraped data available" not in prompt
+
+    def test_prompt_honest_when_failure_page_not_scraped(self, tmp_path: Path) -> None:
+        """Sidecar points at a page the manifest never scraped — no elements."""
+        test_file = self._write_failing_package(tmp_path, "http://localhost:9901/")
+        (tmp_path / "evidence").mkdir()
+        (tmp_path / "evidence" / "test_broken[chromium].evidence.json").write_text(
+            json.dumps({"page": {"url": "http://localhost:9901/never-scraped"}, "steps": []}),
+            encoding="utf-8",
+        )
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self.UNFIXABLE
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=1)
+        runner.heal(test_file)
+
+        prompt = mock_llm.generate_test.call_args.kwargs["prompt"]
+        assert "B068_MARKER_TEXT" not in prompt
+        assert "(no scraped data available for this page)" in prompt
+
+    def test_prompt_honest_when_no_manifest(self, tmp_path: Path) -> None:
+        test_file = tmp_path / "test_solo.py"
+        test_file.write_text(self.FAILING_TEST, encoding="utf-8")
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self.UNFIXABLE
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=1)
+        runner.heal(test_file)
+
+        prompt = mock_llm.generate_test.call_args.kwargs["prompt"]
+        assert "(no scraped data available for this page)" in prompt
+
+    def test_injected_scraped_data_not_overridden_by_manifest(self, tmp_path: Path) -> None:
+        test_file = self._write_failing_package(tmp_path, "http://localhost:9901/")
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self.UNFIXABLE
+        runner = SelfHealingRunner(
+            llm_client=mock_llm,
+            max_iterations=1,
+            scraped_data={"http://localhost:9901/": [{"selector": "a#injected", "text": "INJECTED_MARKER"}]},
+        )
+        runner.heal(test_file)
+
+        prompt = mock_llm.generate_test.call_args.kwargs["prompt"]
+        assert "INJECTED_MARKER" in prompt
+        assert "B068_MARKER_TEXT" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# B-070 — a self-heal that fixes nothing must not re-run the whole suite
+# ---------------------------------------------------------------------------
+
+
+class TestHealNoOpRerun:
+    """The 48-test suite costs ~11 min per run; a no-op heal used to cost
+    two (or more) full passes. The stubbed _run_pytest records every
+    (test_path, test_names) call so run scoping is asserted exactly."""
+
+    @staticmethod
+    def _failed(name: str) -> TestResult:
+        return TestResult(
+            name=name,
+            status="failed",
+            duration=1.0,
+            error_message="AssertionError: boom",
+            file_path="test_noop.py",
+        )
+
+    def _stub_runner(self, run_calls: list[list[str] | None], all_names: list[str]) -> SelfHealingRunner:
+        def fake(test_path: Path, test_names: list[str] | None = None) -> RunResult:
+            run_calls.append(test_names)
+            names = test_names if test_names else all_names
+            results = [TestHealNoOpRerun._failed(n) for n in names]
+            return RunResult(results=results, total=len(results), passed=0, failed=len(results))
+
+        runner = SelfHealingRunner(llm_client=MagicMock(), max_iterations=3)
+        runner._run_pytest = fake  # type: ignore[method-assign]
+        return runner
+
+    def test_noop_heal_skips_final_run(self, tmp_path: Path) -> None:
+        """All failures pre-screened (assertion errors) → no patch → the
+        iteration-1 results are reused; the suite is run exactly once."""
+        test_file = tmp_path / "test_noop.py"
+        test_file.write_text(
+            "def test_a():\n    assert False\n\ndef test_b():\n    assert False\n",
+            encoding="utf-8",
+        )
+        run_calls: list[list[str] | None] = []
+        runner = self._stub_runner(run_calls, ["test_a", "test_b"])
+        report = runner.heal(test_file)
+
+        assert run_calls == [None], "only the first run — no final full-suite pass"
+        assert report.total_failures == 2
+        assert report.unfixable == 2
+        assert report.fixed == 0
+        assert report.remaining == 2
+        assert report.iterations == 1
+
+    def test_llm_decline_still_skips_final_run(self, tmp_path: Path) -> None:
+        """LLM consulted but declined (fixable=false) → no patch applied →
+        still no final pass."""
+        test_file = tmp_path / "test_decline.py"
+        test_file.write_text(
+            "def test_a():\n    raise TimeoutError(\"waiting for locator('#a')\")\n",
+            encoding="utf-8",
+        )
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": False,
+                "diagnosis": "d",
+                "strategy": "skip_test",
+                "old_line": "",
+                "new_line": "",
+                "confidence": 0.2,
+            }
+        )
+        run_calls: list[list[str] | None] = []
+
+        def fake(test_path: Path, test_names: list[str] | None = None) -> RunResult:
+            run_calls.append(test_names)
+            names = test_names if test_names else ["test_a"]
+            results = [
+                TestResult(
+                    name=n,
+                    status="failed",
+                    duration=1.0,
+                    error_message="TimeoutError: waiting for locator('#a')",
+                    file_path="test_decline.py",
+                )
+                for n in names
+            ]
+            return RunResult(results=results, total=len(results), passed=0, failed=len(results))
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=3)
+        runner._run_pytest = fake  # type: ignore[method-assign]
+        report = runner.heal(test_file)
+
+        assert mock_llm.generate_test.call_count == 1
+        assert run_calls == [None]
+        assert report.unfixable == 1
+        assert report.remaining == 1
+
+    def test_final_rerun_scoped_to_failed_subset(self, tmp_path: Path) -> None:
+        """One fix applied, then nothing: the final re-check runs the failed
+        subset — never the whole suite (old code passed test_names=None)."""
+        test_file = tmp_path / "test_one.py"
+        test_file.write_text(
+            "def test_a():\n    raise TimeoutError(\"waiting for locator('#a')\")\n",
+            encoding="utf-8",
+        )
+        fix1 = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "d",
+                "strategy": "replace_locator",
+                "old_line": "raise TimeoutError(\"waiting for locator('#a')\")",
+                "new_line": "    raise TimeoutError(\"waiting for locator('#a-fixed')\")",
+                "confidence": 0.9,
+            }
+        )
+        fix2 = json.dumps(
+            {
+                "fixable": False,
+                "diagnosis": "d",
+                "strategy": "skip_test",
+                "old_line": "",
+                "new_line": "",
+                "confidence": 0.2,
+            }
+        )
+        mock_llm = MagicMock()
+        mock_llm.generate_test.side_effect = [fix1, fix2]
+        run_calls: list[list[str] | None] = []
+
+        def fake(test_path: Path, test_names: list[str] | None = None) -> RunResult:
+            run_calls.append(test_names)
+            names = test_names if test_names else ["test_a"]
+            results = [
+                TestResult(
+                    name=n,
+                    status="failed",
+                    duration=1.0,
+                    error_message="TimeoutError: waiting for locator('#a')",
+                    file_path="test_one.py",
+                )
+                for n in names
+            ]
+            return RunResult(results=results, total=len(results), passed=0, failed=len(results))
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=3)
+        runner._run_pytest = fake  # type: ignore[method-assign]
+        report = runner.heal(test_file)
+
+        # iteration 1 (all) -> iteration 2 (subset) -> final re-check (subset)
+        assert run_calls == [None, ["test_a"], ["test_a"]]
+        assert report.fixed == 1
+        assert report.remaining == 1
+        assert report.iterations == 2
+        assert "#a-fixed" in test_file.read_text(encoding="utf-8")

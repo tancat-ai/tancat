@@ -23,9 +23,9 @@ pytest-playwright runs every test once per browser, so the node id is `test_t31_
 
 ---
 
-## 🆕 B-068 — The self-heal reviewer is given no page elements, so it (correctly) refuses to fix anything
+## ✅ B-068 — The self-heal reviewer is given no page elements, so it (correctly) refuses to fix anything
 
-**Status:** 🆕 new — exposed 2026-09-15 by B-067's fix. Not fixed.
+**Status:** ✅ **Fixed 2026-09-20** — the reviewer prompt now carries the real scraped elements for the failed page.
 **Priority:** high — locator repair is the whole point of self-healing, and the model cannot propose a better selector without candidates.
 **One-line:** `_review_and_suggest` builds element context only when `detail.failure_url in self._scraped_data`, but (a) the UI constructs `SelfHealingRunner(max_iterations=3)` — **no `scraped_data`**, so `self._scraped_data == {}` (`src/ui/ui_run_results.py:1110`), and (b) `classify_failure` sets `failure_url=None` on **every** code path in `src/failure_classifier.py` (lines 124/135/149/160/174). So the context is always empty.
 **Evidence — the model says so itself.** Verbatim reviewer response for a real failure:
@@ -33,7 +33,9 @@ pytest-playwright runs every test once per browser, so the node id is `test_t31_
 
 returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. The prompt instructs the model to set `fixable: false` below 0.5 confidence, so **every** failure is declined.
 **The data exists and is simply not passed in:** `scrape_manifest.json` in the package carries full element records (selector, text, tag, role, href, classes, aria, accessible_name) — `pages_scraped`. Feeding `SelfHealingRunner(scraped_data=...)` from that manifest (and/or deriving `failure_url` from the evidence sidecar, which `_failure_context` already knows how to read) would give the reviewer real candidates.
-**Estimated sessions:** 0.5 (plumb the manifest into the runner; assert the prompt contains element context).
+**Fix (2026-09-20):** `src/self_healing.py` — new module-level `load_scraped_manifest()` reads the package's `scrape_manifest.json` into `{url: elements}` (keys normalised: fragment/query/trailing-slash stripped, first page wins per URL — `#pricing` variants are the same DOM); `heal()` auto-loads it when nothing was injected (both the UI and CLI construct the runner with no `scraped_data` — fixed in the one chokepoint, constructor injection still wins). New `_derive_failure_url()` recovers the failed page's URL the classifier never has (it only sees error text): evidence sidecar `page.url` (the path `_evidence_context` already reads, incl. its manifest `starting_url` fallback) → the test's own `page.goto`. `_elements_for_url()` matches raw or normalised keys; the prompt header now names the matched URL, and when no page matches the prompt stays honest — "(no scraped data available for this page)". 20 new tests (`tests/test_self_healing.py`: loader, URL derivation, lookup, and the acceptance — prompt contains real elements / honest fallback / injected data not overridden).
+**Evidence:** real-data replay against the actual 2026-09-17 landing-page package (`scratch/verify_b068_real_data.py`, offline, no LLM): the failing tests' reviewer prompts now contain the real manifest elements — **2/2, was 0/2** — including the GitHub link element the failing test targeted. Gates: 3281 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (0.0pp drift).
+**Estimated sessions:** 0.5 (spent: 0.5, with B-070).
 
 ---
 
@@ -65,18 +67,19 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ---
 
-## 🆕 B-070 — Self-healing re-runs the whole suite even when it fixes nothing (~1 hour of no-op work)
+## ✅ B-070 — Self-healing re-runs the whole suite even when it fixes nothing (~1 hour of no-op work)
 
-**Status:** 🆕 new — found 2026-09-15. Not fixed.
+**Status:** ✅ **Fixed 2026-09-20** (options A + B, plus a test-selection bug found while fixing).
 **Priority:** medium — it is the "took a really long time" half of the report, and it scales badly: the bigger the suite, the worse the no-op.
 **One-line:** `heal()` runs the full suite, and when `fixed_this_iteration == 0` it `break`s and then runs **the whole suite again** for the final state (`final_run = self._run_pytest(test_path, current_test_names)` where `current_test_names` is still `None` = all tests). On a 48-test suite at ~11 minutes per run, a self-heal that fixes nothing costs ~22 minutes; with 3 iterations of partial progress it approaches an hour.
 **Evidence:** the 48-test suite needs **673s** per full run; the reported self-heal spanned 21:16 → 22:15 with the test file never modified.
+**Fix (2026-09-20):** option A — when `report.patches` is empty, `heal()` reuses the last iteration's `RunResult` for the final state instead of re-running (the test file is unchanged, so a re-run would only repeat the result); the reuse is surfaced via a progress message. Option B — `current_test_names = [failed names]` is now assigned *before* the `break`, so the final re-check is scoped to the failed subset even on the zero-fix path. **Found while fixing:** `_run_pytest` emitted one `-k` flag per test name — pytest keeps only the LAST `-k` flag, and `-k` matching is substring-based — so a subset re-run with 2+ failures silently executed only the last failed test (and `-k test_a` also matches `test_ab`). It now selects by exact `file::name` nodeids (selecting all browser parametrisations); the bare file arg is passed only for full runs — passing it alongside nodeids makes pytest run the union (the whole file). 4 new tests (no-op → exactly 1 run; LLM-decline → exactly 1 run; fix-then-stuck → final run scoped to the subset; multi-name + substring-selection regressions).
 **Options**
-- [ ] **A — skip the final run when nothing was applied:** if `report.patches` is empty, reuse the last `run_result` instead of re-running (`remaining` is already known from iteration 1). Saves a full suite pass in the common no-fix case.
-- [ ] **B — never run the full suite to re-check a subset:** once failures are known, keep passing `current_test_names = [failed names]` into the final run (today it is only assigned at the *end* of the loop body, so the `break` path leaves it as `None`).
-- [ ] **C — stop early on a non-locator failure mix:** if every failure pre-screens as unfixable, return before the LLM loop.
-- Recommendation: **A + B** — both are small and together remove the wasted pass.
-**Estimated sessions:** 0.25–0.5.
+- [x] **A — skip the final run when nothing was applied:** if `report.patches` is empty, reuse the last `run_result` instead of re-running (`remaining` is already known from iteration 1). Saves a full suite pass in the common no-fix case.
+- [x] **B — never run the full suite to re-check a subset:** once failures are known, keep passing `current_test_names = [failed names]` into the final run (today it is only assigned at the *end* of the loop body, so the `break` path leaves it as `None`).
+- [ ] **C — stop early on a non-locator failure mix:** if every failure pre-screens as unfixable, return before the LLM loop. (Moot for the common case: A + B already make an all-unfixable heal cost exactly one run and zero extra passes.)
+- Recommendation: **A + B** — both are small and together remove the wasted pass. **Done 2026-09-20.**
+**Estimated sessions:** 0.25–0.5 (spent: 0.5, with B-068).
 
 ---
 
