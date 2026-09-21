@@ -19,14 +19,23 @@
 
 ---
 
-## Revised Priority Order
+## Horizon — rough timeline
 
-Three items from the original plan are already shipped or fixed:
-- **AI-027 Session 4** — Shipped 2026-05-22 (journey selector propagation)
-- **AI-023 Locator Repair** — Shipped 2026-05-23 (all 4 sessions)
-- **B-013 Journey stops short** — Fixed by AI-027 Session 4
+The tiers group work by **capability**. This table gives the rough **order in time**.
+Tier numbers no longer imply sequence: Tiers 1–3 are essentially shipped, so the
+remaining work runs launch → expansion → docs, with speculative spikes last.
 
-The revised order collapses from 12 items to **11 outstanding items** across 4 tiers.
+| Band | Meaning | Where it lives now |
+|------|---------|--------------------|
+| **Now** | Launch blockers. Nothing behind them matters until these are done. | Tier 5 Phase 8 pre-launch items (payment→license fulfillment, launch-readiness sweep, pricing research, GTM refresh) |
+| **Next** | Post-launch hardening — open leftovers from shipped work. | Tier 4 §12 (dormant cloud providers / per-agent config), §16 AI-042 F2/F4, §18 AI-044 (slim only); Tier 5 §13 per-deployment auth, §16 ingestion per-page OCR wiring |
+| **Later** | Expansion, after launch. | Tier 6 (FC-02/03/04/06/07); Tier 7 UD-01/UD-02 (launch-gated) |
+| **Post-launch / Horizon** | Speculative quality work. Start only if the item's own gate passes; drop it otherwise. | **AI-068** (section below); AI-066 (ColBERT RAG spike, owned by BACKLOG); AI-044 slim; Future Considerations (FC-01, FC-05) |
+
+Sequencing rule: work any **Now** item first. Do not start a **Later** or **Horizon**
+item while a **Now** item is open.
+
+*(The previous "Revised Priority Order" section was removed here on 2026-09-21: it claimed "11 outstanding items across 4 tiers", which was stale — Tiers 1–3 are shipped.)*
 
 ---
 
@@ -1078,6 +1087,43 @@ without a docs visit.
 
 ---
 
+## Post-launch / Horizon
+
+Speculative quality work. Each item has its own GO/STOP gate — start it only if the gate
+passes, and drop it otherwise. See the Horizon table at the top.
+
+### AI-068 — Laya decision scorer for placeholder ranking (post-launch spike)
+
+**Priority:** Low–Medium (quality) — upside on the already-open wrong-ASSERT class; no demo blocker
+**Status:** `[ ]` Proposed (2026-09-21) — **gated spike**. Every phase ends in a GO/STOP gate; stop at the first failed gate and record the numbers
+**Spec:** `docs/specs/FEATURE_SPEC_AI068_laya_decision_scorer.md`
+**Branch rule:** separate git worktree + branch (`experiment/ai068-laya-scorer`) — do not work on `main`
+
+**Impact:** Collect the RAG memory payoff we currently drop, without another LLM call. Today the memory bonus is decided by **exact selector string match** (`_golden_pattern_bonus` → `+20` on a match, half on substring), so a site re-deploy that renames an element silently loses the learned/golden win. A local decision model can score "does this element match this remembered description?" semantically, at ~21 ms and $0 per call.
+
+**What Laya is:** open-source (Apache-2.0) **local** System One model — 322M params, ~650 MB, typed questions in, probabilities out, 0 tokens generated. Not an LLM, not an embedder. JEV (TypeSafe AI) is the hosted closed alternative — **rejected** (weights closed, data leaves the machine, breaks the local-first rule).
+
+**Known limits:** the vendor's own site states Laya is less accurate than JEV out of the box, is wording-sensitive, and cannot read numbers. Treat the 200×/21 ms claims as unverified until Phase 0 measures them here.
+
+**Design sketch (each line = a phase with a gate; details in the spec):**
+- [ ] **Phase 0** — Laya runs fully offline on Windows/AMD (no CUDA). Gate: 10/10 parsed probabilities + measured latency. Stop if it cannot run.
+- [ ] **Phase 1** — offline bench on a **selector-drift fixture**: Laya must beat the string match by ≥ +15 pp top-1. **This is the worth-it gate — no integration before it passes.**
+- [ ] **Phase 2** — integrate behind `AI068_LAYA_BONUS` (mirrors the AI-062 env-flag precedent), bounded at `20`, string match always wins. Gate: static eval ≥ 97.9%, flag-off byte-identical.
+- [ ] **Phase 3** — `verify_production --baseline` A/B. Gate: 0 new gate failures, 0 new failing tests, unresolved count ≤ ceiling.
+- [ ] **Phase 4** — batching + cache. Gate: < 2 s added per production run.
+- [ ] **Phase 5 (optional)** — widen to the token-overlap term in `compute_element_score`. Same gates.
+- [ ] **Phase 6** — decide: ship (re-baseline + docs) or archive and delete the worktree.
+
+**Non-goals:** not a Qwen/LLM replacement; not the RAG embedder (`rag_store.retrieve` untouched); nothing numeric (`toHaveCount` / `expected_value` stay in code); **not** the agent pipeline (`src/agents/` is protected and is a separate classification follow-on — spec §2).
+
+**No protected file is needed** — the change lives in `src/placeholder_scorers.py`, `src/rag_retriever.py`, and a new `src/laya_scorer.py`. Verified 2026-09-21 by tracing the ranking path (spec §0).
+
+**Related:** AI-058 / AI-064 / B-054 / B-055 (open wrong-ASSERT class), B-047 (golden-pattern selector drift), AI-035 / B-036 (self-learning RAG), AI-066 (RAG embedding spike), AI-044 (vision signal into `compute_element_score` — same "one more signal, not a replacement" shape)
+
+**Estimated sessions:** 2-4 if the Phase 1 gate passes; ~0.5 to reach STOP
+
+---
+
 ## Future Considerations
 
 Items worth investigating but not on the active roadmap.
@@ -1156,8 +1202,9 @@ limits, is cacheable, and safe for retries.
 | 25 | AI-043 Output Artifact Quality Gate | Infra | `[x]` Complete 2026-08-11. L1/2 + gates shipped 2026-08-10/11 (`src/artifact_validation.py`, golden fixtures, smoke Gate 0; caught + fixed negative-y bbox bug). L3 shipped 2026-08-11 (`src/heatmap_alignment.py` — live overlay↔page alignment, `validate_report_artifacts.py --full`, 21 tests incl. live mock). See Tier 3 §17. | 2-3 |
 | 26 | AI-044 Visual Grounding (vision element location) | ML | `[ ]` **DEFERRED 2026-08-13** — off-the-shelf GUI-grounding models (UGround / OS-Atlas / UI-TARS) cover the core task; AI-041 dependency dead (training failed). Slim AI-044-B (off-the-shelf integration, 1-2 sessions) if wanted. See Tier 4 §18. | 5-8 |
 | 27 | FC-07 Agent-Callable Run & Compare | Expansion | `[ ]` Not started (added 2026-09-20) — spec `FEATURE_SPEC_FC07_agent_surface.md`; next up among the Tier 6 expansions | 2.5-5 |
+| 28 | AI-068 Laya decision scorer (ranking) | Horizon | `[ ]` Proposed 2026-09-21 — **gated spike** (stop at the first failed gate); spec `FEATURE_SPEC_AI068_laya_decision_scorer.md`; needs its own worktree. Post-launch / Horizon band. | 2-4 (or 0.5 to STOP) |
 
-**Total estimated sessions:** 41-60 (+2 for AI-012, +3 for Phase 1 doc-mode, +2-3 for AI-042, +2-3 for AI-043, +5-8 for AI-044, +2.5-5 for FC-07)
+**Total estimated sessions:** 41-60 (+2 for AI-012, +3 for Phase 1 doc-mode, +2-3 for AI-042, +2-3 for AI-043, +5-8 for AI-044, +2.5-5 for FC-07, +2-4 for AI-068 if the Phase 1 gate passes)
 
 ---
 
@@ -1167,6 +1214,7 @@ Update this section after each session:
 
 | Date | Item Completed | Notes |
 |------|---------------|-------|
+| 2026-09-21 | **AI-068 opened — Laya decision-scorer spike (docs-only)** | New spec `docs/specs/FEATURE_SPEC_AI068_laya_decision_scorer.md`. Adds a **local System One decision model** (Laya, Apache-2.0, 322M) as a middle tier between the in-code weights and the Qwen ranker — starting at the RAG bonus, which today is decided by exact selector string match. JEV rejected (hosted/closed). Framed as a **gated spike**: Phase 1 (offline selector-drift bench) is the worth-it gate; no integration before it passes. Verified no protected file is needed (traced the ranking path). Baseline measured here: eval static **97.9% (94/96)** — near-saturated, so it is a regression guard; the upside is measured on the drift fixture + `verify_production`'s wrong-ASSERT class. Work happens in a separate worktree (`experiment/ai068-laya-scorer`). |
 | 2026-09-19 | **B-069 complete — the false-green class is closed (parts a+b)** | **Part (a)** (`f324b39`, earlier same day): fallback-resolved assertions emit `pytest.skip` instead of a passing assert (the `unverified` flag in `src/element_matcher.py`). **Part (b)** (this session): the 09-18 skeleton read the attribute but only checked **non-emptiness** — `TANCAT-PRO-TBD` still passed a "does not contain TBD" check. Now `attribute_predicate()` derives the predicate from the description (forbidden substrings; `must_be_url` + placeholder vocabulary when the value must be live) and `EvidenceTracker.assert_attribute` enforces it; the count kind ("no TBD in links", "all images have alt", "all anchor links valid") classifies via `count_assertion_from_description()` and emits structural checks (`assert_no_forbidden` / `assert_attribute_all`) that need no element resolution — the intercept sits in the single emit chokepoint (`replace_token_in_line`), before the part-(a) unverified skip. 48 tests (`tests/test_b069_false_greens.py`). **Live verification** — exact emitted calls replayed on the real landing page: **10/10 honest** — the 09-17 false greens now FAIL with diagnostics ("Found 2 element(s) matching a containing 'tbd'"; "4/24 fail: contains forbidden 'your_'"), genuine checks pass with recorded counts. **Pending:** the full-LLM 35-criterion regeneration — the 27B stalled twice on the skeleton prompt (600s × 2, the 2026-09-16 model-state class, `docs/sessions/2026-09-16_b065_rerun_llm_stall.md`); the 14-criterion re-run story is saved at `scratch/b069b_story.md`. Gates: 3198 pytest, smoke 39/39, ruff + mypy clean, eval static **97.9% (94/96, 0.0pp drift)**. |
 | 2026-09-15 | **B-064 + B-067 fixed; improvement plan written** | **B-064** — `PIPELINE_TEST_TIMEOUT` was a flat 600s in `PipelineRunService` and `SelfHealing`; the landing-page suite needs 673–1002s, so healthy runs were discarded. Now `resolve_test_timeout()` scales (`max(600, 25 × tests)`), env override preserved; `evidence_image` encodes with `method=2` (2.08s vs 2.87s, smaller file). **B-067** — `_extract_test_function` matched the raw pytest node id, so pytest-playwright's `[chromium]` suffix made every extraction fail: self-healing was a **no-op on every suite** while still running it twice. Fixed by stripping the suffix; exposed **B-068** (reviewer given no page elements — declines with `confidence 0.2`) and **B-070** (re-runs the whole suite when it applies nothing). Also opened **B-065** (selector builders emit unmatchable selectors — Tailwind `hover:`/`sm:` mangled to `.hover`, `a[href]` loses its host: **18 of 23 landing-page failures are ours, not the page's**), **B-069** (false passes — 17 tests assert the same `#contact` element, ~10 of 25 greens verify nothing), **B-066** (bare `uv sync`/`uv run` strips optional extras), **B-071** (Streamlit watcher `torchvision` spam; the existing `folderWatchBlacklist` cannot work). Plan of record for the next sessions: **`docs/plans/NEXT_SESSIONS_IMPROVEMENTS.md`** — generator items, tancat.dev items, and a commerciality assessment with measurable sellability gates. Gates: 3189 pytest, smoke 39/39, ruff + mypy clean. |
 | 2026-09-17 | **B-065 fixed and verified end-to-end** | **B-065** — the two selector builders (`src/scraper.py` JS builder + `src/locator_builder.py`) now CSS-escape every class token (`_css_escape_class_token`, `build_dot_classes`, `_CLASS_TOKEN_RE`) and emit the raw href in `a[href=…]` (priority 2 gains a `raw_href` fallback; priority 4 prefers the element's own `classes` key). Re-generated the same 35-criterion landing-page story: **4 failed / 31 passed in 437s vs 23/25 before — every selector-caused red is gone**; the 4 remaining reds are `target="_blank"` navigation (new item **B-072**), and 12 of the 31 greens are still false passes (**B-069**, session 2). Gates: smoke 39/39, ruff + format + mypy clean, **3209 pytest**, eval static **97.9% (0.0pp drift)**. Re-run hit a 2h server-wedge detour (agent + pipeline share one llama.cpp slot) — see `docs/sessions/2026-09-16_b065_rerun_llm_stall.md`. |
