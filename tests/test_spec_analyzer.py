@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.spec_analyzer import SpecAnalyzer, TestCondition, infer_condition_intent
+from src.spec_analyzer import SpecAnalyzer, TestCondition, infer_condition_intent, single_condition_warning
 
 
 def test_spec_analyzer_success() -> None:
@@ -302,3 +302,128 @@ def test_analyze_raises_after_retry_still_fails() -> None:
     with pytest.raises(RuntimeError, match="Failed to parse LLM response"):
         analyzer.analyze(MULTI_CONCERN_TEXT)
     assert mock_llm.generate_test.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# B-063: numbered criteria with group headings must not be truncated
+# ---------------------------------------------------------------------------
+
+HEADED_CRITERIA_SPEC = """User Story:
+As a customer I want a landing page
+
+Acceptance Criteria:
+1. hero heading is visible
+2. hero has a working UI toggle
+
+IMAGES
+3. every image has a non-empty alt
+4. noir artwork loads
+
+NOTES
+This page is a demo.
+It changes often.
+Ignore the noise here.
+5. this line belongs to the notes section
+"""
+
+
+def test_extract_numbered_criteria_tolerates_group_headings() -> None:
+    """The exact B-063 shape: a heading between groups must not end the list."""
+    items, source = SpecAnalyzer._extract_numbered_criteria(HEADED_CRITERIA_SPEC)
+    assert source == "numbered"
+    assert items == [
+        "hero heading is visible",
+        "hero has a working UI toggle",
+        "every image has a non-empty alt",
+        "noir artwork loads",
+    ]
+
+
+def test_extract_numbered_criteria_still_stops_at_genuine_prose_section() -> None:
+    """A real new section (several consecutive prose lines) still ends the list."""
+    items, _ = SpecAnalyzer._extract_numbered_criteria(HEADED_CRITERIA_SPEC)
+    assert len(items) == 4
+    assert "this line belongs to the notes section" not in items
+
+
+def test_extract_numbered_criteria_blank_lines_and_bullets_are_neutral() -> None:
+    items, source = SpecAnalyzer._extract_numbered_criteria("1. a\n\n- detail\n2. b\n\n3. c")
+    assert source == "numbered"
+    assert items == ["a", "b", "c"]
+
+
+def test_extract_numbered_criteria_skips_preamble_before_first_criterion() -> None:
+    items, _ = SpecAnalyzer._extract_numbered_criteria("Some intro line.\nAnother line.\n1. a\n2. b")
+    assert items == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# B-062: a normal prose user story must not collapse to exactly one test
+# ---------------------------------------------------------------------------
+
+B062_PROSE_STORY = (
+    "this is the landing page for our software, check it describes the software shows images,\n"
+    "pricing and a demo that can be watched. there should be clickable links to the free version,\n"
+    "the paid version. contact us for the enterprize version. wording shouild be clear and links\n"
+    "should be live."
+)
+
+
+def test_has_multi_concern_signal_long_wrapped_prose() -> None:
+    assert SpecAnalyzer._has_multi_concern_signal(B062_PROSE_STORY)
+
+
+def test_has_multi_concern_signal_coordinating_list_with_test_verbs() -> None:
+    # Short (<= 200 chars) with no quantity words — a coordinating list carrying
+    # several test verbs still signals multi-concern.
+    assert SpecAnalyzer._has_multi_concern_signal("check the links, verify the images, should show the pricing")
+
+
+def test_has_multi_concern_signal_still_false_for_atomic_text() -> None:
+    assert not SpecAnalyzer._has_multi_concern_signal("login with valid credentials")
+    assert not SpecAnalyzer._has_multi_concern_signal("check the hero heading is visible")
+
+
+def test_analyze_routes_wrapped_prose_story_to_llm_splitter() -> None:
+    """B-062 acceptance: the UI path (story + wrapped criteria) reaches the LLM."""
+    mock_llm = MagicMock()
+    mock_llm.generate_test.return_value = (
+        '[{"id": "TC01.01", "type": "happy_path", "text": "landing page describes the software", '
+        '"expected": "ok", "source": "story", "src": "ai", "intent": "element_presence"},'
+        '{"id": "TC01.02", "type": "happy_path", "text": "images and a demo are shown", '
+        '"expected": "ok", "source": "story", "src": "ai", "intent": "element_presence"},'
+        '{"id": "TC01.03", "type": "happy_path", "text": "free and paid links are clickable", '
+        '"expected": "ok", "source": "story", "src": "ai", "intent": "element_behavior"}]'
+    )
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    spec_text = f"User Story:\n{B062_PROSE_STORY}\n\nAcceptance Criteria:\n1. {B062_PROSE_STORY}"
+    conditions = analyzer.analyze(spec_text)
+    assert mock_llm.generate_test.called
+    assert len(conditions) == 3
+
+
+def test_analyze_keeps_single_short_criterion_deterministic() -> None:
+    """A genuinely single short criterion still takes the 1:1 path (no LLM call)."""
+    mock_llm = MagicMock()
+    analyzer = SpecAnalyzer(llm_client=mock_llm)
+    spec_text = (
+        "User Story:\nAs a user I want to log in\n\nAcceptance Criteria:\n1. I can log in with valid credentials"
+    )
+    conditions = analyzer.analyze(spec_text)
+    assert len(conditions) == 1
+    assert conditions[0].text == "I can log in with valid credentials"
+    assert conditions[0].src == "manual"
+    mock_llm.generate_test.assert_not_called()
+
+
+def test_single_condition_warning_fires_for_long_story_one_condition() -> None:
+    condition = [TestCondition(id="TC01.01", type="happy_path", text="whole story", expected="ok", source="AC 1")]
+    message = single_condition_warning(B062_PROSE_STORY, condition)
+    assert message is not None
+    assert "numbered acceptance criteria" in message
+
+
+def test_single_condition_warning_silent_for_multiple_or_short() -> None:
+    condition = [TestCondition(id="TC01.01", type="happy_path", text="x", expected="ok", source="AC 1")]
+    assert single_condition_warning(B062_PROSE_STORY, condition * 2) is None
+    assert single_condition_warning("login as a user", condition) is None
