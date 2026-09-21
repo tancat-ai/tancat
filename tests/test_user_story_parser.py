@@ -402,6 +402,40 @@ Verify inventory page is visible"""
     def test_build_requirement_model_skips_leading_as_a_line_when_multiline(self) -> None:
         """Leading 'As a ...' line should be treated as story framing, not criterion."""
         parser = FeatureParser()
+        text = """As a user I want to be able to log in.
+Add items to cart.
+Go to cart."""
+        result = parser.parse(text)
+        assert result.success is True
+        assert result.specification is not None
+
+        model = parser.build_requirement_model(result.specification)
+        assert model.source == "derived_from_story"
+        assert model.lines == ["Add items to cart.", "Go to cart."]
+
+    def test_build_requirement_model_joins_wrapped_prose_paragraph(self) -> None:
+        """B-062: a wrapped prose paragraph stays ONE requirement, not one per line fragment."""
+        parser = FeatureParser()
+        text = (
+            "this is the landing page for our software, check it describes the software shows images,\n"
+            "pricing and a demo that can be watched. there should be clickable links to the free version,\n"
+            "the paid version. contact us for the enterprize version. wording shouild be clear and links\n"
+            "should be live."
+        )
+        result = parser.parse(text)
+        assert result.success is True
+        assert result.specification is not None
+
+        model = parser.build_requirement_model(result.specification)
+        assert model.source == "story_fallback"
+        assert len(model.lines) == 1
+        assert model.lines[0].startswith("this is the landing page for our software,")
+        assert model.lines[0].endswith("links should be live.")
+        assert "\n" not in model.to_numbered_text()
+
+    def test_build_requirement_model_joins_as_a_story_continuation_lines(self) -> None:
+        """A leading 'as a' line plus its lowercase continuations form one story, not fragments."""
+        parser = FeatureParser()
         text = """As a user I want to be able to
 log in
 add items to cart
@@ -411,12 +445,18 @@ go to cart"""
         assert result.specification is not None
 
         model = parser.build_requirement_model(result.specification)
-        assert model.source == "derived_from_story"
-        assert model.lines == [
-            "log in",
-            "add items to cart",
-            "go to cart",
+        assert model.source == "story_fallback"
+        assert model.lines == ["As a user I want to be able to log in add items to cart go to cart"]
+
+    def test_join_wrapped_lines_keeps_sentence_started_lines_separate(self) -> None:
+        assert FeatureParser._join_wrapped_lines(["Open login page", "Enter username and password"]) == [
+            "Open login page",
+            "Enter username and password",
         ]
+        assert FeatureParser._join_wrapped_lines(["check it shows images,", "pricing and a demo."]) == [
+            "check it shows images, pricing and a demo."
+        ]
+        assert FeatureParser._join_wrapped_lines(["done.", "more lowercase."]) == ["done.", "more lowercase."]
 
     def test_build_requirement_model_single_line_story_fallback(self) -> None:
         """Single-line story without criteria should fallback to one requirement."""

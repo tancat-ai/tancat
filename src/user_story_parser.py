@@ -256,6 +256,11 @@ class FeatureParser:
             self._clean_criterion(line.strip()) for line in specification.user_story.splitlines() if line.strip()
         ]
         story_lines = [line for line in story_lines if line]
+        # B-062: a single prose paragraph wrapped across editor lines is NOT
+        # multiple requirements — join lowercase-starting continuations of a
+        # line that does not end a sentence, so the blob stays whole instead of
+        # becoming one requirement per line fragment.
+        story_lines = self._join_wrapped_lines(story_lines)
         if story_lines and story_lines[0].lower().startswith("as a "):
             remainder = story_lines[1:]
             if remainder:
@@ -263,8 +268,26 @@ class FeatureParser:
         if len(story_lines) > 1:
             return RequirementModel(lines=story_lines, source="derived_from_story")
 
-        fallback_line = specification.user_story.strip()
+        fallback_line = story_lines[0] if story_lines else ""
         return RequirementModel(lines=[fallback_line] if fallback_line else [], source="story_fallback")
+
+    @staticmethod
+    def _join_wrapped_lines(lines: list[str]) -> list[str]:
+        """Join prose lines that are wrapped continuations of the previous line.
+
+        A line is a continuation when the previous line does not end in
+        sentence-terminal punctuation (., !, ?) and the line starts with a
+        lowercase letter — the shape of one paragraph wrapped across editor
+        lines. Lines starting with a capital (or digit/symbol) stay separate:
+        they are distinct sentence-shaped requirements.
+        """
+        joined: list[str] = []
+        for line in lines:
+            if joined and not re.search(r"[.!?]\s*$", joined[-1]) and line[:1].islower():
+                joined[-1] = f"{joined[-1]} {line}"
+            else:
+                joined.append(line)
+        return joined
 
     @staticmethod
     def _clean_criterion(stripped: str) -> str:

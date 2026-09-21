@@ -31,6 +31,7 @@ from src.provider_config import (
 )
 from src.pytest_output_parser import is_run_result
 from src.settings_store import load_setting, save_setting
+from src.spec_analyzer import single_condition_warning
 from src.storage import get_storage, init_storage
 from src.test_plan import TestPlan, apply_editor_rows
 from src.test_table import TestTable, table_to_conditions
@@ -386,6 +387,11 @@ def generator_page() -> None:
                             f"({', '.join(flagged_ids_sorted)}) — ambiguous/exploratory; "
                             "review the expected outcome before signing off."
                         )
+                    # B-062 option C: surface the one-condition collapse instead of
+                    # letting a long story silently produce a single test.
+                    single_warning = single_condition_warning(raw_requirements, current_plan.conditions)
+                    if single_warning:
+                        st.warning(single_warning)
                 else:
                     st.write("Build the plan to review AI-derived conditions before generation.")
 
