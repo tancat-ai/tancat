@@ -3,7 +3,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import Page
@@ -234,12 +234,17 @@ class EvidenceTracker:
         element_id = ""
         test_id = ""
         href = ""
+        target = ""
         try:
             element_id = loc.get_attribute("id") or ""
             test_id = loc.get_attribute("data-testid") or ""
             raw_href = loc.get_attribute("href") or ""
             # Mock pages return MagicMock here — only keep real strings (B-029).
             href = raw_href if isinstance(raw_href, str) else ""
+            # B-072: target="_blank" links open a new tab — the post-click
+            # check needs to know, to distinguish "new tab" from "swallowed".
+            raw_target = loc.get_attribute("target") or ""
+            target = raw_target if isinstance(raw_target, str) else ""
         except Exception:
             pass
 
@@ -305,6 +310,7 @@ class EvidenceTracker:
             "element_id": element_id if element_id else None,
             "test_id": test_id if test_id else None,
             "href": href if href else None,
+            "target": target if target else None,
             "bbox": bbox,
             "viewport_pct": viewport_pct,
         }
@@ -522,6 +528,15 @@ class EvidenceTracker:
         # AI-045 §8.4: never persist basic-auth userinfo (user:pass@host) in
         # the evidence sidecar; navigation itself uses the original URL.
         safe_url = redact_url_credentials(url)
+        # B-072: close stray tabs a previous step's new-tab link leaked (headless
+        # tab creation can lag past the post-click observation window). The
+        # tracker works on ONE page; a second tab is an artifact, not test state.
+        try:
+            for stray in list(self.page.context.pages):
+                if stray is not self.page:
+                    stray.close()
+        except Exception:
+            pass
         _t0 = time.time()
         try:
             self.page.goto(url)
@@ -721,6 +736,13 @@ class EvidenceTracker:
             # B-029: capture the URL BEFORE any click so a swallowed link click
             # (ad/consent overlay intercepting the navigation) is detectable.
             original_url = self._safe_page_url()
+            # B-072: the pages already open BEFORE the click — a page appearing
+            # after the click means the link opened a NEW tab (target="_blank"),
+            # which the original page's URL check can never see.
+            try:
+                pages_before: tuple[Page, ...] = tuple(self.page.context.pages)
+            except Exception:
+                pages_before = ()
             # We record metadata BEFORE clicking in case navigation clears it
             el_metadata = self._get_element_metadata(locator)
             try:
@@ -744,7 +766,7 @@ class EvidenceTracker:
                     element_metadata=el_metadata,
                     expected_page=expected_page,
                 )
-                self._verify_click_navigation(locator, label, el_metadata, original_url)
+                self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
                 return
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
@@ -770,7 +792,7 @@ class EvidenceTracker:
                             element_metadata=el_metadata,
                             expected_page=expected_page,
                         )
-                        self._verify_click_navigation(locator, label, el_metadata, original_url)
+                        self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
                         return
 
                     # Attempt 3: Locator scoring fallback (new — Tier 2)
@@ -786,7 +808,7 @@ class EvidenceTracker:
                     )
                     # try_fallback records the step internally; verify it actually
                     # navigated (B-029) and amend to a failure if it did not.
-                    self._verify_click_navigation(locator, label, el_metadata, original_url)
+                    self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
                 else:
                     raise
         except Exception as e:
@@ -814,6 +836,7 @@ class EvidenceTracker:
         label: str,
         el_metadata: dict[str, Any],
         original_url: str,
+        pages_before: tuple[Page, ...] = (),
     ) -> None:
         """Ensure a "successful" click on a link actually navigated.
 
@@ -826,21 +849,58 @@ class EvidenceTracker:
         When a link click does not navigate, dismiss overlays and retry once.
         If it still does not navigate, amend the recorded step to a failure
         instead of leaving a false pass.
+
+        B-072: ``target="_blank"`` links open a NEW tab, so the original page's
+        URL never changes even on a healthy click. ``pages_before`` is the
+        context's page list captured before the click; a new entry after the
+        click means the navigation happened in the new tab — that is a
+        verified success, not a swallowed click.
         """
         href = str(el_metadata.get("href") or "").strip()
-        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
-            return  # not a navigation link — nothing to verify
-        try:
-            target = urljoin(original_url, href)
-            if (
-                urlparse(target).path == urlparse(original_url).path
-                and urlparse(target).netloc == urlparse(original_url).netloc
-            ):
-                return  # same-page link (anchor / hash navigation)
-        except Exception:
-            return
+        is_nav_link = bool(href) and not href.startswith(("#", "javascript:", "mailto:", "tel:"))
+        if is_nav_link:
+            try:
+                target = urljoin(original_url, href)
+                if (
+                    urlparse(target).path == urlparse(original_url).path
+                    and urlparse(target).netloc == urlparse(original_url).netloc
+                ):
+                    is_nav_link = False  # same-page link (anchor / hash navigation)
+            except Exception:
+                is_nav_link = False
 
-        if self._url_changed(original_url, timeout=2.5):
+        # B-072: wait for EITHER a same-tab URL change OR a new tab. A new
+        # tab appearing is always a successful navigation — even for
+        # javascript:/no-href elements (window.open links). The new page
+        # arrives via the CDP connection a moment after the click, so a
+        # single immediate check races the event: poll for both.
+        #
+        # The wait is only worth it when the element CAN open a tab (real
+        # link, target="_blank", or javascript: onclick). Plain #anchor / mailto:
+        # / tel: clicks return immediately — no 2.5s tax per step (A5).
+        can_open_tab = is_nav_link or str(el_metadata.get("target") or "") == "_blank" or href.startswith("javascript:")
+        if not can_open_tab:
+            return  # plain same-page/mailto/tel link — nothing to verify
+
+        if not is_nav_link:
+            # B-072: window.open-style links have no retry path — give them one
+            # long observation window. Headless tab creation can lag many
+            # seconds (measured ~8s on this machine's headless Chromium 151).
+            outcome = self._wait_for_navigation(original_url, pages_before, timeout=10.0)
+            if outcome != "none":
+                if outcome == "url":
+                    return
+                self._record_new_tab_navigation(cast("Page", outcome), label, el_metadata, original_url)
+                return
+            return  # opened nothing observable — the click itself worked
+
+        outcome = self._wait_for_navigation(original_url, pages_before, timeout=2.5)
+        if outcome == "url":
+            return
+        if outcome != "none":
+            # B-072: a new tab appeared — the navigation went there. Duck-typed
+            # on purpose (B-029 stub pages are not real Page instances).
+            self._record_new_tab_navigation(cast("Page", outcome), label, el_metadata, original_url)
             return
 
         # Click succeeded but no navigation — likely swallowed by an overlay.
@@ -851,15 +911,112 @@ class EvidenceTracker:
             self.page.locator(locator).first.click(timeout=5000)
         except Exception:
             pass
-        if self._url_changed(original_url, timeout=2.5):
+        # B-072: longer second window — headless new-tab creation can lag ~8s
+        # (measured), so the short first window is not enough to rule out a
+        # slow tab before declaring the click swallowed.
+        outcome = self._wait_for_navigation(original_url, pages_before, timeout=7.5)
+        if outcome == "url":
+            return
+        if outcome != "none":
+            self._record_new_tab_navigation(cast("Page", outcome), label, el_metadata, original_url)
             return
 
         # Still no navigation — amend the recorded step to a truthful failure.
-        self._amend_last_click_to_failure(label, locator, original_url)
+        if str(el_metadata.get("target") or "") == "_blank":
+            # B-072: headless Chromium drops new-tab navigation from trusted
+            # anchor clicks — no tab appears at all, so there is nothing to
+            # wait for. This is an environment limit, not an overlay swallow:
+            # the actionable fix is to check the href without clicking.
+            detail = (
+                'The link has target="_blank" and no new tab appeared — headless '
+                "Chromium drops new-tab navigation from anchor clicks, so this "
+                "criterion cannot be click-verified in a headless run. Check the "
+                "link's href instead of clicking it."
+            )
+        else:
+            detail = "The click was likely swallowed by an overlay even after dismissal + retry."
+        self._amend_last_click_to_failure(label, locator, original_url, detail)
         raise _LocatorNotFoundError(
-            f"Click '{label}' succeeded but the page did not navigate (still on {original_url}). "
-            "The click was likely swallowed by an overlay even after dismissal + retry."
+            f"Click '{label}' succeeded but the page did not navigate (still on {original_url}). {detail}"
         )
+
+    def _find_new_tab(self, pages_before: tuple[Page, ...]) -> Page | None:
+        """B-072: return the most recent page opened after the click, if any."""
+        try:
+            current = list(self.page.context.pages)
+        except Exception:
+            return None
+        prior = set(pages_before)
+        new_tabs = [p for p in current if p not in prior]
+        return new_tabs[-1] if new_tabs else None
+
+    def _wait_for_navigation(
+        self,
+        original_url: str,
+        pages_before: tuple[Page, ...],
+        timeout: float,
+    ) -> str | Page:
+        """B-072: poll up to *timeout* seconds for a navigation event.
+
+        Returns ``"url"`` when the original page navigated, the new ``Page``
+        when a new tab appeared, or ``"none"`` when neither happened in the
+        window.
+        """
+        deadline = time.time() + timeout
+        while True:
+            try:
+                if self.page.url != original_url:
+                    return "url"
+            except Exception:
+                return "url"  # page closed/navigated away — treat as navigated
+            new_tab = self._find_new_tab(pages_before)
+            if new_tab is not None:
+                return new_tab
+            if time.time() >= deadline:
+                return "none"
+            time.sleep(0.15)
+
+    def _record_new_tab_navigation(
+        self,
+        new_tab: Page,
+        label: str,
+        el_metadata: dict[str, Any],
+        original_url: str,
+    ) -> None:
+        """B-072: the click opened a new tab — the navigation went there.
+
+        Wait for the new tab to load, record its final URL on the click step
+        (plus whether it matches the link's href), then close the tab so the
+        suite continues on the original page without leaking tabs. A
+        target="_blank" link that opens NO tab still falls through to the
+        swallowed-click failure path.
+        """
+        try:
+            new_tab.wait_for_load_state("domcontentloaded", timeout=8000)
+        except Exception:
+            pass
+        new_url = new_tab.url
+        href = str(el_metadata.get("href") or "").strip()
+        matched: bool | None = None  # None = no href to compare against (window.open)
+        if href and not href.startswith(("javascript:", "mailto:", "tel:", "#")):
+            try:
+                target = urljoin(original_url, href)
+                a, b = urlparse(target), urlparse(new_url)
+                matched = (
+                    a.scheme in ("http", "https")
+                    and a.netloc.lower() == b.netloc.lower()
+                    and a.path.rstrip("/") == b.path.rstrip("/")
+                )
+            except Exception:
+                matched = False
+        if self.steps and self.steps[-1].get("type") == "click":
+            element = self.steps[-1].get("element")
+            if isinstance(element, dict):
+                element["new_tab"] = {"url": new_url, "matched_href": matched}
+        try:
+            new_tab.close()
+        except Exception:
+            pass
 
     def _url_changed(self, original_url: str, timeout: float) -> bool:
         """Poll for a URL change within *timeout* seconds."""
@@ -873,7 +1030,9 @@ class EvidenceTracker:
             time.sleep(0.15)
         return False
 
-    def _amend_last_click_to_failure(self, label: str, locator: str, original_url: str) -> None:
+    def _amend_last_click_to_failure(
+        self, label: str, locator: str, original_url: str, detail: str | None = None
+    ) -> None:
         """Flip the last recorded passed/partial click step to a truthful failure."""
         if not self.steps:
             return
@@ -881,10 +1040,9 @@ class EvidenceTracker:
         result = last.get("result", {})
         if last.get("type") != "click" or result.get("status") not in ("passed", "partial_pass"):
             return
-        error = (
-            f"Click recorded passed but the page did not navigate (stayed on {original_url}). "
-            "Overlay swallow suspected — the click was consumed by an ad/consent overlay."
-        )
+        if detail is None:
+            detail = "Overlay swallow suspected — the click was consumed by an ad/consent overlay."
+        error = f"Click recorded passed but the page did not navigate (stayed on {original_url}). {detail}"
         result["status"] = "failed"
         result["error"] = error
         result["failure_note"] = error

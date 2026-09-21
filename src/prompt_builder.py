@@ -216,6 +216,9 @@ NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
    a URL assertion (expect(page).to_have_url). Do NOT write {{ASSERT:<page> title}}.
 9. For disappearance checks ('popup closed', 'item removed'), describe the
    ABSENCE — they resolve to not-visible assertions (assert_hidden).
+10. For 'link resolves / does not 404 / correct URL / live URL' checks, do NOT
+    click the link — use {{ASSERT:<link text> link resolves}} (it checks the
+    link's href without navigating; new-tab links cannot be click-verified).
 
 === PREREQUISITE STEPS ===
 Each test must be self-contained. If a test depends on earlier criteria
@@ -312,6 +315,9 @@ Expected: {target_condition_expected}
 5. For disappearance checks ('popup closed', 'item removed'), describe the
    ABSENCE — they resolve to not-visible assertions (assert_hidden).
 6. DO NOT write long verbose descriptions — use short, concrete element labels.
+7. For 'link resolves / does not 404 / correct URL / live URL' checks, do NOT
+   click the link — use {{ASSERT:<link text> link resolves}} (it checks the
+   link's href without navigating; new-tab links cannot be click-verified).
 
 === JOURNEY STRUCTURE (MANDATORY) ===
 1. Every step must appear on the page it belongs to. Follow the story order:

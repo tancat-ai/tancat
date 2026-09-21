@@ -232,10 +232,10 @@ Measure on a **held-out** story set, live regeneration, not frozen captures:
 | # | Gate | Today |
 |---|---|---|
 | 1 | Live resolution accuracy ≥ 90% on a held-out set | ~50% on a plain static page (eval static's 97.9% measures frozen captures, not regeneration) |
-| 2 | **Zero** false greens — every passing test provably checked its condition | ~10 false greens on one 48-test run |
-| 3 | Self-healing fixes ≥ 30% of locator failures, with element context | 0% |
-| 4 | A prose story yields the criteria a human would list; headings never truncate | 1 test from prose; 35→5 with headings |
-| 5 | A 50-test suite completes in ≤ 5 minutes | 673–1002s |
+| 2 | **Zero** false greens — every passing test provably checked its condition | fixed 2026-09-19 (B-069 a+b); 09-17 false-green classes verified red on live replay; full held-out re-measure pending (session 7) |
+| 3 | Self-healing fixes ≥ 30% of locator failures, with element context | wiring fixed 2026-09-20 (B-068 + B-070) — reviewer now gets real elements, no-op re-runs gone; fix-rate **not yet measured** |
+| 4 | A prose story yields the criteria a human would list; headings never truncate | fixed 2026-09-21 (B-062 + B-063) — 35/35 with headings, prose routed to the splitter |
+| 5 | A 50-test suite completes in ≤ 5 minutes | 673–1002s (437s on the 09-17 re-run) |
 | 6 | A stranger can buy from the site | cannot — Buy links are `TBD` |
 
 ### Recommendation
@@ -261,15 +261,16 @@ traceability layer** ("prove your testing happened, entirely inside your network
 
 | Session | Do | Why now | Done when |
 |---|---|---|---|
-| 1 | **B-065** — fix the two selector builders (Tailwind variants, href host) | removes 15 of 23 reds in one change | landing-page run reds ≈ 8 |
-| 2 | **B-069** — stop false greens (unverified → honest skip; attribute asserts read attributes) | the green/red signal becomes truthful | 0 false greens on the same run |
-| 3 | **B-068 + B-070** — give the reviewer element context; stop the no-op re-run | makes the self-healing claim true | self-heal fixes ≥ 1 real locator failure; no-op self-heal < 5 min |
-| 4 | **B-062 + B-063** — story→criteria (prose, headings) | the customer's first action | prose story yields > 1 test; headed list keeps all criteria |
+| 1 | **B-065** — fix the two selector builders (Tailwind variants, href host) | removes 15 of 23 reds in one change | ✅ done 2026-09-17, shipped 09-18 — 0 selector reds on re-run |
+| 2 | **B-069** — stop false greens (unverified → honest skip; attribute asserts read attributes) | the green/red signal becomes truthful | ✅ done 2026-09-19 (a+b) — 09-17 false-green classes verified red on live replay |
+| 3 | **B-068 + B-070** — give the reviewer element context; stop the no-op re-run | makes the self-healing claim true | ✅ done 2026-09-20 — reviewer gets the scrape manifest; no-op heals stop re-running (fix-rate still to measure, session 7) |
+| 4 | **B-062 + B-063** — story→criteria (prose, headings) | the customer's first action | ✅ done 2026-09-21 — 35/35 with headings; prose routed to the splitter |
+| 4b | **B-072** — `target="_blank"` clicks false-fail; resolve/404 criteria click at all | the last selector-adjacent red class (4/4 remaining reds on the 09-17 re-run) | ✅ done 2026-09-21 — new-tab clicks detected/verified/closed; resolve criteria read the href (live replay 8/8) |
 | 5 | Evidence cost (A5) + **B-061/B-066/B-071** cleanups | a 50-test suite in ≤ 5 min | suite ≤ 5 min |
 | 6 | **tancat.dev B1** — privacy/terms, meta+OG+favicon, noir image, real Buy + demo links | cannot sell without it | a stranger can buy and watch the demo |
 | 7 | **Re-measure** against the Part C gates and decide the positioning | the commercial decision | gates 1–6 recorded in the appendix |
 
-If only one session happens, do **Session 1**.
+Sessions 1–4 + 4b are done. Next: **Session 5** (evidence cost is a product decision — raise it first).
 
 ---
 
@@ -283,6 +284,9 @@ Record one row per session so drift is visible. All numbers from live regenerati
 | 2026-09-15 | eval harness static (frozen captures) | 97.9% | 0 | — | <1s | **not** a live-regeneration measure |
 | 2026-09-17 | **B-065 fix** — same story re-generated (35 tests), local page | — | **12 of 31 passes** (B-069 class unchanged) | 4 — **all** `target="_blank"` nav checks (B-072, new item); **0 selector failures** | 437s | Session 1 done: B-065's 18 selector reds → 0. All 4 remaining reds are the new new-tab class; the page's real defects are hidden by the 12 false greens → Session 2 (B-069) unblocks honest reporting. Re-run hit a 2h server-wedge detour (agent + pipeline share one llama.cpp slot) — see `docs/sessions/2026-09-16_b065_rerun_llm_stall.md` |
 | 2026-09-19 | **B-069 (a+b) shipped** — 14-criterion story via `ci_generate.py` BLOCKED (27B stalled ×2 on the skeleton prompt, 600s timeouts); live replay of the **exact emitted calls** on the real landing page instead | — (no fresh live regeneration) | **0 of the 09-17 false-green classes remain green** — TBD purchase hrefs ×2, `YOUR_VIDEO_ID_HERE` video ×2, "no TBD in links", "all anchor links valid" (4/24 placeholder hrefs) all now FAIL with precise diagnostics | TBD/placeholder criteria red (honest) | n/a | Session 2 done (a+b): `attribute_predicate` + `count_assertion_from_description` + `assert_no_forbidden`/`assert_attribute_all`; 48 tests, 3198 pytest, smoke 39/39, eval static 97.9%. Full-LLM re-run pending a healthy model — story saved at `scratch/b069b_story.md` |
+| 2026-09-20 | **B-068 + B-070 shipped** — self-heal reviewer now loads `scrape_manifest.json` element context; no-op heals stop re-running the suite | — | — | — | — | Session 3 done: wiring verified against real manifest data (`scratch/verify_b068_real_data.py`); the ≥30% fix-rate gate is a MEASUREMENT — recorded for session 7 |
+| 2026-09-21 | **B-062 + B-063 shipped** — prose story no longer collapses to one test; headed criteria no longer truncate (35/35, deterministic, zero LLM calls) | — | — | — | — | Session 4 done: +5 tests, e2e replays in `scratch/verify_b062_e2e.py` / `verify_b063_e2e.py`; 3295 pytest, eval static 97.9% |
+| 2026-09-21 | **B-072 shipped** — live replay of the 09-17 red class against the real landing page (`scratch/verify_b072_live.py`, self-hosted) | — (no fresh live regeneration) | 0 — TBD/placeholder criteria still red | **0 selector-adjacent reds** — the 4 reds (tc01_20..23) pass via the href check; the `_blank` GitHub click itself detected, verified (`matched_href=True`), recorded, closed | n/a | Session 4b done: 8/8 live cases, +11 unit tests, 3306 pytest, smoke 39/39, eval static 97.9%. Environment finding: headless Chromium 151 creates new tabs up to ~8s after the click (`scratch/probe_delay*.py`) — observation windows sized to that; a stray-tab cleanup rides on `navigate()` |
 
 ---
 
@@ -363,17 +367,17 @@ AXI validates that principled CLI design beats both raw CLI and MCP. Our product
 
 | Id | Item | Status at time of writing |
 |---|---|---|
-| B-062 | Prose story collapses to one test | open |
-| B-063 | Numbered criteria truncated at the first heading | open |
+| B-062 | Prose story collapses to one test | ✅ fixed 2026-09-21 |
+| B-063 | Numbered criteria truncated at the first heading | ✅ fixed 2026-09-21 |
 | B-064 | Flat 600s pytest ceiling killed healthy suites | ✅ fixed |
 | B-065 | Selector builders emit unmatchable selectors (Tailwind variants, href host) | ✅ fixed 2026-09-17 (re-run verified; ship pending) |
 | B-066 | Bare `uv sync` / `uv run` strips optional extras | open |
 | B-067 | Self-healing no-op on `[chromium]` node ids | ✅ fixed |
-| B-068 | Self-heal reviewer given no page elements | open |
+| B-068 | Self-heal reviewer given no page elements | ✅ fixed 2026-09-20 |
 | B-069 | False passes — 17 tests assert the same element | ✅ complete 2026-09-19 (a: f324b39 · b: attribute predicates + page-level count checks; full-LLM re-run pending model health) |
-| B-070 | Self-heal re-runs the whole suite when it fixes nothing | open |
+| B-070 | Self-heal re-runs the whole suite when it fixes nothing | ✅ fixed 2026-09-20 |
 | B-071 | Streamlit watcher `torchvision` traceback spam | open |
-| B-072 | `target="_blank"` link tests fail post-click navigation check | open — found 2026-09-17 by the B-065 re-run |
+| B-072 | `target="_blank"` link tests fail post-click navigation check | ✅ fixed 2026-09-21 (found 2026-09-17 by the B-065 re-run) |
 | B-060 / B-061 | Mock page scoping / eval-harness `Tests executed: 0` | fixed / open |
 
 ---
