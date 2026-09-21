@@ -156,5 +156,9 @@ ci-workspace/
 # Phase 7 CI action scratch workspace (no leading dot — the action input default)
 ai-test-workspace/
 
+# Git worktrees (parallel agent worktrees). The branches live in this repo; the
+# working directories do not belong in it.
+.worktrees/
+
 # local zvec-grep search index (dev-only, regenerable)
 .zvec-grep/
