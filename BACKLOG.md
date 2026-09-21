@@ -7,6 +7,38 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
+## ✅ B-077 — Stale worktrees and remote branches audited; `.worktrees/` now ignored
+
+**Status:** ✅ **Complete 2026-09-21** — audit done, cleanup shipped in `d9da13a`, three merged local branches deleted. **Nothing needed pulling.** Recorded so the next session does not re-audit the same branches.
+**Priority:** low — housekeeping only, no product impact.
+**One-line:** Three registered git worktrees sat inside the repo as untracked files, and 8 remote branches had never been checked for work missing from `main`. All were audited; none contains work that needs pulling.
+
+**Done**
+
+- `.worktrees/` was **not gitignored**, so every session's `git status` carried noise — added to `.gitignore` (`d9da13a`).
+- Three registered worktrees removed (`git worktree remove` + `prune`): `.worktrees/b-069`, `.worktrees/improvements-research`, and a third in a **sibling directory outside the repo** (`../AI-Playwright-Test-Generator.worktrees/agents-update-demo-guide-for-sales-pitch`), which could never have been tracked.
+- Three merged local branches deleted (`-d`, so git refuses if unmerged): `agents/update-demo-guide-for-sales-pitch`, `b-069`, `improvements-research`.
+
+**Audit result — all 8 remote branches**
+
+| Branch | Ahead of `main` | Verdict |
+|---|---|---|
+| `feat/resolver-restructure`, `feature/dynamic-eval-rag`, `recovery-pre-56a0c56`, `refact/overnight-20260513`, `work/current-session` | 0 | Already merged — nothing to pull |
+| `overnight/ai045-4-pdf-ocr-dedup` | 9 | **Content 100% in `main`** — 20 files touched, **0 missing**. Landed by squash-merge |
+| `agents-update-demo-guide-for-sales-pitch` | 1 | 4 asset files (`assets/short_video_script.md`, `short_video_shots.md`, `short_video_spoken.txt`, `DEMO_ASSETS_README.md`) absent from `main`; judged not usable (pre-dates the TanCat rename — says `playwright-test-generator` / `AI Playwright`). **Branch kept on `origin` — recoverable if a demo video is ever made.** |
+| `cli-fix-attempt` | 6 | Abandoned May branch ("SAVEPOINT: Investigating breakage"). Of 31 files absent from `main`: **20 are `generated_tests/` output** (correctly never committed), **7 relocated** (`cli/report_generator.py`→`src/cli/`, `main.py`→`src/cli/main.py`, `scripts/cli_e2e_validation.py`→`scripts/maintenance/`, 3 docs→`docs/*/completed/`), **4 genuinely absent and superseded** (`scripts/dump_manifest.py`, `scripts/uat_workflow.py`, `tests/test_pipeline_package_integration.py`, `docs/test_suite_audit_2026-04-08.md`) |
+
+**Method note (the trap that cost time):** `git cherry` reported **every** commit on all three unmerged branches as `+` (not in main) — including `ai045-4`, whose content is provably 100% in `main`. Squash and rebase change patch-ids, so `git cherry` cannot be trusted for this. The reliable test is: list the files the branch added, then check which are absent from `main` (`git diff --name-only $(git merge-base main BRANCH)..BRANCH`, then `git cat-file -e main:PATH`).
+
+**Why the work sat unnoticed — two local/remote name mismatches**
+
+- `agents/update-demo-guide-for-sales-pitch` (local, slash) vs `agents-update-demo-guide-for-sales-pitch` (origin, **hyphen**), with **no upstream configured** — so `git pull` silently did nothing.
+- Local `improvements-research` vs remote `work/current-session` — the same commit (`3f53071`) under two names.
+
+**Estimated sessions:** 0 (done).
+
+---
+
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
 **Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.
