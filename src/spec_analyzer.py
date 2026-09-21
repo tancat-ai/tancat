@@ -10,6 +10,17 @@ from typing import Any, Literal
 from src.llm_client import LLMClient
 
 ConditionType = Literal["happy_path", "boundary", "negative", "exploratory", "regression", "ambiguity"]
+
+# B-062: a wrapped prose story rarely contains the quantity hints below; these
+# describe its common shape (a long blob of several distinct checks) so the
+# deterministic 1:1 path lets it through to the LLM splitter instead.
+MULTI_CONCERN_MIN_CHARS = 200
+MULTI_CONCERN_TEST_VERBS = ("check", "verify", "should", "shows", "links", "can be")
+
+# B-063: how many consecutive non-numbered, non-empty, non-bullet lines a
+# numbered criteria list may be interrupted by (group headings, an isolated
+# sentence) before the interruption is treated as a genuine new section.
+NUMBERED_LIST_BREAK_STREAK = 3
 ConditionSrc = Literal["ai", "manual", "automation"]
 ConditionIntent = Literal[
     "element_presence",
@@ -38,6 +49,25 @@ def infer_condition_intent(text: str) -> ConditionIntent:
     if any(word in lowered for word in ("click", "select", "choose", "open", "navigate", "add to cart", "remove")):
         return "element_behavior"
     return "journey_step"
+
+
+def single_condition_warning(spec_text: str, conditions: list[TestCondition]) -> str | None:
+    """B-062 option C: warn when a long story collapses to a single condition.
+
+    Returns a short user-facing warning so a "one test for a whole page" result
+    is not mistaken for a correct one, or None when no warning is warranted
+    (several conditions were derived, or the story is short enough that one
+    condition is plausible).
+    """
+    if len(conditions) != 1:
+        return None
+    if len((spec_text or "").strip()) <= MULTI_CONCERN_MIN_CHARS:
+        return None
+    return (
+        "Only 1 condition was derived from this story. If it describes several distinct "
+        "checks, list them as numbered acceptance criteria (1. ..., 2. ..., plus a "
+        "(Total: N criteria) line) so each one becomes its own test."
+    )
 
 
 @dataclass
@@ -135,7 +165,13 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
         # multi-concern signals is almost certainly that wrapping — route it to the
         # LLM path (SPLITTING RULES prompt) so distinct concerns become separate
         # conditions instead of a deterministic 1:1 mapping.
-        if len(explicit_criteria) == 1 and self._has_multi_concern_signal(explicit_criteria[0]):
+        # B-062: a wrapped multi-line story extracts only its FIRST line as the
+        # single item, and that line may carry no signal on its own — so when
+        # exactly one item was extracted, also check the full spec text (the
+        # wrapped blob appears in it in full).
+        if len(explicit_criteria) == 1 and (
+            self._has_multi_concern_signal(explicit_criteria[0]) or self._has_multi_concern_signal(spec_text)
+        ):
             explicit_criteria = []
         if explicit_criteria:
             conditions: list[TestCondition] = []
@@ -193,7 +229,7 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
     def _has_multi_concern_signal(text: str) -> bool:
         """Return True when the text hints at multiple distinct test concerns."""
         lowered = (text or "").lower()
-        return any(
+        if any(
             hint in lowered
             for hint in (
                 "maximum",
@@ -205,7 +241,16 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
                 " at least ",
                 " at most ",
             )
-        )
+        ):
+            return True
+        # B-062: the default customer shape — a long wrapped prose story listing
+        # several checks — carries no quantity words at all. A long blob, or a
+        # coordinating list carrying several test verbs, is multi-concern too.
+        if len(lowered) > MULTI_CONCERN_MIN_CHARS:
+            return True
+        if lowered.count(",") >= 2 and sum(1 for verb in MULTI_CONCERN_TEST_VERBS if verb in lowered) >= 2:
+            return True
+        return False
 
     @staticmethod
     def _conservative_sentence_split(text: str) -> list[str] | None:
@@ -288,14 +333,23 @@ CRITICAL: Do NOT output trailing commas. The JSON must be strictly valid."""
             section = text
 
         criteria: list[str] = []
+        streak = 0  # consecutive prose lines since the last numbered line
         for line in section.splitlines():
             m = re.match(r"^\s*(\d+)\.\s+(.*\S)\s*$", line)
-            if not m:
-                # Stop once we leave a numbered list after having started one.
-                if criteria and line.strip() and not line.lstrip().startswith("-"):
-                    break
+            if m:
+                criteria.append(m.group(2).strip())
+                streak = 0
                 continue
-            criteria.append(m.group(2).strip())
+            if criteria and line.strip() and not line.lstrip().startswith("-"):
+                # B-063: a single heading or prose line between numbered criteria
+                # (group headings like "IMAGES", an isolated sentence) must not
+                # end the list — that silently truncated headed criteria sets. Only
+                # a genuine new section (several consecutive prose lines) does.
+                # Blank lines and bullets are list-structural: they neither
+                # interrupt nor extend the streak.
+                streak += 1
+                if streak >= NUMBERED_LIST_BREAK_STREAK:
+                    break
 
         # Return criteria as-is — no comma splitting.
         # Criteria should match what the user wrote exactly.
