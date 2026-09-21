@@ -114,6 +114,13 @@ def attribute_assertion_type(description: str) -> str | None:
         return "toHaveAttribute:content"
     if "video" in lowered and "url" in lowered:
         return "toHaveAttribute:href"
+    # B-072: "link resolves / does not return 404" criteria verify the href
+    # attribute — not visibility, and not a click (target="_blank" links open
+    # a new tab, which a post-click URL check on the original page cannot see).
+    if "resolv" in lowered:
+        return "toHaveAttribute:href"
+    if "404" in lowered and ("link" in lowered or "href" in lowered):
+        return "toHaveAttribute:href"
     if "title" in lowered and ("og" in lowered or "open graph" in lowered or "meta" in lowered):
         return "toHaveAttribute:content"
     return None

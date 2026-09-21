@@ -58,6 +58,10 @@ def test_polarity_negative_state() -> None:
         ("every image has a non-empty alt", "alt"),
         ("Open Graph title tag present", "content"),
         ("video URL is valid", "href"),
+        # B-072: link-resolution criteria verify the href, not visibility.
+        ("GitHub link resolves to the correct URL", "href"),
+        ("Security Policy link resolves without returning 404", "href"),
+        ("License link does not return 404", "href"),
     ],
 )
 def test_attribute_description_detected(description: str, expected_attr: str) -> None:
@@ -194,6 +198,28 @@ def test_emit_attribute_predicate_live_url() -> None:
     )
     assert "must_be_url=True" in out
     assert "forbidden=" in out
+
+
+def test_emit_link_resolves_asserts_attribute_not_click() -> None:
+    """B-072: a 'link resolves' ASSERT must emit an href check (assert_attribute
+    with must_be_url + placeholder forbidden) — never a click, which cannot be
+    verified on a new-tab link in a headless run."""
+    desc = "GitHub link resolves to the correct URL"
+    token = "{{ASSERT:GitHub link resolves}}"
+    out = replace_token_in_line(
+        f"    {token}",
+        "ASSERT",
+        token,
+        "'a[href=\"https://github.com/tancat-ai/tancat\"]'",
+        set(),
+        desc,
+        assertion_type="toHaveAttribute:href",
+    )
+    assert out.strip().startswith("evidence_tracker.assert_attribute(")
+    assert "'href'" in out
+    assert "must_be_url=True" in out
+    assert "forbidden=" in out
+    assert ".click(" not in out
 
 
 # ---------------------------------------------------------------------------

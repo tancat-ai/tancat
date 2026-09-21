@@ -568,3 +568,202 @@ def test_page_is_compared_before_the_action(tmp_path: Any) -> None:
     assert "page_mismatch" not in tracker.steps[-1]["result"]
     # ...and the landing page is still recorded on the step for the report.
     assert tracker.steps[-1]["url"] == "https://example.com/dashboard.html"
+
+
+# ── B-072: target="_blank" clicks open a NEW tab ───────────────────────────
+
+
+class _NewTabStub:
+    """A page opened in a new tab: records load waits and close."""
+
+    def __init__(self, url: str) -> None:
+        self.url = url
+        self.closed = False
+        self.load_waits: list[str] = []
+
+    def wait_for_load_state(self, state: str = "load", timeout: float = 30000) -> None:
+        self.load_waits.append(state)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _NewTabPage:
+    """Stub page whose URL never changes (like _StaticPage) but whose context
+    can hold a second (new-tab) page — the target="_blank" shape (B-072)."""
+
+    url = "https://example.com/start"
+
+    def __init__(self) -> None:
+        self.new_tab: _NewTabStub | None = None
+        self._context = _NewTabContext(self)
+
+    @property
+    def context(self) -> _NewTabContext:
+        return self._context
+
+    def locator(self, *args: Any, **kwargs: Any) -> Any:
+        return MagicMock()
+
+    evaluate = MagicMock()
+    keyboard = MagicMock()
+
+
+class _NewTabContext:
+    def __init__(self, owner: _NewTabPage) -> None:
+        self._owner = owner
+
+    @property
+    def pages(self) -> list[Any]:
+        pages: list[Any] = [self._owner]
+        if self._owner.new_tab is not None:
+            pages.append(self._owner.new_tab)
+        return pages
+
+
+def test_b072_new_tab_click_is_verified_not_failed(tmp_path: Any) -> None:
+    """A target="_blank" link opens a new tab: the click must PASS, the new
+    tab's URL must be recorded on the step, and the tab must be closed so the
+    suite continues on the original page."""
+    page = _NewTabPage()
+    page.new_tab = _NewTabStub("https://github.com/tancat-ai/tancat")
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "GitHub",
+        locator='a[href="https://github.com/tancat-ai/tancat"]',
+        element_metadata={"href": "https://github.com/tancat-ai/tancat"},
+    )
+    tracker._verify_click_navigation(
+        'a[href="https://github.com/tancat-ai/tancat"]',
+        "GitHub",
+        {"href": "https://github.com/tancat-ai/tancat"},
+        "https://example.com/start",
+        pages_before=(cast("Page", page),),
+    )
+    last = tracker.steps[-1]
+    assert last["result"]["status"] == "passed"
+    assert last["element"]["new_tab"]["url"] == "https://github.com/tancat-ai/tancat"
+    assert last["element"]["new_tab"]["matched_href"] is True
+    assert page.new_tab.load_waits == ["domcontentloaded"]
+    assert page.new_tab.closed is True
+
+
+def test_b072_new_tab_url_mismatch_recorded_not_raised(tmp_path: Any) -> None:
+    """The new tab landing somewhere else (redirect/rewrite) is recorded as a
+    mismatch, not a hard failure — the click still navigated in a new tab."""
+    page = _NewTabPage()
+    page.new_tab = _NewTabStub("https://github.com/other/repo")
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "GitHub",
+        locator="a",
+        element_metadata={"href": "https://github.com/tancat-ai/tancat"},
+    )
+    tracker._verify_click_navigation(
+        "a",
+        "GitHub",
+        {"href": "https://github.com/tancat-ai/tancat"},
+        "https://example.com/start",
+        pages_before=(cast("Page", page),),
+    )
+    assert tracker.steps[-1]["result"]["status"] == "passed"
+    assert tracker.steps[-1]["element"]["new_tab"]["matched_href"] is False
+    assert page.new_tab.closed is True
+
+
+def test_b072_new_tab_relative_href_matched_against_original_url(tmp_path: Any) -> None:
+    """A relative href is resolved against the original page before comparing."""
+    page = _NewTabPage()
+    page.new_tab = _NewTabStub("https://example.com/about")
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "About",
+        locator="a",
+        element_metadata={"href": "/about"},
+    )
+    tracker._verify_click_navigation(
+        "a",
+        "About",
+        {"href": "/about"},
+        "https://example.com/start",
+        pages_before=(cast("Page", page),),
+    )
+    assert tracker.steps[-1]["element"]["new_tab"]["matched_href"] is True
+
+
+def test_b072_no_new_tab_still_fails(tmp_path: Any) -> None:
+    """No new tab and no URL change — the B-029 swallowed-click failure is
+    preserved (a dead target="_blank" link must not pass silently)."""
+    from src.evidence_tracker import _LocatorNotFoundError
+
+    page = _NewTabPage()  # no new tab created
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "Cart",
+        locator='a[href="/cart"]',
+        element_metadata={"href": "/cart"},
+    )
+    with pytest.raises(_LocatorNotFoundError, match="did not navigate"):
+        tracker._verify_click_navigation(
+            'a[href="/cart"]',
+            "Cart",
+            {"href": "/cart"},
+            "https://example.com/start",
+            pages_before=(cast("Page", page),),
+        )
+    assert tracker.steps[-1]["result"]["status"] == "failed"
+
+
+def test_b072_blank_target_failure_is_actionable(tmp_path: Any) -> None:
+    """A target="_blank" link that opens no tab (headless Chromium drops
+    new-tab anchor navigation) must fail with an actionable message — not
+    the overlay-swallow guess."""
+    from src.evidence_tracker import _LocatorNotFoundError
+
+    page = _NewTabPage()  # no new tab created
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "GitHub",
+        locator="a",
+        element_metadata={"href": "https://github.com/tancat-ai/tancat", "target": "_blank"},
+    )
+    with pytest.raises(_LocatorNotFoundError, match=r'target="_blank".*href'):
+        tracker._verify_click_navigation(
+            "a",
+            "GitHub",
+            {"href": "https://github.com/tancat-ai/tancat", "target": "_blank"},
+            "https://example.com/start",
+            pages_before=(cast("Page", page),),
+        )
+    assert tracker.steps[-1]["result"]["status"] == "failed"
+    assert 'target="_blank"' in tracker.steps[-1]["result"]["error"]
+
+
+def test_b072_window_open_link_new_tab_recorded(tmp_path: Any) -> None:
+    """A window.open link (href=javascript:) that opens a new tab is a
+    verified success: the tab is recorded (no href to match → None) and
+    closed, despite the javascript: href early-return of the old code."""
+    page = _NewTabPage()
+    page.new_tab = _NewTabStub("https://example.com/")
+    tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker._record_step(
+        "click",
+        "Popup",
+        locator="a",
+        element_metadata={"href": "javascript:void(0)"},
+    )
+    tracker._verify_click_navigation(
+        "a",
+        "Popup",
+        {"href": "javascript:void(0)"},
+        "https://example.com/start",
+        pages_before=(cast("Page", page),),
+    )
+    assert tracker.steps[-1]["result"]["status"] == "passed"
+    assert tracker.steps[-1]["element"]["new_tab"] == {"url": "https://example.com/", "matched_href": None}
+    assert page.new_tab.closed is True

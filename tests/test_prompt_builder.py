@@ -87,6 +87,28 @@ def test_skeleton_prompt_count_header() -> None:
     assert "Generate the 6 test functions now." in rendered
 
 
+def test_both_prompts_carry_link_resolves_rule() -> None:
+    """B-072: both skeleton prompts must steer 'link resolves / 404' criteria
+    to an ASSERT (href check) instead of a click — new-tab links cannot be
+    click-verified on the original page."""
+    rendered = _render(build_skeleton_prompt(user_story=STORY, conditions=CONDITIONS, known_urls_block=URLS))
+    assert "link resolves" in rendered.text
+    assert "{ASSERT:<link text> link resolves}" in rendered.text
+
+    rendered_single = _render(
+        build_single_condition_prompt(
+            user_story=STORY,
+            conditions_block="- [TC-01] GitHub link resolves",
+            known_urls_block=URLS,
+            target_condition_ref="TC-01",
+            target_condition_text="GitHub link resolves",
+            target_condition_expected="Meets acceptance criteria.",
+        )
+    )
+    assert "link resolves" in rendered_single.text
+    assert "{ASSERT:<link text> link resolves}" in rendered_single.text
+
+
 def test_single_condition_prompt_matches_legacy_modulo_brace_normalisation() -> None:
     """Single-condition prompt must match legacy text except brace normalisation.
 
