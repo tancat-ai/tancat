@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-21 (SHIPPED — **Session 5**: **A5** evidence capture ~4x faster (the bottleneck was the lossless WebP re-encode — ~2.3s of the ~2.7s per step — now `method=0` + "keep the PNG when WebP would not shrink it" + a per-page probe cache; live 10-test A/B 163.6s → 57.8s, ≈4.8 min projected for 50, inside the ≤5-min gate; both formats stay lossless and pixel-identical). **B-061** Fixed (custom `--test-output` gets the conftest; `--pytest-timeout` 120→700s; timeouts report as TIMED OUT, not "Tests executed: 0"). **B-066** Fixed (hooks `uv run --all-extras` + targeted `importorskip`). **B-071** Fixed (`fileWatcherType = "none"`). **B-078** opened (watch: re-measure the encoder on Pillow/browser upgrades). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
+Last updated: 2026-09-21 (SHIPPED — **eval_runner mypy follow-up:** the six pre-existing mypy errors in `scripts/eval/eval_runner.py` (red on main before, invisible to both mypy scopes) — five fixed as label-only changes (4× `-> None` on nested helpers; `_sampling_identity` return widened to `str | None`; and the `persist_results` `thinking` param widened the same way — a mismatch the label fix *exposed*: the linear pipeline legitimately passes `None` = "not reported", which the old `thinking: str` label had hidden). **B-079** opened for the sixth (`get_loaded_model` missing from the `LLMProvider` ABC — protected dir, parked for approval). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
+
+Previous: 2026-09-21 (SHIPPED — **Session 5**: **A5** evidence capture ~4x faster (the bottleneck was the lossless WebP re-encode — ~2.3s of the ~2.7s per step — now `method=0` + "keep the PNG when WebP would not shrink it" + a per-page probe cache; live 10-test A/B 163.6s → 57.8s, ≈4.8 min projected for 50, inside the ≤5-min gate; both formats stay lossless and pixel-identical). **B-061** Fixed (custom `--test-output` gets the conftest; `--pytest-timeout` 120→700s; timeouts report as TIMED OUT, not "Tests executed: 0"). **B-066** Fixed (hooks `uv run --all-extras` + targeted `importorskip`). **B-071** Fixed (`fileWatcherType = "none"`). **B-078** opened (watch: re-measure the encoder on Pillow/browser upgrades). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
 
 Previous: 2026-09-21 (SHIPPED — **B-072** Fixed (`target="_blank"` clicks no longer false-fail, and resolve/404 criteria no longer click at all: the post-click check now polls for the new tab — 2.5s window + 7.5s post-retry window, because headless tab creation was measured at up to ~8s late — verifies its URL against the link's href, records `new_tab` on the step evidence, and closes it; when no tab appears the failure says so (headless drops `_blank` anchor clicks) instead of guessing "overlay swallow". `attribute_assertion_type` classifies "resolves / 404" descriptions as `toHaveAttribute:href`, both skeleton prompts steer such criteria to `{{ASSERT:<link> link resolves}}`, and `navigate()` closes leaked stray tabs. Scope note: the href check validates a live-shaped URL, it does not HTTP-probe the destination's status). Gates: 3306 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (baseline), live replay 8/8. See the entries at the top.)
 
@@ -76,6 +78,17 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 **Re-measure command** (kept for exactly this purpose): `python scratch/bench_evidence_real.py` — it times image-wait / full-shot / height-capped shot / viewport shot / `method=0` / `method=2` encodes on the real landing page and prints the combined per-step totals for each option.
 
 **Estimated sessions:** 0 now; 0.25 when triggered.
+
+---
+
+## 🆕 B-079 — `LLMProvider` ABC doesn't promise `get_loaded_model`, so mypy flags every call through the base type
+
+**Status:** 🆕 new — found 2026-09-21 while fixing the pre-existing mypy errors in `scripts/eval/eval_runner.py` (those five are fixed; this sixth one lives in a protected directory and is parked here per AGENTS.md §3).
+**Priority:** low — works today; the gap is a silent-failure hole, not a current bug.
+**One-line:** `get_loaded_model(timeout=…)` is implemented on the two concrete providers (`src/llm_providers/__init__.py:258,368`) but NOT on the `LLMProvider` ABC (`src/llm_providers/__init__.py:52`). Code that holds the base type — e.g. `scripts/eval/eval_runner.py:687` after `auto_detect_provider()` — is flagged `[attr-defined]`. `src/llm_client.py:194,202` call the same method without a mypy flag (different annotation on `self._provider`), so the ABC gap is the single root cause.
+**Why it matters (the real gap):** the eval_runner call sits in `try/except Exception: return "", ""` — if a future provider forgets to implement the method, nothing crashes; the run record just silently stores an empty model name. The ABC promise is what would catch that at type-check time.
+**Proposed fix (needs approval — protected dir):** add `get_loaded_model` to the `LLMProvider` ABC — either `@abstractmethod` (forces every provider to implement it) or a concrete default returning `None` (matches "unknown"). Then the flag at `eval_runner.py:687` disappears and future providers are checked.
+**Estimated sessions:** 0.1.
 
 ---
 
