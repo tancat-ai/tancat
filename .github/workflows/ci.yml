@@ -46,28 +46,21 @@ jobs:
   sanitizer:
     name: Project Sanitizer
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 1
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
+      # project_sanitizer.py is stdlib-only (argparse/shutil/subprocess/pathlib),
+      # so no project environment is needed — the runner's built-in Python is
+      # enough. This runs in ~15s instead of a ~220-package `uv sync --frozen`,
+      # which took >2m on cold-cache runners and flaked the 2-min budget
+      # (run 35748803163, 2026-09-22). Same pattern as graph-freshness and
+      # docs-coverage below. If the script ever imports a project dependency,
+      # restore setup-python + setup-uv + uv sync here.
       - name: Run Project Sanitizer (check-only)
-        run: uv run python scripts/maintenance/project_sanitizer.py --check-only
+        run: python3 scripts/maintenance/project_sanitizer.py --check-only
 
   # ── Gate 1b: Graph freshness (warning-only, non-blocking) ─────────────
   graph-freshness:
@@ -127,33 +120,26 @@ jobs:
   kanban-freshness:
     name: Kanban Freshness Check
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 1
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
+      # kanban.py is stdlib-only (re/sys/datetime/html/pathlib), so no project
+      # environment is needed — the runner's built-in Python is enough. This
+      # runs in ~15s instead of a ~220-package `uv sync --frozen`, which took
+      # >2m on cold-cache runners and flaked the 2-min budget
+      # (run 35748803163, 2026-09-22). Same pattern as graph-freshness and
+      # docs-coverage. If the script ever imports a project dependency,
+      # restore setup-python + setup-uv + uv sync here.
       - name: Check kanban.html is up to date
         run: |
           if [ ! -f kanban.html ]; then
             echo "::warning::kanban.html not found — run scripts/maintenance/kanban.py"
             exit 0
           fi
-          uv run python scripts/maintenance/kanban.py --check 2>&1 || echo "::warning::kanban.html stale — run scripts/maintenance/kanban.py"
+          python3 scripts/maintenance/kanban.py --check 2>&1 || echo "::warning::kanban.html stale — run scripts/maintenance/kanban.py"
 
   # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
