@@ -113,6 +113,43 @@ class TestFullValidation:
         assert results[0].tests_executed >= 1
         assert results[0].tests_passed >= 1
 
+    def test_timeout_is_marked_not_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-061 (b): a pytest run killed by its timeout is its own state.
+
+        It must not render as "Tests executed: 0" — that is indistinguishable
+        from the missing-conftest trap.
+        """
+        from eval_runner import PYTEST_TIMEOUT_MARKER
+
+        golden = {
+            "id": "eval-998",
+            "site": "test",
+            "base_url": "https://example.com",
+            "conditions": ["1. Do X"],
+            "golden_resolutions": [],
+        }
+        (tmp_path / "eval-998.json").write_text(json.dumps(golden))
+        test_file = tmp_path / "test_eval.py"
+        test_file.write_text("def test_always_pass():\n    assert True\n")
+
+        def fake_run(test_file: Path, pytest_timeout: float = 120.0) -> tuple[int, int, int, int, float, str]:
+            return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER)
+
+        monkeypatch.setattr("eval_runner.run_generated_tests", fake_run)
+        results = run_full_validation(
+            tmp_path,
+            {"eval-998": "evidence_tracker.fill('#input', 'val')"},
+            test_files={"eval-998": test_file},
+        )
+        assert results[0].tests_timed_out is True
+        assert results[0].tests_executed == 0
+
+        from eval_metrics import HarnessReport
+
+        summary = HarnessReport(stories=results).to_summary()
+        assert "TIMED OUT" in summary
+        assert "Tests timed out" in summary
+
 
 # ---------------------------------------------------------------------------
 # persist_results / load_eval_history
@@ -266,6 +303,26 @@ class TestPersistRegeneratedTests:
         runner = self._make_runner(tmp_path)
         runner._persist_regenerated_tests({"eval-003": ""})
         assert not (tmp_path / "out" / "test_demoqa.py").exists()
+
+    def test_copies_conftest_when_missing(self, tmp_path: Path) -> None:
+        """B-061 (a): a custom --test-output dir must get the evidence_tracker fixture."""
+        runner = self._make_runner(tmp_path)
+        runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
+
+        conftest = tmp_path / "out" / "conftest.py"
+        assert conftest.exists()
+        assert "evidence_tracker" in conftest.read_text(encoding="utf-8")
+
+    def test_does_not_overwrite_existing_conftest(self, tmp_path: Path) -> None:
+        """B-061 (a): a caller-placed conftest wins over the repo copy."""
+        runner = self._make_runner(tmp_path)
+        out_dir = tmp_path / "out"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "conftest.py").write_text("# custom conftest\n", encoding="utf-8")
+
+        runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
+
+        assert (out_dir / "conftest.py").read_text(encoding="utf-8") == "# custom conftest\n"
 
     def test_load_test_files_finds_persisted_file(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)

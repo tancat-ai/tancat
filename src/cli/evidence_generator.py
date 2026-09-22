@@ -102,10 +102,11 @@ class ScreenshotCapturer:
         """Capture screenshot from page."""
         try:
             screenshot_bytes = page.screenshot(full_page=True)
-            # Pillow re-encode: Chromium's native WebP lossless is ~4x larger
-            # than its PNG (see src/evidence_image.py).
-            screenshot_bytes = encode_evidence_image(screenshot_bytes)
-            filename = self._generate_filename(test_case, capture_stage, step_description)
+            # A5: lossless WebP at method=0 — or the original PNG whenever
+            # WebP would not be strictly smaller (src/evidence_image.py).
+            # The extension follows the format actually written.
+            screenshot_bytes, actual_fmt = encode_evidence_image(screenshot_bytes)
+            filename = self._generate_filename(test_case, capture_stage, step_description, f".{actual_fmt}")
             filepath = self._save_screenshot(screenshot_bytes, filename, test_case.title)
             file_size = os.path.getsize(filepath)
             screenshot_metadata = ScreenshotMetadata(
@@ -124,22 +125,35 @@ class ScreenshotCapturer:
             print(f"Screenshot capture failed: {e}")
             return None
 
-    def _generate_filename(self, test_case: AnalyzedTestCase, capture_stage: str, step_description: str) -> str:
-        """Generate screenshot filename based on naming convention."""
+    def _generate_filename(
+        self,
+        test_case: AnalyzedTestCase,
+        capture_stage: str,
+        step_description: str,
+        extension: str | None = None,
+    ) -> str:
+        """Generate screenshot filename based on naming convention.
+
+        Args:
+            extension: File extension to use (e.g. ``".webp"``). Defaults to the
+                configured evidence extension. Pass the format actually written
+                by the adaptive encoder (A5) so the name matches the content.
+        """
         base = test_case.title.lower().replace(" ", "_")
         timestamp = datetime.now().strftime("%Y%m%d")
         self.screenshot_count += 1
         case_number = f"{self.screenshot_count:03d}"
+        ext = extension or evidence_image_extension()
 
         convention = getattr(self, "naming_convention", ScreenshotNaming.HYBRID)
 
         if convention == ScreenshotNaming.SEQUENTIAL:
-            filename = f"{capture_stage}_{case_number}{evidence_image_extension()}"
+            filename = f"{capture_stage}_{case_number}{ext}"
         elif convention == ScreenshotNaming.DESCRIPTIVE:
-            filename = f"{base}_{timestamp}{evidence_image_extension()}"
+            filename = f"{base}_{timestamp}{ext}"
         else:
             descriptive_part = base[:20].rstrip("_")
-            filename = f"{descriptive_part}_{case_number}_{timestamp}{evidence_image_extension()}"
+            filename = f"{descriptive_part}_{case_number}_{timestamp}{ext}"
 
         return filename
 
