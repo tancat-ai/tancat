@@ -19,7 +19,11 @@ jobs:
   smoke:
     name: Smoke Test
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # 5 min: this job does a full `uv sync --frozen` (~220 packages). On a
+    # cold-cache runner that alone measured >167s (run 35748803163 killed
+    # verify-baseline at the old 2-min budget); 5 min covers the cold worst
+    # case with headroom, matching the other env-needing jobs.
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
@@ -249,7 +253,10 @@ jobs:
   verify-baseline:
     name: Verify Baseline Integrity
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    # 5 min: full `uv sync --frozen` before an offline file check — flaked
+    # red at the 2-min budget on a cold-cache runner (commit f55eeaf,
+    # 2026-09-22). Same rationale as the smoke job above.
+    timeout-minutes: 5
     needs: smoke
 
     steps:
