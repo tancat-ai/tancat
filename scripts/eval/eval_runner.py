@@ -276,7 +276,11 @@ def persist_results(
     git_commit: str = "",
     temperature_sent: float | None = None,
     server_defaults: str = "",
-    thinking: str = "",
+    # None = "not reported by the server" (the linear pipeline leaves it
+    # None); the SQLite TEXT column stores it as NULL. Same pattern as
+    # temperature_sent above — do not collapse to "" (that erases the
+    # "unknown" state).
+    thinking: str | None = "",
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -688,7 +692,7 @@ class EvalRunner:
         except Exception:
             return "", ""
 
-    def _sampling_identity(self, use_graph: bool) -> tuple[float | None, str, str]:
+    def _sampling_identity(self, use_graph: bool) -> tuple[float | None, str, str | None]:
         """Resolved (temperature_sent, server_defaults, thinking) for a run.
 
         ``temperature_sent`` is the sampling temperature the pipeline actually
@@ -796,7 +800,7 @@ class EvalRunner:
         code_map: dict[str, str] = {}
         durations: dict[str, float] = {}
 
-        async def process_story(golden_file: Path):
+        async def process_story(golden_file: Path) -> None:
             golden = load_golden_key(golden_file)
             story_id = golden["id"]
 
@@ -830,7 +834,7 @@ class EvalRunner:
         asyncio.set_event_loop(loop)
 
         # Process sequentially to avoid browser/resource conflicts
-        async def run_sequential():
+        async def run_sequential() -> None:
             for f in sorted(self.dataset_dir.glob("*.json")):
                 await process_story(f)
 
@@ -860,7 +864,7 @@ class EvalRunner:
             len(list(self.dataset_dir.glob("*.json"))),
         )
 
-        async def process_story(golden_file: Path):
+        async def process_story(golden_file: Path) -> None:
             golden = load_golden_key(golden_file)
             story_id = golden["id"]
 
@@ -923,7 +927,7 @@ class EvalRunner:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
-        async def run_sequential():
+        async def run_sequential() -> None:
             for f in sorted(self.dataset_dir.glob("*.json")):
                 await process_story(f)
 
