@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-21 (SHIPPED — **B-072** Fixed (`target="_blank"` clicks no longer false-fail, and resolve/404 criteria no longer click at all: the post-click check now polls for the new tab — 2.5s window + 7.5s post-retry window, because headless tab creation was measured at up to ~8s late — verifies its URL against the link's href, records `new_tab` on the step evidence, and closes it; when no tab appears the failure says so (headless drops `_blank` anchor clicks) instead of guessing "overlay swallow". `attribute_assertion_type` classifies "resolves / 404" descriptions as `toHaveAttribute:href`, both skeleton prompts steer such criteria to `{{ASSERT:<link> link resolves}}`, and `navigate()` closes leaked stray tabs. Scope note: the href check validates a live-shaped URL, it does not HTTP-probe the destination's status). Gates: 3306 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (baseline), live replay 8/8. See the entries at the top.)
+Last updated: 2026-09-21 (SHIPPED — **Session 5**: **A5** evidence capture ~4x faster (the bottleneck was the lossless WebP re-encode — ~2.3s of the ~2.7s per step — now `method=0` + "keep the PNG when WebP would not shrink it" + a per-page probe cache; live 10-test A/B 163.6s → 57.8s, ≈4.8 min projected for 50, inside the ≤5-min gate; both formats stay lossless and pixel-identical). **B-061** Fixed (custom `--test-output` gets the conftest; `--pytest-timeout` 120→700s; timeouts report as TIMED OUT, not "Tests executed: 0"). **B-066** Fixed (hooks `uv run --all-extras` + targeted `importorskip`). **B-071** Fixed (`fileWatcherType = "none"`). **B-078** opened (watch: re-measure the encoder on Pillow/browser upgrades). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
+
+Previous: 2026-09-21 (SHIPPED — **B-072** Fixed (`target="_blank"` clicks no longer false-fail, and resolve/404 criteria no longer click at all: the post-click check now polls for the new tab — 2.5s window + 7.5s post-retry window, because headless tab creation was measured at up to ~8s late — verifies its URL against the link's href, records `new_tab` on the step evidence, and closes it; when no tab appears the failure says so (headless drops `_blank` anchor clicks) instead of guessing "overlay swallow". `attribute_assertion_type` classifies "resolves / 404" descriptions as `toHaveAttribute:href`, both skeleton prompts steer such criteria to `{{ASSERT:<link> link resolves}}`, and `navigate()` closes leaked stray tabs. Scope note: the href check validates a live-shaped URL, it does not HTTP-probe the destination's status). Gates: 3306 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (baseline), live replay 8/8. See the entries at the top.)
 
 Previous: 2026-09-21 (SHIPPED — **B-063** Fixed (numbered criteria with group headings no longer truncate: the 35-criterion story yields 35/35 instead of 5 — an isolated heading/prose line survives, 3+ consecutive prose lines end the list) and **B-062** Fixed (a prose story no longer collapses to one test: `FeatureParser` joins wrapped paragraph lines into a single requirement — the line-fragment root cause the original repro missed — and the widened multi-concern guard routes the wrapped blob to the LLM splitter; the UI warns when a long story still yields one condition). Gates: 3295 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%. See the entries at the top.)
 
@@ -40,6 +42,40 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 - Local `improvements-research` vs remote `work/current-session` — the same commit (`3f53071`) under two names.
 
 **Estimated sessions:** 0 (done).
+
+---
+
+## 🆕 B-078 — Watch item: re-measure the A5 evidence encoder when Pillow / Chromium ship faster lossless options
+
+**Status:** 🆕 new — watch item opened 2026-09-21 as the A5 (Session 5) follow-on. Not a bug: the current implementation is correct and fast; this is the "keep an eye on it" the user asked for.
+**Priority:** low — run only when a dependency or browser release makes it worth it. No action on a normal session.
+**One-line:** A5 replaced the ~2.3 s `method=2` lossless WebP re-encode with **`method=0` + "keep the PNG whenever WebP would not be strictly smaller" + a per-page probe cache**. That is a *measured* local optimum, not a law of physics — Pillow, the WebP bitstream, and Chromium all keep improving, and a better encoder (AVIF, a faster `method`, or a cheaper keep-PNG heuristic) would drop the last ~0.3–0.6 s/step of evidence cost.
+
+**What shipped (2026-09-21, Session 5 / A5)** — measured on the real 1280×6533 landing page:
+
+| Phase | Before (A5) | After (A5) |
+|---|---|---|
+| Full-page screenshot (1280×6533) | ~320 ms | ~320 ms (unchanged) |
+| Lossless re-encode | `method=2` ~2330 ms | `method=0` ~330 ms, or **0 ms** when the per-page cache says WebP already lost |
+| Per-step total | ~2.7 s | ~0.3–0.6 s |
+| 10-test gate suite (file://, `-n 4`) | 163.6 s | **57.8 s** (2.8×) |
+| Projected 50-test suite | ~13–15 min | **~4.8 min** (inside the ≤5 min gate) |
+
+Both output formats are lossless and pixel-identical — fidelity was never traded. The extension follows the format actually written (`.webp` or `.png`), and every downstream MIME map already handles both.
+
+**Where the decision lives** — the single place to update:
+- `src/evidence_image.py` → `encode_evidence_image` (the `method=0` + keep-PNG threshold).
+- `src/evidence_tracker.py` → `_encode_png_won` (the per-page probe cache).
+
+**When to act (any of):**
+- **Pillow is upgraded** in a dependency refresh — re-run `python scratch/bench_evidence_real.py` (encode wall time + keep-PNG ratio on the real page). If a new `method` or a Pillow flag beats `method=0` on either wall time or size, update the constant and the module docstring.
+- **A new lossless encoder becomes a drop-in** (e.g. Pillow gains lossless AVIF, or a maintained `cwebp`-class tool is a safe dep) — bench it against the current path with the same script before adopting.
+- **The keep-PNG rule starts mis-firing** — if real pages flip between "WebP wins" and "PNG wins" step-to-step on the *same* URL (the per-page cache assumes the compression class of a page is stable across its steps), the cache is trading file size for speed on the wrong pages; revisit the cache key or drop it.
+- **The ≤5 min gate is re-measured** in Session 7 (held-out, live regeneration) — if a future page class pushes per-step cost back up, this is the first lever to revisit.
+
+**Re-measure command** (kept for exactly this purpose): `python scratch/bench_evidence_real.py` — it times image-wait / full-shot / height-capped shot / viewport shot / `method=0` / `method=2` encodes on the real landing page and prints the combined per-step totals for each option.
+
+**Estimated sessions:** 0 now; 0.25 when triggered.
 
 ---
 
@@ -119,14 +155,14 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 
 ---
 
-## 🆕 B-071 — Streamlit file-watcher floods the log with `ModuleNotFoundError: torchvision` (the existing config key does not stop it)
+## ✅ B-071 — Streamlit file-watcher floods the log with `ModuleNotFoundError: torchvision` (the existing config key does not stop it)
 
-**Status:** 🆕 new — diagnosed 2026-09-15. Cosmetic.
+**Status:** ✅ **Fixed 2026-09-21** — option A: `.streamlit/config.toml` sets `fileWatcherType = "none"` (watcher off → the module-introspection spam is gone; accepted cost: no auto-rerun on source edits, the app still reruns on interaction). The misleading B-041 comment claiming `folderWatchBlacklist` stops the noise was replaced with the honest B-071 explanation; the blacklist is kept as a guard for a future re-enable.
 **Priority:** low — Streamlit catches the exceptions, so nothing breaks; but hundreds of tracebacks per session slow startup and bury real errors in the log.
 **One-line:** `local_sources_watcher.get_module_paths` walks imported modules and calls `hasattr(m, "__path__")`, which triggers `transformers`' lazy submodule imports; every vision model (videomae, vilt, vitmatte, vitpose, yolos, zoedepth, …) imports `torchvision`, which is not installed → one traceback per submodule.
 **The existing mitigation does not work.** `.streamlit/config.toml` already sets `folderWatchBlacklist = [".venv"]` with a B-041 comment claiming it stops this. It does not: the noise comes from **module introspection**, not directory scanning, so a folder blacklist cannot prevent it — and the user still sees it with the key set.
 **Options**
-- [ ] **A — `server.fileWatcherType = "none"`:** removes the noise completely; costs auto-rerun on source edits (the app still reruns on interaction).
+- [x] **A — `server.fileWatcherType = "none"`:** removes the noise completely; costs auto-rerun on source edits (the app still reruns on interaction). **Done 2026-09-21.**
 - [ ] **B — keep the watcher, silence the source:** leave it and note in the log/docs that these tracebacks are expected and harmless.
 - [ ] **C — avoid the import:** make the `transformers` import lazy/zombie (only inside the embedder call) so the watcher is less likely to walk it — narrow, and the RAG still imports it in a normal session.
 - Recommendation: **A**, with the existing misleading `folderWatchBlacklist` comment corrected either way.
@@ -270,16 +306,16 @@ Real element: `href="https://github.com/tancat-ai/tancat/blob/main/docs/security
 
 ---
 
-## 🆕 B-066 — A bare `uv sync` (or any `uv run`) silently REMOVES the optional extras → the recurring `fitz` failure
+## ✅ B-066 — A bare `uv sync` (or any `uv run`) silently REMOVES the optional extras → the recurring `fitz` failure
 
-**Status:** 🆕 new — diagnosed 2026-09-15; docs corrected this session, durable fix not yet chosen.
+**Status:** ✅ **Fixed 2026-09-21** — options A + B. A: both pre-commit `uv run` hooks (there are **two**, not the three the 09-15 note says — one was removed since) now use `uv run --all-extras`, matching CI's `--frozen --all-extras`. B: the single test that needs `fitz` importable (its `patch("fitz.open")`) gets `pytest.importorskip("fitz")` — deliberately narrower than the 09-15 module-level suggestion, which would have wrongly skipped ~20 mocked rapidocr tests in a bare environment.
 **Priority:** medium — it makes the local suite permanently red for no product reason, and it wastes a debugging session every time someone meets it.
 **One-line:** CI's pytest job runs `uv sync --frozen --all-extras` (`.github/workflows/ci.yml:313`), but the documented local setup was a bare `uv sync` and the pre-commit hooks run bare `uv run`. An unqualified sync makes the environment match the **default** dependency set, which **uninstalls `pymupdf` and `rapidocr-onnxruntime`** from the `[pdf]` / `[ocr]` optional extras — and `tests/test_ocr_backends.py` then fails with `ModuleNotFoundError: No module named 'fitz'`. CI is green because it installs the extras; local runs go red.
 **Evidence:** installing `uv sync --extra pdf` makes the suite green (3178 passed); the next `git commit` (pre-commit `uv run`) strips it again and the same test fails; `uv sync --all-extras` → 38/38 OCR tests pass and the full suite is 3189/0.
 **Docs corrected this session:** `AGENTS.md` §6 and `CONTRIBUTING.md` now say `uv sync --all-extras` with the reason inline. `README.md` deliberately still shows a bare `uv sync` — that section is the *product install* for customers, who do not need the test extras.
 **Durable fix (pick one)**
-- [ ] **A — hooks install the extras:** change the three `uv run` hooks in `.pre-commit-config.yaml` to `uv run --all-extras`, so the hook environment matches CI.
-- [ ] **B — the tests skip when the extra is absent:** `pytest.importorskip("fitz")` in `tests/test_ocr_backends.py`. Standard for an optional dependency, and it protects a contributor on a default install — but it hides the coverage gap silently if CI ever stops installing extras.
+- [x] **A — hooks install the extras:** both `uv run` hooks in `.pre-commit-config.yaml` → `uv run --all-extras`. **Done 2026-09-21** (note: two hooks, not three — one was removed after the 09-15 note).
+- [x] **B — the tests skip when the extra is absent:** targeted `pytest.importorskip("fitz")` on the single test that patches `fitz.open` (module-level would wrongly skip the mocked rapidocr tests in a bare env). **Done 2026-09-21.**
 - Recommendation: **A**, with **B** as a belt-and-braces follow-up.
 **Estimated sessions:** 0.25.
 
@@ -388,9 +424,9 @@ So the splitter is not the problem and the LLM is not the problem: the input nev
 
 ---
 
-## 🆕 B-061 — `eval_harness --regenerate` can report `Tests executed: 0` two different ways
+## ✅ B-061 — `eval_harness --regenerate` can report `Tests executed: 0` two different ways
 
-**Status:** 🆕 new — both found 2026-09-15 while running the mock suite; neither is fixed.
+**Status:** ✅ **Fixed 2026-09-21** — both traps. (a) `_persist_regenerated_tests` now copies `generated_tests/conftest.py` into a custom `--test-output` dir when it lacks one (never overwrites a caller-placed conftest). (b) `--pytest-timeout` default raised 120s → 700s (the measured banking worst case; the 09-15 note said 300 — the code had drifted to 120 by then), and a timeout is now its own report state: `StoryResult.tests_timed_out`, per-story `Tests: TIMED OUT (pytest run killed — no result)` plus a `Tests timed out: N story run(s)` summary line — no longer indistinguishable from "no test files persisted". +3 regression tests.
 **Priority:** Low–Medium — dev-tooling. The danger is that `Tests executed: 0` looks identical to "the run produced no tests", so a red suite can be mistaken for a green/no-op one, and vice versa.
 **One-line (a) — the missing conftest:** `--regenerate --mode full --test-output <custom dir>` writes the regenerated tests but **no `conftest.py`**. Every generated test needs the `evidence_tracker` fixture, which lives in `generated_tests/conftest.py`, so all 8 tests error at setup and the report prints **`Tests executed: 0`**. That is *not* the historical "no test files persisted" bug (fixed 2026-08-18, item at line ~830) — the files *are* written, they just cannot run. Workaround: use the default `--test-output` (`generated_tests/`, which has the conftest), or copy that conftest into the custom dir. Real fix: `_persist_regenerated_tests` should also write/copy a conftest when the target dir lacks one.
 **One-line (b) — the timeout under-reports:** the default `--pytest-timeout 300` is too tight once a scoping fix reduces skips (fewer skips = more real work per suite). The banking suite took 366s, was killed at the 330s ceiling, and the report printed **`Tests executed: 0` / pass rate 0.0%** even though running pytest directly showed **3 passed / 4 failed / 1 skipped**. Raising the flag fixes it (700s completed the run). Real fix: raise the default and/or make a timeout visibly distinct from "zero tests ran" in the report.

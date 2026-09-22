@@ -125,6 +125,11 @@ def run_static_validation(
 # Test execution (--full mode)
 # ---------------------------------------------------------------------------
 
+# B-061: exact marker returned when the pytest subprocess is killed by its
+# timeout. Callers compare against this (never against a re-typed literal) so
+# "run killed by timeout" can be reported distinctly from "zero tests ran".
+PYTEST_TIMEOUT_MARKER = "pytest execution timed out"
+
 
 def run_generated_tests(
     test_file: Path,
@@ -154,7 +159,8 @@ def run_generated_tests(
             timeout=pytest_timeout + 30,
         )
     except subprocess.TimeoutExpired:
-        return (0, 0, 0, 0, 0.0, "pytest execution timed out")
+        # B-061: the marker, not a zero count, carries the truth here.
+        return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER)
 
     output = result.stdout + result.stderr
 
@@ -234,6 +240,9 @@ def run_full_validation(
             pytest_timeout=pytest_timeout,
         )
 
+        # B-061: a timeout is its own state — the report must say so instead of
+        # printing "Tests executed: 0" (identical to the missing-conftest trap).
+        story.tests_timed_out = raw_output.strip() == PYTEST_TIMEOUT_MARKER
         story.tests_executed = total
         story.tests_passed = passed
 
@@ -477,6 +486,33 @@ class EvalRunner:
             out_path = self.test_output_dir / f"test_{site}.py"
             out_path.write_text(code, encoding="utf-8")
             logger.info("Persisted regenerated tests for %s → %s", story_id, out_path)
+        self._ensure_conftest()
+
+    def _ensure_conftest(self) -> None:
+        """Copy the repo ``generated_tests/conftest.py`` into the test output dir.
+
+        B-061 (a): every generated test needs the ``evidence_tracker`` fixture,
+        which lives in ``generated_tests/conftest.py``. With a custom
+        ``--test-output`` dir the fixture was missing, so every test errored at
+        setup and the report printed ``Tests executed: 0``. Never overwrite a
+        conftest the caller placed there deliberately.
+        """
+        if self.test_output_dir is None:
+            return
+        target = self.test_output_dir / "conftest.py"
+        if target.exists():
+            return
+        source = Path(__file__).resolve().parents[2] / "generated_tests" / "conftest.py"
+        if not source.exists():
+            logger.warning(
+                "No conftest.py in %s and no repo conftest at %s — generated tests "
+                "will error at setup (missing evidence_tracker fixture)",
+                self.test_output_dir,
+                source,
+            )
+            return
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        logger.info("Copied conftest.py → %s (evidence_tracker fixture for generated tests)", target)
 
     def _load_test_files(self) -> dict[str, Path]:
         """Map story_ids to generated test files for execution."""
@@ -500,7 +536,7 @@ class EvalRunner:
     def run(
         self,
         mode: str = "static",
-        pytest_timeout: float = 120.0,
+        pytest_timeout: float = 700.0,
         persist: bool = True,
     ) -> HarnessReport:
         """Execute the eval harness.

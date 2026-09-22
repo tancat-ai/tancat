@@ -358,7 +358,11 @@ Mapped to emoji-backed status strings (`🆕 new`, `❓ needs-info`, `🟡 ready
 
 Single-context — `CONTEXT.md` at repo root + `docs/adr/` for ADRs. See `docs/agents/domain.md`.
 
+### Learning log (personal, local-only)
+
+The user's code-reading level record lives in `.pi/learning-log.md` — **gitignored, never commit it**. Read it in ANY session that involves explaining or reviewing code (not just `/diff`), match vocabulary to it, and keep it current when teaching moments end. Workflow: `diff-review` skill.
+
 ---
 
-*Last updated: 2026-09-11*
+*Last updated: 2026-09-21*
 *Historical/reference sections: `docs/reference/agents_archive.md`*

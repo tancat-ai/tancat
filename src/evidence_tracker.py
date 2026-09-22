@@ -16,7 +16,7 @@ from src.credential_redaction import (
     redact_url_credentials,
     redact_value,
 )
-from src.evidence_image import write_evidence_image
+from src.evidence_image import encode_evidence_image
 from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
@@ -100,6 +100,14 @@ class EvidenceTracker:
         # was resolved against. Compared with ``expected_page`` in
         # ``_record_step``.
         self._step_entry_url: str = ""
+
+        # A5: per-page hint for the adaptive encoder. A page URL lands here when
+        # a full-page capture on it found lossless WebP would NOT shrink the
+        # file, so later captures on the same URL skip the ~330 ms method=0
+        # probe that would just lose again. It only ever skips a probe — every
+        # stored image stays lossless and pixel-identical (a cache miss or a
+        # denser page simply re-probes and may pick WebP).
+        self._encode_png_won: set[str] = set()
 
         # Determine evidence directory: per-test package takes precedence
         if test_package_dir is not None:
@@ -361,7 +369,10 @@ class EvidenceTracker:
 
         screenshot_path = None
         if take_screenshot:
-            screenshot_name = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}{evidence_image_extension()}"
+            screenshot_stem = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}"
+            # Default name; the bytes path may re-point it when the adaptive
+            # encoder (A5) keeps the PNG instead of writing WebP.
+            screenshot_name = f"{screenshot_stem}{evidence_image_extension()}"
             screenshot_full_path = self.evidence_dir / screenshot_name
             try:
                 # Evidence must reflect the settled page. Product grids use
@@ -393,10 +404,21 @@ class EvidenceTracker:
                 with masked_screenshot_page(self.page):
                     screenshot_bytes = self.page.screenshot(full_page=True)
                     if isinstance(screenshot_bytes, bytes):
-                        # Re-encode with Pillow: Chromium's WebP *lossless* encoder
-                        # emits files ~4x larger than its PNG output
-                        # (src/evidence_image.py).
-                        write_evidence_image(screenshot_bytes, screenshot_full_path)
+                        # A5: lossless WebP at method=0 — or the original PNG
+                        # whenever WebP would not be strictly smaller. The
+                        # extension follows the format actually written
+                        # (src/evidence_image.py). Pages where WebP already
+                        # lost skip the probe entirely (self._encode_png_won).
+                        current_url = self._safe_page_url()
+                        if current_url in self._encode_png_won:
+                            data, actual_fmt = screenshot_bytes, "png"
+                        else:
+                            data, actual_fmt = encode_evidence_image(screenshot_bytes)
+                            if actual_fmt == "png" and current_url:
+                                self._encode_png_won.add(current_url)
+                        screenshot_name = f"{screenshot_stem}.{actual_fmt}"
+                        screenshot_full_path = self.evidence_dir / screenshot_name
+                        screenshot_full_path.write_bytes(data)
                     else:
                         # Capture backends that only support path-based capture —
                         # and test doubles that return a sentinel — write through

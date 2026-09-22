@@ -270,8 +270,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--pytest-timeout",
         type=float,
-        default=120.0,
-        help="Timeout per pytest run in seconds (default: 120)",
+        default=700.0,
+        # B-061 (b): 120s killed a healthy 8-test banking suite mid-run and the
+        # report printed "Tests executed: 0" — identical to the missing-conftest
+        # trap. 700s is the measured worst case (banking full suite, 2026-09-15).
+        help="Timeout per pytest run in seconds (default: 700 — measured worst case)",
     )
     run_parser.add_argument(
         "--min-accuracy",

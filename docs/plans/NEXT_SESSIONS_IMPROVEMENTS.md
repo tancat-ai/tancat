@@ -266,11 +266,11 @@ traceability layer** ("prove your testing happened, entirely inside your network
 | 3 | **B-068 + B-070** — give the reviewer element context; stop the no-op re-run | makes the self-healing claim true | ✅ done 2026-09-20 — reviewer gets the scrape manifest; no-op heals stop re-running (fix-rate still to measure, session 7) |
 | 4 | **B-062 + B-063** — story→criteria (prose, headings) | the customer's first action | ✅ done 2026-09-21 — 35/35 with headings; prose routed to the splitter |
 | 4b | **B-072** — `target="_blank"` clicks false-fail; resolve/404 criteria click at all | the last selector-adjacent red class (4/4 remaining reds on the 09-17 re-run) | ✅ done 2026-09-21 — new-tab clicks detected/verified/closed; resolve criteria read the href (live replay 8/8) |
-| 5 | Evidence cost (A5) + **B-061/B-066/B-071** cleanups | a 50-test suite in ≤ 5 min | suite ≤ 5 min |
+| 5 | Evidence cost (A5) + **B-061/B-066/B-071** cleanups | a 50-test suite in ≤ 5 min | ✅ done 2026-09-21 — encode was 87% of step cost; `method=0` + keep-PNG-if-no-shrink + per-page probe cache; live 10-test A/B 163.6s → 57.8s (≈4.8 min projected at 50; the full live 50-test re-measure lands in session 7) |
 | 6 | **tancat.dev B1** — privacy/terms, meta+OG+favicon, noir image, real Buy + demo links | cannot sell without it | a stranger can buy and watch the demo |
 | 7 | **Re-measure** against the Part C gates and decide the positioning | the commercial decision | gates 1–6 recorded in the appendix |
 
-Sessions 1–4 + 4b are done. Next: **Session 5** (evidence cost is a product decision — raise it first).
+Sessions 1–5 are done. Next: **Session 6** (tancat.dev B1 — the page's own trust blockers: privacy/terms, meta/OG/favicon, noir image, real Buy + demo links).
 
 ---
 
@@ -287,6 +287,7 @@ Record one row per session so drift is visible. All numbers from live regenerati
 | 2026-09-20 | **B-068 + B-070 shipped** — self-heal reviewer now loads `scrape_manifest.json` element context; no-op heals stop re-running the suite | — | — | — | — | Session 3 done: wiring verified against real manifest data (`scratch/verify_b068_real_data.py`); the ≥30% fix-rate gate is a MEASUREMENT — recorded for session 7 |
 | 2026-09-21 | **B-062 + B-063 shipped** — prose story no longer collapses to one test; headed criteria no longer truncate (35/35, deterministic, zero LLM calls) | — | — | — | — | Session 4 done: +5 tests, e2e replays in `scratch/verify_b062_e2e.py` / `verify_b063_e2e.py`; 3295 pytest, eval static 97.9% |
 | 2026-09-21 | **B-072 shipped** — live replay of the 09-17 red class against the real landing page (`scratch/verify_b072_live.py`, self-hosted) | — (no fresh live regeneration) | 0 — TBD/placeholder criteria still red | **0 selector-adjacent reds** — the 4 reds (tc01_20..23) pass via the href check; the `_blank` GitHub click itself detected, verified (`matched_href=True`), recorded, closed | n/a | Session 4b done: 8/8 live cases, +11 unit tests, 3306 pytest, smoke 39/39, eval static 97.9%. Environment finding: headless Chromium 151 creates new tabs up to ~8s after the click (`scratch/probe_delay*.py`) — observation windows sized to that; a stray-tab cleanup rides on `navigate()` |
+| 2026-09-21 | **Session 5 shipped** — A5 (evidence encode) + B-061/B-066/B-071; live 10-test A/B on the real landing page (`scratch/a5_gate_suite`, file://, old vs new encoder, same tests) | — (not a regeneration run) | 0 (B-069 state unchanged) | 0 — 10/10 pass on both encoder versions | 163.6s → **57.8s** (≈13.6 → ≈4.8 min projected at 50) | A5: the lossless WebP `method=2` re-encode was ~2.3s of the ~2.7s per step (screenshot itself ~0.3s); now `method=0` + keep-PNG-when-WebP-would-not-shrink + per-page probe cache — both formats lossless, extension follows content, all MIME maps handle both. B-061 (conftest copy + 700s timeout + TIMED OUT report), B-066 (`uv run --all-extras` hooks), B-071 (watcher off). Watch item **B-078** opened: re-measure the encoder when Pillow/Chromium ship better lossless options (`scratch/bench_evidence_real.py`). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% |
 
 ---
 

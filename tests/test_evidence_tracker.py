@@ -54,6 +54,70 @@ def test_evidence_tracker_click_failure_takes_screenshot(tmp_path: Any) -> None:
     assert tracker.steps[-1]["screenshot"] is not None
 
 
+# ---------------------------------------------------------------------------
+# A5 — adaptive encoder probe cache
+# ---------------------------------------------------------------------------
+
+
+def _tiny_png() -> bytes:
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (50, 30), (200, 30, 30)).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def test_a5_probe_skipped_when_webp_already_lost_on_page(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A5: once a capture on a URL finds WebP would not shrink the file, later
+    captures on the same URL skip the method=0 probe (the ~330 ms pure waste)."""
+    calls: list[bytes] = []
+
+    def fake_encode(data: bytes, image_format: str | None = None) -> tuple[bytes, str]:
+        calls.append(data)
+        return data, "png"  # WebP "lost" — keep PNG
+
+    monkeypatch.setattr("src.evidence_tracker.encode_evidence_image", fake_encode)
+
+    page_mock = MagicMock()
+    page_mock.screenshot.return_value = _tiny_png()
+    page_mock.url = "https://example.com/flat-page"
+    tracker = EvidenceTracker(page_mock, "test_a5", evidence_root=Path(tmp_path))
+
+    tracker._record_step("assert_visible", "step one", locator="h1", take_screenshot=True)
+    tracker._record_step("assert_visible", "step two", locator="h2", take_screenshot=True)
+
+    assert len(calls) == 1, "second capture on the same URL must skip the probe"
+    assert tracker._encode_png_won == {"https://example.com/flat-page"}
+    assert all(s["screenshot"].endswith(".png") for s in tracker.steps)
+
+
+def test_a5_webp_win_is_not_cached(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A5: when WebP wins the encode IS the work — the cache must not swallow
+    it, and a 'webp' result must not be recorded as a png hint."""
+    calls: list[bytes] = []
+    webp = b"RIFF....WEBP-loser-marker"
+
+    def fake_encode(data: bytes, image_format: str | None = None) -> tuple[bytes, str]:
+        calls.append(data)
+        return webp, "webp"
+
+    monkeypatch.setattr("src.evidence_tracker.encode_evidence_image", fake_encode)
+
+    page_mock = MagicMock()
+    page_mock.screenshot.return_value = _tiny_png()
+    page_mock.url = "https://example.com/photographic-page"
+    tracker = EvidenceTracker(page_mock, "test_a5w", evidence_root=Path(tmp_path))
+
+    tracker._record_step("assert_visible", "step one", locator="h1", take_screenshot=True)
+    tracker._record_step("assert_visible", "step two", locator="h2", take_screenshot=True)
+
+    assert len(calls) == 2, "webp winners must always be encoded (the cache only skips losing probes)"
+    assert tracker._encode_png_won == set()
+    assert all(s["screenshot"].endswith(".webp") for s in tracker.steps)
+
+
 def test_failed_step_skips_metadata_capture(tmp_path: Any) -> None:
     """B-041: failed steps must not run the un-timed locator metadata capture.
 
