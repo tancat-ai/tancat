@@ -1,7 +1,7 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-22 (SHIPPED — **CI kanban/sanitizer jobs de-installed:** both warning-only jobs (`kanban-freshness`, `sanitizer`) were paying a ~220-package `uv sync --frozen` for scripts that are 100% stdlib — kanban-freshness flaked red at the 2-min timeout on a cold-cache runner (run 35748803163, 2026-09-22) while smoke's identical install step took 32s on a warm one. Fix per user direction (speed it up, don't raise the timeout): dropped setup-python/setup-uv/uv-sync from both jobs and run the scripts with the runner's built-in `python3` — same pattern as the sibling `graph-freshness`/`docs-coverage` jobs (5s each). 167s+ flaky → ~15–20s deterministic; timeouts 2/5 → 1. `.github/workflows/ci.yml` edited under explicit user instruction (protected dir). Side note: `project_sanitizer.py --check-only` flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally on Windows but passes in CI — pre-existing environment quirk, not caused by this change (see B-080).
+Last updated: 2026-09-22 (SHIPPED — **CI kanban/sanitizer jobs de-installed:** both warning-only jobs (`kanban-freshness`, `sanitizer`) were paying a ~220-package `uv sync --frozen` for scripts that are 100% stdlib — kanban-freshness flaked red at the 2-min timeout on a cold-cache runner (run 35748803163, 2026-09-22) while smoke's identical install step took 32s on a warm one. Fix per user direction (speed it up, don't raise the timeout): dropped setup-python/setup-uv/uv-sync from both jobs and run the scripts with the runner's built-in `python3` — same pattern as the sibling `graph-freshness`/`docs-coverage` jobs (5s each). 167s+ flaky → ~15–20s deterministic; timeouts 2/5 → 1. `.github/workflows/ci.yml` edited under explicit user instruction (protected dir). Side note: `project_sanitizer.py --check-only` flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally on Windows but passes in CI — pre-existing environment quirk, not caused by this change (see B-080). **B-081** opened same session (watch item): the de-installed jobs run on the runner's built-in Python 3.12, not the project's 3.14 — upgrade triggers (3.13+/3.14 syntax, project deps, the 2026-10-19 ubuntu-latest→Ubuntu 26 migration) and the upgrade path are recorded there.
 
 Previous: 2026-09-21 (SHIPPED — **eval_runner mypy follow-up:** the six pre-existing mypy errors in `scripts/eval/eval_runner.py` (red on main before, invisible to both mypy scopes) — five fixed as label-only changes (4× `-> None` on nested helpers; `_sampling_identity` return widened to `str | None`; and the `persist_results` `thinking` param widened the same way — a mismatch the label fix *exposed*: the linear pipeline legitimately passes `None` = "not reported", which the old `thinking: str` label had hidden). **B-079** opened for the sixth (`get_loaded_model` missing from the `LLMProvider` ABC — protected dir, parked for approval). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
 
@@ -101,6 +101,19 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 **One-line:** `python scripts/maintenance/project_sanitizer.py --check-only` reports `[FAIL] Found 32 junk file(s)` — all `scripts/archive/cli_snapshots/cli_walkthrough_2026*.log` (committed 2026-08-02) — but the same committed tree passes the CI sanitizer job. Suspect a path-separator or archive-directory exclusion behaving differently on Windows vs Linux.
 **Decide when:** if the local flag starts biting (e.g. someone wires the sanitizer into a local pre-commit hook), either exclude `scripts/archive/` from junk detection or move the snapshots out of the repo. Until then: noise.
 **Estimated sessions:** 0.1.
+
+---
+
+## 🆕 B-081 — CI kanban/sanitizer jobs run on the runner's built-in Python (3.12) — upgrade path when the scripts outgrow it
+
+**Status:** 🆕 new (watch item) — opened 2026-09-22, same session as the de-install change (see BACKLOG header). User direction: leave as-is for now, upgrade when needed.
+**One-line:** `kanban-freshness` and `sanitizer` run `kanban.py` / `project_sanitizer.py` on the ubuntu-latest built-in `python3` (3.12 today) instead of the project's pinned 3.14 — fine while both scripts stay basic-stdlib, but there is a version gap to manage.
+**Triggers that mean "upgrade now":**
+1. Either script starts using 3.13+/3.14-only syntax (e.g. t-strings, PEP 750) → CI's 3.12 hits `SyntaxError`. Sanitizer fails loudly (visible); **kanban job degrades SILENTLY** — its `|| echo` swallows the crash as a "stale" warning.
+2. Either script imports a project dependency → same split: sanitizer loud, kanban silent.
+3. The announced `ubuntu-latest` → Ubuntu 26 migration (**2026-10-19**) changes the built-in Python version — re-verify the two jobs still pass and note the new baseline version.
+**Upgrade path (in order of preference):** (a) first adopt the two-line hardening — script *crash* fails the job, only genuine staleness warns — so trigger 1/2 can never be silent; (b) then, if the scripts genuinely need 3.14 or deps, restore `setup-python` (pinned) + `uv sync --frozen` for just those jobs — the ~220-package cost returns, so prefer keeping the scripts stdlib-only and 3.12-compatible as long as practical.
+**Estimated sessions:** 0.1 for (a); 0.1 for (b) if ever needed.
 
 ---
 
