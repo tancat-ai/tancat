@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-21 (SHIPPED — **eval_runner mypy follow-up:** the six pre-existing mypy errors in `scripts/eval/eval_runner.py` (red on main before, invisible to both mypy scopes) — five fixed as label-only changes (4× `-> None` on nested helpers; `_sampling_identity` return widened to `str | None`; and the `persist_results` `thinking` param widened the same way — a mismatch the label fix *exposed*: the linear pipeline legitimately passes `None` = "not reported", which the old `thinking: str` label had hidden). **B-079** opened for the sixth (`get_loaded_model` missing from the `LLMProvider` ABC — protected dir, parked for approval). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
+Last updated: 2026-09-22 (SHIPPED — **CI kanban/sanitizer jobs de-installed:** both warning-only jobs (`kanban-freshness`, `sanitizer`) were paying a ~220-package `uv sync --frozen` for scripts that are 100% stdlib — kanban-freshness flaked red at the 2-min timeout on a cold-cache runner (run 35748803163, 2026-09-22) while smoke's identical install step took 32s on a warm one. Fix per user direction (speed it up, don't raise the timeout): dropped setup-python/setup-uv/uv-sync from both jobs and run the scripts with the runner's built-in `python3` — same pattern as the sibling `graph-freshness`/`docs-coverage` jobs (5s each). 167s+ flaky → ~15–20s deterministic; timeouts 2/5 → 1. `.github/workflows/ci.yml` edited under explicit user instruction (protected dir). Side note: `project_sanitizer.py --check-only` flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally on Windows but passes in CI — pre-existing environment quirk, not caused by this change (see B-080).
+
+Previous: 2026-09-21 (SHIPPED — **eval_runner mypy follow-up:** the six pre-existing mypy errors in `scripts/eval/eval_runner.py` (red on main before, invisible to both mypy scopes) — five fixed as label-only changes (4× `-> None` on nested helpers; `_sampling_identity` return widened to `str | None`; and the `persist_results` `thinking` param widened the same way — a mismatch the label fix *exposed*: the linear pipeline legitimately passes `None` = "not reported", which the old `thinking: str` label had hidden). **B-079** opened for the sixth (`get_loaded_model` missing from the `LLMProvider` ABC — protected dir, parked for approval). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
 
 Previous: 2026-09-21 (SHIPPED — **Session 5**: **A5** evidence capture ~4x faster (the bottleneck was the lossless WebP re-encode — ~2.3s of the ~2.7s per step — now `method=0` + "keep the PNG when WebP would not shrink it" + a per-page probe cache; live 10-test A/B 163.6s → 57.8s, ≈4.8 min projected for 50, inside the ≤5-min gate; both formats stay lossless and pixel-identical). **B-061** Fixed (custom `--test-output` gets the conftest; `--pytest-timeout` 120→700s; timeouts report as TIMED OUT, not "Tests executed: 0"). **B-066** Fixed (hooks `uv run --all-extras` + targeted `importorskip`). **B-071** Fixed (`fileWatcherType = "none"`). **B-078** opened (watch: re-measure the encoder on Pillow/browser upgrades). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
 
@@ -88,6 +90,16 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 **One-line:** `get_loaded_model(timeout=…)` is implemented on the two concrete providers (`src/llm_providers/__init__.py:258,368`) but NOT on the `LLMProvider` ABC (`src/llm_providers/__init__.py:52`). Code that holds the base type — e.g. `scripts/eval/eval_runner.py:687` after `auto_detect_provider()` — is flagged `[attr-defined]`. `src/llm_client.py:194,202` call the same method without a mypy flag (different annotation on `self._provider`), so the ABC gap is the single root cause.
 **Why it matters (the real gap):** the eval_runner call sits in `try/except Exception: return "", ""` — if a future provider forgets to implement the method, nothing crashes; the run record just silently stores an empty model name. The ABC promise is what would catch that at type-check time.
 **Proposed fix (needs approval — protected dir):** add `get_loaded_model` to the `LLMProvider` ABC — either `@abstractmethod` (forces every provider to implement it) or a concrete default returning `None` (matches "unknown"). Then the flag at `eval_runner.py:687` disappears and future providers are checked.
+**Estimated sessions:** 0.1.
+
+---
+
+## 🆕 B-080 — Project sanitizer flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally (Windows) but passes in CI
+
+**Status:** 🆕 new — observed 2026-09-22 while verifying the CI de-install change.
+**Priority:** low — CI passes (the real gate); the local flag is noise on a machine that already carries archived debug logs.
+**One-line:** `python scripts/maintenance/project_sanitizer.py --check-only` reports `[FAIL] Found 32 junk file(s)` — all `scripts/archive/cli_snapshots/cli_walkthrough_2026*.log` (committed 2026-08-02) — but the same committed tree passes the CI sanitizer job. Suspect a path-separator or archive-directory exclusion behaving differently on Windows vs Linux.
+**Decide when:** if the local flag starts biting (e.g. someone wires the sanitizer into a local pre-commit hook), either exclude `scripts/archive/` from junk detection or move the snapshots out of the repo. Until then: noise.
 **Estimated sessions:** 0.1.
 
 ---
