@@ -1,15 +1,17 @@
 """Tests for the evidence screenshot image format.
 
-Evidence defaults to WebP, encoded *losslessly* by Pillow (see
-``src/evidence_image.py``), so the image stays pixel-identical — evidence is an
-audit artifact, so fidelity is never traded for size — while measuring ~59% of
-the PNG size over real evidence captures.
+Evidence is encoded *losslessly* by Pillow (see ``src/evidence_image.py``):
+lossless WebP at ``method=0``, or the original PNG whenever the WebP output
+would not be strictly smaller (A5 — the encode must be cheap, and the file
+must never grow). Either way the image stays pixel-identical: evidence is an
+audit artifact, so fidelity is never traded for size or speed.
 
-These tests pin four things:
-1. the default really is lossless WebP,
+These tests pin:
+1. the default really is lossless WebP (adaptive fallback to PNG allowed),
 2. ``AITEST_EVIDENCE_IMAGE_FORMAT`` is a working escape hatch to PNG (and an
    unsupported value can never break evidence capture),
-3. the encoder is genuinely lossless (pixel-identical) and actually smaller,
+3. the encoder is genuinely lossless (pixel-identical) and never grows the
+   file (A5),
 4. the CLI evidence generator names files with the configured extension.
 """
 
@@ -35,11 +37,32 @@ ENV_VAR = "AITEST_EVIDENCE_IMAGE_FORMAT"
 
 
 def _png_bytes(size: tuple[int, int] = (200, 120)) -> bytes:
-    """A small gradient PNG — gradient content stands in for a real page."""
+    """A small gradient PNG — smooth content where lossless WebP wins."""
     img = Image.new("RGB", size)
     for y in range(size[1]):
         for x in range(size[0]):
             img.putpixel((x, y), (x % 256, y % 256, (x + y) % 256))
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
+def _noise_png_bytes(size: tuple[int, int] = (400, 300)) -> bytes:
+    """Banded-sinusoid content where lossless WebP at method=0 LOSES to PNG.
+
+    Measured 2026-09-21 (A5): webp-m0 is ~157% of the PNG here, so the
+    adaptive rule must keep the PNG — this is the real-world flat-UI case on
+    the 1280x6533 landing page (1202 KB webp vs 1015 KB png).
+    """
+    import math
+
+    img = Image.new("RGB", size)
+    for y in range(size[1]):
+        for x in range(size[0]):
+            r = int(127 + 127 * math.sin(x / 17.0) * math.cos(y / 23.0))
+            g = int(127 + 127 * math.sin(x / 31.0 + 1.7) * math.sin(y / 11.0))
+            b = int(127 + 127 * math.cos(x / 7.0 - y / 29.0))
+            img.putpixel((x, y), (r, g, b))
     buffer = io.BytesIO()
     img.save(buffer, format="PNG", optimize=True)
     return buffer.getvalue()
@@ -111,7 +134,10 @@ def test_encode_returns_png_untouched_when_format_is_png(monkeypatch: pytest.Mon
     monkeypatch.setenv(ENV_VAR, "png")
     png = _png_bytes()
 
-    assert encode_evidence_image(png) == png
+    data, fmt = encode_evidence_image(png)
+
+    assert data == png
+    assert fmt == "png"
 
 
 def test_encode_webp_is_lossless_and_pixel_identical(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,24 +145,40 @@ def test_encode_webp_is_lossless_and_pixel_identical(monkeypatch: pytest.MonkeyP
     monkeypatch.delenv(ENV_VAR, raising=False)
     png = _png_bytes(size=(300, 200))
 
-    encoded = encode_evidence_image(png)
+    encoded, fmt = encode_evidence_image(png)
 
     with Image.open(io.BytesIO(encoded)) as decoded:
-        assert decoded.format == "WEBP"
+        assert decoded.format == ("WEBP" if fmt == "webp" else "PNG")
         assert decoded.size == (300, 200)
         with Image.open(io.BytesIO(png)) as original:
             diff = ImageChops.difference(original.convert("RGB"), decoded.convert("RGB"))
-            assert diff.getbbox() is None, "lossless WebP must not alter any pixel"
+            assert diff.getbbox() is None, "lossless encoding must not alter any pixel"
 
 
-def test_encode_webp_is_smaller_than_the_png(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The whole point of the default: smaller files at identical fidelity."""
+def test_encode_picks_webp_when_it_shrinks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Smooth (real-page-like) content: WebP wins on size at identical fidelity."""
     monkeypatch.delenv(ENV_VAR, raising=False)
     png = _png_bytes(size=(400, 300))
 
-    encoded = encode_evidence_image(png)
+    encoded, fmt = encode_evidence_image(png)
 
+    assert fmt == "webp"
     assert len(encoded) < len(png), f"webp {len(encoded)}B not smaller than png {len(png)}B"
+
+
+def test_encode_never_grows_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A5: when WebP at method=0 would be LARGER than the PNG, keep the PNG."""
+    monkeypatch.delenv(ENV_VAR, raising=False)
+    png = _noise_png_bytes()
+
+    encoded, fmt = encode_evidence_image(png)
+
+    assert len(encoded) <= len(png)
+    if fmt == "webp":
+        assert len(encoded) < len(png)
+    else:
+        assert fmt == "png"
+        assert encoded == png
 
 
 def test_encode_falls_back_to_original_on_unusable_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,15 +186,20 @@ def test_encode_falls_back_to_original_on_unusable_bytes(monkeypatch: pytest.Mon
     monkeypatch.delenv(ENV_VAR, raising=False)
     junk = b"this is not an image"
 
-    assert encode_evidence_image(junk) == junk
+    data, fmt = encode_evidence_image(junk)
+
+    assert data == junk
+    assert fmt == "png"
 
 
-def test_write_evidence_image_writes_webp_and_returns_size(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_write_evidence_image_writes_actual_format_and_returns_size(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv(ENV_VAR, raising=False)
     destination = tmp_path / "evidence" / "nested" / "shot.webp"
 
-    written = write_evidence_image(_png_bytes(), destination)
+    written, fmt = write_evidence_image(_png_bytes(), destination)
 
     assert destination.exists()
     assert written == destination.stat().st_size
-    assert Image.open(destination).format == "WEBP"
+    assert Image.open(destination).format == ("WEBP" if fmt == "webp" else "PNG")

@@ -7,10 +7,15 @@ primaryColor = "#4ade80"
 font = "monospace"
 
 [server]
-# B-041: keep the file watcher (hot-reload / rerun) but exclude the virtualenv.
-# The always-on RAG loads `transformers` (via sentence-transformers on first
-# embed); the watcher then walks its lazy vision submodules and spams the log
-# with `ModuleNotFoundError: No module named 'torchvision'` tracebacks
-# (cosmetic — Streamlit catches them, but they're huge). Excluding .venv stops
-# the scanning without losing source-file reruns.
+# B-071: the file watcher walks *imported modules* (local_sources_watcher) and
+# calls hasattr(m, "__path__"), which triggers transformers' lazy vision
+# submodules (videomae, vilt, yolos, ...) — each imports torchvision, which is
+# not installed → hundreds of ModuleNotFoundError tracebacks per session.
+# That noise comes from module introspection, NOT directory scanning, so a
+# folderWatchBlacklist cannot stop it (the B-041 comment claiming otherwise
+# was wrong). Disabling the watcher removes the spam entirely; the cost is
+# auto-rerun on source edits — the app still reruns on every interaction.
+# (The blacklist below is kept only so a future watcher re-enable does not
+# scan the virtualenv.)
+fileWatcherType = "none"
 folderWatchBlacklist = [".venv"]

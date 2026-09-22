@@ -41,6 +41,10 @@ class StoryResult:
     tests_passed: int = 0
     tests_false_positive: int = 0
     generation_duration_s: float = 0.0
+    # B-061: True when the pytest subprocess was killed by its timeout. A
+    # timed-out run must never render as "Tests: 0" — that is indistinguishable
+    # from "no test files persisted".
+    tests_timed_out: bool = False
 
 
 @dataclass
@@ -114,6 +118,15 @@ class HarnessReport:
             "",
             f"  Tests executed:           {self.total_tests_executed}",
             f"  Tests passed:             {self.total_tests_passed}",
+        ]
+        timed_out = [s.story_id for s in self.stories if s.tests_timed_out]
+        if timed_out:
+            # B-061: a timeout is NOT "zero tests ran" — say so explicitly.
+            lines.append(
+                f"  Tests timed out:          {len(timed_out)} story run(s) killed by the "
+                f"pytest timeout: {', '.join(timed_out)} (not counted in the totals above)"
+            )
+        lines += [
             f"  Test pass rate:           {self.test_pass_rate():.1f}%",
             f"  False positives:          {self.total_false_positives}",
             f"  False positive rate:      {self.false_positive_rate():.1f}%",
@@ -131,9 +144,12 @@ class HarnessReport:
             lines.append(
                 f"    Placeholders: {len(s.resolutions)} correct={sum(r.matched for r in s.resolutions)}/{len(s.resolutions)} ({acc:.0f}%)"
             )
-            lines.append(
-                f"    Tests:        {s.tests_executed} passed={s.tests_passed} false_pos={s.tests_false_positive}"
-            )
+            if s.tests_timed_out:
+                lines.append("    Tests:        TIMED OUT (pytest run killed — no result)")
+            else:
+                lines.append(
+                    f"    Tests:        {s.tests_executed} passed={s.tests_passed} false_pos={s.tests_false_positive}"
+                )
             lines.append(f"    Skeletons:    {s.criteria_with_skeletons}/{s.total_criteria}")
             lines.append(f"    Duration:     {s.generation_duration_s:.1f}s")
             lines.append("")
@@ -163,6 +179,7 @@ class HarnessReport:
                     tests_passed=s_data.get("tests_passed", 0),
                     tests_false_positive=s_data.get("tests_false_positive", 0),
                     generation_duration_s=s_data.get("generation_duration_s", 0.0),
+                    tests_timed_out=s_data.get("tests_timed_out", False),
                 )
             )
         return cls(stories=stories)

@@ -32,7 +32,9 @@ repos:
       - id: eval-accuracy
         name: Eval Accuracy Gate
         description: Blocks commits that drop placeholder resolution accuracy below baseline
-        entry: uv run python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
+        # B-066: --all-extras keeps the hook environment in sync with CI (a bare
+        # `uv run` resyncs to the default set and UNINSTALLS the [pdf]/[ocr] extras).
+        entry: uv run --all-extras python scripts/eval/eval_harness.py run --mode static --min-accuracy 79 --no-persist
         language: system
         pass_filenames: false
         always_run: true
@@ -41,7 +43,8 @@ repos:
       - id: kanban-freshness
         name: Kanban Freshness Check
         description: Blocks commits when kanban.html is stale vs BACKLOG.md
-        entry: uv run python scripts/maintenance/kanban.py --check
+        # B-066: --all-extras (same reason as the eval-accuracy hook above).
+        entry: uv run --all-extras python scripts/maintenance/kanban.py --check
         language: system
         pass_filenames: false
         always_run: true
