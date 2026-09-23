@@ -21,8 +21,20 @@
 # tests/test_ci_generate.py (MockServer + FakeLLMServer, RAG_ENABLED=0).
 #
 # Deliberately NOT part of the default ci.yml gate chain: building the Docker
-# image + a full browser generation costs minutes. Run on demand
-# (workflow_dispatch) and on main pushes.
+# image + a full browser generation costs minutes.
+#
+# Split (2026-09-22, user decision — "forced check, not memory-dependent"):
+#   - core job (on main push): ONE generate-and-run invocation — the mode
+#     real users get by default. This is the per-push contract.
+#   - full job (schedule cron nightly + workflow_dispatch): the complete
+#     six-mode suite, unchanged. The cron is machine-fired (no reliance on
+#     anyone remembering), and a failure auto-files a DEDUPED repo issue so
+#     a red nightly is an unignorable tracker artifact, not a missed tab.
+#     Push runs never file issues — a red check on a push is visible by
+#     definition.
+# Note: the suite is hermetic (mock site on 127.0.0.1:8781 + fake LLM) — the
+# nightly's value is runner-image / Actions-ecosystem drift (e.g. the
+# ubuntu-latest -> Ubuntu 26 migration, 2026-10-19), not live-site drift.
 
 name: CI/CD Action Self-Test
 
@@ -30,17 +42,153 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  schedule:
+    # Forced nightly — machine-fired, not memory-fired. See the
+    # "File issue on failure (forced visibility)" step in the full job.
+    - cron: '0 3 * * *'
 
 permissions:
   contents: read
   pull-requests: write
   actions: read
+  issues: write  # nightly failure -> auto-filed deduped issue (forced visibility)
 
 jobs:
-  action-self-test:
-    name: Action self-test (generate / run / cache / comment / adapt)
+  # ── Per-push gate: the core contract ────────────────────────────────────────
+  # Exactly the full job's generate-and-run (cache-miss) block, standalone:
+  # one action invocation doing generate (fake LLM + hermetic mock) + seed +
+  # pytest + payload asserts. The six-mode suite is too heavy for every push
+  # and runs nightly + on manual dispatch instead (full job below).
+  action-self-test-core:
+    name: 'Action self-test (core: generate + run)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute cache key
+        id: cache-key
+        run: |
+          KEY=$(python3 action/cache_key.py \
+            --story "$STORY" \
+            --url "$URL" \
+            --model fake-model \
+            --provider openai-local)
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+        env:
+          STORY: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          URL: http://127.0.0.1:8781/index.html
+
+      - name: Restore generated-package cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Restore run-history (per-branch flaky markers, AI-011)
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      - name: 'Restore flow-memory store (learn: true — branch-scoped)'
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/evidence/flow_memory.json
+          key: ai-testgen-flowmem-${{ github.ref }}
+
+      - name: Generate + run (self-test, cache miss)
+        id: genrun
+        uses: ./
+        with:
+          mode: generate-and-run
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          cache-dir: ai-test-workspace/cache
+          self-test: 'true'
+          # No github-token / pr-number: posting is skipped, payload asserted.
+
+      - name: Assert generate-and-run (stub step)
+        if: steps.genrun.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+
+          # Action-state surface: cache_key emitted + cache_hit=false.
+          # Docker actions never get GITHUB_OUTPUT from the runner — the
+          # entrypoint mirrors every output into action-state.txt for stubs.
+          outputs = {}
+          gf = results / 'action-state.txt'
+          if not gf.exists():
+              gf = results / 'github-output.txt'
+          for line in gf.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  k, _, v = line.partition('=')
+                  outputs[k.strip()] = v.strip()
+          assert outputs.get('cache_hit') == 'false', outputs
+          assert len(outputs.get('cache_key', '')) == 64, outputs.get('cache_key')
+
+          # Cache seeded for the workflow's save step
+          seeded = list(Path('ai-test-workspace/cache').rglob('test_*.py'))
+          assert seeded, 'cache was not seeded with the generated package'
+
+          # Comment payload — §6 shape (posting skipped: no token/PR)
+          md = (results / 'comment.md').read_text(encoding='utf-8')
+          assert md.startswith('## 🤖 AI Test Generator — results'), md[:80]
+          assert '| Metric | Value |' in md, md[:200]
+          assert '**Mode:** generate-and-run' in md, md[:200]
+
+          # Report carries the flaky-marker key (AI-011; empty on first run)
+          report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
+          assert 'flaky' in report, report.keys()
+
+          # pytest junit + evidence junit exist
+          assert (results / 'junit.xml').exists()
+          assert (results / 'junit-evidence.xml').exists()
+          print(f'generate-and-run OK: cache_hit={outputs.get("cache_hit")}, '
+                f'{len(seeded)} cached test file(s), comment payload {len(md)} chars')
+          PY
+
+      - name: Save generated-package cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Save run-history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-selftest-results
+          path: ai-test-workspace/results/
+          if-no-files-found: warn
+
+  # ── Nightly + manual: the full six-mode suite (unchanged sequence) ──────────
+  action-self-test-full:
+    name: 'Action self-test (full: six modes — nightly/manual)'
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
@@ -429,3 +577,55 @@ jobs:
           name: run-existing-artifacts
           path: ai-test-workspace/results/
           if-no-files-found: warn
+
+      # ── Forced visibility (user requirement, 2026-09-22) ────────────────────
+      # A red nightly must not depend on anyone remembering to look at the
+      # Actions tab. Failure files a DEDUPED repo issue: one open issue while
+      # red + a "still failing" comment each subsequent failing run. Push runs
+      # never file issues (a red check on a push is visible by definition).
+      - name: File issue on failure (forced visibility)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          from datetime import UTC, datetime
+
+          token = os.environ["GH_TOKEN"]
+          repo = os.environ["REPO"]
+          api = f"https://api.github.com/repos/{repo}"
+          title = "\U0001F319 Nightly self-test failing"
+          run_url = os.environ["RUN_URL"]
+          today = datetime.now(UTC).strftime("%Y-%m-%d")
+
+          def call(method, url, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              req = urllib.request.Request(url, data=data, method=method, headers={
+                  "Authorization": f"token {token}",
+                  "Accept": "application/vnd.github+json",
+              })
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read().decode())
+
+          issues = call("GET", api + "/issues?state=open&per_page=100")
+          open_nums = [
+              i["number"] for i in issues
+              if i.get("title") == title and "pull_request" not in i
+          ]
+          if open_nums:
+              call("POST", f"{api}/issues/{open_nums[0]}/comments",
+                   {"body": f"Still failing — {run_url} ({today})"})
+              print(f"still red — commented on existing #{open_nums[0]}")
+          else:
+              created = call("POST", api + "/issues", {"title": title, "body": (
+                  "The forced nightly full self-test (all six modes) failed.\n\n"
+                  f"- Run: {run_url}\n"
+                  f"- Date: {today}\n\n"
+                  "Re-run: Actions → CI/CD Action Self-Test → Run workflow.\n"
+                  "Close this issue only after a green full run.\n"
+              )})
+              print(f"filed issue #{created['number']}")
+          PY
