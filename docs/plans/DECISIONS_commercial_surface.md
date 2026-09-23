@@ -167,8 +167,17 @@ conversation. We do not need a cheap paid tier to bridge it.
 | Tier | Price | Caps | Includes |
 |---|---|---|---|
 | Free Community | $0 | 25 runs, 10 exports / month | the whole tool: generate, self-heal, RAG, POM, multi-site, every export format, CI Action |
-| Pro Deployment | monthly, per deployment | none | + support, updates, priority security patches |
-| Air-Gap / Defence | monthly, per deployment | none | + private-network entitlement, contractual egress limitation, SLA, onboarding, audit-ready evidence support |
+| Pro Deployment | **$399 / month**, per deployment | none | + support, updates, priority security patches |
+| Air-Gap / Defence | **$1,500 / month**, per deployment | none | + private-network entitlement, contractual egress limitation, SLA, onboarding, audit-ready evidence support |
+
+**The numbers are provisional, and treated as a signpost rather than a price.** Decided 2026-09-23 from the
+anchors in `RESEARCH_FEATURE_COMPARISON_2026-09.md` §9 — $399 sits under Katalon's per-seat maths for a
+5-person team ($420–750/seat-mo total) and near mabl Starter's estimated $499; $1,500 sits above mabl
+Private (~$900) and far below QA Wolf's $8k/mo entry. **Nobody knows the right number without a buyer.**
+Because the public CTA is "request a licence" and not a checkout, a wrong number costs nothing yet — it
+only has to survive a conversation. **Review trigger:** revise after the first 3–5 real pricing
+conversations (the GTM plan already puts 5 design partners through the product), or after the first
+quote from Katalon/Autonoma, whichever comes first.
 
 - **`self-serve` is deleted.** It exists in `src/licensing/tiers.py` only to gate Jira export, which
   is a poor boundary and is not enforced anyway.
@@ -181,8 +190,7 @@ conversation. We do not need a cheap paid tier to bridge it.
   burden. They are distribution, not revenue: they test on Free, then bring it to work.
 - **Price period: monthly** (decided 2026-09-23). Note that annual billing is the norm for
   self-hosted and carries less churn; offer both, lead with monthly.
-- **The numbers are not decided here.** See `RESEARCH_FEATURE_COMPARISON_2026-09.md` §9 for the
-  evidence and the anchors.
+- **Prices: $399/mo Pro, $1,500/mo Air-Gap** (provisional — see the note under the table).
 
 **Why no feature scissors on Free:** the core is Apache-2.0, which already permits commercial use.
 A fork removes any feature gate, so scissors only annoy honest users. What is sellable is support,
@@ -224,9 +232,15 @@ industry-standard by design.
 
 ## 9. Open questions
 
-1. The two price numbers (evidence and anchors are in the research doc).
+1. **The two price numbers are provisionally set** ($399 / $1,500 per month per deployment) with a
+   review trigger — see §6. Not a blocker; the CTA is a conversation, not a checkout.
 2. SOC 2: worth the cost at this revenue level, or defer until a regulated deal demands it?
-3. Free export cap: raise to 25, or remove the export cap entirely?
+3. Free export cap: **keep 10** (recommended — only the compliance formats are metered, the HTML
+   evidence report is not, so an evaluator is not blocked). Revisit if evaluators report hitting it.
 4. Wire the feature gates (`feature_enabled` has zero call sites) or drop the pretence and sell
-   entitlement + support only? **Recommendation: drop it.**
-5. Annual billing alongside monthly — lead with which?
+   entitlement + support only? **Recommendation: drop it.** Tracked as **B-085**.
+5. Annual billing alongside monthly — lead with which? (Not decided; monthly is the published
+   period for now.)
+
+**Work items filed in BACKLOG:** B-082 (commercial copy defects), B-083 (tamper-evident ledger),
+B-084 (14-day trial), B-085 (tier-table cleanup + the export-cap call).

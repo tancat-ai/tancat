@@ -117,6 +117,59 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ---
 
+## 🆕 B-082 — Commercial copy defects: the landing pricing card contradicts the tier table, and the in-product upsell names a company that does not exist
+
+**Status:** 🆕 new — found 2026-09-23 while writing the commercial decision record (`docs/plans/DECISIONS_commercial_surface.md` §7). Both are **live**: `tancat.dev` is published, and the upsell strings ship in the product.
+**Priority:** high — a public page that misstates its own tiers, and a legal name that was never incorporated, shown to every user who hits the free-tier cap.
+**One-line:** seven concrete mismatches between what the page/product says and what the code does.
+
+| # | Where | Problem | Fix |
+|---|---|---|---|
+| 1 | `landing/index.html` pricing cards | prints competitor prices as "anchors" ("testRigor $450/mo Pro; Mabl $499/mo") — they drift (testRigor no longer publishes a price; 2026 estimates put Pro near $900–1,000/mo) and they invite comparison shopping | remove from the page; the research doc is their home |
+| 2 | `landing/index.html` pricing cards | prices carry no period ("~$299-499 / deployment") | state the period (monthly) |
+| 3 | `landing/index.html` Pro card | lists self-healing and RAG as Pro features; `src/licensing/tiers.py` puts both in **free** | correct to match the tier table |
+| 4 | `landing/index.html` Pro card | promises a "priority security patch queue" that is in no tier table | add it to the table or remove the claim |
+| 5 | `src/usage_meter.py` `_UPGRADE_PROMPT` | says "see the license key from **Cat Tan Operations**" — never incorporated; the roadmap says keep "© TanCat", no Ltd | say TanCat (sole trader) |
+| 6 | `src/ui/ui_sidebar.py` limit warning | advertises the bypass to the user who just hit the cap — "set `AITEST_ENFORCE_FREE_TIER=0` to disable the cap" | drop that sentence; keep the bypass documented in the docs, not in the upsell |
+| 7 | `landing/index.html` Free card | 10 exports/month is stated as a headline limit | see B-085 (only the compliance formats are metered; the HTML report is not metered at all) |
+
+**Note on #7:** only `csv`, `ndjson` and `junit` are metered (`src/evidence_export.py`); the HTML evidence report is **not** metered, so an evaluator can already review unlimited evidence. That is the right split — see B-085.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-083 — Make the free-tier usage ledger tamper-EVIDENT (not tamper-proof), so the caps become contractual rather than a lock
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §3). The caps are a nudge today and always will be; this makes a reset *detectable* instead of silent.
+**Priority:** medium — no revenue is lost today (nothing is enforced), but it is the cheapest way to give the caps any meaning without breaking the no-egress promise.
+**One-line:** `src/usage_meter.py` counts runs from a local SQLite DB and exports from a plain JSON ledger (`_load_ledger` / `_save_ledger`). Deleting the ledger resets the export count silently — that is **B-051**. Hash-chain each entry (store a fingerprint of the previous entry) and sign the head with the Ed25519 key already used for licences (`src/licensing/license.py`), so a reset or edit is detectable by a licence check, a support request, or an audit. The terms then say a broken chain voids the licence.
+**Explicitly NOT doing:** a runtime phone-home licence check. It would not leak customer data, but it would break the true-air-gap use case functionally and contradict the published egress claim — which `scripts/audit_egress.py` enforces in CI. If that trade is ever revisited, the audit doc and the gate change **first**.
+**Principle to keep in mind:** whoever owns the machine owns the enforcement. The source is readable Python under Apache-2.0, so a determined user can always bypass this. Deter + contract is the ceiling.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-084 — 14-day self-serve Pro trial (the conversion door, instead of a cheap paid tier)
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §5). Today the only route from Free to Pro is "email us"; the industry norm (mabl, testRigor, Katalon) is a time-boxed self-serve trial.
+**Priority:** medium — this is the answer to "how do we get people in the door at a per-deployment price", and it is small.
+**One-line:** issue a time-boxed licence key (a new `expires_at` on the existing signed-licence format is enough — no new mechanism, no phone-home), self-serve, no email. It lifts the free-tier caps for 14 days. Do **not** add a cheap indie tier instead: the solo dev's alternative is $0 (Playwright MCP + a local model), they do not buy support, and a $19/mo tier would anchor the product's value at $19.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-085 — Tier-table cleanup: delete `self-serve`, and decide whether `feature_enabled` gets wired at all
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §6).
+**Priority:** medium — the code and the page disagree about how many tiers exist, which is how the drift in B-082 started.
+**One-line:** `src/licensing/tiers.py` defines **four** tiers (free, self-serve, pro, airgap); the page shows three. `self-serve` exists only to gate `jira_export` — a poor boundary. Two decisions, both recorded in the decision doc:
+1. **Delete `self-serve`** (or fold its one claim into `pro`). Three public tiers: Free / Pro / Air-Gap.
+2. **`feature_enabled()` has zero call sites** — nothing in the product consults the feature table. Either wire it into POM / multi-site / Jira / private-network, or drop the feature-gate pretence and sell entitlement + support only. **Recommendation: drop it** — the core is Apache-2.0 (commercial use already permitted), a fork removes any gate, and the counters are local files. Scissors would only annoy honest users.
+**Also decide here:** the free **export** cap. Only `csv` / `ndjson` / `junit` are metered; the HTML evidence report is not. So an evaluator already sees unlimited evidence, and the 10/month cap bites the *compliance* formats — which is the correct boundary for a team buyer. Options: keep 10 (recommended — it is enough to prove a JUnit wires into CI, and it does not block the solo dev's real need, which the unmetered HTML report covers), or raise it.
+**Estimated sessions:** 0.5.
+
+---
+
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
 **Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.
