@@ -1,5 +1,11 @@
 # Competitive Landscape & Business Case — AI-Powered Playwright Test Generation
 
+> **⚠️ Partly superseded (2026-09-23).** §2.1 and §4.2 below were researched 2026-08-17 and two of
+their claims no longer hold: testRigor no longer publishes a price, and "zero incumbents sell a
+local-LLM, no-egress generator" is false (Autonoma self-hosts free, Shiplight and Midscene are
+BYO-LLM). Feature-level evidence and the corrected price bands live in
+`RESEARCH_FEATURE_COMPARISON_2026-09.md` — that doc owns them; this one keeps the narrative.
+
 **Created:** 2026-08-17
 **Status:** Research complete — feeds Phase 6 (SaaS) / Phase 8 (GTM) decisions and `RESEARCH_SAAS_AND_LAUNCH.md`
 **Method:** GitHub API (repo stars/activity/funding signals) + web research (market reports, vendor pricing, funding news, M&A). Data captured 2026-08-17; dates cited per source.
@@ -90,6 +96,9 @@ Three pillars, in priority order:
 3. **Self-healing + RAG** (locators that repair themselves, site-scoped memory) — the retention reason.
 
 ### 4.2 Pricing benchmark table (from research)
+
+> **Superseded in part** — see `RESEARCH_FEATURE_COMPARISON_2026-09.md` §2 for first-party prices
+> captured 2026-09-23. The testRigor figures in the table below are no longer published by testRigor.
 
 | Tier | Comparable anchor | Suggested |
 |------|-------------------|-----------|
