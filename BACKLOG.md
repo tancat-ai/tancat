@@ -170,6 +170,39 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ---
 
+## 🆕 B-086 — Head/attribute criteria pass GREEN without checking anything (the resolver has no concept of `<head>`, so the assertion is weakened to match a visible element)
+
+**Status:** 🆕 new — found by the Session 7 re-measure (2026-09-24), recorded in `docs/sessions/2026-09-24_session7_re_measure.md` §3.
+**Priority:** **high** — this is the gate-2 blocker ("zero false greens") and it sits in exactly the criterion class a buyer evaluates first (metadata, attributes, head tags).
+**One-line:** a criterion about `<head>` content or an attribute-only element resolves to the **nearest visible element** and then emits an assertion weak enough to pass. Live evidence from `test_20260924_002444_*`:
+
+| Criterion | Emitted assertion | What it really checked |
+|---|---|---|
+| 30 — "the page declares a canonical URL" | `assert_visible('.border-slate-800/80.border-t.font-mono.mt-6.pt-4.text-[11px].text-amber-400/90')` | visibility of some styled div. `link[rel=canonical]` is in `<head>` and is **never** visible — the test could not have checked it. **PASSED.** |
+| 27 — "the Air-Gap tier shows how to start a conversation" | `assert_visible(h3 class blob)` + `assert_visible(h2 'Contact us' blob)` | that two headings exist — not that a contact link appears **inside the Air-Gap tier**. **PASSED.** |
+| 29 — "Open Graph title and image declared" | `assert_visible(':has-text("Local OpenAI-compatible API endpoint…")')` | any visible element containing that text. Trivially satisfiable. |
+
+Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[href="privacy.html"]`, 33 → `a[href="terms.html"]` (both genuine passes).
+
+**Expected behaviour instead:** for these criterion shapes, either resolve the real element — `meta[name="description"]`, `link[rel="canonical"]`, `link[rel="icon"]`, `meta[property^="og:"]` — or emit an honest `pytest.skip` with the reason. Never a weakened `assert_visible`.
+**Where:** the ASSERT classification + emit path (`src/code_postprocessor.py` `attribute_assertion_type` / `attribute_predicate`, `src/evidence_tracker.py` `assert_attribute` / `assert_visible`), and the resolver's candidate set for head elements.
+**Why it survived B-069:** B-069 fixed the *fallback-resolved-assertion* class (unverified → skip) and made attribute predicates read the attribute. This is a different hole: the element is not a fallback, it is a confidently-resolved **wrong** element, and the emitted assertion kind (`assert_visible`) is chosen to be satisfiable by it.
+**Estimated sessions:** 1 (fix + unit tests + live replay of the 3 cases above).
+
+---
+
+## 🆕 B-087 — `must_be_url` is applied to a criterion that asks for a `mailto:` link, so a correct page fails
+
+**Status:** 🆕 new — found by the Session 7 re-measure (2026-09-24).
+**Priority:** medium — a false **red** (the mirror of B-086), one occurrence today, but any `mailto:`/`tel:`/`#anchor` criterion will hit it.
+**One-line:** criterion 26 is "The hello@tancat.dev link is a mailto link". The generator emitted `assert_attribute('…', 'href', must_be_url=True, …)` and failed with *"is not an http(s) URL (value='mailto:hello@tancat.dev')"* — it **failed a correct page** by asserting the opposite of the criterion. Same predicate family: criterion 13's Buy-Pro CTA failed because `href='#contact'` is not `http(s)` (arguably right, but it shows the predicate is applied without reading the criterion's intent).
+**Expected behaviour:** `must_be_url` applies when the criterion says "resolves to a live/valid URL"; a criterion naming `mailto:` / `tel:` / an in-page anchor must assert that scheme instead.
+**Where:** `attribute_predicate()` in `src/code_postprocessor.py` — the predicate is derived from the description and needs a scheme vocabulary, not just a "must be live" flag.
+**Why it matters:** a false red counts against gate 1 (resolution accuracy) and makes the red list noisier than the real defect count.
+**Estimated sessions:** 0.25.
+
+---
+
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
 **Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.
