@@ -78,6 +78,14 @@ onto whatever *visible* element looks textually closest, then asserts something 
 
 **Also noted:** 35 criteria produced **34** tests — one criterion was lost or merged. Not investigated.
 
+**Config-independence (checked, not assumed).** No model setting can fix B-086: the scraper collects only
+`interactive_tags = ["button", "a", "input", "select", "textarea"]` and `display_tags`, plus elements with
+an `id` (`src/scraper.py:776,780,808,825,839`). `<meta>`, `<link>` and `<title>` are **never collected**, so
+head elements never enter the candidate pool — the resolver cannot pick an element it was never offered.
+The defect is architectural and deterministic. Reasoning-on also did not affect any gate: it slows
+*generation* (42–130s per fragment vs 17–25s with it off in the 09-16 record) and the suite time (210s)
+never touches the LLM.
+
 ---
 
 ## 5. Why this matters commercially
