@@ -264,7 +264,4 @@ class SidebarConfig:
             mb = summary.storage_bytes / (1024 * 1024)
             st.sidebar.caption(f"Storage: {mb:.1f} MB")
         if summary.enforcement_on and (summary.runs_remaining == 0 or summary.exports_remaining == 0):
-            st.sidebar.warning(
-                "Free-tier limit reached. Upgrade for unlimited runs/exports, or set "
-                "AITEST_ENFORCE_FREE_TIER=0 to disable the cap (self-hosted)."
-            )
+            st.sidebar.warning("Free-tier limit reached. Request a license for unlimited runs and exports.")
