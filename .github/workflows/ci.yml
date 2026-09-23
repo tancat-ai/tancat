@@ -203,11 +203,30 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/ cli/
 
-      # Pre-commit parity: the local mypy hook type-checks tests/ too, so a
-      # change that CI's src/cli-only gate would happily accept must not be
-      # able to break a local commit (B-059).
-      - name: Run mypy (tests/ + full tree, pre-commit parity)
-        run: uv run mypy . --ignore-missing-imports
+      # Pre-commit parity (B-059): the local mypy hook type-checks the
+      # STAGED files of a commit (tests/ included; scripts/|fixtures/ excluded),
+      # so a --no-verify push must not slip past CI what the hook would have
+      # rejected. Check exactly the in-scope .py files THIS push changed —
+      # not the whole tree every push (that re-checked hundreds of unchanged
+      # files for zero extra strictness: src/ cli/ is already re-checked
+      # strictly above, and an unchanged file was checked when it last
+      # changed). github.event.before is the ref's pre-push value, so
+      # multi-commit pushes are covered; all-zeros (first push) falls back
+      # to HEAD~1.
+      - name: Run mypy (changed files, pre-commit parity)
+        run: |
+          BASE="${{ github.event.before }}"
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=HEAD~1
+          fi
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- '*.py' \
+            | grep -vE '^(scripts/|fixtures/|generated_tests/|exported_tests/|scratch/|notebooks/)' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No in-scope .py files changed in this push — parity pass skipped."
+            exit 0
+          fi
+          echo "Parity-checking: $CHANGED"
+          uv run mypy --ignore-missing-imports $CHANGED
 
   # ── Gate 2b: Eval static (offline resolver regression, ~0.5s) ─────────
   # Runs in parallel with the other gates. Static mode is fully offline
