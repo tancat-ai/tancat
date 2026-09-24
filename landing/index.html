@@ -2,7 +2,28 @@
 <html class="scroll-smooth" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="description" content="TanCat generates executable Playwright pytest tests from your user stories using your own LLM, inside your own network. Bounded egress, verified in CI."/>
+<meta name="theme-color" content="#070b10"/>
 <title>TanCat - The AI test generator where your data never leaves your deployment</title>
+<link rel="canonical" href="https://tancat.dev/"/>
+<link rel="icon" href="favicon.ico" sizes="any"/>
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
+<link rel="apple-touch-icon" href="apple-touch-icon.png"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="TanCat"/>
+<meta property="og:locale" content="en_GB"/>
+<meta property="og:url" content="https://tancat.dev/"/>
+<meta property="og:title" content="TanCat - The AI test generator where your data never leaves your deployment"/>
+<meta property="og:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, inside your own network. Bounded egress, verified in CI."/>
+<meta property="og:image" content="https://tancat.dev/og-card.png"/>
+<meta property="og:image:type" content="image/png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="TanCat landing page: the AI test generator where your data never leaves your deployment."/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="TanCat - the AI test generator where your data never leaves your deployment"/>
+<meta name="twitter:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, inside your own network."/>
+<meta name="twitter:image" content="https://tancat.dev/og-card.png"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script>
   tailwind.config = {
@@ -57,7 +78,7 @@
   <p class="mt-4 text-base sm:text-lg text-slate-400 font-normal leading-relaxed max-w-2xl mx-auto">Paste a user story <span class="text-slate-200">&rarr;</span> generate executable Playwright <code class="text-amber-300 font-mono text-xs bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">pytest</code> tests from <strong class="text-white font-medium">your own</strong> LLM, on <strong class="text-white font-medium">your own</strong> infra. It even learns from your reference docs &mdash; and they stay in-house.</p>
   <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
     <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:brightness-110 shadow-amber-glow active:scale-95 transition-all flex items-center gap-2" href="#quickstart">Get Started (Free &amp; Local) <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg></a>
-    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/90 border border-slate-800 hover:border-slate-600 hover:text-white hover:bg-slate-800/80 transition-all flex items-center gap-2.5" href="https://www.loom.com/share/YOUR_VIDEO_ID_HERE" rel="noopener noreferrer" target="_blank"><span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-amber-400">&#9654;</span> Watch 3-Min Walkthrough</a>
+    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/90 border border-slate-800 hover:border-slate-600 hover:text-white hover:bg-slate-800/80 transition-all flex items-center gap-2.5" href="#pipeline"><span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-amber-400">&#9654;</span> See the Interactive Demo</a>
   </div>
 </div>
 <div class="mt-12 relative max-w-5xl mx-auto">
@@ -252,25 +273,25 @@
 <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
   <div class="bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between">
     <div><div class="text-xs font-mono uppercase text-slate-400 tracking-wider">Developer / OSS</div><h3 class="text-xl font-bold text-white mt-1">Free Community</h3><p class="text-slate-400 text-xs mt-2">For solo developers, or for local debugging.</p>
-    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-slate-700 pl-2">Anchor: Mabl 500-credit trial; testRigor free trial</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">$0</span><span class="text-slate-400 text-xs font-mono"> / forever</span></div>
-    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">25 runs / 10 exports per 30 days</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">BYO-LLM, bounded egress</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">HTML / CSV / NDJSON evidence</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Playwright Pytest test generator</span></li></ul></div>
+    <div class="my-6"><span class="text-4xl font-black text-white font-mono">$0</span><span class="text-slate-400 text-xs font-mono"> / forever</span></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">25 runs / 10 machine-readable exports per 30 days</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited HTML evidence reports</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Self-healing + RAG DOM memory</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">BYO-LLM, bounded egress</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Playwright Pytest test generator</span></li></ul></div>
     <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="#quickstart">Install Locally</a></div>
   </div>
   <div class="bg-gradient-to-b from-cardbg to-slate-950 rounded-2xl p-7 border-2 border-amber-500/60 shadow-amber-glow transition-all flex flex-col justify-between relative">
     <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-amber-400 text-slate-950 text-[10px] font-mono font-bold uppercase rounded-full tracking-wider shadow-sm">Most Popular</div>
     <div><div class="text-xs font-mono uppercase text-amber-400 tracking-wider">Engineering Team</div><h3 class="text-xl font-bold text-white mt-1">Pro Deployment</h3><p class="text-slate-400 text-xs mt-2">Unlimited internal runs across your sprint teams and staging CI pipelines.</p>
-    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-amber-500/40 pl-2">Anchor: testRigor $450/mo Pro; Mabl $499/mo</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">~$299-499</span><span class="text-slate-400 text-xs font-mono"> / deployment</span></div>
-    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited team test runs</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">POM mode &amp; multi-site suites</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">CI/CD Action (GitHub/GitLab)</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Self-healing + RAG DOM memory</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Priority security patch queue</span></li></ul></div>
-    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:brightness-110 shadow-md transition-all" href="https://lemonsqueezy.com/l/TANCAT-PRO-TBD" rel="noopener noreferrer" target="_blank">Buy Pro</a></div>
+    <div class="my-6"><span class="text-4xl font-black text-white font-mono">$399</span><span class="text-slate-400 text-xs font-mono"> / month / deployment</span></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited runs &amp; evidence exports</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">POM mode &amp; multi-site suites</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">CI/CD Action (GitHub/GitLab)</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Support &amp; updates while licensed</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:brightness-110 shadow-md transition-all" href="#contact">Request Pro License</a></div>
   </div>
   <div class="bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between">
     <div><div class="text-xs font-mono uppercase text-cyberBlue tracking-wider">Regulated Enterprise</div><h3 class="text-xl font-bold text-white mt-1">Air-Gap / Defense</h3><p class="text-slate-400 text-xs mt-2">For banking, healthcare, aerospace, and government zero-trust environments.</p>
-    <p class="text-[10px] font-mono text-slate-500 mt-2 border-l-2 border-cyberBlue/40 pl-2">Anchor: Mabl Private ~$900/mo; QA Wolf $8k/mo+, $90k median ACV</p><div class="my-6"><span class="text-4xl font-black text-white font-mono">~$1-3k</span><span class="text-slate-400 text-xs font-mono"> / deployment</span></div>
+    <div class="my-6"><span class="text-4xl font-black text-white font-mono">$1,500</span><span class="text-slate-400 text-xs font-mono"> / month / deployment</span></div>
     <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Strict private-network / air-gap license</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Contractual egress-limitation SLA</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Custom auditor evidence reporting</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Dedicated engineer onboarding &amp; SLA</span></li></ul></div>
-    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="https://lemonsqueezy.com/l/TANCAT-AIRGAP-TBD" rel="noopener noreferrer" target="_blank">Buy Air-Gap</a></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="#contact">Request Air-Gap License</a></div>
   </div>
 </div>
-<div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing benchmarked against public vendor tiers (testRigor, Mabl, QA Wolf) in RESEARCH_COMPETITIVE_LANDSCAPE.md &sect;4.2. The differentiated revenue is the air-gap premium tier. Contact sales for multi-cluster enterprise licensing.</div>
+<div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing, billed monthly. Prices exclude taxes. Contact sales for multi-cluster enterprise licensing.</div>
 </div>
 </section>
 <section class="py-20 bg-slate-950 border-t border-slate-800 relative" id="quickstart">
@@ -313,6 +334,7 @@
   <div class="text-xs font-mono text-slate-400 uppercase tracking-wider">Email us</div>
   <a class="mt-2 block text-lg font-bold text-amber-300 font-mono hover:text-amber-200 transition-colors" href="mailto:hello@tancat.dev">hello@tancat.dev</a>
   <p class="mt-3 text-[11px] font-mono text-slate-500">We&rsquo;ll get back to you within 2 business days. Per-deployment pricing &middot; no per-seat charges.</p>
+  <p class="mt-2 text-[11px] font-mono text-slate-500">Your message is used only to answer you &mdash; see <a class="text-amber-300 hover:underline" href="privacy.html">Privacy</a>.</p>
 </div>
 </div>
 </section>
@@ -322,12 +344,14 @@
     <img alt="TanCat logo" class="w-6 h-6 rounded object-contain" src="logo_transparent.png"/>
     <p class="font-mono text-slate-400">&copy; TanCat. The AI test generator where your data never leaves your deployment.</p>
   </div>
-  <div class="flex items-center gap-6 font-mono text-slate-400">
+  <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-slate-400">
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank">GitHub</a>
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">Egress Audit</a>
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank">Security</a>
-    <a class="hover:text-amber-400 transition-colors" href="https://www.loom.com/share/YOUR_VIDEO_ID_HERE" rel="noopener noreferrer" target="_blank">Walkthrough</a>
+    <a class="hover:text-amber-400 transition-colors" href="#pipeline">Interactive Demo</a>
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/LICENSE" rel="noopener noreferrer" target="_blank">License (Apache-2.0)</a>
+    <a class="hover:text-amber-400 transition-colors" href="privacy.html">Privacy</a>
+    <a class="hover:text-amber-400 transition-colors" href="terms.html">Terms</a>
   </div>
 </div>
 </footer>

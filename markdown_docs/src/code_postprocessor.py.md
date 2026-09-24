@@ -245,6 +245,35 @@ Key behavior:
 - `_normalize_test_function_names(code)` — renames purely descriptive test names to include condition_ref number (e.g., `test_view_cart` → `test_tc01_05_view_cart`). Tests already numbered are left unchanged.
 - `replace_token_in_line()` — passes through `expect(...)` expressions as-is (URL assertions from B-021) instead of wrapping in `evidence_tracker.*()` calls.
 
+## Assertion classifiers — B-069(b) + B-086 (2026-09-19 / 2026-09-24)
+
+A green test must have actually checked the condition in its criterion. These three
+classifiers decide, from the criterion description alone, what the emitted check must be.
+All three are consulted in `_replace_token_in_line_impl` — the single emit chokepoint —
+**before** element resolution can weaken the assertion, and before the unverified-skip path.
+
+| Function | Answers | Emits |
+|---|---|---|
+| `attribute_predicate(description, attribute)` | must the value be a URL, and which substrings must it not contain? | `(must_be_url, forbidden)` passed to `assert_attribute` |
+| `count_assertion_from_description(description)` | is this a page-level count/scan check ("no TBD in links", "all images have alt")? | `CountAssertion` → `assert_no_forbidden` / `assert_attribute_all` |
+| `document_assertion_from_description(description)` | is this about a `<head>`/document element? | `DocumentAssertion` → `assert_attribute(<head selector>, <attr>)` |
+
+**`DocumentAssertion` (B-086)** carries a deterministic selector + attribute, so no
+resolution happens at all. This is required rather than convenient: the scraper collects
+only interactive tags, display tags and elements with an `id`, so `<meta>`, `<link>` and
+`<title>` never enter the candidate pool. Without the classifier, a criterion about them
+resolved to the nearest *visible* element and the assertion was weakened to
+`assert_visible` — a green that checked nothing (measured: the canonical-URL test
+"passed" by asserting a styled div's visibility).
+
+`_DOCUMENT_TARGETS` maps 11 stable targets: meta description, canonical, favicon,
+og:title / og:image / og:description / og:type / og:url, twitter:card, viewport, and
+`html`/`lang`. First match wins, so the more specific phrases are listed first.
+
+Scope note: the emitted href check confirms the tag exists and the attribute is
+non-empty. It does **not** HTTP-probe the destination's status — the same boundary B-072
+drew for the resolve/404 criteria.
+
 ## How It Works (Internals)
 
 Private `_`-helpers — the module's real logic (3 items). Grouped under the public function that uses them:

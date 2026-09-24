@@ -117,6 +117,138 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ---
 
+## 🆕 B-082 — Commercial copy defects: the landing pricing card contradicts the tier table, and the in-product upsell names a company that does not exist
+
+**Status:** 🆕 new — found 2026-09-23 while writing the commercial decision record (`docs/plans/DECISIONS_commercial_surface.md` §7). Both are **live**: `tancat.dev` is published, and the upsell strings ship in the product.
+**Priority:** high — a public page that misstates its own tiers, and a legal name that was never incorporated, shown to every user who hits the free-tier cap.
+**One-line:** seven concrete mismatches between what the page/product says and what the code does.
+
+| # | Where | Problem | Fix |
+|---|---|---|---|
+| 1 | `landing/index.html` pricing cards | prints competitor prices as "anchors" ("testRigor $450/mo Pro; Mabl $499/mo") — they drift (testRigor no longer publishes a price; 2026 estimates put Pro near $900–1,000/mo) and they invite comparison shopping | remove from the page; the research doc is their home |
+| 2 | `landing/index.html` pricing cards | prices carry no period ("~$299-499 / deployment") | state the period (monthly) |
+| 3 | `landing/index.html` Pro card | lists self-healing and RAG as Pro features; `src/licensing/tiers.py` puts both in **free** | correct to match the tier table |
+| 4 | `landing/index.html` Pro card | promises a "priority security patch queue" that is in no tier table | add it to the table or remove the claim |
+| 5 | `src/usage_meter.py` `_UPGRADE_PROMPT` | says "see the license key from **Cat Tan Operations**" — never incorporated; the roadmap says keep "© TanCat", no Ltd | say TanCat (sole trader) |
+| 6 | `src/ui/ui_sidebar.py` limit warning | advertises the bypass to the user who just hit the cap — "set `AITEST_ENFORCE_FREE_TIER=0` to disable the cap" | drop that sentence; keep the bypass documented in the docs, not in the upsell |
+| 7 | `landing/index.html` Free card | 10 exports/month is stated as a headline limit | see B-085 (only the compliance formats are metered; the HTML report is not metered at all) |
+
+**Note on #7:** only `csv`, `ndjson` and `junit` are metered (`src/evidence_export.py`); the HTML evidence report is **not** metered, so an evaluator can already review unlimited evidence. That is the right split — see B-085.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-083 — Make the free-tier usage ledger tamper-EVIDENT (not tamper-proof), so the caps become contractual rather than a lock
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §3). The caps are a nudge today and always will be; this makes a reset *detectable* instead of silent.
+**Priority:** medium — no revenue is lost today (nothing is enforced), but it is the cheapest way to give the caps any meaning without breaking the no-egress promise.
+**One-line:** `src/usage_meter.py` counts runs from a local SQLite DB and exports from a plain JSON ledger (`_load_ledger` / `_save_ledger`). Deleting the ledger resets the export count silently — that is **B-051**. Hash-chain each entry (store a fingerprint of the previous entry) and sign the head with the Ed25519 key already used for licences (`src/licensing/license.py`), so a reset or edit is detectable by a licence check, a support request, or an audit. The terms then say a broken chain voids the licence.
+**Explicitly NOT doing:** a runtime phone-home licence check. It would not leak customer data, but it would break the true-air-gap use case functionally and contradict the published egress claim — which `scripts/audit_egress.py` enforces in CI. If that trade is ever revisited, the audit doc and the gate change **first**.
+**Principle to keep in mind:** whoever owns the machine owns the enforcement. The source is readable Python under Apache-2.0, so a determined user can always bypass this. Deter + contract is the ceiling.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-084 — 14-day self-serve Pro trial (the conversion door, instead of a cheap paid tier)
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §5). Today the only route from Free to Pro is "email us"; the industry norm (mabl, testRigor, Katalon) is a time-boxed self-serve trial.
+**Priority:** medium — this is the answer to "how do we get people in the door at a per-deployment price", and it is small.
+**One-line:** issue a time-boxed licence key (a new `expires_at` on the existing signed-licence format is enough — no new mechanism, no phone-home), self-serve, no email. It lifts the free-tier caps for 14 days. Do **not** add a cheap indie tier instead: the solo dev's alternative is $0 (Playwright MCP + a local model), they do not buy support, and a $19/mo tier would anchor the product's value at $19.
+**Estimated sessions:** 0.5.
+
+---
+
+## 🆕 B-085 — Tier-table cleanup: delete `self-serve`, and decide whether `feature_enabled` gets wired at all
+
+**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §6).
+**Priority:** medium — the code and the page disagree about how many tiers exist, which is how the drift in B-082 started.
+**One-line:** `src/licensing/tiers.py` defines **four** tiers (free, self-serve, pro, airgap); the page shows three. `self-serve` exists only to gate `jira_export` — a poor boundary. Two decisions, both recorded in the decision doc:
+1. **Delete `self-serve`** (or fold its one claim into `pro`). Three public tiers: Free / Pro / Air-Gap.
+2. **`feature_enabled()` has zero call sites** — nothing in the product consults the feature table. Either wire it into POM / multi-site / Jira / private-network, or drop the feature-gate pretence and sell entitlement + support only. **Recommendation: drop it** — the core is Apache-2.0 (commercial use already permitted), a fork removes any gate, and the counters are local files. Scissors would only annoy honest users.
+**Also decide here:** the free **export** cap. Only `csv` / `ndjson` / `junit` are metered; the HTML evidence report is not. So an evaluator already sees unlimited evidence, and the 10/month cap bites the *compliance* formats — which is the correct boundary for a team buyer. Options: keep 10 (recommended — it is enough to prove a JUnit wires into CI, and it does not block the solo dev's real need, which the unmetered HTML report covers), or raise it.
+**Estimated sessions:** 0.5.
+
+---
+
+## ✅ B-086 — Head/attribute criteria pass GREEN without checking anything (the resolver has no concept of `<head>`, so the assertion is weakened to match a visible element)
+
+**Status:** ✅ **Fixed 2026-09-24**, same session as the measurement that found it. Root cause confirmed by reading the scraper, not assumed: it collects only `interactive_tags` (`button`, `a`, `input`, `select`, `textarea`), `display_tags`, and elements with an `id` (`src/scraper.py:776,780,808,825,839`) — so `<meta>`, `<link>` and `<title>` **never enter the candidate pool**. That makes the defect architectural and deterministic: no model setting (reasoning on/off) can affect it.
+
+**The fix** — a document-level assertion family, modelled on the existing B-069(b) `CountAssertion`:
+
+- `_DOCUMENT_TARGETS` + `DocumentAssertion` + `document_assertion_from_description()` + `_emit_document_assertion()` in `src/code_postprocessor.py`.
+- 11 known targets, each a stable well-known selector needing no resolution: `meta[name="description"]`/content, `link[rel="canonical"]`/href, `link[rel="icon"]`/href, `meta[property="og:title"|"og:image"|"og:description"|"og:type"|"og:url"]`/content, `meta[name="twitter:card"]`/content, `meta[name="viewport"]`/content, `html`/lang.
+- Intercepted in `_replace_token_in_line_impl` — the single emit chokepoint — immediately after the count-assertion intercept and **before** the unverified-skip path, so a real check wins over a skip.
+- Emits `evidence_tracker.assert_attribute(<head selector>, <attr>, label=...)`. `assert_attribute` waits for `state="attached"`, so a `<meta>` in `<head>` works and a **missing** tag fails honestly.
+
+**Verification:**
+
+- `tests/test_b086_document_assertions.py` — 22 tests: the 5 verbatim Session 7 descriptions map to the right selector; og:title and og:image do not cross-match; 8 ordinary criteria are left alone; the Session 7 wrong-element regression is pinned (the hero paragraph is ignored); a `pytest.skip` resolved value is overridden; every emitted line compiles; CLICK is not intercepted.
+- **Live replay** (`scratch/verify_b086_live.py`, self-hosted page): **5/5 PASS present, 5/5 FAIL after the tags are removed, control FAILS.** The check has teeth — it fails when the tag is missing, which is the whole point.
+- Full gates: **3330 pytest passed / 1 skipped** (was 3308 — exactly +22), ruff + mypy clean, smoke 39/39.
+
+**Scope — what this does NOT fix.** B-086 closes the *document/head* class only (criteria 28, 29, 30's false green, 31). Five reds remain on the same story, all a different root cause, filed as **B-088**: 16 and 22 (link-resolution misses), 24 (a page-level text scan that never reached the count classifier), 27 (a section-scoped criterion that resolved to a heading) and 13 (a criterion that no longer matches the page by design). Plus **B-087** (mailto). So gates 1–2 are **not** met by this fix alone — the earlier claim that B-086 was the only thing between us and them was too strong.
+**Priority:** **high** — this is the gate-2 blocker ("zero false greens") and it sits in exactly the criterion class a buyer evaluates first (metadata, attributes, head tags).
+**One-line:** a criterion about `<head>` content or an attribute-only element resolves to the **nearest visible element** and then emits an assertion weak enough to pass. Live evidence from `test_20260924_002444_*`:
+
+| Criterion | Emitted assertion | What it really checked |
+|---|---|---|
+| 30 — "the page declares a canonical URL" | `assert_visible('.border-slate-800/80.border-t.font-mono.mt-6.pt-4.text-[11px].text-amber-400/90')` | visibility of some styled div. `link[rel=canonical]` is in `<head>` and is **never** visible — the test could not have checked it. **PASSED.** |
+| 27 — "the Air-Gap tier shows how to start a conversation" | `assert_visible(h3 class blob)` + `assert_visible(h2 'Contact us' blob)` | that two headings exist — not that a contact link appears **inside the Air-Gap tier**. **PASSED.** |
+| 29 — "Open Graph title and image declared" | `assert_visible(':has-text("Local OpenAI-compatible API endpoint…")')` | any visible element containing that text. Trivially satisfiable. |
+
+Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[href="privacy.html"]`, 33 → `a[href="terms.html"]` (both genuine passes).
+
+**Expected behaviour instead:** for these criterion shapes, either resolve the real element — `meta[name="description"]`, `link[rel="canonical"]`, `link[rel="icon"]`, `meta[property^="og:"]` — or emit an honest `pytest.skip` with the reason. Never a weakened `assert_visible`.
+**Where:** the ASSERT classification + emit path (`src/code_postprocessor.py` `attribute_assertion_type` / `attribute_predicate`, `src/evidence_tracker.py` `assert_attribute` / `assert_visible`), and the resolver's candidate set for head elements.
+**Why it survived B-069:** B-069 fixed the *fallback-resolved-assertion* class (unverified → skip) and made attribute predicates read the attribute. This is a different hole: the element is not a fallback, it is a confidently-resolved **wrong** element, and the emitted assertion kind (`assert_visible`) is chosen to be satisfiable by it.
+**Estimated sessions:** 1 (fix + unit tests + live replay of the 3 cases above).
+
+---
+
+## 🆕 B-087 — `must_be_url` is applied to a criterion that asks for a `mailto:` link, so a correct page fails
+
+**Status:** 🆕 new — found by the Session 7 re-measure (2026-09-24).
+**Priority:** medium — a false **red** (the mirror of B-086), one occurrence today, but any `mailto:`/`tel:`/`#anchor` criterion will hit it.
+**One-line:** criterion 26 is "The hello@tancat.dev link is a mailto link". The generator emitted `assert_attribute('…', 'href', must_be_url=True, …)` and failed with *"is not an http(s) URL (value='mailto:hello@tancat.dev')"* — it **failed a correct page** by asserting the opposite of the criterion. Same predicate family: criterion 13's Buy-Pro CTA failed because `href='#contact'` is not `http(s)` (arguably right, but it shows the predicate is applied without reading the criterion's intent).
+**Expected behaviour:** `must_be_url` applies when the criterion says "resolves to a live/valid URL"; a criterion naming `mailto:` / `tel:` / an in-page anchor must assert that scheme instead.
+**Where:** `attribute_predicate()` in `src/code_postprocessor.py` — the predicate is derived from the description and needs a scheme vocabulary, not just a "must be live" flag.
+**Why it matters:** a false red counts against gate 1 (resolution accuracy) and makes the red list noisier than the real defect count.
+**Estimated sessions:** 0.25.
+
+---
+
+## 🆕 B-088 — Page-level and section-scoped criteria still resolve to a visible lookalike (4 reds + 1 false green left on the Session 7 story)
+
+**Status:** 🆕 new — the residue left after B-086 closed the document/head class. Found by the Session 7 re-measure (2026-09-24); evidence in `docs/sessions/2026-09-24_session7_re_measure.md` §2–§3.
+**Priority:** **high** — with B-086 and B-087 done, this is the remaining blocker for gates 1 and 2.
+**One-line:** four criteria that are about the page or a section as a whole were resolved to an arbitrary nearby element, and the emitted assertion was chosen to match it:
+
+| Criterion | What was emitted | What is wrong |
+|---|---|---|
+| 16 — "the Walkthrough button resolves to a live video URL" | `assert_attribute('a[href="#"]', 'href', must_be_url=True)` | matched the **nav logo** anchor (`href="#"`), not the button. Link-resolution miss. |
+| 22 — "the Security Policy link resolves without returning 404" | `assert_attribute(':has-text("Security Policy")', 'href')` | matched a **non-anchor container** that merely contains the text. Link-resolution miss. |
+| 24 — "no link, button or heading anywhere contains placeholder text" | `assert_attribute(<hero paragraph>, 'href')` | never reached the count classifier; should be a page-level scan (`assert_no_forbidden` over `a`/`button`/headings, href **and** text). |
+| 27 — "the Air-Gap tier shows how to start a conversation" | `assert_visible(h3 blob)` + `assert_visible(h2 blob)` | asserted two headings are visible — never checked for a contact link **inside** the tier. **False green.** |
+
+**Expected behaviour:** for criteria about a *section* or the *page*, scope the resolution (section-scoped candidate set) or lower it to a page-level structural check; when neither is possible, emit an honest `pytest.skip`. A criterion that names a link text must not resolve to a container that merely mentions it.
+**Where:** the resolver's scoping (`src/section_scoper.py`, `src/placeholder_scorers.py`) and the page-level classifiers in `src/code_postprocessor.py` (extend `count_assertion_from_description` to the "anywhere on the page contains X" and "inside section Y there is a Z" shapes).
+**Note:** criterion 13 ("Buy Pro link resolves to a live purchase URL") is *not* part of this — that criterion no longer matches the page by design, since Session 6 replaced the Buy URLs with a request-a-licence route. It needs a story/criterion update, not a code fix.
+**Estimated sessions:** 1–1.5.
+
+---
+
+## ✅ B-089 — Project sanitizer flagged the deployed `landing/robots.txt` as junk, failing CI
+
+**Status:** ✅ **Fixed 2026-09-24** — found by PR #6's CI run (`Project Sanitizer` job, exit 1) and fixed in the same PR.
+**Priority:** low for the product, but it is a **CI-blocking false positive on a legitimate product asset** — every push touching the landing page would have gone red.
+**One-line:** `purge_junk` treats every non-whitelisted `*.txt` as a temporary file (`scripts/maintenance/project_sanitizer.py:227`). `landing/robots.txt` is a standards-defined web-root file sitting in a **deployed** directory, so purge mode would delete it and `--check-only` failed CI. Added `robots.txt` to `TXT_WHITELIST` with a comment; `--check-only` now exits 0 with 0 junk files.
+**Why it matters beyond this one file:** the `*.txt` rule is a blunt instrument — any future legitimate `.txt` asset outside the whitelist fails CI the same way. A directory-level exemption for deploy roots (`landing/`) is the sturdier fix if it recurs.
+**Not the same as B-080:** B-080 is archived `*.log` files flagged locally on Windows but passing in CI; that one is still open.
+**Estimated sessions:** 0.1.
+
+---
+
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
 **Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.

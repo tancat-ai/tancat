@@ -285,6 +285,73 @@ def _emit_count_assertion(indent: str, check: CountAssertion, description: str) 
     return call + ")"
 
 
+# ---------------------------------------------------------------------------
+# B-086 — document-level (`<head>`) assertions.
+#
+# The scraper collects only interactive and display tags plus elements with an
+# id (src/scraper.py), so <meta>/<link>/<title> are NEVER in the candidate
+# pool. A criterion about them therefore resolves to the nearest *visible*
+# element and the assertion is weakened to something that element can satisfy —
+# a green that checked nothing (measured 2026-09-24: the canonical-URL test
+# "passed" by asserting visibility of a styled div).
+#
+# The fix: these targets have stable, well-known selectors, so no resolution is
+# needed. Emit the attribute read against the real element. assert_attribute
+# waits for state="attached", so a <meta> in <head> works and a MISSING tag
+# fails honestly instead of passing.
+#
+# Scope note (deliberate): the href check validates that the tag exists and the
+# attribute is non-empty. It does NOT HTTP-probe the destination's status — the
+# same boundary B-072 drew for the resolve/404 criteria.
+# ---------------------------------------------------------------------------
+
+#: (keywords that identify the criterion, CSS selector, attribute to read).
+#: First match wins, so put more specific phrases before more general ones.
+_DOCUMENT_TARGETS: tuple[tuple[tuple[str, ...], str, str], ...] = (
+    (("open graph title", "og:title", "og title"), 'meta[property="og:title"]', "content"),
+    (("open graph image", "og:image", "og image"), 'meta[property="og:image"]', "content"),
+    (("open graph description", "og:description"), 'meta[property="og:description"]', "content"),
+    (("open graph type", "og:type"), 'meta[property="og:type"]', "content"),
+    (("open graph url", "og:url"), 'meta[property="og:url"]', "content"),
+    (("twitter card",), 'meta[name="twitter:card"]', "content"),
+    (("meta description", "meta tag description", "description meta tag"), 'meta[name="description"]', "content"),
+    (("canonical",), 'link[rel="canonical"]', "href"),
+    (("favicon", "fav icon", "site icon"), 'link[rel="icon"]', "href"),
+    (("viewport meta", "meta viewport", "viewport tag"), 'meta[name="viewport"]', "content"),
+    (("lang attribute", "html lang", "document language"), "html", "lang"),
+)
+
+
+@dataclass(frozen=True)
+class DocumentAssertion:
+    """A criterion about a `<head>`/document-level element (B-086).
+
+    Carries the deterministic selector and attribute, so the emitter never has
+    to resolve — and therefore can never resolve to a visible wrong element.
+    """
+
+    selector: str
+    attribute: str
+
+
+def document_assertion_from_description(description: str) -> DocumentAssertion | None:
+    """Classify a criterion about a document-level (`<head>`) element.
+
+    Returns the fixed selector + attribute to read, or ``None`` when the
+    criterion is about an ordinary page element.
+    """
+    lowered = description.lower()
+    for keywords, selector, attribute in _DOCUMENT_TARGETS:
+        if any(keyword in lowered for keyword in keywords):
+            return DocumentAssertion(selector=selector, attribute=attribute)
+    return None
+
+
+def _emit_document_assertion(indent: str, check: DocumentAssertion, description: str) -> str:
+    """Emit the tracker call for a document-level assertion (B-086)."""
+    return f"{indent}evidence_tracker.assert_attribute({check.selector!r}, {check.attribute!r}, label={description!r})"
+
+
 def _strip_module_level_statements(code: str) -> str:
     """Remove stray executable statements at module scope (LLM leaks).
 
@@ -467,6 +534,14 @@ def _replace_token_in_line_impl(
         count_check = count_assertion_from_description(description)
         if count_check is not None:
             return _emit_count_assertion(indent, count_check, description)
+
+    # B-086: document-level (`<head>`) criteria have no scraped candidate —
+    # emit the attribute read against the real element instead of letting the
+    # resolver pick a visible lookalike and weaken the check to assert_visible.
+    if action == "ASSERT":
+        document_check = document_assertion_from_description(description)
+        if document_check is not None:
+            return _emit_document_assertion(indent, document_check, description)
 
     if "pytest.skip" in resolved_value:
         return f"{indent}{resolved_value}"
