@@ -184,12 +184,20 @@ class JourneyScraper:
             "credential_profile": asdict(credential_profile) if credential_profile else None,
         }
         subprocess_path = str(Path(__file__).resolve())
+        # Run the subprocess against THIS checkout. A script under src/ puts
+        # src/ (not the repo root) on sys.path[0], so without an explicit
+        # PYTHONPATH the child would import `src` from whichever checkout the
+        # active venv was installed from (main vs. a branch/worktree).
+        checkout_root = str(Path(__file__).resolve().parent.parent)
+        child_env = dict(os.environ)
+        child_env["PYTHONPATH"] = checkout_root + os.pathsep + child_env.get("PYTHONPATH", "")
         completed = subprocess.run(
             [sys.executable, subprocess_path, "--journey-scrape"],
             input=json.dumps(payload),
             capture_output=True,
             text=True,
             check=False,
+            env=child_env,
             timeout=max(120, int(self.timeout_ms / 1000) * max(1, len(steps))),
         )
 

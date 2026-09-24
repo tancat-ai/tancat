@@ -11,6 +11,7 @@ import logging
 import re
 from typing import Any
 
+from src.content_scoping import kind_matches, scope_pages_to_headings, scope_pages_to_images
 from src.intent_matcher import SemanticFillStrategy, _is_fillable
 from src.link_scoping import is_link_criterion, link_name_matches, scope_pages_to_links
 from src.locator_builder import build_robust_locator
@@ -845,6 +846,13 @@ class ElementMatcher:
                 str(matched.get("selector", "")).strip(),
             )
             return None
+        if matched is not None and action == "ASSERT" and not kind_matches(description, matched):
+            logger.info(
+                "[RESOLVE] '%s' | B-092 kind guard rejected '%s' (element kind does not match)",
+                description,
+                str(matched.get("selector", "")).strip(),
+            )
+            return None
         return matched
 
     async def _find_best_element_for_current_page(
@@ -874,6 +882,10 @@ class ElementMatcher:
         # B-088: a link-resolution criterion may only match anchor elements, so
         # it can never resolve to a span/container that merely names the link.
         pages_data = scope_pages_to_links(action, description, pages_data)
+        # B-092: an image criterion may only match <img>; a headline criterion
+        # may only match headings — never a nearby paragraph or tab button.
+        pages_data = scope_pages_to_images(action, description, pages_data)
+        pages_data = scope_pages_to_headings(action, description, pages_data)
 
         # Pass 0 — exact text match for ASSERT:"exact text"
         # ── AI-052 S5: penalty-first role gate on the fast passes ──────
@@ -1144,6 +1156,9 @@ class ElementMatcher:
             # pass runs, so a span/container that merely names the link cannot
             # win the fast text pass.
             request_pages = scope_pages_to_links(action, description, pages_data)
+            # B-092: same kind-gate for image and heading criteria.
+            request_pages = scope_pages_to_images(action, description, request_pages)
+            request_pages = scope_pages_to_headings(action, description, request_pages)
 
             # AI-052 S5: penalty-first role gate (same contract as the single
             # resolution path) — role-contradicted fast matches are deferred
@@ -1271,6 +1286,13 @@ class ElementMatcher:
             ):
                 logger.info(
                     "[RESOLVE] '%s' | B-088 link guard rejected '%s' (name does not match)",
+                    description,
+                    str(result.get("selector", "")).strip(),
+                )
+                results[i] = None
+            elif result is not None and req.get("action") == "ASSERT" and not kind_matches(description, result):
+                logger.info(
+                    "[RESOLVE] '%s' | B-092 kind guard rejected '%s' (element kind does not match)",
                     description,
                     str(result.get("selector", "")).strip(),
                 )

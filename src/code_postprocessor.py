@@ -499,6 +499,198 @@ def _emit_section_contains(indent: str, check: SectionContainsAssertion, descrip
     return f"{indent}evidence_tracker.assert_contains({check.section!r}, {check.child!r}, label={description!r})"
 
 
+# ---------------------------------------------------------------------------
+# B-090 / B-092 — page-fact and content assertions.
+#
+# A criterion about a page-wide fact ("no image is broken", "no horizontal
+# scroll at 375px"), a counted set ("at least four capability cards"), an
+# in-page anchor scan ("every same-page anchor link points at an element that
+# exists") or a named content string (the install command, a price) must emit a
+# real check. Session 7 measured all of these emitting
+# ``assert_visible(<one nearby element>)`` — a green that checked nothing.
+#
+# These targets need either no element (page-wide scans) or a content read, so
+# the emitter owns them before element resolution can weaken the check.
+# ---------------------------------------------------------------------------
+
+#: Plural noun in "at least N <noun>" → CSS selector for the counted elements.
+#: First matching noun wins. Card selectors require an ``<h3>`` descendant so a
+#: bare ``bg-cardbg`` wrapper is not counted as a card.
+_COUNT_NOUN_SELECTORS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("card", "cards", "tile", "tiles"), '[class*="card"]:has(h3), [class*="tile"]'),
+    (("image", "images", "photo", "photos", "picture", "pictures", "img", "imgs"), "img"),
+    (("link", "links", "anchor", "anchors"), "a[href]"),
+    (("button", "buttons"), "button"),
+    (("heading", "headings"), "h1, h2, h3, h4, h5, h6"),
+)
+
+#: Shell-command prefixes that mark an install/run criterion.
+_COMMAND_PREFIXES: tuple[str, ...] = (
+    "git clone",
+    "npm install",
+    "npm ci",
+    "pip install",
+    "uv sync",
+    "uv add",
+    "docker run",
+    "docker compose",
+    "curl ",
+    "bash ",
+)
+
+#: Currency symbols used to recognise a literal price in a criterion.
+_CURRENCY_RE = re.compile(r"[$\u20ac\u00a3]\s?\d")
+
+#: Number words accepted in "at least <n> <noun>".
+_NUMBER_WORDS: dict[str, int] = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
+
+
+@dataclass(frozen=True)
+class PageFactAssertion:
+    """A page-wide, counted or content assertion that needs no resolution (B-090/B-092)."""
+
+    method: str  # tracker method name
+    selector: str = ""  # CSS selector (count / natural width / anchor scan)
+    minimum: int = 0  # count lower bound
+    width: int = 0  # viewport width for the scroll check
+    expected: str = ""  # expected substring for a text check
+    section: str = ""  # section heading for the price check
+
+
+def _count_selector_for_noun(noun: str) -> str:
+    """Map the noun of "at least N <noun>" to a CSS selector, else ""."""
+    lowered = noun.lower()
+    for nouns, selector in _COUNT_NOUN_SELECTORS:
+        if any(re.search(rf"\b{re.escape(n)}\b", lowered) for n in nouns):
+            return selector
+    return ""
+
+
+def _price_section_from_description(description: str) -> str:
+    """Extract the tier/section name from a "<tier> price" criterion (B-092)."""
+    text = re.sub(r"\(.*?\)", " ", description)
+    text = re.sub(
+        r"\b(?:the|a|an|tier|section|card|panel|inside|within|is|are|shown|shows|displayed|displays|with|has|have|its|price|pricing|of|on|page)\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[^A-Za-z0-9/\- ]+", " ", text)
+    return " ".join(text.split()).strip()
+
+
+def page_fact_from_description(description: str, resolved_selector: str = "") -> PageFactAssertion | None:
+    """Classify a page-fact / content / count assertion (B-090, B-092).
+
+    Returns ``None`` when the description is an ordinary element assertion —
+    the normal resolution path applies.
+    """
+    lowered = description.replace("_", " ").strip().lower()
+    if not lowered:
+        return None
+
+    # B-090: page-wide broken-image scan.
+    if "broken image" in lowered or re.search(
+        r"\b(?:no|every|all)\b[^.]*\bimages?\b[^.]*\b(?:broken|natural width|non-?zero|loaded)",
+        lowered,
+    ):
+        return PageFactAssertion("assert_no_broken_images")
+
+    # B-090: natural width of a resolved image. "Loaded" on an image criterion
+    # is the same fact — an <img> can be visible while broken.
+    image_word = re.search(r"\b(?:image|images|screenshot|screenshots|artwork|photo|picture)\b", lowered)
+    loaded_word = re.search(r"\bload(?:ed|s|ing)?\b", lowered)
+    if "natural width" in lowered or "finished loading" in lowered or (image_word and loaded_word):
+        if resolved_selector and not resolved_selector.lstrip().startswith("pytest.skip"):
+            return PageFactAssertion("assert_natural_width", selector=resolved_selector)
+        return None
+
+    # B-090: viewport-scoped horizontal scroll.
+    if "horizontal scroll" in lowered or "scroll horizontally" in lowered:
+        width = 375
+        m = re.search(r"(\d{3,4})\s*(?:px|pixels?)", lowered)
+        if m:
+            width = int(m.group(1))
+        return PageFactAssertion("assert_no_horizontal_scroll", width=width)
+
+    # B-090: "at least N <noun>" — count the set.
+    m = re.search(r"at least\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+([a-z][a-z\- ]+)", lowered)
+    if m:
+        raw_count = m.group(1)
+        minimum = int(raw_count) if raw_count.isdigit() else _NUMBER_WORDS[raw_count]
+        selector = _count_selector_for_noun(m.group(2).strip())
+        if selector:
+            return PageFactAssertion("assert_count_at_least", selector=selector, minimum=minimum)
+
+    # B-092: in-page anchor scan — "every same-page anchor link points at an
+    # element that exists" / "anchor links resolve" / "header navigation link
+    # scrolls to a section that exists".
+    if re.search(r"\banchors?\b", lowered) and re.search(r"\b(?:resolve|exist|point|scroll|target)\w*\b", lowered):
+        return PageFactAssertion("assert_anchor_targets_exist")
+    if "same-page" in lowered and "link" in lowered:
+        return PageFactAssertion("assert_anchor_targets_exist")
+    if "navigation link" in lowered and re.search(r"\b(?:exist|scroll)\w*\b", lowered):
+        return PageFactAssertion("assert_anchor_targets_exist")
+
+    # B-092: install/run command — the command string must appear in the copy.
+    # Only a real command counts: at the start of the criterion, or followed by
+    # a URL / shell chain. A section heading like "Clone + uv sync + run" must
+    # not be mistaken for the install command.
+    for prefix in _COMMAND_PREFIXES:
+        idx = lowered.find(prefix)
+        if idx == -1:
+            continue
+        tail = description[idx:]
+        if idx == 0 or "://" in tail or "&&" in tail:
+            command = tail.strip().strip("\"'").rstrip(".")
+            return PageFactAssertion("assert_text_contains", selector="body", expected=command)
+
+    # B-092: a literal price string must appear in the copy.
+    if _CURRENCY_RE.search(description):
+        m = re.search(r"[$\u20ac\u00a3]\s?\d[\d,.]*(?:\s*/\s*[A-Za-z]+)?", description)
+        expected = m.group(0).strip() if m else description.strip()
+        return PageFactAssertion("assert_text_contains", selector="body", expected=expected)
+
+    # B-092: "<tier> price" — the named section must show a currency amount.
+    if re.search(r"\bprices?\b", lowered):
+        section = _price_section_from_description(description)
+        if section:
+            return PageFactAssertion("assert_section_has_price", section=section)
+
+    return None
+
+
+def _emit_page_fact_assertion(indent: str, check: PageFactAssertion, description: str) -> str:
+    """Emit the tracker call for a page-fact / content assertion (B-090, B-092)."""
+    label = repr(description)
+    if check.method == "assert_no_broken_images":
+        return f"{indent}evidence_tracker.assert_no_broken_images(label={label})"
+    if check.method == "assert_natural_width":
+        return f"{indent}evidence_tracker.assert_natural_width({check.selector!r}, label={label})"
+    if check.method == "assert_count_at_least":
+        return f"{indent}evidence_tracker.assert_count_at_least({check.selector!r}, {check.minimum}, label={label})"
+    if check.method == "assert_no_horizontal_scroll":
+        return f"{indent}evidence_tracker.assert_no_horizontal_scroll(width={check.width}, label={label})"
+    if check.method == "assert_anchor_targets_exist":
+        return f"{indent}evidence_tracker.assert_anchor_targets_exist(label={label})"
+    if check.method == "assert_text_contains":
+        return f"{indent}evidence_tracker.assert_text_contains({check.selector!r}, {check.expected!r}, label={label})"
+    if check.method == "assert_section_has_price":
+        return f"{indent}evidence_tracker.assert_section_has_price({check.section!r}, label={label})"
+    return f"{indent}evidence_tracker.assert_visible({check.selector!r}, label={label})"
+
+
 def _strip_module_level_statements(code: str) -> str:
     """Remove stray executable statements at module scope (LLM leaks).
 
@@ -697,6 +889,16 @@ def _replace_token_in_line_impl(
         section_check = section_contains_from_description(description)
         if section_check is not None:
             return _emit_section_contains(indent, section_check, description)
+
+    # B-090 / B-092: page-fact, counted, anchor-scan and content assertions emit
+    # their own check — never a weakened assert_visible on a nearby element.
+    if action == "ASSERT":
+        raw_selector = resolved_value
+        if len(raw_selector) >= 2 and raw_selector[0] in "'\"" and raw_selector[-1] == raw_selector[0]:
+            raw_selector = raw_selector[1:-1]
+        page_fact = page_fact_from_description(description, raw_selector)
+        if page_fact is not None:
+            return _emit_page_fact_assertion(indent, page_fact, description)
 
     if "pytest.skip" in resolved_value:
         return f"{indent}{resolved_value}"
