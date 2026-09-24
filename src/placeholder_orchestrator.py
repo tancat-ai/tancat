@@ -23,6 +23,7 @@ from src.cart_seeding_scraper import CartSeedingScraper
 from src.code_postprocessor import (
     count_assertion_from_description,
     document_assertion_from_description,
+    page_fact_from_description,
     replace_token_in_line,
     section_contains_from_description,
 )
@@ -149,6 +150,7 @@ def _is_page_level_assert(action: str, description: str) -> bool:
         count_assertion_from_description(description) is not None
         or document_assertion_from_description(description) is not None
         or section_contains_from_description(description) is not None
+        or page_fact_from_description(description) is not None
     )
 
 

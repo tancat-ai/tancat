@@ -1310,6 +1310,40 @@ class EvidenceTracker:
             )
             raise
 
+    def assert_count_at_least(self, locator: str, minimum: int, label: str = "") -> None:
+        """Assert at least ``minimum`` elements match the locator (B-090).
+
+        A criterion like "shows at least four capability cards" must count the
+        matching elements, not assert one element's visibility. ``assert_count``
+        is an exact check; this is the lower-bound variant the criterion asks
+        for. Zero matches always fails.
+        """
+        if not label:
+            label = f"Assert count >= {minimum}"
+        _t0 = time.time()
+        try:
+            actual = self.page.locator(locator).count()
+            if actual < minimum:
+                raise AssertionError(f"Expected at least {minimum} elements but found {actual}")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=f"{actual} element(s) (>= {minimum})",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
     def assert_value(self, locator: str, expected: str, label: str = "") -> None:
         """Assert an input/textarea/select has the expected value attribute."""
         if not label:
@@ -1588,6 +1622,231 @@ class EvidenceTracker:
                 "assertion",
                 label,
                 locator=child,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_no_broken_images(self, label: str = "") -> None:
+        """Assert every ``<img>`` on the page finished loading (B-090).
+
+        A page-fact criterion ("no image on the page is broken — every image
+        element has a non-zero natural width") must inspect every image, not
+        assert one hero div's visibility. Waits (bounded, 4s) for in-flight
+        images so a slow load is not a false failure, then fails listing the
+        broken sources.
+        """
+        if not label:
+            label = "No broken images"
+        _t0 = time.time()
+        try:
+            self.page.evaluate(
+                """() => Promise.race([
+                    Promise.all(Array.from(document.images).map(
+                        img => img.complete ? Promise.resolve()
+                            : new Promise(res => {
+                                img.addEventListener('load', res, { once: true });
+                                img.addEventListener('error', res, { once: true });
+                            })
+                    )),
+                    new Promise(res => setTimeout(res, 4000)),
+                ])"""
+            )
+            broken = self.page.evaluate(
+                """() => Array.from(document.images)
+                    .filter(img => !img.complete || img.naturalWidth === 0)
+                    .map(img => img.currentSrc || img.src || img.alt || '(unnamed)')"""
+            )
+            if broken:
+                raise AssertionError(f"{len(broken)} broken image(s): {list(broken)[:3]}")
+            count = self.page.evaluate("() => document.images.length")
+            self._record_step(
+                "assertion",
+                label,
+                locator="img",
+                take_screenshot=True,
+                matched_text=f"{count} image(s), all loaded",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator="img",
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_natural_width(self, locator: str, label: str = "") -> None:
+        """Assert the first element matching ``locator`` is a loaded image (B-090).
+
+        "The hero product screenshot has finished loading (natural width > 0)"
+        must read the image's ``naturalWidth``; ``assert_visible`` passes even
+        for a broken image icon. Fails when the element is not an image (no
+        natural width) or has not loaded.
+        """
+        if not label:
+            label = f"Natural width > 0: {locator}"
+        _t0 = time.time()
+        try:
+            loc = self.page.locator(locator).first
+            loc.wait_for(state="visible", timeout=5000)
+            width = loc.evaluate("el => el.naturalWidth")
+            if not width:
+                raise AssertionError(f"Image {locator} is not loaded (naturalWidth={width})")
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                matched_text=f"naturalWidth={width}",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=locator,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_no_horizontal_scroll(self, width: int = 375, label: str = "") -> None:
+        """Assert the page does not scroll horizontally at ``width`` px (B-090).
+
+        "At a viewport width of 375 pixels the page does not scroll
+        horizontally" must resize the viewport and measure ``scrollWidth`` — a
+        visibility assert checked neither. The original viewport is restored
+        afterwards so later steps are unaffected.
+        """
+        if not label:
+            label = f"No horizontal scroll at {width}px"
+        _t0 = time.time()
+        original = self.page.viewport_size
+        try:
+            height = int(original["height"]) if original and original.get("height") else 800
+            self.page.set_viewport_size({"width": int(width), "height": height})
+            metrics = self.page.evaluate(
+                "() => ({scrollWidth: document.documentElement.scrollWidth,"
+                " clientWidth: document.documentElement.clientWidth})"
+            )
+            scroll_width = int(metrics["scrollWidth"])
+            client_width = int(metrics["clientWidth"])
+            if scroll_width > client_width + 1:
+                raise AssertionError(
+                    f"Page scrolls horizontally at {width}px: scrollWidth={scroll_width} > clientWidth={client_width}"
+                )
+            self._record_step(
+                "assertion",
+                label,
+                locator="html",
+                take_screenshot=True,
+                matched_text=f"scrollWidth={scroll_width} <= clientWidth={client_width} @ {width}px",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator="html",
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+        finally:
+            if original:
+                try:
+                    self.page.set_viewport_size(original)
+                except Exception:
+                    pass
+
+    def assert_anchor_targets_exist(self, selector: str = 'a[href^="#"]', label: str = "") -> None:
+        """Assert every in-page anchor points at an element that exists (B-092).
+
+        "Every same-page anchor link points at an element that exists" is a
+        page-wide scan, not a check of one link. Anchors with a bare ``#``
+        fragment point at the top of the document and are treated as valid;
+        external hrefs are ignored (the default selector only matches in-page
+        anchors). Fails listing the fragments with no matching element.
+        """
+        if not label:
+            label = "Every same-page anchor target exists"
+        _t0 = time.time()
+        try:
+            missing = self.page.evaluate(
+                """(sel) => Array.from(document.querySelectorAll(sel))
+                    .map(a => a.getAttribute('href') || '')
+                    .filter(h => h.startsWith('#') && h.length > 1)
+                    .filter(h => {
+                        const id = decodeURIComponent(h.slice(1));
+                        return !document.getElementById(id) && !document.querySelector(h);
+                    })""",
+                selector,
+            )
+            count = self.page.evaluate("(sel) => document.querySelectorAll(sel).length", selector)
+            if missing:
+                raise AssertionError(f"{len(missing)} anchor target(s) missing: {list(missing)[:3]}")
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
+                take_screenshot=True,
+                matched_text=f"{count} anchor(s), all targets exist",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=selector,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_section_has_price(self, section: str, label: str = "") -> None:
+        """Assert a named section shows a price (B-092).
+
+        "The Pro Deployment tier is shown with a price" must find the section
+        whose heading names the tier and check it contains a currency amount —
+        asserting the heading's visibility never checked a price.
+        """
+        if not label:
+            label = f"{section} shows a price"
+        _t0 = time.time()
+        heading_selector = f":is(h1,h2,h3,h4,h5,h6):has-text({section!r})"
+        price_pattern = re.compile(r"[$\u20ac\u00a3]\s?\d")
+        try:
+            heading = self.page.locator(heading_selector).first
+            heading.wait_for(state="attached", timeout=5000)
+            container = (
+                self.page.locator("div, section, article, li").filter(has=self.page.locator(heading_selector)).last
+            )
+            if container.count() == 0:
+                raise AssertionError(f"No section containing heading {section!r} found")
+            text = container.first.text_content() or ""
+            if not price_pattern.search(text):
+                raise AssertionError(f"Section {section!r} shows no price (text={text[:120]!r})")
+            self._record_step(
+                "assertion",
+                label,
+                locator=heading_selector,
+                take_screenshot=True,
+                matched_text=f"price found in section {section!r}",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=heading_selector,
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
