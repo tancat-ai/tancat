@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en-GB"><head><meta charset="utf-8"/><style>
+  @page { size: A4; margin: 13mm 14mm; }
+  body { font: 9.4pt/1.38 "Segoe UI", Arial, sans-serif; color: #111; margin: 0; }
+  h1 { font-size: 16pt; margin: 0 0 1mm; letter-spacing: -0.3pt; }
+  .sub { color: #555; font-size: 8.6pt; margin: 0 0 4mm; }
+  h2 { font-size: 9.8pt; margin: 3.6mm 0 1.2mm; padding-bottom: 0.6mm; border-bottom: 1px solid #ddd; }
+  code, pre { font-family: Consolas, "Courier New", monospace; font-size: 8.2pt; }
+  pre { background: #f5f5f5; border: 1px solid #e2e2e2; border-radius: 3px; padding: 2mm 2.5mm; margin: 1.4mm 0; line-height: 1.32; }
+  code { background: #f5f5f5; padding: 0.3mm 0.8mm; border-radius: 2px; }
+  ul { margin: 0.8mm 0 1.2mm 4.5mm; padding: 0; }
+  li { margin: 0.4mm 0; }
+  .box { border: 1px solid #e2e2e2; background: #fafafa; border-radius: 3px; padding: 2mm 2.5mm; margin: 1.6mm 0; }
+  .foot { margin-top: 4.5mm; padding-top: 2mm; border-top: 1px solid #ddd; color: #666; font-size: 7.6pt; }
+  strong { color: #000; }
+</style></head><body>
+<h1>TanCat Pro Deployment Licence</h1>
+<p class="sub">Install and licence activation &mdash; one deployment, billed monthly, includes support and updates while your licence is active.</p>
+
+<h2>1. What this licence covers</h2>
+<ul>
+  <li>One <strong>deployment</strong>: one installation of TanCat serving one organisation.</li>
+  <li>Unlimited test runs and evidence exports on that deployment.</li>
+  <li>Support and product updates while the licence is active.</li>
+  <li>Not counted per user &mdash; your whole team may use it. Do not share or resell the key.</li>
+</ul>
+
+<h2>2. Requirements</h2>
+<ul>
+  <li>Python 3.14+ and <code>uv</code></li>
+  <li>An OpenAI-compatible LLM endpoint you control (llama.cpp, Ollama, LM Studio, or similar)</li>
+  <li>Chromium, installed by Playwright</li>
+</ul>
+
+<h2>3. Install</h2>
+<pre>git clone https://github.com/tancat-ai/tancat
+cd tancat &amp;&amp; uv sync &amp;&amp; playwright install chromium</pre>
+<pre>bash launch_ui.sh      # Streamlit UI
+bash launch_cli.sh     # interactive CLI</pre>
+
+<h2>4. Activate your licence</h2>
+<p>Your licence key arrives by email when you purchase. Give it to the deployment in <strong>any one</strong> of these three ways:</p>
+<ul>
+  <li><strong>Environment variable</strong> (best for CI): <code>AITEST_LICENSE_KEY=&lt;your key&gt;</code></li>
+  <li><strong>A file you point at</strong>: <code>AITEST_LICENSE_FILE=/path/to/license.key</code></li>
+  <li><strong>The default key file</strong>: save the key as <code>~/.ai-test-gen/license.key</code></li>
+</ul>
+<div class="box"><strong>Check it worked.</strong> Open the UI &mdash; the sidebar shows <em>License &amp; Usage</em>. A licensed deployment reports unlimited runs and exports. If the key is missing or invalid the product keeps working on the free tier; it never locks you out of the open-source core.</div>
+
+<h2>5. Where your data goes</h2>
+<p>Nowhere. The product runtime makes outbound calls only to <strong>your</strong> LLM endpoint and <strong>your</strong> target site. No telemetry, no update check, no vendor call. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
+
+<h2>6. Support</h2>
+<p>Email <strong>hello@tancat.dev</strong>. We answer written enquiries within two business days.</p>
+
+<p class="foot">TanCat is a sole-trader business based in the United Kingdom. Licence terms: https://tancat.dev/terms.html &middot; Privacy: https://tancat.dev/privacy.html<br/>Merchant of record: Lemon Squeezy. Their terms govern the purchase transaction; these licence terms govern the software.</p>
+</body></html>

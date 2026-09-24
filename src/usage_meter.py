@@ -65,8 +65,8 @@ def _parse_iso(value: str | None) -> datetime | None:
 
 
 _UPGRADE_PROMPT = (
-    "You've hit the free-tier limit. Upgrade to a paid tier (self-serve / pro / air-gap) "
-    "for unlimited runs and exports — see the license key from Cat Tan Operations."
+    "You've hit the free-tier limit. Upgrade to a paid tier for unlimited runs and exports — "
+    "request a license at tancat.dev."
 )
 
 
