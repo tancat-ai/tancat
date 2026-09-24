@@ -391,15 +391,33 @@ class PlaceholderResolver:
             if role == "hidden":
                 continue
 
-            if element.get("is_visible") is False:
-                if action != "ASSERT":
+            if element.get("is_visible") is False and action != "ASSERT":
+                # B-054/B-055: a hard drop removes later-step SPA fields — on a
+                # multi-step form the later steps are display:none at scrape
+                # time, so the real target never enters the pool and the
+                # resolver falls back to a visible step-1 field.
+                #
+                # Keep the hidden element ONLY when the description is
+                # literally present in its own text: decisive evidence that
+                # this is the intended target. A generic hidden overlay control
+                # (a "Confirm" button behind a modal) has no such text match and
+                # stays excluded, which is the contract test_placeholder_resolver
+                # pins for CLICK.
+                hidden_haystack = self._build_element_haystack(element).lower()
+                if not hidden_haystack or normalized_description not in hidden_haystack:
                     logger.debug(
-                        "Skipping hidden element '%s' (is_visible=False) for placeholder '%s' (action=%s)",
+                        "Skipping hidden element '%s' (is_visible=False, no text match) for '%s' (action=%s)",
                         selector,
                         description,
                         action,
                     )
                     continue
+                logger.debug(
+                    "Keeping hidden element '%s' (is_visible=False, decisive text match) for '%s' (action=%s)",
+                    selector,
+                    description,
+                    action,
+                )
 
             if action == "FILL" and not IntentMatcher._is_fillable(element):
                 continue
