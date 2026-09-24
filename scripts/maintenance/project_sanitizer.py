@@ -75,6 +75,10 @@ TXT_WHITELIST: set[str] = {
     "requirements.txt",
     "LICENSE",
     "CHANGELOG.md",  # Note: .md not .txt
+    # B-089: well-known web-root file. landing/ is a *deployed web root*, so
+    # robots.txt is a product asset, not a temporary .txt — flagging it failed
+    # the CI sanitizer job on PR #6.
+    "robots.txt",
 }
 
 # Whitelisted .log files to keep (none by default)
