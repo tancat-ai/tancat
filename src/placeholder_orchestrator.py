@@ -20,7 +20,12 @@ if TYPE_CHECKING:
     from src.rag_retriever import RAGRetriever
 
 from src.cart_seeding_scraper import CartSeedingScraper
-from src.code_postprocessor import replace_token_in_line
+from src.code_postprocessor import (
+    count_assertion_from_description,
+    document_assertion_from_description,
+    replace_token_in_line,
+    section_contains_from_description,
+)
 from src.element_matcher import ElementMatcher
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
@@ -105,6 +110,9 @@ def attribute_assertion_type(description: str) -> str | None:
     container visibility (B-069 part b).
     """
     lowered = description.replace("_", " ").lower()
+    # B-087: a criterion that names a mailto/email link verifies the href.
+    if "mailto" in lowered or ("email" in lowered and "link" in lowered):
+        return "toHaveAttribute:href"
     # Attribute names mapped from keywords in description
     if "href" in lowered:
         return "toHaveAttribute:href"
@@ -124,6 +132,24 @@ def attribute_assertion_type(description: str) -> str | None:
     if "title" in lowered and ("og" in lowered or "open graph" in lowered or "meta" in lowered):
         return "toHaveAttribute:content"
     return None
+
+
+def _is_page_level_assert(action: str, description: str) -> bool:
+    """True when the emitter checks this ASSERT without element resolution.
+
+    B-069/B-086/B-088 page-level families (count scans, document/<head> reads,
+    section containment) emit their own tracker call at the single emit
+    chokepoint. An unresolved resolver result must therefore NOT trigger the
+    journey-level consolidated skip — the check still runs. ASSERT-only: a
+    CLICK/FILL with a similar description has no page-level emitter.
+    """
+    if action != "ASSERT":
+        return False
+    return (
+        count_assertion_from_description(description) is not None
+        or document_assertion_from_description(description) is not None
+        or section_contains_from_description(description) is not None
+    )
 
 
 class PlaceholderOrchestrator:
@@ -872,7 +898,24 @@ class PlaceholderOrchestrator:
                             )
                             continue
                     if "pytest.skip" in resolved_value:
-                        journey_unresolved[journey.test_name].append(description)
+                        if _is_page_level_assert(action, description):
+                            # B-088: a count/document/section-contains check emits
+                            # its own call at the emit chokepoint — keep the token
+                            # (with a skip value) so the emitter can override it,
+                            # and do NOT add a journey-level skip.
+                            line_resolutions.setdefault(placeholder.line_number, []).append(
+                                (
+                                    placeholder.token,
+                                    action,
+                                    resolved_value,
+                                    description,
+                                    fill_value,
+                                    current_url,
+                                    assertion_type,
+                                )
+                            )
+                        else:
+                            journey_unresolved[journey.test_name].append(description)
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
                             (
@@ -997,6 +1040,19 @@ class PlaceholderOrchestrator:
                         (use.token, action, resolved_value, description, fill_value, fallback_url, at)
                     )
                 else:
+                    if _is_page_level_assert(action, description):
+                        line_resolutions.setdefault(use.line_number, []).append(
+                            (
+                                use.token,
+                                action,
+                                'pytest.skip("page-level check")',
+                                description,
+                                fill_value,
+                                fallback_url,
+                                None,
+                            )
+                        )
+                        continue
                     journey_name = self._find_journey_for_line(use.line_number, journeys)
                     if journey_name:
                         journey_unresolved.setdefault(journey_name, []).append(description)
@@ -1206,7 +1262,20 @@ class PlaceholderOrchestrator:
                         )
                     )
                 else:
-                    journey_unresolved.setdefault(journey_name, []).append(description)
+                    if _is_page_level_assert(action, description):
+                        line_resolutions.setdefault(placeholder.line_number, []).append(
+                            (
+                                placeholder.token,
+                                action,
+                                'pytest.skip("page-level check")',
+                                description,
+                                fill_value,
+                                url,
+                                None,
+                            )
+                        )
+                    else:
+                        journey_unresolved.setdefault(journey_name, []).append(description)
 
     # ═════════════════════════════════════════════════════════════
     # Resolution engine

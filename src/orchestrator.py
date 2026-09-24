@@ -102,6 +102,12 @@ class TestOrchestrator:
             from src.llm_client import enable_thinking_default
 
             enable_thinking = enable_thinking_default()
+        # Stored so the per-condition fragment calls (which go straight to
+        # ``client.generate``, not through ``TestGenerator.generate``) honour the
+        # same switch. Without this the fragment path sent nothing and the model
+        # default (thinking ON for Qwen3.8) governed — measured at 42-130s per
+        # fragment vs 17-25s thinking-off (B-091).
+        self.enable_thinking = enable_thinking
         self.parser = SkeletonParser()
         self._starting_url: str | None = None
         self._credential_profile = credential_profile
@@ -969,7 +975,7 @@ class TestOrchestrator:
         # Structured audit trail — same seam as skeleton generation.
         logger.debug("llm_call=generate_single_condition_fragment fields=%s", rendered.to_log_entry())
         prompt = rendered.text
-        fragment = await self.test_generator.client.generate(prompt)
+        fragment = await self.test_generator.client.generate(prompt, enable_thinking=self.enable_thinking)
         fragment = self.parser.normalise_placeholder_actions(fragment)
 
         if len(self.parser.parse_test_journeys(fragment)) != 1:
@@ -978,7 +984,7 @@ class TestOrchestrator:
                 + "\n\nCORRECTION: Your previous answer did not contain exactly one pytest test function. "
                 + "Regenerate the file with one test function for the target condition only."
             )
-            fragment = await self.test_generator.client.generate(correction)
+            fragment = await self.test_generator.client.generate(correction, enable_thinking=self.enable_thinking)
             fragment = self.parser.normalise_placeholder_actions(fragment)
 
         skeleton_error = self.parser.validate_skeleton(fragment)
@@ -1026,7 +1032,7 @@ class TestOrchestrator:
                 "\n"
                 "Generate the test function now using ONLY placeholders."
             )
-            fragment = await self.test_generator.client.generate(correction)
+            fragment = await self.test_generator.client.generate(correction, enable_thinking=self.enable_thinking)
             fragment = self.parser.normalise_placeholder_actions(fragment)
 
             validation_result = validator.validate(fragment)
@@ -1046,7 +1052,9 @@ class TestOrchestrator:
                     "    {{ASSERT:what to see ('page loaded' → URL check)}}\n\n"
                     "Every body line MUST be a {{ACTION:description}} placeholder. No real code."
                 )
-                fragment = await self.test_generator.client.generate(minimal_prompt)
+                fragment = await self.test_generator.client.generate(
+                    minimal_prompt, enable_thinking=self.enable_thinking
+                )
                 fragment = self.parser.normalise_placeholder_actions(fragment)
                 validation_result = validator.validate(fragment)
                 if not validation_result.is_valid:
