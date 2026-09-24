@@ -83,12 +83,16 @@ def _is_fillable(element: dict[str, Any]) -> bool:
         "select",
         "textbox",
         "searchbox",
+        "search_box",
         "combobox",
         "email",
         "password",
         "text",
         "tel",
         "number",
+        "spinbutton",
+        "date",
+        "time",
     }:
         return True
     if selector.startswith(("input", "textarea", "select")):
