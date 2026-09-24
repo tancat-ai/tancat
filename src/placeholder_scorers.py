@@ -11,6 +11,7 @@ Workflow:
 import re
 from typing import Any
 
+from src.content_scoping import is_heading_criterion, is_heading_element, is_image_criterion, is_image_element
 from src.semantic_matcher import SemanticMatcher
 
 
@@ -229,7 +230,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._journey_discovered_bonus(element)
         score += PlaceholderScorer._click_role_bonus(action, element)
         score += PlaceholderScorer._fill_bonus(action, element)
-        score += PlaceholderScorer._assert_visibility_penalty(action, element)
+        score += PlaceholderScorer._assert_visibility_penalty(action, element, description)
         score += PlaceholderScorer._click_text_penalty(action, description, desc_words, element)
         score += PlaceholderScorer._assert_single_class_penalty(action, selector, element)
         score += PlaceholderScorer._visual_enrichment_bonus(
@@ -240,6 +241,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._text_content_bonus(description, element)
         score += PlaceholderScorer._page_level_assert_bonus(action, description, element)
         score += PlaceholderScorer._vision_enriched_bonus(action, description, element)
+        score += PlaceholderScorer._kind_bonus(action, description, element)
 
         # RAG golden pattern bonus
         if golden_patterns:
@@ -263,7 +265,7 @@ class PlaceholderScorer:
         Splits camelCase tokens so ``quoteRef`` matches ``quote reference``.
         """
         parts: list[str] = []
-        for key in ("text", "name", "label", "placeholder", "title", "aria_label", "value", "accessible_name"):
+        for key in ("text", "name", "label", "placeholder", "title", "alt", "aria_label", "value", "accessible_name"):
             val = str(element.get(key, "")).strip()
             if val:
                 parts.append(val)
@@ -274,6 +276,47 @@ class PlaceholderScorer:
         raw = " ".join(parts)
         # Split camelCase so "usageType" in name → "usage Type" in haystack
         return SemanticMatcher._split_camel_case(raw)
+
+    @staticmethod
+    def _kind_bonus(action: str, description: str, element: dict[str, Any]) -> int:
+        """B-092: lift a kind-matching candidate above the match threshold.
+
+        An image criterion ("the hero product screenshot loaded") is scoped to
+        ``<img>`` elements, but their alt text rarely overlaps the criterion's
+        words — without this bonus the whole scoped set scores below the
+        threshold and the assertion skips even though the right element exists.
+        The bonus is a constant for the matching kind, so it never reorders two
+        images relative to each other; the semantic ranker still chooses among
+        them using their alt text.
+        """
+        if action != "ASSERT":
+            return 0
+        if is_image_criterion(description) and is_image_element(element):
+            bonus = 8 + PlaceholderScorer._kind_token_overlap(description, element)
+            # A visible content image beats a hidden one (the Noir Art artwork
+            # only becomes visible after its tab click), and a logo is never
+            # the product screenshot the criterion names.
+            if element.get("is_visible") is not False:
+                bonus += 2
+            if "logo" in str(element.get("alt", "")).lower():
+                bonus -= 3
+            return bonus
+        if is_heading_criterion(description) and is_heading_element(element):
+            return 8 + PlaceholderScorer._kind_token_overlap(description, element)
+        return 0
+
+    @staticmethod
+    def _kind_token_overlap(description: str, element: dict[str, Any]) -> int:
+        """Token overlap between the criterion and the element's identity.
+
+        For images the identity lives in ``alt`` (already in the haystack), so
+        "Noir Art artwork" ranks the ``Neon-noir illustration`` image above the
+        product screenshot. Four points per shared word.
+        """
+        desc_words = SemanticMatcher.get_words(description)
+        haystack = PlaceholderScorer._build_haystack(element).lower()
+        element_words = SemanticMatcher.get_words(haystack, expand_aliases=False)
+        return 4 * len(desc_words.intersection(element_words))
 
     @staticmethod
     def _container_aggregate_penalty(action: str, description: str, element: dict[str, Any]) -> int:
@@ -636,8 +679,13 @@ class PlaceholderScorer:
         return 0
 
     @staticmethod
-    def _assert_visibility_penalty(action: str, element: dict[str, Any]) -> int:
+    def _assert_visibility_penalty(action: str, element: dict[str, Any], description: str = "") -> int:
         if action == "ASSERT" and element.get("is_visible") is False:
+            # B-092: an image criterion ("the Noir Art image loads") is scoped
+            # to <img> and the target is often hidden until the preceding click
+            # reveals it — the visibility penalty would exclude the real image.
+            if description and is_image_criterion(description) and is_image_element(element):
+                return 0
             return -40
         return 0
 
