@@ -541,6 +541,36 @@ _COMMAND_PREFIXES: tuple[str, ...] = (
 #: Currency symbols used to recognise a literal price in a criterion.
 _CURRENCY_RE = re.compile(r"[$\u20ac\u00a3]\s?\d")
 
+#: Generic content words that mark a "...price" criterion as a content check
+#: ("cart shows the product name and price"), not a pricing-tier check. A
+#: section name built from these is not a real heading, so
+#: ``assert_section_has_price`` would fail on a page that is fine.
+_PRICE_SECTION_GENERIC: frozenset[str] = frozenset(
+    {
+        "name",
+        "product",
+        "products",
+        "item",
+        "items",
+        "cart",
+        "basket",
+        "order",
+        "total",
+        "subtotal",
+        "quantity",
+        "description",
+        "detail",
+        "details",
+        "and",
+        "or",
+        "table",
+        "row",
+        "rows",
+        "page",
+        "list",
+    }
+)
+
 #: Number words accepted in "at least <n> <noun>".
 _NUMBER_WORDS: dict[str, int] = {
     "one": 1,
@@ -663,9 +693,12 @@ def page_fact_from_description(description: str, resolved_selector: str = "") ->
         return PageFactAssertion("assert_text_contains", selector="body", expected=expected)
 
     # B-092: "<tier> price" — the named section must show a currency amount.
+    # Reject generic content names ("product name and price") so a cart-content
+    # criterion does not emit a section check against a heading that does not
+    # exist.
     if re.search(r"\bprices?\b", lowered):
         section = _price_section_from_description(description)
-        if section:
+        if section and not _PRICE_SECTION_GENERIC.intersection(section.lower().split()):
             return PageFactAssertion("assert_section_has_price", section=section)
 
     return None
