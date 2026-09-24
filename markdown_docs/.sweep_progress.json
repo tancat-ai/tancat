@@ -1,6 +1,6 @@
 {
-  "total": 166,
-  "completed": 154,
+  "total": 167,
+  "completed": 155,
   "pending": 12,
   "files": [
     {
@@ -832,7 +832,12 @@
       "source": "src/link_scoping.py",
       "doc": "markdown_docs/src/link_scoping.py.md",
       "status": "completed"
+    },
+    {
+      "source": "src/content_scoping.py",
+      "doc": "markdown_docs/src/content_scoping.py.md",
+      "status": "completed"
     }
   ],
-  "last_updated": "2026-09-11T17:07:34.631867+00:00"
+  "last_updated": "2026-09-24T16:30:00.000000+00:00"
 }
