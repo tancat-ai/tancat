@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-22 (SHIPPED — **CI kanban/sanitizer jobs de-installed:** both warning-only jobs (`kanban-freshness`, `sanitizer`) were paying a ~220-package `uv sync --frozen` for scripts that are 100% stdlib — kanban-freshness flaked red at the 2-min timeout on a cold-cache runner (run 35748803163, 2026-09-22) while smoke's identical install step took 32s on a warm one. Fix per user direction (speed it up, don't raise the timeout): dropped setup-python/setup-uv/uv-sync from both jobs and run the scripts with the runner's built-in `python3` — same pattern as the sibling `graph-freshness`/`docs-coverage` jobs (5s each). 167s+ flaky → ~15–20s deterministic; timeouts 2/5 → 1. `.github/workflows/ci.yml` edited under explicit user instruction (protected dir). Side note: `project_sanitizer.py --check-only` flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally on Windows but passes in CI — pre-existing environment quirk, not caused by this change (see B-080). **B-081** opened same session (watch item): the de-installed jobs run on the runner's built-in Python 3.12, not the project's 3.14 — upgrade triggers (3.13+/3.14 syntax, project deps, the 2026-10-19 ubuntu-latest→Ubuntu 26 migration) and the upgrade path are recorded there. Follow-up (same session, user: "it should not take so long"): `smoke` + `verify-baseline` timeouts raised 2 → 5 min after verify-baseline flaked red on a cold-cache runner — the install is genuinely needed by both (they import `src/`), only the budget was under-sized. Deeper CI-speed work: (a) DONE same session — the mypy parity pass no longer re-checks the whole tree every push, only the in-scope `.py` files the push changed (strictness identical to the pre-commit hook); (b) DONE same session — user picked option A: per-push **core** job (single `generate-and-run` invocation, the user-default contract; cache-miss block unchanged) + **full** six-mode suite on a forced `schedule` cron (03:00 UTC, machine-fired) and `workflow_dispatch`, with failure **auto-filing a deduped repo issue** (one open issue while red + daily "still failing" comments; `issues: write` added; push runs never file). Workflow header documents the hermetic-suite rationale (nightly guards runner-image/Actions drift — esp. the 2026-10-19 ubuntu-latest→Ubuntu 26 migration). Both items (a)+(b) closed — the CI-speed work is done; verify the core job's live timing on the next push.
+Last updated: 2026-09-24 (SHIPPED — **B-088 + B-087 closed; generation ~4× faster (B-091):** the 35-criterion landing-page re-run went **8 failed / 26 passed → 2 failed / 31 passed / 2 skipped**, wrong-element mappings **0**. **B-088** added page-level scans for "no X in hrefs / visible copy", anchor-only link scoping (`src/link_scoping.py`) with an honest-skip name guard, and a section-containment `assert_contains`; **B-087** added a scheme predicate (`required_scheme='mailto:'`). **B-091** found the per-condition fragment path sent no thinking switch, so the model default (thinking ON) governed — measured **3356s → 631s** generation, ~14s/fragment. The 2 remaining reds (criteria 13/14) are criteria Session 6 made stale on purpose; the 2 skips (16/17) are named links that no longer exist. **B-090** opened for the separate geometric/asset false-green class (criteria 3, 6, 7, 35). Gates: 3376 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.)
+
+Previous: 2026-09-22 (SHIPPED — **CI kanban/sanitizer jobs de-installed:** both warning-only jobs (`kanban-freshness`, `sanitizer`) were paying a ~220-package `uv sync --frozen` for scripts that are 100% stdlib — kanban-freshness flaked red at the 2-min timeout on a cold-cache runner (run 35748803163, 2026-09-22) while smoke's identical install step took 32s on a warm one. Fix per user direction (speed it up, don't raise the timeout): dropped setup-python/setup-uv/uv-sync from both jobs and run the scripts with the runner's built-in `python3` — same pattern as the sibling `graph-freshness`/`docs-coverage` jobs (5s each). 167s+ flaky → ~15–20s deterministic; timeouts 2/5 → 1. `.github/workflows/ci.yml` edited under explicit user instruction (protected dir). Side note: `project_sanitizer.py --check-only` flags 32 committed `scripts/archive/cli_snapshots/*.log` files as junk locally on Windows but passes in CI — pre-existing environment quirk, not caused by this change (see B-080). **B-081** opened same session (watch item): the de-installed jobs run on the runner's built-in Python 3.12, not the project's 3.14 — upgrade triggers (3.13+/3.14 syntax, project deps, the 2026-10-19 ubuntu-latest→Ubuntu 26 migration) and the upgrade path are recorded there. Follow-up (same session, user: "it should not take so long"): `smoke` + `verify-baseline` timeouts raised 2 → 5 min after verify-baseline flaked red on a cold-cache runner — the install is genuinely needed by both (they import `src/`), only the budget was under-sized. Deeper CI-speed work: (a) DONE same session — the mypy parity pass no longer re-checks the whole tree every push, only the in-scope `.py` files the push changed (strictness identical to the pre-commit hook); (b) DONE same session — user picked option A: per-push **core** job (single `generate-and-run` invocation, the user-default contract; cache-miss block unchanged) + **full** six-mode suite on a forced `schedule` cron (03:00 UTC, machine-fired) and `workflow_dispatch`, with failure **auto-filing a deduped repo issue** (one open issue while red + daily "still failing" comments; `issues: write` added; push runs never file). Workflow header documents the hermetic-suite rationale (nightly guards runner-image/Actions drift — esp. the 2026-10-19 ubuntu-latest→Ubuntu 26 migration). Both items (a)+(b) closed — the CI-speed work is done; verify the core job's live timing on the next push.
 
 Previous: 2026-09-21 (SHIPPED — **eval_runner mypy follow-up:** the six pre-existing mypy errors in `scripts/eval/eval_runner.py` (red on main before, invisible to both mypy scopes) — five fixed as label-only changes (4× `-> None` on nested helpers; `_sampling_identity` return widened to `str | None`; and the `persist_results` `thinking` param widened the same way — a mismatch the label fix *exposed*: the linear pipeline legitimately passes `None` = "not reported", which the old `thinking: str` label had hidden). **B-079** opened for the sixth (`get_loaded_model` missing from the `LLMProvider` ABC — protected dir, parked for approval). Gates: 3309 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.
 
@@ -17,7 +19,19 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
-## ✅ B-077 — Stale worktrees and remote branches audited; `.worktrees/` now ignored
+## ✅ B-091 — Skeleton-fragment generation sent no thinking switch, so the model default (thinking ON) governed — 3–5× slower runs
+
+**Status:** ✅ **Fixed 2026-09-24** — found during the B-088 landing-page re-run; fixed in the same session (branch `fix/b088-page-section-scoping`).
+**Priority:** **high — front of the list.** This is a development-capability problem, not a product nicety: every multi-criterion run pays it, and it makes end-to-end verification of pipeline changes impractical inside one session.
+**One-line:** `TestOrchestrator._generate_single_condition_fragment` (`src/orchestrator.py:972,981,1029,1049`) called `self.test_generator.client.generate(prompt)` with no `enable_thinking`. `LLMClient.generate` sends `chat_template_kwargs.enable_thinking` only when the value is not `None`, so the **model default** governed — thinking ON for Qwen3.8. The documented delivered mode is thinking-off (`enable_thinking_default()` → `AITEST_ENABLE_THINKING`, default False); `TestGenerator.generate` (`src/test_generator.py:111`) passes it, but this per-condition fragment path bypasses that method and sent nothing.
+**Evidence:** `[llm_client] … thinking=default` on every fragment call in the Session 7 / B-088 re-run logs; 32 completions in ~45 min (~60–190s each). The 09-16 record measured the same model at **17–25s** thinking-off vs 42–130s on.
+**Fix (this branch):** `TestOrchestrator.__init__` stores the resolved `self.enable_thinking`, and all four fragment `client.generate` calls pass it explicitly. Thinking off by default; `AITEST_ENABLE_THINKING=1` / explicit `enable_thinking=True` still opts in (and is logged per call). +3 tests (`tests/test_b091_thinking_switch.py`).
+**Measured after the fix (same story, same model, same day):** `thinking=off` on every call, **~14–15s per fragment** (was ~60–70s in the pre-fix leg), full 35-criterion **generation 843.5s** — was **3356s** in Session 7, a **~4× speedup**. Suite unchanged (244s / 35 tests).
+**Not the whole story:** the fragment loop is sequential (`for condition …: await …`) even though fragments are independent — a batch/parallel call is the next lever once the server can serve more than one request at a time. Re-measure after this fix before filing it (expected ~3–4× from thinking-off alone).
+**Estimated sessions:** 0.25.
+
+---
+
 
 **Status:** ✅ **Complete 2026-09-21** — audit done, cleanup shipped in `d9da13a`, three merged local branches deleted. **Nothing needed pulling.** Recorded so the next session does not re-audit the same branches.
 **Priority:** low — housekeeping only, no product impact.
@@ -187,7 +201,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 - **Live replay** (`scratch/verify_b086_live.py`, self-hosted page): **5/5 PASS present, 5/5 FAIL after the tags are removed, control FAILS.** The check has teeth — it fails when the tag is missing, which is the whole point.
 - Full gates: **3330 pytest passed / 1 skipped** (was 3308 — exactly +22), ruff + mypy clean, smoke 39/39.
 
-**Scope — what this does NOT fix.** B-086 closes the *document/head* class only (criteria 28, 29, 30's false green, 31). Five reds remain on the same story, all a different root cause, filed as **B-088**: 16 and 22 (link-resolution misses), 24 (a page-level text scan that never reached the count classifier), 27 (a section-scoped criterion that resolved to a heading) and 13 (a criterion that no longer matches the page by design). Plus **B-087** (mailto). So gates 1–2 are **not** met by this fix alone — the earlier claim that B-086 was the only thing between us and them was too strong.
+**Scope — what this does NOT fix.** B-086 closes the *document/head* class only (criteria 28, 29, 30's false green, 31). Five reds remained on the same story, all a different root cause — filed as **B-088** (16 and 22 link-resolution misses, 24 a page-level text scan, 27 a section-scoped criterion, 13 a criterion that no longer matches the page by design) plus **B-087** (mailto). **Both were fixed 2026-09-24** in the follow-up session (branch `fix/b088-page-section-scoping`): 13 (and 14/17) remain honest reds/skips because the page changed by design, everything else resolves or skips correctly. See the B-088/B-087 entries at the top.
 **Priority:** **high** — this is the gate-2 blocker ("zero false greens") and it sits in exactly the criterion class a buyer evaluates first (metadata, attributes, head tags).
 **One-line:** a criterion about `<head>` content or an attribute-only element resolves to the **nearest visible element** and then emits an assertion weak enough to pass. Live evidence from `test_20260924_002444_*`:
 
@@ -208,10 +222,11 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 
 ## 🆕 B-087 — `must_be_url` is applied to a criterion that asks for a `mailto:` link, so a correct page fails
 
-**Status:** 🆕 new — found by the Session 7 re-measure (2026-09-24).
+**Status:** ✅ **Fixed 2026-09-24** — found by the Session 7 re-measure; fixed in the same session's follow-up (branch `fix/b088-page-section-scoping`).
 **Priority:** medium — a false **red** (the mirror of B-086), one occurrence today, but any `mailto:`/`tel:`/`#anchor` criterion will hit it.
 **One-line:** criterion 26 is "The hello@tancat.dev link is a mailto link". The generator emitted `assert_attribute('…', 'href', must_be_url=True, …)` and failed with *"is not an http(s) URL (value='mailto:hello@tancat.dev')"* — it **failed a correct page** by asserting the opposite of the criterion. Same predicate family: criterion 13's Buy-Pro CTA failed because `href='#contact'` is not `http(s)` (arguably right, but it shows the predicate is applied without reading the criterion's intent).
 **Expected behaviour:** `must_be_url` applies when the criterion says "resolves to a live/valid URL"; a criterion naming `mailto:` / `tel:` / an in-page anchor must assert that scheme instead.
+**Fix:** `attribute_scheme()` (`src/code_postprocessor.py`) recognises the scheme a criterion names and `attribute_predicate` drops `must_be_url` for it; `EvidenceTracker.assert_attribute` gained `required_scheme`, so the emitted check is "href starts with `mailto:`". The skeleton prompt now keeps the word `mailto` in the description (rule 8). Live re-run: criterion 26 emitted `assert_attribute(…, required_scheme='mailto:')` and **passed**.
 **Where:** `attribute_predicate()` in `src/code_postprocessor.py` — the predicate is derived from the description and needs a scheme vocabulary, not just a "must be live" flag.
 **Why it matters:** a false red counts against gate 1 (resolution accuracy) and makes the red list noisier than the real defect count.
 **Estimated sessions:** 0.25.
@@ -220,8 +235,8 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 
 ## 🆕 B-088 — Page-level and section-scoped criteria still resolve to a visible lookalike (4 reds + 1 false green left on the Session 7 story)
 
-**Status:** 🆕 new — the residue left after B-086 closed the document/head class. Found by the Session 7 re-measure (2026-09-24); evidence in `docs/sessions/2026-09-24_session7_re_measure.md` §2–§3.
-**Priority:** **high** — with B-086 and B-087 done, this is the remaining blocker for gates 1 and 2.
+**Status:** ✅ **Fixed 2026-09-24** — the residue left after B-086 closed the document/head class. Found by the Session 7 re-measure (2026-09-24, evidence in `docs/sessions/2026-09-24_session7_re_measure.md` §2–§3); fixed in the follow-up session (branch `fix/b088-page-section-scoping`, session record `docs/sessions/2026-09-24_session8_b088_close.md`).
+**Priority:** **high** — with B-086 and B-087 done, this was the remaining blocker for gates 1 and 2.
 **One-line:** four criteria that are about the page or a section as a whole were resolved to an arbitrary nearby element, and the emitted assertion was chosen to match it:
 
 | Criterion | What was emitted | What is wrong |
@@ -233,7 +248,9 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 
 **Expected behaviour:** for criteria about a *section* or the *page*, scope the resolution (section-scoped candidate set) or lower it to a page-level structural check; when neither is possible, emit an honest `pytest.skip`. A criterion that names a link text must not resolve to a container that merely mentions it.
 **Where:** the resolver's scoping (`src/section_scoper.py`, `src/placeholder_scorers.py`) and the page-level classifiers in `src/code_postprocessor.py` (extend `count_assertion_from_description` to the "anywhere on the page contains X" and "inside section Y there is a Z" shapes).
-**Note:** criterion 13 ("Buy Pro link resolves to a live purchase URL") is *not* part of this — that criterion no longer matches the page by design, since Session 6 replaced the Buy URLs with a request-a-licence route. It needs a story/criterion update, not a code fix.
+**Note:** criterion 13 ("Buy Pro link resolves to a live purchase URL") is *not* part of this — that criterion no longer matches the page by design, since Session 6 replaced the Buy URLs with a request-a-licence route. It needs a story/criterion update, not a code fix. The same is true of criterion 14 (Buy Air-Gap) and 17 (footer Walkthrough) — all three are honest reds/skips after the fix, not resolver defects.
+**Fix:** criterion 24 — `count_assertion_from_description` maps "no X in hrefs" → `[href]`, "no X in visible copy" → `body`, and the combined clause → one multi-token scan of `a, button, h1–h6` over href **and** text (`assert_no_forbidden` gained a token tuple + `also_text`). Criteria 16/22 — new `src/link_scoping.py` narrows a URL-bearing criterion to anchors and rejects a pick with no token from the named link (22 → the real `SECURITY.md` anchor; 16 → honest skip). Criterion 27 — the skeleton prompt keeps "X inside Y" as ONE assert and a section-containment classifier emits `assert_contains(<section heading>, <child selector>)`. Page-level families no longer trigger the journey-level skip when the resolver returns nothing (`_is_page_level_assert`).
+**Verification:** live re-run of the same 35-criterion story — **2 failed / 31 passed / 2 skipped** (was 8/26), wrong-element mappings **0**; the two reds are 13/14 (stale criteria) and the two skips are 16/17 (named links gone). Offline teeth replay (`scratch/b088_live_replay.py`) passes on the clean page and fails once each checked thing is removed. +43 tests (`tests/test_b088_page_and_section_scopes.py`).
 **Estimated sessions:** 1–1.5.
 
 ---
@@ -246,6 +263,26 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 **Why it matters beyond this one file:** the `*.txt` rule is a blunt instrument — any future legitimate `.txt` asset outside the whitelist fails CI the same way. A directory-level exemption for deploy roots (`landing/`) is the sturdier fix if it recurs.
 **Not the same as B-080:** B-080 is archived `*.log` files flagged locally on Windows but passing in CI; that one is still open.
 **Estimated sessions:** 0.1.
+
+---
+
+## 🆕 B-090 — Page-fact criteria (no broken images, no horizontal scroll, natural width) still emit a visibility assert
+
+**Status:** 🆕 new — found while closing B-088, same Session 7 emitted test file (2026-09-24).
+**Priority:** high — these are false **greens** (gate 2): the test reports PASS for a page-wide fact it never checked.
+**One-line:** four criteria are about a **page fact**, not one element, and the resolver checked the nearest element's visibility instead:
+
+| Criterion | Emitted assertion | What it really checked |
+|---|---|---|
+| 7 — "No image on the page is broken — every image element has a non-zero natural width" | `assert_visible('#view-product-ui')` | a hero div is visible; no image was inspected. |
+| 35 — "At a viewport width of 375 pixels the page does not scroll horizontally" | `assert_visible('#view-product-ui')` | the same div is visible; the viewport was never resized and no scroll width was measured. |
+| 6 — "hero product screenshot … natural width is greater than zero" | `assert_visible` × 2 | two elements are visible. |
+| 3 — "shows at least four capability cards" | `assert_visible(<hero paragraph>)` | a paragraph is visible; cards were never counted. |
+
+**Expected behaviour:** a page-fact assertion family, like B-069(b)'s count assertions and B-086's document assertions — `assert_no_broken_images()`, `assert_natural_width(selector)`, `assert_count_at_least(selector, n)`, and a viewport-scoped `assert_no_horizontal_scroll(width=375)` (the last needs the runner to resize the page, so it is the largest piece). Until a real check exists, an honest `pytest.skip` beats a weakened `assert_visible`.
+**Where:** `src/code_postprocessor.py` classifiers + `src/evidence_tracker.py` page-fact methods; the viewport case also touches the test runner/fixture.
+**Note:** found in the same Session 7 pass as B-088 but a different class — B-088 was page-level **text/attribute scans and section scoping**, this is **geometric/asset facts**.
+**Estimated sessions:** 1–2.
 
 ---
 

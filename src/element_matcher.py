@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from src.intent_matcher import SemanticFillStrategy, _is_fillable
+from src.link_scoping import is_link_criterion, link_name_matches, scope_pages_to_links
 from src.locator_builder import build_robust_locator
 from src.placeholder_resolver import PlaceholderResolver
 from src.placeholder_scorers import PlaceholderScorer
@@ -815,6 +816,48 @@ class ElementMatcher:
         golden_patterns: list | None = None,
         site_hash: str | None = None,
     ) -> dict[str, str] | None:
+        """Resolve one placeholder, then enforce the B-088 link-name guard.
+
+        A link-resolution criterion must resolve to the anchor it names. When
+        the chosen element shares no distinctive token with the named link, the
+        resolver picked a lookalike — return ``None`` so the caller emits an
+        honest skip instead of an assertion against the wrong node.
+        """
+        matched = await self._find_best_element_for_current_page(
+            action,
+            description,
+            current_url,
+            pages_data,
+            excluded_selectors=excluded_selectors,
+            resolved_steps=resolved_steps,
+            golden_patterns=golden_patterns,
+            site_hash=site_hash,
+        )
+        if (
+            matched is not None
+            and action == "ASSERT"
+            and not link_name_matches(description, matched)
+            and is_link_criterion(description)
+        ):
+            logger.info(
+                "[RESOLVE] '%s' | B-088 link guard rejected '%s' (name does not match)",
+                description,
+                str(matched.get("selector", "")).strip(),
+            )
+            return None
+        return matched
+
+    async def _find_best_element_for_current_page(
+        self,
+        action: str,
+        description: str,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+        excluded_selectors: set[str] | None = None,
+        resolved_steps: list[str] | None = None,
+        golden_patterns: list | None = None,
+        site_hash: str | None = None,
+    ) -> dict[str, str] | None:
         """Return the best element match across the supplied page mapping.
 
         IMPORTANT: Collects candidates from ALL pages first, then selects the global
@@ -828,6 +871,10 @@ class ElementMatcher:
             site_hash: Current site's one-way domain hash (AI-035 Phase 2) —
                 enables the same-site learned-pattern bonus.
         """
+        # B-088: a link-resolution criterion may only match anchor elements, so
+        # it can never resolve to a span/container that merely names the link.
+        pages_data = scope_pages_to_links(action, description, pages_data)
+
         # Pass 0 — exact text match for ASSERT:"exact text"
         # ── AI-052 S5: penalty-first role gate on the fast passes ──────
         # A fast-pass CLICK match whose ARIA role contradicts the intent
@@ -1093,6 +1140,10 @@ class ElementMatcher:
         for i, req in enumerate(requests):
             action = req.get("action", "CLICK")
             description = req.get("description", "")
+            # B-088: narrow a link-resolution criterion to anchors before any
+            # pass runs, so a span/container that merely names the link cannot
+            # win the fast text pass.
+            request_pages = scope_pages_to_links(action, description, pages_data)
 
             # AI-052 S5: penalty-first role gate (same contract as the single
             # resolution path) — role-contradicted fast matches are deferred
@@ -1112,7 +1163,7 @@ class ElementMatcher:
                 return False
 
             # Pass 0 — exact text match
-            pass0_result = self.pass0_exact_text_match(action, description, pages_data)
+            pass0_result = self.pass0_exact_text_match(action, description, request_pages)
             if (
                 pass0_result is not None
                 and (not excluded_selectors or not _is_excluded(pass0_result, excluded_selectors))
@@ -1124,7 +1175,7 @@ class ElementMatcher:
                 continue
 
             # Pass 1 — text match
-            pass1_result = self.pass1_text_match(action, description, pages_data)
+            pass1_result = self.pass1_text_match(action, description, request_pages)
             if (
                 pass1_result is not None
                 and (not excluded_selectors or not _is_excluded(pass1_result, excluded_selectors))
@@ -1134,7 +1185,7 @@ class ElementMatcher:
                 continue
 
             # Pass 1 — ASSERT text
-            pass1_assert = self.pass1_assert_text_match(action, description, pages_data)
+            pass1_assert = self.pass1_assert_text_match(action, description, request_pages)
             if pass1_assert is not None and (
                 not excluded_selectors or not _is_excluded(pass1_assert, excluded_selectors)
             ):
@@ -1142,7 +1193,7 @@ class ElementMatcher:
                 continue
 
             # Pass 2 — structural match
-            pass2_result = self.pass2_structural_match(action, description, pages_data)
+            pass2_result = self.pass2_structural_match(action, description, request_pages)
             if (
                 pass2_result is not None
                 and (not excluded_selectors or not _is_excluded(pass2_result, excluded_selectors))
@@ -1153,7 +1204,7 @@ class ElementMatcher:
 
             # Collect Pass 3 candidates
             all_ranked: list[tuple[float, dict[str, str]]] = []
-            for _url, elements in pages_data.items():
+            for _url, elements in request_pages.items():
                 ranked = self._resolver.rank_candidates(action, description, elements)
                 all_ranked.extend(ranked)
 
@@ -1206,6 +1257,24 @@ class ElementMatcher:
         for i, _req in enumerate(requests):
             if results[i] is None and role_deferred_by_index.get(i):
                 results[i] = role_deferred_by_index[i][0]
+
+        # B-088: reject a link-resolution pick whose element does not match the
+        # named link — an honest miss, not an assertion against a lookalike.
+        for i, req in enumerate(requests):
+            description = req.get("description", "")
+            result = results[i]
+            if (
+                result is not None
+                and req.get("action") == "ASSERT"
+                and is_link_criterion(description)
+                and not link_name_matches(description, result)
+            ):
+                logger.info(
+                    "[RESOLVE] '%s' | B-088 link guard rejected '%s' (name does not match)",
+                    description,
+                    str(result.get("selector", "")).strip(),
+                )
+                results[i] = None
 
         return results
 
