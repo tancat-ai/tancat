@@ -71,12 +71,44 @@ onto whatever *visible* element looks textually closest, then asserts something 
 |---|---|---|---|
 | 1 | Live resolution accuracy ≥ 90% on a held-out set | 7 wrong-element mappings + 1 emitter bug out of 34 → ≈74% | **FAIL** |
 | 2 | **Zero** false greens | ≥2 found (27, 30), with 29's second half the same pattern | **FAIL** |
-| 3 | Self-healing fixes ≥ 30% | not exercised on this run (no failing-locator heal was invoked) | **UNMEASURED** |
+| 3 | Self-healing fixes ≥ 30% of locator failures | **UNMEASURABLE on this package — 0/8 fixed, 0 LLM calls.** All 8 failures were pre-screened as `OTHER`/`ASSERTION_FAILURE` and correctly **not** sent to the reviewer. They are *assertion* failures (the element was found; the expectation did not hold), not locator failures, so the healer has no broken locator to repair. See §4b. A genuine measurement needs a package with `LOCATOR_TIMEOUT` failures — see §7 item 4. |
 | 4 | Prose story + headings never truncate | not exercised (pre-written criteria) | **UNCHANGED** (passed Session 4) |
 | 5 | 50-test suite ≤ 5 minutes | 34 tests in 210s = 6.2s/test → **≈310s (5.2 min)** at 50 | **BORDERLINE** (was 673–1002s) |
 | 6 | A stranger can buy from the site | request-a-licence route only; checkout parked | **NO** |
 
 **Also noted:** 35 criteria produced **34** tests — one criterion was lost or merged. Not investigated.
+
+## 4b. Gate 3 — measured, and the result is "unmeasurable here"
+
+Ran the production call path (`SelfHealingRunner(max_iterations=3).heal(<package dir>)`, exactly as
+`src/ui/ui_run_results.py:1110` does) against this package, with the same retry hardening as the
+regeneration harness. Result:
+
+| Field | Value |
+|---|---|
+| total_failures | 8 |
+| fixed | **0** |
+| unfixable | **8** — every one "Pre-screened as unfixable (other)" |
+| **llm_calls** | **0** |
+| learned | 0 |
+| iterations | 1 |
+| wall clock | 168s |
+
+**This is correct behaviour, not a defect.** `_pre_screen_failure` (`src/self_healing.py:446`) sends only
+`LOCATOR_TIMEOUT` and `STRICT_VIOLATION` to the reviewer; it declines `ASSERTION_FAILURE`,
+`NAVIGATION_ERROR` and `OTHER`. Our 8 reds are assertion failures — the element **was** found and the
+assertion did not hold — so there is no broken locator to repair. Sending them to the reviewer would be
+the no-guessing violation (AI-052), not a win.
+
+**Two incidental confirmations:**
+- **B-068 works**: `[heal] Loaded scraped elements for 1 page(s) for reviewer context` — the reviewer
+gets real element context.
+- **B-070 works**: `No patches applied → reusing last run results (no extra test pass)` — the no-op
+  re-run that cost ~22 minutes is gone.
+
+**Correction to an earlier claim in this note.** I wrote that this package "holds 7 genuine locator
+failures to heal". That was wrong — they are assertion failures, not locator failures. Gate 3 cannot be
+measured on any package whose reds are all assertion reds.
 
 **Config-independence (checked, not assumed).** No model setting can fix B-086: the scraper collects only
 `interactive_tags = ["button", "a", "input", "select", "textarea"]` and `display_tags`, plus elements with
@@ -132,5 +164,8 @@ Practical numbers for the next session: with thinking **on**, each skeleton frag
 2. **Gate the assertion kind on the criterion wording.** `must_be_url` must not apply to a criterion that
    asks for a `mailto:` link.
 3. Then re-run this same story. Gates 1–2 are the only two that decide the positioning.
-4. Session 3's self-healing fix-rate measurement (gate 3) is still outstanding and is cheap to do on this
-   package, which now contains 7 genuine locator failures to heal.
+4. Session 3's self-healing fix-rate measurement (gate 3) is outstanding, and this package cannot answer
+   it (§4b). The honest way to measure it is a **deliberate DOM mutation**: serve the page with the
+   class names / ids the emitted selectors depend on changed, run the suite so the failures are genuine
+   `LOCATOR_TIMEOUT`s, then heal and count. Cheap (no regeneration needed — reuse this package) and it
+   measures exactly what gate 3 asks.
