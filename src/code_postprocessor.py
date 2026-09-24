@@ -194,6 +194,11 @@ class CountAssertion:
     "all images have alt" → every ``<img>`` has a non-empty alt.
     "all anchor links valid" → every ``<a>`` href is non-empty and not a
     placeholder.
+
+    B-088: ``tokens`` carries a multi-token forbidden set ("no link, button or
+    heading anywhere contains placeholder text"), and ``also_text`` widens a
+    single-attribute scan to the element's text too ("in no href and in no
+    visible copy").
     """
 
     method: str  # "assert_no_forbidden" or "assert_attribute_all"
@@ -202,6 +207,30 @@ class CountAssertion:
     attribute: str | None = None  # attribute to inspect (None = text content)
     forbidden: tuple[str, ...] = ()  # additional placeholder substrings to reject
     must_be_url: bool = False
+    tokens: tuple[str, ...] = ()  # B-088: multi-token forbidden set
+    also_text: bool = False  # B-088: inspect text in addition to the attribute
+
+
+#: Words that ask for a non-http scheme, so ``must_be_url`` must not apply.
+#: B-087: a criterion naming a ``mailto:`` link failed a correct page because
+#: the emitter asserted http(s).
+_SCHEME_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("mailto",), "mailto:"),
+    (("tel:", "telephone link", "phone link"), "tel:"),
+)
+
+
+def attribute_scheme(description: str) -> str | None:
+    """Return the URL scheme a criterion names (``mailto:``/``tel:``), else None.
+
+    B-087: when a criterion asks for a specific scheme, the predicate is
+    "starts with that scheme", not "is an http(s) URL".
+    """
+    lowered = description.lower()
+    for keywords, scheme in _SCHEME_KEYWORDS:
+        if any(keyword in lowered for keyword in keywords):
+            return scheme
+    return None
 
 
 def attribute_predicate(description: str, attribute: str) -> tuple[bool, tuple[str, ...]]:
@@ -224,7 +253,13 @@ def attribute_predicate(description: str, attribute: str) -> tuple[bool, tuple[s
         for token in _PLACEHOLDER_FORBIDDEN:
             if token not in forbidden:
                 forbidden.append(token)
-    must_be_url = attribute == "href" and any(term in lowered for term in ("url", "live", "valid", "resolv"))
+    # B-087: a scheme-naming criterion (mailto/tel) is not an http(s) check.
+    scheme_keywords = any(keyword in lowered for keywords, _scheme in _SCHEME_KEYWORDS for keyword in keywords)
+    must_be_url = (
+        attribute == "href"
+        and not scheme_keywords
+        and any(term in lowered for term in ("url", "live", "valid", "resolv"))
+    )
     return must_be_url, tuple(forbidden)
 
 
@@ -242,15 +277,55 @@ def count_assertion_from_description(description: str) -> CountAssertion | None:
     """
     lowered = description.lower()
     m = re.search(
-        r"\bno\s+([a-z0-9_\-\.]+(?:\s+[a-z0-9_\-\.]+)?)\s+in\s+(links?|images?|buttons?|headings?)\b", lowered
+        r"\bno\s+([a-z0-9_\-\.]+(?:\s+[a-z0-9_\-\.]+)?)\s+in\s+"
+        r"(links?|images?|buttons?|headings?|hrefs?)\b",
+        lowered,
     )
     if m:
         word = m.group(1).split()[0]  # "lorem ipsum" → "lorem" (substring check)
         kind = m.group(2).rstrip("s")
         if word in _NOT_FORBIDDEN_WORDS:
             return None
+        if kind == "href":
+            # B-088: "no TBD in hrefs" — every element carrying an href
+            # attribute, not just anchors (a preview image can carry one too).
+            return CountAssertion("assert_no_forbidden", "[href]", word, "href")
         selector, attribute = _COUNT_ELEMENT_KINDS[kind]
         return CountAssertion("assert_no_forbidden", selector, word, attribute)
+    # B-088: "no TBD in visible copy" / "... in the page text" — a page-level
+    # text scan. The resolver cannot check this (it resolves one element), so
+    # without the classifier it emitted a weakened assert_attribute on whatever
+    # element ranked first (Session 7: the hero paragraph).
+    m = re.search(
+        r"\bno\s+([a-z0-9_\-\.]+(?:\s+[a-z0-9_\-\.]+)?)\s+in\s+"
+        r"(?:the\s+)?(?:visible\s+|page\s+|body\s+)?(copy|text|copytext)\b",
+        lowered,
+    )
+    if m:
+        word = m.group(1).split()[0]
+        if word in _NOT_FORBIDDEN_WORDS:
+            return None
+        return CountAssertion("assert_no_forbidden", "body", word)
+    # B-088: the combined criterion shape — "No link, button or heading anywhere
+    # on the page contains placeholder text — the strings "TBD",
+    # "YOUR_VIDEO_ID_HERE" and "lorem ipsum" appear in no href and in no visible
+    # copy". Scan links, buttons and headings for every named placeholder token
+    # in BOTH href and text.
+    if "placeholder text" in lowered and re.search(
+        r"\blinks?\b[^.]*\bbuttons?\b|\bbuttons?\b[^.]*\bheadings?\b|\blinks?\b[^.]*\bheadings?\b",
+        lowered,
+    ):
+        quoted = tuple(dict.fromkeys(re.findall(r'"([^"]+)"', description)))
+        tokens = quoted or _PLACEHOLDER_FORBIDDEN
+        selector = "a, button, h1, h2, h3, h4, h5, h6"
+        return CountAssertion(
+            "assert_no_forbidden",
+            selector,
+            tokens[0],
+            "href",
+            tokens=tokens,
+            also_text=True,
+        )
     m = re.search(
         r"\b(?:all|every)\s+(?:anchor\s+|external\s+)?(links?|images?|buttons?|headings?)\s+(?:have|has)\s+(?:a\s+)?(?:non-?empty\s+)?([a-z_]+)",
         lowered,
@@ -271,12 +346,14 @@ def _emit_count_assertion(indent: str, check: CountAssertion, description: str) 
     """Emit the page-level count-assertion tracker call (B-069 part b)."""
     label = repr(description)
     if check.method == "assert_no_forbidden":
+        tokens = check.tokens or (check.argument,)
+        argument = repr(tokens[0]) if len(tokens) == 1 else repr(tokens)
+        call = f"{indent}evidence_tracker.assert_no_forbidden({check.selector!r}, {argument}, label={label}"
         if check.attribute:
-            return (
-                f"{indent}evidence_tracker.assert_no_forbidden({check.selector!r}, {check.argument!r}, "
-                f"label={label}, attribute={check.attribute!r})"
-            )
-        return f"{indent}evidence_tracker.assert_no_forbidden({check.selector!r}, {check.argument!r}, label={label})"
+            call += f", attribute={check.attribute!r}"
+        if check.also_text:
+            call += ", also_text=True"
+        return call + ")"
     call = f"{indent}evidence_tracker.assert_attribute_all({check.selector!r}, {check.argument!r}, label={label}"
     if check.forbidden:
         call += f", forbidden={check.forbidden!r}"
@@ -350,6 +427,76 @@ def document_assertion_from_description(description: str) -> DocumentAssertion |
 def _emit_document_assertion(indent: str, check: DocumentAssertion, description: str) -> str:
     """Emit the tracker call for a document-level assertion (B-086)."""
     return f"{indent}evidence_tracker.assert_attribute({check.selector!r}, {check.attribute!r}, label={description!r})"
+
+
+# ---------------------------------------------------------------------------
+# B-088 — section-containment assertions.
+#
+# A criterion the shape "the <section> tier tells the buyer how to start a
+# conversation — a contact link or the email address appears inside that tier"
+# is about a section CONTAINING a child, not about the visibility of two
+# headings. Session 7 emitted two ``assert_visible`` calls (the tier heading and
+# the "Contact us" heading) — a green that checked neither. When the skeleton
+# keeps that shape (prompt rule: "X inside Y" is ONE assert), this classifier
+# emits a scoped check with teeth: the child must exist inside the section.
+# ---------------------------------------------------------------------------
+
+#: Child kind → CSS selector for the element that must be inside the section.
+_SECTION_CHILD_SELECTORS: dict[str, str] = {
+    "contact link": 'a[href^="mailto:"], a[href*="contact"]',
+    "email address": 'a[href^="mailto:"]',
+    "email": 'a[href^="mailto:"]',
+    "link": "a[href]",
+    "button": "button",
+    "image": "img",
+}
+
+_SECTION_WORDS = r"(?:tier|section|card|panel|area|region|banner|block)"
+
+#: Section references that name no real heading — reject them so the emitted
+#: check cannot fail on an unresolvable pronoun ("email inside that tier").
+_SECTION_PRONOUNS: frozenset[str] = frozenset({"that", "this", "the", "it", "a", "an", "same", "above"})
+
+
+@dataclass(frozen=True)
+class SectionContainsAssertion:
+    """A criterion about a child element appearing inside a named section (B-088)."""
+
+    section: str  # heading text of the section, e.g. "Air-Gap / Defense"
+    child: str  # CSS selector the section must contain
+
+
+def section_contains_from_description(description: str) -> SectionContainsAssertion | None:
+    """Classify a section-containment criterion.
+
+    Recognises "<child> inside <section> [tier|section]" and
+    "<section> [tier|section] contains|has|shows a <child>".
+    """
+    lowered = description.strip().lower()
+    child_kinds = "|".join(re.escape(kind) for kind in _SECTION_CHILD_SELECTORS)
+    m = re.search(
+        rf"^(?P<child>{child_kinds})\s+(?:appears\s+|is\s+)?inside\s+(?:the\s+)?"
+        rf"(?P<section>.+?)(?:\s+{_SECTION_WORDS})?[.!]?$",
+        lowered,
+    )
+    if m is None:
+        m = re.search(
+            rf"^(?P<section>.+?)\s+{_SECTION_WORDS}\s+(?:contains|has|shows|displays)\s+(?:a\s+|an\s+)?"
+            rf"(?P<child>{child_kinds})[.!]?$",
+            lowered,
+        )
+    if m is None:
+        return None
+    section = m.group("section").strip().strip("'\"")
+    child = _SECTION_CHILD_SELECTORS.get(m.group("child"))
+    if not section or section in _SECTION_PRONOUNS or child is None:
+        return None
+    return SectionContainsAssertion(section=section, child=child)
+
+
+def _emit_section_contains(indent: str, check: SectionContainsAssertion, description: str) -> str:
+    """Emit the tracker call for a section-containment assertion (B-088)."""
+    return f"{indent}evidence_tracker.assert_contains({check.section!r}, {check.child!r}, label={description!r})"
 
 
 def _strip_module_level_statements(code: str) -> str:
@@ -543,6 +690,14 @@ def _replace_token_in_line_impl(
         if document_check is not None:
             return _emit_document_assertion(indent, document_check, description)
 
+    # B-088: a section-containment criterion ("contact link inside Air-Gap
+    # tier") is a scoped structural check — emit it before element resolution
+    # can weaken it to two unrelated visibility asserts.
+    if action == "ASSERT":
+        section_check = section_contains_from_description(description)
+        if section_check is not None:
+            return _emit_section_contains(indent, section_check, description)
+
     if "pytest.skip" in resolved_value:
         return f"{indent}{resolved_value}"
 
@@ -609,9 +764,12 @@ def _replace_token_in_line_impl(
                     else ("alt" if "alt" in lowered else ("content" if "meta" in lowered else ""))
                 )
             must_be_url, forbidden = attribute_predicate(description, attr_name)
+            scheme = attribute_scheme(description)
             extra = ""
             if must_be_url:
                 extra += ", must_be_url=True"
+            if scheme:
+                extra += f", required_scheme={scheme!r}"
             if forbidden:
                 extra += f", forbidden={forbidden!r}"
             attr_call = (
