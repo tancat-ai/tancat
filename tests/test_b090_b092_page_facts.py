@@ -128,7 +128,15 @@ def test_price_section_strips_leading_inside() -> None:
 
 @pytest.mark.parametrize(
     "description",
-    ["hero headline visible", "Air-Gap / Defense tier", "Copy Command button", "Per deployment, not per seat"],
+    [
+        "hero headline visible",
+        "Air-Gap / Defense tier",
+        "Copy Command button",
+        "Per deployment, not per seat",
+        # A cart-content criterion is not a pricing-tier check (CI self-test).
+        "product name and price",
+        "cart page displays the added product with its name and price",
+    ],
 )
 def test_ordinary_descriptions_are_not_page_facts(description: str) -> None:
     assert page_fact_from_description(description) is None
