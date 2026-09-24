@@ -238,6 +238,17 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 
 ---
 
+## ✅ B-089 — Project sanitizer flagged the deployed `landing/robots.txt` as junk, failing CI
+
+**Status:** ✅ **Fixed 2026-09-24** — found by PR #6's CI run (`Project Sanitizer` job, exit 1) and fixed in the same PR.
+**Priority:** low for the product, but it is a **CI-blocking false positive on a legitimate product asset** — every push touching the landing page would have gone red.
+**One-line:** `purge_junk` treats every non-whitelisted `*.txt` as a temporary file (`scripts/maintenance/project_sanitizer.py:227`). `landing/robots.txt` is a standards-defined web-root file sitting in a **deployed** directory, so purge mode would delete it and `--check-only` failed CI. Added `robots.txt` to `TXT_WHITELIST` with a comment; `--check-only` now exits 0 with 0 junk files.
+**Why it matters beyond this one file:** the `*.txt` rule is a blunt instrument — any future legitimate `.txt` asset outside the whitelist fails CI the same way. A directory-level exemption for deploy roots (`landing/`) is the sturdier fix if it recurs.
+**Not the same as B-080:** B-080 is archived `*.log` files flagged locally on Windows but passing in CI; that one is still open.
+**Estimated sessions:** 0.1.
+
+---
+
 ## ✅ B-067 — Self-healing was a NO-OP on every generated suite (pytest-playwright's `[chromium]` suffix)
 
 **Status:** ✅ **Fixed 2026-09-15** — reported as *"ran the self-heal … looks like it failed, took a really long time"*. Note: the original fix was lost from the working tree (a reset) while this status line stayed committed; it was restored from the 2026-09-15 session record on 2026-09-18 and shipped in the restore commit.
