@@ -1,6 +1,6 @@
 {
-  "total": 165,
-  "completed": 153,
+  "total": 166,
+  "completed": 154,
   "pending": 12,
   "files": [
     {
@@ -826,6 +826,11 @@
     {
       "source": "src/verify_baseline.py",
       "doc": "markdown_docs/src/verify_baseline.py.md",
+      "status": "completed"
+    },
+    {
+      "source": "src/link_scoping.py",
+      "doc": "markdown_docs/src/link_scoping.py.md",
       "status": "completed"
     }
   ],
