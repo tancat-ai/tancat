@@ -55,9 +55,11 @@ worktree. Two fixes:
 
 ## 4. Verification
 
-- **Offline teeth**: `tests/test_b090_b092_page_facts.py` (59 tests) pins the
+- **Offline teeth**: `tests/test_b090_b092_page_facts.py` (62 tests) pins the
   classifier, emitter, tracker methods, scoping, kind bonus, and the
-  journey-subprocess `PYTHONPATH`.
+  journey-subprocess `PYTHONPATH`. The Action self-test caught one over-broad
+  price match ("product name and price"); the classifier now rejects generic
+  content names.
 - **Live re-run**: 4 failed / 29 passed / 2 skipped; every B-090/B-092 class
   emits a real check (see BACKLOG entries).
 - **Gates**: 3436 pytest / 1 skipped, smoke 39/39, ruff + mypy clean, eval
