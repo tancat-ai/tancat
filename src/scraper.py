@@ -749,6 +749,7 @@ class PageScraper:
             "href": href,
             "raw_href": str(tag.get("href", "")).strip(),
             "title": str(tag.get("title", "")).strip(),
+            "alt": str(tag.get("alt", "")).strip(),
             "aria_label": str(tag.get("aria-label", "")).strip(),
             "data_test": str(tag.get("data-test", "")).strip(),
             "name": str(tag.get("name", "")).strip(),
@@ -794,6 +795,9 @@ class PageScraper:
             "svg",
             "title",
             "desc",
+            # B-090/B-092: images carry their identity in the alt attribute;
+            # without them an image criterion has no candidate to resolve to.
+            "img",
         ]
 
         labels: dict[str, str] = {}
@@ -885,11 +889,13 @@ class PageScraper:
             # text (clickable card containers, e.g. #productCar); otherwise
             # require meaningful direct text.
             has_div_id = tag.name == "div" and bool(tag.get("id"))
-            if len(direct_text) < 3 and not data_test and not has_div_id:
+            is_image = tag.name == "img"
+            if len(direct_text) < 3 and not data_test and not has_div_id and not is_image:
                 continue
 
-            # Skip text that's too long — likely a container, not a leaf element
-            if len(text_content) > 300:
+            # Skip text that's too long — likely a container, not a leaf element.
+            # An image is a leaf by definition, so its (possibly long) alt is kept.
+            if not is_image and len(text_content) > 300:
                 continue
 
             elem_dict = self._build_element_dict(tag, base_url, labels, id_to_text)

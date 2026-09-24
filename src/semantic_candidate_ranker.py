@@ -339,6 +339,7 @@ class SemanticCandidateRanker:
                         "href": str(candidate.get("href", "")).strip(),
                         "classes": str(candidate.get("classes", "")).strip(),
                         "placeholder": str(candidate.get("placeholder", "")).strip(),
+                        "alt": str(candidate.get("alt", "")).strip(),
                         "accessible_name": str(candidate.get("accessible_name", "")).strip(),
                     }
                 )
@@ -410,6 +411,7 @@ class SemanticCandidateRanker:
                             "selector": str(candidate.get("selector", "")).strip(),
                             "text": str(candidate.get("text", "")).strip(),
                             "role": str(candidate.get("role", "")).strip(),
+                            "alt": str(candidate.get("alt", "")).strip(),
                         }
                     )
                 )
