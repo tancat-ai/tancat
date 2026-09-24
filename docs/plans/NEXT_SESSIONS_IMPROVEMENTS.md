@@ -269,11 +269,13 @@ traceability layer** ("prove your testing happened, entirely inside your network
 | 5 | Evidence cost (A5) + **B-061/B-066/B-071** cleanups | a 50-test suite in ≤ 5 min | ✅ done 2026-09-21 — encode was 87% of step cost; `method=0` + keep-PNG-if-no-shrink + per-page probe cache; live 10-test A/B 163.6s → 57.8s (≈4.8 min projected at 50; the full live 50-test re-measure lands in session 7) |
 | 6 | **tancat.dev B1** — privacy/terms, meta+OG+favicon, noir image, real Buy + demo links | cannot sell without it | a stranger can buy and watch the demo |
 | 7 | **Re-measure** against the Part C gates and decide the positioning | the commercial decision | ✅ done 2026-09-24 — gates 1–6 recorded in the appendix; **gates 1 and 2 FAIL** (≈74% resolution, ≥2 false greens), gate 5 borderline, gate 3 still unmeasured. Record: `docs/sessions/2026-09-24_session7_re_measure.md` |
-| 8 | **B-086** — head/attribute criteria must resolve honestly or skip, never emit a weakened `assert_visible` | it is the only thing left between us and gates 1–2 | re-run the same story; gates 1 ≥90% and 2 zero false greens both pass |
+| 8 | **B-086** — head/attribute criteria must resolve honestly or skip, never emit a weakened `assert_visible` | it is the only thing left between us and gates 1–2 | ✅ done 2026-09-24 — document-level assertion family added (`_DOCUMENT_TARGETS` + intercept in the emit chokepoint); 22 unit tests; live replay 5/5 pass present, 5/5 correctly FAIL when the tags are removed; 3330 pytest. **Closes the head class only** — criteria 28/29/30/31 |
+| 8b | **B-087** — `must_be_url` must not apply to a `mailto:` criterion | a false red, 0.25 sessions | `document_assertion`-style scheme vocabulary in `attribute_predicate` |
+| 8c | **B-088** — page-level and section-scoped criteria still resolve to a visible lookalike | the remaining blocker for gates 1–2: 4 reds (16, 22, 24, 27-in-part) + 1 false green (27) | those criteria resolve to the right element or emit an honest skip |
 
 Sessions 1–5 are done, and Session 7's re-measure ran on 2026-09-24. Session 6 (tancat.dev B1) is **partly** done: the meta/OG/favicon, privacy/terms, robots/sitemap and the pricing-card corrections are committed on `feat/landing-b1-trust-blockers`, and the privacy/terms links were verified live by the Session 7 run. Still blocked there: the Noir Art image (needs the source file), the demo video (record after the gates pass), and the real checkout (needs the Lemon Squeezy key mapping).
 
-**Next: Session 8 (B-086).** It is the whole remaining commercial gap — see the session record §5.
+**Next: B-088, then B-087, then re-run to re-score gates 1–2.** B-086 alone does **not** reach the gates — it closes one of three remaining classes (document/head), leaving link-resolution misses and page/section-scoped criteria. See the session record §2–§3 and BACKLOG B-088.
 
 ---
 
