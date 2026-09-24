@@ -170,9 +170,24 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ---
 
-## 🆕 B-086 — Head/attribute criteria pass GREEN without checking anything (the resolver has no concept of `<head>`, so the assertion is weakened to match a visible element)
+## ✅ B-086 — Head/attribute criteria pass GREEN without checking anything (the resolver has no concept of `<head>`, so the assertion is weakened to match a visible element)
 
-**Status:** 🆕 new — found by the Session 7 re-measure (2026-09-24), recorded in `docs/sessions/2026-09-24_session7_re_measure.md` §3.
+**Status:** ✅ **Fixed 2026-09-24**, same session as the measurement that found it. Root cause confirmed by reading the scraper, not assumed: it collects only `interactive_tags` (`button`, `a`, `input`, `select`, `textarea`), `display_tags`, and elements with an `id` (`src/scraper.py:776,780,808,825,839`) — so `<meta>`, `<link>` and `<title>` **never enter the candidate pool**. That makes the defect architectural and deterministic: no model setting (reasoning on/off) can affect it.
+
+**The fix** — a document-level assertion family, modelled on the existing B-069(b) `CountAssertion`:
+
+- `_DOCUMENT_TARGETS` + `DocumentAssertion` + `document_assertion_from_description()` + `_emit_document_assertion()` in `src/code_postprocessor.py`.
+- 11 known targets, each a stable well-known selector needing no resolution: `meta[name="description"]`/content, `link[rel="canonical"]`/href, `link[rel="icon"]`/href, `meta[property="og:title"|"og:image"|"og:description"|"og:type"|"og:url"]`/content, `meta[name="twitter:card"]`/content, `meta[name="viewport"]`/content, `html`/lang.
+- Intercepted in `_replace_token_in_line_impl` — the single emit chokepoint — immediately after the count-assertion intercept and **before** the unverified-skip path, so a real check wins over a skip.
+- Emits `evidence_tracker.assert_attribute(<head selector>, <attr>, label=...)`. `assert_attribute` waits for `state="attached"`, so a `<meta>` in `<head>` works and a **missing** tag fails honestly.
+
+**Verification:**
+
+- `tests/test_b086_document_assertions.py` — 22 tests: the 5 verbatim Session 7 descriptions map to the right selector; og:title and og:image do not cross-match; 8 ordinary criteria are left alone; the Session 7 wrong-element regression is pinned (the hero paragraph is ignored); a `pytest.skip` resolved value is overridden; every emitted line compiles; CLICK is not intercepted.
+- **Live replay** (`scratch/verify_b086_live.py`, self-hosted page): **5/5 PASS present, 5/5 FAIL after the tags are removed, control FAILS.** The check has teeth — it fails when the tag is missing, which is the whole point.
+- Full gates: **3330 pytest passed / 1 skipped** (was 3308 — exactly +22), ruff + mypy clean, smoke 39/39.
+
+**Scope — what this does NOT fix.** B-086 closes the *document/head* class only (criteria 28, 29, 30's false green, 31). Five reds remain on the same story, all a different root cause, filed as **B-088**: 16 and 22 (link-resolution misses), 24 (a page-level text scan that never reached the count classifier), 27 (a section-scoped criterion that resolved to a heading) and 13 (a criterion that no longer matches the page by design). Plus **B-087** (mailto). So gates 1–2 are **not** met by this fix alone — the earlier claim that B-086 was the only thing between us and them was too strong.
 **Priority:** **high** — this is the gate-2 blocker ("zero false greens") and it sits in exactly the criterion class a buyer evaluates first (metadata, attributes, head tags).
 **One-line:** a criterion about `<head>` content or an attribute-only element resolves to the **nearest visible element** and then emits an assertion weak enough to pass. Live evidence from `test_20260924_002444_*`:
 
@@ -200,6 +215,26 @@ Same run, for contrast, the criteria that *did* resolve correctly: 32 → `a[hre
 **Where:** `attribute_predicate()` in `src/code_postprocessor.py` — the predicate is derived from the description and needs a scheme vocabulary, not just a "must be live" flag.
 **Why it matters:** a false red counts against gate 1 (resolution accuracy) and makes the red list noisier than the real defect count.
 **Estimated sessions:** 0.25.
+
+---
+
+## 🆕 B-088 — Page-level and section-scoped criteria still resolve to a visible lookalike (4 reds + 1 false green left on the Session 7 story)
+
+**Status:** 🆕 new — the residue left after B-086 closed the document/head class. Found by the Session 7 re-measure (2026-09-24); evidence in `docs/sessions/2026-09-24_session7_re_measure.md` §2–§3.
+**Priority:** **high** — with B-086 and B-087 done, this is the remaining blocker for gates 1 and 2.
+**One-line:** four criteria that are about the page or a section as a whole were resolved to an arbitrary nearby element, and the emitted assertion was chosen to match it:
+
+| Criterion | What was emitted | What is wrong |
+|---|---|---|
+| 16 — "the Walkthrough button resolves to a live video URL" | `assert_attribute('a[href="#"]', 'href', must_be_url=True)` | matched the **nav logo** anchor (`href="#"`), not the button. Link-resolution miss. |
+| 22 — "the Security Policy link resolves without returning 404" | `assert_attribute(':has-text("Security Policy")', 'href')` | matched a **non-anchor container** that merely contains the text. Link-resolution miss. |
+| 24 — "no link, button or heading anywhere contains placeholder text" | `assert_attribute(<hero paragraph>, 'href')` | never reached the count classifier; should be a page-level scan (`assert_no_forbidden` over `a`/`button`/headings, href **and** text). |
+| 27 — "the Air-Gap tier shows how to start a conversation" | `assert_visible(h3 blob)` + `assert_visible(h2 blob)` | asserted two headings are visible — never checked for a contact link **inside** the tier. **False green.** |
+
+**Expected behaviour:** for criteria about a *section* or the *page*, scope the resolution (section-scoped candidate set) or lower it to a page-level structural check; when neither is possible, emit an honest `pytest.skip`. A criterion that names a link text must not resolve to a container that merely mentions it.
+**Where:** the resolver's scoping (`src/section_scoper.py`, `src/placeholder_scorers.py`) and the page-level classifiers in `src/code_postprocessor.py` (extend `count_assertion_from_description` to the "anywhere on the page contains X" and "inside section Y there is a Z" shapes).
+**Note:** criterion 13 ("Buy Pro link resolves to a live purchase URL") is *not* part of this — that criterion no longer matches the page by design, since Session 6 replaced the Buy URLs with a request-a-licence route. It needs a story/criterion update, not a code fix.
+**Estimated sessions:** 1–1.5.
 
 ---
 
