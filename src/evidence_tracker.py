@@ -1341,12 +1341,19 @@ class EvidenceTracker:
             raise
 
     @staticmethod
-    def _attribute_violations(value: str, *, forbidden: tuple[str, ...] = (), must_be_url: bool = False) -> list[str]:
+    def _attribute_violations(
+        value: str,
+        *,
+        forbidden: tuple[str, ...] = (),
+        must_be_url: bool = False,
+        required_scheme: str = "",
+    ) -> list[str]:
         """B-069 part b: predicate violations for an attribute value.
 
         A value violates the condition when it contains any forbidden
-        substring (case-insensitive) or, when ``must_be_url``, is not an
-        http(s) URL.
+        substring (case-insensitive), when ``must_be_url`` and it is not an
+        http(s) URL, or when ``required_scheme`` (B-087) and it does not start
+        with that scheme (``mailto:`` / ``tel:``).
         """
         violations: list[str] = []
         lowered = value.lower()
@@ -1355,6 +1362,8 @@ class EvidenceTracker:
                 violations.append(f"contains forbidden '{token}'")
         if must_be_url and not lowered.startswith(("http://", "https://")):
             violations.append("is not an http(s) URL")
+        if required_scheme and not lowered.startswith(required_scheme.lower()):
+            violations.append(f"does not start with '{required_scheme}'")
         return violations
 
     def assert_attribute(
@@ -1365,13 +1374,16 @@ class EvidenceTracker:
         *,
         forbidden: tuple[str, ...] = (),
         must_be_url: bool = False,
+        required_scheme: str = "",
     ) -> None:
         """Assert an element's attribute is present and non-empty (B-069 part b).
 
         When ``forbidden`` is given, the value must not contain any of those
         substrings (case-insensitive) — a "live" href that still says ``TBD``
         or ``YOUR_VIDEO_ID_HERE`` fails instead of passing. When
-        ``must_be_url`` is given, the value must be an http(s) URL.
+        ``must_be_url`` is given, the value must be an http(s) URL. When
+        ``required_scheme`` is given (B-087), the value must start with it —
+        ``mailto:`` / ``tel:``.
         """
         if not label:
             label = f"Assert attribute {attribute}: {locator}"
@@ -1382,7 +1394,9 @@ class EvidenceTracker:
             actual = loc.get_attribute(attribute) or ""
             if not actual:
                 raise AssertionError(f"Expected non-empty attribute '{attribute}' on {locator} but got empty")
-            violations = self._attribute_violations(actual, forbidden=forbidden, must_be_url=must_be_url)
+            violations = self._attribute_violations(
+                actual, forbidden=forbidden, must_be_url=must_be_url, required_scheme=required_scheme
+            )
             if violations:
                 raise AssertionError(
                     f"Attribute '{attribute}' on {locator} violates the condition: "
@@ -1410,9 +1424,11 @@ class EvidenceTracker:
     def assert_no_forbidden(
         self,
         selector: str,
-        forbidden: str,
+        forbidden: str | tuple[str, ...],
         label: str = "",
         attribute: str | None = None,
+        *,
+        also_text: bool = False,
     ) -> None:
         """Assert NO element matching ``selector`` contains ``forbidden`` (B-069 part b).
 
@@ -1421,9 +1437,16 @@ class EvidenceTracker:
         inspects every button's text. Case-insensitive. Zero matching
         elements passes vacuously (the condition holds trivially) and the
         count is recorded for the evidence.
+
+        B-088: ``forbidden`` may be several tokens at once ("no link, button or
+        heading anywhere contains placeholder text") and ``also_text`` widens an
+        attribute scan to the element's text too ("appear in no href and in no
+        visible copy").
         """
+        tokens = (forbidden,) if isinstance(forbidden, str) else tuple(forbidden)
+        tokens = tuple(token for token in tokens if token)
         if not label:
-            label = f"No '{forbidden}' in {selector}"
+            label = f"No {', '.join(tokens)} in {selector}"
         _t0 = time.time()
         try:
             loc = self.page.locator(selector)
@@ -1431,20 +1454,34 @@ class EvidenceTracker:
             offenders: list[str] = []
             for i in range(count):
                 element = loc.nth(i)
-                raw = element.get_attribute(attribute) if attribute else None
-                value = (raw if raw is not None else element.text_content() or "").strip()
-                if value and forbidden.lower() in value.lower():
-                    offenders.append(value[:80])
+                values: list[str] = []
+                if attribute:
+                    raw = element.get_attribute(attribute)
+                    if raw:
+                        values.append(raw.strip())
+                    if also_text:
+                        text = (element.text_content() or "").strip()
+                        if text:
+                            values.append(text)
+                else:
+                    text = (element.text_content() or "").strip()
+                    if text:
+                        values.append(text)
+                for value in values:
+                    lowered = value.lower()
+                    if any(token.lower() in lowered for token in tokens):
+                        offenders.append(value[:80])
+                        break
             if offenders:
                 raise AssertionError(
-                    f"Found {len(offenders)} element(s) matching {selector} containing '{forbidden}': {offenders[:3]}"
+                    f"Found {len(offenders)} element(s) matching {selector} containing one of {tokens}: {offenders[:3]}"
                 )
             self._record_step(
                 "assertion",
                 label,
                 locator=selector,
                 take_screenshot=True,
-                matched_text=f"{count} element(s), none contain '{forbidden}'",
+                matched_text=f"{count} element(s), none contain {tokens}",
                 elapsed_ms=int((time.time() - _t0) * 1000),
             )
         except Exception as e:
@@ -1509,6 +1546,48 @@ class EvidenceTracker:
                 "assertion",
                 label,
                 locator=selector,
+                take_screenshot=True,
+                error=str(e),
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+            raise
+
+    def assert_contains(self, section: str, child: str, label: str = "") -> None:
+        """Assert a named section contains a child element (B-088).
+
+        ``section`` is the section heading's text and ``child`` is a CSS
+        selector. The check finds the innermost element that has a heading with
+        that text AND contains a matching child — so a contact link elsewhere on
+        the page cannot satisfy it. Fails when no such container exists.
+        """
+        if not label:
+            label = f"{child} inside {section}"
+        _t0 = time.time()
+        heading_selector = f":is(h1,h2,h3,h4,h5,h6):has-text({section!r})"
+        try:
+            heading = self.page.locator(heading_selector).first
+            heading.wait_for(state="attached", timeout=5000)
+            container = (
+                self.page.locator("div, section, article, li")
+                .filter(has=self.page.locator(heading_selector))
+                .filter(has=self.page.locator(child))
+                .last
+            )
+            if container.count() == 0:
+                raise AssertionError(f"No element containing heading {section!r} also contains {child!r}")
+            self._record_step(
+                "assertion",
+                label,
+                locator=child,
+                take_screenshot=True,
+                matched_text=f"{child} found inside section {section!r}",
+                elapsed_ms=int((time.time() - _t0) * 1000),
+            )
+        except Exception as e:
+            self._record_step(
+                "assertion",
+                label,
+                locator=child,
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
