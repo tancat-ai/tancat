@@ -131,14 +131,32 @@ def normalise_element_text(element: dict[str, str]) -> str:
     "Last Name" — and must still match descriptions (B-024 class).
     Strips non-ASCII characters (icon fonts), lowercases,
     and strips whitespace.
+
+    B-096: a source that normalises to nothing (an accessible name of just the
+    required marker ``*``) must not shadow the real text — fall through to the
+    next source. On lv_insurance the scraper records ``accessible_name="*"``
+    for ``#mainLicenseYears``, which hid "Years Licensed" from Pass 1 and let
+    the optional ``#addDriverLicenseYears`` twin win.
     """
-    raw = (
-        element.get("accessible_name")
-        or element.get("aria_label")
-        or element.get("text", "")
-        or element.get("placeholder", "")
-    ).strip()
-    return re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+    for source in (
+        element.get("accessible_name"),
+        element.get("aria_label"),
+        element.get("text"),
+        element.get("placeholder"),
+    ):
+        raw = (source or "").strip()
+        if not raw:
+            continue
+        # B-096: drop required-field markers ("Years Licensed *", "Number*").
+        # They are decoration, not identity — without this the optional twin of
+        # a field ("Years Licensed", no marker) text-matches the description
+        # exactly while the real required field does not.
+        raw = re.sub(r"\s*\*+\s*", " ", raw)
+        raw = re.sub(r"\s+", " ", raw)
+        normalised = re.sub(r"[^\x00-\x7f]", "", raw).strip().lower()
+        if normalised:
+            return normalised
+    return ""
 
 
 def get_effective_role(element: dict[str, str]) -> str:

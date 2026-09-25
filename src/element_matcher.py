@@ -393,6 +393,9 @@ class ElementMatcher:
         # of DOM order. "Pay Bills" (nav link) must beat the "Pay Bill"
         # submit button for a "Pay Bills" click, and vice versa — exact
         # equality is the strongest signal of intent.
+        # B-096: collect EVERY exact match; DOM order is not an intent signal,
+        # so several equal-text elements are tie-broken by the scorer below.
+        exact_matches: list[dict[str, str]] = []
         for elements in pages_data.values():
             for element in elements:
                 if element.get("synthetic_id"):
@@ -415,7 +418,10 @@ class ElementMatcher:
                     action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
                     if not (text_words & action_words_in_desc):
                         continue
-                return element
+                exact_matches.append(element)
+
+        if exact_matches:
+            return self._pick_best_text_match(action, description, exact_matches, pages_data)
 
         # R-001: Extract key phrases from verbose descriptions.
         key_phrases: list[str] = []
@@ -452,6 +458,12 @@ class ElementMatcher:
         if len(noun_phrase_words) >= 1:
             key_phrases.append(" ".join(noun_phrase_words))
 
+        # B-096: collect every element that matches the same rule rather than
+        # returning the first in DOM order — several similar fields (a main
+        # driver and an additional driver, a vehicle make and its registration)
+        # match identically, and DOM order is not an intent signal. The
+        # deterministic scorer decides among equal-rule matches below.
+        matched_candidates: list[dict[str, str]] = []
         for elements in pages_data.values():
             for element in elements:
                 # AI-037: skip synthetic ARIA-only containers (Pass 2 of the
@@ -506,7 +518,13 @@ class ElementMatcher:
                             # "scheme" in "Select scheme..."). The ratio
                             # guard prevents 1-word matches on long texts
                             # but shouldn't block genuine substrings.
-                            phrase_in_text = phrase in norm_text or norm_text in phrase
+                            # B-096: a single-word phrase must match on a word
+                            # boundary — "license" ⊆ "Years Licensed" is a
+                            # substring coincidence, not a match.
+                            if phrase_words == 1:
+                                phrase_in_text = re.search(rf"\b{re.escape(phrase)}\b", norm_text) is not None
+                            else:
+                                phrase_in_text = phrase in norm_text or norm_text in phrase
                             if phrase_in_text and phrase_words == 2:
                                 # Two-word phrase found as substring — trust it
                                 matched = True
@@ -519,7 +537,12 @@ class ElementMatcher:
                                     matched = True
                             if not matched:
                                 word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                                if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
+                                # B-096: a single word that matches on a word
+                                # boundary is a strong signal even against a
+                                # three-word label ("license" → "Driving
+                                # License Number"), so allow ratio == 3 there.
+                                ratio_ok = word_ratio <= 3 if phrase_words == 1 else word_ratio < 3
+                                if ratio_ok and (norm_text == phrase or phrase_in_text):
                                     matched = True
                                     break
 
@@ -572,9 +595,45 @@ class ElementMatcher:
                         action_words_in_desc = desc_words & PlaceholderResolver.ACTION_VERBS
                         if not (text_words & action_words_in_desc):
                             continue
-                    return element
+                    matched_candidates.append(element)
+
+        if matched_candidates:
+            return self._pick_best_text_match(action, description, matched_candidates, pages_data)
 
         return None
+
+    def _pick_best_text_match(
+        self,
+        action: str,
+        description: str,
+        candidates: list[dict[str, str]],
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> dict[str, str]:
+        """B-096: tie-break equal-rule Pass 1 matches with the deterministic scorer.
+
+        Several elements can match the same text rule on one page (an account
+        holder and an additional driver share "Years Licensed"; a vehicle make
+        and its registration share the "vehicle" prefix). Returning the first
+        in scrape order is arbitrary — the scorer is the intent signal, so the
+        highest-scored candidate wins. A single match returns unchanged, and if
+        the scorer drops every candidate (e.g. hidden with no text evidence) the
+        first is kept so behaviour falls back to the pre-B-096 result.
+        """
+        if len(candidates) == 1:
+            return candidates[0]
+
+        candidate_ids = {id(candidate) for candidate in candidates}
+        ranked: list[tuple[int, dict[str, str]]] = []
+        for elements in pages_data.values():
+            for score, element in self._resolver.rank_candidates(action, description, elements):
+                if id(element) in candidate_ids:
+                    ranked.append((score, element))
+
+        if not ranked:
+            return candidates[0]
+
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return ranked[0][1]
 
     def pass1_assert_text_match(
         self,
@@ -701,7 +760,13 @@ class ElementMatcher:
                             # "scheme" in "Select scheme..."). The ratio
                             # guard prevents 1-word matches on long texts
                             # but shouldn't block genuine substrings.
-                            phrase_in_text = phrase in norm_text or norm_text in phrase
+                            # B-096: a single-word phrase must match on a word
+                            # boundary — "license" ⊆ "Years Licensed" is a
+                            # substring coincidence, not a match.
+                            if phrase_words == 1:
+                                phrase_in_text = re.search(rf"\b{re.escape(phrase)}\b", norm_text) is not None
+                            else:
+                                phrase_in_text = phrase in norm_text or norm_text in phrase
                             if phrase_in_text and phrase_words == 2:
                                 # Two-word phrase found as substring — trust it
                                 matched = True
@@ -713,7 +778,12 @@ class ElementMatcher:
                                     matched = True
                             if not matched:
                                 word_ratio = max(text_word_count, phrase_words) / min(text_word_count, phrase_words)
-                                if word_ratio < 3 and (norm_text == phrase or phrase_in_text):
+                                # B-096: a single word that matches on a word
+                                # boundary is a strong signal even against a
+                                # three-word label ("license" → "Driving
+                                # License Number"), so allow ratio == 3 there.
+                                ratio_ok = word_ratio <= 3 if phrase_words == 1 else word_ratio < 3
+                                if ratio_ok and (norm_text == phrase or phrase_in_text):
                                     matched = True
                                     break
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 import subprocess
 import uuid
@@ -57,6 +58,19 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     thinking         TEXT
 )
 """
+
+
+def _story_test_filename(story_id: str) -> str:
+    """B-094: one emitted test file per STORY, never per site.
+
+    Two golden stories can share a site (eval-007 and eval-008 both target
+    banking_mock). Naming the file ``test_<site>.py`` made the later story
+    overwrite the earlier one, and the executor then ran one story's tests
+    under both labels. Slugify the story id instead so each story owns a file.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", story_id.lower()).strip("_")
+    return f"test_{slug}.py"
+
 
 _EVAL_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_story ON eval_runs(story_id)"
 
@@ -471,10 +485,10 @@ class EvalRunner:
     def _persist_regenerated_tests(self, code_map: dict[str, str]) -> None:
         """Write regenerated code to ``test_output_dir`` for the execution phase.
 
-        ``_load_test_files`` globs ``test_*.py`` files whose stem contains the
-        site name — write one deterministic file per story (``test_<site>.py``)
-        so full-mode actually executes the JUST-regenerated tests and reports a
-        pass rate instead of "Tests executed: 0".
+        One deterministic file per STORY (``test_<story_id>.py``, B-094) so full
+        mode executes the JUST-regenerated tests and reports a pass rate instead
+        of "Tests executed: 0". Per site was the old scheme; it made two stories
+        on one site (eval-007 / eval-008 on banking_mock) overwrite each other.
         """
         if self.test_output_dir is None:
             return
@@ -482,12 +496,11 @@ class EvalRunner:
         for golden_file in sorted(self.dataset_dir.glob("*.json")):
             golden = load_golden_key(golden_file)
             story_id = golden["id"]
-            site = golden["site"]
             code = code_map.get(story_id, "")
             if not code.strip():
                 logger.warning("No regenerated code for %s — skipping test persistence", story_id)
                 continue
-            out_path = self.test_output_dir / f"test_{site}.py"
+            out_path = self.test_output_dir / _story_test_filename(story_id)
             out_path.write_text(code, encoding="utf-8")
             logger.info("Persisted regenerated tests for %s → %s", story_id, out_path)
         self._ensure_conftest()
@@ -519,7 +532,12 @@ class EvalRunner:
         logger.info("Copied conftest.py → %s (evidence_tracker fixture for generated tests)", target)
 
     def _load_test_files(self) -> dict[str, Path]:
-        """Map story_ids to generated test files for execution."""
+        """Map each story_id to ITS OWN generated test file (B-094).
+
+        Exact per-story filename (``test_<story_id>.py``) rather than a
+        site-substring glob: two stories on one site must never resolve to the
+        same file, or one story's tests are run and reported under both labels.
+        """
         test_files: dict[str, Path] = {}
         if self.test_output_dir is None:
             return test_files
@@ -527,13 +545,9 @@ class EvalRunner:
         for golden_file in sorted(self.dataset_dir.glob("*.json")):
             golden = load_golden_key(golden_file)
             story_id = golden["id"]
-            site = golden["site"]
-
-            # Look for test file matching site name
-            for test_file in self.test_output_dir.glob("test_*.py"):
-                if site in test_file.stem:
-                    test_files[story_id] = test_file
-                    break
+            test_file = self.test_output_dir / _story_test_filename(story_id)
+            if test_file.exists():
+                test_files[story_id] = test_file
 
         return test_files
 
