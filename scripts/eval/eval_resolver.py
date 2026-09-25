@@ -36,6 +36,13 @@ from pathlib import Path
 from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# B-095: run against THIS checkout's `src/`, not an editable install of another
+# checkout. sys.path[0] is scripts/eval when run as a script, so without this the
+# deferred `from src...` imports resolve through the site-packages editable install.
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 _DATASET_DIR = _PROJECT_ROOT / "scripts" / "eval" / "dataset"
 _SCRAPED_DIR = _PROJECT_ROOT / "scripts" / "eval" / "scraped_pages"
 
