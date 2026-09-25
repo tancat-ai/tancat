@@ -44,6 +44,15 @@ from pathlib import Path
 
 # Resolve project root (scripts/eval is one level deep)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# B-095: run against THIS checkout's `src/`, not an editable install of another
+# checkout (e.g. a worktree must not silently measure main's code). sys.path[0]
+# is scripts/eval when run as a script, so `import src` would otherwise resolve
+# through the site-packages editable install. `eval_runner`/`eval_metrics` are
+# script-local and are not shadowed by anything at the project root.
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 _DATASET_DIR = _PROJECT_ROOT / "scripts" / "eval" / "dataset"
 _CAPTURES_DIR = _PROJECT_ROOT / "scripts" / "eval" / "captures"
 _DB_PATH = _PROJECT_ROOT / "evidence" / "run_results.sqlite"
