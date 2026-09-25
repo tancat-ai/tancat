@@ -291,18 +291,18 @@ class TestPersistRegeneratedTests:
             test_output_dir=tmp_path / "out",
         )
 
-    def test_writes_site_named_test_file(self, tmp_path: Path) -> None:
+    def test_writes_story_named_test_file(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
         runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
 
-        out_file = tmp_path / "out" / "test_demoqa.py"
+        out_file = tmp_path / "out" / "test_eval_003.py"
         assert out_file.exists()
         assert "def test_x()" in out_file.read_text(encoding="utf-8")
 
     def test_skips_stories_without_code(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
         runner._persist_regenerated_tests({"eval-003": ""})
-        assert not (tmp_path / "out" / "test_demoqa.py").exists()
+        assert not (tmp_path / "out" / "test_eval_003.py").exists()
 
     def test_copies_conftest_when_missing(self, tmp_path: Path) -> None:
         """B-061 (a): a custom --test-output dir must get the evidence_tracker fixture."""
@@ -329,4 +329,49 @@ class TestPersistRegeneratedTests:
         runner._persist_regenerated_tests({"eval-003": "def test_x():\n    pass\n"})
 
         test_files = runner._load_test_files()
-        assert test_files["eval-003"] == tmp_path / "out" / "test_demoqa.py"
+        assert test_files["eval-003"] == tmp_path / "out" / "test_eval_003.py"
+
+
+class TestSameSiteStoriesDoNotCollide:
+    """B-094: two stories on one site must own two files, not overwrite one."""
+
+    def _make_runner(self, tmp_path: Path) -> EvalRunner:
+        dataset_dir = tmp_path / "dataset"
+        captures_dir = tmp_path / "captures"
+        dataset_dir.mkdir()
+        captures_dir.mkdir()
+        for story_id in ("eval-007", "eval-008"):
+            golden = {
+                "id": story_id,
+                "site": "banking_mock",
+                "base_url": "http://localhost:8781/",
+                "conditions": [f"1. Step for {story_id}"],
+                "golden_resolutions": [],
+            }
+            (dataset_dir / f"{story_id}_banking_mock.json").write_text(json.dumps(golden))
+        return EvalRunner(
+            dataset_dir=dataset_dir,
+            code_dir=captures_dir,
+            db_path=tmp_path / "test.sqlite",
+            test_output_dir=tmp_path / "out",
+        )
+
+    def test_same_site_stories_get_distinct_files(self, tmp_path: Path) -> None:
+        runner = self._make_runner(tmp_path)
+        runner._persist_regenerated_tests(
+            {
+                "eval-007": "def test_seven():\n    pass\n",
+                "eval-008": "def test_eight():\n    pass\n",
+            }
+        )
+
+        seven = tmp_path / "out" / "test_eval_007.py"
+        eight = tmp_path / "out" / "test_eval_008.py"
+        assert seven.exists() and eight.exists()
+        assert "test_seven" in seven.read_text(encoding="utf-8")
+        assert "test_eight" in eight.read_text(encoding="utf-8")
+
+        test_files = runner._load_test_files()
+        assert test_files["eval-007"] == seven
+        assert test_files["eval-008"] == eight
+        assert test_files["eval-007"] != test_files["eval-008"]
