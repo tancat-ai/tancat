@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-24 (SHIPPED — **B-090 + B-092 closed (gate 2, zero false greens):** the 35-criterion landing-page re-run now emits a real check for every geometric/content criterion — c1 checks the `<h1>` (not a paragraph), c3 counts cards, c4 reads the install command, c6/c8 read the image natural width, c7 scans every image, c10–c12 read the prices, c18/c19 scan every same-page anchor, c35 measures horizontal scroll at 375px. Result **2 failed / 31 passed / 2 skipped** — the artwork was re-hosted locally (`landing/noir_art.jpg`), so c7/c8 now pass for real; the 2 reds are the stale c13/c14, the 2 skips are c16/c17 (named links gone). Zero false greens. Fixes: `PageFactAssertion` classifier + page-fact tracker methods (`assert_no_broken_images`, `assert_natural_width`, `assert_count_at_least`, `assert_no_horizontal_scroll`, `assert_anchor_targets_exist`, `assert_section_has_price`), `src/content_scoping.py` (image/heading scoping + kind guard), scraper `<img alt>` extraction, scorer `_kind_bonus`, and a journey-subprocess `PYTHONPATH` fix so a worktree runs its own code. Gates: 3436 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (0.0pp drift).)
+Last updated: 2026-09-24 (WIP — **B-054 FIXED on `measure/session10-gates-1-3`** (uncommitted): the Session 10 held-out gate re-measure found the Part C gates FAIL (66.4% resolution / 16 false greens) and the deficit's root cause was a **candidate-pool defect**, not the mechanism B-054 originally named. `PlaceholderResolver.rank_candidates` hard-dropped every `is_visible is False` element for non-ASSERT actions, so a multi-step SPA's later-step fields (`#startDate`, `#mainLicenseNumber`, `#scheme`, `#vehicleReg`, `#ncdYears`) never entered the pool and resolution fell back to a visible step-1 field (`#email`); and `IntentMatcher._is_fillable` omitted the `date`/`time`/`spinbutton` roles that `PlaceholderScorer` accepts. Fixed both — a hidden element is now kept **only** when the description is literally present in its own text (the existing hidden-overlay contract test still passes) and the role sets are aligned. **lv_insurance live 9/24 → 16/24 (38% → 67%)**. Gates: 3440 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean. New items: **B-093** (held-out gate fail), **B-094** (two stories on one site overwrite each other's test file), **B-095** (`eval_harness` imports MAIN's `src` when run from a worktree), **B-096** (pass-1 first-match + `main*`/`addDriver*` residual). Gate 1 not re-scored yet.)
+
+Previous: 2026-09-24 (SHIPPED — **B-090 + B-092 closed (gate 2, zero false greens):** the 35-criterion landing-page re-run now emits a real check for every geometric/content criterion — c1 checks the `<h1>` (not a paragraph), c3 counts cards, c4 reads the install command, c6/c8 read the image natural width, c7 scans every image, c10–c12 read the prices, c18/c19 scan every same-page anchor, c35 measures horizontal scroll at 375px. Result **2 failed / 31 passed / 2 skipped** — the artwork was re-hosted locally (`landing/noir_art.jpg`), so c7/c8 now pass for real; the 2 reds are the stale c13/c14, the 2 skips are c16/c17 (named links gone). Zero false greens. Fixes: `PageFactAssertion` classifier + page-fact tracker methods (`assert_no_broken_images`, `assert_natural_width`, `assert_count_at_least`, `assert_no_horizontal_scroll`, `assert_anchor_targets_exist`, `assert_section_has_price`), `src/content_scoping.py` (image/heading scoping + kind guard), scraper `<img alt>` extraction, scorer `_kind_bonus`, and a journey-subprocess `PYTHONPATH` fix so a worktree runs its own code. Gates: 3436 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (0.0pp drift).)
 
 Previous: 2026-09-24 (SHIPPED — **B-088 + B-087 closed; generation ~4× faster (B-091):** the 35-criterion landing-page re-run went **8 failed / 26 passed → 2 failed / 31 passed / 2 skipped**, wrong-element mappings **0**. **B-088** added page-level scans for "no X in hrefs / visible copy", anchor-only link scoping (`src/link_scoping.py`) with an honest-skip name guard, and a section-containment `assert_contains`; **B-087** added a scheme predicate (`required_scheme='mailto:'`). **B-091** found the per-condition fragment path sent no thinking switch, so the model default (thinking ON) governed — measured **3356s → 631s** generation, ~14s/fragment. The 2 remaining reds (criteria 13/14) are criteria Session 6 made stale on purpose; the 2 skips (16/17) are named links that no longer exist. **B-090** opened for the separate geometric/asset false-green class (criteria 3, 6, 7, 35) and **B-092** for the content/wrong-element half (criteria 1, 3, 4, 8, 11, 18, 19) — together they are the rest of gate 2. Gates: 3376 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.)
 
@@ -18,6 +20,76 @@ Previous: 2026-09-21 (SHIPPED — **B-063** Fixed (numbered criteria with group 
 Previous: 2026-09-15 (SHIPPED — **B-060** Fixed (mock page scoping: the divergence check no longer fires on a missing trail note; banking 4/13 → 7/13, overall 22/33 → 24/33, ambiguous 3/4 → 2/4 accepted as the honest result) and **AI-067** Done (wrong-page steps are now flagged, not silently green). **B-061** opened (eval-harness `Tests executed: 0` traps). Gates: 3178 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9%.)
 
 Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red baseline recorded (option 2): `src/verify_baseline.py` + `scripts/verify_production_baseline.json`, and `verify_production.py` gained `--baseline` / `--save-baseline` / `--check-baseline`; CI job `verify-baseline` validates the file offline. Verified live: `automationexercise --baseline` → PASS (baseline), 0 new failures (the known wrong-URL ASSERT on test_07 is tolerated). Also fixed a too-tight suite timeout (30s/test, cap 300s → 60s/test, cap 600s). **B-059** — the 4 `tests/` mypy errors fixed (`Generator[Browser]` fixture; `cast(Page, ...)` test doubles; `[tool.mypy] mypy_path = ["scripts/eval", "scripts"]` resolves the script-local test imports — the real fix, not an `ignore_missing_imports` suppression); CI `type-check` now also runs `mypy . --ignore-missing-imports`. Gates: smoke 39/39, ruff clean, mypy clean (bare `.`, `--ignore-missing-imports`, and `src/ cli/`), 3157 pytest. AI-066 opened — post-launch ColBERT-style late-interaction RAG embedding spike (sentence-transformers `MultiVectorEncoder`); prior: 2026-09-08 (B-057 DONE — PyPI console entry point added: `pyproject.toml` now has `[project.scripts] tancat = "cli.main:main"` so `pip install tancat` / `uv tool install tancat` yields a runnable `tancat` interactive CLI. Verified: `uv build --wheel` succeeds, `entry_points.txt` carries the console script, a fresh venv install + `tancat` launches the menu and exits cleanly (exit 0). `main()` is sync (wraps `asyncio.run(interactive_session())`), no wrapper needed. Publish to PyPI still deferred — B-057 entry covers that. Landing page BUILT — the spec written on 2026-09-07 is now shipped as `landing/index.html` (self-contained, responsive, honest): real Streamlit product screenshot + toggleable noir artwork; hero = the precise, provable claim **"never leaves your deployment"** (NOT "never touches your data" — false in the RAG/reference-docs case; sub-line acknowledges it learns from your reference docs and they stay in-house); how-it-works + interactive DOM-resolution demo; regulated-defense bento (BYO-LLM, **bounded egress verified in CI** via `python scripts/audit_egress.py`, self-healing, **role-based evidence = real heatmap for product owner / Gantt timeline for test manager** / JUnit/HTML/CSV, CI/CD + POM); no-egress trust section linking the published egress audit + SECURITY.md; **per-deployment pricing tiers (Free/Pro/Air-gap) each citing a real comparable anchor** (Mabl 500-credit, testRigor $450/mo + Mabl $499/mo, QA Wolf $8k/mo + $90k median ACV) with a footnote to `RESEARCH_COMPETITIVE_LANDSCAPE.md §4.2`; TanCat logo (nav+footer). Honesty pass: no fabricated metrics, no `0.00 KB egress`, no `iptables`/`eBPF` over-claims, no invented star counts, `© TanCat` (no Ltd — not yet incorporated), `tancat-0.1.0`. Per-deployment (not per-seat) license claim verified real in `src/licensing/` (`deployment_id`, no seat count). Follow-ons still open: the hero Loom link is a placeholder (`YOUR_VIDEO_ID_HERE`) pending a recorded walkthrough; pricing numbers are user-locked placeholders; the noir-artwork visibility + clean logo version are parked. Demo video + README demo fix (UD-01) remain. Landing page spec WRITTEN (`docs/specs/FEATURE_SPEC_landing_page.md`) — the "in market" surface, Phase 8 GTM: clone + `uv sync` + run flow (uv-led, not pip), tancat.dev, © TanCat (no Ltd), no-egress trust section, pricing tiers (numbers pending user decision), demo video follow-on. B-056 opened — kanban-freshness hook flaky under `git commit`: `check_mode` passes via `--check` / `pre-commit run` yet fails during `git commit` (stale hook-checkout / temp-env mtime); DOTALL normalisation fix committed 48d36a0, root cause of the git-commit-env flake still to pin down. AI-039 brand rename to TanCat SHIPPED — working-tree rename committed ad3ec98 (+ kanban chore 48d36a0): distribution name `playwright-test-generator` → `tancat`, repo/display → `tancat-ai/tancat`, customer-facing banners (Streamlit heading/tab, CLI banner, HTML report footer) → **TanCat**; no import-path rename needed (code imports src/cli); Companies House deferred (no funds this month). Gates green: smoke 39/39, ruff clean, mypy clean, full suite 3101/0, eval static exit 0.)
+
+---
+
+## 🆕 B-095 — `eval_harness.py` does not put the checkout on `sys.path`, so a worktree run silently tests the MAIN repo's installed `src`
+
+**Status:** 🆕 new — found 2026-09-24 during Session 10/11 (the debug hook added to the worktree's resolver never fired).
+**Priority:** medium-high — a measurement-integrity trap. Any session that runs the harness from a worktree believes it tested its own code and did not.
+**One-line:** `scripts/eval/eval_harness.py` defines `_PROJECT_ROOT` but never `sys.path.insert`s it. Running `python scripts/eval/eval_harness.py` from a worktree sets `sys.path[0]` to `scripts/eval`, so `import src` resolves through the editable install to the **main repo**. Verified: without `PYTHONPATH`, `src.placeholder_orchestrator.__file__` → main repo; with `PYTHONPATH=<worktree>`, → worktree.
+**Impact:** the Session 10 held-out numbers are still valid (main and the worktree were both at `b11ee8f`), but a worktree fix is invisible to the harness unless `PYTHONPATH` is exported. Same family as the Session 9 `journey_scraper` subprocess `PYTHONPATH` fix.
+**Fix:** `sys.path.insert(0, str(_PROJECT_ROOT))` in `eval_harness.py` (and the same in `eval_resolver.py` if missing), or make the harness refuse a checkout that differs from the imported `src`.
+**Estimated sessions:** 0.1.
+
+---
+
+## 🆕 B-096 — Pass-1 first-match and same-page similar fields still mis-resolve (the residual after B-054)
+
+**Status:** 🆕 new — the residue measured after the B-054 fix (2026-09-24).
+**Priority:** high — it is what stands between the current lv_insurance 67% and the gate-1 90%.
+**One-line:** two distinct sub-classes remain on the lv multi-step form:
+1. **`main*` vs `addDriver*`** — the page has both `#mainLicenseYears`/`#mainOccupation` (account holder) and `#addDriverLicenseYears`/`#addDriverOccupation` (additional driver). The descriptions "years licensed"/"occupation" belong to the account-holder block, but the resolver picks the `addDriver*` twin.
+2. **Pass-1 first-match wins before scoring** — "vehicle registration number" resolves to `#vehicleMake` in `ElementMatcher.pass1_text_match`, although `rank_candidates` scores `#vehicleReg` top (28). Pass 1 returns the first textual hit without consulting the scored ranking.
+**Evidence:** `docs/sessions/2026-09-24_session11_b054_spa_pool.md` §4; local sweep 5/8 after the B-054 fix.
+**Also decide here:** the **`pytest.skip` granularity**. At 67% resolution lv still reports **0/10 tests passed** — one unresolved placeholder emits a top-of-test `pytest.skip` that skips every *resolved* step too. Honest, but it hides working steps from the report. Options: per-step skips, or report resolved/unresolved counts per test.
+**Estimated sessions:** 1–2.
+
+---
+
+## 🔴 B-093 — The Part C gates FAIL on a held-out set: 66.4% resolution, 16 false greens (the Session 7 landing-page numbers were site-specific)
+
+**Status:** 🆕 new — measured 2026-09-24 (Session 10, branch `measure/session10-gates-1-3`). This is the gate re-score the plan asked for, done on held-out ground.
+**Priority:** **critical — it is the commercial go/no-go.** It decides whether the product can claim trustworthy output.
+**One-line:** live regeneration of the 9 committed golden stories (6 sites, 62 conditions, 113 placeholders) gives **75/113 = 66.4% resolution** and **16 false greens** — against gates of ≥90% and zero. The Session 7 landing-page result (0 wrong-element mappings, 0 false greens) does not generalize.
+**Evidence:** `docs/sessions/2026-09-24_session10_heldout_gates.md`; raw log `scratch/gate1_full.log`; emitted tests `scratch/gate1_out/`.
+
+**Per-story (held-out, live):**
+
+| Story | Site | Accuracy | False pos |
+|---|---|---|---|
+| eval-001 | saucedemo | 75% | 5 |
+| eval-002 | automationexercise | **100%** | 0 |
+| eval-003 | demoqa | 88% | 1 |
+| eval-004 | theinternet | 86% | 1 |
+| eval-005 | lv_insurance | **38%** | 0 |
+| eval-006 | ecommerce_mock | 69% | 4 |
+| eval-007 | banking_mock | 54% | 3 |
+| eval-008 | banking_mock | 77% | 1 |
+| eval-010 | ambiguous_mock | 50% | 1 |
+
+**Reading:** plain static public sites are healthy (automationexercise 100%, demoqa 88%, theinternet 86%). The deficit is concentrated in the **stateful / auth-gated / multi-step stories** — 36 of the 38 misses. That connects to **B-054** (single-candidate unrecoverable: the target page is never captured) and **B-055** (page-context/trail mis-assignment), not to the landing-page classes just fixed.
+
+**False greens are still general.** B-090/B-092 added classifiers keyed to landing-page wording; on held-out pages a passing test still frequently rests on an ASSERT that is not the golden element. Concrete example: theinternet `tc04` "Accept the JavaScript alert popup" emits `assert_visible('#content', label='alert accepted')` — `#content` is the page container, always visible, proves nothing. A second weak assert (`h3 "JavaScript Alerts"` labelled "alert accepted") is not caught by the harness counter.
+
+**Re-scored 2026-09-24 after the B-054 pool fix (session 11):** **75/113 (66.4%) → 82/113 (72.6%)** —
+the entire gain is lv_insurance (9/24 → 16/24); every other story is identical. Gate 1 still **FAIL**
+(≥90%); gate 2 unchanged at **16 false greens**; tests passed 49/63 unchanged.
+**Next:** B-096 (pass-1 first-match + `main*`/`addDriver*`), then the false-green class.
+Do **not** re-tune on the landing page.
+**Estimated sessions:** 2–3 to move gate 1 materially; 1 to re-measure.
+
+---
+
+## 🆕 B-094 — Two eval stories on the same site overwrite each other's test file, so one story never runs its own tests
+
+**Status:** 🆕 new — found 2026-09-24 while running the held-out gate measure (Session 10).
+**Priority:** medium — it corrupts the eval numbers (a false reading of the product), not the product itself.
+**One-line:** the regenerated test filename is derived from the **site**, so `eval-007_(banking_mock)` and `eval-008_(banking_mock)` both write `test_banking_mock.py`. The later write wins. The runner then executes that one file twice — once labelled eval-007, once eval-008.
+**Evidence:** `scratch/gate1_full.log` ("Persisted regenerated tests for eval-008 → test_banking_mock.py"); `scratch/gate1_out/test_banking_mock.py` holds eval-008's 9 tests (TC-01…TC-09). eval-007's own 8 tests never ran; "Tests executed: 63" is inflated by ~9; eval-007's pass/fail verdicts are eval-008's.
+**Impact:** resolution metrics are unaffected (static validation uses each story's own code map), but test-execution and pass-rate numbers are wrong whenever two stories share a site.
+**Proposed fix:** name the emitted file from the **story id** (or `story_id + site`), not the site alone; or execute each story immediately after regenerating it (before the next story can overwrite).
+**Estimated sessions:** 0.25.
 
 ---
 
@@ -778,9 +850,16 @@ _Last updated header continued: 2026-09-06 (AI-064 verified COMPLETE — fix com
 
 ---
 
-## 🆕 B-054 — Single-candidate unrecoverable resolution: page rendered as one text block → specific target never enters the candidate pool
+## ✅ B-054 — Single-candidate unrecoverable resolution: the specific target never enters the candidate pool
 
-**Status:** 🆕 new — opened 2026-09-06 from the AI-058 gate analysis (was prose inside the AI-058 entry; now a standalone item per the 2026-08-29 handoff §8 decision "logged as separate resolver items").
+**Status:** ✅ **Fixed 2026-09-24** (branch `measure/session10-gates-1-3`, session record `docs/sessions/2026-09-24_session11_b054_spa_pool.md`) — found while fixing the Session 10 held-out gate deficit.
+**The held-out measure corrected the diagnosis.** B-054 was opened from the banking mock ("one text block"). On the held-out set the mechanism is different: on a multi-step SPA served at **one URL**, every element **is** scraped and journey discovery finds the right ones — but two filters inside candidate selection throw the target away.
+- **Root cause 1:** `PlaceholderResolver.rank_candidates` (`src/placeholder_resolver.py:394`) hard-dropped every `is_visible is False` element for non-ASSERT actions. On a multi-step form the later steps are `display:none` **at scrape time**, so `#startDate`, `#mainLicenseNumber`, `#scheme`, `#vehicleReg`, `#ncdYears`, `#mainOccupation` were removed before scoring and the resolver fell back to a visible step-1 field (`#email`). `PlaceholderScorer._hidden_element_penalty` (−30) already existed for this case but was dead code behind the drop.
+- **Root cause 2:** the two `_is_fillable` implementations disagreed — `PlaceholderScorer` accepts `date`/`time`/`spinbutton`, `IntentMatcher` did not, so a date input was filtered out even after (1).
+**Fix:** keep a hidden element **only when the description is literally present in its own text** (decisive intent evidence); a generic hidden overlay control stays excluded, so the existing contract test still passes. Aligned the role sets. +3 tests (`tests/test_b054_spa_hidden_step.py`).
+**Measured:** lv_insurance local matcher sweep **2/8 → 5/8**; live re-run **9/24 (38%) → 16/24 (67%)**. Full suite 3440 passed / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean.
+**Residual:** the remaining lv misses are pass-1 first-match ordering and `main*` vs `addDriver*` same-page ambiguity → **B-096**. Gate 1 is not re-scored yet (needs the full 9-story held-out re-run).
+
 **Priority:** High — one of the two remaining blockers for closing the AI-058 `mean_pass_depth` metric gate (AI-064 removed the other; B-055 is the third).
 **One-line:** on the banking mock (eval-007) the "Transfer Money"/"Pay Bills" page renders as ONE text block, so `main:has-text("Welcome to Mock Bank…")` is the **only** candidate in the pool — a learned negative (even the −40 container penalty) has nothing to flip to, and all three A/B legs generate byte-identical code. The specific link/button is never captured, so no scoring can recover it.
 **Evidence:** `docs/sessions/2026-08-29_ai058_slice2_negatives_handoff.md` §8 blocker (1); A/B legs identical (`0.900` cold/warm/warm+NEG), `negatives_inserted: 3` banking but no lift.
