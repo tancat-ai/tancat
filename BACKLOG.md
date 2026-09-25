@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-24 (WIP — **B-054 FIXED on `measure/session10-gates-1-3`** (uncommitted): the Session 10 held-out gate re-measure found the Part C gates FAIL (66.4% resolution / 16 false greens) and the deficit's root cause was a **candidate-pool defect**, not the mechanism B-054 originally named. `PlaceholderResolver.rank_candidates` hard-dropped every `is_visible is False` element for non-ASSERT actions, so a multi-step SPA's later-step fields (`#startDate`, `#mainLicenseNumber`, `#scheme`, `#vehicleReg`, `#ncdYears`) never entered the pool and resolution fell back to a visible step-1 field (`#email`); and `IntentMatcher._is_fillable` omitted the `date`/`time`/`spinbutton` roles that `PlaceholderScorer` accepts. Fixed both — a hidden element is now kept **only** when the description is literally present in its own text (the existing hidden-overlay contract test still passes) and the role sets are aligned. **lv_insurance live 9/24 → 16/24 (38% → 67%)**. Gates: 3440 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean. New items: **B-093** (held-out gate fail), **B-094** (two stories on one site overwrite each other's test file), **B-095** (`eval_harness` imports MAIN's `src` when run from a worktree), **B-096** (pass-1 first-match + `main*`/`addDriver*` residual). Gate 1 not re-scored yet.)
+Last updated: 2026-09-25 (SHIPPED — **B-094 + B-095 + B-096 closed (measurement integrity + Pass-1 twins):** three fixes that make the held-out gate trustworthy and move it. **B-095** — the eval harness never put the checkout on `sys.path`, so a worktree run silently imported the MAIN repo's `src`; `eval_harness.py` + `eval_resolver.py` now insert `_PROJECT_ROOT`, proven by a throwaway-checkout test with a control leg. **B-096** — the backlog's scrape-order guess was wrong: the required fields carry `text="Years Licensed *"` while the optional `addDriver*` twins do not, and the scraper records `accessible_name="*"` for the required fields, so `normalise_element_text` trusted the marker and the required field was never a Pass-1 candidate; fixed marker stripping + source fallback, Pass-1 candidate collection with a deterministic scorer tie-break, and word-boundary single-word phrases (`license` matched `licensed` and was blocked from `Driving License Number` by ratio `== 3`). Live lv_insurance **16/24 → 19/24 (79%)**. **B-094** — `_persist_regenerated_tests` named the file from the site, so eval-007/eval-008 overwrote each other; now `test_<story_id>.py`, no schema change. **Full held-out re-run: 82/113 (72.6%) → 86/113 (76.1%)** — six sites byte-identical (no regression), gain = lv +3, ecommerce +1; gate 2 unchanged at 16 false greens. Gates: 3454 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean (one pre-existing B-079 mypy error in `eval_runner.py`). New: **B-097** (per-test `pytest.skip` granularity).
+
+Previous: 2026-09-24 (WIP — **B-054 FIXED on `measure/session10-gates-1-3`** (uncommitted): the Session 10 held-out gate re-measure found the Part C gates FAIL (66.4% resolution / 16 false greens) and the deficit's root cause was a **candidate-pool defect**, not the mechanism B-054 originally named. `PlaceholderResolver.rank_candidates` hard-dropped every `is_visible is False` element for non-ASSERT actions, so a multi-step SPA's later-step fields (`#startDate`, `#mainLicenseNumber`, `#scheme`, `#vehicleReg`, `#ncdYears`) never entered the pool and resolution fell back to a visible step-1 field (`#email`); and `IntentMatcher._is_fillable` omitted the `date`/`time`/`spinbutton` roles that `PlaceholderScorer` accepts. Fixed both — a hidden element is now kept **only** when the description is literally present in its own text (the existing hidden-overlay contract test still passes) and the role sets are aligned. **lv_insurance live 9/24 → 16/24 (38% → 67%)**. Gates: 3440 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean. New items: **B-093** (held-out gate fail), **B-094** (two stories on one site overwrite each other's test file), **B-095** (`eval_harness` imports MAIN's `src` when run from a worktree), **B-096** (pass-1 first-match + `main*`/`addDriver*` residual). Gate 1 not re-scored yet.)
 
 Previous: 2026-09-24 (SHIPPED — **B-090 + B-092 closed (gate 2, zero false greens):** the 35-criterion landing-page re-run now emits a real check for every geometric/content criterion — c1 checks the `<h1>` (not a paragraph), c3 counts cards, c4 reads the install command, c6/c8 read the image natural width, c7 scans every image, c10–c12 read the prices, c18/c19 scan every same-page anchor, c35 measures horizontal scroll at 375px. Result **2 failed / 31 passed / 2 skipped** — the artwork was re-hosted locally (`landing/noir_art.jpg`), so c7/c8 now pass for real; the 2 reds are the stale c13/c14, the 2 skips are c16/c17 (named links gone). Zero false greens. Fixes: `PageFactAssertion` classifier + page-fact tracker methods (`assert_no_broken_images`, `assert_natural_width`, `assert_count_at_least`, `assert_no_horizontal_scroll`, `assert_anchor_targets_exist`, `assert_section_has_price`), `src/content_scoping.py` (image/heading scoping + kind guard), scraper `<img alt>` extraction, scorer `_kind_bonus`, and a journey-subprocess `PYTHONPATH` fix so a worktree runs its own code. Gates: 3436 pytest, smoke 39/39, ruff + mypy clean, eval static 97.9% (0.0pp drift).)
 
@@ -23,9 +25,9 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
-## 🆕 B-095 — `eval_harness.py` does not put the checkout on `sys.path`, so a worktree run silently tests the MAIN repo's installed `src`
+## ✅ B-095 — `eval_harness.py` does not put the checkout on `sys.path`, so a worktree run silently tests the MAIN repo's installed `src`
 
-**Status:** 🆕 new — found 2026-09-24 during Session 10/11 (the debug hook added to the worktree's resolver never fired).
+**Status:** ✅ **Fixed 2026-09-25** (branch `fix/b095-b096-resolver-residual`) — both entry points now insert the checkout root; `tests/test_b095_eval_checkout_path.py` proves the checkout's `src` wins and has a control leg that strips the guard (decoy wins) so the test cannot pass vacuously. Session record: `docs/sessions/2026-09-25_b095_b096_pass1_twins.md`.
 **Priority:** medium-high — a measurement-integrity trap. Any session that runs the harness from a worktree believes it tested its own code and did not.
 **One-line:** `scripts/eval/eval_harness.py` defines `_PROJECT_ROOT` but never `sys.path.insert`s it. Running `python scripts/eval/eval_harness.py` from a worktree sets `sys.path[0]` to `scripts/eval`, so `import src` resolves through the editable install to the **main repo**. Verified: without `PYTHONPATH`, `src.placeholder_orchestrator.__file__` → main repo; with `PYTHONPATH=<worktree>`, → worktree.
 **Impact:** the Session 10 held-out numbers are still valid (main and the worktree were both at `b11ee8f`), but a worktree fix is invisible to the harness unless `PYTHONPATH` is exported. Same family as the Session 9 `journey_scraper` subprocess `PYTHONPATH` fix.
@@ -34,9 +36,9 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
-## 🆕 B-096 — Pass-1 first-match and same-page similar fields still mis-resolve (the residual after B-054)
+## ✅ B-096 — Pass-1 first-match and same-page similar fields still mis-resolve (the residual after B-054)
 
-**Status:** 🆕 new — the residue measured after the B-054 fix (2026-09-24).
+**Status:** ✅ **Fixed 2026-09-25** (branch `fix/b095-b096-resolver-residual`) — the real cause was not scrape order. Required fields carry `text="Years Licensed *"` and the scraper records `accessible_name="*"`, so the required field was never a Pass-1 candidate (`normalise_element_text` trusted the marker). Fixed marker stripping + source fallback; `pass1_text_match` now collects every equal-rule match and ties them with the deterministic scorer; single-word phrases need a word boundary (ratio `== 3` allowed). Live lv_insurance **16/24 → 19/24 (79%)**; full held-out **82/113 → 86/113**. Remaining follow-up: the per-test `pytest.skip` granularity → **B-097**.
 **Priority:** high — it is what stands between the current lv_insurance 67% and the gate-1 90%.
 **One-line:** two distinct sub-classes remain on the lv multi-step form:
 1. **`main*` vs `addDriver*`** — the page has both `#mainLicenseYears`/`#mainOccupation` (account holder) and `#addDriverLicenseYears`/`#addDriverOccupation` (additional driver). The descriptions "years licensed"/"occupation" belong to the account-holder block, but the resolver picks the `addDriver*` twin.
@@ -44,6 +46,16 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 **Evidence:** `docs/sessions/2026-09-24_session11_b054_spa_pool.md` §4; local sweep 5/8 after the B-054 fix.
 **Also decide here:** the **`pytest.skip` granularity**. At 67% resolution lv still reports **0/10 tests passed** — one unresolved placeholder emits a top-of-test `pytest.skip` that skips every *resolved* step too. Honest, but it hides working steps from the report. Options: per-step skips, or report resolved/unresolved counts per test.
 **Estimated sessions:** 1–2.
+
+---
+
+## 🆕 B-097 — Per-test `pytest.skip` hides every resolved step in a test (the open half of B-096)
+
+**Status:** 🆕 new — split out of B-096 when the twins were fixed (2026-09-25).
+**Priority:** medium-high — it is why lv_insurance still reports **0/10 tests passed at 79% resolution**, so the pass-rate gate reads far worse than the resolver. It also inflates the apparent failure count for the reader.
+**One-line:** when any placeholder in a test is unresolved, the emitter writes a single `pytest.skip("Skipping: unresolved placeholders for: ...")` at the top of the test, before every other step. Every placeholder that DID resolve — and every page check that would have run — is hidden. Decision recorded in B-096: keep the per-test skip (a test whose condition was never fully verified must not report green), but surface **resolved/unresolved counts per test** in the report; per-step skips (so resolved steps still execute and evidence) are the alternative and a separate emitter change.
+**Where:** `src/placeholder_orchestrator.py` (the consolidated skip emit) + the report/`StoryResult` surface.
+**Estimated sessions:** 0.5–1.
 
 ---
 
@@ -81,9 +93,9 @@ Do **not** re-tune on the landing page.
 
 ---
 
-## 🆕 B-094 — Two eval stories on the same site overwrite each other's test file, so one story never runs its own tests
+## ✅ B-094 — Two eval stories on the same site overwrite each other's test file, so one story never runs its own tests
 
-**Status:** 🆕 new — found 2026-09-24 while running the held-out gate measure (Session 10).
+**Status:** ✅ **Fixed 2026-09-25** (branch `fix/b095-b096-resolver-residual`) — emitted filename is now per story (`_story_test_filename()` → `test_eval_007.py`), `_load_test_files` matches the exact file. No DB schema change (`eval_runs` already keys on `story_id`); historical 007/008 rows are unrecoverable. Verified end-to-end: `scratch/gate1_out3/` holds 9 distinct per-story files and eval-007/eval-008 report their own numbers. Test: `scripts/eval/eval_runner_test.py::TestSameSiteStoriesDoNotCollide`.
 **Priority:** medium — it corrupts the eval numbers (a false reading of the product), not the product itself.
 **One-line:** the regenerated test filename is derived from the **site**, so `eval-007_(banking_mock)` and `eval-008_(banking_mock)` both write `test_banking_mock.py`. The later write wins. The runner then executes that one file twice — once labelled eval-007, once eval-008.
 **Evidence:** `scratch/gate1_full.log` ("Persisted regenerated tests for eval-008 → test_banking_mock.py"); `scratch/gate1_out/test_banking_mock.py` holds eval-008's 9 tests (TC-01…TC-09). eval-007's own 8 tests never ran; "Tests executed: 63" is inflated by ~9; eval-007's pass/fail verdicts are eval-008's.
