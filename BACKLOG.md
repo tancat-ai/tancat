@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-25 (SHIPPED — **B-094 + B-095 + B-096 closed (measurement integrity + Pass-1 twins):** three fixes that make the held-out gate trustworthy and move it. **B-095** — the eval harness never put the checkout on `sys.path`, so a worktree run silently imported the MAIN repo's `src`; `eval_harness.py` + `eval_resolver.py` now insert `_PROJECT_ROOT`, proven by a throwaway-checkout test with a control leg. **B-096** — the backlog's scrape-order guess was wrong: the required fields carry `text="Years Licensed *"` while the optional `addDriver*` twins do not, and the scraper records `accessible_name="*"` for the required fields, so `normalise_element_text` trusted the marker and the required field was never a Pass-1 candidate; fixed marker stripping + source fallback, Pass-1 candidate collection with a deterministic scorer tie-break, and word-boundary single-word phrases (`license` matched `licensed` and was blocked from `Driving License Number` by ratio `== 3`). Live lv_insurance **16/24 → 19/24 (79%)**. **B-094** — `_persist_regenerated_tests` named the file from the site, so eval-007/eval-008 overwrote each other; now `test_<story_id>.py`, no schema change. **Full held-out re-run: 82/113 (72.6%) → 86/113 (76.1%)** — six sites byte-identical (no regression), gain = lv +3, ecommerce +1; gate 2 unchanged at 16 false greens. Gates: 3454 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean (one pre-existing B-079 mypy error in `eval_runner.py`). New: **B-097** (per-test `pytest.skip` granularity).
+Last updated: 2026-09-25 (SHIPPED — **Gate 2 re-scored: the metric was measuring the wrong thing, and the harness was hiding it.** Session 13 changed how a "false green" is counted and fixed four measurement-integrity defects in the harness itself. **The metric** now asks "did this criterion's own test prove the claim?" — an ASSERT counts as verified by the golden answer, by a distinctively-named element, or (for page criteria) by a URL assertion on the criterion's page; and a check against a **global container** (`body`, `#content`, `main`, `main:has-text(...)`) never counts, whatever text it carries. **Why:** saucedemo's goldens are the *weaker* test in two places — `[data-test="title"]` is the site's shared page header (present on every page) and `[data-test="cart-list-container"]` proves a list exists while the generated test proved *the backpack was in the cart* — both were counted as false greens. **The harness bug:** `pytest.ini` enables xdist, and under xdist the outcome prints *before* the node id, so per-test outcomes were scraped empty and **every run reported 0 false greens**; outcomes now come from JUnit XML with a loud conservative fallback. **Result: 3 false greens (was "16"), all in eval-006 (ecommerce_mock), all the same defect — the resolver answered the cart-page, checkout-page and order-success criteria with `#place-order`, a button that exists only on `checkout.html`.** Also shipped: page-mismatch now FAILS a step (record → fail, `PageMismatchError`; the old behaviour recorded the divergence and still passed), partial-run detection (banner + exit 3), `.env` loading in the harness, the `ollama` → `openai-local` env default (AGENTS.md §5), and a polarity guard after finding `#transfer-error` blessed as "transfer success message". Gate 1 stays strict and unchanged: **82/113 (72.6%)** on this generation — Session 12's 86/113 was a different LLM draw, not a regression. Gates: 3410 pytest / 3 skipped, smoke 39/39, ruff + format clean, mypy `src/ cli/` clean, eval static 97.9%. New: **B-098** (harness `.env` + provider default), **B-099** (harness measurement integrity — xdist parse, partial-run silence, timeout default), **B-100** (product should report its own verification strength), **B-101** (golden-quality audit). Record: `docs/sessions/2026-09-25_session13_gate2_false_greens.md`.)
+
+Previous: 2026-09-25 (SHIPPED — **B-094 + B-095 + B-096 closed (measurement integrity + Pass-1 twins):** three fixes that make the held-out gate trustworthy and move it. **B-095** — the eval harness never put the checkout on `sys.path`, so a worktree run silently imported the MAIN repo's `src`; `eval_harness.py` + `eval_resolver.py` now insert `_PROJECT_ROOT`, proven by a throwaway-checkout test with a control leg. **B-096** — the backlog's scrape-order guess was wrong: the required fields carry `text="Years Licensed *"` while the optional `addDriver*` twins do not, and the scraper records `accessible_name="*"` for the required fields, so `normalise_element_text` trusted the marker and the required field was never a Pass-1 candidate; fixed marker stripping + source fallback, Pass-1 candidate collection with a deterministic scorer tie-break, and word-boundary single-word phrases (`license` matched `licensed` and was blocked from `Driving License Number` by ratio `== 3`). Live lv_insurance **16/24 → 19/24 (79%)**. **B-094** — `_persist_regenerated_tests` named the file from the site, so eval-007/eval-008 overwrote each other; now `test_<story_id>.py`, no schema change. **Full held-out re-run: 82/113 (72.6%) → 86/113 (76.1%)** — six sites byte-identical (no regression), gain = lv +3, ecommerce +1; gate 2 unchanged at 16 false greens. Gates: 3454 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean (one pre-existing B-079 mypy error in `eval_runner.py`). New: **B-097** (per-test `pytest.skip` granularity).
 
 Previous: 2026-09-24 (WIP — **B-054 FIXED on `measure/session10-gates-1-3`** (uncommitted): the Session 10 held-out gate re-measure found the Part C gates FAIL (66.4% resolution / 16 false greens) and the deficit's root cause was a **candidate-pool defect**, not the mechanism B-054 originally named. `PlaceholderResolver.rank_candidates` hard-dropped every `is_visible is False` element for non-ASSERT actions, so a multi-step SPA's later-step fields (`#startDate`, `#mainLicenseNumber`, `#scheme`, `#vehicleReg`, `#ncdYears`) never entered the pool and resolution fell back to a visible step-1 field (`#email`); and `IntentMatcher._is_fillable` omitted the `date`/`time`/`spinbutton` roles that `PlaceholderScorer` accepts. Fixed both — a hidden element is now kept **only** when the description is literally present in its own text (the existing hidden-overlay contract test still passes) and the role sets are aligned. **lv_insurance live 9/24 → 16/24 (38% → 67%)**. Gates: 3440 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean. New items: **B-093** (held-out gate fail), **B-094** (two stories on one site overwrite each other's test file), **B-095** (`eval_harness` imports MAIN's `src` when run from a worktree), **B-096** (pass-1 first-match + `main*`/`addDriver*` residual). Gate 1 not re-scored yet.)
 
@@ -59,9 +61,10 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
-## 🔴 B-093 — The Part C gates FAIL on a held-out set: 66.4% resolution, 16 false greens (the Session 7 landing-page numbers were site-specific)
+## 🔴 B-093 — The Part C gates FAIL on a held-out set: 72.6% resolution, 3 false greens (the Session 7 landing-page numbers were site-specific; the "16" was a metric artefact)
 
-**Status:** 🆕 new — measured 2026-09-24 (Session 10, branch `measure/session10-gates-1-3`). This is the gate re-score the plan asked for, done on held-out ground.
+**Status:** 🟡 **in progress — gate 2 re-scored 2026-09-25 (Session 13): 3 false greens, not 16.** The metric was asking "did the test use the golden's selector?", which flagged legitimate page-arrival checks and the golden's own weak expectations, and it could not see the class that matters (a global container). It now asks "did this criterion's own test prove the claim?" — see §Session 13. What remains open is **gate 1's wrong-element resolver class**, listed there.
+**Measured originally:** 2026-09-24 (Session 10, branch `measure/session10-gates-1-3`). This is the gate re-score the plan asked for, done on held-out ground.
 **Priority:** **critical — it is the commercial go/no-go.** It decides whether the product can claim trustworthy output.
 **One-line:** live regeneration of the 9 committed golden stories (6 sites, 62 conditions, 113 placeholders) gives **75/113 = 66.4% resolution** and **16 false greens** — against gates of ≥90% and zero. The Session 7 landing-page result (0 wrong-element mappings, 0 false greens) does not generalize.
 **Evidence:** `docs/sessions/2026-09-24_session10_heldout_gates.md`; raw log `scratch/gate1_full.log`; emitted tests `scratch/gate1_out/`.
@@ -87,9 +90,83 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 **Re-scored 2026-09-24 after the B-054 pool fix (session 11):** **75/113 (66.4%) → 82/113 (72.6%)** —
 the entire gain is lv_insurance (9/24 → 16/24); every other story is identical. Gate 1 still **FAIL**
 (≥90%); gate 2 unchanged at **16 false greens**; tests passed 49/63 unchanged.
-**Next:** B-096 (pass-1 first-match + `main*`/`addDriver*`), then the false-green class.
+
+---
+
+### Session 13 (2026-09-25) — gate 2 re-scored: **3 false greens**, and the harness bug that hid its own metric
+
+Re-measured by re-executing the emitted tests of the two half-runs (`scratch/rescore.py`, no LLM, so the
+numbers are reproducible): **gate 1 = 82/113 (72.6%)**, **gate 2 = 3**, tests 62 executed / 35 passed.
+ASSERT verification split: **golden 14 · distinctive element 2 · page arrival 6 · unverified 15**.
+
+**What changed in the metric.** A false green now means *an unverified ASSERT on a passing test*, where an
+ASSERT is verified if the criterion's own test asserts the golden answer, a distinctively-named element
+("backpack" → `#remove-sauce-labs-backpack`), or — for a **page** criterion (`criterion_kind: "page"` added to
+the goldens) — a URL assertion on the page the criterion lands on. An assertion against a **global container**
+never verifies anything, and outcome polarity is enforced (`#transfer-error` cannot verify "transfer success
+message"). Gate 1 is untouched and strict: it still compares against the golden locator over the whole file.
+
+**The three, all `eval-006` (ecommerce_mock), one defect:**
+
+| crit | test | golden wants | asserted | verdict |
+|---|---|---|---|---|
+| 3 | `test_04_go_to_cart` | URL `cart.html` | `#place-order` | false green — that button exists only on `checkout.html` |
+| 5 | `test_06_proceed_checkout` | URL `checkout.html` | `#place-order` | borderline — page-unique to checkout, so it arguably proves arrival; reported conservatively |
+| 7 | `test_08_verify_order_success` | `#success-title` | `#place-order` | false green — a checkout button for the order-success claim |
+
+**Root cause (this is the open gate-1 work):** the resolver picked `#place-order` for every later-step assert in
+that story. Same family, from the unverified list: `main:has-text("Your Accounts …")` for account balances
+(eval-007), `#transfer-error` / `#payment-error` for **success** messages (eval-007), `.text` for a form title
+(eval-003), and criteria with **no assertion emitted at all** (eval-006 crit 2/4).
+
+**Harness defects found and fixed while measuring** (see **B-099**): per-test outcomes were unparseable under
+xdist so gate 2 silently read **0** on every run; a missing outcome map implicitly meant "clean"; a failed
+story regeneration still produced a normal-looking report; and `run_full_validation`'s own
+`pytest_timeout` default (120s) is below the CLI's (700s).
+
+**Next:** the wrong-element resolver class above (gate 1), then **B-097**, then **B-100** (let the product report
+what each test proved, instead of the harness guessing) and **B-101** (golden-quality audit).
 Do **not** re-tune on the landing page.
 **Estimated sessions:** 2–3 to move gate 1 materially; 1 to re-measure.
+
+---
+
+## ✅ B-098 — `eval_harness` ignored `.env`, and the env fallback defaulted to `ollama`
+
+**Status:** ✅ **Fixed 2026-09-25** (branch `fix/b093-false-greens`). `scripts/eval/eval_harness.py` now calls `load_dotenv()` in `main()` (the UI/CLI entry points already did; the gate harness did not), and `create_provider_from_env` defaults to `openai-local` — AGENTS.md §5 says never hardcode `ollama`. Before: a bare worktree run silently depended on port auto-detection, and a fully unconfigured run targeted `:11434` and only failed at the first LLM call. Tests: `tests/test_eval_harness_env.py`, `tests/test_llm_provider_env_default.py`.
+**Priority:** medium — measurement integrity (the same family as B-095).
+
+---
+
+## ✅ B-099 — The harness's own metrics could read clean while broken (xdist per-test parse, partial runs, a 120s default)
+
+**Status:** ✅ **Fixed 2026-09-25** (branch `fix/b093-false-greens`). Four defects, all found while re-scoring gate 2:
+1. **Per-test outcomes were scraped from console text, but `pytest.ini` enables `-n 4`** — under xdist the outcome prints *before* the node id (`[gw0] [ 33%] PASSED path::test_01_x[chromium]`), so the parse returned `{}`, no criterion could be attributed to a passing test, and **every run this session scored as "0 false greens"**. Now read from `--junitxml` (`_parse_junit_xml`), console parsing kept as a fallback that also understands the xdist shape.
+2. **A missing outcome map implicitly meant "nothing to report"** — the exact failure mode above. An unknown map now falls back to the conservative story-level rule *and warns*, so it over-counts instead of certifying.
+3. **A story whose regeneration raised produced a normal-looking report** (empty-code rows, "51.3%" presented as a score). `EvalRunner.regeneration_failures` + a banner and exit code 3.
+4. **`run_full_validation(pytest_timeout=120.0)` disagreed with the CLI default (700s)** — a caller that omits it kills healthy multi-test suites (this is B-061's class, and it produced two bogus timeouts during this session).
+**Priority:** **high** — a gate that reports green while unmeasured is worse than no gate.
+**Tests:** `tests/test_eval_gate2_metric.py` (CI-visible), `scripts/eval/eval_runner_test.py`.
+**Note:** CI runs `pytest tests/` only; `scripts/eval/*_test.py` is outside it. The CI-visible file exists for that reason.
+
+---
+
+## 🆕 B-100 — The product should report its own verification strength ("every pass names what it checked")
+
+**Status:** 🆕 new — surfaced 2026-09-25 (Session 13) while correcting the gate-2 metric.
+**Priority:** high for the commercial claim; not a correctness bug.
+**One-line:** the harness has to *guess* whether a passing test verified its criterion, because it only sees the emitted code. The pipeline knows better — at resolution time it knows which page a locator was resolved from and whether the assert targets the golden semantic target. The evidence bundle (and the Jira/HTML/JSON reports) should carry, per test: `verified by element` / `verified by page arrival` / `unverified (+ reason)`. That turns the sellable claim from "zero false greens" (needs an oracle nobody has) into "every pass names what it checked, and you can audit it" — provable from the artifact the customer keeps.
+**Where:** the emit chokepoint (`src/placeholder_orchestrator.py`) + `src/evidence_tracker.py`/report surface; the harness then *reads* it instead of inferring it.
+**Estimated sessions:** 1–2.
+
+---
+
+## 🆕 B-101 — Golden-quality audit: some goldens expect the weaker check
+
+**Status:** 🆕 new — surfaced 2026-09-25 (Session 13). Watch item; AGENTS.md already schedules re-validation every 3–6 months (dataset is a 2026-07 snapshot).
+**One-line:** the golden is a human judgement, and in the held-out set several expectations are weaker than the criterion's own words — `eval-001` crit 5 expects `[data-test="title"]` (saucedemo's shared page header, present on every page) for "verify success", and crit 3 expects `[data-test="cart-list-container"]` (a list exists) for "the added item appears in the cart". `eval-002` crit 3 expects `[data-product-id="11"]` for "a confirmation message appears" (that is a product container, not a message). Fixing them changes gate-1 numbers, so each change needs a stated reason, not a bulk sweep.
+**Priority:** low-medium — it caps how meaningful gate 1 can be.
+**Estimated sessions:** 0.5–1.
 
 ---
 
@@ -185,7 +262,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ## 🆕 B-079 — `LLMProvider` ABC doesn't promise `get_loaded_model`, so mypy flags every call through the base type
 
-**Status:** 🆕 new — found 2026-09-21 while fixing the pre-existing mypy errors in `scripts/eval/eval_runner.py` (those five are fixed; this sixth one lives in a protected directory and is parked here per AGENTS.md §3).
+**Status:** 🆕 new — found 2026-09-21 while fixing the pre-existing mypy errors in `scripts/eval/eval_runner.py` (those five are fixed; this sixth one lives in a protected directory and is parked here per AGENTS.md §3). **Update 2026-09-25 (Session 13):** the *call site* is now hardened — `_sampling_identity` uses `getattr(provider, "get_loaded_model", None)` + a `callable` guard, which is behaviour-identical where the method exists and returns `""` where it does not. That removed the last `[attr-defined]` error in this file and unblocked the pre-commit mypy hook (which checks staged files and had been failing on this line). **The item stays open for the root fix**: the ABC still does not promise the method, so the silent-empty-model hole remains for future providers.
 **Priority:** low — works today; the gap is a silent-failure hole, not a current bug.
 **One-line:** `get_loaded_model(timeout=…)` is implemented on the two concrete providers (`src/llm_providers/__init__.py:258,368`) but NOT on the `LLMProvider` ABC (`src/llm_providers/__init__.py:52`). Code that holds the base type — e.g. `scripts/eval/eval_runner.py:687` after `auto_detect_provider()` — is flagged `[attr-defined]`. `src/llm_client.py:194,202` call the same method without a mypy flag (different annotation on `self._provider`), so the ABC gap is the single root cause.
 **Why it matters (the real gap):** the eval_runner call sits in `try/except Exception: return "", ""` — if a future provider forgets to implement the method, nothing crashes; the run record just silently stores an empty model name. The ABC promise is what would catch that at type-check time.

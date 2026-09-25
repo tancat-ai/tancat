@@ -42,6 +42,8 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # Resolve project root (scripts/eval is one level deep)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -124,6 +126,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
 
     print(report.to_summary())
+
+    # Gate-2 measurement integrity (B-093): a run in which any story's
+    # regeneration failed is PARTIAL. Its metrics mix real stories with
+    # empty-code rows and must not be read as a gate score — say so loudly
+    # and exit non-zero (3, distinct from the accuracy-fail code 2).
+    if runner.regeneration_failures:
+        print("\n" + "=" * 70, file=sys.stderr)
+        print("PARTIAL RUN — regeneration FAILED for:", file=sys.stderr)
+        for failed_id in runner.regeneration_failures:
+            print(f"  {failed_id}", file=sys.stderr)
+        print(
+            "The report above contains empty-code rows for these stories. "
+            "Re-run them before reading the metrics as a gate score.",
+            file=sys.stderr,
+        )
+        print("=" * 70, file=sys.stderr)
+        return 3
 
     # Exit code based on accuracy threshold
     if args.min_accuracy is not None:
@@ -252,6 +271,10 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Load .env so a bare checkout (worktree, CI) honours the operator's
+    # provider/model/timeout config instead of silently auto-detecting.
+    # python-dotenv never overrides variables already in the environment.
+    load_dotenv()
     parser = argparse.ArgumentParser(
         prog="eval_harness",
         description="Automated Evaluation Harness for tancat-ai/tancat",

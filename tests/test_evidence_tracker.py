@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from playwright.sync_api import Page
 
-from src.evidence_tracker import EvidenceTracker, _same_page
+from src.evidence_tracker import EvidenceTracker, PageMismatchError, _same_page
 
 
 def test_evidence_tracker_records_navigation(tmp_path: Any) -> None:
@@ -575,20 +575,50 @@ def test_step_on_expected_page_records_no_mismatch(tmp_path: Any) -> None:
     assert "page_mismatch" not in tracker.steps[-1]["result"]
 
 
-def test_step_on_other_page_records_mismatch(tmp_path: Any) -> None:
-    """The step still passes — the mismatch is recorded, not raised."""
+def test_step_on_other_page_fails(tmp_path: Any) -> None:
+    """Gate 2 (B-093): a step that runs on the wrong page FAILS.
+
+    A check that "passed" on a different page than the one its locator was
+    resolved against verified nothing — the false-green class. The mismatch
+    is still recorded in the evidence (AI-067) before the step fails.
+    """
     page_mock = MagicMock()
     page_mock.url = "https://example.com/success.html"
     tracker = EvidenceTracker(page_mock, "t_bad", evidence_root=Path(tmp_path))
 
-    tracker.assert_visible("#acct", label="order page", expected_page="https://example.com/index.html")
+    with pytest.raises(PageMismatchError):
+        tracker.assert_visible("#acct", label="order page", expected_page="https://example.com/index.html")
 
     result = tracker.steps[-1]["result"]
-    assert result["status"] == "passed"
+    assert result["status"] == "failed"
+    assert result["failure_note"]
     assert result["page_mismatch"] == {
         "expected": "https://example.com/index.html",
         "actual": "https://example.com/success.html",
     }
+
+
+def test_mismatch_does_not_mask_an_earlier_error(tmp_path: Any) -> None:
+    """A step that fails on its own keeps its original error.
+
+    The mismatch stays recorded but must not replace the real cause (the
+    step was already going to fail — surfacing the locator error is the
+    useful diagnosis).
+    """
+    page_mock = MagicMock()
+    page_mock.url = "https://example.com/success.html"
+    page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element timed out")
+    tracker = EvidenceTracker(page_mock, "t_err", evidence_root=Path(tmp_path))
+
+    with pytest.raises(TimeoutError):
+        tracker.assert_visible("#missing", label="x", expected_page="https://example.com/index.html")
+
+    result = tracker.steps[-1]["result"]
+    assert result["status"] == "failed"
+    assert "timed out" in (result["error"] or "")
+    assert result["page_mismatch"]["expected"].endswith("index.html")
+    # single record — the except path must not re-record the failure
+    assert len(tracker.steps) == 1
 
 
 def test_no_expected_page_records_no_mismatch(tmp_path: Any) -> None:
@@ -602,13 +632,18 @@ def test_no_expected_page_records_no_mismatch(tmp_path: Any) -> None:
     assert "page_mismatch" not in tracker.steps[-1]["result"]
 
 
-def test_click_on_other_page_records_mismatch(tmp_path: Any) -> None:
+def test_click_on_other_page_fails(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.url = "https://example.com/checkout.html"
+    # First count() call = the click target (exists); subsequent calls are the
+    # proactive modal-dismissal probes (no visible modals -> no-op).
+    page_mock.locator.return_value.first.count.side_effect = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     tracker = EvidenceTracker(page_mock, "t_click", evidence_root=Path(tmp_path))
 
-    tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
+    with pytest.raises(PageMismatchError):
+        tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
 
+    assert tracker.steps[-1]["result"]["status"] == "failed"
     assert tracker.steps[-1]["result"]["page_mismatch"]["actual"].endswith("checkout.html")
 
 
