@@ -72,6 +72,7 @@
     },
     {
       "criterion_index": 7,
+      "criterion_kind": "element",
       "placeholders": [
         { "action": "ASSERT", "description": "estimated annual premium displayed", "expected_locator": "#premiumPrice", "tolerance_selectors": [".price-value", ".price-display"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "ASSERT", "description": "compulsory excess information", "expected_locator": "#excessInfo", "tolerance_selectors": ["#excessValue"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
@@ -86,6 +87,7 @@
     },
     {
       "criterion_index": 9,
+      "criterion_kind": "element",
       "placeholders": [
         { "action": "ASSERT", "description": "quote generated successfully message", "expected_locator": "#quoteSuccess", "tolerance_selectors": ["h2:has-text('Quote Generated')"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "ASSERT", "description": "quote reference number", "expected_locator": "#quoteRef", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }

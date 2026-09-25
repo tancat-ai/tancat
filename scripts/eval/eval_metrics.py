@@ -26,6 +26,14 @@ class ResolutionResult:
     tolerance_selectors: list[str]
     generated_locator: str | None  # None = skip/unresolved
     matched: bool  # True if generated_locator is in [expected, *tolerances]
+    # Gate 2 (B-093): the criterion this placeholder belongs to, so the
+    # runner can attribute a false green to the test function of its own
+    # criterion instead of the whole story.
+    criterion_index: int | None = None
+    # How strongly the criterion's own test verified this ASSERT, when
+    # measured on the emitted code (see golden_validator._classify_verification):
+    # "golden" | "subject" | "page" | "unverified" | None (non-ASSERT rows).
+    verification: str | None = None
 
 
 @dataclass
@@ -86,10 +94,37 @@ class HarnessReport:
         return self.total_tests_passed / self.total_tests_executed * 100
 
     def false_positive_rate(self) -> float:
-        """% of tests that passed but used incorrect locators."""
+        """% of tests that passed but verified nothing (B-093 gate 2)."""
         if not self.total_tests_executed:
             return 0.0
         return self.total_false_positives / self.total_tests_executed * 100
+
+    def _verification_counts(self) -> dict[str, int]:
+        """ASSERT placeholders by how strongly the generated test verified them."""
+        counts = {"golden": 0, "subject": 0, "page": 0, "unverified": 0}
+        for s in self.stories:
+            for r in s.resolutions:
+                if r.action != "ASSERT":
+                    continue
+                key = r.verification or "unverified"
+                counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    @property
+    def verified_by_element(self) -> int:
+        """ASSERTs matched to the golden element or to a distinctive element."""
+        c = self._verification_counts()
+        return c["golden"] + c["subject"]
+
+    @property
+    def verified_by_page(self) -> int:
+        """ASSERTs verified by reaching the expected page (URL assertion)."""
+        return self._verification_counts()["page"]
+
+    @property
+    def unverified_asserts(self) -> int:
+        """ASSERTs the generated test did not provably verify."""
+        return self._verification_counts()["unverified"]
 
     def skeleton_completeness(self) -> float:
         """% of criteria that produced a skeleton test function."""
@@ -106,6 +141,7 @@ class HarnessReport:
 
     def to_summary(self) -> str:
         """Human-readable summary table."""
+        vc = self._verification_counts()
         lines = [
             "=" * 70,
             "EVALUATION HARNESS REPORT",
@@ -115,6 +151,12 @@ class HarnessReport:
             f"  Total placeholders:       {self.total_placeholders}",
             f"  Correct resolutions:      {self.correct_resolutions}",
             f"  Resolution accuracy:      {self.resolution_accuracy():.1f}%",
+            "",
+            "  ASSERT verification (B-093 gate 2):",
+            f"    by element (golden)              {vc['golden']}",
+            f"    by element (distinctive match)   {vc['subject']}",
+            f"    by page arrival (URL assertion)  {vc['page']}",
+            f"    unverified                       {vc['unverified']}",
             "",
             f"  Tests executed:           {self.total_tests_executed}",
             f"  Tests passed:             {self.total_tests_passed}",
