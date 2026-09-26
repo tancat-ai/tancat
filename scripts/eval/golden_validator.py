@@ -72,14 +72,14 @@ def _action_from_method(method: str) -> str:
     return "ASSERT"
 
 
-def extract_locators_from_code(code: str) -> list[dict[str, str]]:
-    """Extract all evidence_tracker calls with their locators from generated code.
+def _extract_locators_from_chunk(chunk: str) -> list[dict[str, str]]:
+    """Extract tracker/POM/URL-assert locators from one chunk of code.
 
-    Returns a list of dicts:
-        [{"method": "fill", "action": "FILL", "locator": "#user-name"}, ...]
+    Shared by the whole-file and per-test extractors so the two never
+    drift apart in what counts as a locator.
     """
     results: list[dict[str, str]] = []
-    for match in _EVIDENCE_CALL_RE.finditer(code):
+    for match in _EVIDENCE_CALL_RE.finditer(chunk):
         method = match.group(1)
         locator = match.group(3)
         if method == "navigate":
@@ -92,7 +92,7 @@ def extract_locators_from_code(code: str) -> list[dict[str, str]]:
             }
         )
     # B-021: Also extract URL assertions (expect(page).to_have_url(...))
-    for match in _TO_HAVE_URL_RE.finditer(code):
+    for match in _TO_HAVE_URL_RE.finditer(chunk):
         url = match.group(1)
         full_expr = f'expect(page).to_have_url("{url}")'
         results.append(
@@ -103,7 +103,7 @@ def extract_locators_from_code(code: str) -> list[dict[str, str]]:
             }
         )
     # POM calls: inventory_page.click('Add to cart')
-    for match in _POM_CALL_RE.finditer(code):
+    for match in _POM_CALL_RE.finditer(chunk):
         method = match.group(2)
         desc = match.group(3)
         if method == "navigate":
@@ -116,6 +116,34 @@ def extract_locators_from_code(code: str) -> list[dict[str, str]]:
             }
         )
     return results
+
+
+def extract_locators_from_code(code: str) -> list[dict[str, str]]:
+    """Extract all evidence_tracker calls with their locators from generated code.
+
+    Returns a list of dicts:
+        [{"method": "fill", "action": "FILL", "locator": "#user-name"}, ...]
+    """
+    return _extract_locators_from_chunk(code)
+
+
+def extract_locators_per_test(code: str) -> list[tuple[str, list[dict[str, str]]]]:
+    """Extract locators per test function, in file order.
+
+    The skeleton pipeline emits one test function per criterion, in
+    criterion order, so the position of a function in this list is the
+    criterion index it belongs to. Gate 2 (B-093) uses this to attribute
+    each golden placeholder's resolution to its own test: a locator that
+    only matches in a different test does not verify this criterion.
+    """
+    per_test: list[tuple[str, list[dict[str, str]]]] = []
+    starts: list[tuple[str, int]] = []
+    for m in _TEST_FUNC_RE.finditer(code):
+        starts.append((m.group(0)[4:].strip(), m.start()))
+    for i, (name, start) in enumerate(starts):
+        end = starts[i + 1][1] if i + 1 < len(starts) else len(code)
+        per_test.append((name, _extract_locators_from_chunk(code[start:end])))
+    return per_test
 
 
 def extract_skipped_descriptions(code: str) -> list[str]:
@@ -161,6 +189,9 @@ def _build_golden_lookup(golden: dict[str, Any]) -> list[dict[str, Any]]:
                     "expected_locator": ph["expected_locator"],
                     "tolerance_selectors": ph.get("tolerance_selectors", []),
                     "expected_page": ph.get("expected_page", ""),
+                    # B-093 gate 2: "page" = reaching the expected page is the
+                    # verification; "element" = content must be proven.
+                    "criterion_kind": crit.get("criterion_kind", "element"),
                 }
             )
     return flat
@@ -239,6 +270,158 @@ def _same_url_without_slash(a: str, b: str) -> bool:
     return a.rstrip("/") == b.rstrip("/")
 
 
+# Page-level containers: an assertion against one of these passes on any
+# page of a broken app, so it can never verify a criterion (B-093 gate 2).
+# Page-specific containers (``#cart_contents_container``) are NOT in this
+# list — those are legitimate page markers.
+_GLOBAL_CONTAINERS = (
+    "body",
+    "html",
+    "main",
+    "#content",
+    "#root",
+    "#app",
+    "#page",
+    ".container",
+)
+
+# Criterion words so common they carry no subject identity. Matching one of
+# these would bless a wrong element: "order success message" must NOT accept
+# ``#place-order`` just because both say "order".
+_SUBJECT_STOPWORDS = frozenset(
+    {
+        "appears",
+        "appear",
+        "available",
+        "complete",
+        "completed",
+        "confirm",
+        "confirmation",
+        "content",
+        "contents",
+        "correct",
+        "correctly",
+        "details",
+        "display",
+        "displayed",
+        "displays",
+        "element",
+        "elements",
+        "expected",
+        "information",
+        "loaded",
+        "loading",
+        "message",
+        "messages",
+        "page",
+        "pages",
+        "present",
+        "screen",
+        "section",
+        "shown",
+        "shows",
+        "success",
+        "successful",
+        "successfully",
+        "update",
+        "updated",
+        "verify",
+        "verified",
+        "verification",
+        "visible",
+    }
+)
+
+
+def _is_global_container(locator: str) -> bool:
+    """True when a locator targets a page-level container (B-093 gate 2)."""
+    if not locator:
+        return False
+    low = locator.strip().lower()
+    for c in _GLOBAL_CONTAINERS:
+        if low == c:
+            return True
+        if low.startswith(c) and len(low) > len(c) and low[len(c)] in ":[ >.#":
+            return True
+    return False
+
+
+# Success/failure polarity markers. A criterion that expects success must
+# never be "verified" by an error element: ``#transfer-error`` shares the word
+# "transfer" with "transfer success message" but is the opposite outcome.
+_POSITIVE_POLARITY = ("success", "confirm", "thank", "complete", "done", "updated", "added")
+_NEGATIVE_POLARITY = ("error", "fail", "invalid", "denied", "warning", "expired", "rejected")
+
+
+def _subject_tokens(description: str) -> set[str]:
+    """Distinctive words of a criterion — >= 6 chars and not a stopword."""
+    return {t for t in re.findall(r"[a-z]{6,}", description.lower()) if t not in _SUBJECT_STOPWORDS}
+
+
+def _polarity(text: str) -> str | None:
+    """ "positive" / "negative" / None from success-or-failure wording."""
+    low = text.lower()
+    positive = any(p in low for p in _POSITIVE_POLARITY)
+    negative = any(n in low for n in _NEGATIVE_POLARITY)
+    if positive and not negative:
+        return "positive"
+    if negative and not positive:
+        return "negative"
+    return None
+
+
+def _contradicts_polarity(candidate: str, expected_text: str) -> bool:
+    """True when a candidate's outcome polarity contradicts what is expected."""
+    want = _polarity(expected_text)
+    got = _polarity(candidate)
+    return want is not None and got is not None and want != got
+
+
+def _classify_verification(
+    pool: list[dict[str, str]],
+    gp: dict[str, Any],
+    criterion_kind: str,
+    matched: bool,
+) -> str:
+    """How strongly the criterion's own test verified this ASSERT placeholder.
+
+    golden     — the generated locator is the human-approved answer (or a
+                 tolerated equivalent).
+    page       — a 'page' criterion verified by a URL assertion on the page
+                 the criterion lands on (golden ``expected_page``).
+    subject    — a specific element (never a global container) whose locator
+                 carries a distinctive word of the criterion ("backpack").
+    unverified — everything else, including assertions against global
+                 containers and wrong-page URL checks.
+    """
+    if matched:
+        return "golden"
+
+    description = str(gp.get("description", ""))
+    expected_text = f"{description} {gp.get('expected_locator', '')}"
+
+    if criterion_kind == "page":
+        want = str(gp.get("expected_page") or "")
+        if want:
+            for gl in pool:
+                got = _to_have_url_arg(gl["locator"])
+                if got and _same_url_without_slash(got, want) and not _contradicts_polarity(got, expected_text):
+                    return "page"
+
+    tokens = _subject_tokens(description)
+    if tokens:
+        for gl in pool:
+            if gl["action"] != "ASSERT" or _is_global_container(gl["locator"]):
+                continue
+            if _contradicts_polarity(gl["locator"], expected_text):
+                continue
+            hay = gl["locator"].lower()
+            if any(t in hay for t in tokens):
+                return "subject"
+
+    return "unverified"
+
+
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
     """Check if resolved locator matches expected, with normalization.
 
@@ -288,20 +471,44 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
 def _match_generated_to_golden(
     generated_locators: list[dict[str, str]],
     golden_placeholders: list[dict[str, Any]],
+    per_test_locators: list[list[dict[str, str]]] | None = None,
 ) -> list[ResolutionResult]:
     """Match each golden placeholder against generated locators.
 
-    Strategy: for each golden placeholder, search generated locators for a
-    matching action.  Prefer exact locator matches over non-matches.
+    Gate 2 (B-093): the candidate pool for a placeholder is the test
+    function of its own criterion (one skeleton test per criterion, in
+    order). A locator that only matches in a DIFFERENT test does not
+    verify this criterion, so it must not count as resolved. Falls back
+    to the whole file when the criterion has no test function. Within a
+    pool, prefer an exact locator match; otherwise the first non-matching
+    candidate wins (stable, readable reports — the old code kept the LAST
+    non-match, so unrelated goldens all displayed one far-away locator).
     """
     results: list[ResolutionResult] = []
-    used_indices: set[int] = set()
+    used_by_pool: dict[int, set[int]] = {}
 
     for gp in golden_placeholders:
+        idx = gp.get("criterion_index")
+        criterion_kind = str(gp.get("criterion_kind") or "element")
+
+        # Gate 1 (resolver precision) is measured over the WHOLE file: if the
+        # golden locator appears anywhere in the generated code, the resolver
+        # found the right element — where the skeleton placed the call is a
+        # different question. Scoping this to one test would silently mix
+        # resolver quality with skeleton placement.
+        pool = generated_locators
+        used = used_by_pool.setdefault(id(generated_locators), set())
+
+        # Gate 2 (verification) IS per criterion: only a check inside this
+        # criterion's own test proves this criterion.
+        own_pool = pool
+        if per_test_locators is not None and isinstance(idx, int) and 0 <= idx < len(per_test_locators):
+            own_pool = per_test_locators[idx]
+
         best: ResolutionResult | None = None
 
-        for i, gl in enumerate(generated_locators):
-            if i in used_indices:
+        for i, gl in enumerate(pool):
+            if i in used:
                 continue
             if gl["action"] != gp["action"]:
                 continue
@@ -319,14 +526,29 @@ def _match_generated_to_golden(
                 tolerance_selectors=tolerances,
                 generated_locator=locator,
                 matched=matched,
+                criterion_index=idx,
             )
 
-            if candidate.matched and (best is None or not best.matched):
+            if candidate.matched:
                 best = candidate
-                used_indices.add(i)
+                used.add(i)
                 break
-            elif best is None or not best.matched:
+            if best is None:
                 best = candidate
+
+        # "golden" for gate 2 means the golden answer is asserted IN THIS
+        # criterion's own test — not merely present somewhere in the file.
+        tolerances = gp.get("tolerance_selectors", [])
+        own_golden = any(
+            gl["action"] == gp["action"] and _locators_match(gl["locator"], gp["expected_locator"], tolerances)
+            for gl in own_pool
+        )
+        verification = _classify_verification(
+            own_pool,
+            gp,
+            criterion_kind,
+            own_golden,
+        )
 
         if best is None:
             results.append(
@@ -337,9 +559,12 @@ def _match_generated_to_golden(
                     tolerance_selectors=gp.get("tolerance_selectors", []),
                     generated_locator=None,
                     matched=False,
+                    criterion_index=idx,
+                    verification=verification,
                 )
             )
         else:
+            best.verification = verification
             results.append(best)
 
     return results
@@ -355,13 +580,14 @@ def validate_story(
     Returns a StoryResult with all resolution outcomes.
     """
     generated = extract_locators_from_code(code)
+    generated_per_test = [locs for _, locs in extract_locators_per_test(code)]
     golden_ph = _build_golden_lookup(golden)
     test_count = extract_test_function_count(code)
 
     total_criteria = len(golden.get("conditions", []))
     criteria_with_skeletons = test_count
 
-    resolutions = _match_generated_to_golden(generated, golden_ph)
+    resolutions = _match_generated_to_golden(generated, golden_ph, generated_per_test)
 
     return StoryResult(
         story_id=golden["id"],

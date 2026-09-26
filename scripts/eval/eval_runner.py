@@ -145,38 +145,101 @@ def run_static_validation(
 PYTEST_TIMEOUT_MARKER = "pytest execution timed out"
 
 
+# Plain (non-xdist) shape: ``path::test_01_login[chromium] PASSED [ 16%]``.
+_PYTEST_TEST_LINE_RE = re.compile(
+    r"^(?:\S+::)?(test_\d+_\w+)(?:\[[^\]]*\])?\s+(PASSED|FAILED|SKIPPED|ERROR)\b",
+    re.MULTILINE,
+)
+# xdist shape — the outcome prints BEFORE the node id:
+# ``[gw0] [ 33%] PASSED path::test_01_login[chromium]``. pytest.ini enables
+# ``-n 4``, so this is the shape the harness normally sees.
+_PYTEST_XDIST_LINE_RE = re.compile(
+    r"\[gw\d+\].*?\b(PASSED|FAILED|SKIPPED|ERROR)\b\s+\S*::(test_\d+_\w+)(?:\[[^\]]*\])?",
+    re.MULTILINE,
+)
+
+
+def _parse_per_test_results(output: str) -> dict[str, str]:
+    """Map test function name -> pytest outcome from -v console output.
+
+    Handles both the plain and the xdist line shapes. This is the FALLBACK:
+    ``_parse_junit_xml`` is preferred, because under xdist the outcome and
+    the node id are on different lines and console scraping is fragile — a
+    silent miss here made every false green read as zero (B-093).
+    """
+    results: dict[str, str] = {}
+    for name, outcome in _PYTEST_TEST_LINE_RE.findall(output):
+        results[name] = outcome
+    for outcome, name in _PYTEST_XDIST_LINE_RE.findall(output):
+        results[name] = outcome
+    return results
+
+
+def _parse_junit_xml(xml_path: Path) -> dict[str, str]:
+    """Map test function name -> outcome from a pytest JUnit XML report.
+
+    Machine-readable and independent of the console format, so it is the
+    primary source for per-test outcomes. Returns an empty map on any parse
+    failure — callers must treat "empty" as "unknown", never as "all clear".
+    """
+    import xml.etree.ElementTree as ET
+
+    results: dict[str, str] = {}
+    try:
+        tree = ET.parse(xml_path)
+    except OSError, ET.ParseError:
+        return results
+    for case in tree.iter("testcase"):
+        name = re.sub(r"\[[^\]]*\]$", "", case.get("name") or "").strip()
+        if not name:
+            continue
+        if case.find("skipped") is not None:
+            results[name] = "SKIPPED"
+        elif case.find("failure") is not None or case.find("error") is not None:
+            results[name] = "FAILED"
+        else:
+            results[name] = "PASSED"
+    return results
+
+
 def run_generated_tests(
     test_file: Path,
     pytest_timeout: float = 120.0,
-) -> tuple[int, int, int, int, float, str]:
+) -> tuple[int, int, int, int, float, str, dict[str, str]]:
     """Execute a single test file via pytest and parse results.
 
     Returns:
-        (total, passed, failed, skipped, duration, raw_output)
+        (total, passed, failed, skipped, duration, raw_output, per_test)
+        where ``per_test`` maps test function name -> PASSED/FAILED/SKIPPED.
     """
     import sys
+    import tempfile
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "pytest",
-        str(test_file),
-        "-v",
-        "--tb=short",
-        "--override-ini=log_cli_level=ERROR",
-    ]
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=pytest_timeout + 30,
-        )
-    except subprocess.TimeoutExpired:
-        # B-061: the marker, not a zero count, carries the truth here.
-        return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER)
-
-    output = result.stdout + result.stderr
+    with tempfile.TemporaryDirectory() as tmpdir:
+        xml_path = Path(tmpdir) / "results.xml"
+        cmd = [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(test_file),
+            "-v",
+            "--tb=short",
+            f"--junitxml={xml_path}",
+            "--override-ini=log_cli_level=ERROR",
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=pytest_timeout + 30,
+            )
+        except subprocess.TimeoutExpired:
+            # B-061: the marker, not a zero count, carries the truth here.
+            return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER, {})
+        output = result.stdout + result.stderr
+        # JUnit XML is the primary source; console parsing is the fallback.
+        per_test = _parse_junit_xml(xml_path)
 
     # Parse summary line: "=== 5 passed, 1 failed, 0 skipped in 12.34s ==="
     total = passed = failed = skipped = 0
@@ -206,7 +269,10 @@ def run_generated_tests(
         if pm or fm or sm or dur_m:
             break
 
-    return (total, passed, failed, skipped, duration, output)
+    if not per_test:
+        per_test = _parse_per_test_results(output)
+
+    return (total, passed, failed, skipped, duration, output, per_test)
 
 
 def run_full_validation(
@@ -249,7 +315,7 @@ def run_full_validation(
             on_story(story.story_id)
 
         logger.info("Executing tests for %s: %s", story.story_id, test_file)
-        total, passed, failed, skipped, duration, raw_output = run_generated_tests(
+        total, passed, failed, skipped, duration, raw_output, per_test = run_generated_tests(
             test_file,
             pytest_timeout=pytest_timeout,
         )
@@ -260,11 +326,41 @@ def run_full_validation(
         story.tests_executed = total
         story.tests_passed = passed
 
-        # Estimate false positives: tests that passed but had wrong locators
-        # A test is false positive if it passed but any of its ASSERT locators were wrong
-        if test_file is not None and passed > 0:
-            wrong_asserts = [r for r in story.resolutions if r.action == "ASSERT" and not r.matched]
-            story.tests_false_positive = len(wrong_asserts)
+        # Gate 2 (B-093): a false green is a criterion whose golden ASSERT the
+        # generated code does not satisfy AND whose own test function PASSED.
+        # The old story-level rule ("any pass taints every unmatched ASSERT")
+        # overcounted: an unmatched ASSERT on a skipped or failed test is an
+        # honest outcome, not a false green.
+        if test_file is not None:
+            code = code_map.get(story.story_id, "")
+            test_names = re.findall(r"^def (test_\d+_\w+)", code, re.MULTILINE)
+            # A missing per-test map must never read as "nothing to report" —
+            # that silently certifies a run as clean. Treat it as unknown and
+            # fall back to the conservative story-level rule, loudly (B-093).
+            per_test_known = bool(per_test)
+            if not per_test_known and total > 0:
+                logger.warning(
+                    "No per-test outcomes parsed for %s — falling back to story-level "
+                    "false-green attribution (may over-count)",
+                    story.story_id,
+                )
+            false_greens = 0
+            for r in story.resolutions:
+                if r.action != "ASSERT":
+                    continue
+                # Verified by the golden answer, by a distinctive-element
+                # match, or by a URL assertion on the criterion's page (B-093
+                # gate 2) — none of those is a false green. Only an
+                # unverified ASSERT that still passed is.
+                if r.matched or (r.verification or "unverified") != "unverified":
+                    continue
+                if not per_test_known or r.criterion_index is None or not (0 <= r.criterion_index < len(test_names)):
+                    # No attribution possible — conservative story-level rule.
+                    if passed > 0:
+                        false_greens += 1
+                elif per_test.get(test_names[r.criterion_index]) == "PASSED":
+                    false_greens += 1
+            story.tests_false_positive = false_greens
         else:
             story.tests_false_positive = 0
 
@@ -455,6 +551,15 @@ class EvalRunner:
         self._story_mock_dirs: dict[str, str] = {}
         self._mock_server: Any | None = None
         self._mock_serving_dir: str | None = None
+        # Gate-2 measurement integrity (B-093): story ids whose regeneration
+        # raised (e.g. an LLM generation timeout). A run with any of these is
+        # PARTIAL — its metrics must not be read as a gate score.
+        self._regeneration_failures: list[str] = []
+
+    @property
+    def regeneration_failures(self) -> tuple[str, ...]:
+        """Story ids whose code regeneration failed in the last run."""
+        return tuple(self._regeneration_failures)
 
     def _load_code_map(self) -> dict[str, str]:
         """Load all captured code files into a map keyed by story_id."""
@@ -702,7 +807,15 @@ class EvalRunner:
             from src.llm_providers import auto_detect_provider
 
             provider = auto_detect_provider()
-            return str(provider.provider_name), str(provider.get_loaded_model(timeout=5) or "")
+            # B-079: `get_loaded_model` is implemented by the concrete providers
+            # (OpenAIProvider/LMStudio) but is not declared on the LLMProvider
+            # base, so it must be looked up defensively. Root fix (declare an
+            # optional capability on the base) lives in the protected
+            # `src/llm_providers/`; this call site must not depend on the
+            # attribute existing.
+            get_loaded = getattr(provider, "get_loaded_model", None)
+            loaded = str(get_loaded(timeout=5) or "") if callable(get_loaded) else ""
+            return str(provider.provider_name), loaded
         except Exception:
             return "", ""
 
@@ -842,6 +955,7 @@ class EvalRunner:
                 logger.info("Regenerated %s", story_id)
             except Exception as e:
                 logger.error("Failed to regenerate %s: %s", story_id, e)
+                self._regeneration_failures.append(story_id)
                 code_map[story_id] = ""
 
         loop = asyncio.new_event_loop()
@@ -936,6 +1050,7 @@ class EvalRunner:
                 logger.info("Regenerated %s via graph", story_id)
             except Exception as e:
                 logger.error("Failed to regenerate %s via graph: %s", story_id, e)
+                self._regeneration_failures.append(story_id)
                 code_map[story_id] = ""
 
         loop = asyncio.new_event_loop()

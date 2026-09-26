@@ -63,6 +63,18 @@ class _LocatorNotFoundError(RuntimeError):
     """
 
 
+class PageMismatchError(RuntimeError):
+    """Raised when a step ran on a page other than the one its locator was
+    resolved against (the gate-2 false-green class).
+
+    A step that "succeeds" on the wrong page has not verified its
+    condition — a flow divergence that used to be recorded in evidence only
+    (AI-067) while the test still passed green. From the gate-2 work on
+    B-093, a recorded mismatch fails the step: a passing test must
+    provably have checked its condition on the page it was resolved for.
+    """
+
+
 class EvidenceTracker:
     def __init__(
         self,
@@ -443,6 +455,16 @@ class EvidenceTracker:
         else:
             element_data = self._get_element_metadata(locator)
 
+        # AI-067: the page a step RAN on, compared with the page its locator
+        # was resolved against. The trail/scope can be wrong even when an
+        # element resolves (a page-level container matches anything), so a
+        # mismatch must never pass silently.
+        page_mismatch: dict[str, str] | None = None
+        if expected_page:
+            actual_page = self._step_entry_url or self._safe_page_url()
+            if not _same_page(expected_page, actual_page):
+                page_mismatch = {"expected": expected_page, "actual": actual_page}
+
         # On failure, generate self-diagnosing failure evidence (Tier 1).
         failure_note: str | None = None
         diagnosis: dict[str, Any] | None = None
@@ -457,9 +479,19 @@ class EvidenceTracker:
             # Fast-fail errors are self-diagnosing ("not found on current page…")
             # but must still carry a failure note for the evidence index (B-033).
             failure_note = str(error)[:300]
+        elif page_mismatch is not None:
+            failure_note = (
+                f"Step ran on '{page_mismatch['actual']}' but its locator was "
+                f"resolved against '{page_mismatch['expected']}' — the flow "
+                "diverged, so this check did not verify its condition."
+            )
 
-        # Determine step status — "partial_pass" when fallback was used
+        # Determine step status — "partial_pass" when fallback was used.
+        # A mismatch on a would-be-passing step is a failure: the check ran
+        # on the wrong page, so it verified nothing (B-093 gate 2).
         if error:
+            status = "failed"
+        elif page_mismatch is not None:
             status = "failed"
         elif fallback_used:
             status = "partial_pass"
@@ -480,14 +512,8 @@ class EvidenceTracker:
             result["fallback_used"] = True
             result["fallback_chain"] = fallback_chain or []
 
-        # AI-067: flag a step that ran on a page other than the one its locator
-        # was resolved against. The trail/scope can be wrong even when an
-        # element resolves (a page-level container matches anything), so the
-        # mismatch must be recorded rather than passing silently.
-        if expected_page:
-            actual_page = self._step_entry_url or self._safe_page_url()
-            if not _same_page(expected_page, actual_page):
-                result["page_mismatch"] = {"expected": expected_page, "actual": actual_page}
+        if page_mismatch is not None:
+            result["page_mismatch"] = page_mismatch
 
         self.steps.append(
             {
@@ -509,6 +535,19 @@ class EvidenceTracker:
         # status.
         if step_idx == 0 or status in ("failed", "partial_pass"):
             self._persist_sidecar("running")
+
+        # Gate 2 (B-093): a mismatch on a would-be-passing step now fails the
+        # test. Evidence is persisted above first, so the sidecar keeps the
+        # mismatch even though execution stops here. A step that already
+        # failed for its own reason keeps its original error — the mismatch
+        # stays recorded, it does not mask the real cause.
+        if page_mismatch is not None and not error:
+            raise PageMismatchError(
+                f"{step_type} '{label}' ran on '{page_mismatch['actual']}' but "
+                f"was resolved against '{page_mismatch['expected']}'. The flow "
+                "diverged from the resolved page context; this check did not "
+                "verify its condition."
+            )
 
     def _safe_page_url(self) -> str:
         try:
@@ -619,6 +658,10 @@ class EvidenceTracker:
                 expected_page=expected_page,
             )
         except Exception as e:
+            # A page-mismatch failure was already recorded by the success
+            # path of _record_step — re-raise without re-recording (B-093).
+            if isinstance(e, PageMismatchError):
+                raise
             self._record_step(
                 "fill",
                 label,
@@ -835,7 +878,9 @@ class EvidenceTracker:
                     raise
         except Exception as e:
             # Fast-failed not-found clicks were already recorded (fast_fail).
-            if isinstance(e, _LocatorNotFoundError):
+            # A page-mismatch failure was already recorded by the success
+            # path of _record_step (B-093). Re-raise without re-recording.
+            if isinstance(e, (_LocatorNotFoundError, PageMismatchError)):
                 raise
             # Always screenshot on click failure; this is the single most useful
             # artifact for evidence viewer + heatmaps.
@@ -1091,6 +1136,10 @@ class EvidenceTracker:
                 expected_page=expected_page,
             )
         except Exception as e:
+            # A page-mismatch failure was already recorded by the success
+            # path of _record_step — re-raise without re-recording (B-093).
+            if isinstance(e, PageMismatchError):
+                raise
             self._record_step(
                 "assertion",
                 label,
@@ -1127,6 +1176,10 @@ class EvidenceTracker:
                 expected_page=expected_page,
             )
         except Exception as e:
+            # A page-mismatch failure was already recorded by the success
+            # path of _record_step — re-raise without re-recording (B-093).
+            if isinstance(e, PageMismatchError):
+                raise
             self._record_step(
                 "assertion",
                 label,
