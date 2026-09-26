@@ -591,7 +591,10 @@ def create_provider_from_env() -> LLMProvider:
     """
     import os
 
-    provider_name = os.environ.get("LLM_PROVIDER", "ollama").lower()
+    # AGENTS.md §5: the default provider is openai-local (llama.cpp :8080),
+    # never ollama — an unset LLM_PROVIDER used to target :11434 silently and
+    # only failed at the first LLM call.
+    provider_name = os.environ.get("LLM_PROVIDER", "openai-local").lower()
 
     if provider_name == "ollama":
         return OllamaProvider(base_url=os.environ.get("OLLAMA_BASE_URL"))

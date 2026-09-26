@@ -15,6 +15,7 @@
   "golden_resolutions": [
     {
       "criterion_index": 0,
+      "criterion_kind": "page",
       "placeholders": [
         {
           "action": "ASSERT",
@@ -63,6 +64,7 @@
     },
     {
       "criterion_index": 4,
+      "criterion_kind": "element",
       "placeholders": [
         {
           "action": "CLICK",
@@ -82,6 +84,7 @@
     },
     {
       "criterion_index": 5,
+      "criterion_kind": "element",
       "placeholders": [
         {
           "action": "CLICK",
