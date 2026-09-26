@@ -158,6 +158,17 @@ conversation. We do not need a cheap paid tier to bridge it.
 
 **Work.** Build the trial (a time-boxed licence key is enough — no new mechanism).
 
+**Trading entity — decision (2026-09-26). Trade as a sole trader, under the TanCat name.**
+
+- **Reason:** no capital to set up and run a Ltd (incorporation + accountancy).
+- **Surfaces:** © TanCat, no Ltd — already true everywhere. Never name an unincorporated
+  company (the `Cat Tan Operations` defect is already filed in §7).
+- **Reconsider after the first sale**, when revenue can fund incorporation.
+- **Accepted risk:** a sole trader has unlimited personal liability. Recorded, not hidden.
+- **Still open (small):** a short accountant answer on sole-trader invoicing, the VAT threshold,
+  and merchant-of-record duties. This is not the solo-trader-vs-Ltd consultation — that question
+  is now answered by the decision above.
+
 ---
 
 ## 6. Tiers
