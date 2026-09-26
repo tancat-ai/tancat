@@ -18,6 +18,7 @@
   "golden_resolutions": [
     {
       "criterion_index": 0,
+      "criterion_kind": "page",
       "placeholders": [
         {
           "action": "ASSERT",
@@ -57,6 +58,7 @@
     },
     {
       "criterion_index": 2,
+      "criterion_kind": "element",
       "placeholders": [
         {
           "action": "ASSERT",
@@ -100,6 +102,7 @@
     },
     {
       "criterion_index": 5,
+      "criterion_kind": "element",
       "placeholders": [
         {
           "action": "ASSERT",
@@ -138,6 +141,7 @@
     },
     {
       "criterion_index": 7,
+      "criterion_kind": "element",
       "placeholders": [
         {
           "action": "ASSERT",

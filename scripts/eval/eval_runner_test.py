@@ -2,11 +2,14 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from eval_metrics import ResolutionResult, StoryResult
 from eval_runner import (
     EvalRunner,
+    _parse_junit_xml,
+    _parse_per_test_results,
     load_eval_history,
     persist_results,
     run_full_validation,
@@ -67,16 +70,21 @@ class TestRunGeneratedTests:
         # Create a simple passing test
         test_file = tmp_path / "test_passing.py"
         test_file.write_text("def test_always_pass():\n    assert True\n")
-        total, passed, failed, skipped, duration, output = run_generated_tests(test_file, pytest_timeout=15.0)
+        total, passed, failed, skipped, duration, output, per_test = run_generated_tests(test_file, pytest_timeout=15.0)
         assert total >= 1
         assert passed >= 1
         assert failed == 0
+        # B-093 on first principles: the per-test map must come back populated
+        # (JUnit XML). Under xdist, console scraping silently returned {} and
+        # every false green read as zero — this asserts the real source works.
+        assert per_test.get("test_always_pass") == "PASSED"
 
     def test_file_not_found(self, tmp_path: Path) -> None:
         # Non-existent file — pytest returns errors
         test_file = tmp_path / "test_missing.py"
-        total, passed, failed, skipped, duration, output = run_generated_tests(test_file, pytest_timeout=15.0)
+        total, passed, failed, skipped, duration, output, per_test = run_generated_tests(test_file, pytest_timeout=15.0)
         assert total == 0
+        assert per_test == {}
 
 
 # ---------------------------------------------------------------------------
@@ -132,8 +140,10 @@ class TestFullValidation:
         test_file = tmp_path / "test_eval.py"
         test_file.write_text("def test_always_pass():\n    assert True\n")
 
-        def fake_run(test_file: Path, pytest_timeout: float = 120.0) -> tuple[int, int, int, int, float, str]:
-            return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER)
+        def fake_run(
+            test_file: Path, pytest_timeout: float = 120.0
+        ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
+            return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER, {})
 
         monkeypatch.setattr("eval_runner.run_generated_tests", fake_run)
         results = run_full_validation(
@@ -149,6 +159,226 @@ class TestFullValidation:
         summary = HarnessReport(stories=results).to_summary()
         assert "TIMED OUT" in summary
         assert "Tests timed out" in summary
+
+    def test_false_green_is_attributed_to_its_own_test(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Gate 2 (B-093): a false green requires the criterion's OWN test to pass.
+
+        The old story-level rule ("any pass taints every unmatched ASSERT")
+        overcounted: an unmatched ASSERT on a skipped test is an honest skip,
+        not a false green.
+        """
+        golden = {
+            "id": "eval-997",
+            "site": "test",
+            "base_url": "https://example.com",
+            "conditions": ["1. A", "2. B", "3. C"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "placeholders": [
+                        {"action": "ASSERT", "description": "a", "expected_locator": "#a", "tolerance_selectors": []},
+                    ],
+                },
+                {
+                    "criterion_index": 1,
+                    "placeholders": [
+                        {"action": "ASSERT", "description": "b", "expected_locator": "#b", "tolerance_selectors": []},
+                    ],
+                },
+                {
+                    "criterion_index": 2,
+                    "placeholders": [
+                        {"action": "ASSERT", "description": "c", "expected_locator": "#c", "tolerance_selectors": []},
+                    ],
+                },
+            ],
+        }
+        (tmp_path / "eval-997.json").write_text(json.dumps(golden))
+        test_file = tmp_path / "test_eval.py"
+        test_file.write_text("")
+
+        code = (
+            "def test_01_a(page):\n"
+            "    evidence_tracker.assert_visible('#wrong', label='a')\n"
+            "def test_02_b(page):\n"
+            "    evidence_tracker.assert_visible('#wrong', label='b')\n"
+            "def test_03_c(page):\n"
+            "    evidence_tracker.assert_visible('#c', label='c')\n"
+        )
+
+        fake_output = "=== 2 passed, 1 skipped in 1.0s ===\n"
+        fake_per_test = {
+            "test_01_a": "PASSED",
+            "test_02_b": "SKIPPED",
+            "test_03_c": "PASSED",
+        }
+
+        def fake_run(
+            test_file: Path, pytest_timeout: float = 120.0
+        ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
+            return (3, 2, 0, 1, 1.0, fake_output, fake_per_test)
+
+        monkeypatch.setattr("eval_runner.run_generated_tests", fake_run)
+        results = run_full_validation(tmp_path, {"eval-997": code}, test_files={"eval-997": test_file})
+
+        # test_01 passed with the wrong locator -> false green.
+        # test_02 was SKIPPED with the wrong locator -> honest, not counted.
+        # test_03 passed with the right locator -> not counted.
+        assert results[0].tests_false_positive == 1
+
+    def test_failed_regeneration_is_flagged_partial(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Gate-2 measurement integrity (B-093): a story whose regeneration
+        raised must be flagged — its run is partial, not a valid gate score."""
+        golden = {
+            "id": "eval-996",
+            "site": "test",
+            "base_url": "https://example.com",
+            "conditions": ["1. Do X"],
+            "golden_resolutions": [],
+        }
+        (tmp_path / "eval-996.json").write_text(json.dumps(golden))
+
+        class _BoomOrchestrator:
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                pass
+
+            async def run_pipeline(self, *args: Any, **kwargs: Any) -> str:
+                raise TimeoutError("generation timed out")
+
+        monkeypatch.setattr("src.orchestrator.TestOrchestrator", _BoomOrchestrator)
+
+        from eval_runner import EvalRunner
+
+        runner = EvalRunner(
+            dataset_dir=tmp_path,
+            code_dir=tmp_path,
+            db_path=Path(),
+            regenerate=True,
+        )
+        code_map, _ = runner._regenerate_code()
+
+        assert code_map["eval-996"] == ""
+        assert runner.regeneration_failures == ("eval-996",)
+
+
+# ---------------------------------------------------------------------------
+# _parse_per_test_results
+# ---------------------------------------------------------------------------
+
+
+class TestParsePerTestResults:
+    def test_parses_plain_node_lines(self) -> None:
+        out = (
+            "test_eval_001.py::test_01_login[chromium] PASSED   [ 16%]\n"
+            "test_eval_001.py::test_02_cart[chromium] FAILED    [ 33%]\n"
+            "test_eval_001.py::test_03_skip[chromium] SKIPPED   [ 50%]\n"
+        )
+        assert _parse_per_test_results(out) == {
+            "test_01_login": "PASSED",
+            "test_02_cart": "FAILED",
+            "test_03_skip": "SKIPPED",
+        }
+
+    def test_parses_xdist_lines_outcome_before_node_id(self) -> None:
+        """pytest.ini enables -n 4, so this is the shape the harness sees.
+
+        Under xdist the outcome prints BEFORE the node id:
+        ``[gw0] [ 33%] PASSED path::test_01_alpha[1]``.
+        """
+        out = (
+            "[gw0] [ 33%] PASSED test_eval.py::test_01_alpha[chromium] \n"
+            "[gw1] [ 66%] SKIPPED test_eval.py::test_02_beta[chromium] \n"
+            "[gw0] [100%] FAILED test_eval.py::test_03_gamma[chromium] \n"
+        )
+        assert _parse_per_test_results(out) == {
+            "test_01_alpha": "PASSED",
+            "test_02_beta": "SKIPPED",
+            "test_03_gamma": "FAILED",
+        }
+
+    def test_ignores_summary_and_log_lines(self) -> None:
+        out = "=== 1 passed in 0.5s ===\nsome log line\n"
+        assert _parse_per_test_results(out) == {}
+
+
+# ---------------------------------------------------------------------------
+# _parse_junit_xml
+# ---------------------------------------------------------------------------
+
+
+class TestParseJunitXml:
+    def _write(self, tmp_path: Path, body: str) -> Path:
+        xml = tmp_path / "results.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            f'<testsuites><testsuite name="pytest" tests="4">{body}</testsuite></testsuites>',
+            encoding="utf-8",
+        )
+        return xml
+
+    def test_reads_all_three_outcomes_and_strips_param_suffix(self, tmp_path: Path) -> None:
+        xml = self._write(
+            tmp_path,
+            '<testcase name="test_01_login[chromium]" time="0.1" />'
+            '<testcase name="test_02_cart[chromium]" time="0.2"><failure message="boom">t</failure></testcase>'
+            '<testcase name="test_03_skip[chromium]" time="0.0"><skipped message="unresolved" /></testcase>'
+            '<testcase name="test_04_err[chromium]" time="0.0"><error message="err">t</error></testcase>',
+        )
+        assert _parse_junit_xml(xml) == {
+            "test_01_login": "PASSED",
+            "test_02_cart": "FAILED",
+            "test_03_skip": "SKIPPED",
+            "test_04_err": "FAILED",
+        }
+
+    def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
+        assert _parse_junit_xml(tmp_path / "nope.xml") == {}
+
+    def test_malformed_xml_returns_empty(self, tmp_path: Path) -> None:
+        xml = tmp_path / "bad.xml"
+        xml.write_text("<not-xml", encoding="utf-8")
+        assert _parse_junit_xml(xml) == {}
+
+
+class TestMissingPerTestOutcomesFallBackLoudly:
+    def test_unknown_outcomes_use_story_level_rule_not_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A parse failure must never certify a run as clean (B-093).
+
+        With no per-test map, the story-level rule applies: an unmatched
+        ASSERT counts as a false green when the story had any pass. That
+        over-counts rather than silently reporting zero.
+        """
+        golden = {
+            "id": "eval-995",
+            "site": "test",
+            "base_url": "https://example.com",
+            "conditions": ["1. A"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "placeholders": [
+                        {"action": "ASSERT", "description": "a", "expected_locator": "#a", "tolerance_selectors": []},
+                    ],
+                },
+            ],
+        }
+        (tmp_path / "eval-995.json").write_text(json.dumps(golden))
+        test_file = tmp_path / "test_eval.py"
+        test_file.write_text("")
+        code = "def test_01_a(page):\n    evidence_tracker.assert_visible('#wrong', label='a')\n"
+
+        def fake_run(
+            test_file: Path, pytest_timeout: float = 120.0
+        ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
+            # 1 passed in the summary, but NO per-test outcomes parsed.
+            return (1, 1, 0, 0, 1.0, "=== 1 passed in 1.0s ===\n", {})
+
+        monkeypatch.setattr("eval_runner.run_generated_tests", fake_run)
+        results = run_full_validation(tmp_path, {"eval-995": code}, test_files={"eval-995": test_file})
+
+        assert results[0].tests_false_positive == 1
 
 
 # ---------------------------------------------------------------------------
