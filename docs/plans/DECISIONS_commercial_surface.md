@@ -165,9 +165,17 @@ conversation. We do not need a cheap paid tier to bridge it.
   company (the `Cat Tan Operations` defect is already filed in §7).
 - **Reconsider after the first sale**, when revenue can fund incorporation.
 - **Accepted risk:** a sole trader has unlimited personal liability. Recorded, not hidden.
-- **Still open (small):** a short accountant answer on sole-trader invoicing, the VAT threshold,
-  and merchant-of-record duties. This is not the solo-trader-vs-Ltd consultation — that question
-  is now answered by the decision above.
+- **Outstanding, and not a tax question: two things gate the MoR approval.** Lemon Squeezy
+  reviews the storefront before enabling sales, so both of these must work first:
+  1. `hello@tancat.dev` must receive and be able to reply from. Today it only forwards.
+  2. The website must be finished. See section 7 for the copy defects, but verify that list
+     against `landing/index.html` before acting on it: most of its rows already look fixed
+     (no competitor anchors, no placeholder links).
+- **No tax or accounts work before income.** HMRC registration, Self Assessment and the VAT
+  threshold are deferred until the first sale. The Merchant-of-Record route (Lemon Squeezy, see
+  the roadmap's 2026-09-09 session conclusions) is what removes the tax and invoicing question;
+  what remains is ordinary self-employment admin with public documentation, not a professional
+  consultation. Do not re-open this before there is income.
 
 ---
 
