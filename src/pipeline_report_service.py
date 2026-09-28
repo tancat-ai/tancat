@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from src.coverage_utils import build_coverage_analysis
@@ -21,6 +23,10 @@ class PipelineReportBundle:
     local_report_path: str = ""
     jira_report_path: str = ""
     html_report_path: str = ""
+    # B-100: the same rows as machine-readable JSON, so a consumer can read the
+    # per-test verification verdict without scraping the markdown/HTML.
+    local_json: str = ""
+    local_json_path: str = ""
 
 
 class PipelineReportService:
@@ -60,18 +66,30 @@ class PipelineReportService:
         local_report_path = ""
         jira_report_path = ""
         html_report_path = ""
+        local_json = json.dumps(
+            {
+                "generated_at": datetime.now().isoformat(),
+                "coverage": coverage_rows,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        local_json_path = ""
         if package_dir:
             package_path = Path(package_dir)
             package_path.mkdir(parents=True, exist_ok=True)
             local_path = package_path / "report_local.md"
             jira_path = package_path / "report_jira.md"
             html_path = package_path / "report.html"
+            json_path = package_path / "report_local.json"
             local_path.write_text(local_report, encoding="utf-8")
             jira_path.write_text(jira_report, encoding="utf-8")
             html_path.write_text(html_report, encoding="utf-8")
+            json_path.write_text(local_json, encoding="utf-8")
             local_report_path = str(local_path.absolute())
             jira_report_path = str(jira_path.absolute())
             html_report_path = str(html_path.absolute())
+            local_json_path = str(json_path.absolute())
 
         return PipelineReportBundle(
             coverage_rows=coverage_rows,
@@ -81,4 +99,6 @@ class PipelineReportService:
             local_report_path=local_report_path,
             jira_report_path=jira_report_path,
             html_report_path=html_report_path,
+            local_json=local_json,
+            local_json_path=local_json_path,
         )
