@@ -605,3 +605,82 @@ class TestSameSiteStoriesDoNotCollide:
         assert test_files["eval-007"] == seven
         assert test_files["eval-008"] == eight
         assert test_files["eval-007"] != test_files["eval-008"]
+
+
+# ---------------------------------------------------------------------------
+# B-100: the runner reads the pipeline verdicts instead of guessing
+# ---------------------------------------------------------------------------
+
+
+def _verdict_golden(story_id: str) -> dict[str, Any]:
+    return {
+        "id": story_id,
+        "site": "test",
+        "base_url": "https://example.com",
+        "conditions": ["1. Backpack in cart"],
+        "golden_resolutions": [
+            {
+                "criterion_index": 0,
+                "placeholders": [
+                    {
+                        "action": "ASSERT",
+                        "description": "backpack item in cart",
+                        "expected_locator": "#remove-sauce-labs-backpack",
+                        "tolerance_selectors": [],
+                    },
+                ],
+            },
+        ],
+    }
+
+
+_VERDICT_CODE = "def test_01_a(page):\n    evidence_tracker.assert_visible('#pack', label='backpack')\n"
+
+
+class TestVerdictMap:
+    def test_run_static_validation_uses_the_verdict_map(self, tmp_path: Path) -> None:
+        (tmp_path / "eval-998.json").write_text(json.dumps(_verdict_golden("eval-998")))
+
+        results = run_static_validation(
+            tmp_path,
+            {"eval-998": _VERDICT_CODE},
+            verdict_map={"eval-998": [{"status": "verified_by_element"}]},
+        )
+
+        assert results[0].resolutions[0].matched is False  # gate 1 strict
+        assert results[0].resolutions[0].verification == "subject"
+        assert results[0].resolutions[0].verification_reason == ""
+
+    def test_absent_verdict_file_reads_as_unverified_with_a_reason(self, tmp_path: Path) -> None:
+        (tmp_path / "eval-997.json").write_text(json.dumps(_verdict_golden("eval-997")))
+        runner = EvalRunner(
+            dataset_dir=tmp_path,
+            code_dir=tmp_path,
+            db_path=tmp_path / "test.sqlite",
+            test_output_dir=tmp_path / "out",
+        )
+
+        verdict_map = runner._load_verdict_map()
+        results = run_static_validation(tmp_path, {"eval-997": _VERDICT_CODE}, verdict_map=verdict_map)
+
+        assert verdict_map == {}
+        assert results[0].resolutions[0].verification == "unverified"
+        assert "no verification verdict" in results[0].resolutions[0].verification_reason
+
+    def test_verdict_file_round_trips_through_the_runner(self, tmp_path: Path) -> None:
+        dataset_dir = tmp_path / "dataset"
+        dataset_dir.mkdir()
+        (dataset_dir / "eval-996.json").write_text(
+            json.dumps({"id": "eval-996", "site": "test", "conditions": ["1. X"], "golden_resolutions": []})
+        )
+        runner = EvalRunner(
+            dataset_dir=dataset_dir,
+            code_dir=tmp_path,
+            db_path=tmp_path / "test.sqlite",
+            test_output_dir=tmp_path / "out",
+        )
+        runner._verdict_map = {"eval-996": [{"status": "verified_by_element", "reason": ""}]}
+
+        runner._persist_verdicts()
+
+        assert runner._load_verdict_map() == {"eval-996": [{"status": "verified_by_element", "reason": ""}]}
