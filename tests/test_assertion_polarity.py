@@ -180,6 +180,7 @@ async def test_batch_resolve_applies_polarity() -> None:
     placeholder = SimpleNamespace(line_number=5, token="{{ASSERT:popup closed}}")
     line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]] = {}
     journey_unresolved: dict[str, list[str]] = {}
+    journey_unresolved_keys: dict[str, set[tuple[int, str]]] = {}
 
     await orchestrator._batch_resolve_deferred_asserts(
         deferred_asserts=[
@@ -198,6 +199,7 @@ async def test_batch_resolve_applies_polarity() -> None:
         fallback_url="https://example.com",
         line_resolutions=line_resolutions,
         journey_unresolved=journey_unresolved,
+        journey_unresolved_keys=journey_unresolved_keys,
         journey_name="test_01",
     )
 

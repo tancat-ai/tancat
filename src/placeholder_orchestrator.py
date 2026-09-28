@@ -564,6 +564,9 @@ class PlaceholderOrchestrator:
         observed_trails: dict[str, ObservedTrail] | None = None,
     ) -> str:
         """Resolve placeholders step by step while tracking the active page for each test."""
+        # B-097 charge 2: clear at entry so a run that raises mid-way can never
+        # leave the PREVIOUS run's counts on the instance.
+        self._test_resolution_counts = []
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
         lines = skeleton_code.splitlines()
         line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]] = {}
@@ -573,6 +576,10 @@ class PlaceholderOrchestrator:
 
         observed_trails = observed_trails or {}
         journey_unresolved: dict[str, list[str]] = {}
+        # B-097 charge 1: the placeholder occurrences the consolidated skip will
+        # cover. Kept per occurrence (a set of (line, token) keys) so a deferred
+        # assert that fails two passes is not counted twice.
+        journey_unresolved_keys: dict[str, set[tuple[int, str]]] = {}
         # AI-052: tokens skipped under strict scope must never reach the
         # all-pages batch fallback below — that would resurrect exactly the
         # cross-page locator this fix removes.
@@ -932,6 +939,9 @@ class PlaceholderOrchestrator:
                             )
                         else:
                             journey_unresolved[journey.test_name].append(description)
+                            journey_unresolved_keys.setdefault(journey.test_name, set()).add(
+                                (placeholder.line_number, placeholder.token)
+                            )
                     else:
                         line_resolutions.setdefault(placeholder.line_number, []).append(
                             (
@@ -990,6 +1000,7 @@ class PlaceholderOrchestrator:
                     fallback_url=fallback_url,
                     line_resolutions=line_resolutions,
                     journey_unresolved=journey_unresolved,
+                    journey_unresolved_keys=journey_unresolved_keys,
                     journey_name=journey.test_name,
                     strict_scope=bool(trail_steps),
                 )
@@ -1072,6 +1083,7 @@ class PlaceholderOrchestrator:
                     journey_name = self._find_journey_for_line(use.line_number, journeys)
                     if journey_name:
                         journey_unresolved.setdefault(journey_name, []).append(description)
+                        journey_unresolved_keys.setdefault(journey_name, set()).add((use.line_number, use.token))
 
         # Handle GOTO/URL placeholders individually
         for use in all_placeholder_uses:
@@ -1151,9 +1163,21 @@ class PlaceholderOrchestrator:
             final_lines.append(updated_line)
 
         # 5. Insert consolidated pytest.skip() per journey.
-        # B-097: the skip reason is the source of truth for the counts. Record
-        # them before the emitter so the report can name the resolved steps.
-        self._test_resolution_counts = build_test_resolution_counts(journeys, journey_unresolved)
+        # B-097 charge 1: the count must match the code actually emitted. An
+        # occurrence is unresolved when the consolidated skip covers it OR its
+        # replacement line is a surviving per-line pytest.skip(...). Page-level
+        # asserts keep a skip VALUE but the emitter overrides them into real
+        # structural checks, so they are NOT counted here.
+        unresolved_occurrences: dict[str, set[tuple[int, str]]] = {
+            name: set(keys) for name, keys in journey_unresolved_keys.items()
+        }
+        for line_number, replacements in line_resolutions.items():
+            for token, action, resolved_value, description, _fill, _url, _assertion in replacements:
+                if "pytest.skip" in resolved_value and not _is_page_level_assert(action, description):
+                    owner = self._find_journey_for_line(line_number, journeys)
+                    if owner:
+                        unresolved_occurrences.setdefault(owner, set()).add((line_number, token))
+        self._test_resolution_counts = build_test_resolution_counts(journeys, unresolved_occurrences)
         counts_by_test = {counts.test_name: counts for counts in self._test_resolution_counts}
         final_lines = insert_consolidated_skips(
             final_lines,
@@ -1179,6 +1203,7 @@ class PlaceholderOrchestrator:
         fallback_url: str | None,
         line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]],
         journey_unresolved: dict[str, list[str]],
+        journey_unresolved_keys: dict[str, set[tuple[int, str]]],
         journey_name: str,
         strict_scope: bool = False,
     ) -> None:
@@ -1203,6 +1228,10 @@ class PlaceholderOrchestrator:
                 # all-pages cross-page match.
                 for da in group:
                     journey_unresolved.setdefault(journey_name, []).append(da["description"])
+                    placeholder = da["placeholder"]
+                    journey_unresolved_keys.setdefault(journey_name, set()).add(
+                        (placeholder.line_number, placeholder.token)
+                    )
                 continue
             pages_to_search = pages_data if pages_data else scraped_data
 
@@ -1297,6 +1326,9 @@ class PlaceholderOrchestrator:
                         )
                     else:
                         journey_unresolved.setdefault(journey_name, []).append(description)
+                        journey_unresolved_keys.setdefault(journey_name, set()).add(
+                            (placeholder.line_number, placeholder.token)
+                        )
 
     # ═════════════════════════════════════════════════════════════
     # Resolution engine
