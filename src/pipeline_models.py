@@ -99,6 +99,37 @@ class TestJourney:
 
 
 @dataclass(frozen=True)
+class TestResolutionCounts:
+    """Resolved/unresolved placeholder counts for one generated test (B-097).
+
+    When any placeholder in a test is unresolved, the emitter writes one
+    ``pytest.skip()`` at the top of the test, which also hides every step that
+    DID resolve. These counts carry that hidden work beside the test's outcome,
+    so a partially resolved test does not read as if nothing ran.
+    """
+
+    test_name: str
+    resolved: int
+    unresolved: int
+
+    __test__ = False
+
+    @property
+    def total(self) -> int:
+        """Total placeholders seen in this test."""
+        return self.resolved + self.unresolved
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly representation."""
+        return {
+            "test_name": self.test_name,
+            "resolved": self.resolved,
+            "unresolved": self.unresolved,
+            "total": self.total,
+        }
+
+
+@dataclass(frozen=True)
 class ScrapedPage:
     """Metadata for one scraped page used by the pipeline."""
 

@@ -31,7 +31,13 @@ from src.element_matcher import ElementMatcher
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.page_object_builder import PageObjectBuilder
-from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
+from src.pipeline_models import (
+    GeneratedPageObject,
+    PageRequirement,
+    ScrapedPage,
+    TestJourney,
+    TestResolutionCounts,
+)
 from src.placeholder_resolver import PlaceholderResolver
 from src.pom_helpers import (
     build_page_object_artifacts,
@@ -55,6 +61,7 @@ from src.semantic_candidate_ranker import (
     SemanticCandidateRanker,
 )
 from src.skip_manager import (
+    build_test_resolution_counts,
     insert_consolidated_skips,
     remove_old_placeholder_skips,
     remove_raw_placeholder_lines,
@@ -210,6 +217,13 @@ class PlaceholderOrchestrator:
             generator, timeout=resolution_timeout, enable_thinking=enable_thinking
         )
         self._rag_retriever = rag_retriever
+        # B-097: per-test resolved/unresolved counts for the most recent run.
+        self._test_resolution_counts: list[TestResolutionCounts] = []
+
+    @property
+    def test_resolution_counts(self) -> list[TestResolutionCounts]:
+        """Return per-test resolved/unresolved placeholder counts (B-097)."""
+        return list(self._test_resolution_counts)
 
     @property
     def pom_mode(self) -> bool:
@@ -1137,11 +1151,16 @@ class PlaceholderOrchestrator:
             final_lines.append(updated_line)
 
         # 5. Insert consolidated pytest.skip() per journey.
+        # B-097: the skip reason is the source of truth for the counts. Record
+        # them before the emitter so the report can name the resolved steps.
+        self._test_resolution_counts = build_test_resolution_counts(journeys, journey_unresolved)
+        counts_by_test = {counts.test_name: counts for counts in self._test_resolution_counts}
         final_lines = insert_consolidated_skips(
             final_lines,
             journeys,
             journey_unresolved,
             lines,
+            test_counts=counts_by_test,
         )
 
         # 6. Remove old per-placeholder skip lines.
