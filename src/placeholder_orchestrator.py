@@ -37,6 +37,7 @@ from src.pipeline_models import (
     ScrapedPage,
     TestJourney,
     TestResolutionCounts,
+    TestVerificationVerdict,
 )
 from src.placeholder_resolver import PlaceholderResolver
 from src.pom_helpers import (
@@ -75,6 +76,7 @@ from src.url_utils import (
     heuristic_url_from_description,
     is_stateful_cart_checkout_path,
 )
+from src.verification_strength import ResolvedAssertion, compute_test_verification_verdicts
 
 logger = logging.getLogger(__name__)
 
@@ -219,11 +221,18 @@ class PlaceholderOrchestrator:
         self._rag_retriever = rag_retriever
         # B-097: per-test resolved/unresolved counts for the most recent run.
         self._test_resolution_counts: list[TestResolutionCounts] = []
+        # B-100: per-test verification strength for the most recent run.
+        self._test_verification_verdicts: list[TestVerificationVerdict] = []
 
     @property
     def test_resolution_counts(self) -> list[TestResolutionCounts]:
         """Return per-test resolved/unresolved placeholder counts (B-097)."""
         return list(self._test_resolution_counts)
+
+    @property
+    def test_verification_verdicts(self) -> list[TestVerificationVerdict]:
+        """Return what each generated test provably checked (B-100)."""
+        return list(self._test_verification_verdicts)
 
     @property
     def pom_mode(self) -> bool:
@@ -567,6 +576,7 @@ class PlaceholderOrchestrator:
         # B-097 charge 2: clear at entry so a run that raises mid-way can never
         # leave the PREVIOUS run's counts on the instance.
         self._test_resolution_counts = []
+        self._test_verification_verdicts = []
         duplicate_selectors = self._get_duplicate_selectors(scraped_data)
         lines = skeleton_code.splitlines()
         line_resolutions: dict[int, list[tuple[str, str, str, str, str, str | None, str | None]]] = {}
@@ -1179,6 +1189,32 @@ class PlaceholderOrchestrator:
                         unresolved_occurrences.setdefault(owner, set()).add((line_number, token))
         self._test_resolution_counts = build_test_resolution_counts(journeys, unresolved_occurrences)
         counts_by_test = {counts.test_name: counts for counts in self._test_resolution_counts}
+        # B-100: classify what each test proved from the same resolution facts --
+        # the page each ASSERT resolved against and whether the emitted check is
+        # an element check or a page arrival. Carried into the evidence bundle.
+        assertions_by_test: dict[str, list[ResolvedAssertion]] = {}
+        for line_number, replacements in line_resolutions.items():
+            owner = self._find_journey_for_line(line_number, journeys)
+            if not owner:
+                continue
+            for _token, action, resolved_value, description, _fill, page_url, assertion_type in replacements:
+                if action != "ASSERT":
+                    continue
+                assertions_by_test.setdefault(owner, []).append(
+                    ResolvedAssertion(
+                        description=description,
+                        resolved_value=resolved_value,
+                        assertion_type=assertion_type,
+                        page_url=page_url,
+                        is_page_level=_is_page_level_assert(action, description),
+                    )
+                )
+        self._test_verification_verdicts = compute_test_verification_verdicts(
+            journeys,
+            assertions_by_test,
+            journey_unresolved,
+            counts_by_test,
+        )
         final_lines = insert_consolidated_skips(
             final_lines,
             journeys,
