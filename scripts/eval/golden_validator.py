@@ -308,156 +308,53 @@ def _same_url_without_slash(a: str, b: str) -> bool:
     return a.rstrip("/") == b.rstrip("/")
 
 
-# Page-level containers: an assertion against one of these passes on any
-# page of a broken app, so it can never verify a criterion (B-093 gate 2).
-# Page-specific containers (``#cart_contents_container``) are NOT in this
-# list — those are legitimate page markers.
-_GLOBAL_CONTAINERS = (
-    "body",
-    "html",
-    "main",
-    "#content",
-    "#root",
-    "#app",
-    "#page",
-    ".container",
-)
+# B-100 part 3: verification strength comes from the pipeline's own emit-time
+# verdict, not from a harness guess. The harness used to re-derive "is this
+# element distinctive enough?" from the emitted selector; the resolver already
+# knows what it resolved and why. The golden-match leg is kept: if the
+# criterion's own test asserts the human-approved locator, that is the
+# strongest result regardless of the verdict.
+#
+# Harness vocabulary (unchanged): golden / subject / page / unverified.
+# ``subject`` now means "the pipeline reported verified_by_element" instead of
+# "a distinctive word happened to appear in the emitted selector".
+_STATUS_TO_VERIFICATION: dict[str, str] = {
+    "verified_by_element": "subject",
+    "verified_by_page_arrival": "page",
+    "unverified": "unverified",
+}
 
-# Criterion words so common they carry no subject identity. Matching one of
-# these would bless a wrong element: "order success message" must NOT accept
-# ``#place-order`` just because both say "order".
-_SUBJECT_STOPWORDS = frozenset(
-    {
-        "appears",
-        "appear",
-        "available",
-        "complete",
-        "completed",
-        "confirm",
-        "confirmation",
-        "content",
-        "contents",
-        "correct",
-        "correctly",
-        "details",
-        "display",
-        "displayed",
-        "displays",
-        "element",
-        "elements",
-        "expected",
-        "information",
-        "loaded",
-        "loading",
-        "message",
-        "messages",
-        "page",
-        "pages",
-        "present",
-        "screen",
-        "section",
-        "shown",
-        "shows",
-        "success",
-        "successful",
-        "successfully",
-        "update",
-        "updated",
-        "verify",
-        "verified",
-        "verification",
-        "visible",
-    }
-)
+# Shown when a criterion has no product verdict. Never leave the reason blank:
+# a reader would assume the criterion was checked.
+_NO_VERDICT_REASON = "no verification verdict was emitted for this criterion"
 
 
-def _is_global_container(locator: str) -> bool:
-    """True when a locator targets a page-level container (B-093 gate 2)."""
-    if not locator:
-        return False
-    low = locator.strip().lower()
-    for c in _GLOBAL_CONTAINERS:
-        if low == c:
-            return True
-        if low.startswith(c) and len(low) > len(c) and low[len(c)] in ":[ >.#":
-            return True
-    return False
+def _classify_verification(matched: bool, verdict: dict[str, Any] | None) -> str:
+    """Verification strength for one criterion, from the product verdict.
 
-
-# Success/failure polarity markers. A criterion that expects success must
-# never be "verified" by an error element: ``#transfer-error`` shares the word
-# "transfer" with "transfer success message" but is the opposite outcome.
-_POSITIVE_POLARITY = ("success", "confirm", "thank", "complete", "done", "updated", "added")
-_NEGATIVE_POLARITY = ("error", "fail", "invalid", "denied", "warning", "expired", "rejected")
-
-
-def _subject_tokens(description: str) -> set[str]:
-    """Distinctive words of a criterion — >= 6 chars and not a stopword."""
-    return {t for t in re.findall(r"[a-z]{6,}", description.lower()) if t not in _SUBJECT_STOPWORDS}
-
-
-def _polarity(text: str) -> str | None:
-    """ "positive" / "negative" / None from success-or-failure wording."""
-    low = text.lower()
-    positive = any(p in low for p in _POSITIVE_POLARITY)
-    negative = any(n in low for n in _NEGATIVE_POLARITY)
-    if positive and not negative:
-        return "positive"
-    if negative and not positive:
-        return "negative"
-    return None
-
-
-def _contradicts_polarity(candidate: str, expected_text: str) -> bool:
-    """True when a candidate's outcome polarity contradicts what is expected."""
-    want = _polarity(expected_text)
-    got = _polarity(candidate)
-    return want is not None and got is not None and want != got
-
-
-def _classify_verification(
-    pool: list[dict[str, str]],
-    gp: dict[str, Any],
-    criterion_kind: str,
-    matched: bool,
-) -> str:
-    """How strongly the criterion's own test verified this ASSERT placeholder.
-
-    golden     — the generated locator is the human-approved answer (or a
-                 tolerated equivalent).
-    page       — a 'page' criterion verified by a URL assertion on the page
-                 the criterion lands on (golden ``expected_page``).
-    subject    — a specific element (never a global container) whose locator
-                 carries a distinctive word of the criterion ("backpack").
-    unverified — everything else, including assertions against global
-                 containers and wrong-page URL checks.
+    golden     - the criterion's own test asserts the human-approved locator.
+    subject    - the pipeline reported ``verified_by_element``.
+    page       - the pipeline reported ``verified_by_page_arrival``.
+    unverified - the pipeline reported ``unverified``, or no verdict exists
+                 (a missing verdict never assumes the best case).
     """
     if matched:
         return "golden"
+    if not verdict:
+        return "unverified"
+    return _STATUS_TO_VERIFICATION.get(str(verdict.get("status") or ""), "unverified")
 
-    description = str(gp.get("description", ""))
-    expected_text = f"{description} {gp.get('expected_locator', '')}"
 
-    if criterion_kind == "page":
-        want = str(gp.get("expected_page") or "")
-        if want:
-            for gl in pool:
-                got = _to_have_url_arg(gl["locator"])
-                if got and _same_url_without_slash(got, want) and not _contradicts_polarity(got, expected_text):
-                    return "page"
-
-    tokens = _subject_tokens(description)
-    if tokens:
-        for gl in pool:
-            if gl["action"] != "ASSERT" or _is_global_container(gl["locator"]):
-                continue
-            if _contradicts_polarity(gl["locator"], expected_text):
-                continue
-            hay = gl["locator"].lower()
-            if any(t in hay for t in tokens):
-                return "subject"
-
-    return "unverified"
+def _verification_reason(matched: bool, verdict: dict[str, Any] | None) -> str:
+    """Why a criterion is unverified; empty when it was verified."""
+    if matched:
+        return ""
+    if not verdict:
+        return _NO_VERDICT_REASON
+    if str(verdict.get("status") or "") != "unverified":
+        return ""
+    reason = str(verdict.get("reason") or "").strip()
+    return reason or "the pipeline reported this criterion unverified"
 
 
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
@@ -510,6 +407,7 @@ def _match_generated_to_golden(
     generated_locators: list[dict[str, str]],
     golden_placeholders: list[dict[str, Any]],
     per_test_locators: list[list[dict[str, str]]] | None = None,
+    verdicts: list[dict[str, Any]] | None = None,
 ) -> list[ResolutionResult]:
     """Match each golden placeholder against generated locators.
 
@@ -527,7 +425,6 @@ def _match_generated_to_golden(
 
     for gp in golden_placeholders:
         idx = gp.get("criterion_index")
-        criterion_kind = str(gp.get("criterion_kind") or "element")
 
         # Gate 1 (resolver precision) is measured over the WHOLE file: if the
         # golden locator appears anywhere in the generated code, the resolver
@@ -581,12 +478,14 @@ def _match_generated_to_golden(
             gl["action"] == gp["action"] and _locators_match(gl["locator"], gp["expected_locator"], tolerances)
             for gl in own_pool
         )
-        verification = _classify_verification(
-            own_pool,
-            gp,
-            criterion_kind,
-            own_golden,
-        )
+        # B-100 part 3: the pipeline's own verdict for this criterion (if the
+        # harness has one) decides element / page-arrival / unverified. A
+        # missing verdict is unverified with a reason, never a best-case guess.
+        verdict: dict[str, Any] | None = None
+        if verdicts is not None and isinstance(idx, int) and 0 <= idx < len(verdicts):
+            verdict = verdicts[idx]
+        verification = _classify_verification(own_golden, verdict)
+        verification_reason = _verification_reason(own_golden, verdict)
 
         if best is None:
             results.append(
@@ -599,10 +498,12 @@ def _match_generated_to_golden(
                     matched=False,
                     criterion_index=idx,
                     verification=verification,
+                    verification_reason=verification_reason,
                 )
             )
         else:
             best.verification = verification
+            best.verification_reason = verification_reason
             results.append(best)
 
     return results
@@ -612,8 +513,13 @@ def validate_story(
     code: str,
     golden: dict[str, Any],
     generation_duration_s: float = 0.0,
+    verdicts: list[dict[str, Any]] | None = None,
 ) -> StoryResult:
     """Validate a single story's generated code against its golden key.
+
+    ``verdicts`` is the pipeline's per-criterion verification verdict (B-100),
+    in criterion order. When absent, gate 2 reports every non-golden criterion
+    as unverified with a reason instead of guessing.
 
     Returns a StoryResult with all resolution outcomes.
     """
@@ -625,7 +531,7 @@ def validate_story(
     total_criteria = len(golden.get("conditions", []))
     criteria_with_skeletons = test_count
 
-    resolutions = _match_generated_to_golden(generated, golden_ph, generated_per_test)
+    resolutions = _match_generated_to_golden(generated, golden_ph, generated_per_test, verdicts)
 
     return StoryResult(
         story_id=golden["id"],
@@ -638,10 +544,35 @@ def validate_story(
     )
 
 
+def load_verdict_map(path: Path) -> dict[str, list[dict[str, Any]]]:
+    """Load the harness verification verdicts written beside the tests (B-100).
+
+    The harness writes one file per run:
+    ``{"generated_at": ..., "stories": {"eval-001": [verdict, ...]}}``. A
+    missing or malformed file returns ``{}`` -- every story then reports
+    ``unverified`` with a reason, which is the honest answer.
+    """
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError, OSError:
+        return {}
+    stories = payload.get("stories")
+    if not isinstance(stories, dict):
+        return {}
+    return {
+        str(story_id): [verdict for verdict in verdicts if isinstance(verdict, dict)]
+        for story_id, verdicts in stories.items()
+        if isinstance(verdicts, list)
+    }
+
+
 def validate_dataset(
     dataset_dir: Path,
     code_map: dict[str, str],
     durations: dict[str, float] | None = None,
+    verdict_map: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[StoryResult]:
     """Validate all stories in a dataset directory against captured code.
 
@@ -649,12 +580,15 @@ def validate_dataset(
         dataset_dir: Path to scripts/eval/dataset/
         code_map: dict mapping story_id (e.g. 'eval-001') to generated code string
         durations: optional dict mapping story_id to generation duration in seconds
+        verdict_map: optional dict mapping story_id to its per-criterion
+            verification verdicts (B-100). Missing stories report unverified.
 
     Returns:
         List of StoryResult, one per story.
     """
     results: list[StoryResult] = []
     durations = durations or {}
+    verdict_map = verdict_map or {}
 
     for golden_file in sorted(dataset_dir.glob("*.json")):
         golden = load_golden_key(golden_file)
@@ -676,6 +610,7 @@ def validate_dataset(
                 code=code,
                 golden=golden,
                 generation_duration_s=durations.get(story_id, 0.0),
+                verdicts=verdict_map.get(story_id),
             )
         )
 
