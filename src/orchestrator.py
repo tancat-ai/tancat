@@ -21,7 +21,7 @@ from src.journey_scraper import (
     execute_journey,
 )
 from src.page_object_builder import PageObjectBuilder
-from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney
+from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney, TestResolutionCounts
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
 from src.pom_helpers import deduplicate_pom_lines
@@ -59,6 +59,10 @@ class PipelineRunResult:
     scraped_page_records: list[ScrapedPage] = field(default_factory=list)
     generated_page_objects: list[GeneratedPageObject] = field(default_factory=list)
     unresolved_placeholders: list[str] = field(default_factory=list)
+    # B-097: per-test resolved/unresolved placeholder counts. A test with any
+    # unresolved placeholder is still skipped as a whole (the skip is kept),
+    # but these counts let the report show the steps that DID resolve.
+    test_resolution_counts: list[TestResolutionCounts] = field(default_factory=list)
     pages_visited: list[str] = field(default_factory=list)
     observed_trails: dict[str, ObservedTrail] = field(default_factory=dict)
     pom_mode: bool = False
@@ -658,6 +662,7 @@ class TestOrchestrator:
             scraped_page_records=scraped_page_records,
             generated_page_objects=generated_page_objects,
             unresolved_placeholders=unresolved,
+            test_resolution_counts=self._placeholder_orchestrator.test_resolution_counts,
             pages_visited=pages_visited,
             observed_trails=observed_trails,
             pom_mode=self._pom_mode,
