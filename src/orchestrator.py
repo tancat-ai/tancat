@@ -21,7 +21,14 @@ from src.journey_scraper import (
     execute_journey,
 )
 from src.page_object_builder import PageObjectBuilder
-from src.pipeline_models import GeneratedPageObject, PageRequirement, ScrapedPage, TestJourney, TestResolutionCounts
+from src.pipeline_models import (
+    GeneratedPageObject,
+    PageRequirement,
+    ScrapedPage,
+    TestJourney,
+    TestResolutionCounts,
+    TestVerificationVerdict,
+)
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
 from src.pom_helpers import deduplicate_pom_lines
@@ -63,6 +70,10 @@ class PipelineRunResult:
     # unresolved placeholder is still skipped as a whole (the skip is kept),
     # but these counts let the report show the steps that DID resolve.
     test_resolution_counts: list[TestResolutionCounts] = field(default_factory=list)
+    # B-100: per-test verification strength -- "verified by element" / "verified
+    # by page arrival" / "unverified (+ reason)" -- decided at emit time and
+    # carried into the evidence bundle instead of left for a reader to guess.
+    test_verification_verdicts: list[TestVerificationVerdict] = field(default_factory=list)
     pages_visited: list[str] = field(default_factory=list)
     observed_trails: dict[str, ObservedTrail] = field(default_factory=dict)
     pom_mode: bool = False
@@ -663,6 +674,7 @@ class TestOrchestrator:
             generated_page_objects=generated_page_objects,
             unresolved_placeholders=unresolved,
             test_resolution_counts=self._placeholder_orchestrator.test_resolution_counts,
+            test_verification_verdicts=self._placeholder_orchestrator.test_verification_verdicts,
             pages_visited=pages_visited,
             observed_trails=observed_trails,
             pom_mode=self._pom_mode,
