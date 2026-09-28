@@ -181,3 +181,71 @@ def match_evidence_to_test(
             return val
 
     return None
+
+
+def load_verification_strength(package_dir: str | Path) -> dict[str, dict[str, Any]]:
+    """Load the emitted per-test verification verdicts (B-100).
+
+    Reads ``<package_dir>/verification_strength.json`` written by
+    ``PipelineArtifactWriter`` and returns it keyed by test name. A missing or
+    malformed file returns ``{}`` -- an older package without the emit-side
+    verdict is not an error.
+
+    Args:
+        package_dir: Test package directory (the directory holding the
+            generated ``test_*.py`` and ``verification_strength.json``).
+
+    Returns:
+        Dict mapping test name to its verdict dict.
+    """
+    path = Path(package_dir) / "verification_strength.json"
+    if not path.is_file():
+        logger.debug("No verification_strength.json at %s", path)
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load %s: %s", path.name, exc)
+        return {}
+    verdicts = payload.get("verdicts", [])
+    if not isinstance(verdicts, list):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for verdict in verdicts:
+        if isinstance(verdict, dict) and verdict.get("test_name"):
+            result[str(verdict["test_name"])] = verdict
+    return result
+
+
+def match_verification_to_test(
+    verdicts: dict[str, dict[str, Any]],
+    test_name: str,
+) -> dict[str, Any] | None:
+    """Find the verdict for a runtime test name (B-100).
+
+    Mirrors :func:`match_evidence_to_test`: pytest emits ``test_01_x[chromium]``
+    while the pipeline's verdict key is ``test_01_x``.
+    """
+    if test_name in verdicts:
+        return verdicts[test_name]
+
+    base_name = test_name.split("[", 1)[0]
+    if base_name in verdicts:
+        return verdicts[base_name]
+
+    for key, verdict in verdicts.items():
+        if key.startswith(base_name):
+            return verdict
+
+    return None
+
+
+def get_verification(evidence: dict[str, Any]) -> dict[str, Any]:
+    """Return the B-100 verification verdict from an evidence payload.
+
+    Returns ``{}`` when the sidecar predates the field, so report rendering
+    stays backward compatible.
+    """
+    test_info = evidence.get("test", {})
+    verification = test_info.get("verification", {})
+    return verification if isinstance(verification, dict) else {}
