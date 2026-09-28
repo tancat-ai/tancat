@@ -111,10 +111,7 @@ class PipelineRunService:
 
             UsageMeter().assert_run_allowed()
         except FreeTierLimitError as exc:
-            raise FreeTierLimitError(
-                f"{exc}\nSet AITEST_ENFORCE_FREE_TIER=0 to disable the free-tier cap "
-                "(self-hosted deployments), or install a paid license to lift it."
-            ) from exc
+            raise FreeTierLimitError(f"{exc}\nInstall a paid license to lift the cap.") from exc
         failed_nodeids = get_failed_nodeids(previous_run.results) if rerun_failed_only and previous_run else []
         pytest_command = build_pytest_run_command(saved_path, failed_nodeids=failed_nodeids or None)
         command = [sys.executable, "-m", *pytest_command]
