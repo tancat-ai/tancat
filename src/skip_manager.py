@@ -96,29 +96,33 @@ def remove_raw_placeholder_lines(lines: list[str]) -> list[str]:
 
 def build_test_resolution_counts(
     journeys: list[TestJourney],
-    journey_unresolved: dict[str, list[str]],
+    unresolved_occurrences: dict[str, set[tuple[int, str]]],
 ) -> list[TestResolutionCounts]:
     """Return per-test resolved/unresolved placeholder counts (B-097).
 
-    The skip reason is the source of truth: a placeholder listed under a
-    journey's consolidated ``pytest.skip()`` is unresolved (the skip hides it),
-    and every other placeholder in that test is resolved. This stays consistent
-    with the emitted message even when the batch fallback also emits a step for
-    a placeholder the per-journey pass had marked unresolved.
+    ``unresolved_occurrences`` is built from every place the resolver decided a
+    placeholder would emit a skip: the consolidated per-test skip AND the
+    surviving per-line ``pytest.skip(...)`` the batch fallback writes. The unit
+    is the placeholder occurrence, not the description: two placeholders that
+    share a description are two steps. A key recorded twice (a deferred assert
+    that fails both the deferred pass and the all-pages fallback) still counts
+    once, so the count can never overstate resolution.
 
     Args:
         journeys: Parsed test functions, one per criterion.
-        journey_unresolved: Test name -> unresolved placeholder descriptions,
-            exactly the input that decides whether a skip is written.
+        unresolved_occurrences: Test name -> ``(line_number, token)`` keys whose
+            replacement line is a skip, or that the consolidated skip covers.
 
     Returns:
         One :class:`TestResolutionCounts` per journey, in journey order.
     """
     counts: list[TestResolutionCounts] = []
     for journey in journeys:
+        unresolved_keys = unresolved_occurrences.get(journey.test_name, set())
         total = len(journey.placeholders)
-        unresolved = len(dict.fromkeys(journey_unresolved.get(journey.test_name, [])))
-        unresolved = min(unresolved, total)
+        unresolved = sum(
+            1 for placeholder in journey.placeholders if (placeholder.line_number, placeholder.token) in unresolved_keys
+        )
         counts.append(
             TestResolutionCounts(
                 test_name=journey.test_name,
