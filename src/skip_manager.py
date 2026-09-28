@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from src.pipeline_models import TestJourney
+from src.pipeline_models import TestJourney, TestResolutionCounts
 
 
 def remove_old_placeholder_skips(
@@ -94,16 +94,69 @@ def remove_raw_placeholder_lines(lines: list[str]) -> list[str]:
     return result_lines
 
 
+def build_test_resolution_counts(
+    journeys: list[TestJourney],
+    journey_unresolved: dict[str, list[str]],
+) -> list[TestResolutionCounts]:
+    """Return per-test resolved/unresolved placeholder counts (B-097).
+
+    The skip reason is the source of truth: a placeholder listed under a
+    journey's consolidated ``pytest.skip()`` is unresolved (the skip hides it),
+    and every other placeholder in that test is resolved. This stays consistent
+    with the emitted message even when the batch fallback also emits a step for
+    a placeholder the per-journey pass had marked unresolved.
+
+    Args:
+        journeys: Parsed test functions, one per criterion.
+        journey_unresolved: Test name -> unresolved placeholder descriptions,
+            exactly the input that decides whether a skip is written.
+
+    Returns:
+        One :class:`TestResolutionCounts` per journey, in journey order.
+    """
+    counts: list[TestResolutionCounts] = []
+    for journey in journeys:
+        total = len(journey.placeholders)
+        unresolved = len(dict.fromkeys(journey_unresolved.get(journey.test_name, [])))
+        unresolved = min(unresolved, total)
+        counts.append(
+            TestResolutionCounts(
+                test_name=journey.test_name,
+                resolved=total - unresolved,
+                unresolved=unresolved,
+            )
+        )
+    return counts
+
+
+def _counts_suffix(counts: TestResolutionCounts | None) -> str:
+    """Return the B-097 count suffix for a skip message, or '' when unknown.
+
+    No closing parenthesis: naive parsers that read ``pytest.skip((.*?))``
+    (e.g. the skipped-test UI panel) would stop at the first ``)`` and
+    truncate the message.
+    """
+    if counts is None or counts.total == 0:
+        return ""
+    return f". {counts.resolved} of {counts.total} placeholders resolved"
+
+
 def insert_consolidated_skips(
     lines: list[str],
     journeys: list[TestJourney],
     journey_unresolved: dict[str, list[str]],
     original_lines: list[str],
+    test_counts: dict[str, TestResolutionCounts] | None = None,
 ) -> list[str]:
     """Insert a single consolidated pytest.skip() at the start of each test with unresolved placeholders.
 
     The skip is placed AFTER any consent-dismiss or POM-instantiation lines,
     so that dismiss_consent_overlays(page) still runs before the skip.
+
+    B-097: when ``test_counts`` is given, the skip message names how many
+    placeholders resolved, so the report shows the hidden work. The prefix
+    (``Skipping: unresolved placeholders for:``) is unchanged so existing
+    parsers keep working.
     """
     skip_messages: dict[str, str] = {}
     for test_name, unresolved_list in journey_unresolved.items():
@@ -114,8 +167,11 @@ def insert_consolidated_skips(
                 if desc not in seen:
                     seen.add(desc)
                     unique_unresolved.append(desc)
-            skip_messages[test_name] = "Skipping: unresolved placeholders for: " + "; ".join(
-                f"'{desc}'" for desc in unique_unresolved
+            counts = test_counts.get(test_name) if test_counts else None
+            skip_messages[test_name] = (
+                "Skipping: unresolved placeholders for: "
+                + "; ".join(f"'{desc}'" for desc in unique_unresolved)
+                + _counts_suffix(counts)
             )
 
     if not skip_messages:
@@ -159,6 +215,7 @@ def insert_consolidated_skips(
 
 
 __all__ = [
+    "build_test_resolution_counts",
     "insert_consolidated_skips",
     "remove_old_placeholder_skips",
     "remove_raw_placeholder_lines",

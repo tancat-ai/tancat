@@ -48,6 +48,13 @@ _SKIP_RE = re.compile(
     r"""pytest\.skip\s*\(\s*['"]Skipping: unresolved placeholders for:\s*['"]([^'"]*?)['"]""",
 )
 
+# B-097: per-test counts appended to the consolidated skip message, e.g.
+#   pytest.skip("Skipping: unresolved placeholders for: 'a'; 'b'. 3 of 5 placeholders resolved")
+_SKIP_COUNT_RE = re.compile(r"\.\s*(\d+) of (\d+) placeholders resolved")
+
+# Any test function name (the numeric criterion form is a subset).
+_ANY_TEST_FUNC_RE = re.compile(r"^def\s+(test_\w+)", re.MULTILINE)
+
 # B-021: URL assertions — expect(page).to_have_url("...")
 _TO_HAVE_URL_RE = re.compile(
     r"""expect\(page\)\.to_have_url\(\s*['"]([^'"]*)['"]\s*\)""",
@@ -149,6 +156,37 @@ def extract_locators_per_test(code: str) -> list[tuple[str, list[dict[str, str]]
 def extract_skipped_descriptions(code: str) -> list[str]:
     """Extract descriptions from pytest.skip() calls."""
     return _SKIP_RE.findall(code)
+
+
+def extract_test_resolution_counts(code: str) -> list[dict[str, Any]]:
+    """Return B-097 per-test resolved/unresolved counts from skip messages.
+
+    Only tests whose consolidated ``pytest.skip()`` carries the count suffix
+    are returned. A test with no unresolved placeholder has ``unresolved == 0``
+    and needs no explanation. Older captures without the suffix are skipped.
+
+    Returns:
+        One dict per partially resolved test, in file order:
+        ``{"test_name", "resolved", "unresolved", "total"}``.
+    """
+    counts: list[dict[str, Any]] = []
+    starts = [(m.group(1), m.start()) for m in _ANY_TEST_FUNC_RE.finditer(code)]
+    for i, (name, start) in enumerate(starts):
+        end = starts[i + 1][1] if i + 1 < len(starts) else len(code)
+        match = _SKIP_COUNT_RE.search(code[start:end])
+        if not match:
+            continue
+        resolved = int(match.group(1))
+        total = int(match.group(2))
+        counts.append(
+            {
+                "test_name": name,
+                "resolved": resolved,
+                "unresolved": total - resolved,
+                "total": total,
+            }
+        )
+    return counts
 
 
 def extract_test_function_count(code: str) -> int:
@@ -596,6 +634,7 @@ def validate_story(
         criteria_with_skeletons=criteria_with_skeletons,
         resolutions=resolutions,
         generation_duration_s=generation_duration_s,
+        test_resolution_counts=extract_test_resolution_counts(code),
     )
 
 
