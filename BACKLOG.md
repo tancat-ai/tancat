@@ -129,6 +129,8 @@ what each test proved, instead of the harness guessing) and **B-101** (golden-qu
 Do **not** re-tune on the landing page.
 **Estimated sessions:** 2–3 to move gate 1 materially; 1 to re-measure.
 
+**Static-number measurement (2026-09-28, branch `task/assert-fallthrough`):** the fall-through guard moves no static figure — `eval_resolver.py --mode static` (RAG off, frozen `scraped_pages/`) is **38/113 = 33.6%** with and without the guard, because the 10 `url_assertion` answers it changes (wrong element -> `None`) were already scored as mismatches, so accuracy is invariant; the quoted **97.9%** is a different metric (`eval_harness.py run --mode static`, captured-code validation, 94/96) that never calls the resolver and is unchanged too.
+
 ---
 
 ## ✅ B-098 — `eval_harness` ignored `.env`, and the env fallback defaulted to `ollama`
