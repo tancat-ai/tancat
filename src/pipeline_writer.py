@@ -265,6 +265,9 @@ Base URL:  {base_url or "Not specified"}
                 for page_object, page_path in zip(run_result.generated_page_objects, page_object_paths, strict=False)
             ],
             "records": [record.to_dict() for record in records],
+            # B-097: per-test resolved/unresolved counts, so a test that was
+            # skipped as a whole still reports the steps that did resolve.
+            "test_resolution_counts": [counts.to_dict() for counts in run_result.test_resolution_counts],
         }
 
     @staticmethod
@@ -278,4 +281,7 @@ Base URL:  {base_url or "Not specified"}
             "unresolved_placeholder_count": len(run_result.unresolved_placeholders),
             "unresolved_placeholders": list(run_result.unresolved_placeholders),
             "tests": [journey.test_name for journey in run_result.journeys],
+            # B-097: a test skipped as a whole still resolves most of its steps;
+            # carry the resolved/unresolved split beside the test list.
+            "test_resolution_counts": [counts.to_dict() for counts in run_result.test_resolution_counts],
         }

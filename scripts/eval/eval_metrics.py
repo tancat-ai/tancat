@@ -14,6 +14,7 @@ Metrics:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -53,6 +54,10 @@ class StoryResult:
     # timed-out run must never render as "Tests: 0" — that is indistinguishable
     # from "no test files persisted".
     tests_timed_out: bool = False
+    # B-097: per-test resolved/unresolved placeholder counts for tests that were
+    # skipped as a whole. Each entry: {"test_name", "resolved", "unresolved",
+    # "total"}. Empty when every test fully resolved.
+    test_resolution_counts: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -192,6 +197,11 @@ class HarnessReport:
                 lines.append(
                     f"    Tests:        {s.tests_executed} passed={s.tests_passed} false_pos={s.tests_false_positive}"
                 )
+            # B-097: a skipped test hides all its resolved steps; name the split.
+            partial = [c for c in s.test_resolution_counts if c.get("unresolved")]
+            if partial:
+                rendered = "; ".join(f"{c['test_name']} {c['resolved']}/{c['total']} resolved" for c in partial)
+                lines.append(f"    Partial:      {rendered}")
             lines.append(f"    Skeletons:    {s.criteria_with_skeletons}/{s.total_criteria}")
             lines.append(f"    Duration:     {s.generation_duration_s:.1f}s")
             lines.append("")
@@ -222,6 +232,7 @@ class HarnessReport:
                     tests_false_positive=s_data.get("tests_false_positive", 0),
                     generation_duration_s=s_data.get("generation_duration_s", 0.0),
                     tests_timed_out=s_data.get("tests_timed_out", False),
+                    test_resolution_counts=s_data.get("test_resolution_counts", []),
                 )
             )
         return cls(stories=stories)

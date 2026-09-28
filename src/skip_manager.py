@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from src.pipeline_models import TestJourney
+from src.pipeline_models import TestJourney, TestResolutionCounts
 
 
 def remove_old_placeholder_skips(
@@ -94,16 +94,73 @@ def remove_raw_placeholder_lines(lines: list[str]) -> list[str]:
     return result_lines
 
 
+def build_test_resolution_counts(
+    journeys: list[TestJourney],
+    unresolved_occurrences: dict[str, set[tuple[int, str]]],
+) -> list[TestResolutionCounts]:
+    """Return per-test resolved/unresolved placeholder counts (B-097).
+
+    ``unresolved_occurrences`` is built from every place the resolver decided a
+    placeholder would emit a skip: the consolidated per-test skip AND the
+    surviving per-line ``pytest.skip(...)`` the batch fallback writes. The unit
+    is the placeholder occurrence, not the description: two placeholders that
+    share a description are two steps. A key recorded twice (a deferred assert
+    that fails both the deferred pass and the all-pages fallback) still counts
+    once, so the count can never overstate resolution.
+
+    Args:
+        journeys: Parsed test functions, one per criterion.
+        unresolved_occurrences: Test name -> ``(line_number, token)`` keys whose
+            replacement line is a skip, or that the consolidated skip covers.
+
+    Returns:
+        One :class:`TestResolutionCounts` per journey, in journey order.
+    """
+    counts: list[TestResolutionCounts] = []
+    for journey in journeys:
+        unresolved_keys = unresolved_occurrences.get(journey.test_name, set())
+        total = len(journey.placeholders)
+        unresolved = sum(
+            1 for placeholder in journey.placeholders if (placeholder.line_number, placeholder.token) in unresolved_keys
+        )
+        counts.append(
+            TestResolutionCounts(
+                test_name=journey.test_name,
+                resolved=total - unresolved,
+                unresolved=unresolved,
+            )
+        )
+    return counts
+
+
+def _counts_suffix(counts: TestResolutionCounts | None) -> str:
+    """Return the B-097 count suffix for a skip message, or '' when unknown.
+
+    No closing parenthesis: naive parsers that read ``pytest.skip((.*?))``
+    (e.g. the skipped-test UI panel) would stop at the first ``)`` and
+    truncate the message.
+    """
+    if counts is None or counts.total == 0:
+        return ""
+    return f". {counts.resolved} of {counts.total} placeholders resolved"
+
+
 def insert_consolidated_skips(
     lines: list[str],
     journeys: list[TestJourney],
     journey_unresolved: dict[str, list[str]],
     original_lines: list[str],
+    test_counts: dict[str, TestResolutionCounts] | None = None,
 ) -> list[str]:
     """Insert a single consolidated pytest.skip() at the start of each test with unresolved placeholders.
 
     The skip is placed AFTER any consent-dismiss or POM-instantiation lines,
     so that dismiss_consent_overlays(page) still runs before the skip.
+
+    B-097: when ``test_counts`` is given, the skip message names how many
+    placeholders resolved, so the report shows the hidden work. The prefix
+    (``Skipping: unresolved placeholders for:``) is unchanged so existing
+    parsers keep working.
     """
     skip_messages: dict[str, str] = {}
     for test_name, unresolved_list in journey_unresolved.items():
@@ -114,8 +171,11 @@ def insert_consolidated_skips(
                 if desc not in seen:
                     seen.add(desc)
                     unique_unresolved.append(desc)
-            skip_messages[test_name] = "Skipping: unresolved placeholders for: " + "; ".join(
-                f"'{desc}'" for desc in unique_unresolved
+            counts = test_counts.get(test_name) if test_counts else None
+            skip_messages[test_name] = (
+                "Skipping: unresolved placeholders for: "
+                + "; ".join(f"'{desc}'" for desc in unique_unresolved)
+                + _counts_suffix(counts)
             )
 
     if not skip_messages:
@@ -159,6 +219,7 @@ def insert_consolidated_skips(
 
 
 __all__ = [
+    "build_test_resolution_counts",
     "insert_consolidated_skips",
     "remove_old_placeholder_skips",
     "remove_raw_placeholder_lines",
