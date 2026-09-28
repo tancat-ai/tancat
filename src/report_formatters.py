@@ -11,7 +11,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.report_builder import _status_icon, _status_summary
+from src.report_builder import _status_icon, _status_summary, escape_html
+
+
+def verification_line(test: dict[str, Any]) -> str:
+    """Return the B-100 one-line verification summary for a report row.
+
+    Uses the emitted verdict's own label, so the wording stays in one place:
+    ``verified by element (<selector>)``, ``verified by page arrival (<url
+    assertion>)``, or ``unverified - <reason>``. Empty when the row has no
+    verdict (an older package).
+    """
+    verification = test.get("verification") or {}
+    if not isinstance(verification, dict) or not verification:
+        return ""
+    label = str(verification.get("label") or verification.get("status") or "unverified")
+    reason = str(verification.get("reason") or "")
+    checked = str(verification.get("checked") or "")
+    if label == "unverified":
+        return f"unverified - {reason}" if reason else "unverified"
+    if checked:
+        return f"{label} ({checked})"
+    return label
 
 
 def generate_local_report(coverage: list[dict[str, Any]]) -> str:
@@ -68,6 +89,10 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
         lines.append("")
         lines.append(f"- **Status:** {status}")
         lines.append(f"- **Duration:** {duration:.2f}s")
+
+        verification = verification_line(test)
+        if verification:
+            lines.append(f"- **Verification:** {verification}")
 
         if error_message:
             lines.append(f"- **Error:** {error_message[:200]}")
@@ -192,6 +217,10 @@ def generate_jira_report(
         lines.append("")
         lines.append(f"*Status:* {status}")
         lines.append(f"*Duration:* {duration:.2f}s")
+
+        verification = verification_line(test)
+        if verification:
+            lines.append(f"*Verification:* {verification}")
 
         if error_message:
             lines.append(f"*Error:* {error_message[:200]}")
@@ -367,6 +396,13 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                 f"                <div class='detail-row'><span class='detail-label'>Duration:</span><span>{duration:.2f}s</span></div>",
             ]
         )
+
+        verification = verification_line(test)
+        if verification:
+            lines.append(
+                "                <div class='detail-row'><span class='detail-label'>Verification:</span>"
+                f"<span>{escape_html(verification)}</span></div>"
+            )
 
         if error_message:
             lines.extend(

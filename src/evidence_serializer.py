@@ -23,8 +23,15 @@ class EvidenceSerializer:
         run_history: dict[str, int],
         steps: list[dict[str, Any]],
         duration_s: float = 0.0,
+        verification: dict[str, Any] | None = None,
     ) -> str:
-        """Return JSON payload for an evidence sidecar."""
+        """Return JSON payload for an evidence sidecar.
+
+        B-100: ``verification`` is the emit-time verdict for this test
+        (``verified_by_element`` / ``verified_by_page_arrival`` / ``unverified``
+        plus a reason), written under ``test.verification``. Empty when the
+        test package carried no ``verification_strength.json``.
+        """
         return json.dumps(
             {
                 "schema_version": SCHEMA_VERSION,
@@ -34,6 +41,7 @@ class EvidenceSerializer:
                     "story_ref": story_ref,
                     "status": status,
                     "duration_s": round(duration_s, 3),
+                    "verification": verification or {},
                 },
                 "page": {"url": page_url},
                 "run_history": run_history,
