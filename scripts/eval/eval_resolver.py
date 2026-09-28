@@ -72,6 +72,10 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
                         "expected_locator": ph["expected_locator"],
                         "tolerance_selectors": ph.get("tolerance_selectors", []),
                         "expected_page": ph.get("expected_page", ""),
+                        # B-093: keep the URL classification. Without it every
+                        # golden url_assertion reaches _resolve_placeholder as
+                        # None, so the no-fall-through guard never runs.
+                        "expected_type": ph.get("expected_type", ""),
                         "site": data.get("site", ""),
                         "story_id": data.get("id", ""),
                     }
@@ -185,6 +189,14 @@ def _resolve_placeholder(
         )
         if flow_url:
             return flow_url
+
+    # B-093: a URL assertion must not fall through to element matching. The URL
+    # branch is the only branch that can answer it; when that branch yields no
+    # URL, element ranking silently answers with a lookalike element (``.title``
+    # for "cart page title") — the wrong kind of check, which can pass on the
+    # wrong page. Refuse to resolve instead.
+    if expected_type == "url_assertion":
+        return None
 
     # Filter to the expected page if specified
     if expected_page and expected_page in pages_data:
