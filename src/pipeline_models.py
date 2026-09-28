@@ -129,6 +129,67 @@ class TestResolutionCounts:
         }
 
 
+class VerificationStatus(StrEnum):
+    """How strongly a generated test verified its own criterion (B-100).
+
+    - VERIFIED_BY_ELEMENT: an ASSERT resolved to a specific element and the
+      emitter wrote a real check against it.
+    - VERIFIED_BY_PAGE_ARRIVAL: the criterion's check is a URL assertion -- the
+      test proves it reached the page the criterion describes.
+    - UNVERIFIED: nothing provably checked the criterion. ``reason`` names what
+      was missing and is never empty.
+    """
+
+    VERIFIED_BY_ELEMENT = "verified_by_element"
+    VERIFIED_BY_PAGE_ARRIVAL = "verified_by_page_arrival"
+    UNVERIFIED = "unverified"
+
+
+_VERIFICATION_LABELS: dict[str, str] = {
+    VerificationStatus.VERIFIED_BY_ELEMENT: "verified by element",
+    VerificationStatus.VERIFIED_BY_PAGE_ARRIVAL: "verified by page arrival",
+    VerificationStatus.UNVERIFIED: "unverified",
+}
+
+
+@dataclass(frozen=True)
+class TestVerificationVerdict:
+    """What one generated test proved, decided at emit time (B-100).
+
+    The eval harness has to *guess* this from the emitted code alone. The
+    resolver knows it: it saw which page a locator was resolved against, and
+    whether the emitted check targets an element or a page arrival. This
+    verdict carries that knowledge into the evidence bundle, so "every pass
+    names what it checked" is provable from the artifact the customer keeps.
+    """
+
+    __test__ = False
+
+    test_name: str
+    status: VerificationStatus
+    checked: str = ""
+    page_url: str = ""
+    reason: str = ""
+
+    @property
+    def label(self) -> str:
+        """Human-readable status phrase (e.g. ``verified by element``)."""
+        raw = getattr(self.status, "value", self.status)
+        return _VERIFICATION_LABELS.get(str(raw), str(raw))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly representation."""
+        raw = getattr(self.status, "value", self.status)
+        return {
+            "test_name": self.test_name,
+            "status": str(raw),
+            "label": self.label,
+            "checked": self.checked,
+            "page_url": self.page_url,
+            "reason": self.reason,
+        }
+
+
 @dataclass(frozen=True)
 class ScrapedPage:
     """Metadata for one scraped page used by the pipeline."""
@@ -185,6 +246,8 @@ class PipelineArtifactSet:
     pages: list[ScrapedPage] = field(default_factory=list)
     records: list[ManifestRecord] = field(default_factory=list)
     pom_mode: bool = False
+    # B-100: path to the per-test verification-strength evidence file.
+    verification_strength_path: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-friendly representation."""
@@ -196,4 +259,5 @@ class PipelineArtifactSet:
             "pages": [page.to_dict() for page in self.pages],
             "records": [record.to_dict() for record in self.records],
             "pom_mode": self.pom_mode,
+            "verification_strength_path": self.verification_strength_path,
         }
