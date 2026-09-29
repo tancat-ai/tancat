@@ -31,15 +31,14 @@ URL = "http://localhost:8765/"
 OUT = Path("scratch/streamlit_core_acceptance_2026-09-29")
 SHOTS = OUT / "screenshots"
 
+
 # Criteria whose wording uses a plain hyphen while the app renders an em dash.
 def _norm(text: str) -> str:
     return re.sub(r"[\u2010-\u2015]", "-", text)
 
 
 def _links(page: Page) -> list[dict[str, str]]:
-    return page.eval_on_selector_all(
-        "a", "els => els.map(e => ({t: e.innerText.trim(), h: e.getAttribute('href')}))"
-    )
+    return page.eval_on_selector_all("a", "els => els.map(e => ({t: e.innerText.trim(), h: e.getAttribute('href')}))")
 
 
 def _buttons(page: Page) -> list[str]:
@@ -99,7 +98,6 @@ def main() -> int:
         page.goto(URL, wait_until="domcontentloaded")
         page.wait_for_selector("text=TanCat", timeout=60000)
         page.wait_for_timeout(4000)
-        body = page.inner_text("body")
         sidebar = page.inner_text("[data-testid='stSidebar']")
         main_shot = shot(page, "01_test_generator")
 
@@ -117,7 +115,7 @@ def main() -> int:
             main_shot,
         )
 
-        nav = [(l["t"], l["h"] or "") for l in _links(page) if (l["h"] or "").startswith(URL)]
+        nav = [(link["t"], link["h"] or "") for link in _links(page) if (link["h"] or "").startswith(URL)]
         paths = sorted(h.replace(URL, "/") for _t, h in nav)
         nav_ok = paths == ["/", "/evidence_page", "/run_fix_page"] and len(nav) == 3
         record(3, "three nav links", "pass" if nav_ok else "fail", f"nav = {nav}", main_shot)
@@ -142,7 +140,10 @@ def main() -> int:
             main_shot,
         )
 
-        radios = [r.strip() for r in page.eval_on_selector_all("[role='radiogroup'] label", "els => els.map(e => e.innerText.trim())")]
+        radios = [
+            r.strip()
+            for r in page.eval_on_selector_all("[role='radiogroup'] label", "els => els.map(e => e.innerText.trim())")
+        ]
         record(
             6,
             "requirements input options",
