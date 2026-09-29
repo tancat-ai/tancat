@@ -185,6 +185,55 @@ class TestComputeVerdicts:
         verdicts = compute_test_verification_verdicts([journey], assertions, {}, {"test_01": _counts("test_01", 1, 0)})
         assert verdicts[0].status == VerificationStatus.VERIFIED_BY_ELEMENT
 
+    def test_global_container_assert_is_not_verified_by_element(self) -> None:
+        """B-093 regression guard: a ``body`` check passes on any page, so it
+        must not be recorded as a real element verification."""
+        journey = _journey("test_01", [("ASSERT", "account balances")])
+        assertions = {"test_01": [ResolvedAssertion(description="account balances", resolved_value="'body'")]}
+        verdicts = compute_test_verification_verdicts([journey], assertions, {}, {"test_01": _counts("test_01", 1, 0)})
+
+        assert verdicts[0].status == VerificationStatus.UNVERIFIED
+        assert verdicts[0].reason, "a global-container check must carry a reason"
+        assert "body" in verdicts[0].reason
+        assert "global container" in verdicts[0].reason
+
+    def test_global_container_with_has_text_is_not_verified(self) -> None:
+        journey = _journey("test_01", [("ASSERT", "account balances")])
+        assertions = {
+            "test_01": [
+                ResolvedAssertion(description="account balances", resolved_value="'main:has-text(\"Welcome\")'")
+            ]
+        }
+        verdicts = compute_test_verification_verdicts([journey], assertions, {}, {"test_01": _counts("test_01", 1, 0)})
+        assert verdicts[0].status == VerificationStatus.UNVERIFIED
+
+    def test_real_element_beats_a_global_container(self) -> None:
+        journey = _journey("test_01", [("ASSERT", "backpack in cart"), ("ASSERT", "account balances")])
+        assertions = {
+            "test_01": [
+                ResolvedAssertion(description="backpack in cart", resolved_value="'#backpack'"),
+                ResolvedAssertion(description="account balances", resolved_value="'body'"),
+            ]
+        }
+        verdicts = compute_test_verification_verdicts([journey], assertions, {}, {"test_01": _counts("test_01", 2, 0)})
+        assert verdicts[0].status == VerificationStatus.VERIFIED_BY_ELEMENT
+        assert verdicts[0].checked == "'#backpack'"
+
+    def test_page_arrival_beats_a_global_container(self) -> None:
+        journey = _journey("test_01", [("ASSERT", "cart page loaded"), ("ASSERT", "account balances")])
+        assertions = {
+            "test_01": [
+                ResolvedAssertion(
+                    description="cart page loaded",
+                    resolved_value='expect(page).to_have_url("https://example.com/cart")',
+                    assertion_type="url",
+                ),
+                ResolvedAssertion(description="account balances", resolved_value="'body'"),
+            ]
+        }
+        verdicts = compute_test_verification_verdicts([journey], assertions, {}, {"test_01": _counts("test_01", 2, 0)})
+        assert verdicts[0].status == VerificationStatus.VERIFIED_BY_PAGE_ARRIVAL
+
     def test_verdict_serializes_with_a_label(self) -> None:
         verdict = TestVerificationVerdict(
             test_name="test_01",
@@ -306,6 +355,41 @@ class TestEndToEndEmit:
         assert verdicts[0].status == VerificationStatus.VERIFIED_BY_PAGE_ARRIVAL
         assert "to_have_url" in verdicts[0].checked
         assert "to_have_url" in emitted
+
+    def test_global_container_assert_reports_a_reason(self) -> None:
+        """The resolver picked a container (``body``): the emitted test cannot
+        claim it verified the criterion, end to end through the real emitter."""
+        from unittest.mock import AsyncMock
+
+        skeleton = "def test_assert(page):\n    page.assert_visible('{{ASSERT:account balances}}')\n"
+        scraped_data = {
+            "https://example.com/": [
+                {"selector": "body", "tag": "body", "role": "body", "text": "Content"},
+            ]
+        }
+        journey = _journey("test_assert", [("ASSERT", "account balances")])
+        orch = PlaceholderOrchestrator(starting_url="https://example.com/")
+        orch._element_matcher.find_best_elements_batch = AsyncMock(  # type: ignore[method-assign]
+            return_value=[{"selector": "body"}]
+        )
+
+        async def run() -> str:
+            return await orch._replace_placeholders_sequentially(
+                skeleton_code=skeleton,
+                journeys=[journey],
+                page_requirements=[PageRequirement(keyword="home")],
+                seed_urls=["https://example.com/"],
+                scraped_data=scraped_data,
+                scraped_errors={},
+            )
+
+        asyncio.run(run())
+
+        verdicts = orch.test_verification_verdicts
+        assert len(verdicts) == 1
+        assert verdicts[0].status == VerificationStatus.UNVERIFIED
+        assert verdicts[0].reason
+        assert "body" in verdicts[0].reason
 
     def test_stale_verdicts_cleared_at_entry(self) -> None:
         orch = PlaceholderOrchestrator(starting_url="https://example.com/")
