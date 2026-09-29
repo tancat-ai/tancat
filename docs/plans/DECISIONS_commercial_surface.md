@@ -195,10 +195,6 @@ why the tier is priced as a support contract and not for features: the sellable 
 onboarding, audit-ready evidence and the contractual wrapper. The software is the same as the tiers
 below.
 
-**Proposed term (not adopted):** *counterparty viability* - the buyer's requirement that the vendor
-will still exist to honour the SLA. Proposed because the record has no name for it. It is the buyer's
-requirement, not a promise the company has made.
-
 **Where this was written before (search, 2026-09-29):** nowhere as a rule. The idea appears only as
 phrases - "a named counterparty for procurement" (`RESEARCH_FEATURE_COMPARISON_2026-09.md` line 222),
 "the 'must show its working' buyer" (`NEXT_SESSIONS_IMPROVEMENTS.md` line 224), and an open question,
