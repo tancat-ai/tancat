@@ -208,6 +208,18 @@ class HarnessReport:
             if partial:
                 rendered = "; ".join(f"{c['test_name']} {c['resolved']}/{c['total']} resolved" for c in partial)
                 lines.append(f"    Partial:      {rendered}")
+            # B-100: a count hides why a criterion is unverified; name the
+            # reason in the human summary, not only in the JSON.
+            seen_reasons: set[tuple[str, str]] = set()
+            for r in s.resolutions:
+                if r.action != "ASSERT" or (r.verification or "unverified") != "unverified":
+                    continue
+                key = (r.description, r.verification_reason)
+                if key in seen_reasons:
+                    continue
+                seen_reasons.add(key)
+                reason = r.verification_reason or "(no reason recorded)"
+                lines.append(f"    Unverified:   {r.description} - {reason}")
             lines.append(f"    Skeletons:    {s.criteria_with_skeletons}/{s.total_criteria}")
             lines.append(f"    Duration:     {s.generation_duration_s:.1f}s")
             lines.append("")
