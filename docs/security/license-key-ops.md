@@ -56,3 +56,24 @@ There is no CRL/OCSP possibility in an air-gapped design. Revocation is achieved
 - **B-050** — RESOLVED: the `AITEST_LICENSE_PUBKEY` customer-settable trust root was removed; the trust root is always the vendored key. If per-customer signing keypairs are needed, the on-book path is server-issued offline-verified (a separate item), not a customer-settable key.
 - **B-051** — free-tier metering is local and resettable; document honestly.
 - Spec: `docs/specs/FEATURE_SPEC_phase6_saas.md` §5.4 (license design contract).
+
+## 8. Key ceremony record - the signing pair in service
+
+Recorded 2026-09-29.
+
+- **Keypair generated:** 2026-09-28, offline, with `python scripts/license_gen.py gen-keys`.
+  The private half was copied into the owner's password manager; it lives there and **is not on
+  this machine**.
+- **Acceptance test passed:** 2026-09-29. A 7-day `pro` token (`deployment_id` `owner-trust-test`)
+  signed with the private half was accepted by the running app, which showed
+  `License valid — pro tier (deployment owner-trust-test).` The vendored public key and the
+  private half are therefore a matching pair.
+- **Public half (the vendored trust root, `VENDORED_PUBLIC_KEY_B64`):**
+
+  ```
+  2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8=
+  ```
+
+- **Fingerprint:** `79f90d48d41002c6` - the first 16 hex characters of the SHA-256 of the raw
+  32-byte public key (the base64 above, decoded), computed as
+  `hashlib.sha256(base64.b64decode(pub)).hexdigest()[:16]`.
