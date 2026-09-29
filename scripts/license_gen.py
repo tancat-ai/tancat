@@ -10,12 +10,14 @@ product release (docs/security/license-key-ops.md).
 
 Usage::
 
-    python scripts/license_gen.py --gen-keys --keys-dir ./secrets
-        # writes secrets/license_signing_private_key.pem (PEM) and prints the
-        # public key (base64 raw) to embed in a deployment.
+    python scripts/license_gen.py gen-keys
+        # writes <keys-dir>/license_signing_private_key.pem (PEM) and prints the
+        # public key (base64 raw) to embed in a deployment. The default keys-dir
+        # is OUTSIDE the repository (~/.tancat/license-signing) and an in-repo
+        # path is refused, so a private key cannot land in a commit by accident.
 
-    python scripts/license_gen.py --sign \\
-        --private-key ./secrets/license_signing_private_key.pem \\
+    python scripts/license_gen.py sign \\
+        --private-key ~/.tancat/license-signing/license_signing_private_key.pem \\
         --deployment-id "acme-prod" --tier pro \\
         --days 365 --out license.key
         # writes the signed token to license.key (or prints it with --json).
@@ -39,9 +41,25 @@ from src.licensing.license import LicenseClaims, sign_license
 
 VALID_TIERS = ("free", "self-serve", "pro", "airgap")
 
+# The signing key must never live inside the repository: the old `./secrets`
+# default made "generate a key, then `git add -A`" a one-command accident.
+# Default to a per-user directory outside the checkout and refuse in-repo paths.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_KEYS_DIR = str(Path.home() / ".tancat" / "license-signing")
+
 
 def _gen_keys(keys_dir: Path) -> str:
-    """Generate a signing keypair; returns the base64 public key (raw)."""
+    """Generate a signing keypair; returns the base64 public key (raw).
+
+    Refuses a target inside the repository so the private key cannot be
+    committed by accident.
+    """
+    keys_dir = keys_dir.expanduser().resolve()
+    if keys_dir == _REPO_ROOT or _REPO_ROOT in keys_dir.parents:
+        raise SystemExit(
+            f"Refusing to write a private key inside the repository: {keys_dir}\n"
+            f"Use the default ({_DEFAULT_KEYS_DIR}) or another path outside the checkout."
+        )
     keys_dir.mkdir(parents=True, exist_ok=True)
     priv = ed25519.Ed25519PrivateKey.generate()
     pem = priv.private_bytes(
@@ -94,7 +112,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     gen = sub.add_parser("gen-keys", help="Generate the signing keypair.")
-    gen.add_argument("--keys-dir", default="./secrets", help="Directory to write the private key PEM.")
+    gen.add_argument(
+        "--keys-dir",
+        default=_DEFAULT_KEYS_DIR,
+        help=(
+            "Directory to write the private key PEM. Defaults OUTSIDE the repository "
+            f"({_DEFAULT_KEYS_DIR}); an in-repo path is refused so the key cannot be committed by accident."
+        ),
+    )
 
     sign = sub.add_parser("sign", help="Sign a license token for a deployment.")
     sign.add_argument("--private-key", required=True, help="Path to the signing private key PEM.")

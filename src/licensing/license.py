@@ -71,7 +71,7 @@ GRACE_DAYS: int = 7
 # trust root must not be customer-settable (that would let a stock build
 # self-sign its way into paid tier without a fork). Rotation ships with a
 # product release (docs/security/license-key-ops.md). See B-050.
-VENDORED_PUBLIC_KEY_B64 = "QOzKE23yF9PBbrlN//ncQVPL+DIONBk8/bEo02IIz7w="
+VENDORED_PUBLIC_KEY_B64 = "2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8="
 
 
 class LicenseValidationError(ValueError):
