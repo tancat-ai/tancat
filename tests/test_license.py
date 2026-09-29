@@ -239,3 +239,51 @@ def test_headline_smoke() -> None:
     ):
         h = LicenseResult(status=status).headline
         assert h and len(h) > 5
+
+
+# -- trust-root rotation (key ceremony 2026-09-28) ----------------------------
+
+# The public half of the pair minted for the product. The private half is held
+# off-machine by the owner and never enters the repo. Pinned so a stray revert
+# cannot restore a key whose signing half nobody holds.
+ROTATED_PUBLIC_KEY_B64 = "2XisSdAOFhJ3ciNZDNudV9GyYK6CeDF2zcMw7wXVbP8="
+
+
+def test_vendored_trust_root_is_the_rotated_public_key() -> None:
+    """The shipped trust root is the rotated key, not a retired one."""
+    import base64
+
+    from src.licensing.license import vendor_public_key
+
+    pub = vendor_public_key()
+    assert pub == ROTATED_PUBLIC_KEY_B64
+    assert len(base64.b64decode(pub)) == 32
+
+
+def test_token_signed_with_the_vendored_pair_verifies(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A token whose signer matches the vendored root verifies.
+
+    The shipped private half is deliberately not on this machine, so the
+    matching pair is generated here and patched in as the trust root - the
+    same B-050 pattern, exercising the real verify path with no ``public_key``
+    argument.
+    """
+    priv, pub = _keypair()
+    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)
+    result = verify_license(_make_token(priv, _claims(tier="pro")))
+    assert result.status == LicenseStatus.VALID
+    assert result.tier == "pro"
+
+
+def test_token_from_a_different_pair_is_refused() -> None:
+    """A token signed by another pair is refused by the shipped trust root.
+
+    The first call passes no ``public_key``, so it uses the real vendored key.
+    The second call is a sanity check that the token is well-formed and would
+    verify under its own public half.
+    """
+    priv, pub = _keypair()
+    token = _make_token(priv, _claims(tier="airgap"))
+
+    assert verify_license(token).status == LicenseStatus.INVALID
+    assert verify_license(token, pub).status == LicenseStatus.VALID
