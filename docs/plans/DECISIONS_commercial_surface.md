@@ -189,6 +189,22 @@ conversation. We do not need a cheap paid tier to bridge it.
 | Pro Deployment | **$399 / month**, per deployment | none | + support, updates, priority security patches |
 | Air-Gap / Defence | **$1,500 / month**, per deployment | none | + private-network entitlement, contractual egress limitation, SLA, onboarding, audit-ready evidence support |
 
+**Who the Air-Gap / Defence tier is for.** A regulated buyer whose procurement works from an approved
+list of vendors, and who needs a counterparty that will visibly still exist to honour the SLA. That is
+why the tier is priced as a support contract and not for features: the sellable content is the SLA,
+onboarding, audit-ready evidence and the contractual wrapper. The software is the same as the tiers
+below.
+
+**Proposed term (not adopted):** *counterparty viability* - the buyer's requirement that the vendor
+will still exist to honour the SLA. Proposed because the record has no name for it. It is the buyer's
+requirement, not a promise the company has made.
+
+**Where this was written before (search, 2026-09-29):** nowhere as a rule. The idea appears only as
+phrases - "a named counterparty for procurement" (`RESEARCH_FEATURE_COMPARISON_2026-09.md` line 222),
+"the 'must show its working' buyer" (`NEXT_SESSIONS_IMPROVEMENTS.md` line 224), and an open question,
+"Professional indemnity insurance: needed?" (`RESEARCH_SAAS_AND_LAUNCH.md` line 147). Vendor viability,
+continuity and an approved-vendor requirement are written nowhere else.
+
 **The numbers are provisional, and treated as a signpost rather than a price.** Decided 2026-09-23 from the
 anchors in `RESEARCH_FEATURE_COMPARISON_2026-09.md` §9 — $399 sits under Katalon's per-seat maths for a
 5-person team ($420–750/seat-mo total) and near mabl Starter's estimated $499; $1,500 sits above mabl
