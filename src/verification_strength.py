@@ -24,6 +24,47 @@ from src.pipeline_models import (
     VerificationStatus,
 )
 
+# Page-level containers: an assertion against one of these passes on any page
+# of a broken app, so it can never prove a criterion (B-093 gate 2). This guard
+# used to live in the harness; when the harness stopped guessing (B-100 part 3)
+# it moved here, to the place that decides the verdict, because the evidence
+# bundle and every report read this result. Page-specific containers
+# (``#cart_contents_container``) are NOT in this list -- those are legitimate
+# page markers.
+_GLOBAL_CONTAINERS: tuple[str, ...] = (
+    "body",
+    "html",
+    "main",
+    "#content",
+    "#root",
+    "#app",
+    "#page",
+    ".container",
+)
+
+
+def _unwrap_selector(resolved_value: str) -> str:
+    """Return the bare selector from an emitted value (``'#x'`` -> ``#x``)."""
+    return resolved_value.strip().strip("'\"").strip()
+
+
+def is_global_container(locator: str) -> bool:
+    """True when a locator targets a page-level container (B-093 gate 2).
+
+    ``body``, ``main``, ``#content`` and friends pass on any page of a broken
+    app, so an assertion against one proves nothing about the criterion it was
+    resolved for.
+    """
+    if not locator:
+        return False
+    low = locator.strip().lower()
+    for container in _GLOBAL_CONTAINERS:
+        if low == container:
+            return True
+        if low.startswith(container) and len(low) > len(container) and low[len(container)] in ":[ >.#":
+            return True
+    return False
+
 
 @dataclass(frozen=True)
 class ResolvedAssertion:
@@ -53,13 +94,35 @@ class ResolvedAssertion:
         return self.assertion_type == "url" and not self.is_skip
 
     @property
+    def is_global_container_check(self) -> bool:
+        """True when the emitted check targets a page-level container.
+
+        The page-level families (count/document/section) are real structural
+        checks and are exempt -- only a plain element assertion can target a
+        raw container.
+        """
+        if self.is_page_level:
+            return False
+        return is_global_container(_unwrap_selector(self.resolved_value))
+
+    @property
     def is_element_check(self) -> bool:
-        """True when the emitter wrote a real check against an element."""
+        """True when the emitter wrote a real check against a specific element."""
         if self.is_page_arrival:
             return False
         if self.is_skip and not self.is_page_level:
             return False
+        if self.is_global_container_check:
+            return False
         return True
+
+
+def _global_container_reason(locator: str) -> str:
+    """Name the container and why the check proves nothing."""
+    return (
+        f"assertion targets a global container ('{locator}'), which passes on "
+        "any page and proves nothing about this criterion"
+    )
 
 
 def _unresolved_reason(descriptions: Sequence[str], unresolved: int, total: int) -> str:
@@ -128,6 +191,19 @@ def compute_test_verification_verdicts(
                     status=VerificationStatus.VERIFIED_BY_PAGE_ARRIVAL,
                     checked=page.resolved_value,
                     page_url=page.page_url or "",
+                )
+            )
+            continue
+
+        # A check that only asserts a global container proves nothing, so it
+        # must not read as verified -- and it must say why (B-093 gate 2).
+        container = next((a for a in assertions if a.is_global_container_check), None)
+        if container is not None:
+            verdicts.append(
+                TestVerificationVerdict(
+                    test_name=name,
+                    status=VerificationStatus.UNVERIFIED,
+                    reason=_global_container_reason(_unwrap_selector(container.resolved_value)),
                 )
             )
             continue
