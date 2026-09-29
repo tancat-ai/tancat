@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from eval_metrics import HarnessReport, StoryResult
-from golden_validator import load_golden_key, validate_dataset
+from golden_validator import load_golden_key, load_verdict_map, validate_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +121,7 @@ def run_static_validation(
     dataset_dir: Path,
     code_map: dict[str, str],
     durations: dict[str, float] | None = None,
+    verdict_map: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[StoryResult]:
     """Run static validation against golden keys (no browser needed).
 
@@ -128,11 +129,13 @@ def run_static_validation(
         dataset_dir: Path to scripts/eval/dataset/
         code_map: Dict mapping story_id to generated Python code string.
         durations: Optional dict mapping story_id to generation duration in seconds.
+        verdict_map: Optional story_id -> per-criterion verification verdicts
+            (B-100). A story without one reports unverified with a reason.
 
     Returns:
         List of StoryResult, one per story.
     """
-    return validate_dataset(dataset_dir, code_map, durations or {})
+    return validate_dataset(dataset_dir, code_map, durations or {}, verdict_map or {})
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +285,7 @@ def run_full_validation(
     test_files: dict[str, Path] | None = None,
     pytest_timeout: float = 120.0,
     on_story: Callable[[str], None] | None = None,
+    verdict_map: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[StoryResult]:
     """Run full validation: static + test execution.
 
@@ -294,12 +298,14 @@ def run_full_validation(
         pytest_timeout: Timeout for each pytest run in seconds.
         on_story: Optional per-story hook called with ``story_id`` before its
             tests execute (used to serve the correct localhost-mock root).
+        verdict_map: Optional story_id -> per-criterion verification verdicts
+            (B-100). Missing stories report unverified with a reason.
 
     Returns:
         List of StoryResult with both resolution and test metrics populated.
     """
     # Stage 1: Static validation
-    results = validate_dataset(dataset_dir, code_map, durations or {})
+    results = validate_dataset(dataset_dir, code_map, durations or {}, verdict_map or {})
 
     # Stage 2: Test execution (if files provided)
     if test_files is None:
@@ -555,6 +561,8 @@ class EvalRunner:
         # raised (e.g. an LLM generation timeout). A run with any of these is
         # PARTIAL — its metrics must not be read as a gate score.
         self._regeneration_failures: list[str] = []
+        # B-100: story_id -> the pipeline's per-criterion verification verdicts.
+        self._verdict_map: dict[str, list[dict[str, Any]]] = {}
 
     @property
     def regeneration_failures(self) -> tuple[str, ...]:
@@ -586,6 +594,49 @@ class EvalRunner:
                     break
 
         return code_map
+
+    def _collect_verdicts(self, story_id: str, orchestrator: Any) -> None:
+        """Record the pipeline's verification verdicts for one story (B-100).
+
+        The orchestrator decides these at emit time; the harness reads them
+        instead of re-deriving strength from the emitted code. A failed or
+        missing run stores an empty list, which reads as unverified.
+        """
+        result = getattr(orchestrator, "last_result", None)
+        verdicts = getattr(result, "test_verification_verdicts", None) or []
+        self._verdict_map[story_id] = [
+            verdict.to_dict() if hasattr(verdict, "to_dict") else dict(verdict) for verdict in verdicts
+        ]
+
+    def _persist_verdicts(self) -> None:
+        """Write the run's verdicts beside the persisted tests (B-100).
+
+        One file for the whole run, keyed by story id, so a story's test names
+        cannot collide with another story's. Written whenever regeneration
+        produced verdicts, in both static and full mode.
+        """
+        if self.test_output_dir is None:
+            return
+        self.test_output_dir.mkdir(parents=True, exist_ok=True)
+        path = self.test_output_dir / "verification_strength.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "generated_at": datetime.now(UTC).isoformat(),
+                    "stories": self._verdict_map,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        logger.info("Persisted verification verdicts for %d stories -> %s", len(self._verdict_map), path)
+
+    def _load_verdict_map(self) -> dict[str, list[dict[str, Any]]]:
+        """Load the verdict file beside the tests; {} when absent (B-100)."""
+        if self.test_output_dir is None:
+            return {}
+        return load_verdict_map(self.test_output_dir / "verification_strength.json")
 
     def _persist_regenerated_tests(self, code_map: dict[str, str]) -> None:
         """Write regenerated code to ``test_output_dir`` for the execution phase.
@@ -687,9 +738,20 @@ class EvalRunner:
             # files and "Tests executed: 0" is reported every run.
             if mode == "full" and self.test_output_dir is not None:
                 self._persist_regenerated_tests(code_map)
+            # B-100: write the verdicts beside the tests for this and later runs.
+            if self.test_output_dir is not None:
+                self._persist_verdicts()
+                # Read the file back: it is the single source the reports read too.
+                verdict_map = self._load_verdict_map()
+            else:
+                # No output dir (static mode): the in-memory map is the source.
+                verdict_map = dict(self._verdict_map)
         else:
             code_map = self._load_code_map()
             durations = {}
+            # Captured code carries no fresh verdicts, and a stale file from an
+            # earlier run must not be trusted — absent means unverified.
+            verdict_map = {}
 
         if mode == "full":
             test_files = self._load_test_files()
@@ -700,9 +762,10 @@ class EvalRunner:
                 test_files=test_files,
                 pytest_timeout=pytest_timeout,
                 on_story=self._on_story_mock_swap,
+                verdict_map=verdict_map,
             )
         else:
-            results = run_static_validation(self.dataset_dir, code_map, durations)
+            results = run_static_validation(self.dataset_dir, code_map, durations, verdict_map=verdict_map)
 
         if persist:
             # B-036 Phase 4: LANGGRAPH_ENABLED env gate removed — --use-graph
@@ -952,6 +1015,7 @@ class EvalRunner:
                 )
                 durations[story_id] = datetime.now(UTC).timestamp() - start
                 code_map[story_id] = code
+                self._collect_verdicts(story_id, orchestrator)
                 logger.info("Regenerated %s", story_id)
             except Exception as e:
                 logger.error("Failed to regenerate %s: %s", story_id, e)
@@ -1047,6 +1111,7 @@ class EvalRunner:
 
                 durations[story_id] = datetime.now(UTC).timestamp() - start
                 code_map[story_id] = code
+                self._collect_verdicts(story_id, orchestrator)
                 logger.info("Regenerated %s via graph", story_id)
             except Exception as e:
                 logger.error("Failed to regenerate %s via graph: %s", story_id, e)

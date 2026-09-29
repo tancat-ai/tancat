@@ -12,6 +12,7 @@ from src.report_formatters import (
     generate_html_report,
     generate_jira_report,
     generate_local_report,
+    verification_line,
 )
 
 __all__ = [
@@ -23,4 +24,5 @@ __all__ = [
     "generate_jira_report",
     "generate_local_report",
     "generate_suite_heatmap",
+    "verification_line",
 ]

@@ -10,8 +10,9 @@ These tests pin the invariants that failure taught us:
   1. per-test outcomes come from JUnit XML, not console text;
   2. an unparseable/missing map falls back to the CONSERVATIVE rule, never to
      "nothing to report";
-  3. verification strength is classified on its merits (golden / subject /
-     page / unverified) instead of "did it use the golden's selector";
+  3. verification strength comes from the pipeline's own verdict (golden /
+     subject / page / unverified) instead of a harness guess; a missing
+     verdict is unverified with a reason, never a best-case assumption;
   4. gate 1 (resolver precision) and gate 2 (verification) are measured
      differently and must not be conflated.
 
@@ -35,7 +36,7 @@ import eval_runner  # noqa: E402
 from eval_runner import _parse_junit_xml, _parse_per_test_results, run_full_validation  # noqa: E402
 from golden_validator import (  # noqa: E402
     _classify_verification,
-    _is_global_container,
+    _verification_reason,
     validate_story,
 )
 
@@ -99,62 +100,31 @@ class TestPerTestOutcomes:
 
 
 class TestVerificationClassification:
+    """B-100 part 3: the harness reads the pipeline verdict, it does not guess."""
+
     @staticmethod
-    def _ph(desc: str, kind: str, expected_page: str = "") -> dict[str, Any]:
-        return {
-            "action": "ASSERT",
-            "description": desc,
-            "expected_locator": "#golden",
-            "tolerance_selectors": [],
-            "expected_page": expected_page,
-            "criterion_kind": kind,
-        }
+    def _verdict(status: str, reason: str = "") -> dict[str, Any]:
+        return {"status": status, "reason": reason}
 
-    def test_global_container_can_never_verify(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": 'main:has-text("na")'}]
-        assert _classify_verification(pool, self._ph("account balances", "element"), "element", False) == "unverified"
+    def test_verified_by_element_maps_to_subject(self) -> None:
+        assert _classify_verification(False, self._verdict("verified_by_element")) == "subject"
 
-    def test_wrong_element_on_right_page_is_unverified(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#place-order"}]
-        assert (
-            _classify_verification(pool, self._ph("order success message", "element"), "element", False) == "unverified"
-        )
+    def test_verified_by_page_arrival_maps_to_page(self) -> None:
+        assert _classify_verification(False, self._verdict("verified_by_page_arrival")) == "page"
 
-    def test_distinctive_element_verifies_content(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#remove-sauce-labs-backpack"}]
-        assert _classify_verification(pool, self._ph("backpack item in cart", "element"), "element", False) == "subject"
+    def test_unverified_verdict_stays_unverified(self) -> None:
+        assert _classify_verification(False, self._verdict("unverified", "1 of 2 unresolved")) == "unverified"
 
-    def test_url_assertion_verifies_only_a_page_criterion(self) -> None:
-        pool = [
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": 'expect(page).to_have_url("https://x.com/inventory.html")',
-            }
-        ]
-        ph = self._ph("product list", "page", expected_page="https://x.com/inventory.html")
-        assert _classify_verification(pool, ph, "page", False) == "page"
-        # ...but not a content criterion.
-        assert _classify_verification(pool, self._ph("product list", "element"), "element", False) == "unverified"
+    def test_missing_verdict_is_unverified_not_optimistic(self) -> None:
+        """A missing verdict must never read as verified."""
+        assert _classify_verification(False, None) == "unverified"
+        assert _verification_reason(False, None)
 
-    def test_global_container_detection(self) -> None:
-        assert _is_global_container("main")
-        assert _is_global_container("#content")
-        assert not _is_global_container("#cart_contents_container")
+    def test_golden_match_wins(self) -> None:
+        assert _classify_verification(True, None) == "golden"
 
-    def test_error_element_never_verifies_a_success_criterion(self) -> None:
-        """Found live on banking_mock: ``#transfer-error`` shares "transfer"
-        with "transfer success message" but is the opposite outcome."""
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#transfer-error"}]
-        ph = {
-            "action": "ASSERT",
-            "description": "transfer success message",
-            "expected_locator": "#transfer-success-title",
-            "tolerance_selectors": [],
-            "expected_page": "",
-            "criterion_kind": "element",
-        }
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
+    def test_reason_is_carried_through_for_unverified(self) -> None:
+        assert _verification_reason(False, self._verdict("unverified", "why")) == "why"
 
 
 class TestGateSeparation:
@@ -181,6 +151,6 @@ class TestGateSeparation:
                 },
             ],
         }
-        result = validate_story(code, golden)
+        result = validate_story(code, golden, verdicts=[{"status": "verified_by_page_arrival"}])
         assert result.resolutions[0].matched is False  # gate 1 strict
-        assert result.resolutions[0].verification == "page"  # gate 2 fair
+        assert result.resolutions[0].verification == "page"  # gate 2 reads the verdict
