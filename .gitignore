@@ -138,6 +138,7 @@ notebooks/.ipynb_checkpoints/
 graphify-out/
 results_*.json
 .pi/
+secrets/
 evidence/rag_store.db
 *.db
 scripts/eval/scraped_pages/
