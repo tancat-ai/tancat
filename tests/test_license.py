@@ -287,3 +287,54 @@ def test_token_from_a_different_pair_is_refused() -> None:
 
     assert verify_license(token).status == LicenseStatus.INVALID
     assert verify_license(token, pub).status == LicenseStatus.VALID
+
+
+# -- paste-box install: save a token to the config file -----------------------
+
+
+def test_save_license_key_writes_and_reads_back(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A pasted token lands in _config_dir()/license.key and reads back valid."""
+    from src.licensing.license import save_license_key
+
+    priv, pub = _keypair()
+    token = _make_token(priv, _claims(tier="pro", deployment_id="deploy-42"))
+    monkeypatch.setattr(_license_module, "VENDORED_PUBLIC_KEY_B64", pub)  # B-050
+    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
+    monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
+    monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
+
+    result = save_license_key(token)
+
+    assert result.status == LicenseStatus.VALID
+    assert result.deployment_id == "deploy-42"
+    key_file = tmp_path / "license.key"
+    assert key_file.read_text(encoding="utf-8").strip() == token
+    # Read back through the same file route the CLI and CI use.
+    read_back = license_status()
+    assert read_back.status == LicenseStatus.VALID
+    assert read_back.tier == "pro"
+    assert read_back.deployment_id == "deploy-42"
+
+
+def test_save_license_key_refuses_malformed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A malformed token is refused with a message and nothing is written."""
+    from src.licensing.license import save_license_key
+
+    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
+
+    result = save_license_key("not-a-token")
+
+    assert result.status == LicenseStatus.INVALID
+    assert result.reason
+    assert not (tmp_path / "license.key").exists()
+
+
+def test_save_license_key_refuses_blank(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from src.licensing.license import save_license_key
+
+    monkeypatch.setattr("src.secure_config._config_dir", lambda: tmp_path)
+
+    result = save_license_key("   ")
+
+    assert result.status == LicenseStatus.INVALID
+    assert not (tmp_path / "license.key").exists()

@@ -248,6 +248,10 @@ class SidebarConfig:
         else:
             st.sidebar.info(status.headline)
 
+        # Small action + hidden paste panel (design 2026-09-29, owner's
+        # amendment: the box is not permanently visible).
+        SidebarConfig._render_license_entry(status)
+
         runs = summary.runs_used
         runs_limit = summary.runs_limit
         exports = summary.exports_used
@@ -265,3 +269,73 @@ class SidebarConfig:
             st.sidebar.caption(f"Storage: {mb:.1f} MB")
         if summary.enforcement_on and (summary.runs_remaining == 0 or summary.exports_remaining == 0):
             st.sidebar.warning("Free-tier limit reached. Request a license for unlimited runs and exports.")
+
+    @staticmethod
+    def _render_license_entry(status: Any) -> None:
+        """Small licence action plus a hidden paste panel (design 2026-09-29).
+
+        The one-line state is rendered above, unchanged. This adds one small
+        action next to it: "Enter a licence" when none is installed, "Replace
+        licence" once one is. The paste field + Save only appear after the
+        action is clicked and close after a successful save, so the box is
+        never permanently visible. A refused token shows its reason here, in
+        the panel, not only in the state line.
+        """
+        from src.licensing.license import LicenseStatus, save_license_key
+
+        flash = st.session_state.pop("license_entry_flash", None)
+        if flash is not None:
+            kind, message = flash
+            if kind == "success":
+                st.sidebar.success(message)
+            elif kind == "warning":
+                st.sidebar.warning(message)
+            else:
+                st.sidebar.error(message)
+
+        installed = status.status in (
+            LicenseStatus.VALID,
+            LicenseStatus.EXPIRED_GRACE,
+            LicenseStatus.EXPIRED_BLOCKED,
+        )
+        open_key = "license_entry_open"
+        if st.sidebar.button(
+            "Replace licence" if installed else "Enter a licence",
+            key="license_entry_button",
+            help="Paste the licence token from your email.",
+        ):
+            st.session_state[open_key] = not st.session_state.get(open_key, False)
+
+        if not st.session_state.get(open_key, False):
+            return
+
+        with st.sidebar.form("license_entry_form", clear_on_submit=False):
+            token = st.sidebar.text_area(
+                "Licence token",
+                key="license_entry_token",
+                height=80,
+                placeholder="Paste the token from your email, then Save.",
+            )
+            submitted = st.sidebar.form_submit_button("Save")
+
+        if not submitted:
+            return
+
+        result = save_license_key(token)
+        if result.status == LicenseStatus.INVALID:
+            st.sidebar.error(f"That licence token was refused: {result.reason}")
+            return
+
+        deployment = result.deployment_id or "unknown"
+        if result.status == LicenseStatus.VALID:
+            st.session_state["license_entry_flash"] = (
+                "success",
+                f"Licence installed. Deployment id: {deployment}.",
+            )
+        else:
+            st.session_state["license_entry_flash"] = (
+                "warning",
+                f"Licence installed, but it is not active ({result.status}). Deployment id: {deployment}.",
+            )
+        st.session_state[open_key] = False
+        st.rerun()
