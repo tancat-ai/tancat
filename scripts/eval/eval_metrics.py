@@ -32,9 +32,15 @@ class ResolutionResult:
     # criterion instead of the whole story.
     criterion_index: int | None = None
     # How strongly the criterion's own test verified this ASSERT, when
-    # measured on the emitted code (see golden_validator._classify_verification):
-    # "golden" | "subject" | "page" | "unverified" | None (non-ASSERT rows).
+    # measured on the emitted code. From B-100 part 3 this is the pipeline's
+    # own verdict mapped onto the harness vocabulary
+    # (see golden_validator._STATUS_TO_VERIFICATION):
+    # "golden" | "subject" (verified_by_element) | "page"
+    # (verified_by_page_arrival) | "unverified" | None (non-ASSERT rows).
     verification: str | None = None
+    # Why the criterion is unverified; empty when it was verified. A missing
+    # product verdict always fills this (B-100: never say unverified silently).
+    verification_reason: str = ""
 
 
 @dataclass
@@ -159,7 +165,7 @@ class HarnessReport:
             "",
             "  ASSERT verification (B-093 gate 2):",
             f"    by element (golden)              {vc['golden']}",
-            f"    by element (distinctive match)   {vc['subject']}",
+            f"    by element (pipeline verdict)    {vc['subject']}",
             f"    by page arrival (URL assertion)  {vc['page']}",
             f"    unverified                       {vc['unverified']}",
             "",
@@ -202,6 +208,18 @@ class HarnessReport:
             if partial:
                 rendered = "; ".join(f"{c['test_name']} {c['resolved']}/{c['total']} resolved" for c in partial)
                 lines.append(f"    Partial:      {rendered}")
+            # B-100: a count hides why a criterion is unverified; name the
+            # reason in the human summary, not only in the JSON.
+            seen_reasons: set[tuple[str, str]] = set()
+            for r in s.resolutions:
+                if r.action != "ASSERT" or (r.verification or "unverified") != "unverified":
+                    continue
+                key = (r.description, r.verification_reason)
+                if key in seen_reasons:
+                    continue
+                seen_reasons.add(key)
+                reason = r.verification_reason or "(no reason recorded)"
+                lines.append(f"    Unverified:   {r.description} - {reason}")
             lines.append(f"    Skeletons:    {s.criteria_with_skeletons}/{s.total_criteria}")
             lines.append(f"    Duration:     {s.generation_duration_s:.1f}s")
             lines.append("")

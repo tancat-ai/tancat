@@ -17,6 +17,7 @@ from src.credential_redaction import (
     redact_value,
 )
 from src.evidence_image import encode_evidence_image
+from src.evidence_loader import load_verification_strength, match_verification_to_test
 from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
@@ -122,9 +123,12 @@ class EvidenceTracker:
         self._encode_png_won: set[str] = set()
 
         # Determine evidence directory: per-test package takes precedence
+        package_root: Path | None = None
         if test_package_dir is not None:
-            self.evidence_dir = Path(test_package_dir) / "evidence"
+            package_root = Path(test_package_dir)
+            self.evidence_dir = package_root / "evidence"
         elif evidence_root is not None:
+            package_root = evidence_root
             self.evidence_dir = evidence_root / "evidence"
         else:
             # Fallback to workspace evidence directory
@@ -132,6 +136,16 @@ class EvidenceTracker:
 
         self.evidence_dir.mkdir(parents=True, exist_ok=True)
         self.sidecar_path = self.evidence_dir / f"{self.test_name}.evidence.json"
+
+        # B-100: stamp the emit-time verification verdict into the sidecar, so
+        # the evidence bundle itself says what this test provably checked. The
+        # pipeline wrote it beside the tests; a package without it (older run)
+        # yields an empty dict, never an error.
+        self.verification: dict[str, Any] = {}
+        if package_root is not None:
+            verdict = match_verification_to_test(load_verification_strength(package_root), self.test_name)
+            if verdict is not None:
+                self.verification = verdict
 
         # Load run history immediately so we can increment during steps if needed
         self.run_history = self._load_previous_history()
@@ -571,6 +585,7 @@ class EvidenceTracker:
                 run_history=self.run_history,
                 steps=self.steps,
                 duration_s=time.time() - self.start_time,
+                verification=self.verification,
             )
             self.sidecar_path.write_text(json_content, encoding="utf-8")
         except Exception as exc:

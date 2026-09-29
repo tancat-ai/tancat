@@ -87,6 +87,15 @@ class PipelineArtifactWriter:
             encoding="utf-8",
         )
 
+        # B-100: the per-test verification strength, written as its own evidence
+        # artifact beside the tests. The manifest and coverage summary also
+        # carry it so a reader never has to open a second file to find it.
+        verification_strength_path = package_dir / "verification_strength.json"
+        verification_strength_path.write_text(
+            json.dumps(self._build_verification_strength_dict(run_result), indent=2),
+            encoding="utf-8",
+        )
+
         records = self._build_manifest_records(run_result)
         manifest_path = package_dir / "scrape_manifest.json"
         manifest_path.write_text(
@@ -97,6 +106,7 @@ class PipelineArtifactWriter:
                     page_object_paths=page_object_paths,
                     test_file_path=str(test_file_path.absolute()),
                     coverage_summary_path=str(coverage_summary_path.absolute()),
+                    verification_strength_path=str(verification_strength_path.absolute()),
                     records=records,
                 ),
                 indent=2,
@@ -125,6 +135,7 @@ class PipelineArtifactWriter:
             pages=run_result.scraped_page_records,
             records=records,
             pom_mode=getattr(run_result, "pom_mode", False),
+            verification_strength_path=str(verification_strength_path.absolute()),
         )
 
     def _save_package_manifest(
@@ -243,6 +254,7 @@ Base URL:  {base_url or "Not specified"}
         test_file_path: str,
         coverage_summary_path: str,
         records: list[ManifestRecord],
+        verification_strength_path: str = "",
     ) -> dict[str, Any]:
         """Return the JSON-serializable manifest structure."""
         return {
@@ -250,6 +262,7 @@ Base URL:  {base_url or "Not specified"}
             "base_url": base_url,
             "test_file_path": test_file_path,
             "coverage_summary_path": coverage_summary_path,
+            "verification_strength_path": verification_strength_path,
             "run_command": f'pytest "{test_file_path}" -v',
             "pages_scraped": [page.to_dict() for page in run_result.scraped_page_records],
             "page_requirements": [page_requirement.to_dict() for page_requirement in run_result.page_requirements],
@@ -268,6 +281,8 @@ Base URL:  {base_url or "Not specified"}
             # B-097: per-test resolved/unresolved counts, so a test that was
             # skipped as a whole still reports the steps that did resolve.
             "test_resolution_counts": [counts.to_dict() for counts in run_result.test_resolution_counts],
+            # B-100: what each test provably checked, decided at emit time.
+            "test_verification_verdicts": [verdict.to_dict() for verdict in run_result.test_verification_verdicts],
         }
 
     @staticmethod
@@ -284,4 +299,22 @@ Base URL:  {base_url or "Not specified"}
             # B-097: a test skipped as a whole still resolves most of its steps;
             # carry the resolved/unresolved split beside the test list.
             "test_resolution_counts": [counts.to_dict() for counts in run_result.test_resolution_counts],
+            # B-100: a passing test must name what it checked, and an unverified
+            # criterion must name its reason -- never silence.
+            "test_verification_verdicts": [verdict.to_dict() for verdict in run_result.test_verification_verdicts],
+        }
+
+    @staticmethod
+    def _build_verification_strength_dict(run_result: PipelineRunResult) -> dict[str, Any]:
+        """Return the per-test verification strength (B-100).
+
+        ``verified by element`` / ``verified by page arrival`` / ``unverified``
+        with a reason. Decided at emit time, where the resolver still knows the
+        page each locator resolved against and whether the emitted check is an
+        element check or a page arrival -- so a customer can audit a pass from
+        the artifact they keep.
+        """
+        return {
+            "generated_at": datetime.now().isoformat(),
+            "verdicts": [verdict.to_dict() for verdict in run_result.test_verification_verdicts],
         }
