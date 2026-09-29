@@ -1,0 +1,106 @@
+{
+ "run_at": "2026-09-29T20:11:44",
+ "url": "http://localhost:8765/",
+ "criteria": [
+  {
+   "n": 1,
+   "criterion": "tab title",
+   "verdict": "pass",
+   "evidence": "title = 'TanCat - AI Playwright Test Generator'",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 2,
+   "criterion": "TanCat heading",
+   "verdict": "pass",
+   "evidence": "TanCat heading present: True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 3,
+   "criterion": "three nav links",
+   "verdict": "pass",
+   "evidence": "nav = [('🧪\\n\\nTest Generator', 'http://localhost:8765/'), ('▶️\\n\\nRun & Fix', 'http://localhost:8765/run_fix_page'), ('📊\\n\\nEvidence & Reports', 'http://localhost:8765/evidence_page')]",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 4,
+   "criterion": "sidebar controls",
+   "verdict": "pass",
+   "evidence": "missing=[] check_my_llm_button=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 5,
+   "criterion": "license line",
+   "verdict": "pass",
+   "evidence": "sidebar has 'No license - running on the free tier.': True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 6,
+   "criterion": "requirements input options",
+   "verdict": "pass",
+   "evidence": "radios = ['Paste Text', 'Upload File']",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 7,
+   "criterion": "Requirements textarea",
+   "verdict": "pass",
+   "evidence": "count=1 placeholder_starts='## User Story\\nAs a customer I '",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 8,
+   "criterion": "Run button present and enabled",
+   "verdict": "pass",
+   "evidence": "present=True enabled=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\01_test_generator.png"
+  },
+  {
+   "n": 9,
+   "criterion": "Run & Fix heading + description",
+   "verdict": "pass",
+   "evidence": "heading=True description=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\09_run_fix.png"
+  },
+  {
+   "n": 10,
+   "criterion": "no suite message",
+   "verdict": "pass",
+   "evidence": "message_present=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\09_run_fix.png"
+  },
+  {
+   "n": 11,
+   "criterion": "Evidence heading + description",
+   "verdict": "pass",
+   "evidence": "heading=True description=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\11_evidence.png"
+  },
+  {
+   "n": 12,
+   "criterion": "exactly three tabs",
+   "verdict": "pass",
+   "evidence": "tabs = ['📊 Dashboard & Search', '🌡️ Coverage Heatmap', '⏱️ Gantt Timeline']",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\11_evidence.png"
+  },
+  {
+   "n": 13,
+   "criterion": "three export buttons present (not pressed)",
+   "verdict": "pass",
+   "evidence": "export buttons = ['📥 CSV', '📥 NDJSON', '📥 JUnit XML']",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\13_more_filters_expander.png"
+  },
+  {
+   "n": 14,
+   "criterion": "Run button disabled after story typed",
+   "verdict": "pass",
+   "evidence": "AppTest: empty disabled=False; after story disabled=True",
+   "screenshot": "scratch\\streamlit_core_acceptance_2026-09-29\\screenshots\\14_story_typed.png"
+  }
+ ],
+ "passed": 14,
+ "total": 14
+}
