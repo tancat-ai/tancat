@@ -298,6 +298,52 @@ class TestSummaryOutput:
         assert "Resolution accuracy:" in summary
         assert "PER-STORY BREAKDOWN" in summary
 
+    def test_summary_prints_unverified_reasons(self) -> None:
+        """B-100: the reason must reach the human summary, not only the JSON."""
+        story = StoryResult(
+            "eval-001",
+            "saucedemo",
+            1,
+            1,
+            resolutions=[
+                ResolutionResult(
+                    action="ASSERT",
+                    description="account balances",
+                    expected_locator="#balance",
+                    tolerance_selectors=[],
+                    generated_locator="body",
+                    matched=False,
+                    verification="unverified",
+                    verification_reason="assertion targets a global container ('body'), which passes on any page",
+                )
+            ],
+        )
+        summary = HarnessReport(stories=[story]).to_summary()
+        assert (
+            "Unverified:   account balances - assertion targets a global container ('body'), "
+            "which passes on any page" in summary
+        )
+
+    def test_summary_omits_the_line_when_verified(self) -> None:
+        story = StoryResult(
+            "eval-001",
+            "saucedemo",
+            1,
+            1,
+            resolutions=[
+                ResolutionResult(
+                    action="ASSERT",
+                    description="x",
+                    expected_locator="#a",
+                    tolerance_selectors=[],
+                    generated_locator="#a",
+                    matched=True,
+                    verification="golden",
+                )
+            ],
+        )
+        assert "Unverified:" not in HarnessReport(stories=[story]).to_summary()
+
 
 class TestSerialization:
     def test_roundtrip(self) -> None:

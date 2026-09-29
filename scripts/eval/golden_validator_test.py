@@ -3,20 +3,21 @@
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from golden_validator import (
     _action_from_method,
     _build_golden_lookup,
     _classify_verification,
-    _is_global_container,
     _match_generated_to_golden,
-    _subject_tokens,
+    _verification_reason,
     extract_locators_from_code,
     extract_locators_per_test,
     extract_skipped_descriptions,
     extract_test_function_count,
     load_golden_key,
+    load_verdict_map,
     validate_dataset,
     validate_story,
 )
@@ -427,9 +428,9 @@ class TestValidateStoryVerification:
                 },
             ],
         }
-        result = validate_story(code, golden)
+        result = validate_story(code, golden, verdicts=[{"status": "verified_by_page_arrival"}])
         assert result.resolutions[0].matched is False  # gate 1 stays strict
-        assert result.resolutions[0].verification == "page"  # gate 2 is fair
+        assert result.resolutions[0].verification == "page"  # gate 2 reads the verdict
 
     def test_element_criterion_defaults_when_kind_absent(self) -> None:
         code = 'def test_01_a(page):\n    expect(page).to_have_url("https://x.com/cart.html")\n'
@@ -453,8 +454,9 @@ class TestValidateStoryVerification:
             ],
         }
         result = validate_story(code, golden)
-        # No criterion_kind -> strict "element" reading, so a URL cannot verify it.
+        # No product verdict -> unverified with a reason, never a best-case guess.
         assert result.resolutions[0].verification == "unverified"
+        assert result.resolutions[0].verification_reason
 
 
 class TestValidateDataset:
@@ -517,141 +519,117 @@ def _ph(action: str, desc: str, expected: str, criterion_index: int = 0, tol: li
     }
 
 
-class TestGlobalContainerDetection:
-    def test_global_containers_are_rejected(self) -> None:
-        for loc in ("body", "html", "main", "#content", "#root", "#app"):
-            assert _is_global_container(loc), loc
-
-    def test_has_text_on_a_global_container_is_rejected(self) -> None:
-        assert _is_global_container('main:has-text("Your Accounts Welcome back")')
-
-    def test_page_specific_elements_are_allowed(self) -> None:
-        for loc in ("#cart_contents_container", ".account_balance", "#success-title", "h3"):
-            assert not _is_global_container(loc), loc
-
-
-class TestSubjectTokens:
-    def test_distinctive_word_survives(self) -> None:
-        assert _subject_tokens("backpack item in cart") == {"backpack"}
-
-    def test_generic_criterion_words_are_dropped(self) -> None:
-        # "order" is < 6 chars and "success"/"message" are noise — this is why
-        # ``#place-order`` must NOT be accepted for "order success message".
-        assert _subject_tokens("order success message") == set()
-
-    def test_long_stopwords_are_dropped(self) -> None:
-        assert _subject_tokens("confirmation message displayed") == set()
-
-
 class TestClassifyVerification:
-    def _ph(self, desc: str, kind: str, expected_page: str = "") -> dict[str, object]:
+    """B-100 part 3: the verdict comes from the pipeline, not a harness guess."""
+
+    def _verdict(self, status: str, reason: str = "") -> dict[str, Any]:
+        return {"status": status, "label": status, "checked": "", "reason": reason}
+
+    def test_golden_match_wins_over_any_verdict(self) -> None:
+        assert _classify_verification(True, self._verdict("unverified")) == "golden"
+
+    def test_missing_verdict_is_unverified(self) -> None:
+        assert _classify_verification(False, None) == "unverified"
+
+    def test_verified_by_element_maps_to_subject(self) -> None:
+        assert _classify_verification(False, self._verdict("verified_by_element")) == "subject"
+
+    def test_verified_by_page_arrival_maps_to_page(self) -> None:
+        assert _classify_verification(False, self._verdict("verified_by_page_arrival")) == "page"
+
+    def test_pipeline_unverified_stays_unverified(self) -> None:
+        assert _classify_verification(False, self._verdict("unverified", "1 of 2 unresolved")) == "unverified"
+
+    def test_unknown_status_is_unverified_not_optimistic(self) -> None:
+        assert _classify_verification(False, self._verdict("something_new")) == "unverified"
+
+    def test_empty_verdict_dict_is_unverified(self) -> None:
+        assert _classify_verification(False, {}) == "unverified"
+
+
+class TestVerificationReason:
+    def _verdict(self, status: str, reason: str = "") -> dict[str, Any]:
+        return {"status": status, "reason": reason}
+
+    def test_verified_criterion_has_no_reason(self) -> None:
+        assert _verification_reason(True, None) == ""
+        assert _verification_reason(False, self._verdict("verified_by_element")) == ""
+
+    def test_missing_verdict_says_so(self) -> None:
+        reason = _verification_reason(False, None)
+        assert reason
+        assert "no verification verdict" in reason
+
+    def test_pipeline_reason_is_carried_through(self) -> None:
+        assert _verification_reason(False, self._verdict("unverified", "1 of 2 unresolved")) == "1 of 2 unresolved"
+
+    def test_pipeline_unverified_without_a_reason_still_says_something(self) -> None:
+        assert _verification_reason(False, self._verdict("unverified"))
+
+
+class TestValidateStoryReadsVerdicts:
+    def _golden(self) -> dict[str, Any]:
         return {
-            "action": "ASSERT",
-            "description": desc,
-            "expected_locator": "#golden",
-            "tolerance_selectors": [],
-            "expected_page": expected_page,
-            "criterion_kind": kind,
+            "id": "s-verdict",
+            "site": "test",
+            "conditions": ["1. A"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "backpack item in cart",
+                            "expected_locator": "#remove-sauce-labs-backpack",
+                            "tolerance_selectors": [],
+                        },
+                    ],
+                },
+            ],
         }
 
-    def test_golden_match_wins(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#golden"}]
-        assert _classify_verification(pool, self._ph("x", "element"), "element", True) == "golden"
+    def _code(self) -> str:
+        # The emitted selector does NOT match the golden answer, so gate 1 is
+        # unmatched; gate 2 must come from the pipeline verdict.
+        return "def test_01_a(page):\n    evidence_tracker.assert_visible('#pack', label='backpack')\n"
 
-    def test_page_criterion_accepts_url_assertion_on_expected_page(self) -> None:
-        pool = [
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": 'expect(page).to_have_url("https://x.com/inventory.html")',
-            }
-        ]
-        ph = self._ph("product list", "page", expected_page="https://x.com/inventory.html")
-        assert _classify_verification(pool, ph, "page", False) == "page"
+    def test_reads_verified_by_element(self) -> None:
+        story = validate_story(self._code(), self._golden(), verdicts=[{"status": "verified_by_element"}])
+        assert story.resolutions[0].matched is False  # gate 1 strict
+        assert story.resolutions[0].verification == "subject"  # gate 2 from product
+        assert story.resolutions[0].verification_reason == ""
 
-    def test_page_criterion_rejects_url_assertion_on_another_page(self) -> None:
-        pool = [
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": 'expect(page).to_have_url("https://x.com/payments.html")',
-            }
-        ]
-        ph = self._ph("accounts dashboard loaded", "page", expected_page="https://x.com/dashboard.html")
-        assert _classify_verification(pool, ph, "page", False) == "unverified"
+    def test_reads_verified_by_page_arrival(self) -> None:
+        story = validate_story(self._code(), self._golden(), verdicts=[{"status": "verified_by_page_arrival"}])
+        assert story.resolutions[0].verification == "page"
 
-    def test_element_criterion_is_not_verified_by_a_url_assertion(self) -> None:
-        pool = [
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": 'expect(page).to_have_url("https://x.com/cart.html")',
-            }
-        ]
-        ph = self._ph("backpack item in cart", "element", expected_page="https://x.com/cart.html")
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
+    def test_absent_verdict_is_unverified_with_a_reason(self) -> None:
+        story = validate_story(self._code(), self._golden())
+        result = story.resolutions[0]
+        assert result.verification == "unverified"
+        assert result.verification_reason
+        assert "no verification verdict" in result.verification_reason
 
-    def test_distinctive_element_verifies_a_content_criterion(self) -> None:
-        pool = [
-            {
-                "method": "assert_visible",
-                "action": "ASSERT",
-                "locator": "#remove-sauce-labs-backpack",
-            }
-        ]
-        ph = self._ph("backpack item in cart", "element")
-        assert _classify_verification(pool, ph, "element", False) == "subject"
-
-    def test_wrong_element_on_the_right_page_stays_unverified(self) -> None:
-        """The real false green: ``#place-order`` for "order success message"."""
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#place-order"}]
-        ph = self._ph("order success message", "element")
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
-
-    def test_global_container_never_verifies_even_with_matching_words(self) -> None:
-        pool = [
-            {
-                "method": "assert_visible",
-                "action": "ASSERT",
-                "locator": 'main:has-text("Your Accounts ... current balances")',
-            }
-        ]
-        ph = self._ph("account balances visible", "element")
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
+    def test_golden_match_still_wins(self) -> None:
+        code = "def test_01_a(page):\n    evidence_tracker.assert_visible('#remove-sauce-labs-backpack', label='x')\n"
+        story = validate_story(code, self._golden(), verdicts=[{"status": "unverified", "reason": "nope"}])
+        assert story.resolutions[0].matched is True
+        assert story.resolutions[0].verification == "golden"
 
 
-class TestPolarityGuard:
-    def _ph(self, desc: str, expected: str = "#golden") -> dict[str, object]:
-        return {
-            "action": "ASSERT",
-            "description": desc,
-            "expected_locator": expected,
-            "tolerance_selectors": [],
-            "expected_page": "",
-            "criterion_kind": "element",
-        }
+class TestLoadVerdictMap:
+    def test_reads_stories_keyed_by_story_id(self, tmp_path: Path) -> None:
+        path = tmp_path / "verification_strength.json"
+        path.write_text(json.dumps({"stories": {"eval-001": [{"status": "verified_by_element"}]}}))
+        assert load_verdict_map(path) == {"eval-001": [{"status": "verified_by_element"}]}
 
-    def test_error_element_does_not_verify_a_success_criterion(self) -> None:
-        """Found live: ``#transfer-error`` shares "transfer" with "transfer
-        success message" but is the OPPOSITE outcome (B-093)."""
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#transfer-error"}]
-        ph = self._ph("transfer success message", "#transfer-success-title")
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
+    def test_absent_file_is_empty(self, tmp_path: Path) -> None:
+        assert load_verdict_map(tmp_path / "missing.json") == {}
 
-    def test_success_element_with_the_subject_word_verifies(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#transfer-success-note"}]
-        ph = self._ph("transfer success message", "#transfer-success-title")
-        assert _classify_verification(pool, ph, "element", False) == "subject"
-
-    def test_success_element_does_not_verify_an_error_criterion(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#order-success"}]
-        ph = self._ph("order error message", "#order-error")
-        assert _classify_verification(pool, ph, "element", False) == "unverified"
-
-    def test_no_polarity_words_means_no_constraint(self) -> None:
-        pool = [{"method": "assert_visible", "action": "ASSERT", "locator": "#remove-sauce-labs-backpack"}]
-        ph = self._ph("backpack item in cart", '[data-test="cart-list-container"]')
-        assert _classify_verification(pool, ph, "element", False) == "subject"
+    def test_malformed_file_is_empty(self, tmp_path: Path) -> None:
+        path = tmp_path / "verification_strength.json"
+        path.write_text("{not json")
+        assert load_verdict_map(path) == {}
 
 
 class TestMatchCriterionScoping:

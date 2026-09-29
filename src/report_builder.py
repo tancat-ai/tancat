@@ -18,6 +18,7 @@ from src.coverage_utils import RequirementCoverage
 from src.evidence_loader import (
     get_failure_diagnostics,
     get_screenshot_paths,
+    get_verification,
     load_evidence_for_package,
     match_evidence_to_test,
 )
@@ -144,10 +145,14 @@ def build_report_dicts(
         page_url: str = ""
         page_title: str = ""
         evidence_duration: float | None = None
+        # B-100: the emit-time verdict for this criterion's test, read from its
+        # evidence sidecar. Empty when the package predates the field.
+        verification: dict[str, Any] = {}
 
         if evidence_map and run is not None:
             evidence = match_evidence_to_test(evidence_map, run.name)
             if evidence:
+                verification = get_verification(evidence)
                 diag = get_failure_diagnostics(evidence)
                 failed = diag.get("failed_steps", [])
 
@@ -197,6 +202,9 @@ def build_report_dicts(
                 "screenshot_paths": screenshot_paths,
                 "page_url": page_url,
                 "page_title": page_title,
+                # B-100: what this test proved, straight from its evidence
+                # sidecar (label + checked target + reason for unverified).
+                "verification": verification,
             }
         )
 
