@@ -278,14 +278,19 @@ class SidebarConfig:
         action next to it: "Enter a licence" when none is installed, "Replace
         licence" once one is. The paste field + Save only appear after the
         action is clicked and close after a successful save, so the box is
-        never permanently visible. A refused token shows its reason here, in
-        the panel, not only in the state line.
+        never permanently visible. The field is cleared after every outcome,
+        so it never prefills the previous token, and a refused token or a save
+        error shows a line here in the panel, not only in the state line.
         """
         from src.licensing.license import LicenseStatus, save_license_key
 
         flash = st.session_state.pop("license_entry_flash", None)
         if flash is not None:
             kind, message = flash
+            # Clear the paste field on any outcome (success or refusal) before
+            # the widget is instantiated this run, so reopening "Replace
+            # licence" never prefills the previous token.
+            st.session_state["license_entry_token"] = ""
             if kind == "success":
                 st.sidebar.success(message)
             elif kind == "warning":
@@ -321,9 +326,18 @@ class SidebarConfig:
         if not submitted:
             return
 
-        result = save_license_key(token)
+        try:
+            result = save_license_key(token)
+        except Exception as exc:  # a filesystem/permission error must show a line, not raise
+            st.session_state["license_entry_flash"] = ("error", f"Could not save the licence: {exc}")
+            st.rerun()
+            return
+
         if result.status == LicenseStatus.INVALID:
-            st.sidebar.error(f"That licence token was refused: {result.reason}")
+            # Refusal is an outcome too: show the reason on the rerun and clear
+            # the field there.
+            st.session_state["license_entry_flash"] = ("error", f"That licence token was refused: {result.reason}")
+            st.rerun()
             return
 
         deployment = result.deployment_id or "unknown"
