@@ -25,6 +25,13 @@ Renders the configuration sidebar:
 
 **POM Mode:** When enabled, generates tests using Page Object Model classes with evidence-aware locators. Stored in `st.session_state.pom_mode`.
 
+### `render_license_usage()` (static)
+
+Renders the one-line licence state, then a small action (`Enter a licence` / `Replace licence`)
+and a hidden paste panel. The panel is not permanently visible: it opens on the action and
+closes after a successful save; a refused token shows its reason in the panel. Saving calls
+`save_license_key` and writes `~/.ai-test-gen/license.key`.
+
 ## How It Works (Internals)
 
 Private `_`-helpers — the module's real logic (1 item). Grouped under the public function that uses them:

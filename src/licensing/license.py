@@ -55,6 +55,7 @@ __all__ = [
     "sign_license",
     "verify_license",
     "load_license",
+    "save_license_key",
     "license_status",
     "effective_tier",
     "feature_enabled",
@@ -319,6 +320,39 @@ def load_license() -> str | None:
         if token:
             return token
     return None
+
+
+def save_license_key(token: str) -> LicenseResult:
+    """Install a pasted licence token, and return what it verified as.
+
+    The token is verified first. A token that is blank or structurally invalid
+    (bad encoding, malformed payload, signature that does not verify) is
+    refused: nothing is written, and the returned result carries the reason so
+    the caller can show it in the panel. Any signed token is written to
+    ``_config_dir()/license.key`` (mode 0600), the same file the CLI and CI
+    read, so one paste covers app, CLI and CI.
+
+    The two environment routes (``AITEST_LICENSE_KEY`` / ``AITEST_LICENSE_FILE``)
+    are unchanged and still win at read time; this only writes the file route.
+    """
+    if not token or not token.strip():
+        return LicenseResult(LicenseStatus.INVALID, reason="No licence token was entered.")
+
+    result = verify_license(token)
+    if result.status == LicenseStatus.INVALID:
+        return result
+
+    from pathlib import Path
+
+    from src.secure_config import _config_dir
+
+    path = Path(_config_dir()) / "license.key"
+    path.write_text(token.strip() + "\n", encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:  # pragma: no cover - best effort (e.g. Windows)
+        logger.debug("Could not set 0600 on %s", path)
+    return result
 
 
 def license_status(now: int | None = None) -> LicenseResult:
