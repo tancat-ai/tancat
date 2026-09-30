@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from eval_metrics import HarnessReport, StoryResult
+from eval_metrics import HarnessReport, StoryResult, count_false_greens
 from golden_validator import load_golden_key, load_verdict_map, validate_dataset
 
 logger = logging.getLogger(__name__)
@@ -208,8 +208,18 @@ def _parse_junit_xml(xml_path: Path) -> dict[str, str]:
 def run_generated_tests(
     test_file: Path,
     pytest_timeout: float = 120.0,
+    *,
+    junit_dir: Path | None = None,
+    log_dir: Path | None = None,
 ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
     """Execute a single test file via pytest and parse results.
+
+    Args:
+        test_file: The emitted test file to execute.
+        pytest_timeout: Per-file timeout in seconds.
+        junit_dir: When given, keep the JUnit XML here (B-093: the per-test
+            outcomes are the evidence a re-score needs; the tempdir is deleted).
+        log_dir: When given, keep the raw pytest output here.
 
     Returns:
         (total, passed, failed, skipped, duration, raw_output, per_test)
@@ -243,6 +253,12 @@ def run_generated_tests(
         output = result.stdout + result.stderr
         # JUnit XML is the primary source; console parsing is the fallback.
         per_test = _parse_junit_xml(xml_path)
+        if junit_dir is not None:
+            junit_dir.mkdir(parents=True, exist_ok=True)
+            (junit_dir / f"{test_file.stem}.xml").write_text(xml_path.read_text(encoding="utf-8"), encoding="utf-8")
+    if log_dir is not None:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        (log_dir / f"{test_file.stem}.log").write_text(output, encoding="utf-8")
 
     # Parse summary line: "=== 5 passed, 1 failed, 0 skipped in 12.34s ==="
     total = passed = failed = skipped = 0
@@ -286,6 +302,7 @@ def run_full_validation(
     pytest_timeout: float = 120.0,
     on_story: Callable[[str], None] | None = None,
     verdict_map: dict[str, list[dict[str, Any]]] | None = None,
+    evidence_dir: Path | None = None,
 ) -> list[StoryResult]:
     """Run full validation: static + test execution.
 
@@ -300,6 +317,8 @@ def run_full_validation(
             tests execute (used to serve the correct localhost-mock root).
         verdict_map: Optional story_id -> per-criterion verification verdicts
             (B-100). Missing stories report unverified with a reason.
+        evidence_dir: When given, keep the per-test outcomes (``junit/``) and the
+            raw pytest output (``pytest/``) here, so a re-score needs no run.
 
     Returns:
         List of StoryResult with both resolution and test metrics populated.
@@ -321,9 +340,15 @@ def run_full_validation(
             on_story(story.story_id)
 
         logger.info("Executing tests for %s: %s", story.story_id, test_file)
+        # Keep the JUnit XML and raw output only when an evidence dir is set, so
+        # the call is unchanged for every existing caller and test double.
+        keep: dict[str, Path] = {}
+        if evidence_dir is not None:
+            keep = {"junit_dir": evidence_dir / "junit", "log_dir": evidence_dir / "pytest"}
         total, passed, failed, skipped, duration, raw_output, per_test = run_generated_tests(
             test_file,
             pytest_timeout=pytest_timeout,
+            **keep,
         )
 
         # B-061: a timeout is its own state — the report must say so instead of
@@ -334,39 +359,20 @@ def run_full_validation(
 
         # Gate 2 (B-093): a false green is a criterion whose golden ASSERT the
         # generated code does not satisfy AND whose own test function PASSED.
-        # The old story-level rule ("any pass taints every unmatched ASSERT")
-        # overcounted: an unmatched ASSERT on a skipped or failed test is an
-        # honest outcome, not a false green.
+        # The rule lives in eval_metrics.count_false_greens so a re-score on the
+        # kept outcomes applies exactly the same rule (see eval_evidence.py).
         if test_file is not None:
             code = code_map.get(story.story_id, "")
-            test_names = re.findall(r"^def (test_\d+_\w+)", code, re.MULTILINE)
             # A missing per-test map must never read as "nothing to report" —
-            # that silently certifies a run as clean. Treat it as unknown and
-            # fall back to the conservative story-level rule, loudly (B-093).
-            per_test_known = bool(per_test)
-            if not per_test_known and total > 0:
+            # that silently certifies a run as clean. count_false_greens falls
+            # back to the conservative story-level rule, so say so loudly.
+            if not per_test and total > 0:
                 logger.warning(
                     "No per-test outcomes parsed for %s — falling back to story-level "
                     "false-green attribution (may over-count)",
                     story.story_id,
                 )
-            false_greens = 0
-            for r in story.resolutions:
-                if r.action != "ASSERT":
-                    continue
-                # Verified by the golden answer, by a distinctive-element
-                # match, or by a URL assertion on the criterion's page (B-093
-                # gate 2) — none of those is a false green. Only an
-                # unverified ASSERT that still passed is.
-                if r.matched or (r.verification or "unverified") != "unverified":
-                    continue
-                if not per_test_known or r.criterion_index is None or not (0 <= r.criterion_index < len(test_names)):
-                    # No attribution possible — conservative story-level rule.
-                    if passed > 0:
-                        false_greens += 1
-                elif per_test.get(test_names[r.criterion_index]) == "PASSED":
-                    false_greens += 1
-            story.tests_false_positive = false_greens
+            story.tests_false_positive = count_false_greens(story, code, per_test, passed)
         else:
             story.tests_false_positive = 0
 
@@ -543,6 +549,7 @@ class EvalRunner:
         test_output_dir: Path | None = None,
         regenerate: bool = False,
         use_graph: bool = False,
+        evidence_dir: Path | None = None,
     ) -> None:
         self.dataset_dir = dataset_dir
         self.code_dir = code_dir
@@ -550,6 +557,11 @@ class EvalRunner:
         self.test_output_dir = test_output_dir
         self.regenerate = regenerate
         self.use_graph = use_graph
+        # B-093: when set, every run keeps its evidence here (emitted tests,
+        # per-test outcomes, raw pytest output, per-placeholder result) so the
+        # score can be recomputed with no model and no live run. See
+        # eval_evidence.py.
+        self.evidence_dir = evidence_dir
         # Phase 6 6a follow-up (eval fix): per-story mock serving. ``story_id``
         # -> served directory for localhost-mock datasets; the single mock
         # server on :8781 is (re)started per story so each mock family is
@@ -763,6 +775,7 @@ class EvalRunner:
                 pytest_timeout=pytest_timeout,
                 on_story=self._on_story_mock_swap,
                 verdict_map=verdict_map,
+                evidence_dir=self.evidence_dir,
             )
         else:
             results = run_static_validation(self.dataset_dir, code_map, durations, verdict_map=verdict_map)
@@ -794,7 +807,29 @@ class EvalRunner:
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
-        return HarnessReport(stories=results)
+        report = HarnessReport(stories=results)
+
+        # B-093: keep the evidence a re-score needs, in one known place. A run
+        # whose evidence is deleted is a run nobody can re-score.
+        if self.evidence_dir is not None:
+            from eval_evidence import write_run_evidence
+
+            write_run_evidence(
+                self.evidence_dir,
+                code_map=code_map,
+                results=results,
+                verdict_map=verdict_map,
+                summary=report.to_summary(),
+                metadata={
+                    "mode": mode,
+                    "dataset": str(self.dataset_dir),
+                    "pipeline": "graph" if self.use_graph else "linear",
+                    "generation_mode": "regenerated" if self.regenerate else "captured",
+                    "git_commit": _get_git_commit(),
+                },
+            )
+
+        return report
 
     def _build_mock_dirs(self, repo_root: Path | None = None) -> dict[str, str]:
         """Map each localhost-mock story to the directory it must be served from.

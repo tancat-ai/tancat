@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-09-25",
+  "source": "docs/sessions/2026-09-25_session13_gate2_false_greens.md (Session 13 re-score)",
+  "gate1_correct": 82,
+  "gate1_total": 113,
+  "gate1_accuracy_pct": 72.6,
+  "gate2_false_greens": 3,
+  "note": "The run that produced this was deleted - scratch/gate1_full.log and the emitted dirs gate1_out*/gate2_out* are gone - so it cannot be re-scored. The next live held-out run (eval_harness.py run --regenerate --mode full --evidence-dir <dir>) must reproduce this, or explain the difference. Session 12's generation measured 86/113 (76.1%): a different LLM draw, not a like-for-like regression. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2."
+}
