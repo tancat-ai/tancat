@@ -20,20 +20,13 @@
 #     docker build -f Dockerfile.action -t ai-test-generator-action .
 
 # Builder stage: install dependencies using uv
-FROM python:3.14-slim AS builder
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
 
 WORKDIR /app
 
-# Install system dependencies for uv
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv (explicit install dir so the path is deterministic — the
-# installer default varies by shell profile and has moved over releases)
-ENV UV_INSTALL_DIR=/usr/local/bin
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# uv, pinned, from PyPI (see Dockerfile for the reasoning): one released
+# version, no network install script, and no unpinned Debian `curl`/`gnupg`.
+RUN pip install --no-cache-dir uv==0.11.28
 
 # Use the base image's python 3.14 for the venv (pinned explicitly on both
 # syncs below). Without this uv may download its own managed CPython and the
@@ -59,14 +52,12 @@ COPY . .
 RUN uv sync --frozen --no-dev --python /usr/local/bin/python3
 
 # Runtime stage: python 3.14 (matches the venv; the repo requires >= 3.14)
-FROM python:3.14-slim AS runtime
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# No apt install here on purpose: `ca-certificates` already ships in the pinned
+# base, and neither the action nor its entrypoint uses `curl`.
 
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
@@ -92,5 +83,14 @@ COPY . .
 # (action/entrypoint.sh) is copied into the image root where action.yml points.
 COPY action/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Non-root user (uid/gid 1000). The action's outputs land in the mounted
+# GitHub workspace, which is owned by the runner's user - a build/run test must
+# confirm uid 1000 can write there; if it cannot, this image needs the runner's
+# uid (or root, with the owner's word).
+RUN useradd --create-home --uid 1000 --user-group appuser \
+    && chown -R appuser:appuser /app /ms-playwright
+ENV HOME=/home/appuser
+USER appuser
 
 ENTRYPOINT ["/entrypoint.sh"]
