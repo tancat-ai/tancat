@@ -73,8 +73,13 @@ WORKDIR /app
 # health check is Python). Dropping the block removes two unpinned Debian
 # packages from the image.
 
-# Copy virtual environment from builder
-COPY --from=builder /app/.venv /app/.venv
+# Create the non-root user BEFORE anything is copied. Every later COPY sets
+# ownership as it writes (COPY --chown) and the browser bundle is installed as
+# the user, so no `chown -R` pass is needed. That pass duplicated every file in
+# the image - 7.2GB of the 2026-09-30 measurement.
+RUN groupadd --gid 1000 appuser \
+    && useradd --create-home --uid 1000 --gid 1000 --shell /bin/bash appuser \
+    && mkdir -p /ms-playwright && chown appuser:appuser /ms-playwright
 
 # Add virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
@@ -82,21 +87,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Chromium + system deps, from the venv's own playwright (version-matched).
-# Explicit /app/.venv/bin/python — do not rely on PATH resolution inside RUN.
-RUN /app/.venv/bin/python -m playwright install --with-deps chromium
+# Copy the environment and the application as the user - no second copy.
+COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
+COPY --chown=appuser:appuser . .
 
-# Copy application code
-COPY . .
-
-# Non-root runtime user (uid/gid 1000). The app writes only to
-# /app/generated_tests and /app/evidence, which are bind-mounted - the host
-# side must be writable by uid 1000. /app and the browser bundle are chowned so
-# the user can read them.
-RUN useradd --create-home --uid 1000 --user-group appuser \
-    && chown -R appuser:appuser /app /ms-playwright
-ENV HOME=/home/appuser
+# Chromium's OS packages need root; the browser bundle itself does not, so it is
+# downloaded as the user and lands correctly owned (no chown pass).
+RUN /app/.venv/bin/python -m playwright install-deps chromium
 USER appuser
+RUN /app/.venv/bin/python -m playwright install chromium
+
+ENV HOME=/home/appuser
 
 # Default command: Run Streamlit app
 CMD ["streamlit", "run", "streamlit_app.py", "--server.port", "8080", "--server.address", "0.0.0.0"]

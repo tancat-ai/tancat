@@ -29,6 +29,11 @@ dependencies = [
     "milvus-lite==3.1.1",
     "gitpython==3.1.57",
     "langgraph>=1.2.9",
+    # CPU-only torch. The container has no GPU and the embeddings
+    # (sentence-transformers) run on the CPU, but the default Linux wheel drags
+    # in ~5GB of CUDA (nvidia-*) machinery per image. The index below serves the
+    # CPU build; see [tool.uv.sources] / [[tool.uv.index]] at the end of file.
+    "torch",
 ]
 
 # Console entry point (B-057): without this, `pip install tancat` / `uv tool
@@ -131,3 +136,15 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "langgraph.*"
 ignore_missing_imports = true
+
+# --- CPU-only PyTorch ------------------------------------------------------
+# Without this, torch resolves to the default PyPI Linux wheel, which is the
+# CUDA build and pulls in ~5GB of nvidia-* packages. This machine (and the
+# container) has no NVIDIA GPU; embeddings are CPU work.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
