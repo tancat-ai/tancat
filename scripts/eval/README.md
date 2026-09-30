@@ -181,6 +181,42 @@ difference. The gates are unchanged: `>=90%` gate 1, zero hollow passes gate 2.
 
 ---
 
+## The verification basis, persisted (B-093)
+
+A pass without its basis is what hid the hollow passes once. Every persisted
+run now stores, per criterion, **what its own test verified against**: the
+golden locator, a distinctive element, a page arrival, or nothing. No new
+database: the table is created beside `eval_runs` in the same SQLite file
+(`evidence/run_results.sqlite`).
+
+```bash
+# The run that produced a gate number persists it (the harness does this by
+# default; --no-persist opts out). Rebuild a row from kept evidence instead:
+python scripts/eval/eval_harness.py rebuild --evidence-dir scratch/eval_runs/heldout
+
+# One rollup: per story, per site, over time, plus the miss classes with counts.
+python scripts/eval/eval_harness.py report --story eval-007
+
+# Compare the latest two persisted runs by criterion identity.
+python scripts/eval/eval_harness.py compare --story eval-007
+```
+
+| Item | What it holds |
+|---|---|
+| `eval_runs.verified_by_element` | golden + element verdict (queryable, no JSON) |
+| `eval_runs.verified_by_page` | page-arrival verdicts |
+| `eval_runs.unverified` | assertions that proved nothing |
+| `eval_criteria` | one row per criterion: story, criterion id, stable `identity` (story + criterion + placeholder), placeholder, page, golden locator, resolved locator, matched, verification, outcome, miss class |
+
+The miss classes (`eval_criteria.miss_class`) are `target_never_captured`,
+`page_context_misassigned`, `weakened_to_visible_element`,
+`element_instead_of_page_arrival`, `golden_weaker_than_generated` and
+`wrong_element`; `eval_criteria.MISS_FIX_HINT` names what a fix would change.
+`page_context_misassigned` needs the page a locator was resolved from, which
+the harness does not record yet - it is never guessed.
+
+---
+
 ## Architecture
 
 ```
