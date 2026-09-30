@@ -102,6 +102,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     captures_dir = _CAPTURES_DIR if args.captures is None else Path(args.captures)
     db_path = _DB_PATH if args.db is None else Path(args.db)
     test_output = _TEST_OUTPUT_DIR if args.test_output is None else Path(args.test_output)
+    # B-093: when set, the run keeps its evidence (emitted tests, per-test
+    # outcomes, raw pytest output, per-placeholder result) in one known place.
+    evidence_dir = Path(args.evidence_dir) if getattr(args, "evidence_dir", None) else None
 
     if not dataset_dir.exists():
         print(f"ERROR: Dataset directory not found: {dataset_dir}", file=sys.stderr)
@@ -117,6 +120,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         test_output_dir=test_output if args.mode == "full" else None,
         regenerate=args.regenerate,
         use_graph=args.use_graph,
+        evidence_dir=evidence_dir,
     )
 
     report = runner.run(
@@ -126,6 +130,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
     )
 
     print(report.to_summary())
+
+    # B-093: a run that did not keep its evidence cannot be re-scored. Say so
+    # loudly and exit non-zero (4, distinct from 2 accuracy-fail and 3 partial)
+    # instead of letting a deleted evidence directory read as a clean run.
+    if evidence_dir is not None:
+        from eval_evidence import verify_run_evidence
+
+        problems = verify_run_evidence(evidence_dir)
+        if problems:
+            print("\n" + "=" * 70, file=sys.stderr)
+            print("EVIDENCE INCOMPLETE — this run cannot be re-scored:", file=sys.stderr)
+            for problem in problems:
+                print(f"  {problem}", file=sys.stderr)
+            print("=" * 70, file=sys.stderr)
+            return 4
+        print(f"\nEvidence kept in {evidence_dir}")
+        print(f"Re-score it with: python scripts/eval/rescore.py --run-dir {evidence_dir}")
 
     # Gate-2 measurement integrity (B-093): a run in which any story's
     # regeneration failed is PARTIAL. Its metrics mix real stories with
@@ -299,6 +320,14 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--captures", help="Path to captures directory")
     run_parser.add_argument("--db", help="Path to SQLite database")
     run_parser.add_argument("--test-output", help="Path to generated test files")
+    run_parser.add_argument(
+        "--evidence-dir",
+        help=(
+            "Keep this run's evidence here (emitted tests, per-test outcomes, raw pytest "
+            "output, per-placeholder result) so scripts/eval/rescore.py can recompute the "
+            "score with no model and no live run. A run that fails to keep it exits 4."
+        ),
+    )
     run_parser.add_argument(
         "--pytest-timeout",
         type=float,
