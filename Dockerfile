@@ -28,7 +28,7 @@
 # `pip install`, explicit apt installs removed, non-root runtime user added.
 
 # Builder stage: install dependencies using uv
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
 
 WORKDIR /app
 
@@ -64,7 +64,7 @@ RUN uv sync --frozen --no-dev --python /usr/local/bin/python3
 
 # Runtime stage: python 3.14 (matches the venv; the repo requires >= 3.14 —
 # the old playwright/python:v1.50.0-jammy base shipped python 3.10)
-FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
 
 WORKDIR /app
 

@@ -84,11 +84,10 @@ COPY . .
 COPY action/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Non-root user (uid/gid 1000). The action's outputs land in the mounted
-# GitHub workspace, which is owned by the runner's user - a build/run test must
-# confirm uid 1000 can write there; if it cannot, this image needs the runner's
-# uid (or root, with the owner's word).
-RUN useradd --create-home --uid 1000 --user-group appuser \
+# Non-root user (uid/gid 1001): the GitHub runner owns the mounted workspace as
+# 1001, so the action's outputs stay writable. (The product image uses 1000.)
+RUN groupadd --gid 1001 appuser \
+    && useradd --create-home --uid 1001 --gid 1001 --shell /bin/bash appuser \
     && chown -R appuser:appuser /app /ms-playwright
 ENV HOME=/home/appuser
 USER appuser
