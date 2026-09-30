@@ -43,7 +43,9 @@ demoted to free with a warning (never hard-fails validity). `now`/`grace_days` o
 - `load_license() -> str | None` — `AITEST_LICENSE_KEY` → `AITEST_LICENSE_FILE` →
   `~/.ai-test-gen/license.key`.
 - `save_license_key(token) -> LicenseResult` — verify a pasted token and, when it is signed,
-  write it to `~/.ai-test-gen/license.key` (mode 0600). Blank/malformed/forged tokens are
+  write it to `~/.ai-test-gen/license.key`. The write asks for mode 0600; that is a Unix
+  permission and Windows ignores it (the file reads back as 666 there), so the `chmod` is
+  best-effort and is kept for Linux installs. Blank/malformed/forged tokens are
   refused and nothing is written; the result carries the reason. This is the paste box's
   install path, so one paste covers app, CLI and CI. The two env routes still win at read time.
 - `license_status(now=None) -> LicenseResult` — the deployment's effective state.
