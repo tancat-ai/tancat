@@ -150,14 +150,21 @@ def test_render_license_entry_refusal_is_shown_in_the_panel(monkeypatch: Any) ->
         lambda token: LicenseResult(LicenseStatus.INVALID, reason="Token malformed: bad"),
     )
 
+    # run 1: the refusal is recorded and a rerun is requested.
     SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+    assert fake.session_state["license_entry_flash"] == (
+        "error",
+        "That licence token was refused: Token malformed: bad",
+    )
+    assert fake.session_state["license_entry_open"] is True
 
-    assert any(kind == "form" for kind, _ in fake.sidebar.calls)
+    # run 2 (the rerun): the reason is shown in the panel.
+    fake.sidebar._submitted = False
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
     errors = [text for kind, text in fake.sidebar.calls if kind == "error"]
     assert errors
     assert "refused" in errors[0]
     assert "Token malformed" in errors[0]
-    assert fake.session_state["license_entry_open"] is True
 
 
 def test_render_license_entry_success_closes_and_names_deployment(monkeypatch: Any) -> None:
@@ -179,3 +186,76 @@ def test_render_license_entry_success_closes_and_names_deployment(monkeypatch: A
         "Licence installed. Deployment id: deploy-42.",
     )
     assert ("rerun", "") in fake.sidebar.calls
+
+
+def test_render_license_entry_clears_token_after_success(monkeypatch: Any) -> None:
+    """The paste field is empty after a successful save."""
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    fake = _FakeSt(submitted=True, token="a-token")
+    fake.session_state["license_entry_open"] = True
+    fake.session_state["license_entry_token"] = "a-token"
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+    monkeypatch.setattr(
+        "src.licensing.license.save_license_key",
+        lambda token: LicenseResult(LicenseStatus.VALID, tier="pro", deployment_id="deploy-42"),
+    )
+
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+    assert fake.session_state["license_entry_open"] is False
+
+    # run 2 (the rerun): the flash is consumed and the field is cleared.
+    SidebarConfig._render_license_entry(
+        LicenseResult(status=LicenseStatus.VALID, tier="pro", deployment_id="deploy-42")
+    )
+    assert fake.session_state["license_entry_token"] == ""
+
+
+def test_render_license_entry_clears_token_after_refusal(monkeypatch: Any) -> None:
+    """The paste field is empty after a refused token."""
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    fake = _FakeSt(submitted=True, token="garbage")
+    fake.session_state["license_entry_open"] = True
+    fake.session_state["license_entry_token"] = "garbage"
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+    monkeypatch.setattr(
+        "src.licensing.license.save_license_key",
+        lambda token: LicenseResult(LicenseStatus.INVALID, reason="Token malformed: bad"),
+    )
+
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+
+    # run 2 (the rerun): the field is cleared even though the panel stays open.
+    fake.sidebar._submitted = False
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+    assert fake.session_state["license_entry_open"] is True
+    assert fake.session_state["license_entry_token"] == ""
+
+
+def test_render_license_entry_save_error_shows_a_line(monkeypatch: Any) -> None:
+    """A save error is caught and shown as a line, not raised."""
+    from src.licensing.license import LicenseResult, LicenseStatus
+
+    fake = _FakeSt(submitted=True, token="a-token")
+    fake.session_state["license_entry_open"] = True
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+
+    def _boom(token: str) -> Any:
+        raise PermissionError("read-only file system")
+
+    monkeypatch.setattr("src.licensing.license.save_license_key", _boom)
+
+    # run 1 must not raise.
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+    assert fake.session_state["license_entry_flash"] == (
+        "error",
+        "Could not save the licence: read-only file system",
+    )
+
+    # run 2 (the rerun): the error is shown as a line in the panel.
+    fake.sidebar._submitted = False
+    SidebarConfig._render_license_entry(LicenseResult(status=LicenseStatus.UNLICENSED))
+    errors = [text for kind, text in fake.sidebar.calls if kind == "error"]
+    assert errors
+    assert "Could not save the licence" in errors[0]

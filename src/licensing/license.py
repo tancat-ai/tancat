@@ -329,8 +329,10 @@ def save_license_key(token: str) -> LicenseResult:
     (bad encoding, malformed payload, signature that does not verify) is
     refused: nothing is written, and the returned result carries the reason so
     the caller can show it in the panel. Any signed token is written to
-    ``_config_dir()/license.key`` (mode 0600), the same file the CLI and CI
-    read, so one paste covers app, CLI and CI.
+    ``_config_dir()/license.key``, the same file the CLI and CI read, so one
+    paste covers app, CLI and CI. The write asks for mode 0600; that is a Unix
+    permission and Windows ignores it (the file reads back as 666 there), so the
+    ``chmod`` is best-effort and is kept for Linux installs.
 
     The two environment routes (``AITEST_LICENSE_KEY`` / ``AITEST_LICENSE_FILE``)
     are unchanged and still win at read time; this only writes the file route.
