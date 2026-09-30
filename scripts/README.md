@@ -206,7 +206,22 @@ python scripts/eval/eval_harness.py run --min-accuracy 79     # Quality gate (ex
 python scripts/eval/eval_harness.py baseline --save            # Save reference baseline
 python scripts/eval/eval_harness.py compare                    # Current vs. baseline
 python scripts/eval/eval_harness.py dataset --validate         # Validate golden keys
+
+# Keep a run's evidence (emitted tests, per-test outcomes, raw pytest output,
+# per-placeholder result) in one known place. A run that fails to keep it exits 4.
+python scripts/eval/eval_harness.py run --regenerate --mode full --evidence-dir scratch/eval_runs/heldout
+
+# Recompute the gate score from that evidence - no model, no browser, no live site.
+python scripts/eval/rescore.py --run-dir scratch/eval_runs/heldout --expect-gate1 82 --expect-gate2 3
 ```
+
+**Evidence (B-093).** A run whose evidence is deleted is a run nobody can
+re-score. `--evidence-dir` writes `manifest.json`, `results.json`,
+`emitted/`, `junit/` and `pytest/`; `rescore.py` reads them back and re-applies
+the same rules a live run uses. A run with no evidence is reported as *cannot
+recompute* (exit 5), never read as a zero. The last recorded re-score
+(82/113 gate 1, 3 hollow passes) is in `scripts/eval/known_gate_scores.json`;
+the next live run must reproduce it.
 
 **When to run:** Before shipping changes to pipeline/resolver/prompt files.
 **Not part of ship-it** — it's a pre-commit quality gate for pipeline changes.

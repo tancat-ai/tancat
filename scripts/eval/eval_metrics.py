@@ -13,6 +13,7 @@ Metrics:
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -254,6 +255,50 @@ class HarnessReport:
                 )
             )
         return cls(stories=stories)
+
+
+# ---------------------------------------------------------------------------
+# Gate 2 attribution (B-093) — one pure rule, shared by the run and the re-score
+# ---------------------------------------------------------------------------
+
+
+def count_false_greens(
+    story: StoryResult,
+    code: str,
+    per_test: dict[str, str],
+    passed: int,
+) -> int:
+    """Return the false greens for one story (gate 2, B-093).
+
+    A false green is a criterion whose golden ASSERT the generated code does
+    not satisfy AND whose own test function PASSED. An unmatched ASSERT on a
+    skipped or failed test is an honest outcome, not a false green.
+
+    A missing per-test map must never read as "nothing to report" — an unknown
+    map falls back to the conservative story-level rule (any pass counts), so
+    the metric over-counts instead of certifying a run as clean.
+
+    ``scripts/eval/rescore.py`` calls this on the kept per-test outcomes, so a
+    re-score and a live run apply the exact same rule.
+    """
+    test_names = re.findall(r"^def (test_\d+_\w+)", code, re.MULTILINE)
+    per_test_known = bool(per_test)
+    false_greens = 0
+    for r in story.resolutions:
+        if r.action != "ASSERT":
+            continue
+        # Verified by the golden answer, by a distinctive-element match, or by
+        # a URL assertion on the criterion's page (B-093 gate 2) — none of
+        # those is a false green. Only an unverified ASSERT that still passed.
+        if r.matched or (r.verification or "unverified") != "unverified":
+            continue
+        if not per_test_known or r.criterion_index is None or not (0 <= r.criterion_index < len(test_names)):
+            # No attribution possible — conservative story-level rule.
+            if passed > 0:
+                false_greens += 1
+        elif per_test.get(test_names[r.criterion_index]) == "PASSED":
+            false_greens += 1
+    return false_greens
 
 
 # ---------------------------------------------------------------------------

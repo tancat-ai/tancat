@@ -139,6 +139,48 @@ python scripts/eval/eval_harness.py run --mode full
 
 ---
 
+## Evidence and the cheap re-score (B-093)
+
+A held-out run is expensive (LLM + scrape + pytest against live sites). Its
+**evidence** must survive so the score can be recomputed without another run.
+
+```bash
+# 1. Run, and keep the evidence in one known place.
+python scripts/eval/eval_harness.py run --regenerate --mode full \
+  --evidence-dir scratch/eval_runs/2026-09-30_heldout
+
+# 2. Re-score from that evidence: no model, no browser, no live site.
+python scripts/eval/rescore.py --run-dir scratch/eval_runs/2026-09-30_heldout \
+  --expect-gate1 82 --expect-gate2 3
+```
+
+The evidence directory holds:
+
+| Item | What it is |
+|---|---|
+| `manifest.json` | metadata + the gate numbers this run recorded |
+| `results.json` | the per-placeholder result (`HarnessReport.to_dict`) |
+| `emitted/test_eval-001.py` | the emitted test files, one per story |
+| `junit/test_eval-001.xml` | the per-test outcomes (pytest `--junitxml`) |
+| `pytest/test_eval-001.log` | the raw pytest output, one per story |
+| `verification_strength.json` | the product's per-test verdicts (may be absent) |
+
+`rescore.py` recomputes gate 1 statically (emitted code vs golden keys) and
+re-applies gate 2 to the kept per-test outcomes, using the same
+`eval_metrics.count_false_greens` rule a live run uses. Exit codes: `0` scored,
+`2` a number did not match `--expect-*`, `5` evidence missing (the score
+**cannot** be recomputed - it is never read as a zero).
+
+The harness exits `4` when a run with `--evidence-dir` fails to keep its
+evidence, distinct from `2` (accuracy below threshold) and `3` (partial run).
+
+The last recorded re-score is `scripts/eval/known_gate_scores.json`:
+**82/113 gate 1 (72.6%)** and **3 hollow passes**. The run that produced it was
+deleted, so the next live held-out run must reproduce it, or explain the
+difference. The gates are unchanged: `>=90%` gate 1, zero hollow passes gate 2.
+
+---
+
 ## Architecture
 
 ```
