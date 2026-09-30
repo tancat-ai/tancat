@@ -29,8 +29,9 @@ Renders the configuration sidebar:
 
 Renders the one-line licence state, then a small action (`Enter a licence` / `Replace licence`)
 and a hidden paste panel. The panel is not permanently visible: it opens on the action and
-closes after a successful save; a refused token shows its reason in the panel. Saving calls
-`save_license_key` and writes `~/.ai-test-gen/license.key`.
+closes after a successful save; a refused token or a save error shows its reason in the panel.
+The token field is cleared after every outcome, so reopening it never prefills the previous
+token. Saving calls `save_license_key` and writes `~/.ai-test-gen/license.key`.
 
 ## How It Works (Internals)
 
