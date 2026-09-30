@@ -212,7 +212,29 @@ def _cmd_baseline(args: argparse.Namespace) -> int:
 
 
 def _cmd_compare(args: argparse.Namespace) -> int:
-    """Compare current results against the baseline."""
+    """Compare current results against the baseline, or two runs' criteria."""
+    # B-093: --story compares the latest two PERSISTED runs of one story by
+    # criterion identity, from the eval DB (no parallel comparison path).
+    if getattr(args, "story", None):
+        from eval_criteria import compare_criteria
+        from eval_runner import load_eval_history
+
+        db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+        history = load_eval_history(db_path, args.story)
+        if len(history) < 2:
+            print(
+                f"Need at least 2 persisted runs for {args.story} (found {len(history)}).",
+                file=sys.stderr,
+            )
+            return 1
+        comparison = compare_criteria(
+            db_path,
+            [str(history[-2]["run_id"])],
+            [str(history[-1]["run_id"])],
+        )
+        print(comparison.to_text())
+        return 0
+
     if not _BASELINE_PATH.exists():
         print("No baseline found. Run 'baseline --save' first.", file=sys.stderr)
         return 1
@@ -237,6 +259,31 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     deltas = compute_deltas(baseline, current)
     print(deltas_to_report(deltas))
 
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: report (rollup over eval_runs + eval_criteria)
+# ---------------------------------------------------------------------------
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    """Print the eval rollup: per story, per site, over time, plus miss classes."""
+    from eval_runner import eval_rollup
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    print(eval_rollup(db_path, getattr(args, "story", None)))
+    return 0
+
+
+def _cmd_rebuild(args: argparse.Namespace) -> int:
+    """Rebuild an eval_runs row + criteria from a run's kept evidence (no model)."""
+    from eval_runner import rebuild_run_from_evidence
+
+    db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
+    run_ids = rebuild_run_from_evidence(args.evidence_dir, db_path)
+    print(f"Rebuilt {len(run_ids)} eval_runs row(s): {', '.join(run_ids)}")
+    print("Query them with: python scripts/eval/eval_harness.py report")
     return 0
 
 
@@ -372,6 +419,21 @@ def main(argv: list[str] | None = None) -> int:
         default="static",
         help="Evaluation mode (default: static)",
     )
+    compare_parser.add_argument(
+        "--story",
+        help="Compare the latest two persisted runs of this story by criterion identity (B-093)",
+    )
+    compare_parser.add_argument("--db", help="Path to the SQLite database (with --story)")
+
+    # --- report (rollup) ---
+    report_parser = subparsers.add_parser("report", help="Rollup over eval_runs + eval_criteria")
+    report_parser.add_argument("--story", help="Limit the rollup to one story")
+    report_parser.add_argument("--db", help="Path to the SQLite database")
+
+    # --- rebuild (from kept evidence) ---
+    rebuild_parser = subparsers.add_parser("rebuild", help="Rebuild an eval_runs row from kept evidence")
+    rebuild_parser.add_argument("--evidence-dir", required=True, help="Run directory kept by --evidence-dir")
+    rebuild_parser.add_argument("--db", help="Path to the SQLite database")
 
     # --- dataset ---
     dataset_parser = subparsers.add_parser("dataset", help="Validate golden keys")
@@ -388,6 +450,8 @@ def main(argv: list[str] | None = None) -> int:
         "run": _cmd_run,
         "baseline": _cmd_baseline,
         "compare": _cmd_compare,
+        "report": _cmd_report,
+        "rebuild": _cmd_rebuild,
         "dataset": _cmd_dataset,
     }
 
