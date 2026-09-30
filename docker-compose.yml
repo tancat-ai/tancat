@@ -1,6 +1,14 @@
 
 version: '3.8'
 
+# Host ports on purpose: NONE.
+# 2026-09-30 (owner): host 8080 on this machine is his local llama.cpp model
+# server, and 11434 is Ollama's unauthenticated API. The app and Ollama
+# therefore publish no host port at all - containers reach each other over
+# `playwright-network`, and the app is reached from the phone through
+# `remote-pi-relay` (:3000), a separate container. If the app ever needs its own
+# host port, it gets a new number and the owner's word comes first.
+
 services:
   test-generator:
     build:
@@ -8,10 +16,13 @@ services:
       dockerfile: Dockerfile
     container_name: tancat
     volumes:
+      # The app writes generated tests and evidence - keep these writable.
       - ./generated_tests:/app/generated_tests
       - ./evidence:/app/evidence
-      - ./notebooks:/app/notebooks
-      - ./scripts:/app/scripts
+      # Dev-only content that the container only reads: read-only, so a
+      # compromised container cannot modify host scripts or notebooks.
+      - ./scripts:/app/scripts:ro
+      - ./notebooks:/app/notebooks:ro
     environment:
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
@@ -23,24 +34,25 @@ services:
       - OPENAI_MODEL=${OPENAI_MODEL:-llama}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OUTPUT_DIR=/app/generated_tests
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"   # container-network only; NO host published port (see above)
     networks:
       - playwright-network
     depends_on:
       ollama:
         condition: service_healthy
 
-  # Ollama service (default)
+  # Ollama service (default). Pinned 2026-09-30 to the version `latest` pointed
+  # at (0.35.0), by multi-arch manifest digest.
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.35.0@sha256:2a6e883b917fc543389599dae79918f5cac9e1438890506982f44aa4f5625d01
     container_name: ollama
-    ports:
-      - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
     networks:
       - playwright-network
+    expose:
+      - "11434"  # container-network only; NO host published port (see above)
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 30s
