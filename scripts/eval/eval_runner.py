@@ -55,7 +55,10 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     git_commit   TEXT NOT NULL DEFAULT '',
     temperature_sent REAL,
     server_defaults  TEXT,
-    thinking         TEXT
+    thinking         TEXT,
+    verified_by_element INTEGER NOT NULL DEFAULT 0,
+    verified_by_page    INTEGER NOT NULL DEFAULT 0,
+    unverified          INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -104,11 +107,19 @@ def _ensure_eval_table(conn: sqlite3.Connection) -> None:
         "temperature_sent REAL",
         "server_defaults TEXT",
         "thinking TEXT",
+        # B-093: the verification split, queryable without parsing raw_report.
+        "verified_by_element INTEGER NOT NULL DEFAULT 0",
+        "verified_by_page INTEGER NOT NULL DEFAULT 0",
+        "unverified INTEGER NOT NULL DEFAULT 0",
     ):
         try:
             conn.execute(f"ALTER TABLE eval_runs ADD COLUMN {column_decl}")
         except sqlite3.OperationalError:
             pass  # column already exists (fresh table or previously migrated)
+    # B-093: per-criterion rows live in the SAME database, beside eval_runs.
+    from eval_criteria import ensure_criteria_table
+
+    ensure_criteria_table(conn)
     conn.commit()
 
 
@@ -303,6 +314,7 @@ def run_full_validation(
     on_story: Callable[[str], None] | None = None,
     verdict_map: dict[str, list[dict[str, Any]]] | None = None,
     evidence_dir: Path | None = None,
+    outcomes_out: dict[str, dict[str, str]] | None = None,
 ) -> list[StoryResult]:
     """Run full validation: static + test execution.
 
@@ -319,6 +331,8 @@ def run_full_validation(
             (B-100). Missing stories report unverified with a reason.
         evidence_dir: When given, keep the per-test outcomes (``junit/``) and the
             raw pytest output (``pytest/``) here, so a re-score needs no run.
+        outcomes_out: When given, filled with story_id -> per-test outcomes, so
+            the caller can give each criterion row its own test's outcome (B-093).
 
     Returns:
         List of StoryResult with both resolution and test metrics populated.
@@ -356,6 +370,8 @@ def run_full_validation(
         story.tests_timed_out = raw_output.strip() == PYTEST_TIMEOUT_MARKER
         story.tests_executed = total
         story.tests_passed = passed
+        if outcomes_out is not None:
+            outcomes_out[story.story_id] = per_test
 
         # Gate 2 (B-093): a false green is a criterion whose golden ASSERT the
         # generated code does not satisfy AND whose own test function PASSED.
@@ -403,6 +419,8 @@ def persist_results(
     # temperature_sent above — do not collapse to "" (that erases the
     # "unknown" state).
     thinking: str | None = "",
+    code_map: dict[str, str] | None = None,
+    outcomes: dict[str, dict[str, str]] | None = None,
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -417,11 +435,17 @@ def persist_results(
         provider: LLM provider name (e.g. "openai-local").
         model: LLM model path or identifier.
         git_commit: Git commit hash for the code that produced these results.
+        code_map: Optional story_id -> emitted code. When given, one
+            ``eval_criteria`` row is written per resolution (B-093).
+        outcomes: Optional story_id -> per-test outcomes. Gives each criterion
+            row the outcome of its own test function.
 
     Returns:
         List of run_ids inserted.
     """
     import sqlite3
+
+    from eval_criteria import persist_criteria, verification_split
 
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     try:
@@ -432,6 +456,7 @@ def persist_results(
         for story in stories:
             report = HarnessReport(stories=[story])
             run_id = f"eval-{uuid.uuid4().hex[:8]}"
+            split = verification_split(story)
 
             conn.execute(
                 """
@@ -440,8 +465,9 @@ def persist_results(
                      resolution_accuracy, test_pass_rate, false_positive_rate,
                      skeleton_completeness, generation_duration, mode, raw_report, created_at,
                      pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit,
-                     temperature_sent, server_defaults, thinking)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     temperature_sent, server_defaults, thinking,
+                     verified_by_element, verified_by_page, unverified)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -467,9 +493,23 @@ def persist_results(
                     temperature_sent,
                     server_defaults,
                     thinking,
+                    # B-093: golden + element = the harness "verified_by_element".
+                    split["golden"] + split["element"],
+                    split["page"],
+                    split["unverified"],
                 ),
             )
             run_ids.append(run_id)
+
+            # B-093: per-criterion rows, so a question is a query.
+            if code_map is not None:
+                persist_criteria(
+                    conn,
+                    run_id,
+                    story,
+                    code_map.get(story.story_id, ""),
+                    (outcomes or {}).get(story.story_id, {}),
+                )
 
         conn.commit()
         return run_ids
@@ -506,6 +546,103 @@ def load_eval_history(
         return [dict(row) for row in rows]
     finally:
         conn.close()
+
+
+def rebuild_run_from_evidence(
+    evidence_dir: str | Path,
+    db_path: str | Path,
+    dataset_dir: Path | None = None,
+) -> list[str]:
+    """Rebuild an eval_runs row + its criteria from a run's kept evidence (B-093).
+
+    The evidence was written by ``eval_harness run --evidence-dir`` (see
+    eval_evidence.py). No model call, no browser: the kept emitted code is
+    re-validated against the golden keys and the kept per-test outcomes give
+    each criterion the outcome of its own test. This is how a row lost from the
+    database is recovered without re-running the held-out set.
+    """
+    import rescore as _rescore
+    from eval_evidence import read_run_evidence
+
+    evidence = read_run_evidence(evidence_dir)
+    recorded_dataset = evidence.manifest.get("dataset")
+    default_dataset = Path(__file__).resolve().parent / "dataset"
+    dataset = dataset_dir or (Path(recorded_dataset) if recorded_dataset else default_dataset)
+    report = _rescore.rescore(Path(evidence_dir), Path(dataset))
+    outcomes = {story_id: evidence.per_test(story_id) for story_id in evidence.code_map}
+    return persist_results(
+        Path(db_path),
+        report.stories,
+        mode=str(evidence.manifest.get("mode", "static")),
+        generation_mode=str(evidence.manifest.get("generation_mode", "regenerated")),
+        pipeline=str(evidence.manifest.get("pipeline", "linear")),
+        git_commit=str(evidence.manifest.get("git_commit", "")),
+        code_map=evidence.code_map,
+        outcomes=outcomes,
+    )
+
+
+def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
+    """One rollup over eval_runs + eval_criteria (B-093), answering the owner.
+
+    Reuses ``load_eval_history`` (the history) and ``compare_criteria`` (the
+    compare) - it is a view, not a parallel pipeline. Answers, in order:
+    which criteria failed and with which locators; whether this run's failures
+    are the same, new or fixed; for every pass, what it verified against; and
+    how many were judged by the golden locator vs the test's own outcome.
+    """
+    from eval_criteria import MISS_FIX_HINT, compare_criteria, load_criteria
+
+    history = load_eval_history(Path(db_path), story_id)
+    if not history:
+        return "No eval_runs rows yet. Run the harness with persistence on first."
+
+    lines = ["EVAL ROLLUP (eval_runs + eval_criteria)", "=" * 70, ""]
+    by_story: dict[str, list[dict[str, Any]]] = {}
+    for row in history:
+        by_story.setdefault(str(row["story_id"]), []).append(row)
+
+    for sid, rows in sorted(by_story.items()):
+        rows.sort(key=lambda r: str(r["created_at"]))
+        latest = rows[-1]
+        lines.append(f"{sid} ({latest['site']}) - {len(rows)} run(s), latest {latest['created_at'][:19]}")
+        for r in rows[-5:]:
+            lines.append(
+                f"  {str(r['created_at'])[:19]}  {r['placeholders_correct']}/{r['placeholders_total']}"
+                f" = {float(r['resolution_accuracy']):.1f}%  verified_by_element={r.get('verified_by_element')}"
+                f" page={r.get('verified_by_page')} unverified={r.get('unverified')}  model={r.get('model', '')}"
+            )
+
+        if len(rows) >= 2:
+            comparison = compare_criteria(db_path, [str(rows[-2]["run_id"])], [str(latest["run_id"])])
+            lines.append("  " + comparison.to_text().replace("\n", "\n  "))
+
+        criteria = load_criteria(db_path, run_id=str(latest["run_id"]))
+        misses = [c for c in criteria if not c["matched"]]
+        classes: dict[str, int] = {}
+        for c in misses:
+            key = str(c["miss_class"] or "unknown")
+            classes[key] = classes.get(key, 0) + 1
+        lines.append(f"  FAILED CRITERIA: {len(misses)}; classes: {classes}")
+        for c in misses:
+            lines.append(
+                f"    [{c['miss_class']}] {c['placeholder']} | page {c['page'] or '-'}"
+                f" | golden {c['golden_locator']} | resolved {c['resolved_locator']}"
+            )
+
+        basis: dict[str, int] = {}
+        for c in criteria:
+            if c["action"] != "ASSERT":
+                continue
+            key = str(c["verification"] or "unverified")
+            basis[key] = basis.get(key, 0) + 1
+        lines.append(f"  PASSES BY BASIS (ASSERT): {basis}")
+        lines.append("")
+
+    lines.append("MISS CLASS -> WHAT A FIX WOULD CHANGE")
+    for key, hint in MISS_FIX_HINT.items():
+        lines.append(f"  {key}: {hint}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -767,6 +904,7 @@ class EvalRunner:
 
         if mode == "full":
             test_files = self._load_test_files()
+            outcomes: dict[str, dict[str, str]] = {}
             results = run_full_validation(
                 self.dataset_dir,
                 code_map,
@@ -776,8 +914,10 @@ class EvalRunner:
                 on_story=self._on_story_mock_swap,
                 verdict_map=verdict_map,
                 evidence_dir=self.evidence_dir,
+                outcomes_out=outcomes,
             )
         else:
+            outcomes = {}
             results = run_static_validation(self.dataset_dir, code_map, durations, verdict_map=verdict_map)
 
         if persist:
@@ -804,6 +944,9 @@ class EvalRunner:
                 temperature_sent=temperature_sent,
                 server_defaults=server_defaults,
                 thinking=thinking,
+                # B-093: store the per-criterion verification basis beside the row.
+                code_map=code_map,
+                outcomes=outcomes,
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 
