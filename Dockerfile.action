@@ -1,43 +1,105 @@
 # Dockerfile for the Phase 7 CI/CD GitHub Action image.
 #
-# The action image is now the PRODUCT image plus an entrypoint. The environment,
-# the Playwright browsers and uid/gid 1000 are inherited, so the app and the
-# action share one copy of the environment instead of carrying two (the pair was
-# 44.6GB on 2026-09-30). The action only adds /entrypoint.sh and runs as uid/gid
-# 1001, because the GitHub runner owns the mounted workspace as 1001.
+# The action image is built STANDALONE from the same pinned python base as the
+# product image. `action.yml` uses `image: 'Dockerfile.action'`, so GitHub builds
+# this file itself on a clean runner - it must not depend on an image that only
+# exists locally, and the product image is not published to any registry.
 #
-# BUILD ORDER MATTERS - the product image must exist first:
-#     docker build -t tancat-product:latest -f Dockerfile .
-#     docker build --build-arg PRODUCT_IMAGE=tancat-product:latest \
-#         -f Dockerfile.action -t tancat-action .
+# Consequences, stated plainly: the action image carries its OWN copy of the
+# Python environment and the browsers. The shared-base idea (building FROM the
+# product image) was dropped because it cannot build on a clean runner and
+# publishing a base image is a new supply-chain surface. The duplication is the
+# price of a self-contained action; the size is reported in the job record.
 #
-# KEPT AT THE REPO ROOT on purpose: the build context must be the repository
-# root so `COPY action/entrypoint.sh` resolves.
+# Carries the same two slimming changes as the product image:
+#   1. CPU-only torch - comes from uv.lock, which resolves torch from the
+#      PyTorch CPU index (no CUDA/nvidia packages), so nothing here re-adds it.
+#   2. No ownership-copy layer - the non-root user is created BEFORE anything is
+#      copied, the venv and the code are copied with --chown, and the browser
+#      bundle is installed as that user. There is no `chown -R`.
 #
-# NOTE for the GitHub action: `action.yml` uses `image: 'Dockerfile.action'`, so
-# GitHub builds this file itself on a clean runner and would not find the local
-# `tancat-product` image. Before the action is used from GitHub, the product
-# image must be published to a registry and PRODUCT_IMAGE pointed at it (or
-# action.yml switched to a published image reference).
+# Runtime base is python:3.14.7-slim (NOT the playwright/python image) because
+# the repo targets python >= 3.14 (PEP 758 exception syntax, requires-python in
+# pyproject) while mcr playwright/python:v1.50.0-jammy ships python 3.10. Browsers
+# come from the venv's OWN playwright (uv.lock), so the browser version always
+# matches the driver.
+#
+# KEPT AT THE REPO ROOT on purpose: the build context must be the repository root
+# so `COPY pyproject.toml uv.lock` and `COPY action/entrypoint.sh` resolve.
+#
+#     docker build -f Dockerfile.action -t tancat-action .
 
-ARG PRODUCT_IMAGE=tancat-product:latest
-FROM ${PRODUCT_IMAGE} AS runtime
+# Builder stage: install dependencies using uv
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
 
 WORKDIR /app
 
-# The inherited environment is owned by uid 1000 (appuser) and is world-readable,
-# so the action needs no chown pass and no second copy of the environment. The
-# action runs as uid 1001 so the mounted GitHub workspace (owned by the runner,
-# 1001) stays writable.
-COPY action/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh \
-    && groupadd --gid 1001 actionuser \
-    && useradd --create-home --uid 1001 --gid 1001 --shell /bin/bash actionuser
-ENV HOME=/home/actionuser
-USER actionuser
+# uv, pinned, from PyPI (see Dockerfile for the reasoning): one released
+# version, no network install script, and no unpinned Debian `curl`/`gnupg`.
+RUN pip install --no-cache-dir uv==0.11.28
 
-# Clear the inherited CMD (the product's Streamlit command); the entrypoint reads
-# its inputs from the environment.
-CMD []
+# Use the base image's python 3.14 for the venv (pinned explicitly on both
+# syncs below). Without this uv may download its own managed CPython and the
+# venv's bin/python symlinks into /root/.local/share/uv/python/... — a path
+# that does NOT exist in the runtime stage, making the copied venv
+# unexecutable there.
+ENV UV_PYTHON_PREFERENCE=only-system
+
+# Copy uv files first for better caching (README needed by the hatchling
+# build backend — pyproject declares readme = "README.md")
+COPY pyproject.toml uv.lock README.md ./
+
+# Install dependencies using uv (frozen mode for reproducibility). The
+# project itself is skipped here: its wheel builds from src/ (hatchling
+# packages = ["src", "cli"]), which is copied in the next layer — building
+# it now would ship an EMPTY project install (no src importable).
+RUN uv sync --frozen --no-dev --no-install-project --python /usr/local/bin/python3
+
+# Copy the rest of the repo (src/, scripts/, action/, ...) so the project
+# wheel builds with real content. Deps are already installed above and uv's
+# wheel cache is warm, so this second sync is incremental.
+COPY . .
+RUN uv sync --frozen --no-dev --python /usr/local/bin/python3
+
+# Runtime stage: python 3.14 (matches the venv; the repo requires >= 3.14)
+FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
+
+WORKDIR /app
+
+# Create the non-root user BEFORE anything is copied, so every later COPY sets
+# ownership as it writes and the browser bundle is installed as the user. That
+# removes the `chown -R` pass that duplicated every file in the image.
+# uid/gid 1001: the GitHub runner owns the mounted workspace as 1001, so the
+# action's outputs stay writable. (The product image uses 1000.)
+RUN groupadd --gid 1001 actionuser \
+    && useradd --create-home --uid 1001 --gid 1001 --shell /bin/bash actionuser \
+    && mkdir -p /ms-playwright && chown actionuser:actionuser /ms-playwright
+
+# Add virtual environment to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Copy the environment as the user - no second copy.
+COPY --from=builder --chown=actionuser:actionuser /app/.venv /app/.venv
+
+# Chromium's OS packages need root; the browser bundle itself does not, so it is
+# downloaded as the user and lands correctly owned. Ordered BEFORE the code copy
+# so an action-code edit does not invalidate the ~2 min browser layer.
+RUN /app/.venv/bin/python -m playwright install-deps chromium
+USER actionuser
+RUN /app/.venv/bin/python -m playwright install chromium
+
+# Copy application code (scripts/, src/, action/, generated_tests/conftest.py,
+# mock_sites/ for hermetic self-tests, fixtures/) as the user.
+COPY --chown=actionuser:actionuser . .
+
+# GitHub Actions Docker actions must have an entrypoint. The orchestrator
+# (action/entrypoint.sh) is copied into the image root where action.yml points.
+COPY --chown=actionuser:actionuser action/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENV HOME=/home/actionuser
 
 ENTRYPOINT ["/entrypoint.sh"]
