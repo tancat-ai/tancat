@@ -10,7 +10,9 @@
 #      after the repo is copied.
 #   2. `~/.cargo/bin/uv` PATH — the uv installer's default dir varies by shell
 #      profile and moved across releases, so the old path broke on newer
-#      installer versions. Fix: explicit UV_INSTALL_DIR=/usr/local/bin.
+#      installer versions. Fix (2026-08-15): explicit UV_INSTALL_DIR=/usr/local/bin.
+#      (2026-09-30: uv now comes from `pip install uv==0.11.28`, so the
+#      install-script path cannot vary at all.)
 #   3. PYTHON VERSION MISMATCH — the old runtime base
 #      (mcr.microsoft.com/playwright/python:v1.50.0-jammy) ships python 3.10,
 #      while the repo requires >= 3.14 (PEP 758 exception syntax;
@@ -21,22 +23,21 @@
 #
 # Build context is the repository root:
 #     docker build -t ai-test-generator .
+#
+# 2026-09-30 (docker hardening): base images pinned by digest, uv pinned via
+# `pip install`, explicit apt installs removed, non-root runtime user added.
 
 # Builder stage: install dependencies using uv
-FROM python:3.14-slim AS builder
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS builder
 
 WORKDIR /app
 
-# Install system dependencies for uv
-RUN apt-get update && apt-get install -y \
-    curl \
-    gnupg \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv (explicit install dir so the path is deterministic — the
-# installer default varies by shell profile and has moved over releases)
-ENV UV_INSTALL_DIR=/usr/local/bin
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+# uv, pinned, from PyPI. The old image piped the network installer
+# (`curl -LsSf https://astral.sh/uv/install.sh | sh`) with no version: both the
+# script and the binary were whatever the network served, and it pulled
+# unpinned Debian `curl`/`gnupg` into the builder. `pip install uv==0.11.28`
+# pins exactly one release and removes those apt installs.
+RUN pip install --no-cache-dir uv==0.11.28
 
 # Use the base image's python 3.14 for the venv (pinned explicitly on both
 # syncs below). Without this uv may download its own managed CPython and the
@@ -63,14 +64,14 @@ RUN uv sync --frozen --no-dev --python /usr/local/bin/python3
 
 # Runtime stage: python 3.14 (matches the venv; the repo requires >= 3.14 —
 # the old playwright/python:v1.50.0-jammy base shipped python 3.10)
-FROM python:3.14-slim AS runtime
+FROM python:3.14-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d AS runtime
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# No apt install here on purpose: `ca-certificates` already ships in the pinned
+# base, and `curl` is not used by the app or the container at runtime (the LLM
+# health check is Python). Dropping the block removes two unpinned Debian
+# packages from the image.
 
 # Copy virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
@@ -87,6 +88,15 @@ RUN /app/.venv/bin/python -m playwright install --with-deps chromium
 
 # Copy application code
 COPY . .
+
+# Non-root runtime user (uid/gid 1000). The app writes only to
+# /app/generated_tests and /app/evidence, which are bind-mounted - the host
+# side must be writable by uid 1000. /app and the browser bundle are chowned so
+# the user can read them.
+RUN useradd --create-home --uid 1000 --user-group appuser \
+    && chown -R appuser:appuser /app /ms-playwright
+ENV HOME=/home/appuser
+USER appuser
 
 # Default command: Run Streamlit app
 CMD ["streamlit", "run", "streamlit_app.py", "--server.port", "8080", "--server.address", "0.0.0.0"]
