@@ -213,13 +213,21 @@ python scripts/eval/eval_harness.py run --regenerate --mode full --evidence-dir 
 
 # Recompute the gate score from that evidence - no model, no browser, no live site.
 python scripts/eval/rescore.py --run-dir scratch/eval_runs/heldout --expect-gate1 82 --expect-gate2 3
+
+# The verification basis, per criterion, in the same DB (evidence/run_results.sqlite):
+python scripts/eval/eval_harness.py report --story eval-007       # rollup + miss classes
+python scripts/eval/eval_harness.py compare --story eval-007      # latest two runs, by criterion
+python scripts/eval/eval_harness.py rebuild --evidence-dir <dir>  # rebuild a row from kept evidence
 ```
 
 **Evidence (B-093).** A run whose evidence is deleted is a run nobody can
 re-score. `--evidence-dir` writes `manifest.json`, `results.json`,
 `emitted/`, `junit/` and `pytest/`; `rescore.py` reads them back and re-applies
 the same rules a live run uses. A run with no evidence is reported as *cannot
-recompute* (exit 5), never read as a zero. The last recorded re-score
+recompute* (exit 5), never read as a zero. A persisted run also stores the
+per-criterion verification basis (golden / element / page / unverified) in the
+`eval_criteria` table, beside `eval_runs` - so a question is a query, not a
+script. The last recorded re-score
 (82/113 gate 1, 3 hollow passes) is in `scripts/eval/known_gate_scores.json`;
 the next live run must reproduce it.
 
