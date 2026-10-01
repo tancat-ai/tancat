@@ -33,13 +33,32 @@ It is now removed and must not come back.
 |---|---|---|---|
 | rapidocr-onnxruntime | 1.4.4 | Apache-2.0 | tier-1 CPU OCR engine |
 | onnxruntime | 1.29.0 | MIT | ONNX inference runtime (transitive) |
-| opencv-python | 5.0.0.93 | Apache-2.0 | image ops. **Note:** the PyPI wheel can bundle FFmpeg; the OpenCV project is Apache-2.0, the bundled FFmpeg build is the thing to re-check if OpenCV is ever used beyond OCR | 
+| opencv-python-headless | 5.0.0.93 | Apache-2.0 | image ops, server/headless build (no GUI libraries). **Note:** the PyPI wheel can bundle FFmpeg; the OpenCV project is Apache-2.0, the bundled FFmpeg build is the thing to re-check if OpenCV is ever used beyond OCR | 
 | numpy | 2.5.3 | BSD-3-Clause | arrays (transitive) |
 | pyclipper | 1.4.0 | MIT | polygon clipping (transitive) |
 | shapely | 2.1.2 | BSD-3-Clause | geometry (transitive) |
 
 Both extras are installed in the product image (`Dockerfile`, `uv sync --extra
 pdf --extra ocr`).
+
+### OpenCV: headless, not the GUI build (2026-10-01)
+
+RapidOCR declares a dependency on `opencv-python` (the GUI build). The product
+is a server, so the `[ocr]` extra ships **`opencv-python-headless`** instead
+(owner direction, 2026-10-01). It provides the same `cv2` module without the
+GUI libraries.
+
+How: `[tool.uv] override-dependencies` in `pyproject.toml` overrides the
+`opencv-python` requirement away (a never-true marker), and the `[ocr]` extra
+adds `opencv-python-headless`. Measured cost:
+
+| Build | Linux x86_64 wheel | Note |
+|---|---|---|
+| opencv-python (GUI) | 67.8 MB | pulls GUI runtime libraries |
+| opencv-python-headless | 53.9 MB | same `cv2`, no GUI libs |
+
+That is **~14 MB smaller compressed**, and the image saving is larger again
+because the GUI runtime libraries are no longer needed.
 
 ## Optional, proposed only (not shipped)
 

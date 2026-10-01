@@ -60,6 +60,10 @@ pdf = [
 # on ONNX Runtime = pure CPU, no framework dependency, ~50-80 MB.
 ocr = [
     "rapidocr_onnxruntime>=1.3.0",
+    # RapidOCR depends on the GUI build opencv-python. The server/headless build
+    # provides the same cv2 module without the GUI libraries, at a smaller size.
+    # The [tool.uv] override below removes the GUI dependency; this adds headless.
+    "opencv-python-headless>=4.10.0",
 ]
 [dependency-groups]
 dev = [
@@ -147,6 +151,15 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "langgraph.*"
 ignore_missing_imports = true
+
+# RapidOCR requires the GUI build ``opencv-python``. The server variant
+# ``opencv-python-headless`` provides the same ``cv2`` module without the GUI
+# libraries. The false-marker override drops the GUI requirement; the ``[ocr]``
+# extra adds headless in its place (owner direction 2026-10-01).
+[tool.uv]
+override-dependencies = [
+    "opencv-python ; python_version < '0'",
+]
 
 # --- CPU-only PyTorch ------------------------------------------------------
 # Without this, torch resolves to the default PyPI Linux wheel, which is the
