@@ -112,6 +112,16 @@ ALLOWED_DOMAINS="$(get_input ALLOWED-DOMAINS)"
 cd "$WORKSPACE_ROOT"
 mkdir -p "$RESULT_DIR"
 
+# Point the lazy storage singleton at the mounted workspace for EVERY
+# subprocess (the pytest conftest, the AI-028 evidence exporter, the report).
+# Without this the import-time storage init in src/sqlite_persistence.py falls
+# back to the image root (/app), which the non-root user cannot write: the
+# evidence JUnit export dies on `mkdir /app/evidence` and the self-test's
+# junit-evidence.xml assert fails.  AITEST_* is the documented lazy override
+# (src/storage.py).
+export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"
+export AITEST_WORKSPACE="$WS_NAME"
+
 # --- hermetic self-test: boot mock site + fake LLM inside the container -----
 MOCK_PORT="${INPUT_SELF_TEST_MOCK_PORT:-8781}"
 LLM_PORT="${INPUT_SELF_TEST_LLM_PORT:-9977}"
@@ -411,11 +421,9 @@ run_generate_and_run() {
     # CI (its ~80 MB embedder download per runner; docs/ci.md §8).
     export RAG_ENABLED=0
     # The conftest teardown writes the store through get_storage()'s lazy
-    # default — point it at the runner-mount workspace so the store lands
-    # exactly where the caller's actions/cache step persists it (branch-
-    # scoped), and a restored store is loaded for dedup/reinforcement.
-    export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"
-    export AITEST_WORKSPACE="$WS_NAME"
+    # default, which is pointed at the runner-mount workspace above, so the
+    # store lands exactly where the caller's actions/cache step persists it
+    # (branch-scoped), and a restored store is loaded for dedup/reinforcement.
     log "learn: true — RAG off; flow-memory store: $WORKSPACE_ROOT/$WS_NAME/evidence/flow_memory.json"
   fi
 
