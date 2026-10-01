@@ -4,8 +4,9 @@ The harness computed per-assertion whether a criterion was verified by the
 golden locator, a distinctive element, a page arrival, or nothing - and never
 stored it. These tests pin the smaller job: the run that produced a gate number
 writes one `eval_runs` row carrying the verification split, one `eval_criteria`
-row per criterion, the row can be rebuilt from the run's kept evidence, and the
-existing compare command names a criterion that improved and one that regressed.
+row per criterion placeholder, the row can be rebuilt from the run's kept
+evidence, and the existing compare command names a criterion that improved and
+one that regressed.
 
 No new database: the table is created beside `eval_runs` in the same SQLite file.
 """
@@ -25,12 +26,14 @@ from eval_criteria import (  # noqa: E402
     MISS_WRONG_ELEMENT,
     compare_criteria,
     criterion_key,
+    criterion_outcome,
     load_criteria,
     verification_split,
 )
 from eval_evidence import emitted_filename, write_run_evidence  # noqa: E402
 from eval_metrics import ResolutionResult, StoryResult  # noqa: E402
 from eval_runner import (  # noqa: E402
+    eval_rollup,
     load_eval_history,
     persist_results,
     rebuild_run_from_evidence,
@@ -254,3 +257,32 @@ class TestCompareCriteria:
         comparison = compare_criteria(db, [], [newer])
 
         assert "eval-999#c1#cart_page_loaded" in comparison.new_failures
+
+
+class TestFailedDefinition:
+    def test_a_matched_criterion_whose_test_failed_is_failed_in_both_views(self, tmp_path: Path) -> None:
+        """The rollup and compare share one definition of failed (B-093)."""
+        db = tmp_path / "run_results.sqlite"
+        older = _persist(db, _CODE_NEWER)[0]  # both criteria matched, tests passed
+        story = validate_story(_CODE_NEWER, _GOLDEN)
+        newer = persist_results(
+            db,
+            [story],
+            mode="full",
+            code_map={"eval-999": _CODE_NEWER},
+            outcomes={"eval-999": {"test_01_a": "FAILED", "test_02_b": "PASSED"}},
+        )[0]
+
+        c0 = next(r for r in load_criteria(db, run_id=newer) if r["criterion_index"] == 0)
+        assert c0["matched"] == 1
+        assert c0["outcome"] == "FAILED"
+        assert criterion_outcome(c0) == "failed"
+
+        # compare: c0 passed before, its own test now failed -> regressed.
+        comparison = compare_criteria(db, [older], [newer])
+        assert "eval-999#c0#backpack_in_cart" in comparison.regressed
+
+        # rollup: c0 is a failure (2 total, because c1 misses too) and never a pass.
+        rendered = eval_rollup(db, "eval-999")
+        assert "FAILED CRITERIA: 2" in rendered
+        assert "PASSES BY BASIS (ASSERT): {}" in rendered

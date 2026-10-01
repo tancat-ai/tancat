@@ -591,7 +591,7 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
     are the same, new or fixed; for every pass, what it verified against; and
     how many were judged by the golden locator vs the test's own outcome.
     """
-    from eval_criteria import MISS_FIX_HINT, compare_criteria, load_criteria
+    from eval_criteria import MISS_FIX_HINT, compare_criteria, criterion_outcome, load_criteria
 
     history = load_eval_history(Path(db_path), story_id)
     if not history:
@@ -618,7 +618,7 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
             lines.append("  " + comparison.to_text().replace("\n", "\n  "))
 
         criteria = load_criteria(db_path, run_id=str(latest["run_id"]))
-        misses = [c for c in criteria if not c["matched"]]
+        misses = [c for c in criteria if criterion_outcome(c) == "failed"]
         classes: dict[str, int] = {}
         for c in misses:
             key = str(c["miss_class"] or "unknown")
@@ -632,7 +632,7 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
 
         basis: dict[str, int] = {}
         for c in criteria:
-            if c["action"] != "ASSERT":
+            if c["action"] != "ASSERT" or criterion_outcome(c) != "passed":
                 continue
             key = str(c["verification"] or "unverified")
             basis[key] = basis.get(key, 0) + 1
