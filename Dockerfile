@@ -54,13 +54,17 @@ COPY pyproject.toml uv.lock README.md ./
 # project itself is skipped here: its wheel builds from src/ (hatchling
 # packages = ["src", "cli"]), which is copied in the next layer — building
 # it now would ship an EMPTY project install (no src importable).
-RUN uv sync --frozen --no-dev --no-install-project --python /usr/local/bin/python3
+#
+# 2026-10-01 (owner decision): the [pdf] and [ocr] extras are installed so the
+# shipped product can actually read a PDF - pypdfium2 + pdfplumber (licence-clean)
+# for text/layout, RapidOCR for scanned pages. PyMuPDF was removed (AGPL-3.0).
+RUN uv sync --frozen --no-dev --extra pdf --extra ocr --no-install-project --python /usr/local/bin/python3
 
 # Copy the rest of the repo (src/, cli/, scripts/, ...) so the project
 # wheel builds with real content. Deps are already installed above and uv's
 # wheel cache is warm, so this second sync is incremental.
 COPY . .
-RUN uv sync --frozen --no-dev --python /usr/local/bin/python3
+RUN uv sync --frozen --no-dev --extra pdf --extra ocr --python /usr/local/bin/python3
 
 # Runtime stage: python 3.14 (matches the venv; the repo requires >= 3.14 —
 # the old playwright/python:v1.50.0-jammy base shipped python 3.10)

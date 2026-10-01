@@ -93,6 +93,8 @@ generated_tests/test_*.py
 generated_tests/resolved/
 generated_tests/test_cases_*.*
 generated_tests/test_report_*.*
+# Per-run verification verdicts (eval harness output, re-generated each run)
+generated_tests/verification_strength.json
 generated_tests/pages/
 generated_tests/uat_*/
 
