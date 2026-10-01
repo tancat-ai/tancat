@@ -19,51 +19,42 @@ import pytest
 class TestIngestPdfPageAware:
     """Tests for the page-aware PDF ingestion function."""
 
-    def _make_mock_doc(self, pages: list[tuple[str, str]]) -> MagicMock:
-        """Create a mock fitz document with given (text, label) pages."""
-        mock_doc = MagicMock()
-        mock_doc.page_count = len(pages)
-
-        mock_pages = []
-        for text, label in pages:
+    @staticmethod
+    def _make_fake_doc(pages: list[tuple[str, str]]) -> Any:
+        """A fake pdfplumber document with the given (text, label) pages."""
+        doc = MagicMock()
+        fake_pages = []
+        for text, _label in pages:
             page = MagicMock()
-            page.get_text.return_value = text
-            page.get_label.return_value = label
+            page.extract_text.return_value = text
+            page.extract_text_lines.return_value = []
+            page.extract_tables.return_value = []
+            fake_pages.append(page)
+        doc.pages = fake_pages
+        doc.close.return_value = None
+        return doc
 
-            # _extract_headings calls page.get_text("dict") — return empty blocks
-            # to skip the heading detection path (simpler mock)
-            def _make_get_text(t: str) -> Any:
-                def _get_text(*a: Any, **k: Any) -> Any:
-                    if a and a[0] == "dict":
-                        return {"blocks": []}
-                    return t
-
-                return _get_text
-
-            page.get_text.side_effect = _make_get_text(text)
-            mock_pages.append(page)
-
-        # __getitem__ returns pages by index
-        def getitem(i: int) -> MagicMock:
-            return mock_pages[i]
-
-        mock_doc.__getitem__ = MagicMock(side_effect=getitem)
-        return mock_doc
-
-    @patch("src.pdf_ingest._import_fitz")
-    def test_page_aware_returns_tagged_chunks(self, mock_fitz: MagicMock) -> None:
-        """ingest_pdf_page_aware returns chunks with page numbers."""
+    def _run(self, pages: list[tuple[str, str]], **kwargs: Any) -> list[Any]:
+        """Run ingest_pdf_page_aware against a fake document."""
         from src.pdf_ingest import ingest_pdf_page_aware
 
+        doc = self._make_fake_doc(pages)
+        labels = [label for _text, label in pages]
+        with (
+            patch("src.pdf_ingest._require_pdfplumber") as mock_plumber,
+            patch("src.pdf_ingest._page_labels", return_value=labels),
+        ):
+            mock_plumber.return_value.open.return_value = doc
+            return ingest_pdf_page_aware(Path("test.pdf"), **kwargs)
+
+    def test_page_aware_returns_tagged_chunks(self) -> None:
+        """ingest_pdf_page_aware returns chunks with page numbers."""
         pages = [
             ("## Section A\n\nSome text about section A", "1"),
             ("## Section B\n\nSome text about section B", "2"),
             ("## Section C\n\nSome text about section C", "3"),
         ]
-        mock_doc = self._make_mock_doc(pages)
-        mock_fitz.return_value.open.return_value = mock_doc
-
-        chunks = ingest_pdf_page_aware(Path("test.pdf"))
+        chunks = self._run(pages)
 
         assert len(chunks) > 0
         for chunk in chunks:
@@ -71,77 +62,54 @@ class TestIngestPdfPageAware:
             assert chunk.route == "text"  # All text route (no OCR)
             assert chunk.page_label != ""  # All pages have labels
 
-    @patch("src.pdf_ingest._import_fitz")
-    def test_page_aware_ocr_route(self, mock_fitz: MagicMock) -> None:
+    def test_page_aware_ocr_route(self) -> None:
         """ingest_pdf_page_aware tags OCR chunks with route='ocr'."""
-        from src.pdf_ingest import ingest_pdf_page_aware
-
         pages = [
             ("## Section A\n\nText content here", "1"),
             ("", "2"),  # Empty = image-only, will use OCR
         ]
-        mock_doc = self._make_mock_doc(pages)
-        mock_fitz.return_value.open.return_value = mock_doc
 
         def ocr_hook(path: Path, page_num: int) -> str:
             if page_num == 2:
                 return "## Scanned Section\n\nOCR extracted text"
             return ""
 
-        chunks = ingest_pdf_page_aware(Path("test.pdf"), ocr_fallback=ocr_hook)
+        chunks = self._run(pages, ocr_fallback=ocr_hook)
 
         ocr_chunks = [c for c in chunks if c.route == "ocr"]
         assert len(ocr_chunks) > 0
         assert ocr_chunks[0].page == 2
         assert ocr_chunks[0].page_label == "2"
 
-    @patch("src.pdf_ingest._import_fitz")
-    def test_page_aware_skips_empty_pages(self, mock_fitz: MagicMock) -> None:
+    def test_page_aware_skips_empty_pages(self) -> None:
         """ingest_pdf_page_aware skips image-only pages without OCR."""
-        from src.pdf_ingest import ingest_pdf_page_aware
-
         pages = [
             ("## Section A\n\nText content", "1"),
             ("", "2"),  # Empty = image-only
         ]
-        mock_doc = self._make_mock_doc(pages)
-        mock_fitz.return_value.open.return_value = mock_doc
-
-        chunks = ingest_pdf_page_aware(Path("test.pdf"))
+        chunks = self._run(pages)
 
         # Only page 1 chunks (page 2 skipped, no OCR)
         assert all(c.page == 1 for c in chunks)
 
-    @patch("src.pdf_ingest._import_fitz")
-    def test_page_aware_dedup_keys(self, mock_fitz: MagicMock) -> None:
+    def test_page_aware_dedup_keys(self) -> None:
         """ingest_pdf_page_aware computes dedup keys for all chunks."""
-        from src.pdf_ingest import ingest_pdf_page_aware
-
         pages = [
             ("## Section A\n\nText content here", "1"),
         ]
-        mock_doc = self._make_mock_doc(pages)
-        mock_fitz.return_value.open.return_value = mock_doc
-
-        chunks = ingest_pdf_page_aware(Path("test.pdf"))
+        chunks = self._run(pages)
 
         for chunk in chunks:
             assert chunk.dedup_key != ""  # Every chunk has a dedup key
 
-    @patch("src.pdf_ingest._import_fitz")
-    def test_page_aware_page_numbers_sequential(self, mock_fitz: MagicMock) -> None:
+    def test_page_aware_page_numbers_sequential(self) -> None:
         """Page numbers are sequential and match the PDF page order."""
-        from src.pdf_ingest import ingest_pdf_page_aware
-
         pages = [
             ("## A\n\nText A content here", "1"),
             ("## B\n\nText B content here", "2"),
             ("## C\n\nText C content here", "3"),
         ]
-        mock_doc = self._make_mock_doc(pages)
-        mock_fitz.return_value.open.return_value = mock_doc
-
-        chunks = ingest_pdf_page_aware(Path("test.pdf"))
+        chunks = self._run(pages)
 
         # Group chunks by page
         page_1 = [c for c in chunks if c.page == 1]
