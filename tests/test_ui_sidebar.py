@@ -284,9 +284,9 @@ def test_ocr_choices_hide_gpu_without_a_gpu(monkeypatch: Any) -> None:
     """A GPU-less build offers the CPU tier and hides the GPU choice."""
     from src.ui.ui_sidebar import _ocr_backend_choices
 
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", True)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", False)
 
     choices, notes = _ocr_backend_choices()
 
@@ -299,9 +299,9 @@ def test_ocr_choices_expose_gpu_when_the_build_has_one(monkeypatch: Any) -> None
     """A build with PyMuPDF, CPU OCR and a GPU offers all three tiers."""
     from src.ui.ui_sidebar import _ocr_backend_choices
 
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", True)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", True)
 
     choices, notes = _ocr_backend_choices()
 
@@ -313,9 +313,9 @@ def test_ocr_choices_name_what_to_install_when_missing(monkeypatch: Any) -> None
     """The shipped build has no PyMuPDF, no CPU OCR, no GPU - it offers nothing and says why."""
     from src.ui.ui_sidebar import _ocr_backend_choices
 
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: False)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", False)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", False)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", False)
 
     choices, notes = _ocr_backend_choices()
 
@@ -329,9 +329,9 @@ def test_render_ocr_backend_migrates_an_unavailable_saved_choice(monkeypatch: An
     fake = _FakeSt()
     saved: list[tuple[str, Any]] = []
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", True)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", False)
     monkeypatch.setattr("src.ui.ui_sidebar.load_setting", lambda _key, _default=None: "unlimited-ocr")
     monkeypatch.setattr("src.ui.ui_sidebar.save_setting", lambda key, value: saved.append((key, value)))
 
@@ -348,9 +348,9 @@ def test_render_ocr_backend_warns_instead_of_offering_a_dead_choice(monkeypatch:
     fake = _FakeSt()
     saved: list[tuple[str, Any]] = []
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: False)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", False)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", False)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", False)
     monkeypatch.setattr("src.ui.ui_sidebar.load_setting", lambda _key, _default=None: "unlimited-ocr")
     monkeypatch.setattr("src.ui.ui_sidebar.save_setting", lambda key, value: saved.append((key, value)))
 
@@ -406,14 +406,43 @@ def test_ocr_choices_gpu_note_names_the_true_cause(monkeypatch: Any) -> None:
     from src.ui.ui_sidebar import _ocr_backend_choices
 
     monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda name: name == "torch")
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", False)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", False)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", False)
     monkeypatch.setattr("torch.cuda.is_available", lambda: True)
 
     _, notes = _ocr_backend_choices()
 
     assert any("transformers" in n for n in notes)
     assert not any("no CUDA/ROCm GPU" in n for n in notes)
+
+
+def test_ocr_choices_hide_everything_when_the_backend_cannot_run(monkeypatch: Any) -> None:
+    """When the backend reports the PDF library missing, the picker offers no PDF tier."""
+    from src.ui.ui_sidebar import _ocr_backend_choices
+
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", True)
+
+    choices, notes = _ocr_backend_choices()
+
+    assert choices == []
+    assert any("PyMuPDF is not installed" in n for n in notes)
+
+
+def test_ocr_choices_offer_all_tiers_when_the_backend_reports_them(monkeypatch: Any) -> None:
+    """The picker agrees with the backend's availability in the positive case too."""
+    from src.ui.ui_sidebar import _ocr_backend_choices
+
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", True)
+
+    choices, notes = _ocr_backend_choices()
+
+    assert choices == ["auto", "cpu", "power"]
+    assert notes == []
 
 
 # ---------------------------------------------------------------------------
@@ -440,9 +469,9 @@ def test_render_ocr_backend_shows_the_engine_in_use(monkeypatch: Any) -> None:
     """The panel names the engine actually in use, so a downgrade is not silent."""
     fake = _FakeSt()
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
-    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
-    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", True)
-    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.PyMuPDFBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.engine_available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.engine_available", True)
     monkeypatch.setattr("src.ui.ui_sidebar.load_setting", lambda _key, _default=None: "auto")
     monkeypatch.setattr("src.ui.ui_sidebar.save_setting", lambda _key, _value: None)
 
