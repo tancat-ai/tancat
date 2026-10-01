@@ -32,14 +32,41 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: How to install the PDF reader.  One string, so the UI, the CLI and the
+#: pipeline cannot drift on what to tell a user who needs it.
+PDF_READER_INSTALL_HINT = "uv sync --extra pdf (or pip install PyMuPDF)"
+
 
 def _import_fitz() -> type[fitz]:
     """Lazy-import PyMuPDF.  Raises ImportError with install instructions if absent."""
     try:
         import fitz as _fitz  # type: ignore[import-untyped]
     except ImportError:
-        raise ImportError("PyMuPDF (fitz) is required for PDF ingestion. Install with: pip install PyMuPDF") from None
+        raise ImportError(
+            f"PyMuPDF (fitz) is required for PDF ingestion. Install with: {PDF_READER_INSTALL_HINT}"
+        ) from None
     return _fitz  # type: ignore[return-value]
+
+
+def pdf_reader_available() -> bool:
+    """Whether PyMuPDF can be imported in this environment.
+
+    ``find_spec`` does not import the module, so the UI can ask without paying
+    the import cost or risking a raise.  This is the honest capability check:
+    a build without the ``[pdf]`` extra has no PDF reader, whatever an OCR
+    backend's ``available`` flag may claim.
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("fitz") is not None
+
+
+def pdf_reader_missing_message() -> str:
+    """Plain sentence for the UI: what is missing and how to install it."""
+    return (
+        "This build cannot read PDFs - document mode has no PDF reader: "
+        f"PyMuPDF is not installed. Install it with `{PDF_READER_INSTALL_HINT}`."
+    )
 
 
 # ---------------------------------------------------------------------------
