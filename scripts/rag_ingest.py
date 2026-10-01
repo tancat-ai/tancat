@@ -38,7 +38,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from src.ocr_backends import OcrBackend, get_ocr_backend
+from src.ocr_backends import OcrBackend, OcrBackendUnavailableError, get_ocr_backend
 from src.pdf_ingest import ingest_pdf_directory
 from src.rag_bundled import (
     _write_marker,
@@ -96,6 +96,12 @@ def _build_ocr_fallback() -> Callable[[Path, int], str]:
     is available, ``parse_page`` returns empty and the production ingest path
     skips the page with a loud WARNING (never fails ingestion for a missing
     optional tier — graceful degradation).
+
+    An **explicitly requested** tier that cannot run (``OCR_BACKEND=power`` on
+    a GPU-less box, or a stale saved setting) is refused: the factory raises
+    :class:`~src.ocr_backends.OcrBackendUnavailableError`, which :func:`main`
+    prints as a readable ``ERROR:`` line instead of a traceback.  Only ``auto``
+    degrades quietly.
 
     Returns the backend's ``parse_page`` bound method (always callable); the
     empty-string return when no OCR is available is handled by the ingest
@@ -218,11 +224,15 @@ def main(argv: list[str] | None = None) -> dict[str, object]:
     """Run the ingestion CLI.
 
     Returns a summary dict so tests can verify output. An embedder-mismatch
-    refusal is printed cleanly (no traceback) with the reindex fix.
+    refusal, and an OCR tier this build cannot run, are printed cleanly
+    (no traceback) with the fix.
     """
     try:
         return _run(argv)
     except EmbeddingMismatchError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return {"error": str(exc)}
+    except OcrBackendUnavailableError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return {"error": str(exc)}
 
