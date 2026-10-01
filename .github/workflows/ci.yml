@@ -145,6 +145,24 @@ jobs:
           fi
           python3 scripts/maintenance/kanban.py --check 2>&1 || echo "::warning::kanban.html stale — run scripts/maintenance/kanban.py"
 
+  # ── Gate 1e: Private-content guard (BLOCKING) ───────────────────────
+  # Split from kanban-freshness on the owner's word: a committed artefact
+  # carrying private material must fail the build; board freshness stays a
+  # warning because that check has a history of flaking. The guard is the
+  # same code kanban.py runs before its freshness comparison.
+  private-content-guard:
+    name: Private Content Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # stdlib-only, same reasoning as kanban-freshness above: no uv sync.
+      - name: Fail if kanban.html carries content from docs/private/
+        run: python3 scripts/maintenance/kanban.py --check-private
+
   # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
     name: Ruff Lint & Format
