@@ -150,6 +150,7 @@ class TestOcrBackendIntegration:
         monkeypatch.setenv("OCR_BACKEND", "pymupdf")
         save_setting("ocr_backend", "unlimited-ocr")
         with (
+            patch("src.ocr_backends._pdf_library_available", return_value=True),
             patch("torch.cuda.is_available", return_value=True),
             patch("torch.cuda.is_bf16_supported", return_value=True),
             patch("torch.cuda.get_device_name", return_value="Test GPU"),

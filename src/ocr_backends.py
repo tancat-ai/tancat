@@ -35,6 +35,12 @@ on a GPU-less box, or a stale saved setting) is refused with
 :class:`OcrBackendUnavailableError`, naming the source and the fix — it is
 never silently swapped for a weaker engine.  Only ``auto`` degrades quietly,
 because degrading is what ``auto`` means.
+
+``Available`` means "this backend can do its job on this build": it includes
+the PDF library (PyMuPDF, ``fitz``), which every PDF path needs.  The OCR
+backends also expose ``engine_available`` for "the tier's engine is installed,
+ignoring the PDF library", so the UI can name the missing piece instead of
+showing one misleading boolean.
 """
 
 from __future__ import annotations
@@ -48,6 +54,20 @@ from typing import Any
 from src.settings_store import load_setting
 
 logger = logging.getLogger(__name__)
+
+
+def _pdf_library_available() -> bool:
+    """Whether the PDF library (PyMuPDF, ``fitz``) is importable here.
+
+    Every backend in this module opens a PDF page or reads its text, so
+    without ``fitz`` none of them can do its job.  This delegates to
+    :func:`src.pdf_ingest.pdf_reader_available` so the backend's answer is the
+    same one the UI's PDF-reader notice gives.
+    """
+    from src.pdf_ingest import pdf_reader_available
+
+    return pdf_reader_available()
+
 
 # ---------------------------------------------------------------------------
 # Abstract backend
@@ -112,6 +132,11 @@ class PyMuPDFBackend(OcrBackend):
     def name(self) -> str:
         return "pymupdf"
 
+    @property
+    def available(self) -> bool:
+        """Whether the PDF library is importable - this backend's only need."""
+        return _pdf_library_available()
+
     def parse_pdf(self, path: str | Path) -> str:
         from src.pdf_ingest import ingest_pdf
 
@@ -167,7 +192,17 @@ class RapidOCRBackend(OcrBackend):
 
     @property
     def available(self) -> bool:
-        """Whether the CPU ONNX OCR engine is importable in this environment."""
+        """Whether this backend can OCR a page here.
+
+        Both halves are needed: the PDF library rasterises the page and the
+        CPU ONNX engine recognises the text.  Without ``fitz`` the page cannot
+        be rendered even when the engine is installed.
+        """
+        return _pdf_library_available() and self.engine_available
+
+    @property
+    def engine_available(self) -> bool:
+        """Whether the CPU ONNX engine is importable (ignores the PDF library)."""
         try:
             import rapidocr_onnxruntime  # noqa: F401
         except ImportError:
@@ -306,7 +341,12 @@ class AutoOcrBackend(OcrBackend):
 
     @property
     def available(self) -> bool:
-        """Tier 0 (PyMuPDF) is always on; tier-1 CPU OCR is best-effort."""
+        """Whether the PDF path can run here.
+
+        Tier 0 (PyMuPDF) is the floor, so this mirrors whether ``fitz`` is
+        importable.  Tier-1 CPU OCR for image-only pages is best-effort and
+        does not change this answer.
+        """
         return self._text.available
 
     def parse_pdf(self, path: str | Path) -> str:
@@ -320,13 +360,19 @@ class AutoOcrBackend(OcrBackend):
     def parse_page(self, path: str | Path, page_number: int) -> str:
         """Image-only-page fallback via the tier-1 CPU OCR (RapidOCR).
 
-        Returns empty when the CPU OCR engine is absent so the caller skips
-        the page (graceful degradation — never fail ingestion for a missing
-        optional tier).
+        Returns empty when the CPU OCR engine or the PDF library is absent so
+        the caller skips the page (graceful degradation — never fail ingestion
+        for a missing optional tier).
         """
         if not self._ocr.available:
+            missing = (
+                "the PDF library (PyMuPDF)"
+                if not _pdf_library_available()
+                else "the CPU OCR engine (rapidocr_onnxruntime)"
+            )
             logger.debug(
-                "auto.parse_page: CPU OCR (rapidocr) not installed — image-only page %d will be skipped",
+                "auto.parse_page: %s is not installed — image-only page %d will be skipped",
+                missing,
                 page_number,
             )
             return ""
@@ -366,7 +412,16 @@ class UnlimitedOCRBackend(OcrBackend):
 
     @property
     def available(self) -> bool:
-        """Check whether GPU + required packages are available.
+        """Whether this backend can OCR a page here.
+
+        Needs the PDF library to rasterise the page and the GPU stack to run
+        the model; both must be present.
+        """
+        return _pdf_library_available() and self.engine_available
+
+    @property
+    def engine_available(self) -> bool:
+        """Whether the GPU stack is usable (ignores the PDF library).
 
         Supports NVIDIA CUDA and AMD ROCm (via HIP).
         """
@@ -645,7 +700,14 @@ def _unavailable_line(name: str, source: str) -> str | None:
             f"Refusing instead of silently using a different engine."
         )
     if tier == "cpu":
-        if RapidOCRBackend().available:
+        if not _pdf_library_available():
+            return (
+                f"OCR backend '{name}' requested {where} cannot run on this build: "
+                f"the PDF library (PyMuPDF) is not installed (every page is rendered with it). "
+                f"Install it with `uv sync --extra pdf`, or choose Automatic in Settings. "
+                f"Refusing instead of silently using a different engine."
+            )
+        if RapidOCRBackend().engine_available:
             return None
         return (
             f"OCR backend '{name}' requested {where} cannot run on this build: "
@@ -654,7 +716,14 @@ def _unavailable_line(name: str, source: str) -> str | None:
             f"Refusing instead of silently using a different engine."
         )
     if tier == "power":
-        if UnlimitedOCRBackend().available:
+        if not _pdf_library_available():
+            return (
+                f"OCR backend '{name}' requested {where} cannot run on this build: "
+                f"the PDF library (PyMuPDF) is not installed (it rasterises each page). "
+                f"Install it with `uv sync --extra pdf`, or choose Automatic in Settings. "
+                f"Refusing instead of silently using a different engine."
+            )
+        if UnlimitedOCRBackend().engine_available:
             return None
         return (
             f"OCR backend '{name}' requested {where} cannot run on this build: "
