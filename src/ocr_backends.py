@@ -360,13 +360,19 @@ class AutoOcrBackend(OcrBackend):
     def parse_page(self, path: str | Path, page_number: int) -> str:
         """Image-only-page fallback via the tier-1 CPU OCR (RapidOCR).
 
-        Returns empty when the CPU OCR engine is absent so the caller skips
-        the page (graceful degradation — never fail ingestion for a missing
-        optional tier).
+        Returns empty when the CPU OCR engine or the PDF library is absent so
+        the caller skips the page (graceful degradation — never fail ingestion
+        for a missing optional tier).
         """
         if not self._ocr.available:
+            missing = (
+                "the PDF library (PyMuPDF)"
+                if not _pdf_library_available()
+                else "the CPU OCR engine (rapidocr_onnxruntime)"
+            )
             logger.debug(
-                "auto.parse_page: CPU OCR (rapidocr) not installed — image-only page %d will be skipped",
+                "auto.parse_page: %s is not installed — image-only page %d will be skipped",
+                missing,
                 page_number,
             )
             return ""
