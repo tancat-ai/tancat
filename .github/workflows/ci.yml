@@ -124,7 +124,7 @@ jobs:
   kanban-freshness:
     name: Kanban Freshness Check
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository

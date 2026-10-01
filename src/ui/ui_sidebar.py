@@ -205,6 +205,7 @@ class SidebarConfig:
             if workspace != stored_workspace:
                 save_setting(SETTING_WORKSPACE, workspace)
 
+        SidebarConfig._render_pdf_reader_notice()
         SidebarConfig._render_learned_patterns()
         SidebarConfig._render_flow_memory()
 
@@ -267,6 +268,20 @@ class SidebarConfig:
         # Say plainly which engine is actually in use (the owner's question 3).
         st.caption(f"Engine in use: {_format_ocr_backend(ocr_backend)}")
         return ocr_backend
+
+    @staticmethod
+    def _render_pdf_reader_notice() -> None:
+        """Say plainly when this build has no PDF reader.
+
+        Separate from the OCR picker's note: that one covers the OCR tiers,
+        while a build with no PyMuPDF cannot read a PDF at all - document mode
+        has no reader. Rendered wherever Settings renders, so the user meets it
+        without having to open a particular dropdown.
+        """
+        from src.pdf_ingest import pdf_reader_available, pdf_reader_missing_message
+
+        if not pdf_reader_available():
+            st.sidebar.warning(pdf_reader_missing_message())
 
     @staticmethod
     def _render_learned_patterns() -> None:
