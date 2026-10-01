@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Generate kanban.html from BACKLOG.md + ROADMAP_ROADTO_PRODUCTION.md.
+"""Generate the public kanban.html from BACKLOG.md.
+
+The roadmap now lives under the ignored ``docs/private/``. A default run is
+public-only: it reads BACKLOG.md and never reads anything under ``docs/private/``,
+so the committed board carries no private content. ``--with-private`` includes
+the private roadmap for a local view - that output must not be committed.
+``--check-private`` fails when a committed board carries private content (the
+blocking CI guard); ``--check`` runs that guard, then checks freshness.
 
 BACKLOG.md  -> bugs, issues found, unplanned changes
-ROADMAP.md  -> planned features and milestones
+ROADMAP.md  -> planned features and milestones (private; local view only)
 
-Both are merged into a single kanban view. Items sharing an ID are deduplicated;
-the roadmap status wins for column assignment.
+Items sharing an ID are deduplicated; when the roadmap is included its status
+wins for column assignment.
 """
 
 from __future__ import annotations
@@ -18,7 +25,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 BACKLOG_PATH = ROOT / "BACKLOG.md"
-ROADMAP_PATH = ROOT / "docs" / "plans" / "ROADMAP_ROADTO_PRODUCTION.md"
+PRIVATE_DIR = ROOT / "docs" / "private"
+ROADMAP_PUBLIC_PATH = ROOT / "docs" / "plans" / "ROADMAP_ROADTO_PRODUCTION.md"
+ROADMAP_PRIVATE_PATH = PRIVATE_DIR / "ROADMAP_ROADTO_PRODUCTION.md"
 KANBAN_PATH = ROOT / "kanban.html"
 
 # ── Column mapping ──────────────────────────────────────────────────────────
@@ -277,7 +286,7 @@ def merge_items(roadmap_items: list[dict], backlog_items: list[dict]) -> list[di
 # ── HTML generator ──────────────────────────────────────────────────────────
 
 
-def generate_html(items: list[dict], source_updated: str) -> str:
+def generate_html(items: list[dict], source_updated: str, *, roadmap_used: bool = False) -> str:
     """Generate a self-contained kanban HTML page."""
     columns: dict[str, list[dict]] = {
         TODO_LABEL: [],
@@ -291,6 +300,13 @@ def generate_html(items: list[dict], source_updated: str) -> str:
     done_count = str(len(columns[DONE_LABEL]))
     roadmap_count = sum(1 for it in items if "ROADMAP" in it.get("source_path", ""))
     backlog_count = len(items) - roadmap_count
+    if roadmap_used:
+        source_line = (
+            f"Generated from <code>BACKLOG.md</code> ({backlog_count}) + "
+            f"<code>ROADMAP_ROADTO_PRODUCTION.md</code> ({roadmap_count})"
+        )
+    else:
+        source_line = f"Generated from <code>BACKLOG.md</code> ({backlog_count}) &mdash; private roadmap omitted"
     src_time = html_escape(source_updated)
 
     return f"""<!DOCTYPE html>
@@ -410,7 +426,7 @@ header p {{ font-size: 0.8rem; color: #8b949e; margin-top: 4px; }}
 <body>
 <header>
     <h1>\U0001f4cb Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> ({backlog_count}) + <code>ROADMAP_ROADTO_PRODUCTION.md</code> ({roadmap_count}) &mdash; {src_time}</p>
+    <p>{source_line} &mdash; {src_time}</p>
 </header>
 <div class="board">
     {_render_column(TODO_LABEL, "todo", columns[TODO_LABEL])}
@@ -510,18 +526,122 @@ def _render_card(item: dict) -> str:
 </div>"""
 
 
+# ── Private-content guard ─────────────────────────────────────────────────────
+
+#: Board markers that only a roadmap-sourced card emits.
+_PRIVATE_BOARD_MARKERS = ("source-badge roadmap", "ROADMAP_ROADTO_PRODUCTION.md")
+
+_MD_PREFIX_RE = re.compile(r"^[\s>#*+`\-]*")
+_ID_PREFIX_RE = re.compile(r"^(?:\d+[a-z]?\.\s*|(?:[A-Z]+-\d+)\s*|Phase\s+\d+[a-z]?\s*)?[\s\u2014\u2013\-:]*")
+_MIN_FINGERPRINT = 12
+
+
+def _content_phrase(line: str) -> str:
+    """Strip markdown and item-id noise so a heading matches its rendered title."""
+    text = _MD_PREFIX_RE.sub("", line).strip()
+    return _ID_PREFIX_RE.sub("", text).strip()
+
+
+def _private_fingerprints(
+    private_dir: Path | None = None,
+    public_text: str | None = None,
+) -> list[str]:
+    """Strings a public artefact must never carry.
+
+    Built from the private files: their names, their content phrases, and the
+    board markers only a roadmap-sourced card emits. Anything also present in
+    the public inputs is dropped, so a backlog title shared with the roadmap is
+    not treated as a private signal.
+    """
+    directory = private_dir if private_dir is not None else PRIVATE_DIR
+    if public_text is None:
+        public_text = BACKLOG_PATH.read_text(encoding="utf-8") if BACKLOG_PATH.exists() else ""
+
+    raw: list[str] = list(_PRIVATE_BOARD_MARKERS)
+    if directory.is_dir():
+        for path in sorted(directory.iterdir()):
+            if not path.is_file():
+                continue
+            raw.append(path.name)
+            if path.suffix.lower() != ".md":
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            for line in text.splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                raw.append(stripped)
+                phrase = _content_phrase(stripped)
+                if phrase:
+                    raw.append(phrase)
+
+    fingerprints: list[str] = []
+    seen: set[str] = set()
+    for value in raw:
+        if value in seen or len(value) < _MIN_FINGERPRINT or value in public_text:
+            continue
+        seen.add(value)
+        fingerprints.append(value)
+    return fingerprints
+
+
+def private_content_bleed(
+    artifact_text: str,
+    *,
+    private_dir: Path | None = None,
+    public_text: str | None = None,
+) -> list[str]:
+    """Return the private fingerprints found in a public artefact (empty = clean)."""
+    return [
+        fingerprint for fingerprint in _private_fingerprints(private_dir, public_text) if fingerprint in artifact_text
+    ]
+
+
 # ── Check mode ───────────────────────────────────────────────────────────────
 
 
+def private_content_check() -> int:
+    """Exit 0 if kanban.html carries no private content, 1 if it does.
+
+    This is its own blocking CI gate (``--check-private``): a committed artefact
+    with private material fails the build. The general freshness check stays
+    warning-only, so the two concerns are split.
+    """
+    if not KANBAN_PATH.exists():
+        print("ERROR: kanban.html does not exist. Run scripts/maintenance/kanban.py")
+        return 1
+
+    existing = KANBAN_PATH.read_text(encoding="utf-8")
+    bleed = private_content_bleed(existing)
+    if not bleed:
+        print("OK: kanban.html carries no content from docs/private/")
+        return 0
+
+    print("ERROR: kanban.html carries content from docs/private/:")
+    for marker in bleed[:5]:
+        print(f"  - {marker[:100]!r}")
+    print("Regenerate the public board: python scripts/maintenance/kanban.py")
+    return 1
+
+
 def check_mode() -> int:
-    """Exit 0 if kanban.html is up to date, 1 if stale."""
+    """Exit 0 if kanban.html is public-only and up to date, 1 otherwise."""
     if not KANBAN_PATH.exists():
         print("ERROR: kanban.html does not exist. Run kanban.py without --check to generate it.")
         return 1
 
-    items = _load_all_items()
-    new_html = generate_html(items, _source_timestamp())
+    # The private-content guard runs first and fails exactly as `--check-private`
+    # does. The freshness comparison below is the separate concern.
+    if private_content_check() != 0:
+        return 1
+
     existing = KANBAN_PATH.read_text(encoding="utf-8")
+    roadmap_path = _roadmap_path(with_private=False)
+    items = _load_all_items(with_private=False)
+    new_html = generate_html(items, _source_timestamp(False), roadmap_used=roadmap_path is not None)
 
     # Normalize the "Generated from ... <timestamp></p>" line before comparing.
     # Strip the whole line to a canonical form so a wall-clock/min-advance in the
@@ -542,12 +662,14 @@ def check_mode() -> int:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
-def _source_timestamp() -> str:
-    """Human-readable timestamp for the newest source file's modification."""
-    mtime = max(
-        BACKLOG_PATH.stat().st_mtime if BACKLOG_PATH.exists() else 0,
-        ROADMAP_PATH.stat().st_mtime if ROADMAP_PATH.exists() else 0,
-    )
+def _source_timestamp(with_private: bool = False) -> str:
+    """Human-readable timestamp for the newest source file used."""
+    sources = [BACKLOG_PATH]
+    roadmap_path = _roadmap_path(with_private)
+    if roadmap_path is not None:
+        sources.append(roadmap_path)
+    mtimes = [path.stat().st_mtime for path in sources if path.exists()]
+    mtime = max(mtimes) if mtimes else 0.0
     dt = datetime.fromtimestamp(mtime, tz=UTC)
     return dt.strftime("%Y-%m-%d %H:%M UTC")
 
@@ -560,11 +682,21 @@ def _relative_path(path: Path) -> str:
         return str(path)
 
 
-def _load_all_items() -> list[dict]:
-    """Parse both sources and return merged items."""
+def _roadmap_path(with_private: bool = False) -> Path | None:
+    """The roadmap to read: the private copy only on request, else the public copy."""
+    if with_private and ROADMAP_PRIVATE_PATH.exists():
+        return ROADMAP_PRIVATE_PATH
+    if ROADMAP_PUBLIC_PATH.exists():
+        return ROADMAP_PUBLIC_PATH
+    return None
+
+
+def _load_all_items(with_private: bool = False) -> list[dict]:
+    """Parse the available sources and return merged items."""
     roadmap_items: list[dict] = []
-    if ROADMAP_PATH.exists():
-        roadmap_items = parse_roadmap(ROADMAP_PATH)
+    roadmap_path = _roadmap_path(with_private)
+    if roadmap_path is not None:
+        roadmap_items = parse_roadmap(roadmap_path)
 
     backlog_items: list[dict] = []
     if BACKLOG_PATH.exists():
@@ -574,15 +706,22 @@ def _load_all_items() -> list[dict]:
 
 
 def main() -> None:
-    if "--check" in sys.argv:
+    args = set(sys.argv[1:])
+    if "--check-private" in args:
+        sys.exit(private_content_check())
+    if "--check" in args:
         sys.exit(check_mode())
 
-    items = _load_all_items()
+    with_private = "--with-private" in args
+    roadmap_path = _roadmap_path(with_private)
+    items = _load_all_items(with_private)
     roadmap_count = sum(1 for it in items if "ROADMAP" in it.get("source_path", ""))
     backlog_count = len(items) - roadmap_count
 
-    html = generate_html(items, _source_timestamp())
+    html = generate_html(items, _source_timestamp(with_private), roadmap_used=roadmap_path is not None)
     KANBAN_PATH.write_text(html, encoding="utf-8")
+    if roadmap_path == ROADMAP_PRIVATE_PATH:
+        print("WARNING: kanban.html contains private roadmap content; do not commit it.")
     print(f"OK: generated kanban.html ({roadmap_count} from roadmap, {backlog_count} from backlog)")
 
 
