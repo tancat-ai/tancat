@@ -70,3 +70,16 @@ def test_guard_ignores_content_shared_with_public_inputs(tmp_path: Path) -> None
     (private / "PLAN.md").write_text(f"# Plan\n\n- {shared}\n", encoding="utf-8")
     artifact = f"<div>{shared}</div>"
     assert kanban.private_content_bleed(artifact, private_dir=private, public_text=shared) == []
+
+
+def test_private_content_check_passes_on_the_committed_board() -> None:
+    kanban = _load_kanban()
+    assert kanban.private_content_check() == 0
+
+
+def test_private_content_check_fails_on_a_poisoned_board(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    kanban = _load_kanban()
+    poisoned = tmp_path / "kanban.html"
+    poisoned.write_text('<span class="source-badge roadmap">ROADMAP</span>', encoding="utf-8")
+    monkeypatch.setattr(kanban, "KANBAN_PATH", poisoned)
+    assert kanban.private_content_check() == 1
