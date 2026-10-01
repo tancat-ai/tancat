@@ -4,8 +4,9 @@
 The roadmap now lives under the ignored ``docs/private/``. A default run is
 public-only: it reads BACKLOG.md and never reads anything under ``docs/private/``,
 so the committed board carries no private content. ``--with-private`` includes
-the private roadmap for a local view - that output must not be committed, and
-``--check`` fails when a committed board carries private content.
+the private roadmap for a local view - that output must not be committed.
+``--check-private`` fails when a committed board carries private content (the
+blocking CI guard); ``--check`` runs that guard, then checks freshness.
 
 BACKLOG.md  -> bugs, issues found, unplanned changes
 ROADMAP.md  -> planned features and milestones (private; local view only)
@@ -602,24 +603,42 @@ def private_content_bleed(
 # ── Check mode ───────────────────────────────────────────────────────────────
 
 
+def private_content_check() -> int:
+    """Exit 0 if kanban.html carries no private content, 1 if it does.
+
+    This is its own blocking CI gate (``--check-private``): a committed artefact
+    with private material fails the build. The general freshness check stays
+    warning-only, so the two concerns are split.
+    """
+    if not KANBAN_PATH.exists():
+        print("ERROR: kanban.html does not exist. Run scripts/maintenance/kanban.py")
+        return 1
+
+    existing = KANBAN_PATH.read_text(encoding="utf-8")
+    bleed = private_content_bleed(existing)
+    if not bleed:
+        print("OK: kanban.html carries no content from docs/private/")
+        return 0
+
+    print("ERROR: kanban.html carries content from docs/private/:")
+    for marker in bleed[:5]:
+        print(f"  - {marker[:100]!r}")
+    print("Regenerate the public board: python scripts/maintenance/kanban.py")
+    return 1
+
+
 def check_mode() -> int:
     """Exit 0 if kanban.html is public-only and up to date, 1 otherwise."""
     if not KANBAN_PATH.exists():
         print("ERROR: kanban.html does not exist. Run kanban.py without --check to generate it.")
         return 1
 
-    existing = KANBAN_PATH.read_text(encoding="utf-8")
-
-    # A committed generated artefact must not carry private content, whatever
-    # the freshness comparison below says. This is the explicit guard.
-    bleed = private_content_bleed(existing)
-    if bleed:
-        print("ERROR: kanban.html carries content from docs/private/:")
-        for marker in bleed[:5]:
-            print(f"  - {marker[:100]!r}")
-        print("Regenerate the public board: python scripts/maintenance/kanban.py")
+    # The private-content guard runs first and fails exactly as `--check-private`
+    # does. The freshness comparison below is the separate concern.
+    if private_content_check() != 0:
         return 1
 
+    existing = KANBAN_PATH.read_text(encoding="utf-8")
     roadmap_path = _roadmap_path(with_private=False)
     items = _load_all_items(with_private=False)
     new_html = generate_html(items, _source_timestamp(False), roadmap_used=roadmap_path is not None)
@@ -688,6 +707,8 @@ def _load_all_items(with_private: bool = False) -> list[dict]:
 
 def main() -> None:
     args = set(sys.argv[1:])
+    if "--check-private" in args:
+        sys.exit(private_content_check())
     if "--check" in args:
         sys.exit(check_mode())
 
