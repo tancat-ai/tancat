@@ -57,7 +57,7 @@ def _module_available(name: str) -> bool:
 def _gpu_unavailable_reason() -> str | None:
     """Why the GPU OCR tier is hidden, or None when it can run.
 
-    Mirrors ``UnlimitedOCRBackend.available``: PyTorch -> CUDA/ROCm ->
+    Mirrors ``UnlimitedOCRBackend.engine_available``: PyTorch -> CUDA/ROCm ->
     transformers. It names the true cause and how to install it, so a machine
     that has a GPU but is missing a package is not told it has no GPU.
     """

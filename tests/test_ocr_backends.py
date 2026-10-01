@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import tempfile
@@ -177,6 +178,39 @@ class TestAutoOcrBackend:
             text = backend.parse_page("/fake/doc.pdf", 2)
             assert text == ""
             mock_parse.assert_not_called()
+
+    def test_parse_page_skip_log_names_the_engine_when_it_is_missing(self, caplog: pytest.LogCaptureFixture) -> None:
+        """The skip line names the OCR engine when the PDF library is present."""
+        backend = AutoOcrBackend()
+        with (
+            patch("src.ocr_backends._pdf_library_available", return_value=True),
+            patch(
+                "src.ocr_backends.RapidOCRBackend.engine_available",
+                new_callable=PropertyMock,
+                return_value=False,
+            ),
+            caplog.at_level(logging.DEBUG, logger="src.ocr_backends"),
+        ):
+            text = backend.parse_page("/fake/doc.pdf", 2)
+
+        assert text == ""
+        assert "CPU OCR engine (rapidocr_onnxruntime)" in caplog.text
+        assert "PDF library" not in caplog.text
+
+    def test_parse_page_skip_log_names_the_pdf_library_when_it_is_missing(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The skip line blames PyMuPDF when that is the true cause, not rapidocr."""
+        backend = AutoOcrBackend()
+        with (
+            patch("src.ocr_backends._pdf_library_available", return_value=False),
+            caplog.at_level(logging.DEBUG, logger="src.ocr_backends"),
+        ):
+            text = backend.parse_page("/fake/doc.pdf", 2)
+
+        assert text == ""
+        assert "PDF library (PyMuPDF)" in caplog.text
+        assert "rapidocr" not in caplog.text
 
     def test_parse_markdown_reads_file(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
