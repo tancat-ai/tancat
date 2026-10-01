@@ -41,8 +41,13 @@ class TestPyMuPDFBackend:
     def test_name(self) -> None:
         assert PyMuPDFBackend().name == "pymupdf"
 
-    def test_available_always_true(self) -> None:
-        assert PyMuPDFBackend().available is True
+    def test_available_is_true_when_the_pdf_library_is_present(self) -> None:
+        with patch("src.ocr_backends._pdf_library_available", return_value=True):
+            assert PyMuPDFBackend().available is True
+
+    def test_available_is_false_without_the_pdf_library(self) -> None:
+        with patch("src.ocr_backends._pdf_library_available", return_value=False):
+            assert PyMuPDFBackend().available is False
 
     def test_parse_markdown_reads_file(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
@@ -91,10 +96,23 @@ class TestRapidOCRBackend:
             assert backend.available is False
 
     def test_available_when_engine_importable(self) -> None:
-        """When the engine module is importable, reports available."""
-        with patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}):
+        """When the engine module and the PDF library are importable, reports available."""
+        with (
+            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch("src.ocr_backends._pdf_library_available", return_value=True),
+        ):
             backend = RapidOCRBackend()
             assert backend.available is True
+
+    def test_available_is_false_without_the_pdf_library(self) -> None:
+        """The engine alone is not enough: the page still needs PyMuPDF to render."""
+        with (
+            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch("src.ocr_backends._pdf_library_available", return_value=False),
+        ):
+            backend = RapidOCRBackend()
+            assert backend.engine_available is True
+            assert backend.available is False
 
     def test_parse_page_out_of_range_returns_empty(self) -> None:
         """A page number outside the PDF's range returns empty (no crash)."""
@@ -191,9 +209,22 @@ class TestUnlimitedOCRBackend:
             patch("torch.cuda.is_available", return_value=True),
             patch("transformers.AutoModel", create=True),
             patch("transformers.AutoTokenizer", create=True),
+            patch("src.ocr_backends._pdf_library_available", return_value=True),
         ):
             backend = UnlimitedOCRBackend()
             assert backend.available is True
+
+    def test_available_is_false_without_the_pdf_library(self) -> None:
+        """The GPU stack alone is not enough: the page still needs PyMuPDF to render."""
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("transformers.AutoModel", create=True),
+            patch("transformers.AutoTokenizer", create=True),
+            patch("src.ocr_backends._pdf_library_available", return_value=False),
+        ):
+            backend = UnlimitedOCRBackend()
+            assert backend.engine_available is True
+            assert backend.available is False
 
     def test_ensure_model_raises_without_cuda(self) -> None:
         backend = UnlimitedOCRBackend()
@@ -246,11 +277,16 @@ class TestGetOcrBackend:
 
     @pytest.fixture(autouse=True)
     def _isolate_settings(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """B-036 Phase 4: keep the persisted settings store out of these tests."""
+        """Keep the settings store and the PDF library out of these tests.
+
+        The factory tests exercise tier selection, so they take the PDF library
+        as present; the two tests that need it absent patch it False themselves.
+        """
         settings_file = tmp_path / "settings.enc"
         monkeypatch.setattr("src.settings_store._settings_path", lambda: settings_file)
         if settings_file.exists():
             settings_file.unlink()
+        monkeypatch.setattr("src.ocr_backends._pdf_library_available", lambda: True)
 
     def test_default_is_auto(self) -> None:
         """AI-055: the default tier is ``auto`` (tier-0 whole-doc + tier-1 CPU OCR)."""
@@ -280,7 +316,7 @@ class TestGetOcrBackend:
     def test_cpu_tier_returns_rapidocr(self) -> None:
         """``cpu`` forces the tier-1 CPU OCR (RapidOCR)."""
         with patch(
-            "src.ocr_backends.RapidOCRBackend.available",
+            "src.ocr_backends.RapidOCRBackend.engine_available",
             new_callable=PropertyMock,
             return_value=True,
         ):
@@ -288,7 +324,11 @@ class TestGetOcrBackend:
             assert isinstance(backend, RapidOCRBackend)
 
     def test_rapidocr_alias_for_cpu(self) -> None:
-        with patch("src.ocr_backends.RapidOCRBackend.available", return_value=True):
+        with patch(
+            "src.ocr_backends.RapidOCRBackend.engine_available",
+            new_callable=PropertyMock,
+            return_value=True,
+        ):
             backend = get_ocr_backend("rapidocr")
             assert isinstance(backend, RapidOCRBackend)
 
@@ -296,7 +336,7 @@ class TestGetOcrBackend:
         """CPU tier requested but engine absent → refuses, no silent downgrade."""
         with (
             patch(
-                "src.ocr_backends.RapidOCRBackend.available",
+                "src.ocr_backends.RapidOCRBackend.engine_available",
                 new_callable=PropertyMock,
                 return_value=False,
             ),
@@ -410,6 +450,22 @@ class TestGetOcrBackend:
         assert "OCR_BACKEND" in line
         assert "Unlimited-OCR" in line
         assert "silently" in line
+
+    def test_auto_still_resolves_but_reports_unavailable_without_fitz(self) -> None:
+        """auto degrades by design, but its ``available`` now tells the truth."""
+        with patch("src.ocr_backends._pdf_library_available", return_value=False):
+            backend = get_ocr_backend("auto")
+            assert isinstance(backend, AutoOcrBackend)
+            assert backend.available is False
+
+    def test_cpu_refusal_names_the_pdf_library_when_that_is_the_cause(self) -> None:
+        """With the engine present but fitz absent, the line blames the PDF library."""
+        with (
+            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch("src.ocr_backends._pdf_library_available", return_value=False),
+            pytest.raises(OcrBackendUnavailableError, match="PyMuPDF"),
+        ):
+            get_ocr_backend("cpu")
 
     def test_persisted_backend_name_normalised(self) -> None:
         from src.settings_store import save_setting
