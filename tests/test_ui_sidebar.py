@@ -341,15 +341,73 @@ def test_render_ocr_backend_migrates_an_unavailable_saved_choice(monkeypatch: An
 
 
 def test_render_ocr_backend_warns_instead_of_offering_a_dead_choice(monkeypatch: Any) -> None:
-    """With nothing installable, the panel warns and renders no dropdown at all."""
+    """With nothing installable, the panel warns, renders no dropdown, and the store matches it."""
     fake = _FakeSt()
+    saved: list[tuple[str, Any]] = []
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
     monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: False)
     monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", False)
     monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("src.ui.ui_sidebar.load_setting", lambda _key, _default=None: "unlimited-ocr")
+    monkeypatch.setattr("src.ui.ui_sidebar.save_setting", lambda key, value: saved.append((key, value)))
 
     result = SidebarConfig._render_ocr_backend()
 
     assert result == "auto"
+    assert ("ocr_backend", "auto") in saved
     assert any(kind == "warning" for kind, _ in fake.sidebar.calls)
     assert not any(kind == "selectbox" for kind, _ in fake.sidebar.calls)
+
+
+def test_gpu_note_names_no_gpu_when_that_is_the_cause(monkeypatch: Any) -> None:
+    """A genuinely GPU-less machine gets the no-GPU message."""
+    from src.ui.ui_sidebar import _gpu_unavailable_reason
+
+    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
+    monkeypatch.setattr("torch.cuda.is_available", lambda: False)
+
+    reason = _gpu_unavailable_reason()
+
+    assert reason is not None
+    assert "no CUDA/ROCm GPU" in reason
+
+
+def test_gpu_note_names_transformers_when_that_is_the_cause(monkeypatch: Any) -> None:
+    """A GPU machine missing transformers is told so, not told it has no GPU."""
+    from src.ui.ui_sidebar import _gpu_unavailable_reason
+
+    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda name: name == "torch")
+    monkeypatch.setattr("torch.cuda.is_available", lambda: True)
+
+    reason = _gpu_unavailable_reason()
+
+    assert reason is not None
+    assert "transformers" in reason
+    assert "no CUDA/ROCm GPU" not in reason
+
+
+def test_gpu_note_names_torch_when_it_is_missing(monkeypatch: Any) -> None:
+    """A build without PyTorch is told to install it."""
+    from src.ui.ui_sidebar import _gpu_unavailable_reason
+
+    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: False)
+
+    reason = _gpu_unavailable_reason()
+
+    assert reason is not None
+    assert "PyTorch" in reason
+
+
+def test_ocr_choices_gpu_note_names_the_true_cause(monkeypatch: Any) -> None:
+    """The picker's GPU note names the missing package, not a phantom missing GPU."""
+    from src.ui.ui_sidebar import _ocr_backend_choices
+
+    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda name: name == "torch")
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", False)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", False)
+    monkeypatch.setattr("torch.cuda.is_available", lambda: True)
+
+    _, notes = _ocr_backend_choices()
+
+    assert any("transformers" in n for n in notes)
+    assert not any("no CUDA/ROCm GPU" in n for n in notes)
