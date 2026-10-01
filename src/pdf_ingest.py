@@ -1,6 +1,8 @@
 """PDF ingestion pipeline — extract text, headings, and tables from PDFs into DocChunks.
 
-Uses PyMuPDF (fitz) for text extraction.  Handles:
+Uses the licence-clean reader: pdfplumber for page text, font-size heading
+detection and tables, and pypdfium2 for page rendering in the OCR path.  PyMuPDF
+was removed on 2026-10-01 (AGPL-3.0 / paid Artifex).  Handles:
 - Heading detection via font-size threshold (no bookmarks required)
 - Table extraction as markdown (kept whole, never split)
 - Image-only pages (skipped with log warning)
@@ -23,49 +25,120 @@ import logging
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from src.rag_store import DocChunk
 
-if TYPE_CHECKING:
-    import fitz  # PyMuPDF
-
 logger = logging.getLogger(__name__)
+
 
 #: How to install the PDF reader.  One string, so the UI, the CLI and the
 #: pipeline cannot drift on what to tell a user who needs it.
-PDF_READER_INSTALL_HINT = "uv sync --extra pdf (or pip install PyMuPDF)"
+PDF_READER_INSTALL_HINT = "uv sync --extra pdf (or pip install pypdfium2 pdfplumber)"
+
+#: The libraries the ``[pdf]`` extra provides.  Both must be importable.
+PDF_READER_PACKAGES: tuple[str, ...] = ("pypdfium2", "pdfplumber")
 
 
-def _import_fitz() -> type[fitz]:
-    """Lazy-import PyMuPDF.  Raises ImportError with install instructions if absent."""
+def _require_pdfplumber() -> Any:
+    """Lazy-import pdfplumber (page text, font-size headings, tables)."""
     try:
-        import fitz as _fitz  # type: ignore[import-untyped]
+        import pdfplumber
     except ImportError:
-        raise ImportError(
-            f"PyMuPDF (fitz) is required for PDF ingestion. Install with: {PDF_READER_INSTALL_HINT}"
-        ) from None
-    return _fitz  # type: ignore[return-value]
+        raise ImportError(f"pdfplumber is required to read PDFs. Install with: {PDF_READER_INSTALL_HINT}") from None
+    return pdfplumber
+
+
+def _require_pdfium() -> Any:
+    """Lazy-import pypdfium2 (page count, labels, rendering)."""
+    try:
+        import pypdfium2
+    except ImportError:
+        raise ImportError(f"pypdfium2 is required to read PDFs. Install with: {PDF_READER_INSTALL_HINT}") from None
+    return pypdfium2
+
+
+def render_page_png(filepath: Path, page_number: int, out_path: Path, *, dpi: int = 300) -> bool:
+    """Render one PDF page (1-indexed) to a PNG.
+
+    Returns False when the page is out of range.  The OCR backends use this to
+    rasterise a page for RapidOCR / the vision model - PyMuPDF did this before
+    the 2026-10-01 licence-clean swap.
+    """
+    pdfium = _require_pdfium()
+    doc = pdfium.PdfDocument(str(filepath))
+    try:
+        if page_number < 1 or page_number > len(doc):
+            return False
+        bitmap = doc[page_number - 1].render(scale=dpi / 72)
+        bitmap.to_pil().save(str(out_path), format="PNG")
+        return True
+    finally:
+        doc.close()
+
+
+def render_all_pages_png(filepath: Path, out_dir: Path, *, dpi: int = 300) -> list[Path]:
+    """Render every page of a PDF to ``out_dir/page_NNNN.png``.
+
+    Returns the written paths in page order.
+    """
+    pdfium = _require_pdfium()
+    doc = pdfium.PdfDocument(str(filepath))
+    paths: list[Path] = []
+    try:
+        for index in range(len(doc)):
+            out = out_dir / f"page_{index + 1:04d}.png"
+            bitmap = doc[index].render(scale=dpi / 72)
+            bitmap.to_pil().save(str(out), format="PNG")
+            paths.append(out)
+        return paths
+    finally:
+        doc.close()
+
+
+def _page_labels(filepath: Path, page_count: int) -> list[str]:
+    """Printed page labels for a PDF (e.g. "5"), or empty strings.
+
+    Best-effort: a PDF without labels, or a missing pypdfium2, yields empty
+    strings and ingestion continues.
+    """
+    try:
+        pdfium = _require_pdfium()
+        doc = pdfium.PdfDocument(str(filepath))
+    except Exception:
+        return [""] * page_count
+    try:
+        labels: list[str] = []
+        for index in range(page_count):
+            try:
+                labels.append(doc.get_page_label(index) or "")
+            except Exception:
+                labels.append("")
+        return labels
+    finally:
+        doc.close()
 
 
 def pdf_reader_available() -> bool:
-    """Whether PyMuPDF can be imported in this environment.
+    """Whether both PDF-reader libraries can be imported in this environment.
 
-    ``find_spec`` does not import the module, so the UI can ask without paying
-    the import cost or risking a raise.  This is the honest capability check:
-    a build without the ``[pdf]`` extra has no PDF reader, whatever an OCR
-    backend's ``available`` flag may claim.
+    ``find_spec`` does not import them, so the UI can ask without paying the
+    import cost or risking a raise.  This is the honest capability check.
     """
     import importlib.util
 
-    return importlib.util.find_spec("fitz") is not None
+    return all(importlib.util.find_spec(pkg) is not None for pkg in PDF_READER_PACKAGES)
 
 
 def pdf_reader_missing_message() -> str:
     """Plain sentence for the UI: what is missing and how to install it."""
+    import importlib.util
+
+    missing = [pkg for pkg in PDF_READER_PACKAGES if importlib.util.find_spec(pkg) is None]
+    names = ", ".join(missing) if missing else ", ".join(PDF_READER_PACKAGES)
     return (
         "This build cannot read PDFs - document mode has no PDF reader: "
-        f"PyMuPDF is not installed. Install it with `{PDF_READER_INSTALL_HINT}`."
+        f"missing {names}. Install with `{PDF_READER_INSTALL_HINT}`."
     )
 
 
@@ -129,25 +202,24 @@ def doc_chunk_key(chunk: DocChunk) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _extract_headings(page: fitz.Page) -> list[tuple[float, str]]:
+def _extract_headings(page: Any) -> list[tuple[float, str]]:
     """Return heading candidates sorted by vertical position (y coordinate).
 
-    Each result is ``(y_position, text)``.  Duplicates within the same
-    vertical band (±2 px) are collapsed.
+    ``page`` is a pdfplumber page.  Each result is ``(y_position, text)``; a
+    line is a heading when its largest font size is at or above
+    :data:`HEADING_MIN_SIZE`.  Duplicates within the same vertical band (2 px)
+    are collapsed, keeping the longer text.
     """
-    blocks = page.get_text("dict")["blocks"]
     candidates: list[tuple[float, str]] = []
 
-    for block in blocks:
-        if "lines" not in block:
+    for line in page.extract_text_lines():
+        chars = line.get("chars") or []
+        text = (line.get("text") or "").strip()
+        if not chars or not text:
             continue
-        for line in block["lines"]:
-            for span in line["spans"]:
-                size = span.get("size", 0)
-                text = span.get("text", "").strip()
-                if size >= HEADING_MIN_SIZE and text:
-                    y = span["bbox"][3]  # bottom of bbox
-                    candidates.append((y, text))
+        size = max(float(c.get("size", 0) or 0) for c in chars)
+        if size >= HEADING_MIN_SIZE:
+            candidates.append((float(line.get("bottom", 0.0) or 0.0), text))
 
     # Sort by vertical position
     candidates.sort(key=lambda c: c[0])
@@ -171,22 +243,18 @@ def _extract_headings(page: fitz.Page) -> list[tuple[float, str]]:
 
 
 def _extract_page_text_with_headings(
-    page: fitz.Page,
+    page_text: str,
+    headings: list[tuple[float, str]],
 ) -> str:
-    """Extract page text and inject heading markers.
+    """Inject heading markers into page text.
 
     Headings detected by font size are prefixed with ``## `` so the
     downstream chunking logic can split on them.
     """
-    headings = _extract_headings(page)
     if not headings:
-        return page.get_text()
+        return page_text
 
-    # Get plain text
-    plain_text = page.get_text()
-
-    # Replace heading occurrences with markdown markers
-    result = plain_text
+    result = page_text
     for _y, heading_text in headings:
         # Escape special regex chars in heading text
         escaped = re.escape(heading_text)
@@ -202,39 +270,35 @@ def _extract_page_text_with_headings(
 # ---------------------------------------------------------------------------
 
 
-def _extract_tables_page(page: fitz.Page) -> list[str]:
-    """Extract tables from a page as markdown strings.
+def _extract_tables_page(page: Any) -> list[str]:
+    """Extract tables from a pdfplumber page as markdown strings.
 
     Returns empty list if no tables found.  Each table is a single
     markdown string kept whole (never split across chunks).
     """
     try:
-        tables = page.find_tables()
+        extracted_tables = page.extract_tables()
     except Exception:
         # Some PDFs don't support table detection; skip silently.
         return []
 
     markdown_tables: list[str] = []
-    for table in tables.tables:
+    for extracted in extracted_tables:
+        if not extracted:
+            continue
         try:
-            # Extract as list of lists first
-            extracted = table.extract()
-            if not extracted:
-                continue
-
-            # Convert to markdown
             md_lines: list[str] = []
 
             # Header row
             header = extracted[0]
-            md_lines.append("| " + " | ".join(_md_cell(str(c)) for c in header) + " |")
+            md_lines.append("| " + " | ".join(_md_cell(_cell_str(c)) for c in header) + " |")
             md_lines.append("| " + " | ".join("---" for _ in header) + " |")
 
             # Data rows
             for row in extracted[1:]:
                 # Pad row to header width if uneven
                 padded = list(row) + [""] * (len(header) - len(row))
-                md_lines.append("| " + " | ".join(_md_cell(str(c)) for c in padded) + " |")
+                md_lines.append("| " + " | ".join(_md_cell(_cell_str(c)) for c in padded) + " |")
 
             markdown_tables.append("\n".join(md_lines))
         except Exception:
@@ -242,6 +306,11 @@ def _extract_tables_page(page: fitz.Page) -> list[str]:
             continue
 
     return markdown_tables
+
+
+def _cell_str(value: Any) -> str:
+    """A pdfplumber cell can be None; normalise it to an empty string."""
+    return "" if value is None else str(value)
 
 
 def _md_cell(text: str) -> str:
@@ -373,7 +442,7 @@ def ingest_pdf(
             with a loud WARNING.
         page_report: Optional list that receives one
             ``(page_number, outcome, reason)`` tuple per page, where outcome is
-            ``"text"`` (PyMuPDF text), ``"ocr"`` (extracted via the OCR
+            ``"text"`` (text layer), ``"ocr"`` (extracted via the OCR
             fallback), ``"empty"`` (page was checked via OCR but no usable
             content found — the page is genuinely blank or the OCR could not
             read it), or ``"skipped"`` (page was NOT checked — the OCR hook
@@ -391,21 +460,21 @@ def ingest_pdf(
     source = filepath.name
 
     try:
-        doc = _import_fitz().open(str(filepath))
+        doc = _require_pdfplumber().open(str(filepath))
     except Exception:
         logger.error("Failed to open PDF: %s", filepath)
         return []
 
     doc_title = source.replace(".pdf", "")
-    page_count = doc.page_count
+    page_count = len(doc.pages)
     all_text = ""
     tables_extracted: list[str] = []
 
     for page_num in range(page_count):
-        page = doc[page_num]
+        page = doc.pages[page_num]
 
         # Quick check: pages with too few characters are image-only.
-        quick_text = page.get_text()
+        quick_text = page.extract_text() or ""
         if len(quick_text) < MIN_PAGE_CHARS:
             if ocr_fallback is not None:
                 try:
@@ -452,7 +521,8 @@ def ingest_pdf(
             continue
 
         # Extract text with heading markers
-        page_text = _extract_page_text_with_headings(page)
+        headings = _extract_headings(page)
+        page_text = _extract_page_text_with_headings(quick_text, headings)
         all_text += page_text + "\n\n"
         if page_report is not None:
             page_report.append((page_num + 1, "text", ""))
@@ -514,27 +584,23 @@ def ingest_pdf_page_aware(
     source = filepath.name
 
     try:
-        doc = _import_fitz().open(str(filepath))
+        doc = _require_pdfplumber().open(str(filepath))
     except Exception:
         logger.error("Failed to open PDF: %s", filepath)
         return []
 
     doc_title = source.replace(".pdf", "")
-    page_count = doc.page_count
+    page_count = len(doc.pages)
     all_chunks: list[DocChunk] = []
+    page_labels = _page_labels(filepath, page_count)
 
     for page_num in range(page_count):
-        page = doc[page_num]
+        page = doc.pages[page_num]
         page_index = page_num + 1  # 1-indexed
-        # Get the printed page label (e.g. "5") if the PDF has one
-        page_label = ""
-        try:
-            page_label = page.get_label() or ""
-        except Exception:
-            pass
+        page_label = page_labels[page_num]
 
         # Quick check: pages with too few characters are image-only.
-        quick_text = page.get_text()
+        quick_text = page.extract_text() or ""
         if len(quick_text) < MIN_PAGE_CHARS:
             if ocr_fallback is not None:
                 try:
@@ -576,7 +642,8 @@ def ingest_pdf_page_aware(
             continue
 
         # Extract text with heading markers
-        page_text = _extract_page_text_with_headings(page)
+        headings = _extract_headings(page)
+        page_text = _extract_page_text_with_headings(quick_text, headings)
         if not page_text.strip():
             continue
 
