@@ -304,15 +304,17 @@ class TestGetOcrBackend:
         ):
             get_ocr_backend("cpu")
 
-    def test_high_accuracy_falls_to_cpu_tier(self) -> None:
-        """Tier 2 not built in v1 → falls to the CPU (RapidOCR) tier."""
-        with patch(
-            "src.ocr_backends.RapidOCRBackend.available",
-            new_callable=PropertyMock,
-            return_value=True,
+    def test_high_accuracy_refuses_even_with_the_cpu_engine(self) -> None:
+        """Tier 2 is not built in v1 → refused, never silently the CPU engine."""
+        with (
+            patch(
+                "src.ocr_backends.RapidOCRBackend.available",
+                new_callable=PropertyMock,
+                return_value=True,
+            ),
+            pytest.raises(OcrBackendUnavailableError, match="not built in v1"),
         ):
-            backend = get_ocr_backend("high-accuracy")
-            assert isinstance(backend, RapidOCRBackend)
+            get_ocr_backend("high-accuracy")
 
     def test_unlimited_ocr_without_gpu_refuses(self) -> None:
         """Tier-3 GPU VLM requested but no GPU → refuses, no silent CPU swap."""
