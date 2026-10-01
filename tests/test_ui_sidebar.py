@@ -74,6 +74,9 @@ class _FakeSt:
     def caption(self, text: str) -> None:
         self.sidebar.calls.append(("caption", text))
 
+    def error(self, text: str) -> None:
+        self.sidebar.calls.append(("error", text))
+
     def warning(self, text: str) -> None:
         self.sidebar.calls.append(("warning", text))
 
@@ -411,3 +414,39 @@ def test_ocr_choices_gpu_note_names_the_true_cause(monkeypatch: Any) -> None:
 
     assert any("transformers" in n for n in notes)
     assert not any("no CUDA/ROCm GPU" in n for n in notes)
+
+
+# ---------------------------------------------------------------------------
+# OCR refusal + engine in use (job t-0183): no silent downgrade from the env
+# ---------------------------------------------------------------------------
+
+
+def test_render_ocr_refusal_is_shown_at_the_top_of_settings(monkeypatch: Any) -> None:
+    """A configured backend that cannot run is refused visibly, not inside the expander."""
+    fake = _FakeSt()
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+    monkeypatch.setattr(
+        "src.ocr_backends.configured_ocr_backend_error",
+        lambda: "REFUSED: OCR_BACKEND=power cannot run here",
+    )
+
+    SidebarConfig._render_ocr_refusal()
+
+    errors = [t for kind, t in fake.sidebar.calls if kind == "error"]
+    assert errors and "REFUSED" in errors[0]
+
+
+def test_render_ocr_backend_shows_the_engine_in_use(monkeypatch: Any) -> None:
+    """The panel names the engine actually in use, so a downgrade is not silent."""
+    fake = _FakeSt()
+    monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
+    monkeypatch.setattr("src.ui.ui_sidebar._module_available", lambda _name: True)
+    monkeypatch.setattr("src.ocr_backends.RapidOCRBackend.available", True)
+    monkeypatch.setattr("src.ocr_backends.UnlimitedOCRBackend.available", True)
+    monkeypatch.setattr("src.ui.ui_sidebar.load_setting", lambda _key, _default=None: "auto")
+    monkeypatch.setattr("src.ui.ui_sidebar.save_setting", lambda _key, _value: None)
+
+    SidebarConfig._render_ocr_backend()
+
+    captions = [t for kind, t in fake.sidebar.calls if kind == "caption"]
+    assert any("Engine in use" in c for c in captions)

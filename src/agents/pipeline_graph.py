@@ -138,7 +138,7 @@ class PipelineGraph:
         """
         from pathlib import Path
 
-        from src.ocr_backends import get_ocr_backend
+        from src.ocr_backends import OcrBackendUnavailableError, get_ocr_backend
 
         if not state.document_source:
             return {"errors": ["document_source is empty — nothing to parse"]}
@@ -152,7 +152,12 @@ class PipelineGraph:
             from src.pdf_ingest import ingest_pdf_page_aware
 
             # Use the tier-1 CPU OCR backend as the fallback for scanned pages
-            ocr_backend = get_ocr_backend()
+            try:
+                ocr_backend = get_ocr_backend()
+            except OcrBackendUnavailableError as e:
+                # Refuse loudly: an explicitly requested tier that cannot run
+                # must not be silently swapped for a weaker engine (B-093 follow-up).
+                return {"errors": [str(e)]}
             ocr_hook: Callable[[Path, int], str] | None = None
             if ocr_backend.available:
 
@@ -187,7 +192,11 @@ class PipelineGraph:
             }
 
         # Non-PDF documents (Markdown) — use the OCR backend as before
-        backend = get_ocr_backend()
+        try:
+            backend = get_ocr_backend()
+        except OcrBackendUnavailableError as e:
+            # Refuse loudly rather than parse with a weaker engine than asked for.
+            return {"errors": [str(e)]}
         try:
             raw_text = backend.parse_markdown(source_path)
         except Exception as e:

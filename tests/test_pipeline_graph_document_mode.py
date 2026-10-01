@@ -258,6 +258,34 @@ class TestParseDocumentNode:
         finally:
             Path(path).unlink(missing_ok=True)
 
+    @pytest.mark.asyncio
+    async def test_unavailable_configured_backend_returns_a_clear_error(self, graph: PipelineGraph) -> None:
+        """An explicit tier this build cannot run refuses with a clear line (t-0183).
+
+        The factory raises ``OcrBackendUnavailableError`` instead of silently
+        swapping in the CPU tier; the node turns that into an ``errors`` entry.
+        """
+        from src.ocr_backends import OcrBackendUnavailableError
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("# Spec")
+            f.flush()
+            path = f.name
+
+        try:
+            with patch(
+                "src.ocr_backends.get_ocr_backend",
+                side_effect=OcrBackendUnavailableError(
+                    "OCR backend 'power' requested from the environment variable OCR_BACKEND cannot run on this build."
+                ),
+            ):
+                state = PipelineState(input_mode="document", document_source=path)
+                result = await graph._parse_document(state)
+            assert "errors" in result
+            assert "cannot run on this build" in result["errors"][0]
+        finally:
+            Path(path).unlink(missing_ok=True)
+
 
 # ---------------------------------------------------------------------------
 # PipelineGraph.run() integration tests
