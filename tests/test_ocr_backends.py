@@ -136,6 +136,17 @@ class TestRapidOCRBackend:
         assert RapidOCRBackend._result_to_text(None) == ""
         assert RapidOCRBackend._result_to_text(()) == ""
 
+    def test_result_to_text_rapidocr_14_results_elapse(self) -> None:
+        """RapidOCR 1.4.x returns (results, elapse); each row is [box, text, score]."""
+        rows = [
+            [[[0, 0], [1, 0], [1, 1], [0, 1]], "Line one", 0.9],
+            [[[0, 2], [1, 2], [1, 3], [0, 3]], "Line two", 0.8],
+        ]
+        assert RapidOCRBackend._result_to_text((rows, [1.0, 0.1, 0.2])) == "Line one\nLine two"
+
+    def test_result_to_text_empty_results_with_elapse(self) -> None:
+        assert RapidOCRBackend._result_to_text(([], [1.0, 0.1, 0.2])) == ""
+
 
 # ---------------------------------------------------------------------------
 # Auto backend (tier 0 whole-doc + tier-1 CPU per-page — AI-055 default)

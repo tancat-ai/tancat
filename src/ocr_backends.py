@@ -286,23 +286,38 @@ class RapidOCRBackend(OcrBackend):
     def _result_to_text(result: Any) -> str:
         """Convert a RapidOCR result to plain text.
 
-        ``RapidOCR(path)`` returns a tuple ``(boxes, texts, scores)`` (and in
-        some versions a fourth ``elapse``).  We join the recognised text
-        lines in reading order (the engine already returns them ordered).
+        RapidOCR 1.4.x returns ``(results, elapse)``, where each row of
+        ``results`` is ``[box, text, score]``.  Older builds returned
+        ``(boxes, texts, scores)``.  Both shapes (and a dict, and a flat list
+        of lines) are handled so the adapter does not silently join the wrong
+        field - which is what turned a scanned page into elapsed timings.
         """
         if not result:
             return ""
-        # RapidOCR >= 1.0 returns (boxes, texts, scores) — texts is the 2nd element.
-        # Older / variant shapes may return just the texts list or a dict; handle defensively.
         if isinstance(result, dict):
             texts = result.get("texts") or result.get("rec_texts") or []
             return "\n".join(str(t) for t in texts if t)
         if isinstance(result, (list, tuple)):
-            # (boxes, texts, scores[, elapse]) → texts at index 1
+            first = result[0] if result else None
+            # RapidOCR >= 1.4: (results, elapse), each row = [box, text, score].
+            if isinstance(first, (list, tuple)):
+                if not first:
+                    return ""
+                rows = [
+                    row[1]
+                    for row in first
+                    if isinstance(row, (list, tuple)) and len(row) >= 2 and isinstance(row[1], str)
+                ]
+                if rows:
+                    return "\n".join(rows)
+            # Older / variant: (boxes, texts, scores) - texts is the 2nd element.
             if len(result) >= 2 and isinstance(result[1], (list, tuple)):
-                return "\n".join(str(t) for t in result[1] if t)
-            # Variant: a flat list of text lines
-            return "\n".join(str(t) for t in result if isinstance(t, str))
+                texts = list(result[1])
+                if texts and all(isinstance(t, str) for t in texts):
+                    return "\n".join(texts)
+            # Variant: a flat list of text lines.
+            if all(isinstance(t, str) for t in result):
+                return "\n".join(result)
         # Fallback: str-ify
         return str(result)
 
