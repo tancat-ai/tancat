@@ -29,6 +29,12 @@ Backend / tier selection (B-036 Phase 4 persisted setting wins; AI-055 tiers)::
     high-accuracy    # tier 2 (not built in v1) → falls to tier-1 CPU
     power            # tier-3 GPU VLM (Unlimited-OCR)
     unlimited-ocr    # legacy alias → maps to the tier-3 GPU VLM
+
+An explicitly requested tier that this build cannot run (``OCR_BACKEND=power``
+on a GPU-less box, or a stale saved setting) is refused with
+:class:`OcrBackendUnavailableError`, naming the source and the fix — it is
+never silently swapped for a weaker engine.  Only ``auto`` degrades quietly,
+because degrading is what ``auto`` means.
 """
 
 from __future__ import annotations
@@ -572,17 +578,93 @@ _LEGACY_TO_TIER: dict[str, str] = {
     "unlimited_ocr": "power",  # legacy tier-3 alias
 }
 
-# The OCR tier used as the image-only-page fallback when a higher tier is
-# requested but unavailable.  ``auto``/``cpu``/``rapidocr`` all resolve to the
-# RapidOCR CPU backend; ``high-accuracy`` (tier 2) is not built in v1 so it
-# falls through to the CPU tier; ``power`` (tier 3) is the existing
-# Unlimited-OCR GPU VLM.  (Defined after ``UnlimitedOCRBackend`` because it
-# references that class.)
-_TIER_FALLBACK_BACKEND: dict[str, type[OcrBackend]] = {
-    "cpu": RapidOCRBackend,
-    "high-accuracy": RapidOCRBackend,  # tier 2 not in v1 → CPU tier
-    "power": UnlimitedOCRBackend,  # tier 3
+
+# ---------------------------------------------------------------------------
+# Refusal: an explicitly requested tier that cannot run
+# ---------------------------------------------------------------------------
+
+
+class OcrBackendUnavailableError(RuntimeError):
+    """An OCR backend was requested that this build cannot run.
+
+    Raised instead of silently substituting a weaker engine. The message names
+    the requested backend, where the request came from, why it cannot run, and
+    the fix.
+    """
+
+
+#: Where a configured backend name came from, for the refusal line.
+_SOURCE_LABELS: dict[str, str] = {
+    "setting": "from the saved setting 'ocr_backend'",
+    "env": "from the environment variable OCR_BACKEND",
+    "argument": "from the explicit argument",
+    "default": "from the default",
 }
+
+
+def _configured_backend_name() -> tuple[str, str]:
+    """Return ``(name, source)`` for the configured backend.
+
+    Same order as :func:`get_ocr_backend` with no argument: the persisted
+    setting wins, then ``OCR_BACKEND``, then ``auto``.
+    """
+    saved = load_setting("ocr_backend")
+    if saved:
+        return str(saved), "setting"
+    env = os.getenv("OCR_BACKEND")
+    if env:
+        return str(env), "env"
+    return "auto", "default"
+
+
+def _unavailable_line(name: str, source: str) -> str | None:
+    """The refusal line for *name*, or None when this build can run it.
+
+    Never raises. ``auto`` is always available: it is the documented
+    best-effort tier that reads text directly and uses CPU OCR when present.
+    An explicit request for a tier whose engine is missing is refused, because
+    silently running a different engine is the fault this guards against.
+    """
+    tier = _LEGACY_TO_TIER.get(name)
+    where = _SOURCE_LABELS.get(source, f"from {source}")
+    if tier is None:
+        return (
+            f"OCR backend '{name}' requested {where} is not recognised. "
+            f"Valid values: {', '.join(sorted(_LEGACY_TO_TIER))}. "
+            f"Refusing instead of silently using a different engine."
+        )
+    if tier == "auto":
+        return None
+    if tier in ("cpu", "high-accuracy"):
+        if RapidOCRBackend().available:
+            return None
+        return (
+            f"OCR backend '{name}' requested {where} cannot run on this build: "
+            f"the CPU OCR engine (rapidocr_onnxruntime) is not installed. "
+            f"Install it with `uv sync --extra ocr`, or choose Automatic in Settings. "
+            f"Refusing instead of silently using a different engine."
+        )
+    if tier == "power":
+        if UnlimitedOCRBackend().available:
+            return None
+        return (
+            f"OCR backend '{name}' requested {where} cannot run on this build: "
+            f"Unlimited-OCR (tier-3 GPU) needs a CUDA/ROCm GPU and the `transformers` package. "
+            f"Set OCR_BACKEND=cpu for CPU OCR, or choose Automatic in Settings. "
+            f"Refusing instead of silently using a different engine."
+        )
+    return None  # pragma: no cover - every tier is handled above
+
+
+def configured_ocr_backend_error() -> str | None:
+    """The refusal line for the *configured* backend, or None when it can run.
+
+    The UI calls this at startup so a bad ``OCR_BACKEND`` value or a stale
+    saved setting is shown before a document is parsed, not discovered when
+    the pipeline refuses.
+    """
+    name, source = _configured_backend_name()
+    return _unavailable_line(name, source)
 
 
 # ---------------------------------------------------------------------------
@@ -604,15 +686,19 @@ def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
     Tiered OCR (AI-055):
 
     - ``auto`` (default) → :class:`AutoOcrBackend` — tier-0 PyMuPDF for
-      whole docs, tier-1 CPU RapidOCR for image-only pages.
+      whole docs, tier-1 CPU RapidOCR for image-only pages.  It is the
+      documented best-effort tier and always resolves.
     - ``cpu`` / ``rapidocr`` → :class:`RapidOCRBackend` (tier-1 CPU forced).
-    - ``high-accuracy`` → tier 2 (not built in v1) → falls to the CPU tier.
+    - ``high-accuracy`` → tier 2 (not built in v1) → the CPU tier.
     - ``power`` / ``unlimited-ocr`` (legacy) → :class:`UnlimitedOCRBackend`
-      (tier-3 GPU VLM; falls back to the CPU tier if no GPU).
+      (tier-3 GPU VLM).
 
-    A tier that isn't installed / can't run on this machine is skipped and
-    the path falls to the next-lower tier, then to "skip + WARNING."  Never
-    fail the ingestion because an optional OCR tier is missing.
+    An explicit request for a tier that cannot run on this machine is
+    **refused loudly** with :class:`OcrBackendUnavailableError`, naming the
+    source and the fix — it is never silently swapped for a weaker engine.
+    That covers both routes the request can arrive on: the ``OCR_BACKEND``
+    env var and a saved ``ocr_backend`` setting.  ``auto`` is the only tier
+    that degrades quietly, because degrading is what ``auto`` means.
 
     Args:
         backend_name: Override for testing.  When None, consults the
@@ -620,38 +706,35 @@ def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
 
     Returns:
         A ready-to-use ``OcrBackend`` instance.
+
+    Raises:
+        OcrBackendUnavailableError: the requested tier cannot run here.
     """
     if backend_name is None:
         # Settings win; env is honoured only when the setting was never saved.
-        backend_name = load_setting("ocr_backend") or os.getenv("OCR_BACKEND", "auto")
+        backend_name, source = _configured_backend_name()
+    else:
+        source = "argument"
     name = str(backend_name).strip().lower()
-    tier = _LEGACY_TO_TIER.get(name, "auto")
+
+    line = _unavailable_line(name, source)
+    if line is not None:
+        raise OcrBackendUnavailableError(line)
+
+    tier = _LEGACY_TO_TIER[name]
 
     if tier == "auto":
         logger.debug("OCR backend: auto (tier 0 PyMuPDF + tier-1 CPU OCR)")
         return AutoOcrBackend()
 
     if tier in ("cpu", "high-accuracy"):
-        backend = RapidOCRBackend()
-        if backend.available:
-            logger.info("OCR backend: %s (tier-1 CPU)", "high-accuracy" if tier == "high-accuracy" else "cpu")
-            return backend
-        logger.warning(
-            "Tier-1 CPU OCR (rapidocr) requested but not installed — "
-            "image-only pages will be skipped. Install with: pip install rapidocr_onnxruntime (or the [ocr] extra)"
-        )
-        # Fall through to a backend whose parse_page returns empty so the
-        # ingest path skips image-only pages (graceful degradation).
+        logger.info("OCR backend: %s (tier-1 CPU)", "high-accuracy" if tier == "high-accuracy" else "cpu")
         return RapidOCRBackend()
 
     if tier == "power":
-        ocr_backend = UnlimitedOCRBackend()
-        if ocr_backend.available:
-            logger.info("OCR backend: unlimited-ocr (tier-3 GPU)")
-            return ocr_backend
-        logger.warning("Tier-3 GPU OCR requested but GPU not available — falling back to tier-1 CPU OCR")
-        return RapidOCRBackend()
+        logger.info("OCR backend: unlimited-ocr (tier-3 GPU)")
+        return UnlimitedOCRBackend()
 
-    # Defensive: unknown name → auto
-    logger.debug("OCR backend: auto (unknown name %r)", name)
-    return AutoOcrBackend()
+    raise OcrBackendUnavailableError(  # pragma: no cover - unreachable, tier is in the map
+        f"OCR backend '{name}' is not implemented."
+    )
