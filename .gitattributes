@@ -1,0 +1,5 @@
+# Shell scripts must check out with LF, even on Windows (core.autocrlf=true).
+# A CRLF entrypoint baked into the action image fails in the container with
+# `env: 'bash\r': No such file or directory`, which is how the local
+# scripts/ci_action_selftest.py run broke on a Windows checkout.
+*.sh text eol=lf

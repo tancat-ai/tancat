@@ -82,3 +82,24 @@ def test_rag_sidecar_sweep_runs_per_site() -> None:
     assert site_loop != -1 and sweep != -1 and sweep > site_loop, (
         "parent-side RAG sweep is no longer inside the per-site loop"
     )
+
+
+def test_action_entrypoint_points_storage_at_the_workspace_before_pytest() -> None:
+    """The action must export AITEST_STORAGE_ROOT before it runs pytest.
+
+    ``src/sqlite_persistence.py`` calls ``get_storage().evidence_dir()`` at
+    import time; in the Docker action the lazy default is the read-only image
+    root (/app), so the AI-028 evidence exporter died on ``mkdir
+    /app/evidence`` and ``junit-evidence.xml`` was never written.  The
+    documented AITEST_* override (src/storage.py) must be set for every
+    subprocess, before the first ``run_pytest`` call.
+    """
+    text = (PROJECT_ROOT / "action" / "entrypoint.sh").read_text(encoding="utf-8")
+    export_at = text.find('export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"')
+    first_call = text.find('run_pytest "$')
+    assert export_at != -1, "action/entrypoint.sh no longer exports AITEST_STORAGE_ROOT"
+    assert first_call != -1, "action/entrypoint.sh no longer calls run_pytest"
+    assert export_at < first_call, (
+        "action/entrypoint.sh must export AITEST_STORAGE_ROOT before the first run_pytest call "
+        "(the evidence exporter imports sqlite_persistence, which creates <root>/evidence)"
+    )
