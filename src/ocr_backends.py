@@ -26,7 +26,7 @@ Backend / tier selection (B-036 Phase 4 persisted setting wins; AI-055 tiers)::
 
     auto             # default — tier 0 (whole-doc) + tier-1 CPU OCR (image-only)
     cpu              # tier-1 CPU forced (RapidOCR)
-    high-accuracy    # tier 2 (not built in v1) → falls to tier-1 CPU
+    high-accuracy    # tier 2 (not built in v1) → refused, not downgraded
     power            # tier-3 GPU VLM (Unlimited-OCR)
     unlimited-ocr    # legacy alias → maps to the tier-3 GPU VLM
 
@@ -572,7 +572,7 @@ _LEGACY_TO_TIER: dict[str, str] = {
     "pymupdf": "auto",  # legacy default → auto (tier 0 + tier-1 CPU)
     "cpu": "cpu",  # tier-1 CPU forced
     "rapidocr": "cpu",  # alias for tier-1
-    "high-accuracy": "high-accuracy",  # tier 2 (not built in v1 → falls to lower tier)
+    "high-accuracy": "high-accuracy",  # tier 2 (not built in v1 → refused, not downgraded)
     "power": "power",  # tier 3
     "unlimited-ocr": "power",  # legacy tier-3 alias
     "unlimited_ocr": "power",  # legacy tier-3 alias
@@ -635,7 +635,16 @@ def _unavailable_line(name: str, source: str) -> str | None:
         )
     if tier == "auto":
         return None
-    if tier in ("cpu", "high-accuracy"):
+    if tier == "high-accuracy":
+        # Tier 2 is not built in v1: an explicit request for it is refused like
+        # any other tier that cannot run, rather than silently serving CPU OCR.
+        return (
+            f"OCR backend '{name}' requested {where} cannot run on this build: "
+            f"tier-2 high-accuracy OCR is not built in v1. "
+            f"Choose cpu or Automatic in Settings. "
+            f"Refusing instead of silently using a different engine."
+        )
+    if tier == "cpu":
         if RapidOCRBackend().available:
             return None
         return (
@@ -689,7 +698,8 @@ def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
       whole docs, tier-1 CPU RapidOCR for image-only pages.  It is the
       documented best-effort tier and always resolves.
     - ``cpu`` / ``rapidocr`` → :class:`RapidOCRBackend` (tier-1 CPU forced).
-    - ``high-accuracy`` → tier 2 (not built in v1) → the CPU tier.
+    - ``high-accuracy`` → tier 2 (not built in v1) → refused, not silently
+      downgraded to the CPU tier.
     - ``power`` / ``unlimited-ocr`` (legacy) → :class:`UnlimitedOCRBackend`
       (tier-3 GPU VLM).
 
@@ -727,8 +737,8 @@ def get_ocr_backend(backend_name: str | None = None) -> OcrBackend:
         logger.debug("OCR backend: auto (tier 0 PyMuPDF + tier-1 CPU OCR)")
         return AutoOcrBackend()
 
-    if tier in ("cpu", "high-accuracy"):
-        logger.info("OCR backend: %s (tier-1 CPU)", "high-accuracy" if tier == "high-accuracy" else "cpu")
+    if tier == "cpu":
+        logger.info("OCR backend: cpu (tier-1 CPU)")
         return RapidOCRBackend()
 
     if tier == "power":

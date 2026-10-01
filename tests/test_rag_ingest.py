@@ -339,6 +339,27 @@ class TestMain:
         assert "error" in result
         assert "--reindex" in str(result["error"])
 
+    def test_ocr_refusal_returns_clean_error(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """An OCR tier this build cannot run prints a readable line, not a traceback (t-0192)."""
+        from src.ocr_backends import OcrBackendUnavailableError
+
+        def boom() -> object:
+            raise OcrBackendUnavailableError(
+                "OCR backend 'power' requested from the environment variable OCR_BACKEND cannot run on this build."
+            )
+
+        monkeypatch.setattr("scripts.rag_ingest._build_ocr_fallback", boom)
+        result = main(["--pdfs"])
+
+        assert "error" in result
+        assert "cannot run on this build" in str(result["error"])
+        err = capsys.readouterr().err
+        assert err.startswith("ERROR:")
+        assert "cannot run on this build" in err
+        assert "Traceback" not in err
+
     @pytest.mark.slow
     def test_both_flags_accepted(self) -> None:
         """Smoke test: --golden --docs should run without error."""
