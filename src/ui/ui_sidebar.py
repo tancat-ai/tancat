@@ -188,6 +188,10 @@ class SidebarConfig:
         st.sidebar.divider()
         st.sidebar.subheader("Settings")
 
+        # Refuse loudly at the top of Settings, not inside the collapsed
+        # expander: a configured backend this build cannot run must be visible.
+        SidebarConfig._render_ocr_refusal()
+
         with st.sidebar.expander("App Settings", expanded=False):
             ocr_backend = SidebarConfig._render_ocr_backend()
 
@@ -206,6 +210,19 @@ class SidebarConfig:
         SidebarConfig._render_flow_memory()
 
         return {"ocr_backend": ocr_backend, "workspace": workspace}
+
+    @staticmethod
+    def _render_ocr_refusal() -> None:
+        """Show, above the Settings expander, a configured backend that cannot run.
+
+        The picker lives in a collapsed expander; a refusal must not hide there.
+        The factory raises the same line, so the two never drift.
+        """
+        from src.ocr_backends import configured_ocr_backend_error
+
+        refusal = configured_ocr_backend_error()
+        if refusal:
+            st.sidebar.error(refusal)
 
     @staticmethod
     def _render_ocr_backend() -> str:
@@ -248,6 +265,8 @@ class SidebarConfig:
 
         if ocr_backend != stored_raw:
             save_setting(SETTING_OCR_BACKEND, ocr_backend)
+        # Say plainly which engine is actually in use (the owner's question 3).
+        st.caption(f"Engine in use: {_format_ocr_backend(ocr_backend)}")
         return ocr_backend
 
     @staticmethod
