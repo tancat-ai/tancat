@@ -94,18 +94,20 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     PyMuPDF (to rasterise the page) and a CUDA/ROCm GPU, so it is hidden when
     either is absent.
     """
-    from src.ocr_backends import RapidOCRBackend, UnlimitedOCRBackend
+    from src.ocr_backends import PyMuPDFBackend, RapidOCRBackend, UnlimitedOCRBackend
 
-    has_pdf_text = _module_available("fitz")
-    has_cpu_ocr = RapidOCRBackend().available
-    has_gpu = UnlimitedOCRBackend().available
+    # The backend answers the same question the PDF-reader notice does; the
+    # engine-only flags let each missing piece get its own note.
+    has_pdf_text = PyMuPDFBackend().available
+    has_cpu_engine = RapidOCRBackend().engine_available
+    has_gpu_engine = UnlimitedOCRBackend().engine_available
 
     choices: list[str] = []
     if has_pdf_text:
         choices.append("auto")
-        if has_cpu_ocr:
+        if has_cpu_engine:
             choices.append("cpu")
-    if has_pdf_text and has_gpu:
+    if has_pdf_text and has_gpu_engine:
         choices.append("power")
 
     notes: list[str] = []
@@ -114,12 +116,12 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
             "Document mode cannot read PDFs: PyMuPDF is not installed. "
             "Install it with `uv sync --extra pdf` (or `pip install PyMuPDF`)."
         )
-    if not has_cpu_ocr:
+    if not has_cpu_engine:
         notes.append(
             "Scanned (image-only) pages cannot be read: the CPU OCR engine is not installed. "
             "Install it with `uv sync --extra ocr` (or `pip install rapidocr_onnxruntime`)."
         )
-    if not has_gpu:
+    if not has_gpu_engine:
         notes.append(_gpu_unavailable_reason() or "The GPU OCR option is hidden.")
     elif not has_pdf_text:
         notes.append("The GPU OCR option is hidden until PyMuPDF is installed (it rasterises the page).")
