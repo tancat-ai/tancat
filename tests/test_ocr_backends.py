@@ -5,7 +5,7 @@ Covers:
 - RapidOCRBackend: availability, parse_page (tier-1 CPU OCR — AI-055)
 - AutoOcrBackend: tier-0 whole-doc + tier-1 CPU per-page (AI-055 default)
 - UnlimitedOCRBackend: availability detection, lazy loading, error paths (tier 3)
-- get_ocr_backend: factory with tiered selection, fallback behavior
+- get_ocr_backend: factory with tiered selection, refusal behavior
 - Integration with PipelineGraph._parse_document
 """
 
@@ -22,9 +22,11 @@ import pytest
 from src.agents.pipeline_graph import PipelineGraph
 from src.ocr_backends import (
     AutoOcrBackend,
+    OcrBackendUnavailableError,
     PyMuPDFBackend,
     RapidOCRBackend,
     UnlimitedOCRBackend,
+    configured_ocr_backend_error,
     get_ocr_backend,
 )
 
@@ -290,17 +292,17 @@ class TestGetOcrBackend:
             backend = get_ocr_backend("rapidocr")
             assert isinstance(backend, RapidOCRBackend)
 
-    def test_cpu_tier_without_engine_returns_unavailable_rapidocr(self) -> None:
-        """Graceful degradation: CPU tier requested but engine absent → RapidOCRBackend
-        whose ``available`` is False (parse_page returns empty, page skipped)."""
-        with patch(
-            "src.ocr_backends.RapidOCRBackend.available",
-            new_callable=PropertyMock,
-            return_value=False,
+    def test_cpu_tier_without_engine_refuses(self) -> None:
+        """CPU tier requested but engine absent → refuses, no silent downgrade."""
+        with (
+            patch(
+                "src.ocr_backends.RapidOCRBackend.available",
+                new_callable=PropertyMock,
+                return_value=False,
+            ),
+            pytest.raises(OcrBackendUnavailableError, match="rapidocr_onnxruntime"),
         ):
-            backend = get_ocr_backend("cpu")
-            assert isinstance(backend, RapidOCRBackend)
-            assert backend.available is False
+            get_ocr_backend("cpu")
 
     def test_high_accuracy_falls_to_cpu_tier(self) -> None:
         """Tier 2 not built in v1 → falls to the CPU (RapidOCR) tier."""
@@ -312,11 +314,13 @@ class TestGetOcrBackend:
             backend = get_ocr_backend("high-accuracy")
             assert isinstance(backend, RapidOCRBackend)
 
-    def test_unlimited_ocr_without_gpu_falls_back_to_cpu(self) -> None:
-        """Tier-3 GPU VLM requested but no GPU → falls to the CPU (RapidOCR) tier."""
-        with patch("torch.cuda.is_available", return_value=False):
-            backend = get_ocr_backend("unlimited-ocr")
-            assert isinstance(backend, RapidOCRBackend)
+    def test_unlimited_ocr_without_gpu_refuses(self) -> None:
+        """Tier-3 GPU VLM requested but no GPU → refuses, no silent CPU swap."""
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            pytest.raises(OcrBackendUnavailableError, match="Unlimited-OCR"),
+        ):
+            get_ocr_backend("unlimited-ocr")
 
     def test_unlimited_ocr_with_gpu_returns_ocr_backend(self) -> None:
         with (
@@ -327,11 +331,14 @@ class TestGetOcrBackend:
             backend = get_ocr_backend("unlimited-ocr")
             assert isinstance(backend, UnlimitedOCRBackend)
 
-    def test_env_var_overrides_default(self) -> None:
-        with patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}):
-            with patch("torch.cuda.is_available", return_value=False):
-                backend = get_ocr_backend()
-                assert isinstance(backend, RapidOCRBackend)  # GPU check fails → CPU tier
+    def test_env_var_power_without_gpu_refuses_and_names_the_env(self) -> None:
+        """OCR_BACKEND=power on a GPU-less build refuses; the line names the env var."""
+        with (
+            patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}),
+            patch("torch.cuda.is_available", return_value=False),
+            pytest.raises(OcrBackendUnavailableError, match="OCR_BACKEND"),
+        ):
+            get_ocr_backend()
 
     def test_env_var_auto(self) -> None:
         with patch.dict(os.environ, {"OCR_BACKEND": "auto"}):
@@ -359,10 +366,48 @@ class TestGetOcrBackend:
                 assert isinstance(backend, UnlimitedOCRBackend)
 
     def test_env_is_fallback_when_setting_never_saved(self) -> None:
-        with patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}):
-            with patch("torch.cuda.is_available", return_value=False):
-                backend = get_ocr_backend()
-                assert isinstance(backend, RapidOCRBackend)  # requested → GPU fails → CPU tier
+        with (
+            patch.dict(os.environ, {"OCR_BACKEND": "unlimited-ocr"}),
+            patch("torch.cuda.is_available", return_value=False),
+            pytest.raises(OcrBackendUnavailableError, match="OCR_BACKEND"),
+        ):
+            get_ocr_backend()
+
+    # ---- refusal: both routes, plus the UI helper ----
+
+    def test_saved_power_without_gpu_refuses_and_names_the_setting(self) -> None:
+        """A stale saved 'power' setting refuses; the line names the saved setting."""
+        from src.settings_store import save_setting
+
+        save_setting("ocr_backend", "power")
+        with (
+            patch("torch.cuda.is_available", return_value=False),
+            pytest.raises(OcrBackendUnavailableError, match="saved setting"),
+        ):
+            get_ocr_backend()
+
+    def test_unknown_backend_refuses(self) -> None:
+        """An unrecognised explicit name is refused, not quietly re-mapped to auto."""
+        with pytest.raises(OcrBackendUnavailableError, match="not recognised"):
+            get_ocr_backend("banana")
+
+    def test_configured_error_is_none_for_the_auto_default(self) -> None:
+        """The documented default still resolves quietly - auto is best-effort by design."""
+        with patch.dict(os.environ, {}, clear=True):
+            assert configured_ocr_backend_error() is None
+
+    def test_configured_error_names_the_env_route(self) -> None:
+        """The UI helper returns the same refusal line the factory raises."""
+        with (
+            patch.dict(os.environ, {"OCR_BACKEND": "power"}, clear=True),
+            patch("torch.cuda.is_available", return_value=False),
+        ):
+            line = configured_ocr_backend_error()
+
+        assert line is not None
+        assert "OCR_BACKEND" in line
+        assert "Unlimited-OCR" in line
+        assert "silently" in line
 
     def test_persisted_backend_name_normalised(self) -> None:
         from src.settings_store import save_setting
