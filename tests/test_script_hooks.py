@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 #: Script → the suite-chaining hook it must keep.
@@ -82,3 +84,76 @@ def test_rag_sidecar_sweep_runs_per_site() -> None:
     assert site_loop != -1 and sweep != -1 and sweep > site_loop, (
         "parent-side RAG sweep is no longer inside the per-site loop"
     )
+
+
+#: The storage override the Docker action must set for every subprocess.  The
+#: evidence exporter imports src/sqlite_persistence, whose module-level
+#: get_storage().evidence_dir() creates <root>/evidence; without the override
+#: the lazy default is the read-only image root (/app), the export dies, and
+#: junit-evidence.xml is never written.
+_STORAGE_OVERRIDE_EXPORT = 'export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"'
+
+
+def _assert_storage_override_is_unconditional(text: str) -> None:
+    """Fail unless AITEST_STORAGE_ROOT is exported unconditionally.
+
+    "Unconditional" means two things, each of which the pre-fix file failed:
+
+    1. The export is a top-level statement - the line carries no leading
+       whitespace.  The pre-fix file had it indented inside the ``learn:
+       true`` block, so the per-push self-test (which does not set ``learn``)
+       never ran it.
+    2. It appears before ``run_pytest()`` is *defined* - so it executes during
+       the script's initial pass, before any mode function is called.
+    """
+    export_at = text.find(_STORAGE_OVERRIDE_EXPORT)
+    assert export_at != -1, (
+        f"action/entrypoint.sh must export {_STORAGE_OVERRIDE_EXPORT!r} "
+        "(the evidence exporter imports sqlite_persistence, which creates <root>/evidence)"
+    )
+
+    line_start = text.rfind("\n", 0, export_at) + 1
+    line = text[line_start : export_at + len(_STORAGE_OVERRIDE_EXPORT)]
+    assert line == _STORAGE_OVERRIDE_EXPORT, (
+        "AITEST_STORAGE_ROOT must be exported unconditionally at the top level, not "
+        f"indented inside a mode/if block; found {line!r}"
+    )
+
+    run_pytest_def = text.find("run_pytest() {")
+    assert run_pytest_def != -1, "action/entrypoint.sh no longer defines run_pytest()"
+    assert export_at < run_pytest_def, (
+        "AITEST_STORAGE_ROOT must be exported before run_pytest() is defined, so every "
+        "mode gets it (the pre-fix file exported it inside the learn: true block, which "
+        "the per-push self-test does not set, so the evidence export died)"
+    )
+
+
+def test_action_entrypoint_exports_storage_override_unconditionally() -> None:
+    text = (PROJECT_ROOT / "action" / "entrypoint.sh").read_text(encoding="utf-8")
+    _assert_storage_override_is_unconditional(text)
+
+
+def test_guard_rejects_the_pre_fix_entrypoint_shape() -> None:
+    """The guard must fail on the shape it exists to catch.
+
+    The pre-fix file exported the override *indented inside* the ``learn:
+    true`` block, after ``run_pytest()`` was defined.  A guard that only
+    compared text order passed on that file; this one must not.
+    """
+    pre_fix_shape = (
+        "run_pytest() { # $1 = tests path\n"
+        '  python -m pytest "$1"\n'
+        "}\n"
+        "\n"
+        "run_generate_and_run() {\n"
+        '  if [ "$LEARN" = "true" ]; then\n'
+        '    export AITEST_STORAGE_ROOT="$WORKSPACE_ROOT"\n'
+        '    export AITEST_WORKSPACE="$WS_NAME"\n'
+        "  fi\n"
+        '  run_pytest "$PKG_PATH"\n'
+        "}\n"
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        _assert_storage_override_is_unconditional(pre_fix_shape)
+    message = str(excinfo.value)
+    assert "unconditionally" in message or "before run_pytest() is defined" in message, message
