@@ -184,9 +184,12 @@ difference. The gates are unchanged: `>=90%` gate 1, zero hollow passes gate 2.
 ## The verification basis, persisted (B-093)
 
 A pass without its basis is what hid the hollow passes once. Every persisted
-run now stores, per criterion, **what its own test verified against**: the
-golden locator, a distinctive element, a page arrival, or nothing. No new
-database: the table is created beside `eval_runs` in the same SQLite file
+run now stores, per criterion placeholder, **what its own test verified
+against**: the golden locator, a distinctive element, a page arrival, or
+nothing. No new database and no parallel pipeline: the `eval_criteria` table
+and its three indexes - on `identity` (the compare lookup), `story_id` (the
+rollup filter) and `run_id` (loading one run, and the `ON DELETE CASCADE`) -
+live beside `eval_runs` in the same SQLite file
 (`evidence/run_results.sqlite`).
 
 ```bash
@@ -206,7 +209,17 @@ python scripts/eval/eval_harness.py compare --story eval-007
 | `eval_runs.verified_by_element` | golden + element verdict (queryable, no JSON) |
 | `eval_runs.verified_by_page` | page-arrival verdicts |
 | `eval_runs.unverified` | assertions that proved nothing |
-| `eval_criteria` | one row per criterion: story, criterion id, stable `identity` (story + criterion + placeholder), placeholder, page, golden locator, resolved locator, matched, verification, outcome, miss class |
+| `eval_criteria` | one row per criterion **placeholder** (a criterion with several placeholders writes several rows): story, criterion id, stable `identity` (story + criterion + placeholder slug), placeholder, page, golden locator, resolved locator, matched, verification, outcome, miss class |
+
+A criterion's `identity` is `story#c<index>#<slug>`. The description is slugged
+to `[a-z0-9_]` and truncated to **48 characters**, so two placeholders that
+share their first 48 slug characters collide, and editing a placeholder inside
+those 48 characters makes the criterion read as new in `compare`.
+
+**Failed, defined once.** A criterion is failed when its golden locator did not
+match, or when its own test did not pass (`FAILED`, `ERROR` or `SKIPPED`);
+everything else passed. The rollup (`FAILED CRITERIA`, `PASSES BY BASIS`) and
+`compare` both use this one definition.
 
 The miss classes (`eval_criteria.miss_class`) are `target_never_captured`,
 `page_context_misassigned`, `weakened_to_visible_element`,
