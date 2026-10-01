@@ -5,10 +5,12 @@ verified it by the **golden** locator, a distinctive **element**, a **page**
 arrival, or **nothing** (``golden_validator`` -> ``ResolutionResult.verification``).
 It never stored it: of 1149 ``eval_runs`` rows, none named the basis.
 
-This module stores it per criterion, in the SAME SQLite file as ``eval_runs``
-(``evidence/run_results.sqlite``). No new database, no new index, no parallel
+This module stores it per criterion placeholder, in the SAME SQLite file as
+``eval_runs`` (``evidence/run_results.sqlite``). No new database and no parallel
 pipeline: the ``eval_criteria`` table is created beside ``eval_runs`` and the
-existing compare/history commands read it.
+existing compare/history commands read it. The table carries three indexes in
+that same file - on ``identity`` (the compare lookup), ``story_id`` (the rollup
+filter) and ``run_id`` (loading one run, and the ON DELETE CASCADE).
 
 The owner's questions this answers:
 
@@ -113,6 +115,12 @@ def criterion_key(story_id: str, criterion_index: int | None, description: str) 
     Story + criterion + placeholder, so "the same failure as last time" is a
     query across runs and not a memory. Stable across runs because it does not
     depend on the resolved locator or the outcome.
+
+    Limit: the placeholder is slugged to ``[a-z0-9_]`` and truncated to 48
+    characters. Two placeholders that share their first 48 slug characters
+    therefore collide, and editing a placeholder inside those 48 characters
+    makes the criterion read as new in ``compare``. Stated here on purpose;
+    the README repeats it so a reader does not have to find this docstring.
     """
     slug = re.sub(r"[^a-z0-9]+", "_", (description or "").lower()).strip("_")[:48]
     return f"{story_id}#c{criterion_index}#{slug}"
@@ -159,7 +167,8 @@ def criterion_rows(
     code: str,
     per_test: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return one row per resolution: the owner's per-criterion record.
+    """Return one row per criterion placeholder (a criterion with several
+    placeholders writes several rows): the owner's per-criterion record.
 
     ``per_test`` maps test function name -> PASSED/FAILED/SKIPPED; the outcome
     of a criterion is the outcome of its own test function (the skeleton emits
@@ -296,8 +305,14 @@ class CriteriaComparison:
         return "\n".join(lines)
 
 
-def _outcome_of(row: dict[str, Any]) -> str:
-    """A criterion 'failed' when it missed, or when its own test did not pass."""
+def criterion_outcome(row: dict[str, Any]) -> str:
+    """The single definition of a criterion's outcome: ``passed`` or ``failed``.
+
+    A criterion is failed when its golden locator did not match, or when its
+    own test did not pass (``FAILED``, ``ERROR`` or ``SKIPPED``). Everything
+    else passed. The rollup and ``compare_criteria`` both call this, so the two
+    views cannot disagree about the same row.
+    """
     if not row.get("matched"):
         return "failed"
     outcome = str(row.get("outcome") or "")
@@ -327,12 +342,12 @@ def compare_criteria(
 
     for identity, new_row in sorted(newer.items()):
         old_row = older.get(identity)
-        new_outcome = _outcome_of(new_row)
+        new_outcome = criterion_outcome(new_row)
         if old_row is None:
             if new_outcome == "failed":
                 new_failures.append(identity)
             continue
-        old_outcome = _outcome_of(old_row)
+        old_outcome = criterion_outcome(old_row)
         if old_outcome == "failed" and new_outcome == "passed":
             fixed.append(identity)
         elif old_outcome == "passed" and new_outcome == "failed":
@@ -376,6 +391,7 @@ __all__ = [
     "classify_miss",
     "compare_criteria",
     "criterion_key",
+    "criterion_outcome",
     "criterion_rows",
     "ensure_criteria_table",
     "load_criteria",
