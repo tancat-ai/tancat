@@ -3,7 +3,7 @@
 Provides a pluggable, **tiered** backend interface for PDF → text
 conversion (AI-055 tiered CPU-first OCR):
 
-- **Tier 0 — PyMuPDF** (always on): extracts embedded text directly.  Fast,
+- **Tier 0 — PDF text layer** (always on, pdfplumber): extracts embedded text directly.  Fast,
   zero OCR cost, handles text-based PDFs.  Whole documents always go through
   this tier so a mostly-text PDF stays fast.
 - **Tier 1 — RapidOCR / PP-OCR (ONNX Runtime)** (AI-055 new default OCR tier):
@@ -121,7 +121,12 @@ class OcrBackend(ABC):
 
 
 class PyMuPDFBackend(OcrBackend):
-    """Extract text from PDFs using PyMuPDF.
+    """Extract text from PDFs using the licence-clean text layer (pdfplumber).
+
+    The class name and the ``name`` value are kept for compatibility with the
+    persisted ``OCR_BACKEND=pymupdf`` setting and the legacy tier mapping; the
+    reader itself is pdfplumber (PyMuPDF was removed 2026-10-01 for licence
+    reasons).
 
     The existing ``src/pdf_ingest.ingest_pdf()`` pipeline — heading
     detection, table extraction, chunking.  Handles text-based PDFs
@@ -251,27 +256,17 @@ class RapidOCRBackend(OcrBackend):
         import shutil
         import tempfile
 
-        import fitz  # PyMuPDF
+        from src.pdf_ingest import render_page_png
 
         engine = self._ensure_engine()
 
         pdf_path = Path(path)
-        doc = fitz.open(str(pdf_path))
-        if page_number < 1 or page_number > doc.page_count:
-            doc.close()
-            logger.warning(
-                "parse_page: page %d out of range (1-%d) for %s",
-                page_number,
-                doc.page_count,
-                pdf_path.name,
-            )
-            return ""
-        page = doc[page_number - 1]
         tmp_dir = tempfile.mkdtemp(prefix="rapidocr_page_")
-        mat = fitz.Matrix(300 / 72, 300 / 72)
+        out = Path(tmp_dir) / "page.png"
         try:
-            out = Path(tmp_dir) / "page.png"
-            page.get_pixmap(matrix=mat).save(str(out))
+            if not render_page_png(pdf_path, page_number, out):
+                logger.warning("parse_page: page %d out of range for %s", page_number, pdf_path.name)
+                return ""
 
             result = engine(str(out))
             text = self._result_to_text(result)
@@ -284,7 +279,6 @@ class RapidOCRBackend(OcrBackend):
                 )
             return text
         finally:
-            doc.close()
             if os.getenv("PIPELINE_DEBUG") != "1":
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -485,7 +479,7 @@ class UnlimitedOCRBackend(OcrBackend):
         import tempfile
         from pathlib import Path
 
-        import fitz  # PyMuPDF
+        from src.pdf_ingest import render_all_pages_png
 
         self._ensure_model()
         assert self._model is not None
@@ -495,17 +489,9 @@ class UnlimitedOCRBackend(OcrBackend):
         logger.info("Parsing PDF %s with Unlimited-OCR...", pdf_path.name)
 
         # Render pages to images at 300 DPI
-        doc = fitz.open(str(pdf_path))
         tmp_dir = tempfile.mkdtemp(prefix="unlimited_ocr_")
-        mat = fitz.Matrix(300 / 72, 300 / 72)
-        image_paths: list[str] = []
-
         try:
-            for i, page in enumerate(doc):
-                out = Path(tmp_dir) / f"page_{i + 1:04d}.png"
-                page.get_pixmap(matrix=mat).save(str(out))
-                image_paths.append(str(out))
-            doc.close()
+            image_paths = [str(p) for p in render_all_pages_png(pdf_path, Path(tmp_dir))]
 
             logger.info("Rasterised %d pages for OCR", len(image_paths))
 
@@ -552,24 +538,19 @@ class UnlimitedOCRBackend(OcrBackend):
         import shutil
         import tempfile
 
-        import fitz  # PyMuPDF
+        from src.pdf_ingest import render_page_png
 
         self._ensure_model()
         assert self._model is not None
         assert self._tokenizer is not None
 
         pdf_path = Path(path)
-        doc = fitz.open(str(pdf_path))
-        if page_number < 1 or page_number > doc.page_count:
-            doc.close()
-            logger.warning("parse_page: page %d out of range (1-%d) for %s", page_number, doc.page_count, pdf_path.name)
-            return ""
-        page = doc[page_number - 1]
         tmp_dir = tempfile.mkdtemp(prefix="unlimited_ocr_page_")
-        mat = fitz.Matrix(300 / 72, 300 / 72)
+        out = Path(tmp_dir) / "page.png"
         try:
-            out = Path(tmp_dir) / "page.png"
-            page.get_pixmap(matrix=mat).save(str(out))
+            if not render_page_png(pdf_path, page_number, out):
+                logger.warning("parse_page: page %d out of range for %s", page_number, pdf_path.name)
+                return ""
 
             self._model.infer_multi(
                 self._tokenizer,
@@ -584,7 +565,6 @@ class UnlimitedOCRBackend(OcrBackend):
             )
             return self._collect_output_text(Path(tmp_dir) / "output")
         finally:
-            doc.close()
             if os.getenv("PIPELINE_DEBUG") != "1":
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 

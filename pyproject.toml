@@ -45,8 +45,14 @@ dependencies = [
 tancat = "cli.main:main"
 
 [project.optional-dependencies]
+# Licence-clean PDF reading (owner decision 2026-10-01): pypdfium2 extracts text
+# and renders pages (BSD-3-Clause / Apache-2.0); pdfplumber supplies layout and
+# table structure (MIT). PyMuPDF was removed - it is AGPL-3.0 or a paid Artifex
+# licence, a conflict for an Apache-2.0 product. Licence record:
+# docs/licenses/DOCUMENT_READER_LICENSES.md.
 pdf = [
-    "PyMuPDF>=1.28.0",
+    "pypdfium2>=5.13.0",
+    "pdfplumber>=0.11.10",
 ]
 # Tier-1 CPU OCR for scanned / image-only PDF pages (AI-055).  The
 # ``[ocr]`` extra is optional so the default install stays light and an
@@ -129,8 +135,13 @@ ignore_missing_imports = true
 module = "rapidocr_onnxruntime"
 ignore_missing_imports = true
 
+# Licence-clean [pdf] reader - not installed in every environment.
 [[tool.mypy.overrides]]
-module = "fitz"
+module = "pdfplumber.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pypdfium2.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

@@ -91,14 +91,15 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     Only backends that can actually run are offered, so the panel never
     advertises a choice that would silently fall back to a weaker tier. Each
     missing piece gets a note naming how to install it. The GPU tier needs both
-    PyMuPDF (to rasterise the page) and a CUDA/ROCm GPU, so it is hidden when
-    either is absent.
+    the PDF reader (to rasterise the page) and a CUDA/ROCm GPU, so it is hidden
+    when either is absent.
     """
-    from src.ocr_backends import PyMuPDFBackend, RapidOCRBackend, UnlimitedOCRBackend
+    from src.ocr_backends import RapidOCRBackend, UnlimitedOCRBackend
+    from src.pdf_ingest import pdf_reader_available, pdf_reader_missing_message
 
-    # The backend answers the same question the PDF-reader notice does; the
-    # engine-only flags let each missing piece get its own note.
-    has_pdf_text = PyMuPDFBackend().available
+    # The PDF-reader check is the same one the notice gives; the engine-only
+    # flags let each missing piece get its own note.
+    has_pdf_text = pdf_reader_available()
     has_cpu_engine = RapidOCRBackend().engine_available
     has_gpu_engine = UnlimitedOCRBackend().engine_available
 
@@ -112,10 +113,7 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
 
     notes: list[str] = []
     if not has_pdf_text:
-        notes.append(
-            "Document mode cannot read PDFs: PyMuPDF is not installed. "
-            "Install it with `uv sync --extra pdf` (or `pip install PyMuPDF`)."
-        )
+        notes.append(pdf_reader_missing_message())
     if not has_cpu_engine:
         notes.append(
             "Scanned (image-only) pages cannot be read: the CPU OCR engine is not installed. "
@@ -124,7 +122,7 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     if not has_gpu_engine:
         notes.append(_gpu_unavailable_reason() or "The GPU OCR option is hidden.")
     elif not has_pdf_text:
-        notes.append("The GPU OCR option is hidden until PyMuPDF is installed (it rasterises the page).")
+        notes.append("The GPU OCR option is hidden until the PDF reader is installed (it rasterises the page).")
     return choices, notes
 
 
@@ -276,7 +274,7 @@ class SidebarConfig:
         """Say plainly when this build has no PDF reader.
 
         Separate from the OCR picker's note: that one covers the OCR tiers,
-        while a build with no PyMuPDF cannot read a PDF at all - document mode
+        while a build with no reader cannot read a PDF at all - document mode
         has no reader. Rendered wherever Settings renders, so the user meets it
         without having to open a particular dropdown.
         """

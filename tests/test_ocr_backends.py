@@ -117,19 +117,13 @@ class TestRapidOCRBackend:
 
     def test_parse_page_out_of_range_returns_empty(self) -> None:
         """A page number outside the PDF's range returns empty (no crash)."""
-        # B-066: patch("fitz.open") imports the real module, so this single test
-        # needs the [pdf] extra; the rest of the file mocks it. A bare `uv sync`
-        # env (no extras) skips just this test instead of erroring at setup.
-        pytest.importorskip("fitz", reason="optional [pdf] extra (pymupdf) not installed")
         backend = RapidOCRBackend()
-        with patch.object(backend, "_ensure_engine", return_value=MagicMock()):
-            # fitz is imported inside parse_page; patch the real module's open.
-            with patch("fitz.open") as mock_open:
-                mock_doc = MagicMock()
-                mock_doc.page_count = 3
-                mock_open.return_value = mock_doc
-                result = backend.parse_page("/fake/doc.pdf", 99)
-            assert result == ""
+        with (
+            patch.object(backend, "_ensure_engine", return_value=MagicMock()),
+            patch("src.pdf_ingest.render_page_png", return_value=False),
+        ):
+            result = backend.parse_page("/fake/doc.pdf", 99)
+        assert result == ""
 
     def test_result_to_text_boxes_texts_scores(self) -> None:
         """RapidOCR (boxes, texts, scores) tuple → joined text lines."""
