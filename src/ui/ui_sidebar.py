@@ -32,6 +32,74 @@ def _saved_index(options: tuple[str, ...], stored_value: str, default: str) -> i
     return 0
 
 
+# Canonical OCR backend values the panel can store. Legacy names from the
+# pre-AI-055 dropdown are mapped to these when read, so an old saved value is
+# never lost and never silently kept as something the build cannot run.
+_OCR_LABELS: dict[str, str] = {
+    "auto": "Automatic - text, plus CPU OCR for scanned pages",
+    "cpu": "CPU OCR - local CPU engine for scanned pages",
+    "power": "GPU - Unlimited-OCR (needs a CUDA/ROCm GPU)",
+}
+_OCR_LEGACY_NAMES: dict[str, str] = {
+    "pymupdf": "auto",
+    "unlimited-ocr": "power",
+    "unlimited_ocr": "power",
+}
+
+
+def _module_available(name: str) -> bool:
+    """Whether *name* can be imported here (used to report what this build has)."""
+    import importlib.util
+
+    return importlib.util.find_spec(name) is not None
+
+
+def _format_ocr_backend(value: str) -> str:
+    """Human label for a canonical OCR backend name."""
+    return _OCR_LABELS.get(value, value)
+
+
+def _ocr_backend_choices() -> tuple[list[str], list[str]]:
+    """The OCR choices this build can run, plus honest notes on what is missing.
+
+    Only backends that can actually run are offered, so the panel never
+    advertises a choice that would silently fall back to a weaker tier. Each
+    missing piece gets a note naming how to install it. The GPU tier needs both
+    PyMuPDF (to rasterise the page) and a CUDA/ROCm GPU, so it is hidden when
+    either is absent.
+    """
+    from src.ocr_backends import RapidOCRBackend, UnlimitedOCRBackend
+
+    has_pdf_text = _module_available("fitz")
+    has_cpu_ocr = RapidOCRBackend().available
+    has_gpu = UnlimitedOCRBackend().available
+
+    choices: list[str] = []
+    if has_pdf_text:
+        choices.append("auto")
+        if has_cpu_ocr:
+            choices.append("cpu")
+    if has_pdf_text and has_gpu:
+        choices.append("power")
+
+    notes: list[str] = []
+    if not has_pdf_text:
+        notes.append(
+            "Document mode cannot read PDFs: PyMuPDF is not installed. "
+            "Install it with `uv sync --extra pdf` (or `pip install PyMuPDF`)."
+        )
+    if not has_cpu_ocr:
+        notes.append(
+            "Scanned (image-only) pages cannot be read: the CPU OCR engine is not installed. "
+            "Install it with `uv sync --extra ocr` (or `pip install rapidocr_onnxruntime`)."
+        )
+    if not has_gpu:
+        notes.append("The GPU OCR option is hidden: no CUDA/ROCm GPU is available on this machine.")
+    elif not has_pdf_text:
+        notes.append("The GPU OCR option is hidden until PyMuPDF is installed (it rasterises the page).")
+    return choices, notes
+
+
 class SidebarConfig:
     """Renders the configuration sidebar and returns the selected values."""
 
@@ -95,19 +163,7 @@ class SidebarConfig:
         st.sidebar.subheader("Settings")
 
         with st.sidebar.expander("App Settings", expanded=False):
-            stored_ocr = cast(str, load_setting(SETTING_OCR_BACKEND, "pymupdf"))
-            ocr_backend = st.selectbox(
-                "OCR Backend (document mode)",
-                ["pymupdf", "unlimited-ocr"],
-                index=0 if stored_ocr != "unlimited-ocr" else 1,
-                help=(
-                    "Backend used to parse PDFs in document mode. "
-                    "pymupdf is fast and offline; unlimited-ocr needs a GPU."
-                ),
-                key="ocr_backend_setting",
-            )
-            if ocr_backend != stored_ocr:
-                save_setting(SETTING_OCR_BACKEND, ocr_backend)
+            ocr_backend = SidebarConfig._render_ocr_backend()
 
             stored_workspace = cast(str, load_setting(SETTING_WORKSPACE, "default"))
             workspace = st.text_input(
@@ -123,6 +179,47 @@ class SidebarConfig:
         SidebarConfig._render_flow_memory()
 
         return {"ocr_backend": ocr_backend, "workspace": workspace}
+
+    @staticmethod
+    def _render_ocr_backend() -> str:
+        """Render the OCR backend picker; return the canonical value to store.
+
+        Only backends this build can run are offered. A saved backend that
+        cannot run is named and replaced with Automatic, so no option here
+        silently falls back to a weaker tier.
+        """
+        choices, notes = _ocr_backend_choices()
+        stored_raw = str(load_setting(SETTING_OCR_BACKEND, "auto") or "auto")
+        stored = _OCR_LEGACY_NAMES.get(stored_raw, stored_raw)
+
+        if not choices:
+            for note in notes:
+                st.warning(note)
+            return "auto"
+
+        if stored not in choices:
+            st.caption(f"Saved OCR backend '{stored_raw}' cannot run on this build; using Automatic.")
+            stored = "auto"
+
+        ocr_backend = str(
+            st.selectbox(
+                "OCR Backend (document mode)",
+                choices,
+                index=choices.index(stored),
+                format_func=_format_ocr_backend,
+                help=(
+                    "How PDFs in document mode are read. Automatic reads the text directly and "
+                    "uses CPU OCR for scanned pages; CPU OCR forces the local CPU engine; the GPU "
+                    "tier runs Unlimited-OCR (CUDA/ROCm)."
+                ),
+                key="ocr_backend_setting",
+            )
+        )
+        for note in notes:
+            st.caption(note)
+        if ocr_backend != stored_raw:
+            save_setting(SETTING_OCR_BACKEND, ocr_backend)
+        return ocr_backend
 
     @staticmethod
     def _render_learned_patterns() -> None:
