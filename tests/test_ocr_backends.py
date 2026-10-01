@@ -147,6 +147,11 @@ class TestRapidOCRBackend:
     def test_result_to_text_empty_results_with_elapse(self) -> None:
         assert RapidOCRBackend._result_to_text(([], [1.0, 0.1, 0.2])) == ""
 
+    def test_result_to_text_old_shape_empty_texts(self) -> None:
+        """Old (boxes, [], scores) means no text - empty string, not a stringified tuple."""
+        boxes = [[[0, 0], [1, 0], [1, 1], [0, 1]]]
+        assert RapidOCRBackend._result_to_text((boxes, [], [0.9])) == ""
+
 
 # ---------------------------------------------------------------------------
 # Auto backend (tier 0 whole-doc + tier-1 CPU per-page — AI-055 default)

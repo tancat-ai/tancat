@@ -311,6 +311,10 @@ class RapidOCRBackend(OcrBackend):
                 if rows:
                     return "\n".join(rows)
             # Older / variant: (boxes, texts, scores) - texts is the 2nd element.
+            # An empty texts list means the engine found no text: return "" so an
+            # empty page does not become the stringified tuple.
+            if len(result) >= 2 and isinstance(result[1], (list, tuple)) and not result[1]:
+                return ""
             if len(result) >= 2 and isinstance(result[1], (list, tuple)):
                 texts = list(result[1])
                 if texts and all(isinstance(t, str) for t in texts):

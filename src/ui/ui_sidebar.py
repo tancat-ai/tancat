@@ -94,12 +94,12 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     the PDF reader (to rasterise the page) and a CUDA/ROCm GPU, so it is hidden
     when either is absent.
     """
-    from src.ocr_backends import RapidOCRBackend, UnlimitedOCRBackend
-    from src.pdf_ingest import pdf_reader_available, pdf_reader_missing_message
+    from src.ocr_backends import PyMuPDFBackend, RapidOCRBackend, UnlimitedOCRBackend
+    from src.pdf_ingest import pdf_reader_missing_message
 
-    # The PDF-reader check is the same one the notice gives; the engine-only
-    # flags let each missing piece get its own note.
-    has_pdf_text = pdf_reader_available()
+    # The backend answers the same question the PDF-reader notice does; the
+    # engine-only flags let each missing piece get its own note.
+    has_pdf_text = PyMuPDFBackend().available
     has_cpu_engine = RapidOCRBackend().engine_available
     has_gpu_engine = UnlimitedOCRBackend().engine_available
 

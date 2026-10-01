@@ -79,6 +79,17 @@ def _patch_reader(doc: Any) -> Any:
     return patch("src.pdf_ingest._require_pdfplumber", return_value=fake_module)
 
 
+def _require_pdf_reader() -> None:
+    """Skip a test that needs a real PDF reader when the ``[pdf]`` extra is absent.
+
+    The fake-reader tests above never call this; only the tests that open a
+    real PDF on disk do, so a plain ``uv sync`` (no extras) skips them instead
+    of failing, and names the missing package.
+    """
+    pytest.importorskip("pypdfium2", reason="[pdf] extra not installed (pypdfium2)")
+    pytest.importorskip("pdfplumber", reason="[pdf] extra not installed (pdfplumber)")
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -331,6 +342,7 @@ class TestExtractTablesPage:
 
 class TestIngestPdf:
     def test_real_tcs_pdf(self) -> None:
+        _require_pdf_reader()
         path = Path("docs/rag_corpus/lv_docs/35880-2023-car-tc.pdf")
         if not path.exists():
             pytest.skip("PDF not available")
@@ -341,6 +353,7 @@ class TestIngestPdf:
         assert any("Your insurance policy" in c.heading_path for c in chunks)
 
     def test_real_ipid_pdf(self) -> None:
+        _require_pdf_reader()
         path = Path("docs/rag_corpus/lv_docs/0042748-2025-car-ipid.pdf")
         if not path.exists():
             pytest.skip("PDF not available")
@@ -349,6 +362,7 @@ class TestIngestPdf:
         assert any("What is this type of insurance" in c.heading_path for c in chunks)
 
     def test_real_cover_limits_pdf(self) -> None:
+        _require_pdf_reader()
         path = Path("docs/rag_corpus/lv_docs/40383-2025-Cover-and-limits-v4-1.pdf")
         if not path.exists():
             pytest.skip("PDF not available")
@@ -360,6 +374,7 @@ class TestIngestPdf:
         assert chunks == []
 
     def test_contains_insurance_terms(self) -> None:
+        _require_pdf_reader()
         path = Path("docs/rag_corpus/lv_docs/35880-2023-car-tc.pdf")
         if not path.exists():
             pytest.skip("PDF not available")
@@ -376,6 +391,7 @@ class TestIngestPdf:
 
 class TestIngestPdfDirectory:
     def test_all_pdfs(self) -> None:
+        _require_pdf_reader()
         directory = Path("docs/rag_corpus/lv_docs")
         if not directory.exists():
             pytest.skip("Directory not available")
@@ -395,6 +411,7 @@ class TestIngestPdfDirectory:
         directory = Path("docs/rag_corpus/lv_docs")
         if not directory.exists():
             pytest.skip("Directory not available")
+        _require_pdf_reader()
         from src.ocr_backends import get_ocr_backend
 
         backend = get_ocr_backend()
