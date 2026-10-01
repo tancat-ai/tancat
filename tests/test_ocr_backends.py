@@ -117,19 +117,13 @@ class TestRapidOCRBackend:
 
     def test_parse_page_out_of_range_returns_empty(self) -> None:
         """A page number outside the PDF's range returns empty (no crash)."""
-        # B-066: patch("fitz.open") imports the real module, so this single test
-        # needs the [pdf] extra; the rest of the file mocks it. A bare `uv sync`
-        # env (no extras) skips just this test instead of erroring at setup.
-        pytest.importorskip("fitz", reason="optional [pdf] extra (pymupdf) not installed")
         backend = RapidOCRBackend()
-        with patch.object(backend, "_ensure_engine", return_value=MagicMock()):
-            # fitz is imported inside parse_page; patch the real module's open.
-            with patch("fitz.open") as mock_open:
-                mock_doc = MagicMock()
-                mock_doc.page_count = 3
-                mock_open.return_value = mock_doc
-                result = backend.parse_page("/fake/doc.pdf", 99)
-            assert result == ""
+        with (
+            patch.object(backend, "_ensure_engine", return_value=MagicMock()),
+            patch("src.pdf_ingest.render_page_png", return_value=False),
+        ):
+            result = backend.parse_page("/fake/doc.pdf", 99)
+        assert result == ""
 
     def test_result_to_text_boxes_texts_scores(self) -> None:
         """RapidOCR (boxes, texts, scores) tuple → joined text lines."""
@@ -141,6 +135,22 @@ class TestRapidOCRBackend:
     def test_result_to_text_empty(self) -> None:
         assert RapidOCRBackend._result_to_text(None) == ""
         assert RapidOCRBackend._result_to_text(()) == ""
+
+    def test_result_to_text_rapidocr_14_results_elapse(self) -> None:
+        """RapidOCR 1.4.x returns (results, elapse); each row is [box, text, score]."""
+        rows = [
+            [[[0, 0], [1, 0], [1, 1], [0, 1]], "Line one", 0.9],
+            [[[0, 2], [1, 2], [1, 3], [0, 3]], "Line two", 0.8],
+        ]
+        assert RapidOCRBackend._result_to_text((rows, [1.0, 0.1, 0.2])) == "Line one\nLine two"
+
+    def test_result_to_text_empty_results_with_elapse(self) -> None:
+        assert RapidOCRBackend._result_to_text(([], [1.0, 0.1, 0.2])) == ""
+
+    def test_result_to_text_old_shape_empty_texts(self) -> None:
+        """Old (boxes, [], scores) means no text - empty string, not a stringified tuple."""
+        boxes = [[[0, 0], [1, 0], [1, 1], [0, 1]]]
+        assert RapidOCRBackend._result_to_text((boxes, [], [0.9])) == ""
 
 
 # ---------------------------------------------------------------------------

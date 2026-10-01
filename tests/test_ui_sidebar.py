@@ -428,7 +428,7 @@ def test_ocr_choices_hide_everything_when_the_backend_cannot_run(monkeypatch: An
     choices, notes = _ocr_backend_choices()
 
     assert choices == []
-    assert any("PyMuPDF is not installed" in n for n in notes)
+    assert any("--extra pdf" in n for n in notes)
 
 
 def test_ocr_choices_offer_all_tiers_when_the_backend_reports_them(monkeypatch: Any) -> None:
@@ -482,12 +482,12 @@ def test_render_ocr_backend_shows_the_engine_in_use(monkeypatch: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PDF reader notice (document mode has no reader on the shipped build)
+# PDF reader notice (document mode has no reader when the [pdf] extra is absent)
 # ---------------------------------------------------------------------------
 
 
 def test_settings_warn_when_the_pdf_reader_is_missing(monkeypatch: Any) -> None:
-    """A build with no PyMuPDF says so in Settings, where document mode is named."""
+    """A build with no reader says so in Settings, where document mode is named."""
     fake = _FakeSt()
     monkeypatch.setattr("src.ui.ui_sidebar.st", fake)
     monkeypatch.setattr("src.pdf_ingest.pdf_reader_available", lambda: False)
