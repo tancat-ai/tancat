@@ -48,3 +48,14 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: secret-scan
+        name: Secret Scan (block hardcoded API keys)
+        description: >-
+          Blocks a commit that adds a hardcoded API key or token. Stdlib-only
+          script, so it needs no project dependencies and stays fast.
+        entry: python scripts/security/secret_scan.py
+        language: system
+        pass_filenames: true
+        always_run: true
+        verbose: true
