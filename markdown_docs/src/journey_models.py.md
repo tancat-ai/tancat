@@ -322,3 +322,10 @@ Scraped element collections use `list[dict[str, Any]]`. This preserves flexibili
 - The module does not access network resources.
 - The module does not launch browsers or subprocesses.
 
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `ObservedStep` (class): One observed transition in a journey (AI-052). A factual record of where the browser actually was at each step - captured from page.url, never inferred. The resolver consumes these observations instead of re-guess...
+- `ObservedTrail` (class): Ordered, per-journey record of observed page transitions (AI-052). Observation, not inference: every URL here was read from the live browser after the step ran. The resolver (Sessions 3-4) consumes this trail to scope...
+- `ObservedTrail.pages_visited` (method of `ObservedTrail`): `ObservedTrail.pages_visited() -> list[str]` - Ordered, deduped list of observed URLs.

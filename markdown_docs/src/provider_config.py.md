@@ -45,3 +45,10 @@ Applies a session-scoped OpenAI API key to `os.environ["OPENAI_API_KEY"]`. Never
 
 - **Configuration centralisation**: Single source of truth for provider defaults, consumed by both UI and CLI code paths.
 - **No side effects for non-OpenAI providers**: `resolve_openai_api_key` returns `None` early for local providers, avoiding unnecessary env lookups.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `OPENAI_COMPATIBLE_PROVIDER` (constant): `OPENAI_COMPATIBLE_PROVIDER = 'openai-compatible'`
+- `OPENROUTER_PROVIDER` (constant): `OPENROUTER_PROVIDER = 'openrouter'`

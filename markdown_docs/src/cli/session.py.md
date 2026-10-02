@@ -107,3 +107,18 @@ Falls back to `get_provider_defaults(provider)` from `src.provider_config`.
 ### `create_session() -> Session`
 
 Factory that creates a `Session` populated with environment-based defaults.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `Session.story_slug` (method of `Session`): `Session.story_slug() -> str` - Slug of the pasted story, used to name exported output directories. Mirrors the pipeline writer's package naming (slugify of the first 50 chars of the story). Previously referenced as session.story_slug without ev...
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (1 item). Grouped under the public function that calls them.
+
+### `create_session() -> Session` - function
+
+- `_session_defaults() -> dict[str, str]` (function): Compute Session defaults from environment variables or provider fallbacks.

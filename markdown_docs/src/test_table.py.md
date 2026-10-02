@@ -66,3 +66,27 @@ Private `_`-helpers — the module's real logic (1 item). Grouped under the publ
 
 ### `single_row_for_condition`
 - `_infer_action_from_intent(intent: str) -> TestAction` (function) — Return a deterministic default action for a condition intent (fallback path).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `TestTable.row_ids` (method of `TestTable`): `TestTable.row_ids() -> set[str]` - Return all row ids currently in the table.
+- `TestTable.unreviewed_row_ids` (method of `TestTable`): `TestTable.unreviewed_row_ids() -> set[str]` - Return row ids that still need explicit confirmation.
+- `TestTable.is_fully_confirmed` (method of `TestTable`): `TestTable.is_fully_confirmed() -> bool` - Return True when every row has been reviewed.
+- `TestTable.from_rows` (method of `TestTable`): `TestTable.from_rows(rows: Sequence[TestRow], *, confirmed_ids: set[str] | None = None) -> TestTable` - Create a table from rows, defaulting to all rows confirmed.
+- `TestTableExpander.__init__` (method of `TestTableExpander`): `TestTableExpander.__init__(llm_client: LLMClient | None = None, *, max_rows_per_condition: int = DEFAULT_MAX_ROWS_PER_CONDITION, timeout: int = DEFAULT_EXPANSION_TIMEOUT) -> None` - Initialize the expander with an LLM client, row cap and per-call budget. Args: timeout: Seconds allowed per condition. Kept short so a degenerating response cannot freeze the caller - see :data:'DEFAULT_EXPANSION_TIME...
+- `DEFAULT_EXPANSION_TIMEOUT` (constant): `DEFAULT_EXPANSION_TIMEOUT = 60`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `TestTableExpander.expand_condition(condition: TestCondition) -> list[TestRow]` - method of `TestTableExpander`
+
+- `_attempt_llm_expansion(condition: TestCondition) -> list[TestRow]` (method of `TestTableExpander`): Call the LLM and parse rows. Returns [] on any failure.
+
+- `_parse_response(response: str, *, condition_ref: str) -> list[TestRow]` (method of `TestTableExpander`): Parse the LLM JSON array into TestRow objects (best-effort).
+- `_extract_json_array_text(raw: str) -> str` (method of `TestTableExpander`): Return the best-effort JSON array substring from the LLM response.
+- `_repair_common_json_issues(text: str) -> str` (method of `TestTableExpander`): Repair common JSON mistakes from LLM output (trailing commas, unquoted keys).

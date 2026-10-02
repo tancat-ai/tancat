@@ -68,3 +68,15 @@ Combined display: metrics → table → failure details → optional raw output.
 ### `render_run_history_summary() -> None`
 
 Displays run history using `format_full_history_summary()` from `src.run_history_cli`.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `render_results_table(run: RunResult) -> None` - function
+
+- `_status_badge(status: str) -> str` (function): Return a coloured emoji-free status badge.
+
+### `render_failure_details(run: RunResult) -> None` - function
+
+- `_suggestion_for_category(category: FailureCategory) -> str` (function): Return a human-readable suggestion for a failure category.

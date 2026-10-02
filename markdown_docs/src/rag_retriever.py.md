@@ -92,3 +92,9 @@ patterns:
 Cross-site learned patterns are returned by retrieval (no hard filter) but
 earn zero bonus — the anti-poisoning guard. Golden patterns stay unscoped
 (+20 anywhere) to preserve the shipped baseline.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `RAGRetriever.pattern_usage` (method of `RAGRetriever`): `RAGRetriever.pattern_usage(patterns: list[RetrievedPattern], site_hash: str, element_selector: str) -> list[dict[str, Any]]` - Report per-pattern usage for a resolved winner element. Mirrors the bonus logic in scoring_bonus_for / PlaceholderScorer but returns **all** patterns (not just the first match) so a lab run can observe, for ea...

@@ -102,3 +102,34 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `create_llm_client(provider_name: str | None = None, model: str | None = None) -> LLMClient` (function)
 
 Create an LLMClient instance.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `llm_temperature_default` (function): `llm_temperature_default() -> float` - Sampling temperature for calls that don't set one explicitly. Reads AITEST_LLM_TEMPERATURE (clamped 0.0-2.0); invalid values fall back to 0.0 with a warning. The 0.0 default matches the LangGraph agents' tempera...
+- `enable_thinking_default` (function): `enable_thinking_default() -> bool` - Whether the structured linear call sites send enable_thinking=True. Reads AITEST_ENABLE_THINKING (truthy values 1/true/yes/on). Defaults to False - preserves the proven thinking-off behaviour for skele...
+- `generation_env_timeout` (function): `generation_env_timeout() -> int` - Resolve the generation timeout from AITEST_GENERATION_TIMEOUT.
+- `LLM_TEMPERATURE_ENV` (constant): `LLM_TEMPERATURE_ENV = 'AITEST_LLM_TEMPERATURE'`
+- `LLM_ENABLE_THINKING_ENV` (constant): `LLM_ENABLE_THINKING_ENV = 'AITEST_ENABLE_THINKING'`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (4 items). Grouped under the public function that calls them.
+
+### `LLMClient.__init__(provider: str | None = None, provider_name: str | None = None, model: str | None = None, base_url: str | None = None, api_key: str | None = None) -> None` - method of `LLMClient`
+
+- `_get_default_model() -> str` (method of `LLMClient`): Return the default model name for the configured provider.
+
+### `LLMClient.generate(prompt: str, timeout: int | None = None, system_prompt: str | None = None, temperature: float | None = None, enable_thinking: bool | None = None) -> str` - method of `LLMClient`
+
+- `_extract_code(raw_text: str) -> str` (method of `LLMClient`): Extract Python code from completions that may include prose or fences.
+
+### `LLMClient.create_vision_completion(image_base64: str, prompt: str) -> str` - method of `LLMClient`
+
+- `_debug(message: str) -> None` (method of `LLMClient`): Print debug message to stderr if logging is enabled. stderr keeps diagnostic output out of the UI/table rendering that prints to stdout - without this, [llm_client] lines interleave with the CLI menus during LLM-b...
+
+### `LLMClient.generate_test(prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None, enable_thinking: bool | None = None) -> str` - method of `LLMClient`
+
+- `_complete_sync(prompt: str, timeout: int = 300, system_prompt: str | None = None, temperature: float | None = None, enable_thinking: bool | None = None) -> ChatCompletion` (method of `LLMClient`): Complete sync; calls `ChatMessage`, `ValueError`, `_debug`, `complete`, `llm_temperature_default`, `reset_conversation`; returns ChatCompletion.

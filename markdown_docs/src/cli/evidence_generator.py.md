@@ -122,3 +122,34 @@ Convenience wrapper — creates a visual HTML report.
 - `src.cli.config.CaptureLevel`
 - `src.config` (constants)
 - `PIL` (optional, for dimension extraction)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `ScreenshotCapturer.__init__` (method of `ScreenshotCapturer`): `ScreenshotCapturer.__init__() -> None`
+- `EvidenceGenerator.__init__` (method of `EvidenceGenerator`): `EvidenceGenerator.__init__(capture_level: CaptureLevel | None = None) -> None`
+- `EvidenceGenerator.generate_evidence` (method of `EvidenceGenerator`): `EvidenceGenerator.generate_evidence() -> None` - Generate evidence package.
+- `BugEvidenceGenerator.__init__` (method of `BugEvidenceGenerator`): `BugEvidenceGenerator.__init__() -> None`
+- `BugEvidenceGenerator.add_test_failure` (method of `BugEvidenceGenerator`): `BugEvidenceGenerator.add_test_failure(test_result: TestResult, page_url: str = 'N/A') -> dict` - Add a test failure as bug evidence (no live page required). Classifies the failure and records category, locator, and repair suggestion alongside the raw error data.
+- `BugEvidenceGenerator.process_run_result` (method of `BugEvidenceGenerator`): `BugEvidenceGenerator.process_run_result(run_result: RunResult) -> list[dict]` - Process a RunResult and record all failed tests as bug evidence. Returns the list of evidence dicts created.
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (6 items). Grouped under the public function that calls them.
+
+### `ScreenshotCapturer.capture(page: Any, test_case: AnalyzedTestCase, capture_stage: str, step_description: str = '') -> str | None` - method of `ScreenshotCapturer`
+
+- `_generate_filename(test_case: AnalyzedTestCase, capture_stage: str, step_description: str, extension: str | None = None) -> str` (method of `ScreenshotCapturer`): Generate screenshot filename based on naming convention. Args: extension: File extension to use (e.g. ".webp"). Defaults to the configured evidence extension. Pass the format actually written by the adaptive encod...
+- `_save_screenshot(screenshot_bytes: bytes, filename: str, test_title: str) -> str` (method of `ScreenshotCapturer`): Save screenshot to disk with proper organization.
+
+### `EvidenceGenerator.capture_test_evidence(page: Any, test_case: AnalyzedTestCase, capture_stage: str = 'step', step_description: str = '') -> str | None` - method of `EvidenceGenerator`
+
+- `_get_screenshot_dimensions(screenshot_bytes: bytes) -> tuple` (method of `ScreenshotCapturer`): Extract dimensions from screenshot bytes.
+- `_generate_case_id(title: str) -> str` (method of `ScreenshotCapturer`): Generate unique test case ID.
+- `_should_capture(capture_stage: str) -> bool` (method of `EvidenceGenerator`): Determine if capture is needed based on capture level.
+
+### `EvidenceGenerator.create_visual_report(output_path: str, test_cases: list[AnalyzedTestCase]) -> str` - method of `EvidenceGenerator`
+
+- `_generate_html_report(test_cases: list[AnalyzedTestCase]) -> str` (method of `EvidenceGenerator`): Generate HTML report content.

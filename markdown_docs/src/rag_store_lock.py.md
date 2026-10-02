@@ -77,3 +77,21 @@ advisory lock dies with the process).
 - `lock_path_for(rag_path)` — `<rag_path>.lock` sibling, whether the store is a `.db` file or a
   Milvus-Lite directory.
 - `_REGISTRY` — the module-level `_Registry` backing `store_lock`.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `_OsLock.__init__` (method of `_OsLock`): `_OsLock.__init__(lock_file: Path) -> None`
+- `StoreLock.__init__` (method of `StoreLock`): `StoreLock.__init__(rag_path: str | Path, timeout: float = DEFAULT_LOCK_TIMEOUT_S) -> None`
+- `StoreLock.__enter__` (method of `StoreLock`): `StoreLock.__enter__() -> StoreLock`
+- `StoreLock.__exit__` (method of `StoreLock`): `StoreLock.__exit__(exc_type: object, exc: object, tb: object) -> None`
+- `_Registry.__init__` (method of `_Registry`): `_Registry.__init__() -> None`
+- `_Registry.get` (method of `_Registry`): `_Registry.get(rag_path: str | Path, timeout: float) -> StoreLock`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+- `_release_at_exit() -> None` (method of `StoreLock`): Release at exit; calls `release`; returns None.

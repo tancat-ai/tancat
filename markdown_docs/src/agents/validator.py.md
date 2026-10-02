@@ -31,3 +31,9 @@ Returns:
 - `SkeletonValidator` from `src.skeleton_validator`
 - `SkeletonParser` from `src.skeleton_parser`
 - No LLM — purely deterministic pattern matching
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `VALIDATOR_SYSTEM_PROMPT` (constant): `VALIDATOR_SYSTEM_PROMPT = 'You are a skeleton code validator. Inspect the skeleton...`

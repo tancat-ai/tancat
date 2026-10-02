@@ -103,3 +103,20 @@ the CLI `--full` gate.
   context, not a gate.
 - **Skip policy:** navigate markers and locator-less points are skipped — they
   make no element claim, so nothing to verify against.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `DEFAULT_VIEWPORT` (constant): `DEFAULT_VIEWPORT = (1280, 720)`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `check_point_alignment(point: HeatmapPoint, *, page: Any, doc_size: tuple[float, float], viewport: tuple[int, int] = DEFAULT_VIEWPORT) -> AlignmentCheck` - function
+
+- `_locator_state(page: Any, locator: str) -> tuple[str, dict[str, float] | None]` (function): Resolve a recorded locator on the live page. Returns ("missing" | "hidden" | "ok", box_or_None): - missing: locator does not match any element (stale locator class) - hidden: matches but has no bounding box (displ...
+- `_scroll_point_into_view(page: Any, px: float, py: float, viewport: tuple[int, int]) -> tuple[float, float]` (function): Scroll so document point (px, py) sits at the viewport centre. Returns the point's viewport-relative position after the scroll (the browser clamps scroll at the document edges, so we read the actual scrollX/scrollY ba...
+- `_hit_check(page: Any, locator: str, vx: float, vy: float) -> dict[str, Any] | None` (function): One page-context evaluate: hit-test (vx, vy) against the claimed element. Returns {"hit": "tag#id" | None, "related": bool} or None when the evaluate fails (element detached between count and here). Everyt...

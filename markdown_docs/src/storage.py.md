@@ -102,3 +102,18 @@ Reset the singleton — used in test teardown for isolation.
 - CI gate enforces: zero hardcoded path hits in any `*.py` file under `src/`
 - Future: S3/GCS/Azure Blob backends implement `StorageBackend` protocol
 - `_find_repo_root()` walks upward from the module file looking for `pyproject.toml`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `LocalStorageBackend.workspace_dir` (method of `LocalStorageBackend`): `LocalStorageBackend.workspace_dir() -> Path` - <root>/<workspace>/ (or <root>/ for default).
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (1 item). Grouped under the public function that calls them.
+
+### `LocalStorageBackend.__init__(root: Path | None = None, workspace: str = 'default') -> None` - method of `LocalStorageBackend`
+
+- `_find_repo_root() -> Path` (function): Walk upward from *this module* until we find pyproject.toml. Falls back to :func:'Path.cwd' when no repository root is detected (e.g. the module was copied outside a checkout).

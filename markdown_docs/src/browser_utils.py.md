@@ -202,3 +202,14 @@ Each dismissal attempt is wrapped in broad exception handling. The design favors
 ## Dependencies
 
 - `playwright.sync_api.Page`
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (4 items). Grouped under the public function that calls them.
+
+### `dismiss_consent_overlays(page: Page) -> None` - function
+
+- `_dismiss_google_consent_tvm(page: Page) -> None` (function): Handle Google Consent Transparency & Consent Framework banners.
+- `_dismiss_structural_consent_banners(page: Page) -> None` (function): Find consent/cookie banner containers and click dismiss buttons inside them. Uses known class/id patterns for common consent providers (OneTrust, Cookiebot, Osano, etc.) and generic overlay patterns. Buttons are only...
+- `_dismiss_position_overlays(page: Page) -> None` (function): Dismiss overlays detected by position (fixed/sticky, bottom or center of viewport). Finds overlay-like elements using JavaScript (position: fixed/sticky, near bottom of viewport, or centered with backdrop) and clicks...
+- `_remove_ad_overlays_js(page: Page) -> None` (function): Remove known ad overlay elements via JavaScript. Uses specific, safe selectors for known ad patterns. Does NOT remove elements by generic properties (e.g. z-index) to avoid affecting legitimate page content.

@@ -38,3 +38,9 @@ Conditions with type `ambiguity` or `exploratory` are flagged `needs_clarificati
 ## Dependencies
 
 - `src.agents.pipeline_state` (data types)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `QADirectorAgent.__init__` (method of `QADirectorAgent`): `QADirectorAgent.__init__(client: Any | None = None) -> None`

@@ -8,3 +8,10 @@ Supports `--no-creds` to simulate the production path (no credential profile).
 ## Related
 - `src/stateful_scraper.py` — `_seed_cart_session`
 - `src/journey_models.py` — `CredentialProfile`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `main` (function): `main(no_creds: bool) -> None`
+- `TARGETS` (constant): `TARGETS = ['https://www.saucedemo.com/cart.html', 'https://www.sauc...`

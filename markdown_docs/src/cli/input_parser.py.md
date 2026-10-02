@@ -121,3 +121,39 @@ Parses and saves to timestamped JSON file in `EVIDENCE_DIR` or custom directory.
 
 - **Strategy pattern**: `InputParser._parse_by_format` routes to format-specific parser implementations.
 - **Keyword-based classification**: Test type and priority derived from acceptance criterion content.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (11 items). Grouped under the public function that calls them.
+
+### `FormatDetector.detect(text: str, method: DetectionMode = DetectionMode.AUTO) -> tuple[str, float]` - method of `FormatDetector`
+
+- `_fast_detect(text: str) -> tuple[str, float]` (method of `FormatDetector`): Quick regex-based detection.
+
+### `PlainTextParser.parse(text: str) -> list[TestCase]` - method of `PlainTextParser`
+
+- `_extract_test_case(text: str) -> TestCase` (method of `PlainTextParser`): Extract a test case from a user story statement.
+
+### `JiraParser.parse(text: str) -> list[TestCase]` - method of `JiraParser`
+
+- `_extract_from_acceptance_criteria(ac_text: str, metadata: dict) -> list[TestCase]` (method of `JiraParser`): Parse acceptance criteria items.
+
+### `BulletParser.parse(text: str) -> list[TestCase]` - method of `BulletParser`
+
+- `_determine_test_type(line: str) -> str` (method of `JiraParser`): Determine test case type from acceptance criterion.
+- `_generate_title(line: str, metadata: dict) -> str` (method of `JiraParser`): Generate a concise title from the acceptance criterion.
+- `_determine_test_type(line: str) -> str` (method of `BulletParser`): Determine test type from bullet point.
+
+### `GherkinParser.parse(text: str) -> list[TestCase]` - method of `GherkinParser`
+
+- `_extract_scenarios(text: str) -> list[dict]` (method of `GherkinParser`): Extract all scenarios from Gherkin text.
+- `_scenario_to_test_case(scenario: dict) -> TestCase` (method of `GherkinParser`): Convert a scenario to a TestCase.
+
+### `InputParser.parse(text: str, explicit_format: str | None = None) -> ParsedInput` - method of `InputParser`
+
+- `_parse_by_format(text: str, format_name: str) -> list[TestCase]` (method of `InputParser`): Route to appropriate parser based on format.
+
+### Internal utilities
+
+- `_determine_priority(line: str) -> str` (method of `JiraParser`): Determine test priority from acceptance criterion.
+- `_extract_steps(steps_text: str) -> list[dict]` (method of `GherkinParser`): Extract and categorize Gherkin steps.

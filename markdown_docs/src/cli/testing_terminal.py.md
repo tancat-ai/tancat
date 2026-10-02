@@ -42,3 +42,9 @@ adapter = QueueTerminal(inputs=["\n", "1", "\r", "Q"])
 set_terminal_adapter(adapter)
 # Now interactive menus will consume from the queue
 ```
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `QueueTerminal.running_in_git_bash` (method of `QueueTerminal`): `QueueTerminal.running_in_git_bash() -> bool`

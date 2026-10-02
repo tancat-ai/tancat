@@ -38,3 +38,10 @@ dataset is broken.
 - The map data (`docs/nodes.csv`, `docs/links.csv`,
   `scripts/3d_map_data.json`) is committed, so the audit can run on a clean
   checkout.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `normalize` (function): `normalize(label: str) -> str | None` - Try to find a matching node label.
+- `BASE` (constant): `BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.a...`

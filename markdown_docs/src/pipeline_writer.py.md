@@ -78,3 +78,18 @@ The manifest is loaded by `pipeline_artifact_manager.load_package_manifest()` to
 ## Depended On By
 
 `orchestrator.py`, `ui_pipeline.py`
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (5 items). Grouped under the public function that calls them.
+
+### `PipelineArtifactWriter.write_run_artifacts(*, run_result: PipelineRunResult, story_text: str, base_url: str = '', provider: str = '', model: str = '', additional_urls: list[str] | None = None) -> PipelineArtifactSet` - method of `PipelineArtifactWriter`
+
+- `_save_package_manifest(*, package_dir: Path, run_result: PipelineRunResult, story_text: str, base_url: str, provider: str, model: str, additional_urls: list[str], test_file_path: Path, page_object_paths: list[str]) -> None` (method of `PipelineArtifactWriter`): Persist a PackageManifest alongside the generated artifacts.
+- `_build_package_dir(story_text: str) -> Path` (method of `PipelineArtifactWriter`): Return the directory path for one generated package.
+- `_build_packaged_test_code(test_code: str, *, generated_page_objects: list[Any]) -> str` (method of `PipelineArtifactWriter`): Return test code rewritten to import generated page objects from 'pages/'.
+- `_build_manifest_records(run_result: PipelineRunResult) -> list[ManifestRecord]` (method of `PipelineArtifactWriter`): Return manifest records built from unresolved placeholders.
+
+### Internal utilities
+
+- `_remove_class_definition(code: str, class_name: str) -> str` (method of `PipelineArtifactWriter`): Remove one top-level class block from generated code.

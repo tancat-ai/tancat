@@ -42,3 +42,23 @@ def test_tc01_01(page: Page, evidence_tracker):
 
 - `src.agents.graph.SkeletonGraph` (Planner → Generator → Validator)
 - `src.agents.pipeline_state` (data types)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `ScriptSynthesizerAgent.__init__` (method of `ScriptSynthesizerAgent`): `ScriptSynthesizerAgent.__init__(client: Any | None = None) -> None`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `ScriptSynthesizerAgent.__call__(state: PipelineState) -> dict[str, Any]` - method of `ScriptSynthesizerAgent`
+
+- `_generate_per_condition(*, conditions: list[Criterion], user_story: str, base_url: str, additional_urls: list[str]) -> tuple[str, list[str]]` (method of `ScriptSynthesizerAgent`): Generate one skeleton fragment per condition and combine them. This prevents cumulative prerequisite chaining - each test function starts from scratch, matching the linear pipeline's behaviour.
+- `_placeholder_skeleton(conditions: list[Criterion]) -> str` (method of `ScriptSynthesizerAgent`): Produce a minimal skeleton when no LLM client is available.
+
+### Internal utilities
+
+- `_strip_imports(code: str) -> str` (method of `ScriptSynthesizerAgent`): Return fragment body without import lines.

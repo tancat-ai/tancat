@@ -50,3 +50,13 @@ Converts a URL list into `goto` + `capture` step pairs.
 ### `_dict_to_journey_step(d) -> JourneyStep`
 
 Converts a session state dict to `JourneyStep`. Maps UI action names: `goto` → `navigate`.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `render_journey_builder(additional_urls: list[str]) -> list[JourneyStep] | None` - function
+
+- `_render_single_step(idx: int, step: _JourneyStepDict) -> _JourneyStepDict` (function): Render a single journey step row and return the updated dict.
+- `_urls_to_journey_step_dicts(urls: list[str]) -> list[_JourneyStepDict]` (function): Convert a list of URLs into goto + capture journey step dicts.
+- `_dict_to_journey_step(d: _JourneyStepDict) -> JourneyStep` (function): Convert a dict from session state into a JourneyStep dataclass.

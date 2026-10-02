@@ -19,3 +19,12 @@ Private `_`-helpers — the module's real logic (2 items). Grouped under the pub
 ### `export_junit_xml`
 - `_classname_from_url(url: str) -> str` (function) — Derive a JUnit ``classname`` from a page URL.
 - `_first_step_error(sidecar: dict | None) -> str` (function) — Extract the first step error message from a sidecar.
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `export_junit_xml(index: EvidenceIndex, *, query: str = '', status: str | None = None, url_domain: str | None = None, condition_prefix: str | None = None, story_ref: str | None = None, step_type: str | None = None, output: str | Path | None = None, suite_name: str = 'evidence_export') -> str` - function
+
+- `_load_sidecar(index: EvidenceIndex, sidecar_path: str) -> dict | None` (function): Load the full sidecar JSON from disk.
+- `_meter_record(format_name: str, output: str | Path) -> None` (function): Best-effort record of one evidence export in the usage ledger. Phase 6e - metering must never break an export: any failure here is swallowed (a log line at most). The ledger lives inside the storage evidence dir; read...

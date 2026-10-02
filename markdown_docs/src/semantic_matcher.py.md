@@ -46,3 +46,18 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `SemanticMatcher` (class)
 
 Token-based semantic similarity for placeholder matching.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SemanticMatcher.get_words` (method of `SemanticMatcher`): `SemanticMatcher.get_words(text: str, *, expand_aliases: bool = True) -> set[str]` - Return expanded, normalised word tokens for *text*. Normalises delimiters (_ and - -> space), strips punctuation, removes stop-words, and optionally applies token expansions.
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (1 item). Grouped under the public function that calls them.
+
+### `SemanticMatcher.get_words(text: str, *, expand_aliases: bool = True) -> set[str]` - method of `SemanticMatcher`
+
+- `_split_camel_case(text: str) -> str` (method of `SemanticMatcher`): Split camelCase and PascalCase tokens with spaces. quoteRef -> quote Ref, usageType -> usage Type, LVQ-000000 unchanged.

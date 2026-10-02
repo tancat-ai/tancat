@@ -106,3 +106,18 @@ Private `_`-helpers — the module's real logic (4 items). Grouped under the pub
 ### `capture_page_screenshot`
 - `_normalise_locator_bbox(bbox: Any) -> dict[str, float] | None` (function) — Return a numeric bbox dict when Playwright reports a visible region.
 - `_selector_from_locator(locator: Any, index: int) -> str` (function) — Build a best-effort selector for a live Playwright locator.
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `scrape_with_enrichment(scrape_results: list[ScrapeResult], provider: str, model: str, timeout: int = 60) -> list[ScrapeResult]` - function
+
+- `_attach_element_boxes(elements: list[dict[str, Any]], element_boxes: list[dict[str, Any]]) -> list[dict[str, Any]]` (method of `PageScraper`): Attach matching bounding boxes to scraped elements by selector.
+
+- `_debug(message: str) -> None` (method of `PageScraper`): Print debug message if logging is enabled.
+- `_normalise_href(base_url: str, href: str) -> str` (method of `PageScraper`): Return an absolute href when the value looks navigable.
+- `_join_classes(tag: Any) -> str` (method of `PageScraper`): Return CSS class names as a single space-delimited string.
+- `_get_direct_text(tag: Any) -> str` (method of `PageScraper`): Get only direct text content of a tag, not inherited from children. Used for B-019 display elements to avoid container divs inheriting all descendant text (e.g. <div class=login_container> containing form fields would...
+- `_build_element_dict(tag: Any, base_url: str, labels: dict[str, str], id_to_text: dict[str, str] | None = None) -> dict[str, Any] | None` (method of `PageScraper`): Build a scraped element dict from a BeautifulSoup tag. Shared between the interactive and display (B-019) extraction passes.
+- `_extract_elements_from_aria(page: Page, bs4_elements: list[dict[str, Any]]) -> list[dict[str, Any]]` (method of `PageScraper`): Hybrid extraction: merge ARIA semantics into BS4 elements. BS4 provides CSS selectors, IDs, data-test, classes - the structural attributes the resolver needs. ARIA provides computed accessible_name, role, placeholder,...

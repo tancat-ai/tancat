@@ -284,3 +284,31 @@ Private `_`-helpers — the module's real logic (3 items). Grouped under the pub
 ### `strip_evidence_from_test_code`
 - `_strip_evidence_decorators(code: str) -> str` (function) — Remove ``@pytest.mark.evidence`` decorators in all emitted forms.
 - `_strip_tracker_asserts(code: str, tracker: str, page_expr: str) -> str` (function) — Convert ``tracker.assert_*`` calls to Playwright ``expect()`` assertions.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `attribute_scheme` (function): `attribute_scheme(description: str) -> str | None` - Return the URL scheme a criterion names (mailto:/tel:), else None. B-087: when a criterion asks for a specific scheme, the predicate is "starts with that scheme", not "is an http(s) URL".
+- `SectionContainsAssertion` (class): A criterion about a child element appearing inside a named section (B-088).
+- `section_contains_from_description` (function): `section_contains_from_description(description: str) -> SectionContainsAssertion | None` - Classify a section-containment criterion. Recognises "<child> inside <section> [tier|section]" and "<section> [tier|section] contains|has|shows a <child>".
+- `PageFactAssertion` (class): A page-wide, counted or content assertion that needs no resolution (B-090/B-092).
+- `page_fact_from_description` (function): `page_fact_from_description(description: str, resolved_selector: str = '') -> PageFactAssertion | None` - Classify a page-fact / content / count assertion (B-090, B-092). Returns None when the description is an ordinary element assertion - the normal resolution path applies.
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `page_fact_from_description(description: str, resolved_selector: str = '') -> PageFactAssertion | None` - function
+
+- `_count_selector_for_noun(noun: str) -> str` (function): Map the noun of "at least N <noun>" to a CSS selector, else "".
+- `_price_section_from_description(description: str) -> str` (function): Extract the tier/section name from a "<tier> price" criterion (B-092).
+
+### `replace_token_in_line(line: str, action: str, token: str, resolved_value: str, duplicate_selectors: set[str], description: str = '', fill_value: str = '', assertion_type: str = 'toBeVisible', expected_page: str = '') -> str` - function
+
+- `_annotate_expected_page(emitted: str, expected_page: str) -> str` (function): Attach expected_page to an emitted tracker call when it is supported. Only tracker calls are annotated. pytest.skip(...) lines and plain locator lines are returned untouched, as are methods that do not accept...
+
+- `_emit_count_assertion(indent: str, check: CountAssertion, description: str) -> str` (function): Emit the page-level count-assertion tracker call (B-069 part b).
+- `_emit_page_fact_assertion(indent: str, check: PageFactAssertion, description: str) -> str` (function): Emit the tracker call for a page-fact / content assertion (B-090, B-092).
+- `_assertion_type_to_et_method(assertion_type: str) -> str` (function): Map a Playwright assertion type to the corresponding evidence_tracker method.

@@ -62,3 +62,18 @@ artifacts: `.xml`, `.lock`, logs, mock HTML).
   3D map shows the documentation layer connected to the code it documents.
 - **Audit companion:** `scripts/3d map/audit_3d_map.py` checks the generated
   CSV for architectural invariants (orphan nodes, layer sanity).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `normalize_label` (function): `normalize_label(label)` - Normalize a label to match a node format.
+- `add_link` (function): `add_link(source, target, link_type)` - Add a link only if both source and target exist as nodes.
+- `module_to_path` (function): `module_to_path(module_name: str) -> str` - Convert a Python module name to a file path. e.g. 'src.orchestrator' -> 'src/orchestrator.py' 'cli.config' -> 'cli/config.py'
+- `extract_imports` (function): `extract_imports(filepath)` - Extract import module paths from a Python file using AST parsing.
+- `SKIP_DIRS` (constant): `SKIP_DIRS = {'.venv', '__pycache__', 'node_modules', '.git', 'screens...`
+- `ROOT_CONFIG_FILES` (constant): `ROOT_CONFIG_FILES = ['.clinerules', '.clineignore', '.dockerignore', '.gitign...`
+- `DOC_REFS` (constant): `DOC_REFS = {'AGENTS.md': ['streamlit_app.py', 'cli/main.py', 'src/te...`
+- `GROUP_COLORS` (constant): `GROUP_COLORS = {'interface': '#FF6B6B', 'orchestration': '#4ECDC4', 'int...`
+- `NODES` (constant): `NODES = []`
+- `LINKS` (constant): `LINKS = set()`

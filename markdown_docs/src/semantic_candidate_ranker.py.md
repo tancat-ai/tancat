@@ -49,3 +49,28 @@ Minimal protocol for async text generation used by the ranker.
 ### `SemanticCandidateRanker` (class)
 
 Use an LLM to rank a tiny candidate list without inventing selectors.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `AsyncGeneratorLike.generate` (method of `AsyncGeneratorLike`): `AsyncGeneratorLike.generate(prompt: str, timeout: int = 300, system_prompt: str | None = None, *, enable_thinking: bool | None = None) -> str` - Generate text from a prompt.
+- `SemanticCandidateRanker.__init__` (method of `SemanticCandidateRanker`): `SemanticCandidateRanker.__init__(generator: AsyncGeneratorLike | None = None, *, timeout: float = DEFAULT_RESOLUTION_TIMEOUT, enable_thinking: bool | None = False, cache: Any | None = None) -> None`
+- `SemanticCandidateRanker.choose_best_candidate` (method of `SemanticCandidateRanker`): `SemanticCandidateRanker.choose_best_candidate(*, action: str, description: str, current_url: str | None, candidates: list[dict[str, Any]], previous_steps: list[str] | None = None) -> dict[str, Any] | None` - Return the best candidate from a short list, or None on failure. B-020: Returns additional keys for ASSERT actions: - assertion_type: e.g. "toBeVisible", "toHaveText" - expected_value: optional, for toHaveText/toConta...
+- `SemanticCandidateRanker.choose_best_candidates_batch` (method of `SemanticCandidateRanker`): `SemanticCandidateRanker.choose_best_candidates_batch(*, items: list[dict[str, Any]]) -> list[dict[str, Any] | None]` - Batch-resolve multiple placeholder-candidate sets in one LLM call. Each item in items should be a dict with keys: - action: str - description: str - candidates: list of candidate dicts Returns a list of the same l...
+- `DEFAULT_RESOLUTION_TIMEOUT` (constant): `DEFAULT_RESOLUTION_TIMEOUT = float(os.getenv('AITEST_RESOLUTION_TIMEOUT', '120.0'))`
+- `ASSERTION_TYPES` (constant): `ASSERTION_TYPES = frozenset({'toBeVisible', 'toHaveText', 'toContainText',...`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `SemanticCandidateRanker.choose_best_candidate(*, action: str, description: str, current_url: str | None, candidates: list[dict[str, Any]], previous_steps: list[str] | None = None) -> dict[str, Any] | None` - method of `SemanticCandidateRanker`
+
+- `_is_timeout_error(exc: BaseException) -> bool` (function): True if exc (or anything in its cause chain) is a timeout. LLMClient.generate wraps provider errors in RuntimeError, so the underlying httpx timeout may sit one level down the cause chain.
+- `_build_prompt(*, action: str, description: str, current_url: str | None, candidates: list[dict[str, Any]], previous_steps: list[str] | None = None) -> str` (method of `SemanticCandidateRanker`): Return a compact ranking prompt for the candidate shortlist.
+
+### `SemanticCandidateRanker.choose_best_candidates_batch(*, items: list[dict[str, Any]]) -> list[dict[str, Any] | None]` - method of `SemanticCandidateRanker`
+
+- `_build_batch_prompt(batch_items: list[tuple[int, dict[str, Any]]]) -> str` (method of `SemanticCandidateRanker`): Build a batch prompt for multiple placeholder-candidate groups. The LLM returns JSON with a "results" array, one entry per placeholder: {"results": [{"id": 0, "selected_index": 1, ...}, ...]}

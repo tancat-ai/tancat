@@ -1,6 +1,6 @@
 # tancat-ai/tancat — Documentation Index
 
-> Auto-generated documentation sweep — 135 source files across `src/`, `cli/`, `scripts/`
+> Auto-generated documentation sweep - 171 documented source files across `src/`, `cli/`, `scripts/`
 
 ## Global Architecture
 
@@ -102,14 +102,21 @@ Test packages produced by the tool. Each package contains:
 
 | Directory | Files | Status |
 |-----------|-------|--------|
-| `src/` (root) | 62 | ✅ Complete |
-| `src/agents/` | 5 | ✅ Complete |
-| `src/cli/` | 15 | ✅ Complete |
-| `src/ui/` | 10 | ✅ Complete |
-| `src/llm_providers/` | 1 | ✅ Complete |
-| `scripts/` (eval + verify_production + archived debug) | 10 | ✅ Complete |
-| `cli/` | 4 | ✅ Complete |
-| **Total** | **143** | **✅ Complete** |
+| `src/` (root) | 116 | Complete |
+| `src/agents/` | 12 | Complete |
+| `src/cli/` | 15 | Complete |
+| `src/ui/` | 11 | Complete |
+| `src/licensing/` | 3 | Complete |
+| `src/llm_providers/` | 1 | Complete |
+| `scripts/` | 10 | Partial - see below |
+| `cli/` | 3 | Complete |
+| **Total** | **171** | |
+
+> 110 further `scripts/` files have never had a doc: archived debug scripts
+> (`scripts/archive/`), generated eval captures (`scripts/eval/captures*`),
+> eval helper modules (`scripts/eval/*.py`), and maintenance/one-off scripts.
+> They are listed under `not_yet_documented` in `.sweep_progress.json` and are
+> outside this refresh.
 
 > Updated 2026-08-03 (document-manager sweep): 12 `src/` docs refreshed for the
 > saucedemo checkout cluster fixes (soft-404, stateful routing, dead-page/
@@ -127,3 +134,5 @@ See `markdown_docs/.sweep_progress.json` for per-file completion status.
 *Updated: 2026-07-23 — Phase 1c LangGraph agents (state, planner, generator, validator, graph)*
 
 *Updated: 2026-09-05 — Phase 6 Part 1 docs added: licensing (license/tiers/__init__), usage_meter, llm_health, llm_cache, rag_store_lock (document-manager sweep per AGENTS.md §10).*
+
+*Updated: 2026-10-02 - document-manager lightweight refresh over the existing tree: 111 docs gained the public symbols that were missing and/or a "How It Works (Internals)" section, 58 docs already covered their module and needed nothing, 2 new docs were added (`src/url_guard.py`, `src/verification_strength.py`). Two stale doc filenames were moved under `scripts/eval/`, and one duplicate left behind by the `src/ui/` move was removed. No source file was changed.*

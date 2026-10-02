@@ -98,3 +98,29 @@ Entry point with `argparse`:
 - **Slim orchestrator**: Main loop is purely routing — all logic lives in `menu_renderer` and `pipeline_runner`.
 - **UTF-8 handling**: Dual encoding fix (module-level + `__init__` import) for Windows Git Bash.
 - **Context-sensitive menu**: Items appear/disappear based on `Session` state flags.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (16 items). Grouped under the public function that calls them.
+
+### `interactive_session() -> None` - function
+
+- `_apply_session_llm_config(session: Session) -> None` (function): Propagate session LLM settings to LLMClient fallbacks and cloud auth.
+- `_configure_llm_inline(session: Session) -> None` (function): Configure llm inline; calls `_configure_llm_inline_inner`, `pop_menu`, `push_menu`; returns None.
+- `_check_llm_inline(session: Session) -> None` (function): Phase 6d - BYO-LLM health check (CLI). Runs the same probe as the UI. Uses the session's configured provider/base_url/model (what the user will actually generate with) and prints a / report + actionable errors.
+- `_collect_user_story_inline(session: Session) -> None` (function): Collect user story inline; calls `collect_user_story`; returns None.
+- `_collect_urls_inline(session: Session) -> None` (function): Collect urls inline; calls `collect_urls`; returns None.
+- `_collect_consent_inline(session: Session) -> None` (function): Collect consent inline; calls `collect_consent_mode`, `green`, `pop_menu`, `push_menu`, `save_setting`; returns None.
+- `_collect_authentication_inline(session: Session) -> None` (function): Collect authentication inline; calls `_collect_authentication_inline_inner`, `pop_menu`, `push_menu`; returns None.
+- `_collect_journey_inline(session: Session) -> None` (function): Collect journey inline; calls `_collect_journey_inline_inner`, `pop_menu`, `push_menu`; returns None.
+- `_load_saved_packages_inline(session: Session) -> None` (function): Load an existing saved package from disk.
+- `_show_package_metadata_inline(session: Session) -> None` (function): Show metadata for the currently loaded package.
+- `_rerun_saved_suite(session: Session) -> None` (function): Re-run tests from the loaded saved package.
+- `_view_saved_package_diagnostics_inline(session: Session) -> None` (function): View failure diagnostics for the loaded saved package (AI-026 Step 6).
+- `_clear_loaded_package(session: Session) -> None` (function): Clear the currently loaded package.
+
+### Internal utilities
+
+- `_configure_llm_inline_inner(session: Session) -> None` (function): Configure llm inline inner; calls `_apply_session_llm_config`, `configure_llm`, `save_settings`; returns None.
+- `_collect_authentication_inline_inner(session: Session) -> None` (function): Collect authentication inline inner; calls `CredentialProfile`, `collect_authentication`, `green`; returns None.
+- `_collect_journey_inline_inner(session: Session) -> None` (function): Collect journey inline inner; calls `JourneyStep`, `collect_journey_steps`, `green`; returns None.

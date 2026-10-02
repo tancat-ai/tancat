@@ -9,3 +9,11 @@ Replicated the orchestrator's scrape + `_upgrade_stateful_pages` phase for sauce
 
 ## Related
 - `src/placeholder_orchestrator.py` — `_drop_dead_pages`, `_drop_redirect_duplicates`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `main` (function): `main() -> None`
+- `CANDIDATES` (constant): `CANDIDATES = ['https://www.saucedemo.com', 'https://www.saucedemo.com/...`
+- `KEYWORDS` (constant): `KEYWORDS = ('checkout', 'continue', 'finish', 'first name', 'last na...`

@@ -81,3 +81,17 @@ Private `_`-helpers — the module's real logic (2 items). Grouped under the pub
 ### `EvidenceViewer`
 - `_format_indexed_at(iso_string: str) -> str` (function) — Format an ISO-8601 timestamp — always show date + time.
 - `_short_package_name(raw: str) -> str` (function) — Turn a long auto-generated package dir name into something readable.
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `EvidenceViewer.render() -> None` - method of `EvidenceViewer`
+
+- `_render_dashboard(evidence_dirs: list[Path]) -> None` (method of `EvidenceViewer`): Render dashboard; calls `Figure`, `Path`, `Pie`, `_filter_runs_by_package`, `_get_test_plan_state`, `_short_package_name`; returns None.
+- `_render_advanced_search(sidecars: list[Path]) -> None` (method of `EvidenceViewer`): Render advanced search; calls `DataFrame`, `TextColumn`, `_format_indexed_at`, `_get_evidence_index_v2`, `_render_single_test_view`, `_short_package_name`; returns None.
+
+- `_render_single_test_view(selected_result: Any, index: EvidenceIndex) -> None` (method of `EvidenceViewer`): Render single test view; calls `_render_test_run_history`, `_short_package_name`, `caption`, `divider`, `download_button`, `error`; returns None.
+- `_render_test_run_history(test_name: str) -> None` (method of `EvidenceViewer`): Render test run history; calls `DataFrame`, `bar`, `caption`, `dataframe`, `generated_tests_dir`, `get_storage`; returns None.
+- `_get_evidence_index_v2() -> EvidenceIndex` (method of `EvidenceViewer`): Return a cached EvidenceIndex, refreshed incrementally.
+- `_get_test_plan_state() -> dict[str, list[str]] | None` (method of `EvidenceViewer`): Get test plan state; returns dict[str, list[str]] | None.

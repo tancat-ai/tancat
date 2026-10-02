@@ -99,3 +99,9 @@ the CLI gate calls.
   round-trip, legacy-pixel regression, NaN Gantt, golden fixtures, CLI exits)
 - Ran against all 51 production evidence dirs — flagged 5 with real negative-y
   off-page markers (the `evidence_tracker` fix this validator caught)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `KNOWN_STATUSES` (constant): `KNOWN_STATUSES = frozenset({'passed', 'partial_pass', 'failed', 'skipped',...`

@@ -44,3 +44,10 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult` (function)
 
 Merge a failed-only rerun into the previous full run result.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `count_generated_tests` (function): `count_generated_tests(test_path: str | Path) -> int` - Count def test_... functions in a generated test file or package dir.
+- `resolve_test_timeout` (function): `resolve_test_timeout(test_path: str | Path) -> int` - Hard pytest timeout for a generated suite, in seconds. PIPELINE_TEST_TIMEOUT wins when set (unchanged back-compat). Otherwise the ceiling scales with the number of tests: a flat 600s was fine for the 9 tests it wa...
