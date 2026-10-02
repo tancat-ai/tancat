@@ -3,11 +3,16 @@
 # - ruff-format: code formatting
 # - mypy: type checking
 # - eval-accuracy: resolution accuracy gate
+# - kanban-freshness: kanban.html is current
+# - secret-scan: stdlib scan for hardcoded API keys (always runs)
+# - gitleaks: fuller secret scan when the gitleaks binary is installed
 #
 # To run: pre-commit run
 # To install: pre-commit install
 #
-# Note: generated_tests/, scripts/, scratch/, and fixtures/ are excluded from checks
+# The exclude below skips generated_tests/, scratch/, notebooks/ and fixtures/.
+# It does NOT skip scripts/ - the July key lived in scripts/eval/ - so both
+# secret hooks scan scripts/ too.
 exclude: ^(generated_tests/|scratch/|notebooks/|fixtures/)
 
 repos:
@@ -57,5 +62,18 @@ repos:
         entry: python scripts/security/secret_scan.py
         language: system
         pass_filenames: true
+        always_run: true
+        verbose: true
+
+      - id: gitleaks
+        name: Gitleaks Secret Scan (when installed)
+        description: >-
+          Runs gitleaks on the staged commit when the gitleaks binary is on
+          PATH. It knows many provider key shapes the stdlib secret-scan does
+          not. Skips with a clear message when gitleaks is not installed; the
+          CI job runs gitleaks over the history on every push.
+        entry: python scripts/security/gitleaks_scan.py
+        language: system
+        pass_filenames: false
         always_run: true
         verbose: true
