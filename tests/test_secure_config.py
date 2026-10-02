@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from pathlib import Path
 
 import pytest
@@ -83,6 +84,75 @@ class TestConfigPaths:
 
     def test_key_path_ends_with_config_key(self) -> None:
         assert secure_config._key_path().name == "config.key"
+
+
+class TestConfigDirCreation:
+    """_config_dir must be safe when several workers create it at once.
+
+    With parallel CI (pytest-xdist) every worker reaches this on a fresh
+    machine; the old check-then-create code raised FileExistsError for all
+    but the first. The local run never hit it because the directory already
+    existed on this machine.
+    """
+
+    def test_creates_a_fresh_config_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(secure_config, "_restrict_to_owner", lambda _path: None)
+
+        created = secure_config._config_dir()
+
+        assert created == tmp_path / ".ai-test-gen"
+        assert created.is_dir()
+
+    def test_two_concurrent_creators_do_not_raise(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        target = tmp_path / ".ai-test-gen"
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(secure_config, "_restrict_to_owner", lambda _path: None)
+
+        original_exists = Path.exists
+        barrier = threading.Barrier(2, timeout=5)
+
+        def exists_with_a_pause(self: Path) -> bool:
+            result = original_exists(self)
+            if self == target and not result:
+                # Hold both threads at the old check until each has seen
+                # "missing", so the mkdir race is deterministic.
+                barrier.wait()
+            return result
+
+        monkeypatch.setattr(Path, "exists", exists_with_a_pause)
+        errors: list[Exception] = []
+
+        def worker() -> None:
+            try:
+                secure_config._config_dir()
+            except Exception as exc:  # the test asserts this list is empty
+                errors.append(exc)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert errors == []
+
+    def test_tolerates_a_creator_between_check_and_mkdir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        target = tmp_path / ".ai-test-gen"
+        target.mkdir()  # a racing worker already created it
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(secure_config, "_restrict_to_owner", lambda _path: None)
+
+        original_exists = Path.exists
+
+        def missing_to_the_parent(self: Path) -> bool:
+            if self == target:
+                return False  # the parent looked before the other worker created it
+            return original_exists(self)
+
+        monkeypatch.setattr(Path, "exists", missing_to_the_parent)
+
+        assert secure_config._config_dir() == target
 
 
 class TestSaveAndLoadKey:

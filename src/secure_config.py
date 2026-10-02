@@ -35,9 +35,13 @@ def _config_dir() -> Path:
     """Return the config directory, creating it owner-only if needed."""
     home = Path.home()
     config_dir = home / ".ai-test-gen"
-    if not config_dir.exists():
-        config_dir.mkdir(mode=0o700, parents=True)
-        _restrict_to_owner(config_dir)
+    # exist_ok=True is race-safe: on a fresh machine several workers create
+    # the directory at once, and a plain mkdir raises FileExistsError for all
+    # but one. _restrict_to_owner is idempotent and best-effort, so it also
+    # covers a directory created by a racing worker (or one that already
+    # existed with the wrong permissions).
+    config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _restrict_to_owner(config_dir)
     return config_dir
 
 
