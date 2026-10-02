@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 from pathlib import Path
 
 import pytest
 
+import src.secure_config as secure_config
 from src.secure_config import (
     _config_dir,
     _config_path,
@@ -19,6 +22,13 @@ from src.secure_config import (
     resolve_key,
     save_key,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_master_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each test gets its own key file and no passphrase in the environment."""
+    monkeypatch.setattr("src.secure_config._key_path", lambda: tmp_path / "config.key")
+    monkeypatch.delenv("AITEST_CONFIG_KEY", raising=False)
 
 
 class TestKeyDerivation:
@@ -39,6 +49,24 @@ class TestKeyDerivation:
         key = _derive_key()
         assert key != b"\x00" * 32
 
+    def test_key_file_is_created_owner_only(self) -> None:
+        _derive_key()
+        key_file = secure_config._key_path()
+        assert key_file.exists()
+        if os.name != "nt":
+            assert (key_file.stat().st_mode & 0o777) == 0o600
+
+    def test_a_new_key_file_gives_a_new_key(self) -> None:
+        first = _derive_key()
+        secure_config._key_path().unlink()
+        second = _derive_key()
+        assert first != second
+
+    def test_passphrase_env_overrides_key_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AITEST_CONFIG_KEY", "correct horse battery staple")
+        assert _derive_key() == hashlib.sha256(b"correct horse battery staple").digest()
+        assert not secure_config._key_path().exists()
+
 
 class TestConfigPaths:
     """Tests for config file paths."""
@@ -52,6 +80,9 @@ class TestConfigPaths:
         p = _config_path()
         assert p.name == "config.enc"
         assert p.parent.name == ".ai-test-gen"
+
+    def test_key_path_ends_with_config_key(self) -> None:
+        assert secure_config._key_path().name == "config.key"
 
 
 class TestSaveAndLoadKey:

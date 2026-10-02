@@ -163,6 +163,35 @@ jobs:
       - name: Fail if kanban.html carries content from docs/private/
         run: python3 scripts/maintenance/kanban.py --check-private
 
+  # Gate 1e: Gitleaks secret scan (blocking). Catches key shapes the stdlib
+  # pre-commit scan does not know. Runs over the repo and its history, so a
+  # key in any commit fails the build. The gitleaks binary is not installed
+  # on every dev machine (no Go toolchain there), so CI installs a pinned
+  # release; the pre-commit hook is best-effort and skips when absent.
+  secret-scan-gitleaks:
+    name: Gitleaks Secret Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: a key in any commit must fail
+
+      - name: Install gitleaks (pinned)
+        run: |
+          GITLEAKS_VERSION="8.30.1"
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tgz
+          mkdir -p /tmp/gitleaks-bin
+          tar -xzf /tmp/gitleaks.tgz -C /tmp/gitleaks-bin gitleaks
+          /tmp/gitleaks-bin/gitleaks version
+
+      - name: Scan the repository and history
+        run: /tmp/gitleaks-bin/gitleaks git --redact --verbose --exit-code 1
+
   # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
     name: Ruff Lint & Format

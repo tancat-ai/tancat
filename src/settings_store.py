@@ -29,11 +29,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
-from src.secure_config import _config_dir, _get_fernet
+from src.secure_config import _config_dir, _get_fernet, _restrict_to_owner
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +81,7 @@ def _save_settings(data: dict[str, Any]) -> None:
     encrypted = fernet.encrypt(json.dumps(data, indent=2).encode())
     path = _settings_path()
     path.write_bytes(encrypted)
-    # Restrict permissions on Unix
-    if os.name != "nt":
-        os.chmod(path, 0o600)
+    _restrict_to_owner(path)
 
 
 class SettingsStore:

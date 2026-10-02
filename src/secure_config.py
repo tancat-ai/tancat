@@ -2,11 +2,22 @@
 
 Stores provider API keys in an encrypted config file at
 ``~/.ai-test-gen/config.enc`` using Fernet symmetric encryption.
-The encryption key is derived from the machine's unique identifier,
-providing local-only access without requiring a master password.
 
-Also supports cloud deployment scenarios where keys are injected
-via environment variables (Azure Key Vault, AWS Secrets Manager).
+The encryption key comes from one of:
+
+1. ``AITEST_CONFIG_KEY`` in the environment (a passphrase, hashed with
+   SHA-256) - use this for headless and CI deployments.
+2. ``~/.ai-test-gen/config.key`` - a random 32-byte key created on first
+   use, readable only by the owner (0600 on POSIX, an owner-only ACL on
+   Windows).
+
+It is deliberately NOT derived from machine identifiers such as the MAC
+address, hostname or CPU architecture: those are guessable, so the old
+scheme was obfuscation rather than encryption.
+
+Product deployments should prefer environment injection from the
+customer's own secret store; the local key file is the air-gapped
+fallback.
 """
 
 from __future__ import annotations
@@ -15,17 +26,18 @@ import base64
 import hashlib
 import json
 import os
-import platform
-import uuid
+import subprocess
 from pathlib import Path
 from typing import Any
 
 
 def _config_dir() -> Path:
-    """Return the config directory, creating it if needed."""
+    """Return the config directory, creating it owner-only if needed."""
     home = Path.home()
     config_dir = home / ".ai-test-gen"
-    config_dir.mkdir(mode=0o700, exist_ok=True)
+    if not config_dir.exists():
+        config_dir.mkdir(mode=0o700, parents=True)
+        _restrict_to_owner(config_dir)
     return config_dir
 
 
@@ -34,26 +46,73 @@ def _config_path() -> Path:
     return _config_dir() / "config.enc"
 
 
-def _derive_key() -> bytes:
-    """Derive an encryption key from machine-specific identifiers.
+def _key_path() -> Path:
+    """Return the path to the local master-key file."""
+    return _config_dir() / "config.key"
 
-    Uses the machine's UUID (platform-independent) and hostname to
-    produce a stable 32-byte key.  This means the config file can only
-    be decrypted on the same machine that created it.
 
-    On cloud VMs the machine UUID may change across reprovisioning,
-    which would orphan existing encrypted configs.  In those environments
-    prefer environment-variable injection (Azure Key Vault / AWS Secrets
-    Manager) over local encrypted storage.
+def _restrict_to_owner(path: Path) -> None:
+    """Restrict *path* to the current user, best effort.
+
+    POSIX: mode 0600 for a file, 0700 for a directory.
+    Windows: replace inherited ACLs with a single grant to the current
+    user (``os.chmod`` on Windows only changes the read-only flag, so it
+    cannot express owner-only). A permission failure is ignored: it must
+    never break the save.
     """
-    identifiers = [
-        str(uuid.getnode()),  # MAC-based node ID
-        platform.node(),  # hostname
-        platform.machine(),  # e.g. 'AMD64'
-        "ai-playwright-test-gen-v1",  # namespace salt
-    ]
-    combined = "|".join(identifiers)
-    return hashlib.sha256(combined.encode()).digest()
+    try:
+        if os.name == "nt":
+            user = os.environ.get("USERNAME", "").strip()
+            if not user:
+                return
+            subprocess.run(
+                [
+                    "icacls",
+                    str(path),
+                    "/inheritance:r",
+                    "/grant:r",
+                    f"{user}:F",
+                    "SYSTEM:F",
+                ],
+                check=False,
+                capture_output=True,
+            )
+        else:
+            os.chmod(path, 0o600 if path.is_file() else 0o700)
+    except OSError:
+        return
+
+
+def _derive_key() -> bytes:
+    """Return the 32-byte Fernet key.
+
+    Priority:
+
+    1. ``AITEST_CONFIG_KEY`` when set (a passphrase, hashed with SHA-256).
+    2. ``~/.ai-test-gen/config.key`` - a random 32-byte key created on
+       first use.
+
+    It is NOT derived from machine identifiers (MAC address, hostname,
+    CPU architecture). Those are guessable, so the old scheme was
+    obfuscation rather than encryption.
+    """
+    passphrase = os.environ.get("AITEST_CONFIG_KEY", "").strip()
+    if passphrase:
+        return hashlib.sha256(passphrase.encode()).digest()
+
+    key_path = _key_path()
+    if key_path.exists():
+        try:
+            raw = base64.urlsafe_b64decode(key_path.read_bytes().strip())
+            if len(raw) == 32:
+                return raw
+        except ValueError, OSError:
+            pass
+
+    key = os.urandom(32)
+    key_path.write_bytes(base64.urlsafe_b64encode(key))
+    _restrict_to_owner(key_path)
+    return key
 
 
 try:
@@ -183,6 +242,4 @@ def _save_config(config: dict[str, Any]) -> None:
     encrypted = fernet.encrypt(plaintext)
     path = _config_path()
     path.write_bytes(encrypted)
-    # Restrict permissions on Unix
-    if os.name != "nt":
-        os.chmod(path, 0o600)
+    _restrict_to_owner(path)
