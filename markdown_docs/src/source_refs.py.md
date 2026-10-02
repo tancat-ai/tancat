@@ -109,3 +109,12 @@ has one right answer.
 > *proof* of the quote, but no orchestration. Orchestration (which criteria get
 > citations, how the LLM is prompted, how surfaces render) lives in
 > `src/citation_verifier.py` and `src/citation_surfaces.py`.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SourceRef.is_unresolved` (method of `SourceRef`): `SourceRef.is_unresolved() -> bool` - True if this citation is an unresolved signal.
+- `SourceRef.display` (method of `SourceRef`): `SourceRef.display(*, privacy_mode: bool = False) -> str` - Render a human-readable citation string. Args: privacy_mode: If True, pointer-only (no quote text) - D7. Returns: A string like:: Doc A, PDF p.9 (printed '5') [OCR] - "The maximum claim is 5,000" or (unresolved):: ...
+- `SourceRef.to_dict` (method of `SourceRef`): `SourceRef.to_dict() -> dict[str, str]` - Serialize for checkpointing / export.
+- `SourceRef.from_dict` (method of `SourceRef`): `SourceRef.from_dict(data: dict[str, str]) -> SourceRef` - Deserialize from a checkpoint / export dict.

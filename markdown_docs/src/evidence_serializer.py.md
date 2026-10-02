@@ -26,3 +26,9 @@ Serialization utilities for evidence sidecar JSON files. Handles writing and rea
 - All methods are @staticmethod — no instance state needed
 - JSON output uses 2-space indent, UTF-8 encoding
 - Validates presence of schema_version, test, and steps keys
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SCHEMA_VERSION` (constant): `SCHEMA_VERSION = '1.0'`

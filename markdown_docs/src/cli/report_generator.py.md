@@ -72,3 +72,17 @@ Routes to format-specific output:
 | `LOCAL` | HTML (same as Confluence) |
 | `JIRA` | Markdown (Jira-friendly) |
 | `SHAREABLE` | Markdown (shareable format) |
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (4 items). Grouped under the public function that calls them.
+
+### `JiraReportGenerator.create_test_case(analyzed_case: AnalyzedTestCase, screenshot_paths: list[str] | None = None) -> JiraTestCase` - method of `JiraReportGenerator`
+
+- `_format_test_steps(analyzed_case: AnalyzedTestCase) -> str` (method of `JiraReportGenerator`): Format test steps for Jira.
+- `_format_expected_results(analyzed_case: AnalyzedTestCase) -> str` (method of `JiraReportGenerator`): Format expected results for Jira.
+
+### `JiraReportGenerator.save_test_cases(format: ReportFormat = ReportFormat.CONFLUENCE) -> str` - method of `JiraReportGenerator`
+
+- `_save_json(output_path: str) -> str` (method of `JiraReportGenerator`): Save test cases as JSON.
+- `_save_markdown(output_path: str) -> str` (method of `JiraReportGenerator`): Save test cases as Markdown.

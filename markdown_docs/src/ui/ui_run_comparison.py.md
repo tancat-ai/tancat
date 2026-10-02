@@ -43,3 +43,12 @@ Short status summary string for a run used in the delta table header.
 
 - **Filtering is in-memory, not SQL** — `load_all_run_results` ignores its `directory` argument, so runs are filtered by `test_package` suffix in Python (documented in the source, B-043 adjacent).
 - Pure Streamlit rendering — no testable business logic lives here (per AGENTS.md, logic belongs in `src/` testable modules).
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `RunComparison.render() -> None` - method of `RunComparison`
+
+- `_run_label(run: PersistedRunResult) -> str` (function): Human-readable run label from the ISO-8601 run_id.
+- `_delta_icon(sa: str, sb: str) -> str` (function): Delta icon; returns str.

@@ -78,3 +78,22 @@ CLI entry point. Parses args, loads data, calls `rebuild_store()`. Returns count
 
 - Manual/automated setup step (run once after repo clone or after golden dataset updates)
 - `tests/test_rag_ingest.py` — 15 unit tests
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `prune_doc_duplicates` (function): `prune_doc_duplicates() -> int` - Remove duplicate doc chunks (same dedup_key) from the live store. Groups stored entry_type == "doc" rows by dedup_key (skipping legacy rows with no key), keeps the lowest id in each group, and deletes...
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `main(argv: list[str] | None = None) -> dict[str, object]` - function
+
+- `_run(argv: list[str] | None = None) -> dict[str, object]` (function): Parse args and execute the requested operations (see :func:'main').
+
+### Internal utilities
+
+- `_build_ocr_fallback() -> Callable[[Path, int], str]` (function): Build a page-scoped OCR fallback for image-only PDF pages (AI-055). Consults the configured OCR backend (persisted setting > OCR_BACKEND env > auto default) and returns its parse_page - the per-page image-...

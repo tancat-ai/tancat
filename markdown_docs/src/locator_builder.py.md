@@ -52,3 +52,22 @@ None (stdlib only).
 ## Depended On By
 
 `placeholder_resolver.py`, `placeholder_orchestrator.py`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `build_dot_classes` (function): `build_dot_classes(classes: str) -> str` - Build a dot-class selector (.a.b.c) with every class CSS-escaped.
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `build_dot_classes(classes: str) -> str` - function
+
+- `_css_escape_class_token(token: str) -> str` (function): Escape a single CSS class name for use inside a class selector. Tailwind-style variant classes (hover:text-amber-200, sm:text-3xl) and fractional utilities (py-3.5, w-1/2) contain characters with speci...
+
+### `build_selector_relaxed(description: str, page_elements: list[dict]) -> str | None` - function
+
+- `_token_overlap(description_tokens: set[str], element_tokens: set[str]) -> float` (function): Compute Jaccard-like overlap between two token sets. Returns a value in [0, 1] representing how many description tokens are covered by the element tokens.

@@ -107,3 +107,24 @@ Connection management and context-manager protocol support.
 - **Non-destructive lock handling**: transient `OperationalError` (locked) re-raises; only genuine `DatabaseError` (corruption) triggers the delete-and-rebuild recovery — a healthy database is never deleted on contention.
 - **FK CASCADE**: Deleting a `run` automatically removes all child `test_results` rows.
 - **Drop-in replacement**: Mirrors `run_result_persistence.py` signatures for transparent delegation.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SQLitePersistence.__init__` (method of `SQLitePersistence`): `SQLitePersistence.__init__(db_path: Path | None = None, busy_timeout_ms: int = 30000) -> None`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (4 items). Grouped under the public function that calls them.
+
+### `SQLitePersistence.__init__(db_path: Path | None = None, busy_timeout_ms: int = 30000) -> None` - method of `SQLitePersistence`
+
+- `_connect_and_schema() -> None` (method of `SQLitePersistence`): Open the connection, apply PRAGMAs and create the schema.
+- `_close_connection() -> None` (method of `SQLitePersistence`): Close connection; calls `close`; returns None.
+- `_delete_db_files() -> None` (method of `SQLitePersistence`): Remove the database file plus WAL/SHM sidecars (best effort).
+
+### Internal utilities
+
+- `_create_schema() -> None` (method of `SQLitePersistence`): Create tables and indexes if they don't exist.

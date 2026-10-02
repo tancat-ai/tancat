@@ -55,3 +55,25 @@ Private `_`-helpers — the module's real logic (3 items). Grouped under the pub
 - `_after_qa_director(state: PipelineState) -> str` (function) — Route after QA Director: checkpoint, then route by persona.
 - `_after_synthesizer(state: PipelineState) -> str` (function) — Route after Synthesizer: retry on failure, or proceed.
 - `_route_entry(state: PipelineState) -> str` (function) — Route the entry point: document mode goes through parsing first.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `PipelineGraph.__init__` (method of `PipelineGraph`): `PipelineGraph.__init__(client: Any | None = None, rag_retriever: Any | None = None, enable_checkpoint: bool = True) -> None`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `PipelineGraph.__init__(client: Any | None = None, rag_retriever: Any | None = None, enable_checkpoint: bool = True) -> None` - method of `PipelineGraph`
+
+- `_build_graph() -> CompiledStateGraph` (method of `PipelineGraph`): Build and compile the StateGraph. Entry routing: text mode -> ingest; document mode -> parse_document -> ingest.
+
+- `_parse_document(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Pre-processing node: PDF/Markdown -> structured text. Only runs when input_mode == "document" (routed by _route_entry). Uses the configured OCR backend (OCR_BACKEND env var, default: pymupdf). 16b Phase 2 (...
+- `_ingest(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Ingestion Agent: analyse the user story.
+- `_ingest_mock(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Mock ingestion for when no LLM client is available.
+- `_impact_map(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Impact Mapper: ChangeDelta + persona_role -> ImpactMap per change. For each ChangeDelta extracted by the Ingestion Agent, builds an ImpactMap describing the blast radius, regression areas, test scenarios, and risk leve...
+- `_consolidated_report(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Build a ConsolidatedReport from all pipeline outputs. Used by the product_owner persona route - skips test code generation and produces a human-readable report instead.
+- `_postprocess(state: PipelineState) -> dict[str, Any]` (method of `PipelineGraph`): Code Postprocessor: validate syntax, strip evidence for export. Skips syntax validation when the code contains double-brace placeholders (skeleton mode) - placeholders are not valid Python until resolved.

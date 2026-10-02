@@ -31,3 +31,9 @@ Validate skeleton code for forbidden locator patterns. Scans each line for CSS c
 - `src/skeleton_parser.py` — sibling module that parses skeleton structure
 - `src/test_generator.py` — uses validator before accepting skeleton output
 - `src/placeholder_resolver.py` — Phase 2 resolver that substitutes real selectors
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SkeletonValidator.validate` (method of `SkeletonValidator`): `SkeletonValidator.validate(skeleton_code: str) -> SkeletonValidationResult` - Validate skeleton code for forbidden locator patterns. Returns a result indicating whether the skeleton is valid, what violations were found, and a suggestion for fixing them.

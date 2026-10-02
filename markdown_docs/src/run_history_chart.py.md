@@ -57,3 +57,18 @@ Private `_`-helpers — the module's real logic (2 items). Grouped under the pub
 ### `build_run_history_chart`
 - `_health_color(pass_rate: float) -> str` (function) — Return marker colour based on pass-rate threshold.
 - `_health_label(pass_rate: float) -> str` (function) — Short text description of health level.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `COLOR_PASS_GREEN` (constant): `COLOR_PASS_GREEN = '#2ecc71'`
+- `COLOR_AMBER` (constant): `COLOR_AMBER = '#f39c12'`
+- `COLOR_FAIL_RED` (constant): `COLOR_FAIL_RED = '#e74c3c'`
+- `COLOR_BAR_FILL` (constant): `COLOR_BAR_FILL = '#5b6abf'`
+- `COLOR_BAR_LINE` (constant): `COLOR_BAR_LINE = '#3f4a8a'`
+- `COLOR_RANGE_100` (constant): `COLOR_RANGE_100 = 'rgba(39, 174, 96, 0.2)'`
+- `COLOR_GRID` (constant): `COLOR_GRID = '#eaeef2'`
+- `COLOR_TEXT` (constant): `COLOR_TEXT = '#2c3e50'`
+- `THRESHOLD_GREEN` (constant): `THRESHOLD_GREEN = 90.0`
+- `THRESHOLD_AMBER` (constant): `THRESHOLD_AMBER = 70.0`

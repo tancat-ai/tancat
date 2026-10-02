@@ -207,3 +207,38 @@ scorer so same-site bonuses are scoped correctly. Golden patterns keep `""`.
 `KnowledgeEntry.metadata` / `SearchHit.metadata` changed from `dict[str, str]`
 to `dict[str, Any]` — Milvus dynamic fields carry ints/floats (confidence,
 hit_count, created_at).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `EmbeddingMismatchError` (class): The RAG store was created with a different embedding model than configured. Raised at store-open time when the stored embedder stamp (model + dim) does not match the configured embedder - refusing retrieval instead of...
+- `SentenceTransformerEmbedder.identity` (method of `SentenceTransformerEmbedder`): `SentenceTransformerEmbedder.identity() -> str` - Stable embedder identity for store stamping: '<model>@<dim>'. Changing either the model or the dimension changes the identity, so a store created with a different identity is refused (Phase 6 6b).
+- `VectorStoreBackend.find_negative` (method of `VectorStoreBackend`): `VectorStoreBackend.find_negative(action_type: str, description: str, site_hash: str) -> dict[str, Any] | None` - Find an existing learned_negative row by dedup key (AI-058). Mirrors find_learned for the contrastive negative store.
+- `embedder_stamp_path` (function): `embedder_stamp_path(db_path: str) -> str` - Path of the embedder-stamp sidecar for a Milvus db path. Milvus Lite stores its db as a *directory*; the stamp lives as a sibling file so shutil.rmtree of the db dir never silently carries a stale stamp into a reb...
+- `MilvusLiteBackend.verify_embedder` (method of `MilvusLiteBackend`): `MilvusLiteBackend.verify_embedder(embedder_identity: str | None) -> None` - Cross-check the stored stamp against *embedder_identity*. Called by :class:'RAGStore' before every operation with the actual embedder's identity, so a store opened with a different declared identity cannot smuggle mis...
+- `MilvusLiteBackend.find_negative` (method of `MilvusLiteBackend`): `MilvusLiteBackend.find_negative(action_type: str, description: str, site_hash: str) -> dict[str, Any] | None` - Find an existing learned_negative row by dedup key (Milvus impl). AI-058: mirrors find_learned but filters entry_type == 'learned_negative'. Returns the full row so the caller can upsert it back with an in...
+- `RAGStore.is_empty` (method of `RAGStore`): `RAGStore.is_empty() -> bool`
+- `RAGStore.upsert_pattern` (method of `RAGStore`): `RAGStore.upsert_pattern(pattern: LearnedPattern) -> tuple[str, int]` - Insert or dedup a learned pattern (AI-035 core, B-036 Phase 3). Dedup key: (action_type, description, site_hash). When a row with the same key already exists, its hit_count is incremented (no new row - the sto...
+- `RAGStore.upsert_negative_pattern` (method of `RAGStore`): `RAGStore.upsert_negative_pattern(pattern: LearnedPattern) -> tuple[str, int]` - Insert or dedup a learned-NEGATIVE pattern (AI-058 contrastive store). Mirrors :meth:'upsert_pattern' with entry_type="learned_negative"' - dedup on (action_type, description, site_hash); a repeat bumps hit_co...
+- `DEFAULT_EMBEDDER_IDENTITY` (constant): `DEFAULT_EMBEDDER_IDENTITY = f'{SentenceTransformerEmbedder._DEFAULT_MODEL}@384'`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (6 items). Grouped under the public function that calls them.
+
+### `MilvusLiteBackend.verify_embedder(embedder_identity: str | None) -> None` - method of `MilvusLiteBackend`
+
+- `_verify_stamp(embedder_identity: str | None) -> None` (method of `MilvusLiteBackend`): Compare the stored stamp against *embedder_identity*; refuse on mismatch. Refusal policy: * dimension mismatch -> always refuse (inserts would fail confusingly); * embedder identity mismatch -> refuse (cosine similarity...
+
+### `RAGStore.add_patterns(patterns: list[GoldenPattern]) -> int` - method of `RAGStore`
+
+- `_ensure_embedder_match() -> None` (method of `RAGStore`): Refuse operations when the store's stamp doesn't match this embedder. Phase 6 6b: the backend verifies its constructor-declared identity at open; this cross-check uses the *actual* embedder's identity so a store opene...
+
+### Internal utilities
+
+- `_loaded_model() -> Any` (method of `SentenceTransformerEmbedder`): Loaded model; calls `SentenceTransformer`; returns Any.
+- `_read_stamp() -> dict[str, Any] | None` (method of `MilvusLiteBackend`): Read stamp; calls `_stamp_path`, `load`; returns dict[str, Any] | None.
+- `_write_stamp(embedder_identity: str | None) -> None` (method of `MilvusLiteBackend`): Write stamp; calls `_stamp_path`, `dump`, `time`; returns None.
+- `_c() -> Any` (method of `MilvusLiteBackend`): C; calls `MilvusClient`, `_verify_stamp`, `_write_stamp`, `add_field`, `add_index`, `create_collection`; returns Any.

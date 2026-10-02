@@ -51,3 +51,16 @@ Generates placeholder-based pytest skeleton code for the intelligent pipeline. S
 - **Optional dependency:** `langgraph` is not required for normal operation
 - **Import guard:** Lazy import with helpful error message if langgraph missing
 - **Shared client:** Both paths use the same `LLMClient` instance — consistent provider/model across all LLM calls
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `TestGenerator.__init__(client: LLMClient | None = None, *, output_dir: str = 'generated_tests', model_name: str | None = None, provider_name: str | None = None, base_url: str | None = None, api_key: str | None = None) -> None` - method of `TestGenerator`
+
+- `_ensure_output_dir() -> None` (method of `TestGenerator`): Ensure output dir; calls `Path`, `mkdir`; returns None.
+
+### `TestGenerator.generate_skeleton(user_story: str, conditions: str, target_urls: list[str] | None = None, expected_count: int | None = None, use_graph: bool = False) -> str` - method of `TestGenerator`
+
+- `_generate_skeleton_single_call(user_story: str, conditions: str, target_urls: list[str] | None = None, expected_count: int | None = None) -> str` (method of `TestGenerator`): Single-call skeleton generation (original pipeline). Prompt assembly uses the PEP 750 t-string PromptBuilder (src/prompt_builder.py): trusted static structure stays separate from untrusted interpolated values, per...
+- `_generate_skeleton_langgraph(user_story: str, conditions: str, target_urls: list[str] | None = None, expected_count: int | None = None) -> str` (method of `TestGenerator`): Multi-agent LangGraph skeleton generation (Phase 1c).

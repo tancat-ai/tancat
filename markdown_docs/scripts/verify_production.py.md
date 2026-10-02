@@ -54,3 +54,24 @@ LLM connected → Pipeline generation → No unresolved placeholders → Test fu
 - `src/verify_baseline.py` — expected-red baseline comparator (`--baseline`)
 - `scripts/verify_production_baseline.json` — recorded expected-red state
 - `scripts/eval/eval_harness.py` — static resolution accuracy (pre-commit quality gate)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SiteConfig` (class): Per-site configuration for the verification run.
+- `Gate` (class)
+- `Gate.key` (method of `Gate`): `Gate.key() -> str` - Stable identity - strips the dynamic duration/provider suffix.
+- `SiteVerification` (class)
+- `SiteVerification.total` (method of `SiteVerification`): `SiteVerification.total() -> int`
+- `verify_site` (function): `verify_site(site_id: str, url: str, user_story: str, conditions: str, expected_min_tests: int, expected_min_evidence_steps: int, verbose: bool = False, pom_mode: bool = True) -> SiteVerification` - Run the full verification pipeline for one site.
+- `parse_args` (function): `parse_args() -> Any`
+- `main` (function): `main() -> int`
+- `PROJECT_ROOT` (constant): `PROJECT_ROOT = Path(__file__).resolve().parent.parent`
+- `DEFAULT_BASELINE_PATH` (constant): `DEFAULT_BASELINE_PATH = PROJECT_ROOT / 'scripts' / 'verify_production_baseline.json'`
+- `SAUCEDEMO_STORY` (constant): `SAUCEDEMO_STORY = 'As a user, I want to log in to the shopping site, add it...`
+- `SAUCEDEMO_CONDITIONS` (constant): `SAUCEDEMO_CONDITIONS = '1. Log in with username standard_user and password secre...`
+- `AUTOMATIONEXERCISE_STORY` (constant): `AUTOMATIONEXERCISE_STORY = 'As a customer, I want to browse products on the website...`
+- `AUTOMATIONEXERCISE_CONDITIONS` (constant): `AUTOMATIONEXERCISE_CONDITIONS = "1. Navigate to the automationexercise.com home page and...`
+- `SITES` (constant): `SITES = {'saucedemo': {'url': 'https://www.saucedemo.com', 'user_...`
+- `CONFTEST_TEMPLATE` (constant): `CONFTEST_TEMPLATE = textwrap.dedent(' """Conftest for production verification...`

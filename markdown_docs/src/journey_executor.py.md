@@ -349,3 +349,19 @@ The Playwright browser context and browser are closed in a `finally` block after
 ## Classes
 
 This module defines no classes. It coordinates imported model classes and dataclasses from other modules.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (6 items). Grouped under the public function that calls them.
+
+### `execute_journey(journey_steps: list[JourneyStep], credential_profile: CredentialProfile | None = None, timeout_ms: int = 30000, starting_url: str | None = None) -> JourneyResult` - function
+
+- `_parse_execute_result(completed: Any) -> JourneyResult` (function): Parse the subprocess result for execute_journey.
+
+### Internal utilities
+
+- `_execute_journey_sync(journey_steps: list[JourneyStep], credential_profile: CredentialProfile | None = None, timeout_ms: int = 30000, starting_url: str | None = None) -> JourneyResult` (function): Execute journey steps in a single Playwright browser session. Checks for auth redirects, SSO, MFA, and CAPTCHA - returns explicit errors.
+- `_dismiss_consent_overlays(page: Any) -> None` (function): Dismiss cookie consent and ad overlays.
+- `_click_with_locator(page: Any, selector: str, timeout_ms: int) -> None` (function): Click an element by selector, with scroll-into-view.
+- `_fill_with_locator(page: Any, selector: str, text: str, timeout_ms: int) -> None` (function): Fill an input element by selector.
+- `_run_execute_journey_entry() -> int` (function): Entry point for the subprocess-backed execute_journey.

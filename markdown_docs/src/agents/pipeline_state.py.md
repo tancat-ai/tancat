@@ -63,3 +63,10 @@ Cross-reference of changes to affected test areas.
 ### `ConsolidatedReport` (class)
 
 Final output of the document-driven pipeline.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `PipelineState.to_dict` (method of `PipelineState`): `PipelineState.to_dict() -> dict[str, Any]` - Serialize for LangGraph checkpointing.
+- `PipelineState.from_dict` (method of `PipelineState`): `PipelineState.from_dict(data: dict[str, Any]) -> PipelineState` - Deserialize from a checkpoint dict.

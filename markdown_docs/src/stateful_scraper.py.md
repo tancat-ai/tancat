@@ -50,3 +50,22 @@ Private `_`-helpers — the module's real logic (1 item). Grouped under the publ
 
 ### Internal utilities
 - `_run_subprocess_entry() -> int` (function) — Entry point for the subprocess-backed stateful scrape.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `StatefulPageScraper.__init__` (method of `StatefulPageScraper`): `StatefulPageScraper.__init__(starting_url: str, *, timeout_ms: int = 30000, max_retries: int = 2, base_backoff_ms: int = 1000, credential_profile: CredentialProfile | None = None) -> None`
+- `StatefulPageScraper.scrape_url` (method of `StatefulPageScraper`): `StatefulPageScraper.scrape_url(url: str) -> list[dict[str, Any]]` - Async wrapper around the subprocess-backed scrape implementation.
+- `StatefulPageScraper.scrape_urls` (method of `StatefulPageScraper`): `StatefulPageScraper.scrape_urls(urls: list[str]) -> dict[str, list[dict[str, Any]]]` - Scrape multiple URLs in a single Playwright session.
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+- `_scrape_urls_via_subprocess(urls: list[str]) -> dict[str, list[dict[str, Any]]]` (method of `StatefulPageScraper`): Run the sync Playwright workflow in a clean subprocess main thread.
+- `_scrape_urls_sync(urls: list[str]) -> dict[str, list[dict[str, Any]]]` (method of `StatefulPageScraper`): Sync implementation for multi-URL session scrape with retry/backoff support.
+- `_capture_a11y_snapshot(context: Any, page: Any) -> dict[str, Any]` (method of `StatefulPageScraper`): Capture accessibility snapshot via CDP. Returns an empty dict if CDP is unavailable or returns no nodes, matching the PageScraper fallback behaviour.
+- `_seed_cart_session(page: Any) -> None` (method of `StatefulPageScraper`): Navigate, login if needed, then try to add one item to cart (best effort).
+- `_dismiss_consent_overlays(page: Any) -> None` (method of `StatefulPageScraper`): Delegate to central consent dismissal utility.

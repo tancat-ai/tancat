@@ -445,3 +445,16 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `VagueSectionAssertStrategy` (class)
 
 Handle vague ASSERT descriptions about page sections/areas.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `SemanticFillStrategy.match(action: str, description: str, element: dict[str, Any]) -> bool | None` - method of `SemanticFillStrategy`
+
+- `_all_element_text(element: dict[str, Any]) -> str` (function): Concatenate all searchable text fields of *element*.
+- `_is_fillable(element: dict[str, Any]) -> bool` (function): Return True when the scraped element supports text entry.
+
+### `SubscribeGuardStrategy.match(action: str, description: str, element: dict[str, Any]) -> bool | None` - method of `SubscribeGuardStrategy`
+
+- `_is_subscribe_element(element: dict[str, Any]) -> bool` (method of `SubscribeGuardStrategy`): Is subscribe element; calls `_all_element_text`; returns bool.

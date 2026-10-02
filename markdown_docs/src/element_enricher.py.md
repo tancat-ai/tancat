@@ -27,3 +27,22 @@ Enriches scraped DOM elements with visual and contextual metadata (icon detectio
 ## Dependencies
 - `bs4` (lazy import)
 - No project-internal dependencies
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (9 items). Grouped under the public function that calls them.
+
+### `ElementEnricher.enrich_element(element: dict[str, Any], html_snippet: str = '', parent_classes: list[str] | None = None) -> dict[str, Any]` - method of `ElementEnricher`
+
+- `_detect_is_icon(element: dict[str, Any]) -> bool` (method of `ElementEnricher`): Detect whether an element is a pure icon (no meaningful text content).
+- `_detect_icon_classes(element: dict[str, Any]) -> str` (method of `ElementEnricher`): Extract icon font class names from element CSS classes.
+- `_detect_icon_unicode(element: dict[str, Any]) -> str` (method of `ElementEnricher`): Extract unicode icon characters from element text content.
+- `_detect_decorative(element: dict[str, Any]) -> bool` (method of `ElementEnricher`): Detect whether an element is purely decorative (should be ignored).
+- `_detect_hover_reveal(element: dict[str, Any], html_snippet: str = '') -> bool` (method of `ElementEnricher`): Detect whether an element is likely hidden inside a hover-reveal overlay. This identifies elements that are commonly hidden via CSS (display:none, visibility:hidden, opacity:0) and only become visible when the parent...
+- `_extract_parent_text(html_snippet: str) -> str` (method of `ElementEnricher`): Extract visible text from parent elements in the HTML snippet.
+- `_extract_aria_icon_label(element: dict[str, Any]) -> str` (method of `ElementEnricher`): Extract aria-label, title, or alt text for icon-only elements.
+- `_generate_visual_description(element: dict[str, Any]) -> str` (method of `ElementEnricher`): Generate a human-readable visual description of the element. This is used in LLM prompts to help the model understand what the element looks like, enabling better placeholder descriptions.
+
+### Internal utilities
+
+- `_is_unicode_icon_text(text: str) -> bool` (method of `ElementEnricher`): Check if text consists entirely of unicode icon characters.

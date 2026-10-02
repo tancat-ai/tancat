@@ -32,3 +32,9 @@ Returns `{"skeleton_code": "import pytest\\n...", "validation_errors": []}`.
 
 - `validation_errors` is reset to `[]` on each generation — the Validator re-evaluates from scratch.
 - Real `LLMClient.generate()` handles code extraction and whitespace normalisation; the agent just passes through.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `GENERATOR_SYSTEM_PROMPT` (constant): `GENERATOR_SYSTEM_PROMPT = 'You are an expert Playwright Python test engineer.\n\nCR...`

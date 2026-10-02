@@ -30,3 +30,9 @@ Private `_`-helpers — the module's real logic (1 item). Grouped under the publ
 
 ### `get_pom_method_call`
 - `_selector_literal(value: str) -> str` (function) — Return *value* as a Python string literal.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `MIN_PAGE_OBJECT_ELEMENTS` (constant): `MIN_PAGE_OBJECT_ELEMENTS = 3`

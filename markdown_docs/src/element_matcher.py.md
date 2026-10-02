@@ -83,3 +83,32 @@ Private `_`-helpers — the module's real logic. Grouped under the public functi
 
 ## Metadata
 - **Lines:** 1362 (at refresh, 2026-08-23)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `ElementMatcher.__init__` (method of `ElementMatcher`): `ElementMatcher.__init__(resolver: PlaceholderResolver, generator: AsyncGeneratorLike | None = None, *, resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT, enable_thinking: bool | None = None) -> None` - Initialize the element matcher. Args: resolver: PlaceholderResolver instance for text matching and ranking. generator: B-020 LLM generator for semantic candidate ranking. resolution_timeout: Hard limit (seconds) for e...
+- `ElementMatcher.pass0_exact_text_match` (method of `ElementMatcher`): `ElementMatcher.pass0_exact_text_match(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - Pass 0 - exact text match for ASSERT descriptions wrapped in quotes. B-020: When the skeleton emits ASSERT:"exact text here", strip the quotes and do literal string equality against element text. This bypasses all sco...
+- `ElementMatcher.pass_dialog_action` (method of `ElementMatcher`): `ElementMatcher.pass_dialog_action(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - Pass D - dialog-action scoping for CLICK placeholders. When the description implies a dialog/dismiss/confirm action ("OK", "close popup", "dismiss", "Continue Shopping"), resolve it against the modal/dialog's OWN inte...
+- `ElementMatcher.pass1_text_match` (method of `ElementMatcher`): `ElementMatcher.pass1_text_match(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - Pass 1 - fast text match before scoring. Returns the first element whose normalised text is contained in the normalised description. Only fires for CLICK and FILL - ASSERT tokens for page state will not match element...
+- `ElementMatcher.pass1_assert_text_match` (method of `ElementMatcher`): `ElementMatcher.pass1_assert_text_match(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - Pass 1 (ASSERT) - match text-bearing elements whose label appears in the description. Requires the element text to contain at least 2 of the description's content words to avoid false positives like "Summary" matching...
+- `ElementMatcher.pass2_structural_match` (method of `ElementMatcher`): `ElementMatcher.pass2_structural_match(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - Pass 2 - match stable attributes (id, data-test, aria) to description keywords.
+- `TEXT_BEARING_ROLES` (constant): `TEXT_BEARING_ROLES = {'heading', 'paragraph', 'text', 'status', 'alert', 'regi...`
+- `TEXT_BEARING_TAGS` (constant): `TEXT_BEARING_TAGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span', 'label'...`
+- `MIN_SCORE_FOR_TEXT_FALLBACK` (constant): `MIN_SCORE_FOR_TEXT_FALLBACK = 5`
+- `DIALOG_INTENT_TERMS` (constant): `DIALOG_INTENT_TERMS = ('ok', 'okay', 'close', 'dismiss', 'confirm', 'cancel', '...`
+- `DIALOG_SCOPED_ROLES` (constant): `DIALOG_SCOPED_ROLES = frozenset({'button', 'link', 'submit', 'a', 'menuitem', '...`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `ElementMatcher.pass1_text_match(action: str, description: str, pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str] | None` - method of `ElementMatcher`
+
+- `_pick_best_text_match(action: str, description: str, candidates: list[dict[str, str]], pages_data: dict[str, list[dict[str, str]]]) -> dict[str, str]` (method of `ElementMatcher`): B-096: tie-break equal-rule Pass 1 matches with the deterministic scorer. Several elements can match the same text rule on one page (an account holder and an additional driver share "Years Licensed"; a vehicle make an...
+
+### `ElementMatcher.find_best_element_for_current_page(action: str, description: str, current_url: str | None, pages_data: dict[str, list[dict[str, str]]], excluded_selectors: set[str] | None = None, resolved_steps: list[str] | None = None, golden_patterns: list | None = None, site_hash: str | None = None) -> dict[str, str] | None` - method of `ElementMatcher`
+
+- `_find_best_element_for_current_page(action: str, description: str, current_url: str | None, pages_data: dict[str, list[dict[str, str]]], excluded_selectors: set[str] | None = None, resolved_steps: list[str] | None = None, golden_patterns: list | None = None, site_hash: str | None = None) -> dict[str, str] | None` (method of `ElementMatcher`): Return the best element match across the supplied page mapping. IMPORTANT: Collects candidates from ALL pages first, then selects the global best match. This prevents returning a low-quality match from an early page w...

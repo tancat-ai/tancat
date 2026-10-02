@@ -96,3 +96,15 @@ live results.
   degradation philosophy.
 - `JIRA_PROJECT_KEY` env read was removed from `src/config.py` (constant
   default `TEST`); `LANGGRAPH_ENABLED` was removed outright (dead flag).
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `SettingsStore.get(key: str, default: Any = None) -> Any` - method of `SettingsStore`
+
+- `_load_settings() -> dict[str, Any]` (function): Load the decrypted settings dict; empty dict when unset/corrupt. Mirrors secure_config._load_config: a missing file, undecryptable content (e.g. key derivation changed) or malformed JSON all degrade to an empty di...
+
+### `SettingsStore.set(key: str, value: Any) -> None` - method of `SettingsStore`
+
+- `_save_settings(data: dict[str, Any]) -> None` (function): Encrypt and write the settings dict to disk.

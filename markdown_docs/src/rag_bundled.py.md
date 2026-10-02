@@ -101,3 +101,30 @@ Private `_`-helpers — the module's real logic (1 item). Grouped under the publ
 
 ### `ensure_bundled_seeded`
 - `_write_marker(marker_path: Path) -> None` (function) — (no docstring)
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `DocSummary` (class): Per-document ingestion outcome. skipped_pages records, for each skipped page, the (page_number, reason) pair where reason is "no_engine" (the OCR engine is not installed - the [ocr] extra is missin...
+- `IngestionSummary` (class): Aggregated ingestion quality summary for a CLI run.
+- `IngestionSummary.docs_total` (method of `IngestionSummary`): `IngestionSummary.docs_total() -> int`
+- `IngestionSummary.docs_full` (method of `IngestionSummary`): `IngestionSummary.docs_full() -> int`
+- `IngestionSummary.docs_partial` (method of `IngestionSummary`): `IngestionSummary.docs_partial() -> int`
+- `IngestionSummary.chunks_total` (method of `IngestionSummary`): `IngestionSummary.chunks_total() -> int`
+- `IngestionSummary.render` (method of `IngestionSummary`): `IngestionSummary.render() -> str` - Human-readable multi-line summary (CLI output). Uses plain-text markers ([OK] / [WARN]) rather than emoji so the output renders on every terminal, including Windows cp1252 consoles (an emoji like raises...
+- `doc_outcome_from_pages` (function): `doc_outcome_from_pages(pages_total: int, pages_text: int, pages_ocr: int, pages_skipped: int) -> str` - Derive a per-doc outcome from its page counts. * full - every page was read (text or OCR), none skipped. * partial - at least one page was skipped (no text/OCR). * skipped - no pages were read at all (unre...
+- `doc_summaries_from_page_report` (function): `doc_summaries_from_page_report(page_report: list[tuple[str, int, str, str]]) -> list[DocSummary]` - Build per-doc summaries from the per-page report ((source, page, outcome, reason)) collected by :func:'src.pdf_ingest.ingest_pdf_directory'. For a skipped page the reason is carried through to DocSummary.ski...
+- `check_supported_formats` (function): `check_supported_formats(paths: Sequence[str | Path]) -> tuple[list[str | Path], list[str]]` - Split a sequence of doc paths into (supported, rejected) by format scope. supported = paths whose extension is in :data:'SUPPORTED_FORMATS' (pdf + md). rejected = filenames of unsupported formats (reported lou...
+- `build_summary` (function): `build_summary(page_report: list[tuple[str, int, str, str]], chunks_new: int, chunks_present: int, unreadable_docs: list[str] | None = None, skipped_formats: list[str] | None = None) -> IngestionSummary` - Build an :class:'IngestionSummary' from in-memory ingestion data.
+- `CHARS_PER_TOKEN` (constant): `CHARS_PER_TOKEN = 4`
+- `SUPPORTED_FORMATS` (constant): `SUPPORTED_FORMATS = ('.pdf', '.md')`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]` - function
+
+- `_site_identity_hash(site_name: str, base_url: str) -> str` (function): One-way hash of a golden pattern's canonical site identity (B-047). Golden patterns are site-scoped so a saucedemo golden cannot award a +20 bonus while resolving another site. Identity comes from the dataset base_u...

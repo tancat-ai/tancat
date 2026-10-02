@@ -47,3 +47,9 @@ Generate markdown report in Jira attachment format.
 ### `generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path | None = None) -> str` (function)
 
 Generate self-contained HTML report with base64 embedded screenshots.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `verification_line` (function): `verification_line(test: dict[str, Any]) -> str` - Return the B-100 one-line verification summary for a report row. Uses the emitted verdict's own label, so the wording stays in one place: verified by element (<selector>), verified by page arrival (<url assertio...

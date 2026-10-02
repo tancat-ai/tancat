@@ -60,3 +60,18 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 - Filter buttons for all/passed/partial/failed views
 - Element details table with hover highlighting
 - Uses ResizeObserver for responsive SVG resizing
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (5 items). Grouped under the public function that calls them.
+
+### `generate_suite_heatmap(*, evidence_dir: Path, page_url: str) -> str` - function
+
+- `_normalise_url(url: str) -> str` (function): Normalise URLs for matching across redirects and trailing slashes.
+- `_safe_embed_image_data_uri(image_path: Path) -> str | None` (function): Safe embed image data uri; calls `b64encode`, `decode`, `read_bytes`; returns str | None.
+- `_extract_step_points_by_url(sidecar: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]` (function): Return (points_by_url, background_screenshot_by_url) from one sidecar. Points are derived by tracking the current URL as 'navigate' steps occur. Background screenshot chooses the last assertion screenshot within a URL...
+
+### `build_story_confidence(evidence_dir: Path, *, test_plan_state: dict[str, Any] | None = None) -> list[StoryConfidence]` - function
+
+- `_safe_read_json(path: Path) -> dict[str, Any] | None` (function): Safe read json; calls `loads`, `read_text`; returns dict[str, Any] | None.
+- `_extract_confirmed_ids(test_plan_state: dict[str, Any] | None, story_ref: str) -> set[str]` (function): Extract confirmed ids; returns set[str].

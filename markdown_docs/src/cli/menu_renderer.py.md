@@ -133,3 +133,26 @@ Private `_`-helpers — the module's real logic (2 items). Grouped under the pub
 
 ### Internal utilities
 - `_next_selected() -> int` (function) — Return and increment the default selected index for the next menu.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `push_menu` (function): `push_menu(name: str) -> None` - Push a sub-menu name onto the navigation stack (call on entry).
+- `pop_menu` (function): `pop_menu() -> str | None` - Pop and return the most recent sub-menu name, or None at the main menu.
+- `BACK_MAIN` (constant): `BACK_MAIN = -100`
+- `BACK_AUTH` (constant): `BACK_AUTH = -101`
+- `BACK_JOURNEY` (constant): `BACK_JOURNEY = -102`
+- `BACK_PACKAGE` (constant): `BACK_PACKAGE = -103`
+- `BACK_LLM` (constant): `BACK_LLM = -104`
+- `BACK_CONSENT` (constant): `BACK_CONSENT = -105`
+- `JOURNEY_STEP_ACTIONS` (constant): `JOURNEY_STEP_ACTIONS = ['navigate', 'click', 'fill', 'wait', 'scrape']`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `print_menu(options: list[str], prompt: str = 'Choose an option', shortcuts: list[tuple[str, str]] | None = None, back: int | None = None) -> int` - function
+
+- `_reset_menu_stack() -> None` (function): Clear the stack (main menu only - nothing sits above it).

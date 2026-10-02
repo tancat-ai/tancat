@@ -86,3 +86,29 @@ Retro-styled input prompt. Returns `default` on empty input.
 ### `prompt_non_empty(prompt_text) -> str`
 
 Like `prompt_input` but rejects empty values with a retry loop.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `render_shortcuts` (function): `render_shortcuts(entries: list[tuple[str, str]]) -> None` - Render a bottom row of key-action "buttons" in green box-drawing. Each entry is a (key, label) pair rendered as an [key] Label button. Buttons flow horizontally and wrap to additional lines when they do not fi...
+- `BOX` (constant): `BOX = _BoxChars()`
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (5 items). Grouped under the public function that calls them.
+
+### `render_header(title: str, subtitle: str = '') -> None` - function
+
+- `_visible_len(text: str) -> int` (function): Return visible character length, stripping ANSI escape sequences.
+- `_green(text: str, bright: bool = False) -> str` (function): Apply green ANSI colour. *bright=True* -> ANSI 1;32 (bold green - more portable than 100) *bright=False* -> ANSI 32 (standard green) Falls back to plain text when stdout is not a tty.
+
+### `render_shortcuts(entries: list[tuple[str, str]]) -> None` - function
+
+- `_shortcut_button_rows(entries: list[tuple[str, str]], usable: int) -> list[str]` (function): Lay out [key] Label buttons into rows that fit *usable* columns. Buttons are packed greedily onto each row and wrapped to the next row when the next button would not fit. A row is never wider than *usable*.
+
+### Internal utilities
+
+- `_truncate_middle(text: str, max_len: int) -> str` (function): Truncate *text* to *max_len* visible chars, keeping the start readable. Preserves the tail when the result is shorter than *max_len* (i.e. the full text fits) so nothing is lost. Only shrinks when genuinely too wide.
+- `_terminal_width() -> int` (function): Return the terminal width, defaulting to 78 if undetectable.
