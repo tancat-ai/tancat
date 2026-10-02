@@ -7,6 +7,8 @@ name = "tancat"
 version = "0.1.0"
 description = "AI-powered Playwright test generator using local LLMs (llama.cpp, Ollama, LM Studio)"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
     "openai>=2.48.0",
