@@ -236,3 +236,9 @@ Default configuration values are exposed as typed module-level constants. This k
 ## Side Effects
 
 Importing this module reads the `JIRA_PROJECT_KEY` environment variable once through `os.getenv`. No files are read or written, no network calls are made, and no application services are initialized.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `Environment.get_default_url` (method of `Environment`): `Environment.get_default_url(env: Environment) -> str | None` - Return default URL for an environment (placeholder).

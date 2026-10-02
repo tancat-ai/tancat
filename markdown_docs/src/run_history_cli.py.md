@@ -68,3 +68,15 @@ Truncates text with ellipsis (`…`) when exceeding `max_width`.
 
 - **Formatter pattern**: Pure string-building functions with no I/O — returns formatted strings for consumption by any CLI renderer.
 - **Composable design**: Individual formatters can be used independently or combined via `format_full_history_summary`.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `format_run_history_table(runs: list[PersistedRunResult], max_rows: int = 10) -> str` - function
+
+- `_format_run_date(run_id: str) -> str` (function): Format a run_id (ISO timestamp) as a readable date string. Args: run_id: ISO format timestamp (e.g., "2026-06-11T20:30:00"). Returns: Formatted date string (e.g., "2026-06-11 20:30").
+
+### `format_run_comparison(comparison: RunComparison | None) -> str` - function
+
+- `_truncate(text: str, max_width: int) -> str` (function): Truncate text to max_width, adding ellipsis if needed. Args: text: The text to truncate. max_width: Maximum width of the result. Returns: Truncated text with ellipsis if original was longer than max_width.

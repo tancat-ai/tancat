@@ -74,3 +74,23 @@ One unresolved or informational record written into the pipeline manifest.
 ### `PipelineArtifactSet` (class)
 
 The structured output package produced by one pipeline run.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `PlaceholderUse.to_dict` (method of `PlaceholderUse`): `PlaceholderUse.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `TestStep.to_dict` (method of `TestStep`): `TestStep.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `PageRequirement.to_dict` (method of `PageRequirement`): `PageRequirement.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `TestJourney.to_dict` (method of `TestJourney`): `TestJourney.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `TestResolutionCounts` (class): Resolved/unresolved placeholder counts for one generated test (B-097). When any placeholder in a test is unresolved, the emitter writes one pytest.skip() at the top of the test, which also hides every step that DI...
+- `TestResolutionCounts.total` (method of `TestResolutionCounts`): `TestResolutionCounts.total() -> int` - Total placeholders seen in this test.
+- `TestResolutionCounts.to_dict` (method of `TestResolutionCounts`): `TestResolutionCounts.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `VerificationStatus` (class): How strongly a generated test verified its own criterion (B-100). - VERIFIED_BY_ELEMENT: an ASSERT resolved to a specific element and the emitter wrote a real check against it. - VERIFIED_BY_PAGE_ARRIVAL: the criterio...
+- `TestVerificationVerdict` (class): What one generated test proved, decided at emit time (B-100). The eval harness has to *guess* this from the emitted code alone. The resolver knows it: it saw which page a locator was resolved against, and whether the...
+- `TestVerificationVerdict.label` (method of `TestVerificationVerdict`): `TestVerificationVerdict.label() -> str` - Human-readable status phrase (e.g. verified by element).
+- `TestVerificationVerdict.to_dict` (method of `TestVerificationVerdict`): `TestVerificationVerdict.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `ScrapedPage.to_dict` (method of `ScrapedPage`): `ScrapedPage.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `GeneratedPageObject.to_dict` (method of `GeneratedPageObject`): `GeneratedPageObject.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `ManifestRecord.to_dict` (method of `ManifestRecord`): `ManifestRecord.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.
+- `PipelineArtifactSet.to_dict` (method of `PipelineArtifactSet`): `PipelineArtifactSet.to_dict() -> dict[str, Any]` - Return a JSON-friendly representation.

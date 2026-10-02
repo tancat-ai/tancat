@@ -202,3 +202,38 @@ when the retriever is built — first-run seed of the bundled golden pack
 (eval-001..006 keys + curated Playwright docs), idempotent via
 `evidence/.rag_bundled_seeded.json`. Guarded: a failure (offline embedder
 download, corrupt store) logs and proceeds without RAG; the seed retries next run.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `rag_enabled_by_config` (function): `rag_enabled_by_config() -> bool` - Return the configured RAG gate (B-036 Phase 1). RAG is always-on by default: a missing RAG_ENABLED means ENABLED; only RAG_ENABLED=0 opts out. Shared with the eval harness so run records label RAG state identi...
+- `TestOrchestrator.graph_conditions` (method of `TestOrchestrator`): `TestOrchestrator.graph_conditions() -> list` - Access the test conditions from the last graph run (for UI display).
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (14 items). Grouped under the public function that calls them.
+
+### `TestOrchestrator.__init__(test_generator: TestGenerator, *, credential_profile: CredentialProfile | None = None, journey_steps: list[JourneyStep] | None = None, pom_mode: bool = False, provider: str = '', model: str = '', flow_store: Any | None = None, resolution_timeout: float = DEFAULT_RESOLUTION_TIMEOUT, enable_thinking: bool | None = None) -> None` - method of `TestOrchestrator`
+
+- `_build_rag_retriever() -> Any | None` (method of `TestOrchestrator`): Build a RAGRetriever by default; RAG_ENABLED=0 opts out. B-036 Phase 1 (2026-08-03): RAG is always-on for consumers - a missing RAG_ENABLED means enabled. Graceful degradation keeps behaviour identical to the...
+
+### `TestOrchestrator.run_pipeline(user_story: str, conditions: str, target_urls: list[str] | None = None, consent_mode: str = 'auto-dismiss', reviewed_conditions: list[TestCondition] | None = None, prebuilt_skeleton: str | None = None) -> str` - method of `TestOrchestrator`
+
+- `_debug(message: str) -> None` (method of `TestOrchestrator`): Debug; calls `time`; returns None.
+- `_extract_journey_selectors(all_scraped_data: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]` (method of `TestOrchestrator`): Build synthetic resolver elements from journey-discovered selectors.
+- `_scrape_journeys_statefully(journeys: list[TestJourney], starting_url: str, credential_profile: CredentialProfile | None = None) -> tuple[dict[str, list[dict[str, Any]]], list[str], dict[str, ObservedTrail]]` (method of `TestOrchestrator`): Scrape pages by following the generated skeleton journeys step-by-step. Journeys are independent - each starts from the same base URL and follows its own path. They run in parallel via asyncio.gather to cut the journe...
+- `_build_generation_conditions(conditions_text: str, reviewed_conditions: list[TestCondition] | None) -> list[TestCondition]` (method of `TestOrchestrator`): Return ordered conditions used for skeleton generation.
+- `_generate_combined_skeleton_for_conditions(*, user_story: str, conditions: list[TestCondition], target_urls: list[str]) -> str` (method of `TestOrchestrator`): Generate one skeleton fragment per condition and combine them into one module.
+- `_build_candidate_urls(seed_urls: list[str], page_requirements: list[PageRequirement], journeys: list[TestJourney], user_story: str, conditions: str) -> list[str]` (method of `TestOrchestrator`): Return URLs to pre-scrape before placeholder resolution. Combines: - Seed URLs (the starting page) - URLs explicitly referenced by GOTO/URL placeholders in journeys - Common path candidates derived from user story and...
+- `_inject_pom_imports(code: str, pom_imports: list[str]) -> str` (method of `TestOrchestrator`): Inject POM import statements after existing imports. Finds the last existing import line and inserts POM imports after it. Skips any import lines that are already present in the code to avoid duplicate imports when th...
+- `_inject_pom_instantiation(code: str, pom_instantiation: list[str]) -> str` (method of `TestOrchestrator`): Inject POM instantiation lines at the start of each test function. Finds each 'def test_' line and inserts indented instantiation lines after it. Skips instantiation if those lines are already present in the function...
+- `_inject_evidence_markers(code: str, conditions: list[TestCondition]) -> str` (method of `TestOrchestrator`): Inject @pytest.mark.evidence(condition_ref=..., story_ref=...) before each test function. Maps condition IDs to test functions by order - the Nth condition maps to the Nth test. If a test already has the decorator it...
+
+### Internal utilities
+
+- `_normalize_journey_urls(steps: list[JourneyStep]) -> list[JourneyStep]` (method of `TestOrchestrator`): Normalize URLs in navigate steps to handle common path variations.
+- `_generate_single_condition_fragment(*, user_story: str, known_urls_block: str, ordered_conditions: list[str], condition: TestCondition) -> str` (method of `TestOrchestrator`): Generate one skeleton fragment for one reviewed condition. Prompt assembly uses the PEP 750 t-string PromptBuilder - same pattern as TestGenerator._generate_skeleton_single_call. Note this renders placeholder exam...
+- `_combine_condition_fragments(fragments: list[str]) -> str` (method of `TestOrchestrator`): Combine one-condition skeleton fragments into a single skeleton module. Pages are now discovered organically by the journey scraper at runtime. PAGES_NEEDED pre-declaration is no longer emitted in combined output.
+- `_strip_imports_and_pages_needed(code: str) -> str` (method of `TestOrchestrator`): Return fragment body without import lines or trailing PAGES_NEEDED block.

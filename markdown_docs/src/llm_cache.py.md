@@ -62,3 +62,20 @@ wrapped — the ranker only wraps generators that expose `.model`).
   (gitignored output dir, naturally per-workspace via AI-029).
 - `_temperature_or_none()` — `llm_temperature_default()` (what a caller not passing temperature
   tells the key).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `LLMCache.__init__` (method of `LLMCache`): `LLMCache.__init__(cache_dir: str | Path | None = None, *, ttl_s: int | None = None, enabled: bool | None = None) -> None`
+- `CachingGenerator.__init__` (method of `CachingGenerator`): `CachingGenerator.__init__(generator: Any, cache: LLMCache | None = None) -> None`
+- `DEFAULT_CACHE_TTL_S` (constant): `DEFAULT_CACHE_TTL_S = 3600`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `CachingGenerator.generate(prompt: str, timeout: int = 300, system_prompt: str | None = None, *, enable_thinking: bool | None = None) -> str` - method of `CachingGenerator`
+
+- `_identity() -> tuple[str, str]` (method of `CachingGenerator`): Identity; calls `get`; returns tuple[str, str].

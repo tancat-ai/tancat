@@ -47,3 +47,19 @@ terminal = TerminalAdapter()
 ```
 
 Singleton used by `menu_renderer.py`. Can be replaced via `set_terminal_adapter()` for testing.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (3 items). Grouped under the public function that calls them.
+
+### `TerminalAdapter.flush() -> None` - method of `TerminalAdapter`
+
+- `_flush_msvcrt_buffer() -> None` (method of `TerminalAdapter`): Flush msvcrt buffer; calls `getwch`, `kbhit`, `running_in_git_bash`; returns None.
+
+### `TerminalAdapter.read_key() -> str` - method of `TerminalAdapter`
+
+- `_read_key_git_bash() -> str` (method of `TerminalAdapter`): Read key git bash; calls `Thread`, `_normalize_git_bash_input`, `decode`, `fileno`, `readline`, `select`; returns str.
+
+### Internal utilities
+
+- `_normalize_git_bash_input(raw: str) -> str` (method of `TerminalAdapter`): Normalise raw Git Bash input into a key token.

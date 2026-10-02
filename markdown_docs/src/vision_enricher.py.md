@@ -38,3 +38,12 @@ Vision-based element enrichment service. Uses vision-capable LLMs to analyze cro
 - Auto-detection: no user config needed
 - In-memory only: images stored as base64, discarded after enrichment
 - Graceful degradation: per-element errors don't fail the batch
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `VisionEnricher.enrich_elements(elements: list[dict[str, Any]], screenshot_bytes: bytes, provider: str, model: str, timeout: int = 60) -> list[dict[str, Any]]` - method of `VisionEnricher`
+
+- `_build_vision_prompt(element: dict[str, Any]) -> str` (method of `VisionEnricher`): Build the prompt for the vision LLM for a single element. Args: element: Scraped element dict with metadata. Returns: Prompt string for the vision LLM.
+- `_parse_enrichment_response(response_text: str) -> dict[str, str | None]` (method of `VisionEnricher`): Parse the vision LLM's structured response into element metadata. Tries JSON parsing first, falls back to text extraction. Returns None values for all fields if parsing fails. Args: response_text: Raw text response fr...

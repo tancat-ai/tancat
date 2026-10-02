@@ -240,3 +240,9 @@ Private `_`-helpers — the module's real logic (5 items). Grouped under the pub
 - `_count_run_results(package_root: Path) -> int` (function) — Count run results. Prefers SQLite DB, falls back to JSON file count.
 - `_db_run_stats_for_package(package_root: Path) -> tuple[int, str]` (function) — Return ``(run_count, last_run_at)`` for *package_root* from the workspace DB.
 - `_scan_page_object_files(package_root: Path) -> list[str]` (function) — Return relative page-object file names under ``pages/``.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SCRAPE_MANIFEST_FILENAME` (constant): `SCRAPE_MANIFEST_FILENAME = 'scrape_manifest.json'`

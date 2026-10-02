@@ -33,3 +33,11 @@ Wraps text with `\033[{code}m{text}\033[0m` only when stdout is a TTY.
 
 - **Conditional formatting**: All colours are no-ops when piped — prevents ANSI codes in redirected output.
 - **Retro terminal aesthetic**: Phosphor colours match the CHOICE-style retro UI in `retro_ui.py`.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (1 item). Grouped under the public function that calls them.
+
+### `cyan(text: str) -> str` - function
+
+- `_c(text: str, code: str) -> str` (function): Wrap *text* in an ANSI colour code when stdout is a terminal.

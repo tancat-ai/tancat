@@ -9,3 +9,11 @@ Replayed the saucedemo checkout test's placeholder sequence (login → add to ca
 
 ## Related
 - `src/placeholder_orchestrator.py` — `_is_navigation_description` + nav fallback
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `main` (function): `main() -> None`
+- `CANDIDATES` (constant): `CANDIDATES = ['https://www.saucedemo.com', 'https://www.saucedemo.com/...`
+- `STEPS` (constant): `STEPS = [('navigate', 'https://www.saucedemo.com/'), ('FILL', 'us...`

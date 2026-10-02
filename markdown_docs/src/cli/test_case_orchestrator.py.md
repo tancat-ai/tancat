@@ -91,3 +91,24 @@ Regex-based URL extraction.
 #### `_create_summary(analysis, files) -> dict`
 
 Creates orchestration summary with counts, file names, complexity distribution, etc.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (11 items). Grouped under the public function that calls them.
+
+### `TestCaseOrchestrator.process_parsed(parsed: ParsedInput, url: str | None = None, output_dir: str = GENERATED_TESTS_DIR) -> TestOrchestrationResult` - method of `TestCaseOrchestrator`
+
+- `_analyze_input(parsed: object) -> AnalysisResult` (method of `TestCaseOrchestrator`): Analyze parsed input using the keyword analyzer. Args: parsed: ParsedInput from src.cli.input_parser.InputParser Returns: AnalysisResult with analyzed test cases.
+- `_order_test_cases(cases: list[AnalyzedTestCase]) -> list[AnalyzedTestCase]` (method of `TestCaseOrchestrator`): Order test cases based on dependencies and complexity. Topological sort approach: 1. Cases with no dependencies first 2. Then cases that depend on completed cases 3. Within same dependency level, order by complexity (...
+- `_generate_test_files(cases: list[AnalyzedTestCase], url: str | None = None, output_dir: str = GENERATED_TESTS_DIR, raw_requirements: str = '') -> list[str]` (method of `TestCaseOrchestrator`): Generate Playwright test files from analyzed test cases. Uses the same TestOrchestrator pipeline as the Streamlit app for feature parity between CLI and Streamlit frontends.
+
+### Internal utilities
+
+- `_check_dependencies_satisfied(case: AnalyzedTestCase, completed_ids: set[int]) -> bool` (method of `TestCaseOrchestrator`): Check if all dependencies for a case are satisfied. The AnalyzedTestCase.dependencies field is a list of human-readable strings that may contain markers such as "Depends on: <title>". For orchestration we only...
+- `_complexity_score(complexity: str) -> int` (method of `TestCaseOrchestrator`): Convert complexity to numeric score for sorting.
+- `_build_feature_spec_request(raw_requirements: str) -> tuple[str, str] | None` (method of `TestCaseOrchestrator`): Return '(user_story, numbered_conditions)' for markdown-style requirement specs.
+- `_generate_test_content(test_type: str, cases: list[AnalyzedTestCase]) -> str` (method of `TestCaseOrchestrator`): Generate Playwright test file content.
+- `_generate_test_method(idx: int, case: AnalyzedTestCase, total: int) -> str` (method of `TestCaseOrchestrator`): Generate a single test method from an analyzed test case.
+- `_generate_steps_from_description(case: AnalyzedTestCase) -> list[str]` (method of `TestCaseOrchestrator`): Generate Playwright steps from test case description.
+- `_sanitize_name(name: str) -> str` (method of `TestCaseOrchestrator`): Convert name to valid Python identifier.
+- `_extract_url(text: str) -> str | None` (method of `TestCaseOrchestrator`): Extract URL from text if present.

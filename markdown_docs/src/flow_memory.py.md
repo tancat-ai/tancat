@@ -116,3 +116,24 @@ chains — the pure helper behind `SidebarConfig._render_flow_memory()`.
 - **Hermetic tests:** `TestOrchestrator` constructs the store only when
   `FLOW_MEMORY_ENABLED != "0"` (tests set it to `"0"` in
   `tests/conftest.py`, mirroring `RAG_ENABLED=0`).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `chain_suite_transitions` (function): `chain_suite_transitions(sidecars: list[tuple[str, dict[str, Any]]]) -> list[tuple[FlowTransition, str]]` - Chain adjacent passing tests into GOTO transitions (AI-042-F3). sidecars are (filename, data) pairs, ordered by name (test_01, test_02, ...). For each adjacent pair (N, N+1): the terminal page of N and the entry...
+- `FlowMemoryStore.__init__` (method of `FlowMemoryStore`): `FlowMemoryStore.__init__(path: Path | None = None) -> None`
+- `FlowMemoryStore.save` (method of `FlowMemoryStore`): `FlowMemoryStore.save() -> None` - Atomically persist patterns (tmp + os.replace).
+
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `chain_suite_transitions(sidecars: list[tuple[str, dict[str, Any]]]) -> list[tuple[FlowTransition, str]]` - function
+
+- `_sidecar_routes(sidecar: dict[str, Any]) -> tuple[str | None, str | None, str]` (function): (entry_route, terminal_route, site_identity) of one sidecar. Entry = route of the first step (its URL, else the navigate value); terminal = route of the last step with a URL, else the last navigate value (older sideca...
+
+### `FlowMemoryStore.learn_suite_flows(evidence_dir: str | Path) -> dict[str, int]` - method of `FlowMemoryStore`
+
+- `_now_iso() -> str` (function): Now iso; calls `isoformat`, `now`; returns str.

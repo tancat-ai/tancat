@@ -30,3 +30,19 @@ Hover-reveal click strategies for hidden elements. Handles elements hidden via C
 - Strategy 4 targets automationexercise.com-style sidebar menus (Women→Dress pattern)
 - Strategy 5 is last resort: modifies DOM styles with `!important` override
 - `_try_click` uses 5s timeout for the final click attempt
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (6 items). Grouped under the public function that calls them.
+
+### `try_hover_and_click(page: Any, loc: Any, locator: str) -> bool` - function
+
+- `_attempt_hover_then_click(loc: Any) -> bool` (function): Hover the element directly, then click.
+- `_attempt_mouseenter_then_click(loc: Any) -> bool` (function): Dispatch mouseenter on the target element, then click.
+- `_attempt_ancestors_mouseenter(page: Any, locator: str, loc: Any) -> bool` (function): Dispatch mouseenter on all ancestors (for overlay patterns), then click.
+- `_attempt_parent_category_hover(page: Any, locator: str, loc: Any) -> bool` (function): Find and hover visible parent category triggers, then click. On sites like automationexercise.com, subcategory links (e.g., "Dress") are hidden inside a sidebar menu until you hover the parent category header (e.g., "...
+- `_attempt_force_show_and_click(page: Any, locator: str) -> bool` (function): Force-show the element via JavaScript and click programmatically. Last resort for elements hidden behind CSS hover menus.
+
+### Internal utilities
+
+- `_try_click(loc: Any) -> bool` (function): Attempt to click a locator, return True on success.

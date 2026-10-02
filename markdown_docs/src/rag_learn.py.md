@@ -109,3 +109,21 @@ Private `_`-helpers — the module's real logic (4 items). Grouped under the pub
 
 ### Internal utilities
 - `_clean_label(label: str) -> str` (function) — Reduce an evidence step label to the placeholder description.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `effective_site_identity` (function): `effective_site_identity(base_url: str = '') -> str` - Resolve the RAG site identity for scoping, honoring an opt-in scope key. AI-061: when AITEST_RAG_SCOPE is set, the identity is scope:<value> so two projects on the same host:port (e.g. two different localh...
+- `learn_negatives_from_evidence` (function): `learn_negatives_from_evidence(steps: list[dict[str, Any]], *, store: RAGStore | None = None) -> dict[str, int]` - Record learned_negative patterns from failed steps. AI-058: the contrastive half of :func:'learn_from_evidence'. Converts each FAILED step that classifies as a locator-class failure (with a resolved selector) into...
+- `learn_from_evidence_sidecars` (function): `learn_from_evidence_sidecars(evidence_dir: str | Path, *, store: RAGStore | None = None, learn_negatives: bool = True) -> dict[str, int]` - Sweep evidence/*.evidence.json sidecars and learn both positives and contrastive negatives (AI-058 Slice 2). B-047 deferred fix (parent-side sweep): the pytest subprocess hook (generated_tests/conftest.py) can...
+- `RAG_SCOPE_ENV` (constant): `RAG_SCOPE_ENV = 'AITEST_RAG_SCOPE'`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `learn_negatives_from_evidence(steps: list[dict[str, Any]], *, store: RAGStore | None = None) -> dict[str, int]` - function
+
+- `_step_to_negative_pattern(step: dict[str, Any]) -> LearnedPattern | None` (function): Map one FAILED evidence step to a learned_negative pattern, or None. AI-058 contrastive store: only **locator-class** failures (locator timeout / element-not-found, classified by :func:'classify_failure') that car...

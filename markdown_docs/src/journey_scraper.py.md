@@ -685,3 +685,35 @@ caller records `step_skipped` (an honest skip beats a guessed navigation).
 
 ## Metadata
 - **Lines:** 1173 (at refresh, 2026-08-23)
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (25 items). Grouped under the public function that calls them.
+
+### Internal utilities
+
+- `_debug(message: str) -> None` (method of `JourneyScraper`): Print debug message to stderr if logging is enabled.
+- `_scrape_journey_via_subprocess(steps: list[JourneyStep], credential_profile: CredentialProfile | None = None) -> dict[str, list[dict[str, Any]]]` (method of `JourneyScraper`): Run the sync Playwright journey in a clean subprocess (avoids Windows nested loop issues).
+- `_scrape_journey_sync(steps: list[JourneyStep], *, _observed_trail_out: list[ObservedStep] | None = None) -> dict[str, list[dict[str, Any]]]` (method of `JourneyScraper`): Synchronous journey scraping logic (for subprocess entry point). AI-052: every step appends a factual :class:'ObservedStep' (from/to URLs read from page.url) to the trail. Steps are recorded in index order - the f...
+- `_match_discovered_url(description: str, known_urls: list[str]) -> str | None` (method of `JourneyScraper`): Return an ALREADY-DISCOVERED page URL matching a description (AI-052 S4). Evidence-only replacement for the deleted _infer_url_from_description: candidates come exclusively from pages the journey has actually scra...
+- `_list_available_elements(page: Any, limit: int = 10) -> list[dict]` (method of `JourneyScraper`): List clickable elements on the page for diagnostic purposes.
+- `_discover_selector_relaxed(page: Any, action: str, description: str) -> str | None` (method of `JourneyScraper`): Find a selector using relaxed matching criteria.
+- `_has_product_intent(description: str) -> bool` (method of `JourneyScraper`): True when a CLICK description targets product browsing / add-to-cart.
+- `_has_dismiss_intent(description: str) -> bool` (method of `JourneyScraper`): True when a CLICK description asks to dismiss/close a modal or popup.
+- `_has_browse_intent(description: str) -> bool` (method of `JourneyScraper`): True when a product-intent description asks to OPEN/view a product. "Add"/"buy" phrasing (add to cart) is excluded so those steps keep preferring the add-to-cart button over the product detail link.
+- `_has_category_intent(description: str) -> bool` (method of `JourneyScraper`): True when a product-intent description targets a category LISTING. "Product Category" / "category link" / "browse category" describe a category listing page, NOT a product detail page. Without this hint, "Product Cate...
+- `_is_category_listing_link(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True when the element is a category/products listing link.
+- `_is_product_detail_link(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True when the element is a product-detail link (href /product_details/...).
+- `_is_modal_root(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True for elements that are modal structure (root/container) rather than content.
+- `_is_product_card_element(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True when the element is a product-card link/button (not site chrome).
+- `_is_nav_chrome_link(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True when the element is a site-chrome navigation link (cart/login/etc).
+- `_is_dismiss_element(element: dict[str, Any]) -> bool` (method of `JourneyScraper`): True when the element is a modal dismissal control (Continue/Close/OK).
+- `_discover_selector(page: Any, action: str, description: str) -> str | None` (method of `JourneyScraper`): Find the best selector for a description on the current live page. B-015: Unified ranking pipeline - discovery and resolution share scoring logic. B-028: Journey steps carry lowercase actions ("click"/"fill") which si...
+- `_navigate_to(page: Any, url: str, timeout_ms: int) -> str` (method of `JourneyScraper`): Navigate to a URL and return the final URL.
+- `_click_selector(page: Any, selector: str, timeout_ms: int) -> None` (method of `JourneyScraper`): Click an element by selector, with scroll-into-view and retry.
+- `_fill_selector(page: Any, selector: str, text: str, timeout_ms: int) -> None` (method of `JourneyScraper`): Fill an input element by selector.
+- `_try_quantity_stepper_fallback(page: Any, step: JourneyStep) -> bool` (method of `JourneyScraper`): Best-effort quantity setting via +/- stepper buttons. B-028: some e-commerce sites expose quantity only as +/- stepper buttons with no fillable input. When a FILL-quantity step finds no fillable input, click the incre...
+- `_scrape_current_page(page: Any, url: str, context: Any | None = None) -> list[dict[str, Any]]` (method of `JourneyScraper`): Scrape elements from the current page state. Mirrors the frozen-capture methodology (refresh_lv_capture.py): reveal hidden SPA sections before capturing visibility. Multi-step single-page forms keep all sections i...
+- `_reveal_hidden_sections(page: Any) -> None` (method of `JourneyScraper`): Reveal hidden SPA form sections by making all sections visible. On multi-step single-page forms (e.g. the LV Insurance mock site), sections are hidden behind JavaScript section toggles (showPage()). Elements in hidden...
+- `_dismiss_consent_overlays(page: Any) -> None` (method of `JourneyScraper`): Delegate to central consent dismissal utility.
+- `_dismiss_modals(page: Any) -> None` (method of `JourneyScraper`): Dismiss confirmation modals/popups that block pointer events. B-023: On sites like automationexercise.com, the "Added to cart" confirmation modal (#cartModal) intercepts clicks on navigation links. This dismisses comm...

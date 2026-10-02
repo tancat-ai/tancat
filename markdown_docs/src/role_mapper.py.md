@@ -20,3 +20,9 @@ ARIA role mapping and display-role filtering for ASSERT resolution. Extracted fr
 - `src/placeholder_orchestrator.py` — consumer
 - `src/intent_matcher.py` — intent-based element filtering
 - `src/element_matcher.py` — Pass 1 text matching uses `normalise_element_text`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `ROLE_FALLBACK_GAP` (constant): `ROLE_FALLBACK_GAP = 3`

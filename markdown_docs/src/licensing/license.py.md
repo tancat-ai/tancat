@@ -81,3 +81,9 @@ key isn't 32 raw bytes (the vendor tool never silently falls back).
 - `_now_ts()` / `_ts(iso)` / `_iso(ts)` — epoch↔ISO conversion (naive timestamps assumed UTC).
 - `VENDORED_PUBLIC_KEY_B64` — the shipped default public key (Cat Tan Operations holds the
   signing side — the vendor tool `scripts/license_gen.py` can mint a fresh keypair).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `LicenseStatus` (class): Enum-ish statuses for license_state (string constants).

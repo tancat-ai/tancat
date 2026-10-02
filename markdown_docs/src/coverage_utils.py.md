@@ -67,3 +67,10 @@ Private `_`-helpers — the module's real logic (4 items). Grouped under the pub
 
 ### `build_requirement_coverages`
 - `_extract_criterion_number(test_name: str) -> int | None` (function) — Extract the criterion number from a test function name.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `RequirementCoverage.to_dict` (method of `RequirementCoverage`): `RequirementCoverage.to_dict() -> dict[str, object]` - Return a serialisable representation of this requirement.
+- `CoverageDisplayRow.to_dict` (method of `CoverageDisplayRow`): `CoverageDisplayRow.to_dict() -> dict[str, str]` - Convert row into a Streamlit dataframe-friendly dictionary.

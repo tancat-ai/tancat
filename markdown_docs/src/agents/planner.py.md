@@ -32,3 +32,10 @@ Returns `{"test_plan": "## Test Plan\\n### test_01_..."}`.
 
 - `LLMClient.generate()` (async)
 - `prompt_utils.prepare_conditions_for_generation()`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `PLANNER_SYSTEM_PROMPT` (constant): `PLANNER_SYSTEM_PROMPT = 'You are an expert QA test planner. Your job is to analys...`
+- `PLANNER_USER_PROMPT_TEMPLATE` (constant): `PLANNER_USER_PROMPT_TEMPLATE = 'Create a test plan from the acceptance criteria below.\n...`

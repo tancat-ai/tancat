@@ -55,3 +55,15 @@ Called by `TestGenerator._generate_skeleton_langgraph()` when `LANGGRAPH_ENABLED
 - `langgraph` (StateGraph, END, CompiledStateGraph)
 - `src.agents.planner`, `src.agents.generator`, `src.agents.validator`
 - `src.agents.state.WorkflowState`
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (2 items). Grouped under the public function that calls them.
+
+### `SkeletonGraph.__init__(client: Any) -> None` - method of `SkeletonGraph`
+
+- `_build_graph() -> CompiledStateGraph[WorkflowState, None, WorkflowState, WorkflowState]` (method of `SkeletonGraph`): Build and compile the StateGraph.
+
+### Internal utilities
+
+- `_should_retry(state: WorkflowState) -> str` (function): Conditional edge: route to Generator for retry, or END if done.

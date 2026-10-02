@@ -249,3 +249,11 @@ Symbols present in the source but not covered above (refresh pass, 1 items):
 ### `generation_max_tokens() -> int` (function)
 
 Return the per-call generation token cap.
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (1 item). Grouped under the public function that calls them.
+
+### `OpenAIProvider.__init__(api_key: str | None = None, base_url: str | None = None, is_local: bool = False, is_openai_compatible: bool = False)` - method of `OpenAIProvider`
+
+- `_detect_local_url(timeout: float = 2.0) -> str` (method of `OpenAIProvider`): Probe common local OpenAI-compatible ports and return the first responsive one. Checks ports: 8080 (llama.cpp), 8000 (vLLM), 5000 (text-gen-webui). Falls back to http://localhost:8080 if none respond.

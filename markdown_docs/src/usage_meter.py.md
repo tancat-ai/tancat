@@ -78,3 +78,31 @@ meter must not break generation).
 - `_parse_iso(value)` — tolerant ISO parse, naive → UTC.
 - `_epoch(now)` — datetime → epoch int for the license layer's clock override.
 - `_UPGRADE_PROMPT` — module-level constant shared by the error and the gates.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `FreeTierLimitError.__init__` (method of `FreeTierLimitError`): `FreeTierLimitError.__init__(message: str, *, run_remaining: int = 0, export_remaining: int = 0) -> None`
+- `UsageSummary.runs_remaining` (method of `UsageSummary`): `UsageSummary.runs_remaining() -> int | None`
+- `UsageSummary.exports_remaining` (method of `UsageSummary`): `UsageSummary.exports_remaining() -> int | None`
+- `UsageMeter.__init__` (method of `UsageMeter`): `UsageMeter.__init__(*, run_db_path: str | Path | None = None, ledger_path: str | Path | None = None, storage_root: str | Path | None = None, now: datetime | None = None, env: dict[str, str] | None = None) -> None`
+
+
+### Additional helpers (docs refresh 2026-10-02)
+
+Private helpers with real logic not listed above.
+
+### `UsageMeter.count_runs_this_month(now: datetime | None = None) -> int` - method of `UsageMeter`
+
+- `_db_path() -> Path` (method of `UsageMeter`): Db path; calls `Path`, `db_path`, `get_storage`; returns Path.
+
+### `UsageMeter.storage_bytes() -> int` - method of `UsageMeter`
+
+- `_root() -> Path` (method of `UsageMeter`): Root; calls `Path`, `get_storage`; returns Path.
+
+### `UsageMeter.record_export(format_name: str, output_path: str | Path = '') -> None` - method of `UsageMeter`
+
+- `_load_ledger() -> dict[str, Any]` (method of `UsageMeter`): Load ledger; calls `_ledger`, `loads`, `read_text`; returns dict[str, Any].
+
+- `_ledger() -> Path` (method of `UsageMeter`): Ledger; calls `Path`, `evidence_dir`, `get_storage`; returns Path.

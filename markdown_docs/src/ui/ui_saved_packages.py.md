@@ -66,3 +66,9 @@ Private `_`-helpers — the module's real logic (2 items). Grouped under the pub
 ### `SavedPackagePanel`
 - `_format_package_label(pkg: PackageManifest) -> str` (function) — Build a human-readable dropdown label from a package manifest.
 - `_rerun_loaded_package(package_root: Path) -> None` (function) — Actually re-run the loaded saved package (B-041).
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `SavedPackagePanel.__init__` (method of `SavedPackagePanel`): `SavedPackagePanel.__init__() -> None`

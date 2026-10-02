@@ -49,3 +49,11 @@ Private `_`-helpers — the module's real logic (1 item). Grouped under the publ
 
 ### `run_pipeline`
 - `_looks_like_non_code_output(code: str) -> bool` (function) — Return True when *code* looks like a JSON/dict blob, not Python.
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `PipelineSessionState.__init__` (method of `PipelineSessionState`): `PipelineSessionState.__init__(state: dict[str, Any] | None = None) -> None`
+- `PipelineSessionState.get` (method of `PipelineSessionState`): `PipelineSessionState.get(key: str, default: Any = None) -> Any`
+- `PipelineSessionState.set` (method of `PipelineSessionState`): `PipelineSessionState.set(key: str, value: Any) -> None`

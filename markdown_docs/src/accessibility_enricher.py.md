@@ -65,3 +65,21 @@ Applies computed fields from matched a11y node to scraped element:
 ## Dependencies
 - `page.accessibility.snapshot()` output (Playwright)
 - Element dicts from `PageScraper`
+
+## How It Works (Internals)
+
+Private `_`-helpers - the module's real logic (8 items). Grouped under the public function that calls them.
+
+### `AccessibilityEnricher.enrich(elements: list[dict[str, Any]], a11y_tree: dict[str, Any]) -> list[dict[str, Any]]` - method of `AccessibilityEnricher`
+
+- `_flatten_a11y_tree(node: dict[str, Any]) -> list[dict[str, Any]]` (method of `AccessibilityEnricher`): Flatten the a11y tree into a document-order list of interactive nodes. Returns only nodes that have a meaningful name or are interactive by role.
+- `_build_role_name_index(nodes: list[dict[str, Any]]) -> dict[tuple[str, str], list[dict[str, Any]]]` (method of `AccessibilityEnricher`): Build an index of (role, name) -> list of a11y nodes.
+- `_build_href_index(nodes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]` (method of `AccessibilityEnricher`): Build an index of href value -> list of a11y nodes. Hrefs appear in the 'properties' array of link nodes.
+- `_match_by_role_and_name(element: dict[str, Any], role_name_index: dict[tuple[str, str], list[dict[str, Any]]], used_indices: set[int]) -> dict[str, Any] | None` (method of `AccessibilityEnricher`): Strategy 1: match scraped element to a11y node by role + accessible name. The element's visible text is compared against the a11y node's computed name. A role comparison narrows false positives.
+- `_match_by_href(element: dict[str, Any], href_index: dict[str, list[dict[str, Any]]], used_indices: set[int]) -> dict[str, Any] | None` (method of `AccessibilityEnricher`): Strategy 3: match link elements by their href value.
+- `_match_by_document_order(element: dict[str, Any], a11y_nodes: list[dict[str, Any]], used_indices: set[int]) -> dict[str, Any] | None` (method of `AccessibilityEnricher`): Strategy 2: match by document position (fallback). This is intentionally last because ARIA flow relationships can reorder the accessibility tree relative to DOM order. Role+name matching requires two signals to agree...
+- `_apply_enrichment(element: dict[str, Any], a11y_node: dict[str, Any]) -> None` (method of `AccessibilityEnricher`): Apply computed fields from an a11y node to a scraped element. Rules: - accessible_name is added only if not already present (never overwrite). - computed_role is added unconditionally (a11y role may differ fro...
+
+### Internal utilities
+
+- `_transform_cdp_ax_tree(cdp_nodes: list[dict[str, Any]]) -> dict[str, Any]` (method of `AccessibilityEnricher`): Transform CDP Accessibility.getFullAXTree result into the format expected by enrich(). CDP returns a flat list of nodes with: - role: {"type": "...", "value": "button"} - name: {"type": "...", "value": "Click me"} - p...

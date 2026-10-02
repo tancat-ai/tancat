@@ -11,3 +11,10 @@ Measured saucedemo's SPA-on-GitHub-Pages soft-404 behavior (2026-08-03, the sauc
 ## Related
 - `src/scraper.py` — soft-404 recovery
 - Archived alongside `replay_saucedemo_checkout.py`, `verify_saucedemo_stateful_scrape.py`, `verify_saucedemo_upgrade_data.py`
+
+## Public API Additions
+
+Refreshed 2026-10-02: public symbols present in the source and not listed above.
+
+- `probe` (function): `probe(url: str) -> None`
+- `URLS` (constant): `URLS = ['https://www.saucedemo.com/inventory.html', 'https://www...`
