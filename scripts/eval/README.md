@@ -257,6 +257,18 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 - User story and conditions
 - Golden resolutions (expected locators with tolerance selectors)
 
+**Golden specificity rule (narrower-than-story):** A golden must match what the story fixes,
+no more and no less. When a step names a specific target - "add the Sauce Labs Backpack",
+"the Male radio", "pay a bill" - the golden may name that element's selector. When the story
+leaves the choice open ("add an item", "a product (e.g. Blue Top)", "a radio option (e.g.
+Male)", "select an item"), the golden must assert a property of the outcome instead of one
+interchangeable element: an item row is present, the cart badge count increased, a confirmation
+message appeared. Where the harness cannot express that property as a selector match, the
+criterion must be reworded to fix the choice, so the golden and the criterion agree. A specific
+golden for an open choice is a false-negative trap: it fails a correct test that made a
+different valid choice, and it inflates gate 1 only on the draw that happened to pick the named
+element.
+
 **Adding a new story:**
 1. Run the pipeline against the target site
 2. Capture generated code in `scripts/eval/captures/`
@@ -295,20 +307,24 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 |--------|-------|
 | Stories | 8 |
 | Placeholders | 96 |
-| Resolution accuracy (static — CI gate) | **95.8%** (92/96) |
+| Resolution accuracy (static — CI gate) | **94.8%** (91/96) |
 
-Per-story (static, RAG-off frozen dumps): saucedemo 18/20, automationexercise 8/8,
+Per-story (static, RAG-off frozen dumps): saucedemo 18/20, automationexercise 7/8,
 demoqa 8/8, theinternet 7/7, lv_insurance 24/24, ecommerce 14/16 (88%), banking 13/13,
 banking-eval-008 0/0 (no captured code → counted as 0).
 
-The static figure fell from 97.9% (94/96) after the eval-001 goldens for
-"backpack item in cart" (c3) and "Thank You page" (c5) were strengthened to name
-the element/URL the criterion means (B-101). The frozen captures
-(`scripts/eval/captures/saucedemo_code.py`) still emit the old weak locators
-(`.cart_list[data-test="cart-list"]` and `[data-test="title"]`), so those two
-criteria no longer match. The **live held-out gate is the one that improves**
-(+2 on both kept runs: 81/113 -> 83/113 and 85/113 -> 87/113); the static figure
-recovers once the captures are regenerated.
+The static figure fell from 97.9% (94/96) to 94.8% (91/96) after three goldens
+were corrected to name what their criterion means (B-101). The eval-001 goldens for
+"backpack item in cart" (c3) and "Thank You page" (c5) were strengthened, and the
+eval-002 "add to cart confirmation" (c3) primary was changed from the arbitrary
+`[data-product-id="11"]` container to the confirmation message (`.text-center`).
+The frozen captures still emit the old locators - `scripts/eval/captures/saucedemo_code.py`
+holds `.cart_list[data-test="cart-list"]` and `[data-test="title"]`, and
+`scripts/eval/captures/automationexercise_code.py` holds `[data-product-id="11"]` -
+so those three criteria no longer match. This is the same stale-capture effect in
+every case: the figures recover when the captures are regenerated. The **live held-out
+gate is the one that improves** (+2 on both kept runs: 81/113 -> 83/113 and
+85/113 -> 87/113).
 
 Baseline file: `scripts/eval/baseline.json` (refreshed from a static run against the
 corrected goldens).

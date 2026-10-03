@@ -7,7 +7,7 @@
   "user_story": "As a customer, I want to browse products on the store, add them to my cart, proceed to checkout, and place an order.",
   "conditions": [
     "1. Navigate to the store home page",
-    "2. On the home page, click the Add to cart button next to a product (e.g. Blue Top)",
+    "2. On the home page, click the Add to cart button for Blue Top",
     "3. Verify a confirmation message appears indicating the product was added to cart",
     "4. Click the Cart link in the header navigation to go to the cart page",
     "5. Verify the cart page displays the added product with its name and price",
@@ -35,7 +35,7 @@
       "placeholders": [
         {
           "action": "CLICK",
-          "description": "Add to cart",
+          "description": "Add to cart for Blue Top",
           "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
           "tolerance_selectors": [".add-to-cart.btn", "[data-product-id]"],
           "expected_page": "http://localhost:8781/index.html"
