@@ -115,8 +115,11 @@
         {
           "action": "ASSERT",
           "description": "backpack item in cart",
-          "expected_locator": "[data-test=\"cart-list-container\"]",
-          "tolerance_selectors": [".cart_list[data-test=\"cart-list\"]"],
+          "expected_locator": "[data-test=\"remove-sauce-labs-backpack\"]",
+          "tolerance_selectors": [
+            "[data-test=\"inventory-item-name\"]:has-text(\"Sauce Labs Backpack\")",
+            "#remove-sauce-labs-backpack"
+          ],
           "expected_page": "https://www.saucedemo.com/cart.html"
         }
       ]
@@ -183,8 +186,10 @@
         {
           "action": "ASSERT",
           "description": "Thank You page",
-          "expected_locator": "[data-test=\"title\"]",
-          "tolerance_selectors": [],
+          "expected_locator": "[data-test=\"complete-header\"]",
+          "tolerance_selectors": [
+            "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-complete.html\")"
+          ],
           "expected_page": "https://www.saucedemo.com/checkout-complete.html"
         }
       ]
