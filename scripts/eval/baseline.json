@@ -312,7 +312,7 @@
         },
         {
           "action": "CLICK",
-          "description": "Add to cart",
+          "description": "Add to cart for Blue Top",
           "expected_locator": ".add-to-cart.btn",
           "tolerance_selectors": [
             ".add-to-cart.btn[data-product-id=\"1\"]"
@@ -326,17 +326,15 @@
         {
           "action": "ASSERT",
           "description": "add to cart confirmation",
-          "expected_locator": "[data-product-id=\"11\"]",
+          "expected_locator": ".text-center",
           "tolerance_selectors": [
-            ".text-center",
-            ".modal-body",
-            "[data-product-id]"
+            ".modal-body"
           ],
           "generated_locator": "[data-product-id=\"11\"]",
-          "matched": true,
+          "matched": false,
           "criterion_index": 3,
-          "verification": "golden",
-          "verification_reason": ""
+          "verification": "unverified",
+          "verification_reason": "no verification verdict was emitted for this criterion"
         },
         {
           "action": "CLICK",
@@ -908,7 +906,7 @@
         },
         {
           "action": "CLICK",
-          "description": "Add to cart",
+          "description": "Add to cart for Blue Top",
           "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
           "tolerance_selectors": [
             ".add-to-cart.btn",
