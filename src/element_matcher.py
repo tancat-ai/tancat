@@ -1345,6 +1345,24 @@ class ElementMatcher:
                 threshold = max(1, top_score - 2)
                 shortlisted = [e for _s, e in ranked if _s >= threshold][:4]
 
+            # B-055: an element that appears on several scraped pages is ONE
+            # candidate, not N. Without this dedupe the same selector can fill
+            # the shortlist several times, pushing a confidently top-ranked,
+            # deterministic match into the semantic-ranker LLM call - where a
+            # missing/failing generator returns None and turns a correct pick
+            # into an unresolved skip.
+            if len(shortlisted) > 1:
+                seen: set[str] = set()
+                deduped: list[dict[str, Any]] = []
+                for cand in shortlisted:
+                    key = str(cand.get("selector", "")).strip()
+                    if key and key in seen:
+                        continue
+                    if key:
+                        seen.add(key)
+                    deduped.append(cand)
+                shortlisted = deduped
+
             if len(shortlisted) <= 1:
                 if shortlisted:
                     results[i] = shortlisted[0]

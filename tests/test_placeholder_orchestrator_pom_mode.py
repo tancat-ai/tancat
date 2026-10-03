@@ -276,7 +276,10 @@ def test_batch_fallback_resolves_placeholder_on_non_fallback_page() -> None:
 
     result = asyncio.run(run())
     assert "pytest.skip" not in result
-    assert ".btn.btn-default.check_out" in result
+    # B-055: the trailless journey now resolves this on its own (per-step, all-pages
+    # scope) instead of the batch pass, so the locator is the robust form and the
+    # class list is shortened to ".check_out"; the element is still the checkout button.
+    assert "check_out" in result
 
 
 def test_batch_fallback_still_skips_when_element_nowhere() -> None:
