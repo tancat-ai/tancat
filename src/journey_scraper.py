@@ -517,7 +517,15 @@ class JourneyScraper:
                     if last_error is not None:
                         observed.error = str(last_error)
                         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
-                            print(f"[journey_scraper] Step {step_index} ({step.description}): {last_error}", flush=True)
+                            # B-055: stderr, never stdout - the child embeds its
+                            # scraped pages and trail as JSON on stdout, and a
+                            # debug line there made json.loads fail, silently
+                            # dropping the journey.
+                            print(
+                                f"[journey_scraper] Step {step_index} ({step.description}): {last_error}",
+                                flush=True,
+                                file=sys.stderr,
+                            )
 
                 # AI-052: hand the typed trail out. The subprocess entry passes a
                 # list it embeds in the stdout JSON; direct callers get a

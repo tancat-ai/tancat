@@ -647,3 +647,28 @@ class TestB055JourneyScrapeDrop:
 
         assert result == {"http://x": [{"selector": "#a", "text": "a"}]}
         assert calls["n"] == 2
+
+    def test_debug_step_error_goes_to_stderr_not_stdout(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """B-055: with PIPELINE_DEBUG=1 a failing step must not corrupt stdout.
+
+        The child subprocess embeds its scraped pages and trail as JSON on
+        stdout. A step-error debug line written to stdout made json.loads fail
+        and silently dropped the whole journey. It must go to stderr.
+        """
+        import src.journey_scraper as js_mod
+        from tests.test_journey_observed_trail import FakePlaywright, _make_scraper
+
+        monkeypatch.setenv("PIPELINE_DEBUG", "1")
+        scraper = _make_scraper()
+        real_sync_playwright = js_mod.sync_playwright
+        js_mod.sync_playwright = lambda: FakePlaywright()  # type: ignore[assignment,return-value]
+        try:
+            scraper._scrape_journey_sync([JourneyStep(action="navigate", url="http://fake/boom", description="broken")])
+        finally:
+            js_mod.sync_playwright = real_sync_playwright
+
+        captured = capsys.readouterr()
+        assert "[journey_scraper] Step" not in captured.out, "debug line must not reach stdout"
+        assert "[journey_scraper] Step" in captured.err
