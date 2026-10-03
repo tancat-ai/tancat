@@ -257,6 +257,18 @@ Stored in `scripts/eval/dataset/*.json`. Each file contains:
 - User story and conditions
 - Golden resolutions (expected locators with tolerance selectors)
 
+**Golden specificity rule (narrower-than-story):** A golden must match what the story fixes,
+no more and no less. When a step names a specific target - "add the Sauce Labs Backpack",
+"the Male radio", "pay a bill" - the golden may name that element's selector. When the story
+leaves the choice open ("add an item", "a product (e.g. Blue Top)", "a radio option (e.g.
+Male)", "select an item"), the golden must assert a property of the outcome instead of one
+interchangeable element: an item row is present, the cart badge count increased, a confirmation
+message appeared. Where the harness cannot express that property as a selector match, the
+criterion must be reworded to fix the choice, so the golden and the criterion agree. A specific
+golden for an open choice is a false-negative trap: it fails a correct test that made a
+different valid choice, and it inflates gate 1 only on the draw that happened to pick the named
+element.
+
 **Adding a new story:**
 1. Run the pipeline against the target site
 2. Capture generated code in `scripts/eval/captures/`

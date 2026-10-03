@@ -9,7 +9,7 @@
     "2. Fill in the first name field with a value",
     "3. Fill in the last name field with a value",
     "4. Fill in the email address field with a value",
-    "5. Select a radio button option (e.g. Male)",
+    "5. Select the Male radio",
     "6. Click the Submit button at the bottom of the form"
   ],
   "golden_resolutions": [

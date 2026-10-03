@@ -7,7 +7,7 @@
   "conditions": [
     "1. Navigate to the automationexercise.com home page",
     "2. Click the Products link in the header navigation to go to the products page",
-    "3. On the products page, click the Add to cart button next to a product (e.g. Blue Top)",
+    "3. On the products page, click the Add to cart button for Blue Top",
     "4. Verify a confirmation message appears indicating the product was added to cart",
     "5. Click the Cart link in the header navigation to go to the cart page",
     "6. Verify the cart page displays the product that was added with its name and price"
@@ -61,7 +61,7 @@
       "placeholders": [
         {
           "action": "CLICK",
-          "description": "Add to cart",
+          "description": "Add to cart for Blue Top",
           "expected_locator": ".add-to-cart.btn",
           "tolerance_selectors": [
             ".add-to-cart.btn[data-product-id=\"1\"]"
@@ -77,11 +77,9 @@
         {
           "action": "ASSERT",
           "description": "add to cart confirmation",
-          "expected_locator": "[data-product-id=\"11\"]",
+          "expected_locator": ".text-center",
           "tolerance_selectors": [
-            ".text-center",
-            ".modal-body",
-            "[data-product-id]"
+            ".modal-body"
           ],
           "expected_page": "https://automationexercise.com/products"
         }
