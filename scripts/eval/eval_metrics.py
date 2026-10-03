@@ -72,6 +72,10 @@ class HarnessReport:
     """Aggregated report across all stories."""
 
     stories: list[StoryResult] = field(default_factory=list)
+    # B-101 scout t-0316: step/expected-result ALIGNMENT, a report/warn figure
+    # (never pass/fail). Serialized dict from eval_alignment.AlignmentReport;
+    # None when a run did not compute it (older reports). See eval_alignment.
+    alignment: dict[str, Any] | None = None
 
     @property
     def total_placeholders(self) -> int:
@@ -180,6 +184,18 @@ class HarnessReport:
                 f"  Tests timed out:          {len(timed_out)} story run(s) killed by the "
                 f"pytest timeout: {', '.join(timed_out)} (not counted in the totals above)"
             )
+        if self.alignment:
+            # B-101: report/warn only - a rate, never a verdict.
+            lines.append("")
+            lines.append("  Step/expected-result alignment (report only):")
+            lines.append(
+                f"    {self.alignment.get('mismatched', 0)} of {self.alignment.get('assert_steps', 0)} ASSERT steps are specificity-misaligned"
+            )
+            lines.append(
+                f"      (OPEN+DIRECT {self.alignment.get('open_direct', 0)}, "
+                f"FIXED+PROPERTY {self.alignment.get('fixed_property', 0)}, "
+                f"{self.alignment.get('rate_pct', 0.0)}%)"
+            )
         lines += [
             f"  Test pass rate:           {self.test_pass_rate():.1f}%",
             f"  False positives:          {self.total_false_positives}",
@@ -231,6 +247,7 @@ class HarnessReport:
         """Serialize to a plain dict for JSON storage."""
         return {
             "stories": [asdict(s) for s in self.stories],
+            "alignment": self.alignment,
         }
 
     @classmethod
@@ -254,7 +271,7 @@ class HarnessReport:
                     test_resolution_counts=s_data.get("test_resolution_counts", []),
                 )
             )
-        return cls(stories=stories)
+        return cls(stories=stories, alignment=data.get("alignment"))
 
 
 # ---------------------------------------------------------------------------

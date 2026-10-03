@@ -952,6 +952,17 @@ class EvalRunner:
 
         report = HarnessReport(stories=results)
 
+        # B-101 scout t-0316: step/expected-result alignment, a report/warn
+        # figure computed from the run's own data (criterion wording + the
+        # emitted code). Never a pass/fail gate.
+        try:
+            from eval_alignment import compute_alignment
+
+            report.alignment = compute_alignment(self.dataset_dir, code_map).to_dict()
+        except Exception as exc:  # never let the warn metric break a run
+            logger.warning("Alignment metric unavailable: %s", exc)
+            report.alignment = None
+
         # B-093: keep the evidence a re-score needs, in one known place. A run
         # whose evidence is deleted is a run nobody can re-score.
         if self.evidence_dir is not None:

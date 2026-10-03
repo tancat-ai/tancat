@@ -72,7 +72,18 @@ def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
         story.tests_passed = passed
         story.tests_false_positive = count_false_greens(story, code, per_test, passed)
 
-    return HarnessReport(stories=results)
+    report = HarnessReport(stories=results)
+
+    # B-101: same report/warn alignment figure as a live run, recomputed from
+    # the kept evidence's code_map. Never a pass/fail gate.
+    try:
+        from eval_alignment import compute_alignment
+
+        report.alignment = compute_alignment(dataset_dir, evidence.code_map).to_dict()
+    except Exception:  # never let the warn metric break a re-score
+        report.alignment = None
+
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:
