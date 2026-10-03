@@ -99,3 +99,24 @@ class TestGeneratorAgent:
             assert "{{GOTO:login}}" in result["skeleton_code"]
 
         asyncio.run(_run())
+
+    def test_generator_prompt_carries_the_specificity_rule(self, mock_client: MagicMock) -> None:
+        """B-101: the agent prompt must pin how an ASSERT matches specificity."""
+
+        async def _run() -> None:
+            gen = GeneratorAgent(mock_client)
+            state = WorkflowState(
+                user_story="As a user I want to log in",
+                conditions="1. Enter credentials\n2. Verify the dashboard loaded",
+                expected_test_count=2,
+            )
+            await gen(state)
+            prompt = mock_client.generate.call_args.args[0]
+            assert "match its specificity" in prompt
+            assert "assert a property of the outcome" in prompt
+            # The rules block (system prompt) carries the two-sided rule too.
+            system = mock_client.generate.call_args.kwargs.get("system_prompt", "")
+            assert "SPECIFICITY" in system
+            assert "OPEN criterion" in system
+
+        asyncio.run(_run())
