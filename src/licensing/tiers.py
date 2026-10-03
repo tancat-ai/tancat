@@ -5,19 +5,28 @@ usage limits. The **feature toggles the tier gates are enforcement points that
 already exist in the code** (POM flag, Jira export, self-heal, RAG) — this table
 is the entitlement side; the gates read ``feature_enabled`` / ``limit_for``.
 
-The proposed split (from spec §5.5, grill question §9 Q1 — data-driven so it
-can be re-tuned without code changes):
+Published tiers (owner decision 2026-10-03): **Free and Pro only**. The top
+"Air-Gap" tier is retired as a published tier - it read as unprofessional on the
+pricing page. Enterprise and regulated buyers are still served, but as a
+**conversation, not a priced tier** (a plain contact link off the pricing page).
 
-| Tier      | Claims (additive)                              | Limits                  |
-|-----------|------------------------------------------------|-------------------------|
-| free      | core generate, evidence export (CSV/JSON/HTML), self-heal, RAG/flow learning | runs 25/mo, exports 10/mo |
-| self-serve| + Jira export                                  | unlimited               |
-| pro       | + POM mode, multi-site, CI runs                | unlimited               |
-| airgap    | + private-network support, support/onboarding  | unlimited               |
+The ``airgap`` (and legacy ``self-serve``) keys are **retired but still
+resolvable**: they stay in the table so a licence already signed against them
+keeps verifying with its own claims, instead of silently downgrading to free
+(``license.verify_license`` falls back to ``free`` for any key it does not know).
+They are unpublished: see :data:`RETIRED_TIERS` and :func:`published_tiers`.
 
-Self-healing and RAG stay in the free core (they are already shipped OSS
-features — §9 Q1 bias: re-locking shipped work is a retention risk, the paid
-claim is support/onboarding).
+| Published tier | Claims (additive)                              | Limits                  |
+|-----------------|------------------------------------------------|-------------------------|
+| free            | core generate, evidence export (CSV/JSON/HTML), self-heal, RAG/flow learning | runs 25/mo, exports 10/mo |
+| pro             | + Jira export, POM mode, multi-site, CI runs, support | unlimited               |
+
+Retired (still resolvable, not sold, no price):
+
+| Retired key   | Why it stays                                                                  |
+|---------------|-------------------------------------------------------------------------------|
+| self-serve    | Legacy gate for Jira export; B-085 owns deleting or folding it into ``pro``. |
+| airgap        | Owner retired it 2026-10-03; kept so an issued licence still verifies.        |
 """
 
 from __future__ import annotations
@@ -28,6 +37,9 @@ __all__ = [
     "TierSpec",
     "DEFAULT_TIERS",
     "FREE_TIER",
+    "RETIRED_TIERS",
+    "published_tiers",
+    "is_published_tier",
     "tier_label",
     "tier_claims",
     "limit_for",
@@ -63,6 +75,23 @@ class TierSpec:
 
 FREE_TIER = "free"
 
+#: Tiers that are no longer published: not sold, no price, absent from the
+#: pricing page and the decision record. They REMAIN in the tier table so a
+#: licence already signed against them still verifies with its own claims
+#: (license.verify_license maps any unknown tier key to ``free``, so deleting
+#: a key would silently downgrade a paying deployment).
+RETIRED_TIERS: frozenset[str] = frozenset({"self-serve", "airgap"})
+
+
+def published_tiers() -> tuple[str, ...]:
+    """Return the published tier keys, in table order (owner decision 2026-10-03)."""
+    return tuple(key for key in tiers() if key not in RETIRED_TIERS)
+
+
+def is_published_tier(tier: str) -> bool:
+    """True when *tier* is a tier we currently sell."""
+    return tier in tiers() and tier not in RETIRED_TIERS
+
 
 def _tiers() -> dict[str, TierSpec]:
     """The default tier table (overridable via ``AITEST_TIERS_JSON``)."""
@@ -71,11 +100,19 @@ def _tiers() -> dict[str, TierSpec]:
         "free": TierSpec(
             "free", "Free", frozenset(free_claims), {"runs_per_month": 25, "evidence_exports_per_month": 10}
         ),
-        "self-serve": TierSpec("self-serve", "Self-Serve", frozenset(free_claims | {"jira_export"})),
-        "pro": TierSpec("pro", "Pro", frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs"})),
+        # Retired: kept resolvable so an issued licence keeps verifying (B-085).
+        "self-serve": TierSpec("self-serve", "Self-Serve (retired)", frozenset(free_claims | {"jira_export"})),
+        # Published. `support` is claimed here because the pricing page and the
+        # decision record both promise support on Pro; the code did not grant it.
+        "pro": TierSpec(
+            "pro", "Pro", frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs", "support"})
+        ),
+        # Retired 2026-10-03 (owner): no longer a published tier. Kept resolvable
+        # so a licence already signed with this key still verifies with its own
+        # claims instead of silently downgrading to free.
         "airgap": TierSpec(
             "airgap",
-            "Air-Gap Premium",
+            "Air-Gap (retired)",
             frozenset(free_claims | {"jira_export", "pom", "multi_site", "ci_runs", "private_network", "support"}),
         ),
     }
