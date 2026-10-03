@@ -876,6 +876,27 @@ class ElementMatcher:
             return True
         return _is_fillable(element)
 
+    @staticmethod
+    def _is_off_current_page(
+        element: dict[str, str],
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> bool:
+        """B-055: True when a weak (LLM) pick is not on the expected page.
+
+        Only meaningful when the expected page is one of the searched pages -
+        a trail-verified step scopes ``pages_data`` to that one page, so this is
+        inert there. A weak fallback must never move the journey to another
+        page; a page move needs evidence (an href or the trail).
+        """
+        if not current_url or current_url not in pages_data:
+            return False
+        selector = str(element.get("selector", "")).strip()
+        if not selector:
+            return False
+        current_selectors = {str(e.get("selector", "")).strip() for e in pages_data.get(current_url, [])}
+        return selector not in current_selectors
+
     async def find_best_element_for_current_page(
         self,
         action: str,
@@ -1143,6 +1164,14 @@ class ElementMatcher:
                 return candidate
 
         if matched_element is not None:
+            if self._is_off_current_page(matched_element, current_url, pages_data):
+                logger.warning(
+                    "[RESOLVE] '%s' | B-055 rejected LLM fallback '%s' - it lives on another page, not '%s'",
+                    description,
+                    str(matched_element.get("selector", "")).strip(),
+                    current_url,
+                )
+                return None
             element_text = str(matched_element.get("text", "")).strip()
             logger.warning(
                 "LLM-selected element '%s' fails text validation for '%s' — "

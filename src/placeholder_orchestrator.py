@@ -834,6 +834,15 @@ class PlaceholderOrchestrator:
                         matched_out=matched_box,
                     )
 
+                    # B-055: a trailless journey's current_url is only the default
+                    # start page. The page the matched element actually lives on is
+                    # a fact — use it as this step's page (expected_page) and as the
+                    # cursor for the next step, instead of pinning everything to the
+                    # start page. Trail journeys keep the observed page unchanged.
+                    step_page = current_url
+                    if not trail_steps and matched_box.get("source_page"):
+                        step_page = matched_box["source_page"]
+
                     # ── AI-052: divergence-aware replay ────────────────────
                     # The trail's selector_used was PROVEN (successfully clicked
                     # during discovery, error is None). When the resolver picks
@@ -960,7 +969,7 @@ class PlaceholderOrchestrator:
                                 resolved_value,
                                 description,
                                 fill_value,
-                                current_url,
+                                step_page,
                                 assertion_type,
                             )
                         )
@@ -1000,6 +1009,11 @@ class PlaceholderOrchestrator:
                                     diverged = True
                     elif next_url:
                         current_url = next_url
+                    elif not trail_steps and step_page:
+                        # B-055: no observed trail and no href on the match — the
+                        # element's own page is the only fact. Advance the cursor so
+                        # the next step is not resolved against the stale start page.
+                        current_url = step_page
 
             # Batch-resolve deferred ASSERT placeholders for this journey
             if deferred_asserts:
@@ -1257,7 +1271,7 @@ class PlaceholderOrchestrator:
 
         for url, group in by_url.items():
             await self._ensure_scraped(url, scraped_data, scraped_errors)
-            pages_data = self._build_scoped_pages(url, scraped_data)
+            pages_data = self._build_scoped_pages(url, scraped_data, verified=strict_scope)
             if not pages_data and strict_scope:
                 # AI-052: the recorded page is not in the scrape inventory —
                 # these asserts are unverifiable → honest unresolved, never an
@@ -1398,7 +1412,7 @@ class PlaceholderOrchestrator:
                 choice against the trail's proven selector.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
-        scoped_pages = self._build_scoped_pages(current_url, scraped_data)
+        scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
 
         if action in {"GOTO", "URL"}:
             # Step 1: Try UrlResolver
@@ -1551,9 +1565,10 @@ class PlaceholderOrchestrator:
                     None,
                 )
 
+            source_page = self._verify_page_context(description, matched_element, current_url, scraped_data)
             if matched_out is not None:
                 matched_out["element"] = matched_element
-            self._verify_page_context(description, matched_element, current_url, scraped_data)
+                matched_out["source_page"] = source_page
 
             robust_selector = build_robust_locator(matched_element)
             if not robust_selector:
@@ -1828,6 +1843,8 @@ class PlaceholderOrchestrator:
         self,
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
+        *,
+        verified: bool = True,
     ) -> dict[str, list[dict[str, str]]]:
         """Return a page mapping scoped to the current journey URL when available.
 
@@ -1835,8 +1852,13 @@ class PlaceholderOrchestrator:
         (scraped) page — callers decide the fallback. Trail-driven callers
         (``strict_scope=True``) treat ``{}`` as honest-skip, never as licence to
         search every page.
+
+        B-055: ``verified`` is True only for a trail-observed page. When it is
+        False ``current_url`` is merely the journey's default starting page, so
+        scoping to it pins every later step to the start page. Return ``{}``
+        instead and let the caller search the journey's scraped pages.
         """
-        if current_url and current_url in scraped_data:
+        if verified and current_url and current_url in scraped_data:
             return {current_url: scraped_data[current_url]}
         return {}
 
@@ -2007,19 +2029,26 @@ class PlaceholderOrchestrator:
         matched_element: dict[str, str],
         current_url: str | None,
         scraped_data: dict[str, list[dict[str, str]]],
-    ) -> bool:
-        """Verify the resolved locator exists on the current page (B3: page-context validation)."""
+    ) -> str | None:
+        """Return the page the resolved element actually lives on (B3 / B-055).
+
+        The normal case is ``current_url``. When the element exists on a
+        different scraped page, log the cross-page mismatch and return that
+        page — the caller can then move the journey cursor to the fact instead
+        of leaving every later step pinned to the start page. ``None`` means the
+        page is unknown.
+        """
         if current_url is None:
-            return True
+            return None
 
         current_elements = scraped_data.get(current_url, [])
         element_selector = str(matched_element.get("selector", "")).strip()
         if not element_selector:
-            return True
+            return current_url
 
         for elem in current_elements:
             if str(elem.get("selector", "")).strip() == element_selector:
-                return True
+                return current_url
 
         source_url: str | None = None
         for url, elements in scraped_data.items():
@@ -2030,6 +2059,9 @@ class PlaceholderOrchestrator:
             if source_url:
                 break
 
+        if source_url is None:
+            return current_url
+
         logger.warning(
             "Cross-page mismatch: placeholder '%s' resolved to '%s' which exists on '%s' "
             "but current page is '%s'. Element may not be visible at runtime.",
@@ -2038,7 +2070,7 @@ class PlaceholderOrchestrator:
             source_url or "unknown",
             current_url,
         )
-        return False
+        return source_url
 
     def _build_candidate_urls(
         self,

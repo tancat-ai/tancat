@@ -339,6 +339,80 @@ def test_no_trails_behaviour_unchanged_cross_page_still_available() -> None:
     assert JACKET_BUTTON in code
 
 
+# ── B-055: a trailless journey must not pin every step to the start page ──
+
+B055_INDEX = "http://localhost:8781/index.html"
+B055_DASHBOARD = "http://localhost:8781/dashboard.html"
+B055_TRANSFER = "http://localhost:8781/transfer.html"
+
+
+def _b055_data() -> dict[str, list[dict[str, Any]]]:
+    """eval-007 shape: sign-in page, dashboard link, then the transfer form."""
+    return {
+        B055_INDEX: [
+            _el("#user-name", "username", tag="input", role="textbox"),
+            _el("#password", "password", tag="input", role="textbox"),
+            _el("#login-button", "Sign In"),
+            # The production lookalike: a start-page container whose text names
+            # the later steps, so a start-page-pinned resolver matches it.
+            _el(
+                "main",
+                "Welcome. Transfer Money. amount From Account To Account Transfer Funds button.",
+                tag="div",
+                role="generic",
+            ),
+        ],
+        B055_DASHBOARD: [
+            _el("#transfer-link", "Transfer Money", tag="a", href="/transfer.html"),
+        ],
+        B055_TRANSFER: [
+            _el("#from-account", "From Account", tag="select", role="combobox"),
+            _el("#to-account", "To Account", tag="select", role="combobox"),
+            _el("#amount", "amount", tag="input", role="textbox"),
+            _el("#transfer-submit", "Transfer Funds", tag="button"),
+        ],
+    }
+
+
+def test_b055_trailless_journey_resolves_later_pages() -> None:
+    """B-055: an empty trail must not pin later steps to the start page.
+
+    The production shape is a trail map with a key for the journey but no
+    steps (differs from ``observed_trails=None``, which the back-compat test
+    above covers). The transfer steps must resolve on their own pages, not to
+    the index page's ``#user-name`` / ``#login-button``.
+    """
+    skeleton, journey = _build(
+        "test_b055",
+        [
+            ("FILL", "username:admin"),
+            ("FILL", "password:secret"),
+            ("CLICK", "sign in button"),
+            ("CLICK", "Transfer Money"),
+            ("FILL", "amount:100"),
+            ("CLICK", "Transfer Funds button"),
+        ],
+    )
+    code = _resolve(skeleton, [journey], _b055_data(), {"test_b055": ObservedTrail(steps=[])})
+    assert "#transfer-link" in code
+    assert "#amount" in code
+    assert "#transfer-submit" in code
+    # The username fill is the only legitimate use of the index-page field.
+    assert code.count("#user-name") == 1
+
+
+def test_b055_llm_fallback_rejected_when_off_page() -> None:
+    """B-055: a weak LLM pick on another page is rejected, not used anyway."""
+    from src.element_matcher import ElementMatcher
+
+    pages = {"http://a": [_el("#a", "a")], "http://b": [_el("#b", "b")]}
+    assert ElementMatcher._is_off_current_page({"selector": "#b"}, "http://a", pages) is True
+    assert ElementMatcher._is_off_current_page({"selector": "#a"}, "http://a", pages) is False
+    # A trail-verified step scopes to one page, so the guard is inert there.
+    single = {"http://a": [_el("#a", "a")]}
+    assert ElementMatcher._is_off_current_page({"selector": "#a"}, "http://a", single) is False
+
+
 # ── Scraper/resolver disagreement (found in verify run 2026-08-22) ────────
 
 

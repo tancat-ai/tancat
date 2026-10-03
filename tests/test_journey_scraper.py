@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.cart_seeding_scraper import CartSeedingScraper
 from src.journey_auth_detector import (
     detect_auth_redirect as _detect_auth_redirect,
@@ -595,3 +597,53 @@ class TestB028CategoryIntent:
         }
         assert JourneyScraper._is_category_listing_link(listing)
         assert not JourneyScraper._is_category_listing_link(detail)
+
+
+class TestB055JourneyScrapeDrop:
+    """B-055: a per-journey scrape that returns nothing must not be silent.
+
+    A silent empty return loses the journey's pages AND its observed trail, so
+    every later step resolves against the story's start page.
+    """
+
+    def test_failed_child_is_loud_and_retried(
+        self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        from types import SimpleNamespace
+
+        calls = {"n": 0}
+
+        def fake_run(*_a: object, **_kw: object) -> SimpleNamespace:
+            calls["n"] += 1
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        scraper = JourneyScraper(starting_url="http://x")
+        with caplog.at_level("WARNING", logger="src.journey_scraper"):
+            result = scraper._scrape_journey_via_subprocess([JourneyStep(action="click", description="go")])
+
+        assert result == {}
+        assert calls["n"] == 2, "a failed scrape must be retried once"
+        assert any("B-055" in record.message for record in caplog.records)
+
+    def test_first_attempt_recovers_on_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json as _json
+        import subprocess
+        from types import SimpleNamespace
+
+        calls = {"n": 0}
+        good = _json.dumps({"http://x": [{"selector": "#a", "text": "a"}]})
+
+        def fake_run(*_a: object, **_kw: object) -> SimpleNamespace:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SimpleNamespace(returncode=1, stdout="", stderr="")
+            return SimpleNamespace(returncode=0, stdout=good, stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        scraper = JourneyScraper(starting_url="http://x")
+        result = scraper._scrape_journey_via_subprocess([JourneyStep(action="click", description="go")])
+
+        assert result == {"http://x": [{"selector": "#a", "text": "a"}]}
+        assert calls["n"] == 2
