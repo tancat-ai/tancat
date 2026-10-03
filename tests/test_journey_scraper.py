@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.cart_seeding_scraper import CartSeedingScraper
 from src.journey_auth_detector import (
     detect_auth_redirect as _detect_auth_redirect,
@@ -595,3 +597,78 @@ class TestB028CategoryIntent:
         }
         assert JourneyScraper._is_category_listing_link(listing)
         assert not JourneyScraper._is_category_listing_link(detail)
+
+
+class TestB055JourneyScrapeDrop:
+    """B-055: a per-journey scrape that returns nothing must not be silent.
+
+    A silent empty return loses the journey's pages AND its observed trail, so
+    every later step resolves against the story's start page.
+    """
+
+    def test_failed_child_is_loud_and_retried(
+        self, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+        from types import SimpleNamespace
+
+        calls = {"n": 0}
+
+        def fake_run(*_a: object, **_kw: object) -> SimpleNamespace:
+            calls["n"] += 1
+            return SimpleNamespace(returncode=1, stdout="", stderr="boom")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        scraper = JourneyScraper(starting_url="http://x")
+        with caplog.at_level("WARNING", logger="src.journey_scraper"):
+            result = scraper._scrape_journey_via_subprocess([JourneyStep(action="click", description="go")])
+
+        assert result == {}
+        assert calls["n"] == 2, "a failed scrape must be retried once"
+        assert any("B-055" in record.message for record in caplog.records)
+
+    def test_first_attempt_recovers_on_retry(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import json as _json
+        import subprocess
+        from types import SimpleNamespace
+
+        calls = {"n": 0}
+        good = _json.dumps({"http://x": [{"selector": "#a", "text": "a"}]})
+
+        def fake_run(*_a: object, **_kw: object) -> SimpleNamespace:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return SimpleNamespace(returncode=1, stdout="", stderr="")
+            return SimpleNamespace(returncode=0, stdout=good, stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        scraper = JourneyScraper(starting_url="http://x")
+        result = scraper._scrape_journey_via_subprocess([JourneyStep(action="click", description="go")])
+
+        assert result == {"http://x": [{"selector": "#a", "text": "a"}]}
+        assert calls["n"] == 2
+
+    def test_debug_step_error_goes_to_stderr_not_stdout(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """B-055: with PIPELINE_DEBUG=1 a failing step must not corrupt stdout.
+
+        The child subprocess embeds its scraped pages and trail as JSON on
+        stdout. A step-error debug line written to stdout made json.loads fail
+        and silently dropped the whole journey. It must go to stderr.
+        """
+        import src.journey_scraper as js_mod
+        from tests.test_journey_observed_trail import FakePlaywright, _make_scraper
+
+        monkeypatch.setenv("PIPELINE_DEBUG", "1")
+        scraper = _make_scraper()
+        real_sync_playwright = js_mod.sync_playwright
+        js_mod.sync_playwright = lambda: FakePlaywright()  # type: ignore[assignment,return-value]
+        try:
+            scraper._scrape_journey_sync([JourneyStep(action="navigate", url="http://fake/boom", description="broken")])
+        finally:
+            js_mod.sync_playwright = real_sync_playwright
+
+        captured = capsys.readouterr()
+        assert "[journey_scraper] Step" not in captured.out, "debug line must not reach stdout"
+        assert "[journey_scraper] Step" in captured.err

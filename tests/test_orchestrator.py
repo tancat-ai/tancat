@@ -464,6 +464,16 @@ def test_02_go_to_cart(page: Page, evidence_tracker) -> None:
         ),
     ]
 
+    # B-055: the trailless per-step scope is the whole scrape, so the 'cart link'
+    # now has >1 candidate and the resolver consults its semantic ranker (an LLM
+    # call on the same mocked client). This test measures FRAGMENT generation -
+    # one skeleton per reviewed condition - so stub the ranker to keep generate()
+    # at exactly two fragment calls and let the deterministic text-match path
+    # resolve the cart link.
+    ranker = orchestrator._placeholder_orchestrator._element_matcher._semantic_ranker  # type: ignore[attr-defined]
+    ranker.choose_best_candidate = AsyncMock(return_value=None)  # type: ignore[method-assign]
+    ranker.choose_best_candidates_batch = AsyncMock(return_value=[])  # type: ignore[method-assign]
+
     final_code = asyncio.run(
         orchestrator.run_pipeline(
             user_story="As a shopper I want to add to cart and go to cart",
@@ -943,11 +953,12 @@ def test_02_add_item(page):
         "evidence_tracker.click('#add-to-cart-sauce-labs-backpack', label='add to cart button for Sauce Labs Backpack'"
     ) in final_code
     assert "expected_page='https://www.saucedemo.com" in final_code
-    # AI-052 S4: keyword-URL inference is gone — without an observed trail the
-    # resolver cannot know that login lands on /inventory.html, so the
-    # "shopping cart link" click is not evidenced there. The navigation-intent
-    # fallback honestly emits a GOTO to the VERIFIED cart page instead.
-    assert "evidence_tracker.navigate('https://www.saucedemo.com/cart.html')" in final_code
+    # B-055: without an observed trail the per-step scope is the whole scrape, so
+    # the "shopping cart link" now resolves to the real link on inventory.html
+    # (a click) instead of the old fabricated GOTO navigate to the cart URL.
+    assert (
+        "evidence_tracker.click('a[href=\"https://www.saucedemo.com/cart.html\"]', label='shopping cart link'"
+    ) in final_code
 
 
 def test_orchestrator_passes_credential_to_scraper() -> None:

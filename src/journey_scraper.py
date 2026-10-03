@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import random
 import re
@@ -52,6 +53,8 @@ from src.placeholder_resolver import PlaceholderResolver
 from src.placeholder_scorers import PlaceholderScorer
 from src.scraper import PageScraper
 from src.url_guard import UrlGuard
+
+logger = logging.getLogger(__name__)
 
 # Legacy alias — old test files import _substitute_templates
 _substitute_templates = substitute_templates  # noqa: PLW1508
@@ -148,11 +151,21 @@ class JourneyScraper:
         """
         cleaned = [s for s in steps if s and s.action in ("navigate", "click", "fill", "wait", "scrape", "capture")]
         if not cleaned:
+            # B-055: an empty step list yields no pages and no trail. Never drop
+            # that in silence - the caller then resolves against the start page.
+            logger.warning(
+                "B-055: journey has no scrapeable steps [%s] - no pages or trail captured",
+                ", ".join(f"{s.action}:{s.description}" for s in steps) or "empty",
+            )
             return {}
 
         # Use the credential_profile passed at call-site, or fall back to instance-level
         effective_profile = credential_profile or self._credential_profile
         return await asyncio.to_thread(self._scrape_journey_via_subprocess, cleaned, effective_profile)
+
+    #: B-055: a journey scrape that returns nothing silently loses the journey's
+    #: pages and its trail. Two attempts, then a loud warning.
+    _SCRAPE_ATTEMPTS = 2
 
     def _scrape_journey_via_subprocess(
         self,
@@ -191,29 +204,72 @@ class JourneyScraper:
         checkout_root = str(Path(__file__).resolve().parent.parent)
         child_env = dict(os.environ)
         child_env["PYTHONPATH"] = checkout_root + os.pathsep + child_env.get("PYTHONPATH", "")
-        completed = subprocess.run(
-            [sys.executable, subprocess_path, "--journey-scrape"],
-            input=json.dumps(payload),
-            capture_output=True,
-            text=True,
-            check=False,
-            env=child_env,
-            timeout=max(120, int(self.timeout_ms / 1000) * max(1, len(steps))),
-        )
+        timeout_s = max(120, int(self.timeout_ms / 1000) * max(1, len(steps)))
+        step_summary = ", ".join(f"{s.action}:{s.description}" for s in steps)
 
-        # Surface subprocess stderr for real-time debugging
-        if completed.stderr:
-            print(completed.stderr, flush=True, file=sys.stderr)
+        # B-055: this subprocess is the ONLY source of the journey's pages and
+        # its observed trail. A silent empty return leaves every later step to
+        # resolve against the story's start page (the wrong-page bug). Retry
+        # once, and warn loudly when the data is still lost.
+        data: dict[str, Any] | None = None
+        for attempt in range(1, self._SCRAPE_ATTEMPTS + 1):
+            completed = subprocess.run(
+                [sys.executable, subprocess_path, "--journey-scrape"],
+                input=json.dumps(payload),
+                capture_output=True,
+                text=True,
+                check=False,
+                env=child_env,
+                timeout=timeout_s,
+            )
 
-        if completed.returncode != 0:
-            return {}
+            # Surface subprocess stderr for real-time debugging
+            if completed.stderr:
+                print(completed.stderr, flush=True, file=sys.stderr)
 
-        try:
-            data = json.loads(completed.stdout or "{}")
-        except json.JSONDecodeError:
-            return {}
+            if completed.returncode != 0:
+                logger.warning(
+                    "B-055: journey scrape subprocess exited %s on attempt %d/%d [%s]; stderr tail: %s",
+                    completed.returncode,
+                    attempt,
+                    self._SCRAPE_ATTEMPTS,
+                    step_summary,
+                    (completed.stderr or "")[-500:],
+                )
+                continue
 
-        if not isinstance(data, dict):
+            try:
+                parsed = json.loads(completed.stdout or "{}")
+            except json.JSONDecodeError:
+                logger.warning(
+                    "B-055: journey scrape stdout was not JSON on attempt %d/%d [%s]; stdout head: %s",
+                    attempt,
+                    self._SCRAPE_ATTEMPTS,
+                    step_summary,
+                    (completed.stdout or "")[:500],
+                )
+                continue
+
+            if not isinstance(parsed, dict):
+                logger.warning(
+                    "B-055: journey scrape payload was %s, not a mapping, on attempt %d/%d [%s]",
+                    type(parsed).__name__,
+                    attempt,
+                    self._SCRAPE_ATTEMPTS,
+                    step_summary,
+                )
+                continue
+
+            data = parsed
+            break
+
+        if data is None:
+            logger.warning(
+                "B-055: journey scrape produced no pages or trail after %d attempt(s) [%s] - "
+                "steps on this journey may resolve against the wrong page",
+                self._SCRAPE_ATTEMPTS,
+                step_summary,
+            )
             return {}
 
         output: dict[str, list[dict[str, Any]]] = {}
@@ -461,7 +517,15 @@ class JourneyScraper:
                     if last_error is not None:
                         observed.error = str(last_error)
                         if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
-                            print(f"[journey_scraper] Step {step_index} ({step.description}): {last_error}", flush=True)
+                            # B-055: stderr, never stdout - the child embeds its
+                            # scraped pages and trail as JSON on stdout, and a
+                            # debug line there made json.loads fail, silently
+                            # dropping the journey.
+                            print(
+                                f"[journey_scraper] Step {step_index} ({step.description}): {last_error}",
+                                flush=True,
+                                file=sys.stderr,
+                            )
 
                 # AI-052: hand the typed trail out. The subprocess entry passes a
                 # list it embeds in the stdout JSON; direct callers get a

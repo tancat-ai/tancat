@@ -876,6 +876,27 @@ class ElementMatcher:
             return True
         return _is_fillable(element)
 
+    @staticmethod
+    def _is_off_current_page(
+        element: dict[str, str],
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+    ) -> bool:
+        """B-055: True when a weak (LLM) pick is not on the expected page.
+
+        Only meaningful when the expected page is one of the searched pages -
+        a trail-verified step scopes ``pages_data`` to that one page, so this is
+        inert there. A weak fallback must never move the journey to another
+        page; a page move needs evidence (an href or the trail).
+        """
+        if not current_url or current_url not in pages_data:
+            return False
+        selector = str(element.get("selector", "")).strip()
+        if not selector:
+            return False
+        current_selectors = {str(e.get("selector", "")).strip() for e in pages_data.get(current_url, [])}
+        return selector not in current_selectors
+
     async def find_best_element_for_current_page(
         self,
         action: str,
@@ -1143,6 +1164,14 @@ class ElementMatcher:
                 return candidate
 
         if matched_element is not None:
+            if self._is_off_current_page(matched_element, current_url, pages_data):
+                logger.warning(
+                    "[RESOLVE] '%s' | B-055 rejected LLM fallback '%s' - it lives on another page, not '%s'",
+                    description,
+                    str(matched_element.get("selector", "")).strip(),
+                    current_url,
+                )
+                return None
             element_text = str(matched_element.get("text", "")).strip()
             logger.warning(
                 "LLM-selected element '%s' fails text validation for '%s' — "
@@ -1315,6 +1344,24 @@ class ElementMatcher:
             else:
                 threshold = max(1, top_score - 2)
                 shortlisted = [e for _s, e in ranked if _s >= threshold][:4]
+
+            # B-055: an element that appears on several scraped pages is ONE
+            # candidate, not N. Without this dedupe the same selector can fill
+            # the shortlist several times, pushing a confidently top-ranked,
+            # deterministic match into the semantic-ranker LLM call - where a
+            # missing/failing generator returns None and turns a correct pick
+            # into an unresolved skip.
+            if len(shortlisted) > 1:
+                seen: set[str] = set()
+                deduped: list[dict[str, Any]] = []
+                for cand in shortlisted:
+                    key = str(cand.get("selector", "")).strip()
+                    if key and key in seen:
+                        continue
+                    if key:
+                        seen.add(key)
+                    deduped.append(cand)
+                shortlisted = deduped
 
             if len(shortlisted) <= 1:
                 if shortlisted:

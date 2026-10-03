@@ -151,3 +151,42 @@ def test_pipeline_run_result_carries_observed_trails() -> None:
     assert result.observed_trails == {}
     result2 = PipelineRunResult(observed_trails={"t": _make_trail()})
     assert result2.observed_trails["t"].pages_visited == ["http://a", "http://b"]
+
+
+def test_b055_trailless_step_records_matched_page() -> None:
+    """B-055: with no trail, the emitted expected_page is the matched page.
+
+    The journey starts (by default) on the index page, but the only match for
+    "amount" lives on the transfer page. The emitted expected_page must record
+    the transfer page, not the stale start page.
+    """
+    orch = _orch()
+    token = "{{FILL:amount:100}}"
+    raw = f"    {token}"
+    placeholder = PlaceholderUse(token=token, action="FILL", description="amount:100", line_number=2, raw_line=raw)
+    step = TestStep(line_number=2, raw_line=raw, placeholders=[placeholder])
+    journey = TestJourney(test_name="test_b055", start_line=1, end_line=2, steps=[step])
+    skeleton = "def test_b055() -> None:\n" + raw + "\n"
+    scraped: dict[str, list[dict[str, Any]]] = {
+        "http://index.html": [_el("#user-name", "username", tag="input", role="textbox")],
+        "http://transfer.html": [_el("#amount", "amount", tag="input", role="textbox")],
+    }
+
+    code = asyncio.run(
+        orch._replace_placeholders_sequentially(
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=["http://index.html"],
+            scraped_data=scraped,
+            observed_trails={"test_b055": ObservedTrail(steps=[])},
+        )
+    )
+    assert "#amount" in code
+    assert "expected_page='http://transfer.html'" in code
+
+
+def _el(selector: str, text: str, **extra: Any) -> dict[str, Any]:
+    element: dict[str, Any] = {"selector": selector, "text": text, "tag": "button", "role": "button"}
+    element.update(extra)
+    return element
