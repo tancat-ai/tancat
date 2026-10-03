@@ -14,7 +14,10 @@
             "input[name=\"user-name\"]"
           ],
           "generated_locator": "#user-name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -24,7 +27,10 @@
             "input[name=\"password\"]"
           ],
           "generated_locator": "#password",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -34,7 +40,10 @@
             "[data-test=\"submit\"]"
           ],
           "generated_locator": "#login-button",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -44,7 +53,10 @@
             "[data-test=\"inventory-item-description\"]"
           ],
           "generated_locator": "[data-test=\"inventory-item-description\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -54,7 +66,10 @@
             "input[name=\"user-name\"]"
           ],
           "generated_locator": "#user-name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -64,7 +79,10 @@
             "input[name=\"password\"]"
           ],
           "generated_locator": "#password",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -74,7 +92,10 @@
             "[data-test=\"submit\"]"
           ],
           "generated_locator": "#login-button",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -82,7 +103,10 @@
           "expected_locator": "#add-to-cart-sauce-labs-backpack",
           "tolerance_selectors": [],
           "generated_locator": "#add-to-cart-sauce-labs-backpack",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -92,7 +116,10 @@
             ".shopping_cart_link[data-test=\"shopping-cart-link\"]"
           ],
           "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -102,7 +129,10 @@
             "a.shopping_cart_link"
           ],
           "generated_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -110,17 +140,24 @@
           "expected_locator": "#cart_contents_container",
           "tolerance_selectors": [],
           "generated_locator": "#cart_contents_container",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
           "description": "backpack item in cart",
-          "expected_locator": "[data-test=\"cart-list-container\"]",
+          "expected_locator": "[data-test=\"remove-sauce-labs-backpack\"]",
           "tolerance_selectors": [
-            ".cart_list[data-test=\"cart-list\"]"
+            "[data-test=\"inventory-item-name\"]:has-text(\"Sauce Labs Backpack\")",
+            "#remove-sauce-labs-backpack"
           ],
           "generated_locator": ".cart_list[data-test=\"cart-list\"]",
-          "matched": true
+          "matched": false,
+          "criterion_index": 3,
+          "verification": "unverified",
+          "verification_reason": "no verification verdict was emitted for this criterion"
         },
         {
           "action": "CLICK",
@@ -128,7 +165,10 @@
           "expected_locator": "#checkout",
           "tolerance_selectors": [],
           "generated_locator": "#checkout",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -136,7 +176,10 @@
           "expected_locator": "#checkout_info_container",
           "tolerance_selectors": [],
           "generated_locator": "#checkout_info_container",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -146,7 +189,10 @@
             "input[name=\"firstName\"]"
           ],
           "generated_locator": "#first-name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -156,7 +202,10 @@
             "input[name=\"lastName\"]"
           ],
           "generated_locator": "#last-name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -166,7 +215,10 @@
             "input[name=\"postalCode\"]"
           ],
           "generated_locator": "#postal-code",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -174,7 +226,10 @@
           "expected_locator": "#continue",
           "tolerance_selectors": [],
           "generated_locator": "#continue",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -182,21 +237,31 @@
           "expected_locator": "#finish",
           "tolerance_selectors": [],
           "generated_locator": "#finish",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
           "description": "Thank You page",
-          "expected_locator": "[data-test=\"title\"]",
-          "tolerance_selectors": [],
-          "generated_locator": "[data-test=\"title\"]",
-          "matched": true
+          "expected_locator": "[data-test=\"complete-header\"]",
+          "tolerance_selectors": [
+            "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-complete.html\")"
+          ],
+          "generated_locator": ".cart_list[data-test=\"cart-list\"]",
+          "matched": false,
+          "criterion_index": 5,
+          "verification": "unverified",
+          "verification_reason": "no verification verdict was emitted for this criterion"
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-002",
@@ -212,7 +277,10 @@
             "expect(page).to_have_url"
           ],
           "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -223,7 +291,10 @@
             "a[href=\"/products\"]"
           ],
           "generated_locator": "a[href=\"/products\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -234,7 +305,10 @@
             "h2"
           ],
           "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -244,7 +318,10 @@
             ".add-to-cart.btn[data-product-id=\"1\"]"
           ],
           "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -256,7 +333,10 @@
             "[data-product-id]"
           ],
           "generated_locator": "[data-product-id=\"11\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -267,7 +347,10 @@
             "a[href=\"/view_cart\"]"
           ],
           "generated_locator": "a[href=\"/view_cart\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -278,7 +361,10 @@
             "#cart_item"
           ],
           "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -289,13 +375,18 @@
             ".cart_table"
           ],
           "generated_locator": ".cart_total_price",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-003",
@@ -311,7 +402,10 @@
             "h5"
           ],
           "generated_locator": "h5:has-text(\"Student Registration Form\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -319,7 +413,10 @@
           "expected_locator": "#firstName",
           "tolerance_selectors": [],
           "generated_locator": "#firstName",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -327,7 +424,10 @@
           "expected_locator": "#lastName",
           "tolerance_selectors": [],
           "generated_locator": "#lastName",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -335,7 +435,10 @@
           "expected_locator": "#userEmail",
           "tolerance_selectors": [],
           "generated_locator": "#userEmail",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -343,7 +446,10 @@
           "expected_locator": "#gender-radio-1",
           "tolerance_selectors": [],
           "generated_locator": "#gender-radio-1",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -351,7 +457,10 @@
           "expected_locator": "#gender-radio-1",
           "tolerance_selectors": [],
           "generated_locator": "#gender-radio-1",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -359,7 +468,10 @@
           "expected_locator": "#submit",
           "tolerance_selectors": [],
           "generated_locator": "#submit",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -369,13 +481,18 @@
             "table"
           ],
           "generated_locator": ".group-header",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-004",
@@ -392,7 +509,10 @@
             "h1.heading"
           ],
           "generated_locator": ".heading",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -400,7 +520,10 @@
           "expected_locator": "a[href=\"/javascript_alerts\"]",
           "tolerance_selectors": [],
           "generated_locator": "a[href=\"/javascript_alerts\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -410,7 +533,10 @@
             "h3"
           ],
           "generated_locator": "h3:has-text(\"JavaScript Alerts\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -418,7 +544,10 @@
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
           "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -426,7 +555,10 @@
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
           "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -434,7 +566,10 @@
           "expected_locator": "button:has-text(\"Click for JS Alert\")",
           "tolerance_selectors": [],
           "generated_locator": "button:has-text(\"Click for JS Alert\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -444,13 +579,18 @@
             "h4:has-text(\"Result\")"
           ],
           "generated_locator": "h4:has-text(\"Result:\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-005",
@@ -466,7 +606,10 @@
             "input[type='email']"
           ],
           "generated_locator": "#email",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -476,7 +619,10 @@
             "input[type='password']"
           ],
           "generated_locator": "#password",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -484,7 +630,10 @@
           "expected_locator": "#firstName",
           "tolerance_selectors": [],
           "generated_locator": "#firstName",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -492,7 +641,10 @@
           "expected_locator": "#lastName",
           "tolerance_selectors": [],
           "generated_locator": "#lastName",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -500,7 +652,10 @@
           "expected_locator": "#postcode",
           "tolerance_selectors": [],
           "generated_locator": "#postcode",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -508,7 +663,10 @@
           "expected_locator": "#accountNext",
           "tolerance_selectors": [],
           "generated_locator": "#accountNext",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -518,7 +676,10 @@
             "h4:has-text('Car Insurance')"
           ],
           "generated_locator": "#productCar",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -526,7 +687,10 @@
           "expected_locator": "#startDate",
           "tolerance_selectors": [],
           "generated_locator": "#startDate",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -534,7 +698,10 @@
           "expected_locator": "#scheme",
           "tolerance_selectors": [],
           "generated_locator": "#scheme",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -542,7 +709,10 @@
           "expected_locator": "#mainLicenseNumber",
           "tolerance_selectors": [],
           "generated_locator": "#mainLicenseNumber",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -550,7 +720,10 @@
           "expected_locator": "#mainLicenseYears",
           "tolerance_selectors": [],
           "generated_locator": "#mainLicenseYears",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -558,7 +731,10 @@
           "expected_locator": "#mainOccupation",
           "tolerance_selectors": [],
           "generated_locator": "#mainOccupation",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -566,7 +742,10 @@
           "expected_locator": "#vehicleReg",
           "tolerance_selectors": [],
           "generated_locator": "#vehicleReg",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -574,7 +753,10 @@
           "expected_locator": "#lookupRegBtn",
           "tolerance_selectors": [],
           "generated_locator": "#lookupRegBtn",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -584,7 +766,10 @@
             "input[name='usageType']"
           ],
           "generated_locator": "input[name='usageType'][value='SDP']",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -592,7 +777,10 @@
           "expected_locator": "#ncdYears",
           "tolerance_selectors": [],
           "generated_locator": "#ncdYears",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -600,7 +788,10 @@
           "expected_locator": "#overnightLocation",
           "tolerance_selectors": [],
           "generated_locator": "#overnightLocation",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -608,7 +799,10 @@
           "expected_locator": "#addVehicleBtn",
           "tolerance_selectors": [],
           "generated_locator": "#addVehicleBtn",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -619,7 +813,10 @@
             ".price-display"
           ],
           "generated_locator": "#premiumPrice",
-          "matched": true
+          "matched": true,
+          "criterion_index": 7,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -629,7 +826,10 @@
             "#excessValue"
           ],
           "generated_locator": "#excessInfo",
-          "matched": true
+          "matched": true,
+          "criterion_index": 7,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -639,7 +839,10 @@
             "h4:has-text('Pay in Full')"
           ],
           "generated_locator": "#paymentFull",
-          "matched": true
+          "matched": true,
+          "criterion_index": 8,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -647,7 +850,10 @@
           "expected_locator": "#quoteSubmit",
           "tolerance_selectors": [],
           "generated_locator": "#quoteSubmit",
-          "matched": true
+          "matched": true,
+          "criterion_index": 8,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -657,7 +863,10 @@
             "h2:has-text('Quote Generated')"
           ],
           "generated_locator": "#quoteSuccess",
-          "matched": true
+          "matched": true,
+          "criterion_index": 9,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -665,13 +874,18 @@
           "expected_locator": "#quoteRef",
           "tolerance_selectors": [],
           "generated_locator": "#quoteRef",
-          "matched": true
+          "matched": true,
+          "criterion_index": 9,
+          "verification": "golden",
+          "verification_reason": ""
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-006",
@@ -687,7 +901,10 @@
             "expect(page).to_have_url"
           ],
           "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -698,7 +915,10 @@
             "[data-product-id]"
           ],
           "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -710,7 +930,10 @@
             "#cartModal"
           ],
           "generated_locator": "p.text-center",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -720,7 +943,10 @@
             ".cart"
           ],
           "generated_locator": "a[href=\"/cart.html\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -731,7 +957,10 @@
             "#cart_items"
           ],
           "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -743,7 +972,10 @@
             "#cart_items"
           ],
           "generated_locator": "p.cart_price",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -754,7 +986,10 @@
             ".check_out"
           ],
           "generated_locator": "a[href=\"/checkout.html\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -765,7 +1000,10 @@
             "#checkout-form"
           ],
           "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -775,7 +1013,10 @@
             "input[name=\"name\"]"
           ],
           "generated_locator": "#name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -785,7 +1026,10 @@
             "input[type=\"email\"]"
           ],
           "generated_locator": "#email",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -795,7 +1039,10 @@
             "input[name=\"address\"]"
           ],
           "generated_locator": "#address",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -805,7 +1052,10 @@
             "input[name=\"city\"]"
           ],
           "generated_locator": "#city",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -815,7 +1065,10 @@
             "input[name=\"zip\"]"
           ],
           "generated_locator": "#zip",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -824,8 +1077,11 @@
           "tolerance_selectors": [
             "input[name=\"card_number\"]"
           ],
-          "generated_locator": "#cvv",
-          "matched": false
+          "generated_locator": "#card-name",
+          "matched": false,
+          "criterion_index": 6,
+          "verification": "unverified",
+          "verification_reason": "no verification verdict was emitted for this criterion"
         },
         {
           "action": "CLICK",
@@ -835,7 +1091,10 @@
             "button[type=\"submit\"]"
           ],
           "generated_locator": "#place-order",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -846,13 +1105,18 @@
             "h1"
           ],
           "generated_locator": "#place-order",
-          "matched": false
+          "matched": false,
+          "criterion_index": 7,
+          "verification": "unverified",
+          "verification_reason": "no verification verdict was emitted for this criterion"
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-007",
@@ -869,7 +1133,10 @@
             "#user-name"
           ],
           "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
-          "matched": true
+          "matched": true,
+          "criterion_index": 0,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -879,7 +1146,10 @@
             "input[name=\"username\"]"
           ],
           "generated_locator": "#user-name",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -889,7 +1159,10 @@
             "input[name=\"password\"]"
           ],
           "generated_locator": "#password",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -899,7 +1172,10 @@
             "button[type=\"submit\"]"
           ],
           "generated_locator": "#login-button",
-          "matched": true
+          "matched": true,
+          "criterion_index": 1,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -910,7 +1186,10 @@
             "#accounts-list"
           ],
           "generated_locator": "p.account_balance",
-          "matched": true
+          "matched": true,
+          "criterion_index": 2,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -921,7 +1200,10 @@
             "a[href=\"transfer.html\"]"
           ],
           "generated_locator": "#transfer-link",
-          "matched": true
+          "matched": true,
+          "criterion_index": 3,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -931,7 +1213,10 @@
             "input[name=\"amount\"]"
           ],
           "generated_locator": "#amount",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -941,7 +1226,10 @@
             "button[type=\"submit\"]"
           ],
           "generated_locator": "#transfer-submit",
-          "matched": true
+          "matched": true,
+          "criterion_index": 4,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -952,7 +1240,10 @@
             "h1"
           ],
           "generated_locator": "#transfer-success-title",
-          "matched": true
+          "matched": true,
+          "criterion_index": 5,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -963,7 +1254,10 @@
             "a[href=\"payments.html\"]"
           ],
           "generated_locator": "a[href=\"/payments.html\"]",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "FILL",
@@ -973,7 +1267,10 @@
             "input[name=\"payment_amount\"]"
           ],
           "generated_locator": "#payment-amount",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "CLICK",
@@ -983,7 +1280,10 @@
             "button[type=\"submit\"]"
           ],
           "generated_locator": "#pay-bill",
-          "matched": true
+          "matched": true,
+          "criterion_index": 6,
+          "verification": "golden",
+          "verification_reason": ""
         },
         {
           "action": "ASSERT",
@@ -994,13 +1294,18 @@
             "h1"
           ],
           "generated_locator": "#payment-success-title",
-          "matched": true
+          "matched": true,
+          "criterion_index": 7,
+          "verification": "golden",
+          "verification_reason": ""
         }
       ],
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-008",
@@ -1011,7 +1316,9 @@
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     },
     {
       "story_id": "eval-010",
@@ -1022,7 +1329,9 @@
       "tests_executed": 0,
       "tests_passed": 0,
       "tests_false_positive": 0,
-      "generation_duration_s": 0.0
+      "generation_duration_s": 0.0,
+      "tests_timed_out": false,
+      "test_resolution_counts": []
     }
   ]
 }
