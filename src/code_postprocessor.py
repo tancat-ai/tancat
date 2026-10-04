@@ -7,9 +7,11 @@ Orchestrates normalization by delegating to specialised sub-modules:
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
+from .assertion_alignment import alignment_decision
 from .code_normalizer import (
     convert_standalone_placeholders,
     dedent_indented_test_blocks,
@@ -23,6 +25,8 @@ from .code_normalizer import (
     strip_pages_needed_block,
 )
 from .llm_reasoning_filter import strip_llm_reasoning
+
+logger = logging.getLogger(__name__)
 
 
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
@@ -981,6 +985,16 @@ def _replace_token_in_line_impl(
         # but we only have (selector, label) from the resolver. Fall back to assert_visible.
         if et_method in ("assert_text", "assert_text_contains"):
             et_method = "assert_visible"
+        # t-0354: deterministic specificity guard. The prompt asks for this
+        # shape; here, where the criterion's openness cue survives into the
+        # description, the emitter enforces it. OPEN + instance-pinned check ->
+        # honest skip (it would false-negative on a different legitimate
+        # outcome). FIXED + generic check -> logged, never guessed.
+        _decision = alignment_decision(description, et_method, assert_value)
+        if _decision.action == "refuse":
+            return f'{indent}pytest.skip("specificity guard: {_decision.reason}")'
+        if _decision.action == "flag":
+            logger.warning("specificity guard: %s", _decision.reason)
         # B-069 part b: attribute assertions (href/alt/meta) must pass the
         # attribute name + predicate to assert_attribute — extract the name
         # from assertion_type (e.g., "toHaveAttribute:href") or fall back to

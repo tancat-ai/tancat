@@ -226,3 +226,50 @@ def test_to_log_entry_is_json_serialisable() -> None:
     import json
 
     json.dumps(entry)
+
+
+# ---------------------------------------------------------------------------
+# B-101: the step/expected-result SPECIFICITY rule (prompt half)
+# ---------------------------------------------------------------------------
+
+
+def test_skeleton_prompt_carries_the_specificity_rule() -> None:
+    """The skeleton prompt must tell the model how to pick ASSERT specificity."""
+    rendered = _render(build_skeleton_prompt(user_story=STORY, conditions=CONDITIONS, known_urls_block=URLS))
+    text = rendered.text
+    assert "SPECIFICITY" in text
+    # Both directions of the rule must be present: a FIXED criterion checks its
+    # named target, an OPEN one checks a property of the outcome.
+    assert "FIXED criterion" in text
+    assert "OPEN criterion" in text
+    assert "PROPERTY of the outcome" in text
+
+
+def test_single_condition_prompt_carries_the_specificity_rule() -> None:
+    rendered = _render(
+        build_single_condition_prompt(
+            user_story=STORY,
+            conditions_block=CONDITIONS,
+            known_urls_block=URLS,
+            target_condition_ref="TC-01",
+            target_condition_text="Verify the added item appears",
+            target_condition_expected="the item is visible",
+        )
+    )
+    assert "SPECIFICITY" in rendered.text
+    assert "OPEN criterion" in rendered.text
+
+
+def test_utils_prompts_carry_the_specificity_rule() -> None:
+    """The legacy/utils prompt surfaces must not drift from the rule."""
+    single = build_single_condition_skeleton_prompt(
+        user_story=STORY,
+        known_urls_block=URLS,
+        ordered_conditions=CONDITIONS.splitlines(),
+        target_condition_ref="TC-01",
+        target_condition_text="Verify the added item appears",
+        target_condition_expected="the item is visible",
+    )
+    assert "SPECIFICITY" in single
+    template = get_skeleton_prompt_template()
+    assert "SPECIFICITY" in template

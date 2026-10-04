@@ -40,6 +40,13 @@ PLACEHOLDER DESCRIPTION RULES:
 5. For SELECT: use the field label, e.g. {{SELECT:State:NCR}}, {{SELECT:Country:United States}}
 6. For ASSERT: describe what to see, e.g. {{ASSERT:Products}}, {{ASSERT:Thank You}}, {{ASSERT:1}}
 7. For GOTO: use a keyword, e.g. {{GOTO:home}}, {{GOTO:cart}}, {{GOTO:checkout}}
+8. SPECIFICITY — an ASSERT must match what the criterion fixes:
+   - FIXED criterion (it names a target: a title, a price, 'Blue Top', 'Male'):
+     the ASSERT must check THAT target — not a generic container and not a
+     vaguer element.
+   - OPEN criterion ('an item', 'a radio option', 'e.g. X', 'at least one',
+     'any'): the ASSERT must check a PROPERTY of the outcome ('at least one
+     item row', 'a gender radio is checked'), never one named instance.
 
 PREREQUISITE STEPS:
 Only include login/authentication steps if the site requires them.
@@ -110,7 +117,10 @@ The <test_plan> provides STRUCTURE (test names, step count, ordering) ONLY.
 The <acceptance_criteria> provides the EXACT WORDS for placeholder descriptions.
 For CLICK descriptions, copy the exact product names and button labels from the criteria.
 For FILL descriptions, copy the exact field labels from the criteria.
-For ASSERT descriptions, copy what the criteria says should be visible.
+For ASSERT descriptions, copy what the criteria says should be visible, and
+match its specificity: if the criterion names a target, assert that target; if
+it leaves the choice open ("an item", "a radio option", "e.g.", "at least one",
+"any"), assert a property of the outcome rather than one named instance.
 DO NOT summarize, shorten, or rewrite the criteria words.
 </instruction>"""
         )

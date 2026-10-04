@@ -219,6 +219,14 @@ NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
 10. For 'link resolves / does not 404 / correct URL / live URL' checks, do NOT
     click the link — use {{ASSERT:<link text> link resolves}} (it checks the
     link's href without navigating; new-tab links cannot be click-verified).
+11. SPECIFICITY — an ASSERT must match what the criterion fixes:
+    - FIXED criterion (it names a target: a title, a price, 'Blue Top', 'Male'):
+      the ASSERT must check THAT target — not a generic container and not a
+      vaguer element. Naming the target then asserting a page-wide wrapper
+      checks nothing.
+    - OPEN criterion ('an item', 'a radio option', 'e.g. X', 'at least one',
+      'any'): the ASSERT must check a PROPERTY of the outcome ('at least one
+      item row', 'a gender radio is checked'), never one named instance.
 
 === PREREQUISITE STEPS ===
 Each test must be self-contained. If a test depends on earlier criteria
@@ -328,6 +336,13 @@ Expected: {target_condition_expected}
    check. A condition that names them must keep them.
 9. One condition that says 'X inside Y' or 'Y contains X' is ONE assert — do
    NOT split it into two separate visible-element checks.
+10. SPECIFICITY — an ASSERT must match what the criterion fixes:
+    - FIXED criterion (it names a target: a title, a price, 'Blue Top', 'Male'):
+      the ASSERT must check THAT target — not a generic container and not a
+      vaguer element.
+    - OPEN criterion ('an item', 'a radio option', 'e.g. X', 'at least one',
+      'any'): the ASSERT must check a PROPERTY of the outcome ('at least one
+      item row', 'a gender radio is checked'), never one named instance.
 
 === JOURNEY STRUCTURE (MANDATORY) ===
 1. Every step must appear on the page it belongs to. Follow the story order:
