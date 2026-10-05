@@ -77,6 +77,10 @@ class PipelineRunResult:
     pages_visited: list[str] = field(default_factory=list)
     observed_trails: dict[str, ObservedTrail] = field(default_factory=dict)
     pom_mode: bool = False
+    # Journey/scrape diagnostics collected during the run (failed steps, a
+    # journey error message, auth redirects). Surfaced by the UI so a partial
+    # or failed scrape is visible instead of looking like a clean run.
+    pipeline_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 def rag_enabled_by_config() -> bool:
@@ -678,6 +682,7 @@ class TestOrchestrator:
             pages_visited=pages_visited,
             observed_trails=observed_trails,
             pom_mode=self._pom_mode,
+            pipeline_diagnostics=dict(self._pipeline_diagnostics),
         )
         return final_code
 

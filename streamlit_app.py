@@ -618,6 +618,11 @@ def generator_page() -> None:
     if st.button("Run Intelligent Pipeline", type="primary", disabled=run_disabled):
         st.session_state.pipeline_error = ""
         st.session_state.run_tests_error = ""
+        # F2: clear last run's scraper feedback so a failure later in this run
+        # cannot leave a stale warning/error on screen.
+        st.session_state.pipeline_scraper_warnings = []
+        st.session_state.pipeline_scraper_errors = []
+        st.session_state.pipeline_journey_captured_count = 0
         raw_requirements_for_run = str(
             st.session_state.get("requirements_text") or st.session_state.get("Requirements") or raw_requirements or ""
         )
@@ -706,6 +711,9 @@ def generator_page() -> None:
                         "pipeline_local_report_path",
                         "pipeline_jira_report_path",
                         "pipeline_html_report_path",
+                        "pipeline_scraper_warnings",
+                        "pipeline_scraper_errors",
+                        "pipeline_journey_captured_count",
                     }
                     for key in _PIPELINE_KEYS:
                         value = session.get(key)

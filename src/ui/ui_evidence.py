@@ -50,6 +50,42 @@ def _short_package_name(raw: str) -> str:
     return raw[:30] + ("…" if len(raw) > 30 else "")
 
 
+def _evidence_dir_for_root(root: str | Path | None) -> Path | None:
+    """Return the ``evidence/`` dir for a package root or test path, if present.
+
+    Accepts a package directory, a test file inside one, or an evidence dir
+    itself. Returns ``None`` when the path is empty or has no evidence yet.
+    """
+    if not root:
+        return None
+    path = Path(str(root))
+    if path.is_file():
+        path = path.parent
+    if path.name == "evidence":
+        return path if path.exists() else None
+    candidate = path / "evidence"
+    return candidate if candidate.exists() else None
+
+
+def _pick_current_evidence_dir(
+    evidence_dirs: list[Path],
+    preferred_roots: list[str | Path | None],
+) -> Path | None:
+    """Return the evidence dir for the package the user is working on.
+
+    Prefers the loaded/generated package (in order), then the most recently
+    written evidence dir. Never falls back to the alphabetically-first
+    (oldest) package, which is what ``evidence_dirs[0]`` used to give.
+    """
+    for root in preferred_roots:
+        candidate = _evidence_dir_for_root(root)
+        if candidate is not None:
+            return candidate
+    if not evidence_dirs:
+        return None
+    return max(evidence_dirs, key=lambda d: d.stat().st_mtime)
+
+
 class EvidenceViewer:
     """Renders the redesigned evidence viewer section."""
 
@@ -69,22 +105,33 @@ class EvidenceViewer:
             )
             return
 
+        # Both tabs must follow the package the user is actually working on.
+        # ``evidence_dirs[0]`` is the alphabetically-first (oldest) package, so
+        # the heatmap and Gantt used to show stale data from an unrelated run.
+        current_dir = _pick_current_evidence_dir(
+            evidence_dirs,
+            [
+                st.session_state.get("loaded_package_root"),
+                st.session_state.get("pipeline_saved_path"),
+            ],
+        )
+
         top_tabs = st.tabs(["📊 Dashboard & Search", "🌡️ Coverage Heatmap", "⏱️ Gantt Timeline"])
 
         with top_tabs[0]:
-            self._render_dashboard(evidence_dirs)
+            self._render_dashboard(current_dir)
             st.divider()
             self._render_advanced_search(sidecars)
 
         with top_tabs[1]:
-            self._render_coverage_heatmap(evidence_dirs)
+            self._render_coverage_heatmap(current_dir)
 
         with top_tabs[2]:
-            self._render_gantt_timeline(evidence_dirs)
+            self._render_gantt_timeline(current_dir)
 
     # ── Level 1: Dashboard ───────────────────────────────────────────────
 
-    def _render_dashboard(self, evidence_dirs: list[Path]) -> None:
+    def _render_dashboard(self, current_evidence_dir: Path | None) -> None:
         from src.run_history_chart import build_run_history_chart
         from src.run_result_persistence import get_flaky_tests, load_all_run_results
 
@@ -142,7 +189,7 @@ class EvidenceViewer:
         with col_coverage:
             st.markdown("**Coverage** — story confidence at a glance")
             stories = build_story_confidence(
-                evidence_dirs[0] if evidence_dirs else Path("."),
+                current_evidence_dir if current_evidence_dir else Path("."),
                 test_plan_state=self._get_test_plan_state(),
             )
             if stories:
@@ -432,15 +479,20 @@ class EvidenceViewer:
 
     # ── Coverage Heatmap tab ─────────────────────────────────────────────
 
-    def _render_coverage_heatmap(self, evidence_dirs: list[Path]) -> None:
+    def _render_coverage_heatmap(self, evidence_dir: Path | None) -> None:
         st.subheader("🌡️ Coverage Heatmap")
         st.caption(
             "Each story's confidence level is based on how many of its acceptance criteria "
             "have been tested and whether those tests passed."
         )
 
+        if evidence_dir is None:
+            st.info("No heatmap data yet. Run generated tests to produce `.evidence.json` sidecars.")
+            return
+        st.caption(f"Showing package: `{_short_package_name(evidence_dir.parent.name)}`")
+
         stories = build_story_confidence(
-            evidence_dirs[0] if evidence_dirs else Path("."),
+            evidence_dir,
             test_plan_state=self._get_test_plan_state(),
         )
         if not stories:
@@ -479,18 +531,19 @@ class EvidenceViewer:
 
     # ── Gantt Timeline tab ───────────────────────────────────────────────
 
-    def _render_gantt_timeline(self, evidence_dirs: list[Path]) -> None:
+    def _render_gantt_timeline(self, evidence_dir: Path | None) -> None:
         st.subheader("⏱️ Gantt Timeline")
         st.caption(
             "Each bar represents one test condition. Width = duration. "
             "Hover for details. Use Grouping to re-arrange by condition type, sprint, or source."
         )
 
-        if not evidence_dirs:
+        if evidence_dir is None:
             st.info("No evidence data yet.")
             return
+        st.caption(f"Showing package: `{_short_package_name(evidence_dir.parent.name)}`")
 
-        entries = load_gantt_entries(evidence_dirs[0])
+        entries = load_gantt_entries(evidence_dir)
         if not entries:
             st.info("No Gantt data yet. Run generated tests to produce `.evidence.json` sidecars.")
             return

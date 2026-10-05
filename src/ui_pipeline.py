@@ -172,6 +172,52 @@ def test_table_rows(table: TestTable) -> list[dict[str, object]]:
 
 
 # ---------------------------------------------------------------------------
+# Scrape feedback (F2) — make scrape failures/warnings visible in the UI
+# ---------------------------------------------------------------------------
+
+
+def scrape_feedback(last_result: Any) -> tuple[list[str], list[str], int]:
+    """Derive ``(warnings, errors, captured_pages)`` from a pipeline result.
+
+    The UI has always rendered ``pipeline_scraper_warnings``,
+    ``pipeline_scraper_errors`` and ``pipeline_journey_captured_count``, but
+    nothing populated them, so a failed or partial scrape looked clean. This
+    turns the orchestrator's per-URL scrape errors and journey diagnostics into
+    the three values the UI expects.
+
+    Args:
+        last_result: ``PipelineRunResult`` (or any object with the same
+            attributes). ``None`` yields empty feedback.
+    """
+    if last_result is None:
+        return [], [], 0
+
+    scraped_errors = getattr(last_result, "scraped_errors", None) or {}
+    errors = [f"{url}: {message}" for url, message in scraped_errors.items() if message]
+
+    diagnostics = getattr(last_result, "pipeline_diagnostics", None) or {}
+    warnings: list[str] = []
+    journey_error = diagnostics.get("journey_error")
+    if journey_error:
+        warnings.append(str(journey_error))
+    failed_steps = diagnostics.get("journey_failed_steps") or []
+    if failed_steps:
+        warnings.append("journey step(s) failed: " + ", ".join(str(step) for step in failed_steps))
+    redirects = diagnostics.get("auth_redirects") or []
+    if redirects:
+        warnings.append("redirected to another page: " + ", ".join(str(url) for url in redirects))
+
+    pages_visited = getattr(last_result, "pages_visited", None) or []
+    if pages_visited:
+        captured = len(pages_visited)
+    else:
+        scraped_pages = getattr(last_result, "scraped_pages", None) or {}
+        captured = sum(1 for elements in scraped_pages.values() if elements)
+
+    return warnings, errors, captured
+
+
+# ---------------------------------------------------------------------------
 # Pipeline execution (async)
 # ---------------------------------------------------------------------------
 
@@ -247,6 +293,14 @@ async def run_pipeline(
         reviewed_conditions=conditions,
     )
     last_result = orchestrator.last_result
+
+    # F2: surface scrape failures/warnings. The three keys are copied back to
+    # st.session_state (see _PIPELINE_KEYS in streamlit_app.py); before this
+    # they were only ever read, so a failed scrape looked clean.
+    scrape_warnings, scrape_errors, captured_pages = scrape_feedback(last_result)
+    session.set("pipeline_scraper_warnings", scrape_warnings)
+    session.set("pipeline_scraper_errors", scrape_errors)
+    session.set("pipeline_journey_captured_count", captured_pages)
 
     # Store results in session state
     session.set("pipeline_results", final_code)

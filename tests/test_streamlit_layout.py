@@ -5,13 +5,15 @@ expected widgets without crashing. All backend calls (LLM, scraper, etc.)
 are mocked so tests run without external dependencies.
 
 Sidebar layout verified:
-- Provider configuration (LLMProvider selectbox, Provider Base URL, Model)
-- Pages To Scrape section (Starting URL, Additional URLs)
-- Consent Handling selectbox
-- Test Mode selectbox
-- Execution Plan selectbox
-- Run Pipeline button
-- Baseline tests section (checkbox, Load baseline config, Clear baseline)
+- Provider configuration (LLM Provider selectbox, Provider Base URL, Model)
+- Page Object Model toggle and the "Check My LLM" probe
+- License & Usage and Settings (OCR backend, workspace, RAG/flow memory)
+- Saved Packages and Pages To Scrape (Starting URL, Additional URLs)
+- Advanced (Consent Handling selectbox, Load baseline)
+Main content verified:
+- Logo header, Requirements input, Authentication expander
+- Run Intelligent Pipeline button
+- No result tabs before the pipeline runs
 """
 
 from __future__ import annotations

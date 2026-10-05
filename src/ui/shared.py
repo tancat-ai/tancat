@@ -32,6 +32,9 @@ PIPELINE_KEYS: set[str] = {
     "pipeline_local_report_path",
     "pipeline_jira_report_path",
     "pipeline_html_report_path",
+    "pipeline_scraper_warnings",
+    "pipeline_scraper_errors",
+    "pipeline_journey_captured_count",
 }
 
 

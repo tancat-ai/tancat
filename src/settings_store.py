@@ -43,7 +43,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_SETTINGS: dict[str, Any] = {
     "pom_mode": False,
     "consent_mode": "auto-dismiss",
-    "provider": "",
+    # The documented default is the local OpenAI-compatible server (llama.cpp on
+    # :8080). Keep this in step with README/AGENTS; an empty value made the
+    # sidebar selectbox fall back to whatever was listed first (Ollama).
+    "provider": "openai-local",
     "model_name": "",
     "workspace": "default",
     "ocr_backend": "pymupdf",

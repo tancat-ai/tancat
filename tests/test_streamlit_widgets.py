@@ -4,12 +4,13 @@ These tests use Streamlit's AppTest framework to verify widget constraints,
 default values, and input validation logic. All backend calls are mocked.
 
 Widget behaviors verified:
-- Provider selector defaults to Ollama
+- Provider selector defaults to the documented local provider (openai-local)
 - Model input adapts based on available models
 - URL and story inputs accept/validate text
 - Consent mode options are correct
 - Requirements input mode (paste vs upload)
-- Baseline config loads expected preset values
+- Baseline config button is present
+- The Run button stays locked until the Living Test Plan is signed off
 """
 
 from __future__ import annotations
@@ -43,6 +44,10 @@ def app_test() -> AppTest:
     with (
         patch("streamlit_app.LLMClient", new=mock_llm_class),
         patch.object(Path, "exists", fake_exists),
+        # Isolate the encrypted settings store so the test sees documented
+        # defaults, not whatever this machine has saved (and never writes to it).
+        patch("src.settings_store._load_settings", return_value={}),
+        patch("src.settings_store._save_settings"),
     ):
         at = AppTest.from_file(APP_PATH, default_timeout=15)
         at.run(timeout=15)
@@ -63,11 +68,18 @@ def at(request: pytest.FixtureRequest) -> AppTest:  # noqa: ARG001
 class TestProviderSelector:
     """Verify LLM provider selector defaults and options."""
 
-    def test_provider_selector_defaults_to_ollama(self, at: AppTest) -> None:
-        """LLM Provider selectbox should default to Ollama."""
+    def test_provider_selector_defaults_to_documented_local_provider(self, at: AppTest) -> None:
+        """LLM Provider should default to the documented local provider (F3).
+
+        README/AGENTS name llama.cpp on :8080 (``openai-local``) as the
+        default. A blank default used to fall back to the first option
+        (Ollama), which pointed new users at the wrong port.
+        """
         provider_box = at.sidebar.selectbox[0]
         default = provider_box.value  # type: ignore[attr-defined]
-        assert "ollama" in str(default).lower(), f"Expected default provider containing 'Ollama', got '{default}'"
+        assert str(default) == "openai-local", f"Expected default provider 'openai-local', got '{default}'"
+        base_url = at.sidebar.text_input[0]
+        assert "8080" in str(base_url.value), f"Expected the :8080 base URL default, got '{base_url.value}'"
 
     def test_provider_selector_has_all_options(self, at: AppTest) -> None:
         """Provider selectbox should list all four provider options."""
@@ -199,14 +211,45 @@ class TestBaselineConfig:
             f"Expected baseline button in sidebar. Got: {labels}"
         )
 
-    def test_baseline_clear_button_exists(self, at: AppTest) -> None:
-        """A 'Clear baseline' button should be in the sidebar."""
+    def test_baseline_section_has_a_button(self, at: AppTest) -> None:
+        """The baseline section should offer at least one action button."""
         buttons = at.sidebar.button
         labels = [b.label for b in buttons]
-        # There may be a clear button alongside the load button
-        # At minimum we verify the baseline section has buttons
         baseline_buttons = [label for label in labels if "baseline" in label.lower()]
         assert len(baseline_buttons) >= 1, f"Expected at least one baseline button. Got: {labels}"
+
+    def test_run_button_locked_until_plan_signed_off(self) -> None:
+        """Current-UI guard: typing requirements disables Run until sign-off.
+
+        Uses a fresh AppTest (the module fixture is shared and must not be
+        mutated by an interaction test).
+        """
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.list_models.return_value = []
+        mock_llm_class = MagicMock()
+        mock_llm_class.return_value = mock_llm_instance
+        mock_llm_class.set_session_provider = MagicMock()
+
+        def fake_exists(self: Path) -> bool:
+            return False
+
+        with (
+            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch.object(Path, "exists", fake_exists),
+            patch("src.settings_store._load_settings", return_value={}),
+            patch("src.settings_store._save_settings"),
+        ):
+            at = AppTest.from_file(APP_PATH, default_timeout=15)
+            at.run(timeout=15)
+            requirements = [t for t in at.text_area if t.label == "Requirements"][0]
+            requirements.set_value(
+                "## User Story\nAs a user I want to log in\n\n## Acceptance Criteria\n1. Login works\n"
+            )
+            at.run(timeout=15)
+
+            run_buttons = [b for b in at.button if b.label == "Run Intelligent Pipeline"]
+            assert run_buttons, "Run Intelligent Pipeline button missing"
+            assert run_buttons[0].disabled, "Run must stay disabled until the Living Test Plan is signed off"
 
 
 # ---------------------------------------------------------------------------
