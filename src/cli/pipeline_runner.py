@@ -649,7 +649,10 @@ def generate_reports(session: Any) -> None:
         session.pipeline_html_report_path = bundle.html_report_path
 
         print(green(f"  Local report:  {bundle.local_report_path}"))
-        print(green(f"  Jira report:   {bundle.jira_report_path}"))
+        if bundle.jira_blocked:
+            print(yellow(f"  Jira report:   not produced - {bundle.jira_blocked}"))
+        else:
+            print(green(f"  Jira report:   {bundle.jira_report_path}"))
         print(green(f"  HTML report:   {bundle.html_report_path}"))
     except Exception as exc:
         print(red(f"  Report generation failed: {exc}"))

@@ -389,7 +389,7 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
             [
                 "        <div class='test-item'>",
                 "            <div class='test-header'>",
-                f"                <span class='test-name'>{idx}. {test_name} {status_icon}</span>",
+                f"                <span class='test-name'>{idx}. {escape_html(test_name)} {status_icon}</span>",
                 f"                <span class='status-badge {status_class}'>{status.upper()}</span>",
                 "            </div>",
                 "            <div class='test-body'>",
@@ -407,7 +407,7 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         if error_message:
             lines.extend(
                 [
-                    f"                <div class='detail-row'><span class='detail-label'>Error:</span><span style='color:#d32f2f;'>{error_message[:200]}</span></div>",
+                    f"                <div class='detail-row'><span class='detail-label'>Error:</span><span style='color:#d32f2f;'>{escape_html(error_message[:200])}</span></div>",
                 ]
             )
 
@@ -426,19 +426,19 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
             lines.append('                    <div style="margin-top:10px;">')
             if page_url:
                 lines.append(
-                    f"                    <div class='detail-row'><span class='detail-label'>Page URL:</span><span>{page_url}</span></div>"
+                    f"                    <div class='detail-row'><span class='detail-label'>Page URL:</span><span>{escape_html(page_url)}</span></div>"
                 )
             if page_title:
                 lines.append(
-                    f"                    <div class='detail-row'><span class='detail-label'>Page Title:</span><span>{page_title}</span></div>"
+                    f"                    <div class='detail-row'><span class='detail-label'>Page Title:</span><span>{escape_html(page_title)}</span></div>"
                 )
             if failure_note:
                 fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
                 lines.append(
-                    f"                    <div class='detail-row'><span class='detail-label'>Failure Note:</span><span style='white-space:pre-wrap;'>{fn}</span></div>"
+                    f"                    <div class='detail-row'><span class='detail-label'>Failure Note:</span><span style='white-space:pre-wrap;'>{escape_html(fn)}</span></div>"
                 )
             if suggested_locators:
-                loc_html = ", ".join(f"<code>{s}</code>" for s in suggested_locators[:5])
+                loc_html = ", ".join(f"<code>{escape_html(s)}</code>" for s in suggested_locators[:5])
                 lines.append(
                     f"                    <div class='detail-row'><span class='detail-label'>Suggested Alternatives:</span><span>{loc_html}</span></div>"
                 )
@@ -449,7 +449,7 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                     roles[role] = roles.get(role, 0) + 1
                 summary = ", ".join(f"[{r}]x{c}" for r, c in sorted(roles.items()))
                 lines.append(
-                    f"                    <div class='detail-row'><span class='detail-label'>Available Elements:</span><span>{summary}</span></div>"
+                    f"                    <div class='detail-row'><span class='detail-label'>Available Elements:</span><span>{escape_html(summary)}</span></div>"
                 )
             if screenshot_paths:
                 lines.append("                    <strong>Failure Screenshots:</strong>")
@@ -466,7 +466,7 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                 description = screenshot.get("description", "No description")
                 img_html, _ = embed_screenshot(str(path))
                 screenshot_html_parts.append(
-                    f'<div style="margin-bottom:10px;">{img_html}<p style="margin:5px 0 0;padding:5px 0;color:#666;font-size:12px;">{description}</p></div>'
+                    f'<div style="margin-bottom:10px;">{img_html}<p style="margin:5px 0 0;padding:5px 0;color:#666;font-size:12px;">{escape_html(description)}</p></div>'
                 )
 
             if screenshot_html_parts:
