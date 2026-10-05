@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>TanCat launch - Lemon Squeezy checklist (owner)</title>
+<style>
+  :root { --ink:#111827; --muted:#4b5563; --line:#e5e7eb; --bg:#f9fafb; --card:#ffffff; --accent:#b45309; --good:#047857; --warn:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:36px 20px 72px; background:var(--bg); color:var(--ink);
+         font:16px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing:-0.3px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  h2 { font-size: 19px; margin: 34px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; margin: 18px 0 4px; }
+  p, li { color: var(--ink); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .box { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 14px 0; }
+  .warn { border-color: #fca5a5; background: #fef2f2; }
+  .good { border-color: #a7f3d0; background: #ecfdf5; }
+  .note { border-color: #fcd34d; background: #fffbeb; }
+  code, pre { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+  code { background:#f3f4f6; padding:1px 5px; border-radius:4px; }
+  pre { background:#111827; color:#e5e7eb; padding:12px 14px; border-radius:8px; overflow-x:auto; }
+  pre code { background:none; color:inherit; padding:0; }
+  a { color: var(--accent); }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: step; }
+  ol.steps > li { counter-increment: step; margin: 0 0 6px; padding: 14px 16px 14px 58px; position: relative;
+                  background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+  ol.steps > li::before { content: counter(step); position: absolute; left: 14px; top: 14px; width: 28px; height: 28px;
+                  border-radius: 50%; background: #111827; color: #fff; font-weight: 700; font-size: 14px;
+                  display: flex; align-items: center; justify-content: center; }
+  ul.check { list-style: none; padding-left: 0; }
+  ul.check li { margin: 4px 0; }
+  input[type=checkbox] { margin-right: 8px; transform: translateY(1px); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px 6px; vertical-align: top; }
+  .pill { display:inline-block; font-size:12px; font-weight:600; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; }
+  .footer { margin-top: 40px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+  @media print { body { background:#fff; } ol.steps > li, .box { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>TanCat launch &mdash; Lemon Squeezy checklist</h1>
+<p class="sub">Step 3 of the solo launch plan. Free + Pro only. Pro is <strong>$99/month or $990/year</strong>, per deployment, self-serve. Lemon Squeezy is the merchant of record. Owner: Cat Tan Operations.</p>
+
+<div class="box note">
+  <strong>Standing alone:</strong> every link below opens in a browser. Work top to bottom. Nothing here needs a terminal except steps 4 and 5, and those are copy-paste.
+</div>
+
+<h2>Before you start</h2>
+<div class="box">
+  <ul class="check">
+    <li><input type="checkbox"/> Lemon Squeezy account created: <a href="https://app.lemonsqueezy.com/" target="_blank" rel="noopener noreferrer">app.lemonsqueezy.com</a> (docs: <a href="https://docs.lemonsqueezy.com/" target="_blank" rel="noopener noreferrer">docs.lemonsqueezy.com</a>).</li>
+    <li><input type="checkbox"/> Business, tax and payout details to hand (Lemon Squeezy pays out and handles sales tax).</li>
+    <li><input type="checkbox"/> The signing key PEM is in your password manager/offline media &mdash; <em>not</em> on a shared machine. See <a href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" target="_blank" rel="noopener noreferrer">key operations</a>.</li>
+    <li><input type="checkbox"/> You can edit <a href="https://github.com/tancat-ai/tancat/blob/main/landing/index.html" target="_blank" rel="noopener noreferrer"><code>landing/index.html</code></a> (one line, step 6).</li>
+  </ul>
+</div>
+
+<h2>The checklist</h2>
+<ol class="steps">
+
+  <li>
+    <strong>Create the store.</strong>
+    In the dashboard, create a store for TanCat. Pick the store name, country (United Kingdom), currency (GBP or USD &mdash; pick the one you will price in) and a store subdomain such as <code>tancat</code>. The subdomain is what your checkout links sit on.
+    <div class="muted">Where: dashboard &rarr; store switcher &rarr; New store.</div>
+  </li>
+
+  <li>
+    <strong>Activate the store.</strong>
+    Lemon Squeezy will not let you sell until the store is activated. Complete the activation flow: confirm your email, add your identity/business details, tax details and payout account. Approval is usually quick but can take a day &mdash; do this before you want to go live.
+    <div class="muted">Where: dashboard &rarr; Activate store. The banner at the top tells you what is still missing.</div>
+  </li>
+
+  <li>
+    <strong>Create the Pro product.</strong>
+    Add a product named <code>TanCat Pro Deployment</code>. Product type: <strong>subscription</strong>. Add two variants:
+    <table>
+      <tr><th>Variant</th><th>Price</th><th>Billing</th></tr>
+      <tr><td>Pro &mdash; monthly</td><td>$99</td><td>Every month</td></tr>
+      <tr><td>Pro &mdash; yearly</td><td>$990</td><td>Every year</td></tr>
+    </table>
+    Put the same feature list on both (unlimited runs and evidence exports, POM mode, multi-site suites, CI/CD Action, support and updates while licensed, one deployment &mdash; whole team, no per-seat charge).
+    <div class="muted">Where: dashboard &rarr; Products &rarr; New product.</div>
+  </li>
+
+  <li>
+    <strong>Turn on licence keys for the product.</strong>
+    In the product's settings, enable licence keys and set a prefix (for example <code>TANCAT</code>) and activation limit. Also set the wording the buyer sees on the order-confirmation/thank-you email so they know a key is coming.
+    <div class="box note">
+      <strong>Important &mdash; our key is a signed token, not an LS key.</strong>
+      The product verifies an <strong>offline ed25519 signed token</strong> issued by your signing key (see <a href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" target="_blank" rel="noopener noreferrer">key ops</a>). Lemon Squeezy's own licence keys are a different format. Keep fulfilment offline: sign the buyer's token in step 5 and deliver it. <em>Confirm in the dashboard which fulfilment option your store offers</em> (downloadable fulfilment file vs. licence-key field) before you process a real order.
+    </div>
+  </li>
+
+  <li>
+    <strong>Generate a batch of signed keys (offline).</strong>
+    On the machine that holds the signing key, for each order/buyer generate a token with the real signing tool. One buyer, one deployment id:
+    <pre><code>python scripts/license_gen.py sign \
+  --private-key ~/.tancat/license-signing/license_signing_private_key.pem \
+  --deployment-id "ACME-PROD" --tier pro --days 365 \
+  --out issued/ACME-PROD.key</code></pre>
+    For a batch, keep a <code>buyers.csv</code> with <code>deployment_id,email</code> and loop:
+    <pre><code>mkdir -p issued
+while IFS=, read -r deployment_id email; do
+  python scripts/license_gen.py sign \
+    --private-key ~/.tancat/license-signing/license_signing_private_key.pem \
+    --deployment-id "$deployment_id" --tier pro --days 365 \
+    --out "issued/$deployment_id.key"
+done &lt; buyers.csv</code></pre>
+    <div class="muted">Tool: <a href="https://github.com/tancat-ai/tancat/blob/main/scripts/license_gen.py" target="_blank" rel="noopener noreferrer"><code>scripts/license_gen.py</code></a>. Keep a ledger: order id &rarr; deployment id &rarr; expiry date.</div>
+  </li>
+
+  <li>
+    <strong>Upload / deliver the batch.</strong>
+    Put the signed tokens where the buyer can get theirs after payment. Use whichever of these your store supports, in order of preference:
+    <ul>
+      <li>attach the signed token as the order's fulfilment/download file; or</li>
+      <li>send it from <a href="mailto:hello@tancat.dev">hello@tancat.dev</a> when the order email arrives (manual, safe, no server).</li>
+    </ul>
+    <div class="box warn">
+      <strong>Do not</strong> build a signing-key server or a webhook that holds the private key. The key-ops doc calls that the highest-value secret in the business. Fulfilment stays offline/batch.
+    </div>
+  </li>
+
+  <li>
+    <strong>Paste the checkout URL into the landing page.</strong>
+    Copy the checkout URL for the Pro product from the dashboard (the product's <em>Share &rarr; Checkout link</em>, or the Buy link). Open <a href="https://github.com/tancat-ai/tancat/blob/main/landing/index.html" target="_blank" rel="noopener noreferrer"><code>landing/index.html</code></a> and set it in the one clearly-marked config block near the top:
+    <pre><code>window.TANCAT_CONFIG = {
+  checkoutUrl: "https://tancat.lemonsqueezy.com/buy/&lt;your-id&gt;"
+};</code></pre>
+    Save, deploy the site, and click the pricing card's <strong>Buy Pro</strong> button. It must open your Lemon Squeezy checkout in a new tab. While <code>checkoutUrl</code> is empty the button safely falls back to the contact section.
+  </li>
+
+  <li>
+    <strong>Test mode &mdash; buy it end to end.</strong>
+    Turn on <strong>Test mode</strong> in the dashboard (top of the page) and place a test purchase with the card <code>4242 4242 4242 4242</code>, any future expiry, any CVC. Confirm all four:
+    <ul class="check">
+      <li><input type="checkbox"/> the test order is created and the confirmation email sends;</li>
+      <li><input type="checkbox"/> you can produce the buyer's signed token and deliver it;</li>
+      <li><input type="checkbox"/> the buyer's install shows <code>License valid &mdash; pro tier (deployment ...)</code> (follow <a href="https://github.com/tancat-ai/tancat/blob/main/landing/install.html" target="_blank" rel="noopener noreferrer">install &amp; activate</a>);</li>
+      <li><input type="checkbox"/> cancel/refund the test order cleanly.</li>
+    </ul>
+    <div class="muted">A test-mode purchase does not move real money. Delete the test order when done.</div>
+  </li>
+
+  <li>
+    <strong>Go live.</strong>
+    Turn <strong>Test mode</strong> off. Then walk the page as a stranger:
+    <ul class="check">
+      <li><input type="checkbox"/> <a href="https://tancat.dev/#pricing" target="_blank" rel="noopener noreferrer">tancat.dev/#pricing</a> shows $99/month and $990/year, and <strong>Buy Pro</strong> opens the live checkout.</li>
+      <li><input type="checkbox"/> Buy Pro with a real card; confirm the charge, the confirmation email, and that you can issue the key.</li>
+      <li><input type="checkbox"/> The install page name-checks all three activation routes: <code>AITEST_LICENSE_KEY</code>, <code>AITEST_LICENSE_FILE</code>, and <code>~/.ai-test-gen/license.key</code>.</li>
+      <li><input type="checkbox"/> Terms and privacy name Lemon Squeezy as merchant of record.</li>
+      <li><input type="checkbox"/> Refund the real test purchase.</li>
+    </ul>
+  </li>
+
+  <li>
+    <strong>After launch.</strong>
+    <ul class="check">
+      <li><input type="checkbox"/> Keep the signing key backed up (two media, two locations) and test recovery as the key-ops doc says.</li>
+      <li><input type="checkbox"/> Keep the ledger and diarise renewals; issue a fresh token before each expiry.</li>
+      <li><input type="checkbox"/> Verify the loop any time with <code>pytest tests/test_license_loop_e2e.py</code>.</li>
+    </ul>
+  </li>
+</ol>
+
+<h2>Definition of done</h2>
+<div class="box good">
+  A stranger can click <strong>Buy Pro</strong> on the landing page, pay by card, receive a signed key, follow the install page, and see <code>License valid &mdash; pro tier (deployment ...)</code> in the product &mdash; with no server holding the signing key at any point.
+</div>
+
+<div class="footer">
+  Related: <a href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" target="_blank" rel="noopener noreferrer">Key operations</a> &middot;
+  <a href="https://github.com/tancat-ai/tancat/blob/main/scripts/license_gen.py" target="_blank" rel="noopener noreferrer">license_gen.py</a> &middot;
+  <a href="https://github.com/tancat-ai/tancat/blob/main/landing/install.html" target="_blank" rel="noopener noreferrer">Install &amp; activate</a> &middot;
+  <a href="https://github.com/tancat-ai/tancat/blob/main/docs/plans/RESEARCH_SAAS_AND_LAUNCH.md" target="_blank" rel="noopener noreferrer">Launch research</a>
+</div>
+
+</div>
+</body>
+</html>
