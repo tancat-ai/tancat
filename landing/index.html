@@ -24,17 +24,7 @@
 <meta name="twitter:title" content="TanCat - the AI test generator that keeps your data on your own machines"/>
 <meta name="twitter:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, on your own machines. With a local or self-hosted model, nothing leaves your network."/>
 <meta name="twitter:image" content="https://tancat.dev/og-card.png"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script>
-  tailwind.config = {
-    darkMode: 'class',
-    theme: { extend: {
-      colors: { midnight:'#070b10',darkslate:'#0d131b',cardbg:'#111823',amberGlow:'#f59e0b',amberBright:'#fbbf24',cyberBlue:'#38bdf8',neonViolet:'#818cf8',accentPink:'#f43f5e' },
-      fontFamily: { sans:['Inter','system-ui','-apple-system','BlinkMacSystemFont','Segoe UI','Roboto','sans-serif'],mono:['JetBrains Mono','Fira Code','SFMono-Regular','Menlo','Monaco','Consolas','monospace'],serif:['Newsreader','Playfair Display','Georgia','serif'] },
-      boxShadow: { 'amber-glow':'0 0 45px -10px rgba(245,158,11,0.35)','cyber-glow':'0 0 50px -12px rgba(56,189,248,0.25)','neon-glow':'0 0 35px -8px rgba(129,140,248,0.3)' }
-    } }
-  }
-</script>
+<link rel="stylesheet" href="tailwind.css">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400;1,6..72,600&display=swap');
   body{background-color:#070b10;color:#e2e8f0;overflow-x:hidden}
@@ -56,7 +46,7 @@
 </a>
 <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
   <a class="hover:text-amber-400 transition-colors" href="#how-it-works">How It Works</a>
-  <a class="hover:text-amber-400 transition-colors" href="#pipeline">Interactive Pipeline</a>
+  <a class="hover:text-amber-400 transition-colors" href="#pipeline">Pipeline</a>
   <a class="hover:text-amber-400 transition-colors" href="#regulated">Regulated Defense</a>
   <a class="flex items-center gap-1.5 hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Egress Audit: LLM + Target Only</a>
   <a class="hover:text-amber-400 transition-colors" href="#pricing">Pricing</a>
@@ -211,7 +201,7 @@
     <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-amber-400/90">ENV: TANCAT_LLM_URL=http://127.0.0.1:8080/v1</div>
   </div>
   <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-cyberBlue/40 transition-all group flex flex-col justify-between">
-    <div><div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#128737;</div><h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Bounded Egress (Verified in CI)</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Runtime outbound calls strictly limited to your local/self-hosted LLM endpoint and your target application. Verified by static code inspection in CI via <code class="text-cyberBlue font-mono text-[11px]">python scripts/audit_egress.py</code> (AST call-site static inspection) wired into smoke tests and CI.</p></div>
+    <div><div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#128737;</div><h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Bounded Egress (Verified in CI)</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Runtime outbound calls are strictly limited to your configured LLM endpoint and your target application. Point it at a local or self-hosted LLM and nothing leaves your network; cloud OpenAI and OpenRouter are supported too. Verified by static code inspection in CI via <code class="text-cyberBlue font-mono text-[11px]">python scripts/audit_egress.py</code> (AST call-site static inspection) wired into smoke tests and CI.</p></div>
     <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Audit gate: run in CI</div>
   </div>
   <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-neonViolet/40 transition-all group flex flex-col justify-between">
