@@ -241,7 +241,10 @@ def export_junit_xml(
     )
 
     total = len(results)
-    failures = sum(1 for r in results if r.status == "failed")
+    # partial_pass is a test whose assertion was resolved by a fallback: it did
+    # not verify its condition. Counting it as a pass would be a false green in
+    # CI, so it is reported as a failure like any other non-verification.
+    failures = sum(1 for r in results if r.status in ("failed", "partial_pass"))
     errors = sum(1 for r in results if r.status == "error")
     skipped = sum(1 for r in results if r.status == "skipped")
     total_time = 0.0
@@ -276,8 +279,10 @@ def export_junit_xml(
             },
         )
 
-        if r.status in ("failed", "error"):
+        if r.status in ("failed", "error", "partial_pass"):
             failure_msg = _first_step_error(sidecar) if sidecar else ""
+            if not failure_msg and r.status == "partial_pass":
+                failure_msg = "Partial verification: the assertion was resolved by a fallback, not by its condition"
             SubElement(
                 testcase,
                 "failure",

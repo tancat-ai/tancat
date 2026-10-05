@@ -400,5 +400,38 @@ def test_generate_suite_heatmap_counts_navigation_arrivals_as_page_evidence(tmp_
     assert "Points" in html
 
 
+def test_html_report_escapes_dynamic_text() -> None:
+    """Page-derived text (errors, names, URLs) must be HTML-escaped.
+
+    Playwright errors contain literal angle brackets ("Element is not an
+    <input>"), so an unescaped report renders wrong or drops the diagnostic.
+    """
+    rows: list[dict[str, Any]] = [
+        {
+            "test_name": "test_<b>checkout</b>",
+            "status": "failed",
+            "duration": 1.0,
+            "screenshots": [],
+            "error_message": "Element is not an <input>, <textarea> or [contenteditable]",
+            "failure_note": "saw <textarea> at <form>",
+            "suggested_locators": ["#a > b"],
+            "available_elements": [],
+            "screenshot_paths": [],
+            "page_url": "https://example.com/x?a=<b>&c=1",
+            "page_title": "T <title>",
+        }
+    ]
+    html = generate_html_report(rows)
+    # The angle brackets must survive as text, not become tags.
+    assert "<input>" not in html
+    assert "&lt;input&gt;" in html
+    assert "<textarea>" not in html
+    assert "&lt;textarea&gt;" in html
+    assert "&lt;title&gt;" in html
+    # The raw page title must not survive as markup anywhere.
+    assert "T <title>" not in html
+    assert "test_&lt;b&gt;checkout&lt;/b&gt;" in html
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

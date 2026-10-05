@@ -20,6 +20,24 @@ from src.report_utils import generate_annotated_journey
 from src.storage import get_storage
 
 
+def _record_export(format_name: str, filename: str) -> None:
+    """Record one evidence export in the usage ledger (Phase 6e).
+
+    Streamlit re-runs the whole script on every interaction, and the export
+    strings are built eagerly just to populate the download buttons. Recording
+    inside the exporter would therefore count every re-run. Recording on the
+    button's ``on_click`` counts the actual download once - the event the
+    monthly export cap is meant to measure. Best-effort: a metering failure
+    must never break a download.
+    """
+    try:
+        from src.usage_meter import UsageMeter
+
+        UsageMeter().record_export(format_name, filename)
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 def _format_indexed_at(iso_string: str) -> str:
     """Format an ISO-8601 timestamp — always show date + time."""
     if not iso_string:
@@ -296,7 +314,13 @@ class EvidenceViewer:
                     condition_prefix=prefix_filter if prefix_filter != "All" else None,
                 )
                 st.download_button(
-                    "📥 CSV", data=csv_data, file_name="evidence_export.csv", mime="text/csv", use_container_width=True
+                    "📥 CSV",
+                    data=csv_data,
+                    file_name="evidence_export.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    on_click=_record_export,
+                    args=("csv", "evidence_export.csv"),
                 )
             with e2:
                 ndjson_data = export_ndjson(
@@ -312,6 +336,8 @@ class EvidenceViewer:
                     file_name="evidence_export.ndjson",
                     mime="application/x-ndjson",
                     use_container_width=True,
+                    on_click=_record_export,
+                    args=("ndjson", "evidence_export.ndjson"),
                 )
             with e3:
                 junit_data = export_junit_xml(
@@ -327,6 +353,8 @@ class EvidenceViewer:
                     file_name="evidence_junit.xml",
                     mime="application/xml",
                     use_container_width=True,
+                    on_click=_record_export,
+                    args=("junit", "evidence_junit.xml"),
                 )
 
         results = index.search(

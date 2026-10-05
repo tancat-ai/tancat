@@ -27,6 +27,9 @@ class PipelineReportBundle:
     # per-test verification verdict without scraping the markdown/HTML.
     local_json: str = ""
     local_json_path: str = ""
+    #: Set when the Jira export was refused by the tier gate (Phase 6e): the
+    #: free reports are still produced, but report_jira.md was not written.
+    jira_blocked: str = ""
 
 
 class PipelineReportService:
@@ -55,7 +58,20 @@ class PipelineReportService:
         coverage_analysis = build_coverage_analysis(criteria_lines, generated_code)
         coverage_rows = build_report_dicts(coverage_analysis, run_result, package_dir=package_dir)
         local_report = generate_local_report(coverage_rows)
-        jira_report = generate_jira_report(coverage_rows, project_key=jira_project_key)
+        # Phase 6e — Jira is the one metered, Pro-gated export. Gate it here so a
+        # free deployment that has spent its export cap is refused the Jira
+        # report, while the free reports (local markdown, HTML, JSON) are still
+        # produced. Everything else (HTML, CSV, NDJSON, JUnit) stays free.
+        from src.usage_meter import FreeTierLimitError, UsageMeter
+
+        jira_report = ""
+        jira_blocked = ""
+        try:
+            UsageMeter().assert_export_allowed("jira")
+        except FreeTierLimitError as exc:
+            jira_blocked = str(exc)
+        else:
+            jira_report = generate_jira_report(coverage_rows, project_key=jira_project_key)
         # Embed failed-step screenshots (base64) so the HTML report carries
         # diagnostic images without depending on the evidence folder. Passing
         # tests' full screenshot galleries stay on the Evidence & Reports page
@@ -83,11 +99,12 @@ class PipelineReportService:
             html_path = package_path / "report.html"
             json_path = package_path / "report_local.json"
             local_path.write_text(local_report, encoding="utf-8")
-            jira_path.write_text(jira_report, encoding="utf-8")
+            if jira_report:
+                jira_path.write_text(jira_report, encoding="utf-8")
+                jira_report_path = str(jira_path.absolute())
             html_path.write_text(html_report, encoding="utf-8")
             json_path.write_text(local_json, encoding="utf-8")
             local_report_path = str(local_path.absolute())
-            jira_report_path = str(jira_path.absolute())
             html_report_path = str(html_path.absolute())
             local_json_path = str(json_path.absolute())
 
@@ -101,4 +118,5 @@ class PipelineReportService:
             html_report_path=html_report_path,
             local_json=local_json,
             local_json_path=local_json_path,
+            jira_blocked=jira_blocked,
         )

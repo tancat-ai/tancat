@@ -399,3 +399,37 @@ class TestExportEdgeCases:
         suite = root.find("testsuite")
         assert suite is not None
         assert suite.get("errors") == "1"
+
+
+class TestExportJunitPartialPass:
+    def test_partial_pass_is_not_a_pass(self, tmp_path: Path) -> None:
+        """A fallback-resolved test must fail the JUnit report, not read green.
+
+        partial_pass means an assertion was resolved by a fallback, so the test
+        did not verify its condition. Emitting a plain <testcase> would be a
+        false green in CI.
+        """
+        db = SQLitePersistence(db_path=tmp_path / "partial.sqlite")
+        idx = EvidenceIndex(db=db)
+        base = tmp_path / "generated_tests"
+        base.mkdir()
+        _make_sidecar(
+            base,
+            "test_partial[chromium].evidence.json",
+            test_name="test_partial[chromium]",
+            condition_ref="TC09.01",
+            status="partial_pass",
+            test_package_dir="test_pkg_partial",
+        )
+        idx.build_or_refresh(base_dir=base)
+
+        root = ET.fromstring(export_junit_xml(idx))
+        suite = root.find("testsuite")
+        assert suite is not None
+        assert suite.get("failures") == "1"
+
+        testcase = suite.find("testcase")
+        assert testcase is not None
+        failure = testcase.find("failure")
+        assert failure is not None
+        assert "partial" in (failure.get("message") or "").lower()

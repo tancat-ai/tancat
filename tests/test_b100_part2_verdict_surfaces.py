@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from src.coverage_utils import RequirementCoverage
 from src.evidence_loader import (
     get_verification,
@@ -34,6 +36,7 @@ from src.report_formatters import (
     verification_line,
 )
 from src.report_utils import verification_line as report_utils_verification_line
+from tests.test_usage_meter import _paid_license
 
 _VERIFIED = {
     "test_name": "test_01_login",
@@ -257,7 +260,12 @@ class TestFormatters:
 
 
 class TestPipelineReportService:
-    def test_build_reports_writes_local_json_with_verdicts(self, tmp_path: Path) -> None:
+    def test_build_reports_writes_local_json_with_verdicts(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Jira is the gated format; licence the deployment so all three human
+        # surfaces are produced regardless of this machine's free-tier ledger.
+        _paid_license(monkeypatch, tier="self-serve")
         _write_sidecar(tmp_path, "test_01_login", _VERIFIED)
         service = PipelineReportService()
 
