@@ -27,6 +27,8 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from src.provider_config import provider_requires_openai_api_key
+
 if TYPE_CHECKING:
     from src.llm_client import LLMClient
 
@@ -134,9 +136,11 @@ class HealthCheckResult:
     base_url: str
     requested_model: str
     reachable: bool
-    key_ok: bool  # True when no key is required
+    key_ok: bool  # True unless a keyed call was rejected (or no key is present)
     model_available: bool  # True when no model list is available to check
     capability_ok: bool
+    key_required: bool = False  # True for keyed cloud providers
+    key_verified: bool = False  # True once a keyed call completed successfully
     elapsed_s: float = 0.0
     available_models: list[str] = field(default_factory=list)
     sample_output: str = ""
@@ -178,6 +182,19 @@ def build_client(
     return LLMClient(provider=provider, model=model, base_url=base_url, api_key=api_key, **kwargs)
 
 
+def _is_auth_error(exc: BaseException) -> bool:
+    """True when *exc* looks like an HTTP 401/403 auth rejection.
+
+    Checks the httpx response status first (the reliable signal), then falls
+    back to the message for providers that wrap the error.
+    """
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) in (401, 403):
+        return True
+    text = str(exc).lower()
+    return any(token in text for token in ("401", "403", "unauthorized", "invalid api key", "incorrect api key"))
+
+
 def _probe_capability(client: LLMCheckable, timeout: int) -> str:
     """One minimal synchronous completion; returns the (stripped) content.
 
@@ -217,11 +234,18 @@ def check_llm(
     if context_floor is None:
         context_floor = min_context_chars(provider)
 
+    key_required = provider_requires_openai_api_key(provider)
+
     result = HealthCheckResult(
         provider=provider,
         base_url=base_url,
         requested_model=model,
         reachable=False,
+        key_required=key_required,
+        # key_ok means "no evidence of a key problem" — it is cleared to False
+        # only by an auth-shaped rejection. key_verified records positive proof
+        # (a keyed call that completed), so the report never prints "ok" on a
+        # probe that never got as far as the key.
         key_ok=True,
         model_available=True,
         capability_ok=False,
@@ -231,20 +255,29 @@ def check_llm(
     # 1. Reachability — listing models is a cheap metadata call. A failure here
     #    means the endpoint is unreachable OR (for keyed cloud providers) the
     #    key is rejected. We can't always tell which from the list call alone,
-    #    so the capability probe below disambiguates.
+    #    so the capability probe below disambiguates (and an auth-shaped
+    #    exception flags a key rejection directly).
     try:
         models = client.list_models(timeout=list_timeout)
         result.available_models = list(models)
         result.reachable = True
+        if key_required:
+            # A successful keyed call proves the key is accepted.
+            result.key_ok = True
+            result.key_verified = True
     except Exception as exc:  # noqa: BLE001 — any provider error is an actionable report line
-        result.errors.append(f"List models failed: {exc}")
+        if key_required and _is_auth_error(exc):
+            result.key_ok = False
+            result.errors.append(f"List models rejected the API key: {exc}")
+        else:
+            result.errors.append(f"List models failed: {exc}")
         result.errors.append("  → Check the base URL, that the server is running, and (for cloud) the API key.")
         # Reachability is unknown from the list call alone; let the probe decide.
         result.reachable = False
 
-    # 2. Key validity — for keyed providers a *successful* list already proves
-    #    the key is accepted. For providers without keys, key_ok stays True.
-    result.key_ok = True  # no positive evidence of a key rejection yet
+    # 2. Key validity — set by the list call above: a successful keyed call
+    #    proves the key, an auth rejection clears it. A keyless provider needs
+    #    no key, so key_ok stays True.
 
     # 3. Model availability — only meaningful when we got a model list.
     if result.available_models and model:
@@ -261,12 +294,17 @@ def check_llm(
     try:
         sample = _probe_capability(client, probe_timeout)
         result.reachable = True  # a completed request proves the endpoint is up
+        if key_required:
+            result.key_ok = True  # a completed request proves the key is accepted
+            result.key_verified = True
         if sample:
             result.capability_ok = True
             result.sample_output = sample[:120]
             # The probe succeeded — any earlier list failure was transient or a
             # non-fatal listing quirk; the endpoint is demonstrably usable.
-            result.errors = [e for e in result.errors if "List models failed" not in e]
+            result.errors = [
+                e for e in result.errors if "List models failed" not in e and "rejected the API key" not in e
+            ]
         else:
             result.errors.append(
                 "Capability probe returned empty content — the model may be a thinking model "
@@ -275,8 +313,13 @@ def check_llm(
                 "a different model or config.)"
             )
     except Exception as exc:  # noqa: BLE001
-        # Distinguish connection failures (unreachable) from other errors.
-        if isinstance(exc, (ConnectionError, TimeoutError)) or "connect" in str(exc).lower():
+        # Distinguish connection failures (unreachable) from auth rejections
+        # and other errors.
+        if key_required and _is_auth_error(exc):
+            result.key_ok = False
+            result.reachable = True  # the endpoint answered — it just refused the key
+            result.errors.append(f"Capability probe rejected the API key: {exc}")
+        elif isinstance(exc, (ConnectionError, TimeoutError)) or "connect" in str(exc).lower():
             result.reachable = False
             result.errors.append(f"Capability probe could not connect to {base_url}: {exc}")
         else:
@@ -297,13 +340,21 @@ def check_llm(
 def render_report(result: HealthCheckResult) -> str:
     """Render a human-readable probe report (console / UI / CLI identical)."""
     mark = "✓" if result.ok else "✗"
+    if not result.key_ok:
+        key_line = "INVALID"
+    elif not result.key_required:
+        key_line = "ok (no key required)"
+    elif result.key_verified:
+        key_line = "ok"
+    else:
+        key_line = "unverified (no keyed call completed)"
     lines = [
         f"{mark} {result.headline}",
         f"    provider : {result.provider}",
         f"    base_url : {result.base_url or '(default)'}",
         f"    model    : {result.requested_model or '(provider default)'}",
         f"    reachable: {'yes' if result.reachable else 'no'}",
-        f"    key      : {'ok (no key required)' if result.key_ok else 'INVALID'}",
+        f"    key      : {key_line}",
         f"    model    : {'listed' if result.model_available else 'NOT in list'}"
         + (f"  ({len(result.available_models)} available)" if result.available_models else ""),
         f"    responds : {'yes' if result.capability_ok else 'no'}",

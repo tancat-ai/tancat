@@ -229,3 +229,71 @@ def test_build_client_returns_real_llmclient_type() -> None:
     client = build_client("lm-studio", base_url="http://localhost:1234", model="m")
     assert isinstance(client, LLMClient)
     assert client.provider_name == "lm-studio"
+
+
+# -- key validity for cloud / compatible providers (F5) ------------------------
+
+
+def test_keyless_provider_reports_no_key_required() -> None:
+    from src.llm_health import check_llm, render_report
+
+    client = FakeLLMClient(provider="lm-studio", model="m", models=["m"])
+    result = check_llm(client, context_floor=0)
+
+    assert result.key_required is False
+    assert result.key_ok is True
+    assert "ok (no key required)" in render_report(result)
+
+
+def test_keyed_provider_success_reports_key_ok() -> None:
+    from src.llm_health import check_llm, render_report
+
+    client = FakeLLMClient(provider="openrouter", model="m", models=["m"], probe_result="pong")
+    result = check_llm(client, context_floor=0)
+
+    assert result.key_required is True
+    assert result.key_ok is True
+    assert result.ok is True
+    report = render_report(result)
+    assert "key      : ok\n" in report
+    assert "no key required" not in report
+
+
+def test_keyed_provider_auth_error_reports_key_invalid() -> None:
+    """A rejected key must read as KEY INVALID, not as an unreachable endpoint."""
+    from src.llm_health import check_llm, render_report
+
+    auth_error = RuntimeError("HTTP 401 Unauthorized")
+    client = FakeLLMClient(
+        provider="openai-compatible",
+        model="m",
+        list_error=auth_error,
+        probe_error=auth_error,
+    )
+    result = check_llm(client, context_floor=0)
+
+    assert result.key_required is True
+    assert result.key_ok is False
+    assert result.ok is False
+    assert "KEY INVALID" in result.headline
+    report = render_report(result)
+    assert "key      : INVALID" in report
+    assert "ok (no key required)" not in report
+
+
+def test_keyed_provider_network_error_is_not_a_key_failure() -> None:
+    """A genuine connection failure must not be blamed on the key."""
+    from src.llm_health import check_llm, render_report
+
+    client = FakeLLMClient(
+        provider="openai-compatible",
+        model="m",
+        list_error=ConnectionError("connection refused"),
+        probe_error=ConnectionError("connection refused"),
+    )
+    result = check_llm(client, context_floor=0)
+
+    assert result.key_ok is True  # no evidence of a key problem
+    assert result.key_verified is False  # but no keyed call completed either
+    assert "UNREACHABLE" in result.headline
+    assert "unverified" in render_report(result)  # never claims "ok"
