@@ -15,18 +15,20 @@ Writes into ``landing/``:
 | ``og-card.png``        | 1200x630        | Open Graph / Twitter link preview    |
 | ``preview_desktop_1280.png`` | 1280 wide, full page | README / release preview        |
 | ``preview_mobile_390.png``   | 390 wide, full page  | README / release preview            |
+| ``tancat-pro-install-and-licence.pdf`` | A4   | Lemon Squeezy product deliverable    |
 
 The icons come from ``landing/logo_transparent.png``, flattened onto the page's
 ``--midnight`` background (#070b10) so they look identical on light and dark
 browser chrome.
 
-The OG card and both preview screenshots are **real captures of the page**
-rendered headless, not hand-made graphics -- so they can never advertise wording
-or pricing the page no longer shows. They need the Tailwind CDN, so this step
-needs network.
+The OG card, both preview screenshots and the install/licence PDF are **real
+renders of their source pages**, not hand-made graphics -- so they can never
+advertise wording the page or the document no longer shows. The landing renders
+need the Tailwind CDN, so this step needs network.
 
-Run this after ANY landing copy change: a stale share image or preview is the
-difference between a page that is fixed and a page that still looks retired.
+Run this after ANY landing or install-document copy change: a stale share image
+or PDF is the difference between a page that is fixed and one that still says
+the old thing.
 
 Idempotent: same inputs + same Pillow/Chromium versions produce byte-similar
 output. Nothing here ships to the product runtime.
@@ -43,12 +45,16 @@ from playwright.sync_api import sync_playwright
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, Page, Playwright
 
-__all__ = ["main", "build_icons", "build_og_card", "build_previews"]
+__all__ = ["main", "build_icons", "build_og_card", "build_previews", "build_install_pdf"]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LANDING = REPO_ROOT / "landing"
 LOGO = LANDING / "logo_transparent.png"
 INDEX = LANDING / "index.html"
+#: The one-page Pro install/licence document Lemon Squeezy ships. Its source is
+#: an HTML file so the PDF can be rebuilt instead of hand-edited.
+INSTALL_HTML = REPO_ROOT / "docs" / "implementation" / "tancat-pro-install-and-licence.html"
+INSTALL_PDF = LANDING / "tancat-pro-install-and-licence.pdf"
 
 # #070b10 -- keep in sync with `midnight` in landing/index.html.
 MIDNIGHT: tuple[int, int, int, int] = (7, 11, 16, 255)
@@ -137,6 +143,25 @@ def build_previews(index_path: Path = INDEX, out_dir: Path = LANDING) -> list[Pa
     return written
 
 
+def build_install_pdf(source_html: Path = INSTALL_HTML, out_path: Path = INSTALL_PDF) -> Path:
+    """Render the install/licence document HTML to the deliverable PDF.
+
+    The PDF is the one-page document Lemon Squeezy ships on the product. Its
+    source is HTML so a copy correction can be rebuilt into the PDF instead of
+    hand-editing it and leaving the two out of step.
+    """
+    playwright = sync_playwright().start()
+    browser = playwright.chromium.launch()
+    try:
+        page = browser.new_page()
+        page.goto(source_html.as_uri(), wait_until="load")
+        page.pdf(path=str(out_path), format="A4", print_background=True)
+    finally:
+        browser.close()
+        playwright.stop()
+    return out_path
+
+
 def main() -> int:
     """Regenerate every landing asset; print what was written."""
     for path in build_icons():
@@ -144,6 +169,7 @@ def main() -> int:
     print(f"wrote {build_og_card().relative_to(REPO_ROOT)}")
     for path in build_previews():
         print(f"wrote {path.relative_to(REPO_ROOT)}")
+    print(f"wrote {build_install_pdf().relative_to(REPO_ROOT)}")
     return 0
 
 

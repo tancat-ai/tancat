@@ -88,7 +88,7 @@ SITES: dict[str, SiteConfig] = {
             "understand what the product is, how it works, and how to buy or install it."
         ),
         conditions=(
-            "1. Navigate to the TanCat landing page and verify the headline 'The AI test generator where your data never leaves your deployment' is visible\n"
+            "1. Navigate to the TanCat landing page and verify the headline 'The AI test generator that keeps your data on your own machines' is visible\n"
             "2. Click the 'How It Works' link in the header navigation\n"
             "3. Verify the 'How It Works' section with the 'Story → Generate → Run → Evidence → Export' heading is visible\n"
             "4. Click the 'Pricing' link in the header navigation\n"
