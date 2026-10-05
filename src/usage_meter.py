@@ -321,27 +321,32 @@ class UsageMeter:
             )
 
     def assert_export_allowed(self, format_name: str) -> None:
-        """Raise for paid-gated export formats beyond the monthly free cap.
+        """Refuse a paid-gated export when the deployment's tier does not grant it.
 
-        Core evidence formats (CSV/NDJSON/JUnit/HTML) stay free; only formats
-        outside the free tier's claims (e.g. Jira) are capped here — the calling
-        gate also checks `feature_enabled` for the required claim.
+        **This is a packaging choice, not a security gate.** The product is
+        Apache-2.0 and runs on the customer's own machine, so anyone can fork
+        the code and remove this check. It exists so the paid tier means
+        something - a nudge, not a lock.
+
+        Jira export is the one paid-gated format and requires the ``jira_export``
+        claim (Pro). It gets **no free allowance**: a free deployment is refused
+        it outright, not merely once a monthly cap is spent. Every other format
+        (HTML / CSV / NDJSON / JUnit) is free and always passes.
         """
         if not self.enforcement_on:
             return
         from src.licensing.license import feature_enabled
 
-        if feature_enabled("jira_export") or format_name.lower() not in ("jira",):
+        if format_name.lower() not in ("jira",):
+            return
+        if feature_enabled("jira_export"):
             return
         summary = self.summary()
-        remaining = summary.exports_remaining
-        if remaining is not None and remaining <= 0:
-            raise FreeTierLimitError(
-                f"Free tier evidence-export limit reached ({summary.exports_used}/{summary.exports_limit} exports "
-                f"in the current 30-day window). {_UPGRADE_PROMPT}",
-                run_remaining=summary.runs_remaining or 0,
-                export_remaining=remaining,
-            )
+        raise FreeTierLimitError(
+            f"Jira export requires a paid tier. {_UPGRADE_PROMPT}",
+            run_remaining=summary.runs_remaining or 0,
+            export_remaining=summary.exports_remaining or 0,
+        )
 
 
 def _epoch(now: datetime | None) -> int | None:

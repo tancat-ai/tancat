@@ -75,18 +75,15 @@ def _build(tmp_path: Path, **kwargs: object) -> PipelineReportBundle:
     )
 
 
-def test_free_licence_at_export_cap_cannot_write_the_jira_report(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The Jira export is the one gated format: a capped free deployment is refused.
+def test_free_deployment_is_refused_the_jira_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Jira export is Pro-only: a free deployment is refused at once.
 
-    The free reports must still be produced - only report_jira.md is withheld.
+    No free allowance - the free reports must still be produced, and only
+    report_jira.md is withheld.
     """
     monkeypatch.delenv("AITEST_LICENSE_KEY", raising=False)
     monkeypatch.delenv("AITEST_LICENSE_FILE", raising=False)
     meter = _meter(tmp_path)
-    for _ in range(10):  # spend the free-tier export cap
-        meter.record_export("jira", "x")
     monkeypatch.setattr("src.usage_meter.UsageMeter", lambda: meter)
 
     bundle = _build(tmp_path)

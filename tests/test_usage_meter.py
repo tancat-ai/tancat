@@ -200,12 +200,10 @@ def test_summary_json_shape(tmp_path: Path) -> None:
 
 def test_export_gate_jira_only_on_free(tmp_path: Path) -> None:
     m = _meter(tmp_path)
-    # Core formats pass; Jira is capped on the free tier.
+    # Core formats always pass; they are not gated at all.
     m.assert_export_allowed("csv")
     m.assert_export_allowed("json")
-    # Fill the export cap.
-    for _ in range(10):
-        m.record_export("jira", "report.html")
+    # Jira is Pro-only: refused at once on free, with no free allowance.
     with pytest.raises(FreeTierLimitError):
         m.assert_export_allowed("jira")
 
