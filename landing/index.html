@@ -2,9 +2,9 @@
 <html class="scroll-smooth" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<meta name="description" content="TanCat generates executable Playwright pytest tests from your user stories using your own LLM, inside your own network. Bounded egress, verified in CI."/>
+<meta name="description" content="TanCat generates executable Playwright pytest tests from your user stories with your own LLM, on your own machines. Point it at a local or self-hosted model and nothing leaves your network; cloud OpenAI and OpenRouter work too. Bounded egress, verified in CI."/>
 <meta name="theme-color" content="#070b10"/>
-<title>TanCat - The AI test generator where your data never leaves your deployment</title>
+<title>TanCat - The AI test generator that keeps your data on your own machines</title>
 <link rel="canonical" href="https://tancat.dev/"/>
 <link rel="icon" href="favicon.ico" sizes="any"/>
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
@@ -13,16 +13,16 @@
 <meta property="og:site_name" content="TanCat"/>
 <meta property="og:locale" content="en_GB"/>
 <meta property="og:url" content="https://tancat.dev/"/>
-<meta property="og:title" content="TanCat - The AI test generator where your data never leaves your deployment"/>
-<meta property="og:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, inside your own network. Bounded egress, verified in CI."/>
+<meta property="og:title" content="TanCat - the AI test generator that keeps your data on your own machines"/>
+<meta property="og:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, on your own machines. Point it at a local or self-hosted model and nothing leaves your network; it also supports cloud OpenAI and OpenRouter. Bounded egress, verified in CI."/>
 <meta property="og:image" content="https://tancat.dev/og-card.png"/>
 <meta property="og:image:type" content="image/png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="TanCat landing page: the AI test generator where your data never leaves your deployment."/>
+<meta property="og:image:alt" content="TanCat landing page: the AI test generator that runs against your own machines and your own LLM."/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="TanCat - the AI test generator where your data never leaves your deployment"/>
-<meta name="twitter:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, inside your own network."/>
+<meta name="twitter:title" content="TanCat - the AI test generator that keeps your data on your own machines"/>
+<meta name="twitter:description" content="Generate executable Playwright pytest tests from your user stories with your own LLM, on your own machines. With a local or self-hosted model, nothing leaves your network."/>
 <meta name="twitter:image" content="https://tancat.dev/og-card.png"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script>
@@ -63,7 +63,7 @@
 </nav>
 <div class="flex items-center gap-3">
   <a class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-slate-500 bg-slate-900/60 text-xs font-mono text-slate-300 hover:text-white transition-all" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank">GitHub</a>
-  <a class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg shadow-amber-glow hover:brightness-110 active:scale-95 transition-all" href="#quickstart">Deploy Local</a>
+  <a class="inline-flex items-center justify-center px-4 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-500 rounded-lg shadow-amber-glow hover:brightness-110 active:scale-95 transition-all" href="#quickstart">Install locally</a>
 </div>
 </div>
 </header>
@@ -74,11 +74,11 @@
   <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono tracking-wide uppercase mb-6 shadow-sm">
     <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> BYO-LLM &middot; BOUNDED EGRESS &middot; RUNS OFFLINE
   </div>
-  <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">The AI test generator where your data <br class="hidden sm:inline"/><span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-cyberBlue">never leaves your deployment.</span></h1>
-  <p class="mt-4 text-base sm:text-lg text-slate-400 font-normal leading-relaxed max-w-2xl mx-auto">Paste a user story <span class="text-slate-200">&rarr;</span> generate executable Playwright <code class="text-amber-300 font-mono text-xs bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">pytest</code> tests from <strong class="text-white font-medium">your own</strong> LLM, on <strong class="text-white font-medium">your own</strong> infra. It even learns from your reference docs &mdash; and they stay in-house.</p>
+  <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">The AI test generator that keeps your data <br class="hidden sm:inline"/><span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-cyberBlue">on your own machines.</span></h1>
+  <p class="mt-4 text-base sm:text-lg text-slate-400 font-normal leading-relaxed max-w-2xl mx-auto">Paste a user story <span class="text-slate-200">&rarr;</span> generate executable Playwright <code class="text-amber-300 font-mono text-xs bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">pytest</code> tests from <strong class="text-white font-medium">your own</strong> LLM, on <strong class="text-white font-medium">your own</strong> machines. Point it at a local or self-hosted model and nothing leaves your network; cloud OpenAI and OpenRouter work too. It even learns from your reference docs &mdash; point it at a local model and those stay in-house.</p>
   <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
-    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:brightness-110 shadow-amber-glow active:scale-95 transition-all flex items-center gap-2" href="#quickstart">Get Started (Free &amp; Local) <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg></a>
-    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/90 border border-slate-800 hover:border-slate-600 hover:text-white hover:bg-slate-800/80 transition-all flex items-center gap-2.5" href="#pipeline"><span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-amber-400">&#9654;</span> See the Interactive Demo</a>
+    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-950 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:brightness-110 shadow-amber-glow active:scale-95 transition-all flex items-center gap-2" href="#quickstart">Install locally <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path></svg></a>
+    <a class="px-6 py-3.5 rounded-xl font-semibold text-sm text-slate-300 bg-slate-900/90 border border-slate-800 hover:border-slate-600 hover:text-white hover:bg-slate-800/80 transition-all flex items-center gap-2.5" href="#pipeline"><span class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] text-amber-400">&#9654;</span> See how it works</a>
   </div>
 </div>
 <div class="mt-12 relative max-w-5xl mx-auto">
@@ -134,7 +134,7 @@
   <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-cyberBlue/40 transition-all group">
     <div class="w-8 h-8 rounded-lg bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue font-mono font-bold flex items-center justify-center mb-4">2</div>
     <h3 class="text-base font-semibold text-white group-hover:text-cyberBlue transition-colors">Generate against the live DOM</h3>
-    <p class="text-xs text-slate-400 mt-2 leading-relaxed">TanCat launches headless Chromium, inspects real DOM nodes, builds a page skeleton, and feeds exact attributes to your offline LLM. Score-gated resolution - no hallucinated IDs.</p>
+    <p class="text-xs text-slate-400 mt-2 leading-relaxed">TanCat launches headless Chromium, inspects real DOM nodes, builds a page skeleton, and feeds exact attributes to your own LLM. Resolution is score-gated: an unresolved criterion is reported as a skip, never as a guess.</p>
     <div class="mt-4 text-[11px] font-mono text-slate-500 bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80">Resolved: button[data-testid="revoke-access-confirm"]</div>
   </div>
   <div class="relative bg-cardbg border border-slate-800 p-6 rounded-2xl hover:border-emerald-400/40 transition-all group">
@@ -155,7 +155,7 @@
 <div class="rounded-2xl border border-slate-800 bg-cardbg shadow-2xl overflow-hidden code-glow">
   <div class="bg-slate-900 border-b border-slate-800 px-5 py-3 flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-3"><span class="px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-xs font-medium">Session: #TAN-8921</span><span class="text-xs text-slate-400 font-mono hidden sm:inline">Target: https://staging.internal.bank/portal/checkout</span></div>
-    <div class="flex items-center gap-2 text-xs font-mono"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> DOM Synthesized</span><span class="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px]">[Interactive Demo - Example BYO Model: Llama-3-70B-Q4 / Ollama / llama.cpp]</span></div>
+    <div class="flex items-center gap-2 text-xs font-mono"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> DOM Synthesized</span><span class="px-2.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px]">[Example BYO model: Llama-3-70B-Q4 / Ollama / llama.cpp]</span></div>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-800">
     <div class="lg:col-span-3 p-5 bg-slate-950/40">
@@ -176,7 +176,7 @@
         <div class="text-slate-500">&lt;/form&gt;</div>
         <div class="text-slate-500 mt-2">&lt;dialog id="two-factor-dialog" class="modal-open"&gt;...&lt;/dialog&gt;</div>
       </div>
-      <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 px-1"><span>Ground-truth resolution:</span><span class="text-emerald-400 font-semibold">Deterministic (score-gated)</span></div>
+      <div class="mt-3 flex items-center justify-between text-[11px] font-mono text-slate-400 px-1"><span>Ground-truth resolution:</span><span class="text-emerald-400 font-semibold">Score-gated (a criterion that will not resolve is a skip)</span></div>
     </div>
     <div class="lg:col-span-5 p-5 bg-cardbg">
       <div class="flex items-center justify-between mb-3"><div class="flex items-center gap-2"><span class="text-xs font-mono font-semibold text-amber-300 uppercase tracking-wider">3. Playwright Pytest</span><span class="px-1.5 py-0.5 text-[10px] font-mono bg-emerald-500/20 text-emerald-400 rounded">PASSED</span></div><div class="flex gap-2"><span class="text-[11px] font-mono text-slate-300 border-b border-amber-400 pb-0.5">test_wire.py</span><span class="text-[11px] font-mono text-slate-500">junit.xml</span><span class="text-[11px] font-mono text-slate-500">report.html</span></div></div>
@@ -203,7 +203,7 @@
 <div class="text-center max-w-3xl mx-auto mb-16">
   <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Security &amp; Architecture</span>
   <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Built for the regulated buyer.</h2>
-  <p class="text-slate-400 text-sm mt-3">Every incumbent cloud SaaS routes your app's DOM through multi-tenant external servers. TanCat deploys on your infra, pointed at your local LLM, keeping sensitive customer data isolated.</p>
+  <p class="text-slate-400 text-sm mt-3">Most cloud test tools route your app's DOM through shared external servers. TanCat runs on your machines, pointed at your own LLM, so your customer data stays where you put it.</p>
 </div>
 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-6">
   <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-amber-500/40 transition-all group flex flex-col justify-between">
@@ -212,7 +212,7 @@
   </div>
   <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-cyberBlue/40 transition-all group flex flex-col justify-between">
     <div><div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#128737;</div><h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Bounded Egress (Verified in CI)</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Runtime outbound calls strictly limited to your local/self-hosted LLM endpoint and your target application. Verified by static code inspection in CI via <code class="text-cyberBlue font-mono text-[11px]">python scripts/audit_egress.py</code> (AST call-site static inspection) wired into smoke tests and CI.</p></div>
-    <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Audit Gate: PASSING</div>
+    <div class="mt-6 pt-4 border-t border-slate-800/80 font-mono text-[11px] text-emerald-400 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Audit gate: run in CI</div>
   </div>
   <div class="md:col-span-3 lg:col-span-2 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-neonViolet/40 transition-all group flex flex-col justify-between">
     <div><div class="w-12 h-12 rounded-xl bg-neonViolet/10 border border-neonViolet/30 text-neonViolet flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#129665;</div><h3 class="text-lg font-bold text-white group-hover:text-neonViolet transition-colors">Self-Healing Locators</h3><p class="text-slate-400 text-xs mt-2.5 leading-relaxed">When design teams alter markup or CSS class names, TanCat calculates semantic affinity to reconcile and heal broken locators in staging before CI turns red.</p></div>
@@ -227,7 +227,7 @@
   <div class="md:col-span-3 lg:col-span-3 bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-cyberBlue/40 transition-all group">
     <div class="w-12 h-12 rounded-xl bg-cyberBlue/10 border border-cyberBlue/30 text-cyberBlue flex items-center justify-center text-xl mb-6 group-hover:scale-105 transition-transform">&#9881;</div>
     <h3 class="text-lg font-bold text-white group-hover:text-cyberBlue transition-colors">Native CI/CD Action &amp; POM Mode</h3>
-    <p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Organizes test code into maintainable <strong class="text-slate-200">Page-Object-Model (POM)</strong> python classes automatically. Drop our reusable GitHub Action or GitLab Runner into your existing pipelines in minutes.</p>
+    <p class="text-slate-400 text-xs mt-2.5 leading-relaxed">Organizes test code into maintainable <strong class="text-slate-200">Page-Object-Model (POM)</strong> python classes automatically. Drop our reusable GitHub Action or GitLab CI template into your existing pipelines in minutes.</p>
     <div class="mt-4 flex gap-2"><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">GitHub Actions</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">GitLab CI</span><span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">POM Pattern</span></div>
   </div>
 </div>
@@ -274,18 +274,18 @@
   <div class="bg-cardbg rounded-2xl p-7 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between">
     <div><div class="text-xs font-mono uppercase text-slate-400 tracking-wider">Developer / OSS</div><h3 class="text-xl font-bold text-white mt-1">Free Community</h3><p class="text-slate-400 text-xs mt-2">For solo developers, or for local debugging.</p>
     <div class="my-6"><span class="text-4xl font-black text-white font-mono">$0</span><span class="text-slate-400 text-xs font-mono"> / forever</span></div>
-    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">25 runs / 10 machine-readable exports per 30 days</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited HTML evidence reports</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Self-healing + RAG DOM memory</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">BYO-LLM, bounded egress</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Playwright Pytest test generator</span></li></ul></div>
-    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="#quickstart">Install Locally</a></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">25 test runs per 30 days</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited evidence exports (CSV, NDJSON, JUnit, HTML)</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Self-healing locators, remembers your site&rsquo;s DOM</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Your own LLM, bounded egress</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Playwright Pytest test generator</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors" href="#quickstart">Install locally</a></div>
   </div>
   <div class="bg-gradient-to-b from-cardbg to-slate-950 rounded-2xl p-7 border-2 border-amber-500/60 shadow-amber-glow transition-all flex flex-col justify-between relative">
     <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-amber-400 text-slate-950 text-[10px] font-mono font-bold uppercase rounded-full tracking-wider shadow-sm">Most Popular</div>
-    <div><div class="text-xs font-mono uppercase text-amber-400 tracking-wider">Engineering Team</div><h3 class="text-xl font-bold text-white mt-1">Pro Deployment</h3><p class="text-slate-400 text-xs mt-2">Unlimited internal runs across your sprint teams and staging CI pipelines.</p>
+    <div><div class="text-xs font-mono uppercase text-amber-400 tracking-wider">Engineering Team</div><h3 class="text-xl font-bold text-white mt-1">Pro Deployment</h3><p class="text-slate-400 text-xs mt-2">No run caps, and the Jira export, for teams that bill test work to a project.</p>
     <div class="my-6"><span class="text-4xl font-black text-white font-mono">$399</span><span class="text-slate-400 text-xs font-mono"> / month / deployment</span></div>
-    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited runs &amp; evidence exports</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">POM mode &amp; multi-site suites</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">CI/CD Action (GitHub/GitLab)</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Support &amp; updates while licensed</span></li></ul></div>
-    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:brightness-110 shadow-md transition-all" href="#contact">Request Pro License</a></div>
+    <ul class="space-y-3 text-xs text-slate-300 font-mono"><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Unlimited test runs &amp; evidence exports</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Jira evidence export</span></li><li class="flex items-center gap-2 text-emerald-400"><span>&#10003;</span><span class="text-slate-300">Support &amp; updates while licensed</span></li></ul></div>
+    <div class="mt-8"><a class="w-full block text-center py-2.5 px-4 rounded-xl text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-amber-300 hover:brightness-110 shadow-md transition-all" href="#contact">Request a Pro licence</a></div>
   </div>
 </div>
-<div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing, billed monthly. Prices exclude taxes.</div>
+<div class="text-center mt-10 text-xs font-mono text-slate-500">* Per-deployment pricing, billed monthly. Prices exclude taxes. A <strong class="text-slate-400">deployment</strong> is one installation serving one organisation.</div>
 <div class="text-center mt-6 text-sm text-slate-400">
   Need a custom, regulated or enterprise arrangement?
   <a class="text-amber-400 hover:text-amber-300 underline underline-offset-4" href="#contact">Talk to us</a>
@@ -327,12 +327,12 @@
 <div class="text-center max-w-2xl mx-auto mb-10">
   <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Get Started</span>
   <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Contact us</h2>
-  <p class="text-slate-400 text-sm mt-3">Tell us about your deployment &mdash; your stack, your LLM, whether it runs online or fully offline. We&rsquo;ll set you up with a license and point you to the right tier.</p>
+  <p class="text-slate-400 text-sm mt-3">Tell us about your deployment &mdash; your stack, your LLM, whether it runs online or fully offline. We&rsquo;ll set you up with a licence and point you to the right arrangement.</p>
 </div>
 <div class="mx-auto max-w-md bg-cardbg border border-slate-800 rounded-2xl p-6 text-center">
   <div class="text-xs font-mono text-slate-400 uppercase tracking-wider">Email us</div>
   <a class="mt-2 block text-lg font-bold text-amber-300 font-mono hover:text-amber-200 transition-colors" href="mailto:hello@tancat.dev">hello@tancat.dev</a>
-  <p class="mt-3 text-[11px] font-mono text-slate-500">We&rsquo;ll get back to you within 2 business days. Per-deployment pricing &middot; no per-seat charges.</p>
+  <p class="mt-3 text-[11px] font-mono text-slate-500">We reply as soon as we can. Per-deployment pricing &middot; no per-seat charges.</p>
   <p class="mt-2 text-[11px] font-mono text-slate-500">Your message is used only to answer you &mdash; see <a class="text-amber-300 hover:underline" href="privacy.html">Privacy</a>.</p>
 </div>
 </div>
@@ -341,14 +341,14 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-6">
   <div class="flex items-center gap-3">
     <img alt="TanCat logo" class="w-6 h-6 rounded object-contain" src="logo_transparent.png"/>
-    <p class="font-mono text-slate-400">&copy; TanCat. The AI test generator where your data never leaves your deployment.</p>
+    <p class="font-mono text-slate-400">&copy; TanCat. The AI test generator that keeps your data on your own machines.</p>
   </div>
   <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-slate-400">
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat" rel="noopener noreferrer" target="_blank">GitHub</a>
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">Egress Audit</a>
     <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/SECURITY.md" rel="noopener noreferrer" target="_blank">Security</a>
-    <a class="hover:text-amber-400 transition-colors" href="#pipeline">Interactive Demo</a>
-    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/LICENSE" rel="noopener noreferrer" target="_blank">License (Apache-2.0)</a>
+    <a class="hover:text-amber-400 transition-colors" href="#pipeline">See how it works</a>
+    <a class="hover:text-amber-400 transition-colors" href="https://github.com/tancat-ai/tancat/blob/main/LICENSE" rel="noopener noreferrer" target="_blank">Licence (Apache-2.0)</a>
     <a class="hover:text-amber-400 transition-colors" href="privacy.html">Privacy</a>
     <a class="hover:text-amber-400 transition-colors" href="terms.html">Terms</a>
   </div>
