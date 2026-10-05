@@ -46,6 +46,11 @@ class TestDefaults:
     def test_default_ocr_backend_is_pymupdf(self) -> None:
         assert DEFAULT_SETTINGS["ocr_backend"] == "pymupdf"
 
+    def test_default_provider_is_local_openai_compatible(self) -> None:
+        # F3: the documented default is the local OpenAI-compatible server
+        # (llama.cpp on :8080), not whatever happens to be listed first.
+        assert DEFAULT_SETTINGS["provider"] == "openai-local"
+
     def test_default_jira_project_key_is_test(self) -> None:
         assert DEFAULT_SETTINGS["jira_project_key"] == "TEST"
 
