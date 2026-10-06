@@ -164,6 +164,11 @@ class SiteResult:
     run_duration: float = 0.0
     run_pass: bool | None = None
     error: str = ""
+    # RAG state for this run, from the product's own gate (B-036: unset ==
+    # enabled; only RAG_ENABLED=0 opts out). ``rag_contribution`` is the
+    # per-run usage summary when the pipeline was instrumented, else None.
+    rag_enabled: bool = False
+    rag_contribution: dict[str, Any] | None = None
 
     @property
     def passed(self) -> int:
@@ -182,6 +187,8 @@ class SiteResult:
             "site_id": self.site_id,
             "site_name": self.site_name,
             "pom_mode": self.pom_mode,
+            "rag_enabled": self.rag_enabled,
+            "rag_contribution": self.rag_contribution,
             "checks": [{"name": c.name, "passed": c.passed, "detail": c.detail} for c in self.checks],
             "generation_duration_s": round(self.generation_duration, 2),
             "run_duration_s": round(self.run_duration, 2),
@@ -226,6 +233,73 @@ def evidence_tracker(page: Page, request: Any) -> EvidenceTracker:
 
 
 # ---------------------------------------------------------------------------
+# RAG state + contribution recording (t-0488)
+# ---------------------------------------------------------------------------
+
+
+def _rag_diagnostic_line_count() -> int:
+    """Lines already in the AI-059 RAG diagnostics file (0 when unset/missing).
+
+    The pipeline writes per-placeholder RAG usage only when a caller sets
+    ``AI059_RAG_DIAGNOSTICS_PATH`` (the AI-059 lab runner). UAT does not set it,
+    so this is usually 0; when it is set, the pre-run count lets us report only
+    the records this run appended.
+    """
+    path_text = os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip()
+    if not path_text:
+        return 0
+    try:
+        with Path(path_text).open(encoding="utf-8") as stream:
+            return sum(1 for _ in stream)
+    except OSError:
+        return 0
+
+
+def _rag_contribution_since(start_line: int) -> dict[str, Any] | None:
+    """Summarise the RAG usage this run appended, or None when uninstrumented.
+
+    Returns counts of placeholder resolutions the RAG gate scored, how many of
+    them the RAG bonus actually decided (``decisive``), and the bonus points it
+    contributed. ``None`` means the pipeline exposed no contribution for this
+    run (``AI059_RAG_DIAGNOSTICS_PATH`` was not set).
+    """
+    path_text = os.environ.get("AI059_RAG_DIAGNOSTICS_PATH", "").strip()
+    if not path_text:
+        return None
+    path = Path(path_text)
+    if not path.exists():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    records = decisive = matched = bonus = 0
+    for line in lines[start_line:]:
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError, ValueError:
+            continue
+        usage = payload.get("usage") or []
+        if not usage:
+            continue
+        records += 1
+        if payload.get("decisive") is True:
+            decisive += 1
+        for record in usage:
+            if record.get("matched"):
+                matched += 1
+                bonus += int(record.get("bonus", 0) or 0)
+    return {
+        "source": path_text,
+        "records": records,
+        "decisive": decisive,
+        "matched": matched,
+        "bonus": bonus,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Pipeline runner
 # ---------------------------------------------------------------------------
 
@@ -241,10 +315,13 @@ async def run_site_uat(
 ) -> SiteResult:
     """Run the full pipeline UAT for one site."""
     from src.llm_client import LLMClient
-    from src.orchestrator import TestOrchestrator
+    from src.orchestrator import TestOrchestrator, rag_enabled_by_config
     from src.test_generator import TestGenerator
 
     result = SiteResult(site_id=site_id, site_name=config.name, pom_mode=pom_mode)
+    # Record the product's own RAG gate, not a re-derived env check, so the UAT
+    # number and the pipeline agree (t-0488).
+    result.rag_enabled = rag_enabled_by_config()
 
     mode_label = "POM" if pom_mode else "Flat"
     print(f"\n{'=' * 70}")
@@ -272,6 +349,7 @@ async def run_site_uat(
     orchestrator = TestOrchestrator(generator, pom_mode=pom_mode)
 
     # Phase 1: Pipeline
+    rag_diag_start = _rag_diagnostic_line_count()
     try:
         start = time.time()
         final_code = await orchestrator.run_pipeline(
@@ -281,6 +359,7 @@ async def run_site_uat(
         )
         result.generation_duration = time.time() - start
         result.generated_code = final_code
+        result.rag_contribution = _rag_contribution_since(rag_diag_start)
 
         result.checks.append(
             CheckResult(
@@ -488,6 +567,18 @@ async def run_site_uat(
         print("  Mode: POM")
     else:
         print("  Mode: Flat")
+    print(f"  RAG: {'ENABLED' if result.rag_enabled else 'DISABLED (RAG_ENABLED=0)'}")
+    if result.rag_enabled:
+        contribution = result.rag_contribution
+        if contribution:
+            print(
+                "  RAG contribution: "
+                f"{contribution['records']} placeholder(s) scored, "
+                f"{contribution['decisive']} decided by RAG, "
+                f"bonus {contribution['bonus']}"
+            )
+        else:
+            print("  RAG contribution: not recorded (set AI059_RAG_DIAGNOSTICS_PATH to instrument)")
 
     return result
 

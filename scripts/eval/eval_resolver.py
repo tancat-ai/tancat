@@ -7,10 +7,11 @@ Modes:
     ``--mode static``    Uses frozen scraped data in ``scraped_pages/`` (fast, deterministic).
     ``--mode live``      Scrapes live sites first, then resolves (requires running servers).
 
-Supports RAG on/off via ``RAG_ENABLED`` env var for direct comparison::
+Supports RAG on/off via ``RAG_ENABLED`` for direct comparison. RAG follows the
+product gate: a missing ``RAG_ENABLED`` means ENABLED; ``RAG_ENABLED=0`` opts out::
 
-    python scripts/eval/eval_resolver.py   # RAG off
-    RAG_ENABLED=1 python scripts/eval/eval_resolver.py  # RAG on
+    python scripts/eval/eval_resolver.py   # RAG on (the product default)
+    RAG_ENABLED=0 python scripts/eval/eval_resolver.py  # RAG off
 
 Usage:
     # Fast — requires saved_scraped_data/ populated
@@ -21,7 +22,7 @@ Usage:
 
     # Compare RAG on/off
     python scripts/eval/eval_resolver.py --mode static
-    RAG_ENABLED=1 python scripts/eval/eval_resolver.py --mode static
+    RAG_ENABLED=0 python scripts/eval/eval_resolver.py --mode static
 """
 
 from __future__ import annotations
@@ -393,6 +394,19 @@ def _format_summary(summary: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def rag_enabled_for_eval() -> bool:
+    """Whether this eval run has RAG on — the product's own gate.
+
+    Delegates to ``src.orchestrator.rag_enabled_by_config`` (B-036 semantics: a
+    missing ``RAG_ENABLED`` means ENABLED; only ``RAG_ENABLED=0`` opts out), so
+    the eval's label and the run agree with what the product actually does. The
+    old local ``== "1"`` check mislabelled and ran a default run RAG off.
+    """
+    from src.orchestrator import rag_enabled_by_config
+
+    return rag_enabled_by_config()
+
+
 async def _cmd_static() -> int:
     """Run resolver eval against pre-saved scraped data."""
     pages = load_scraped_pages()
@@ -401,7 +415,7 @@ async def _cmd_static() -> int:
         print("  Run first: python scripts/eval/eval_resolver.py --mode live", file=sys.stderr)
         return 1
 
-    rag_enabled = os.getenv("RAG_ENABLED", "").strip() == "1"
+    rag_enabled = rag_enabled_for_eval()
     rag_retriever = None
     if rag_enabled:
         try:
@@ -425,9 +439,9 @@ async def _cmd_static() -> int:
     print(_format_summary(summary))
 
     if rag_enabled:
-        print("\n[RAG: ENABLED]")
+        print("\n[RAG: ENABLED]  (product default; set RAG_ENABLED=0 to compare)")
     else:
-        print("\n[RAG: DISABLED]  (set RAG_ENABLED=1 to compare)")
+        print("\n[RAG: DISABLED]  (RAG_ENABLED=0)")
 
     return 0
 
