@@ -938,11 +938,7 @@ class ElementMatcher:
             site_hash=site_hash,
         )
         if matched is not None and action == "ASSERT":
-            # Carry the quoted target through so the locator builder can pin it
-            # when the class selector is not unique (t-0477).
-            quoted = _quoted_text_in_element(description, matched)
-            if quoted:
-                matched["exact_text"] = quoted
+            _set_exact_text_marker(action, description, matched)
         if (
             matched is not None
             and action == "ASSERT"
@@ -1355,6 +1351,9 @@ class ElementMatcher:
             pass3_requests.append((i, action, description, all_ranked))  # type: ignore
 
         if not pass3_requests:
+            # A fast-pass resolution never reaches the final loop below, so the
+            # quoted-target marker must be applied here too (t-0481).
+            _apply_exact_text_markers(requests, results)
             return results
 
         # Phase 2: Batch Pass 3 LLM calls
@@ -1413,17 +1412,15 @@ class ElementMatcher:
             if results[i] is None and role_deferred_by_index.get(i):
                 results[i] = role_deferred_by_index[i][0]
 
+        # Carry the quoted target through for every resolved ASSERT, fast or
+        # LLM, so the locator builder can pin it (t-0477).
+        _apply_exact_text_markers(requests, results)
+
         # B-088: reject a link-resolution pick whose element does not match the
         # named link — an honest miss, not an assertion against a lookalike.
         for i, req in enumerate(requests):
             description = req.get("description", "")
             result = results[i]
-            if result is not None and req.get("action") == "ASSERT":
-                # Carry the quoted target through so the locator builder can pin
-                # it when the class selector is not unique (t-0477).
-                quoted = _quoted_text_in_element(description, result)
-                if quoted:
-                    result["exact_text"] = quoted
             if (
                 result is not None
                 and req.get("action") == "ASSERT"
@@ -1532,6 +1529,20 @@ def _is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool:
 
 
 _QUOTED_PHRASE_RE = re.compile(r"['\"]([^'\"]{2,})['\"]")
+
+
+def _set_exact_text_marker(action: str, description: str, result: dict[str, str] | None) -> None:
+    """Record the quoted target on a resolved ASSERT element (t-0477)."""
+    if result is not None and action == "ASSERT":
+        quoted = _quoted_text_in_element(description, result)
+        if quoted:
+            result["exact_text"] = quoted
+
+
+def _apply_exact_text_markers(requests: list[dict[str, Any]], results: list[dict[str, str] | None]) -> None:
+    """Apply :func:`_set_exact_text_marker` to every resolved request."""
+    for i, req in enumerate(requests):
+        _set_exact_text_marker(str(req.get("action", "")), str(req.get("description", "")), results[i])
 
 
 def _quoted_text_in_element(description: str, element: dict[str, str]) -> str:

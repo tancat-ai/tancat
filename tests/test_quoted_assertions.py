@@ -205,3 +205,86 @@ class TestQuotedHeadingLocatorPinning:
         assert build_robust_locator(matched, page_elements=pages["https://x.test/"]) == (
             'h2:has-text("Per deployment, not per seat")'
         )
+
+    def test_fast_pass_assert_gets_exact_text_and_pins(self) -> None:
+        """t-0481: a fast-pass ASSERT (no pass3) must still be marked and pinned.
+
+        The batch resolver returns before its final marker loop when every
+        request resolves in the fast passes - the common case. Before the fix
+        the target got no exact_text, so the locator stayed a shared class
+        selector.
+        """
+        pages = {
+            "https://x.test/": [
+                self._heading(
+                    "See how plain English becomes ground-truth Pytest.", "body > section:nth-of-type(2) > h2"
+                ),
+                self._heading("Per deployment, not per seat", "body > section:nth-of-type(3) > h2"),
+            ]
+        }
+        matcher = ElementMatcher(PlaceholderResolver())
+        results = asyncio.run(
+            matcher.find_best_elements_batch(
+                requests=[{"action": "ASSERT", "description": "'Per deployment, not per seat' pricing section"}],
+                current_url="https://x.test/",
+                pages_data=pages,
+            )
+        )
+        matched = results[0]
+
+        assert matched is not None
+        assert matched.get("exact_text") == "Per deployment, not per seat"
+        assert build_robust_locator(matched, page_elements=pages["https://x.test/"]) == (
+            'h2:has-text("Per deployment, not per seat")'
+        )
+
+    def test_superset_class_heading_triggers_a_pin(self) -> None:
+        """A peer whose classes are a superset of the target's is still matched."""
+        target = {
+            "selector": "body > section:nth-of-type(3) > h2",
+            "text": "Per deployment, not per seat",
+            "tag": "h2",
+            "role": "heading",
+            "classes": "text-3xl text-white",
+            "exact_text": "Per deployment, not per seat",
+        }
+        other = {
+            "selector": "body > section:nth-of-type(4) > h2",
+            "text": "Something else",
+            "tag": "h2",
+            "role": "heading",
+            "classes": "text-3xl text-white mt-2",
+        }
+        locator = build_robust_locator(target, page_elements=[target, other])
+        assert locator == 'h2:has-text("Per deployment, not per seat")'
+
+    def test_subset_class_other_does_not_trigger_a_pin(self) -> None:
+        """A peer with fewer classes is not matched by the target's class selector."""
+        target = {
+            "selector": "body > section:nth-of-type(3) > h2",
+            "text": "Per deployment, not per seat",
+            "tag": "h2",
+            "role": "heading",
+            "classes": "text-3xl text-white mt-2",
+            "exact_text": "Per deployment, not per seat",
+        }
+        other = {
+            "selector": "body > section:nth-of-type(4) > h2",
+            "text": "Something else",
+            "tag": "h2",
+            "role": "heading",
+            "classes": "text-3xl text-white",
+        }
+        locator = build_robust_locator(target, page_elements=[target, other])
+        assert locator == "h2.mt-2.text-3xl.text-white"
+
+    def test_self_duplicate_does_not_trigger_a_pin(self) -> None:
+        """One DOM node listed twice must not count as a class collision."""
+        heading = self._heading("Per deployment, not per seat", "body > section:nth-of-type(3) > h2")
+        duplicate = dict(heading)
+        pages = {"https://x.test/": [heading, duplicate]}
+        target = pages["https://x.test/"][0]
+        target["exact_text"] = "Per deployment, not per seat"
+
+        locator = build_robust_locator(target, page_elements=pages["https://x.test/"])
+        assert locator == "h2.font-extrabold.mt-2.sm\\:text-4xl.text-3xl.text-white"

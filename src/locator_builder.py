@@ -60,18 +60,33 @@ def _useful_class_terms(element: dict) -> frozenset[str]:
     )
 
 
+def _same_node(a: dict, b: dict) -> bool:
+    """True when two element dicts are representations of the same DOM node."""
+    for key in ("id", "data_test", "selector"):
+        a_value = str(a.get(key, "")).strip()
+        b_value = str(b.get(key, "")).strip()
+        if a_value and a_value == b_value:
+            return True
+    return False
+
+
 def _class_terms_shared(element: dict, page_elements: list[dict]) -> bool:
-    """True when another same-tag element on the page shares this class set."""
+    """True when another same-tag DOM node is matched by this element's class selector.
+
+    The built selector is ``tag.class1.class2``; it matches any same-tag element
+    whose class set is a SUPERSET of this element's. Duplicate representations of
+    the same node (the scraper can list one DOM node twice) do not count.
+    """
     terms = _useful_class_terms(element)
     if not terms:
         return False
     tag = str(element.get("tag", "")).strip().lower()
     for other in page_elements:
-        if other is element:
+        if other is element or _same_node(element, other):
             continue
         if str(other.get("tag", "")).strip().lower() != tag:
             continue
-        if _useful_class_terms(other) == terms:
+        if terms.issubset(_useful_class_terms(other)):
             return True
     return False
 
