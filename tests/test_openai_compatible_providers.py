@@ -34,7 +34,13 @@ class TestGetProvider:
         assert isinstance(provider, OpenAIProvider)
         assert provider._is_openai_compatible is True
 
-    def test_raises_on_missing_api_key(self) -> None:
+    def test_raises_on_missing_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Hermetic: the provider factory reads only the environment for a
+        # compatible key, so clear any ambient/leaked value first. A leftover
+        # OPENAI_COMPATIBLE_API_KEY (a directly-written os.environ entry that
+        # monkeypatch cannot undo) made this test skip the raise on CI.
+        monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         with pytest.raises(ValueError, match="API key is required"):
             get_provider("openai-compatible")
 

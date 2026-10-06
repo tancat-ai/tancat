@@ -9,6 +9,7 @@ a hard-coded OpenRouter id, and the client sends a browser-like User-Agent.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 
 import pytest
 
@@ -28,6 +29,22 @@ from src.provider_config import (
     resolve_openai_api_key,
     sync_openai_api_key_to_env,
 )
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_environment() -> Iterator[None]:
+    """Snapshot and restore ``os.environ`` around every test in this module.
+
+    ``sync_openai_api_key_to_env`` writes ``os.environ`` directly, which
+    ``monkeypatch`` does not track (it only records its own setenv/delenv
+    calls). Without this snapshot the key those tests write leaks into later
+    tests — and, because an xdist worker runs several files in sequence, into
+    later files too. That leak made two j-0095 CI tests order-dependent.
+    """
+    before = dict(os.environ)
+    yield
+    os.environ.clear()
+    os.environ.update(before)
 
 
 class TestSelectable:
