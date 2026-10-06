@@ -308,6 +308,33 @@ def test_non_link_criterion_still_resolves_an_ordinary_element() -> None:
     assert matched is not None
 
 
+def test_shared_action_verb_is_not_identity() -> None:
+    """t-0465: a removed control must not resolve to a live one on a shared verb.
+
+    The landing copy rewrite removed the "Air-Gap" tier, leaving a "Buy Pro"
+    button. "Buy Air-Gap link resolves" shares only the action verb "buy" with
+    it, so the target's distinguishing token ("air-gap") appears in no
+    candidate. It must stay unresolved (-> pytest.skip), not check #buy-pro,
+    which is TC-10's element.
+    """
+    buy_pro = {
+        "selector": "#buy-pro",
+        "text": "Buy Pro",
+        "tag": "a",
+        "role": "a",
+        "href": "#contact",
+        "raw_href": "#contact",
+    }
+    pages = {"https://x.test/": [buy_pro]}
+
+    # The shared verb is dropped; only the identity token survives.
+    assert link_name_tokens("Buy Air-Gap link resolves") == ("air-gap",)
+    assert not link_name_matches("Buy Air-Gap link resolves", buy_pro)
+    assert _resolve(_matcher(), "Buy Air-Gap link resolves", pages) is None
+    # The real control still resolves to its own element.
+    assert link_name_matches("Buy Pro link resolves", buy_pro)
+
+
 # ---------------------------------------------------------------------------
 # Criterion 27 — section containment
 # ---------------------------------------------------------------------------

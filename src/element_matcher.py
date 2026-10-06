@@ -1186,11 +1186,16 @@ class ElementMatcher:
             validated = _validate_text_match(top_candidate, description, self._resolver)
             if validated is not None:
                 return validated
-            # Text validation failed: check if there's at least some word overlap
-            # before returning a fallback match. Zero overlap means the score came
-            # entirely from structural bonuses (e.g. button role for CLICK) with
-            # no semantic relationship to the description.
+            # Text validation failed: check for overlap before returning a
+            # fallback match. A shared action verb is not identity: "Buy Air-Gap"
+            # must not match a "Buy Pro" control on "buy" alone, so prefer the
+            # description's distinguishing tokens when it has any (t-0465).
+            # Zero overlap means the score came entirely from structural bonuses
+            # (e.g. button role for CLICK) with no semantic relationship.
             desc_words_check = SemanticMatcher.get_words(description)
+            distinguishing_words = desc_words_check - PlaceholderResolver.ACTION_VERBS
+            if not distinguishing_words:
+                distinguishing_words = desc_words_check
             candidate_haystack = str(
                 top_candidate.get("text", "")
                 + " "
@@ -1201,9 +1206,9 @@ class ElementMatcher:
                 + top_candidate.get("name", "")
             ).lower()
             candidate_words = SemanticMatcher.get_words(candidate_haystack, expand_aliases=False)
-            if not desc_words_check.intersection(candidate_words):
+            if not distinguishing_words.intersection(candidate_words):
                 logger.debug(
-                    "Top-ranked element '%s' has zero word overlap with '%s' — returning None",
+                    "Top-ranked element '%s' shares no distinguishing token with '%s' - returning None",
                     str(top_candidate.get("text", "")).strip(),
                     description,
                 )

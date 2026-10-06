@@ -136,8 +136,17 @@ def is_anchor(element: dict[str, Any] | None) -> bool:
 def link_name_tokens(description: str) -> tuple[str, ...]:
     """Return the distinctive tokens of the link name in a criterion.
 
-    "Watch 3-Min Walkthrough link resolves" → ("watch", "3-min", "walkthrough").
+    "Watch 3-Min Walkthrough link resolves" -> ("watch", "3-min", "walkthrough").
+
+    Action/CTA verbs are dropped when a non-verb (identity) token remains, so a
+    shared verb cannot stand in for the target's identity: "Buy Air-Gap link
+    resolves" leaves ("air-gap",) and a "Buy Pro" anchor that shares only "buy"
+    no longer satisfies it (t-0465). A criterion whose name is *only* a verb
+    (e.g. "Login link resolves") keeps its token, so the guard is not weakened.
     """
+    # Local import: element_matcher imports this module at load time.
+    from src.placeholder_resolver import PlaceholderResolver
+
     lowered = description.replace("_", " ").lower()
     tokens: list[str] = []
     for word in re.split(r"[^a-z0-9@./\-]+", lowered):
@@ -146,7 +155,8 @@ def link_name_tokens(description: str) -> tuple[str, ...]:
         if len(word) < 3 and not any(ch.isdigit() for ch in word):
             continue
         tokens.append(word)
-    return tuple(dict.fromkeys(tokens))
+    identity_tokens = [token for token in tokens if token not in PlaceholderResolver.ACTION_VERBS]
+    return tuple(dict.fromkeys(identity_tokens or tokens))
 
 
 def link_name_matches(description: str, element: dict[str, Any] | None) -> bool:
