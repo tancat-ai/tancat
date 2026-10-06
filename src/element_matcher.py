@@ -257,21 +257,33 @@ class ElementMatcher:
         if action != "ASSERT":
             return None
 
-        text = description
-        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
-            text = text[1:-1]
-        if not text:
+        stripped_desc = description.strip()
+        if (stripped_desc.startswith('"') and stripped_desc.endswith('"')) or (
+            stripped_desc.startswith("'") and stripped_desc.endswith("'")
+        ):
+            targets = [stripped_desc[1:-1]]
+        else:
+            # A criterion may quote the exact text inside a longer description
+            # ("the 'Per deployment, not per seat' pricing section"): exact-match
+            # each quoted phrase before the loose scoring passes. Longest first so
+            # a specific heading wins over an incidental section name.
+            targets = sorted(
+                (m.strip() for m in re.findall(r"['\"]([^'\"]{2,})['\"]", description)),
+                key=len,
+                reverse=True,
+            )
+        if not targets:
             return None
 
-        norm_target = text.strip().lower()
-        if len(norm_target) < 2:
-            return None
-
-        for elements in pages_data.values():
-            for element in elements:
-                norm_text = normalise_element_text(element)
-                if norm_text == norm_target:
-                    return element
+        for target in targets:
+            norm_target = target.strip().lower()
+            if len(norm_target) < 2:
+                continue
+            for elements in pages_data.values():
+                for element in elements:
+                    norm_text = normalise_element_text(element)
+                    if norm_text == norm_target:
+                        return element
 
         return None
 
