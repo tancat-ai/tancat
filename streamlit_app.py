@@ -24,6 +24,7 @@ except ImportError:
 
 from src.llm_client import LLMClient
 from src.provider_config import (
+    api_key_env_var,
     get_provider_defaults,
     provider_requires_openai_api_key,
     resolve_openai_api_key,
@@ -151,18 +152,19 @@ _model_value = (
 
 user_openai_api_key: str | None = None
 if provider_requires_openai_api_key(provider):
+    _key_env = api_key_env_var(provider)
+    _key_label = "OpenAI API Key" if provider == "openai" else "API Key"
     user_openai_api_key = st.sidebar.text_input(
-        "OpenAI API Key",
+        _key_label,
         type="password",
         key="openai_api_key",
         help=(
-            "Required for OpenAI (cloud). Stored in memory for this session only — "
-            "never written to disk. Azure/AWS deployments can inject OPENAI_API_KEY "
-            "instead."
+            f"Required for {provider}. Stored in memory for this session only — "
+            f"never written to disk. Deployments can inject {_key_env} instead."
         ),
     )
-    if not (user_openai_api_key or "").strip() and not os.environ.get("OPENAI_API_KEY", "").strip():
-        st.sidebar.warning("Enter your OpenAI API key to use cloud generation.")
+    if not (user_openai_api_key or "").strip() and not os.environ.get(_key_env, "").strip():
+        st.sidebar.warning(f"Enter your API key to use {provider}.")
 
 resolved_openai_api_key = resolve_openai_api_key(provider=provider, user_api_key=user_openai_api_key)
 sync_openai_api_key_to_env(provider, resolved_openai_api_key)
@@ -194,6 +196,11 @@ if available_models:
         model_name = model_option
 else:
     model_name = st.sidebar.text_input("Model", value=_model_value, key=f"model_name_{provider}")
+
+# Cloud compatible providers have no universal default model (ids differ per
+# endpoint). Say so rather than silently sending a wrong id.
+if provider_requires_openai_api_key(provider) and not str(model_name).strip():
+    st.sidebar.warning("Name the model this endpoint serves — model ids differ per provider.")
 
 LLMClient.set_session_provider(provider, provider_base_url, model_name)
 
