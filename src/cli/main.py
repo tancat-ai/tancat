@@ -561,8 +561,34 @@ def _clear_loaded_package(session: Session) -> None:
     input()
 
 
-def main() -> int:
-    """Main entry point — runs the interactive CLI session."""
+_USAGE = """TanCat - AI-powered Playwright test generator (interactive CLI)
+
+Usage:
+  tancat            Start the interactive session.
+  tancat --help     Show this message.
+
+The interactive session walks through:
+  1. Configure LLM      pick your provider, base URL and model
+  2. Check LLM          probe the endpoint before generating
+  3. Enter User Story   paste a story or upload a file
+  4. Generate + run     write Playwright pytest tests, run them, read evidence
+
+For the Streamlit UI: bash launch_ui.sh
+Docs: https://github.com/tancat-ai/tancat (README.md, docs/ci.md)
+"""
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Main entry point — runs the interactive CLI session.
+
+    ``tancat --help`` prints usage and exits 0. Any other arguments are
+    ignored: the CLI is interactive, so there is nothing else to parse. The
+    CI build check runs this help to exercise the packaged console script.
+    """
+    args = sys.argv[1:] if argv is None else argv
+    if any(arg in ("-h", "--help", "help") for arg in args):
+        print(_USAGE)
+        return 0
     try:
         asyncio.run(interactive_session())
     except KeyboardInterrupt:

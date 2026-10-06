@@ -42,16 +42,20 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  # PR-time self-test (CI review t-0408): the shipping Action's contract was
+  # only checked after merge. The core job below now runs on PRs too.
+  pull_request:
+    branches: [main]
   schedule:
     # Forced nightly — machine-fired, not memory-fired. See the
     # "File issue on failure (forced visibility)" step in the full job.
     - cron: '0 3 * * *'
 
+# Least privilege: jobs grant what they need below. The core job reads only;
+# the full job additionally files the nightly issue (CI review t-0408 — the
+# core job used to inherit pull-requests/issues write it never used).
 permissions:
   contents: read
-  pull-requests: write
-  actions: read
-  issues: write  # nightly failure -> auto-filed deduped issue (forced visibility)
 
 jobs:
   # ── Per-push gate: the core contract ────────────────────────────────────────
@@ -63,7 +67,11 @@ jobs:
     name: 'Action self-test (core: generate + run)'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'push'
+    # Runs on main pushes AND on PRs, so the Action's contract is checked
+    # before merge, not only after it (CI review t-0408).
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -189,6 +197,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      issues: write  # nightly failure -> auto-filed deduped issue
 
     steps:
       - name: Checkout repository
