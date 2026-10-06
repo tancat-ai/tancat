@@ -937,6 +937,12 @@ class ElementMatcher:
             golden_patterns=golden_patterns,
             site_hash=site_hash,
         )
+        if matched is not None and action == "ASSERT":
+            # Carry the quoted target through so the locator builder can pin it
+            # when the class selector is not unique (t-0477).
+            quoted = _quoted_text_in_element(description, matched)
+            if quoted:
+                matched["exact_text"] = quoted
         if (
             matched is not None
             and action == "ASSERT"
@@ -1412,6 +1418,12 @@ class ElementMatcher:
         for i, req in enumerate(requests):
             description = req.get("description", "")
             result = results[i]
+            if result is not None and req.get("action") == "ASSERT":
+                # Carry the quoted target through so the locator builder can pin
+                # it when the class selector is not unique (t-0477).
+                quoted = _quoted_text_in_element(description, result)
+                if quoted:
+                    result["exact_text"] = quoted
             if (
                 result is not None
                 and req.get("action") == "ASSERT"
@@ -1517,6 +1529,28 @@ def _is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool:
     if robust and robust in excluded_selectors:
         return True
     return False
+
+
+_QUOTED_PHRASE_RE = re.compile(r"['\"]([^'\"]{2,})['\"]")
+
+
+def _quoted_text_in_element(description: str, element: dict[str, str]) -> str:
+    """Return the quoted phrase in *description* that the element text carries.
+
+    A criterion that quotes the target it checks ("the 'Per deployment, not per
+    seat' pricing section", "the 'Story -> ...' heading") names text that
+    identifies the element. Return that text so the locator can be pinned to it
+    when the element's class selector is shared by other elements (t-0477).
+    Returns "" when no quoted phrase is present in the element text.
+    """
+    element_text = str(element.get("text", "")).strip().lower()
+    if not element_text:
+        return ""
+    for phrase in _QUOTED_PHRASE_RE.findall(description or ""):
+        phrase = phrase.strip()
+        if len(phrase) >= 2 and phrase.lower() in element_text:
+            return phrase
+    return ""
 
 
 def _validate_text_match(
