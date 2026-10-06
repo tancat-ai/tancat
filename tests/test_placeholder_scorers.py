@@ -1155,3 +1155,66 @@ class TestLearnedNetEvidence:
         )
         net = PlaceholderScorer._learned_net_evidence(el, [prefixed], "abc123", action="CLICK", description="Cart link")
         assert net == -PlaceholderScorer.LEARNED_NEGATIVE_BONUS
+
+
+class TestGoldenPatternSiteGate:
+    """The golden bonus only fires for the site the golden was curated for.
+
+    Scorer half of t-0490: the resolver eval used to call compute_element_score
+    without a site_hash, so every golden pattern (all carry a non-empty
+    site_hash) was skipped and the RAG on/off A/B measured the same number.
+    """
+
+    @staticmethod
+    def _golden(selector: str, site_hash: str) -> RetrievedPattern:
+        return RetrievedPattern(
+            description="CLICK: Add to cart",
+            selector=selector,
+            action_type="CLICK",
+            confidence=1.0,
+            source="golden",
+            site_hash=site_hash,
+        )
+
+    def test_matching_site_hash_applies_the_bonus(self) -> None:
+        el = _element({"selector": "#add-cart", "text": "Add to cart"})
+        base = PlaceholderScorer.compute_element_score("CLICK", "Add to cart", el, "#add-cart", 0)
+        scored = PlaceholderScorer.compute_element_score(
+            "CLICK",
+            "Add to cart",
+            el,
+            "#add-cart",
+            0,
+            golden_patterns=[self._golden("#add-cart", "site-a")],
+            site_hash="site-a",
+        )
+        assert base is not None and scored is not None
+        assert scored - base == PlaceholderScorer.GOLDEN_PATTERN_BONUS
+
+    def test_non_matching_site_hash_does_not_apply_the_bonus(self) -> None:
+        el = _element({"selector": "#add-cart", "text": "Add to cart"})
+        base = PlaceholderScorer.compute_element_score("CLICK", "Add to cart", el, "#add-cart", 0)
+        scored = PlaceholderScorer.compute_element_score(
+            "CLICK",
+            "Add to cart",
+            el,
+            "#add-cart",
+            0,
+            golden_patterns=[self._golden("#add-cart", "site-b")],
+            site_hash="site-a",
+        )
+        assert scored == base
+
+    def test_no_site_hash_does_not_apply_the_bonus(self) -> None:
+        """The pre-t-0490 eval state: no site_hash, so every golden is skipped."""
+        el = _element({"selector": "#add-cart", "text": "Add to cart"})
+        base = PlaceholderScorer.compute_element_score("CLICK", "Add to cart", el, "#add-cart", 0)
+        scored = PlaceholderScorer.compute_element_score(
+            "CLICK",
+            "Add to cart",
+            el,
+            "#add-cart",
+            0,
+            golden_patterns=[self._golden("#add-cart", "site-a")],
+        )
+        assert scored == base
