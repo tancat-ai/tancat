@@ -107,6 +107,12 @@ RECOMMENDED_MODELS: tuple[RecommendedModel, ...] = (
         min_context=128000,
         note="Cloud reference; any recent instruct model works.",
     ),
+    RecommendedModel(
+        provider="azure-openai",
+        model="gpt-4o",
+        min_context=128000,
+        note="Azure OpenAI deployment name; any recent instruct model works.",
+    ),
 )
 
 

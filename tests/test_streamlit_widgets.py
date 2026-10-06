@@ -141,6 +141,35 @@ class TestProviderSelector:
             assert any("API key" in w for w in warnings), f"expected a key warning. Got: {warnings}"
             assert any("Name the model" in w for w in warnings), f"expected a model prompt. Got: {warnings}"
 
+    def test_azure_provider_is_selectable_and_asks_for_its_key(self) -> None:
+        """Azure OpenAI is first-class: selectable, keyed, deployment-named."""
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.list_models.return_value = []
+        mock_llm_class = MagicMock()
+        mock_llm_class.return_value = mock_llm_instance
+        mock_llm_class.set_session_provider = MagicMock()
+
+        def fake_exists(self: Path) -> bool:
+            return False
+
+        with (
+            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch.object(Path, "exists", fake_exists),
+            patch("src.settings_store._load_settings", return_value={}),
+            patch("src.settings_store._save_settings"),
+        ):
+            at = AppTest.from_file(APP_PATH, default_timeout=15)
+            at.run(timeout=15)
+            at.sidebar.selectbox[0].select("azure-openai")
+            at.run(timeout=15)
+
+            key_fields = [t for t in at.sidebar.text_input if t.key == "openai_api_key"]
+            assert key_fields, "expected an API key field for Azure OpenAI"
+            assert key_fields[0].label == "Azure OpenAI API Key"
+            warnings = [w.value for w in at.sidebar.warning]
+            assert any("API key" in w for w in warnings), f"expected a key warning. Got: {warnings}"
+            assert any("Name the model" in w for w in warnings), f"expected a model prompt. Got: {warnings}"
+
 
 # ---------------------------------------------------------------------------
 # Model input tests

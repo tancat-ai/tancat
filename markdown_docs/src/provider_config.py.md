@@ -10,7 +10,8 @@ Centralised configuration for LLM provider defaults, labels, and OpenAI API key 
 |----------|------|-------------|
 | `CLOUD_OPENAI_PROVIDER` | `str` | `"openai"` |
 | `LOCAL_OPENAI_PROVIDER` | `str` | `"openai-local"` |
-| `SUPPORTED_PROVIDERS` | `tuple[str, ...]` | `("ollama", "lm-studio", "openai-local", "openai")` |
+| `AZURE_OPENAI_PROVIDER` | `str` | `"azure-openai"` |
+| `SUPPORTED_PROVIDERS` | `tuple[str, ...]` | `("ollama", "lm-studio", "openai-local", "openai", "azure-openai", "openai-compatible", "openrouter")` |
 | `PROVIDER_LABELS` | `dict[str, str]` | Human-readable labels for each provider |
 
 ## Functions
@@ -24,11 +25,20 @@ Returns `(base_url, model)` defaults for a given provider.
 | `lm-studio` | `http://localhost:1234` | `lmstudio-community/Qwen2.5-7B-Instruct-GGUF` |
 | `openai-local` | `http://localhost:8080` | `llama` |
 | `openai` | `https://api.openai.com/v1` | `gpt-4o` |
+| `azure-openai` | *(none)* | *(none - the deployment name is the model)* |
+| `openai-compatible` | `https://openrouter.ai/api/v1` | *(none - name the model)* |
+| `openrouter` | `https://openrouter.ai/api/v1` | *(none - name the model)* |
 | `ollama` | `http://localhost:11434` | `qwen3.5:35b` |
+
+### `api_key_env_var(provider: str) -> str`
+
+Returns the environment variable that carries the provider's API key
+(`OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, or `OPENAI_COMPATIBLE_API_KEY`).
 
 ### `provider_requires_openai_api_key(provider: str) -> bool`
 
-Returns `True` only for the cloud OpenAI provider (`"openai"`).
+Returns `True` for `openai`, `azure-openai`, `openai-compatible` and
+`openrouter`; `False` for the local providers.
 
 ### `resolve_openai_api_key(*, provider: str, user_api_key: str | None = None) -> str | None`
 

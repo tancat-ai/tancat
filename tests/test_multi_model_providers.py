@@ -48,8 +48,10 @@ class TestSelectable:
         monkeypatch.setenv("LLM_PROVIDER", provider)
         monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         monkeypatch.setenv("OPENAI_COMPATIBLE_API_KEY", "test-key")
+        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "test-key")
         monkeypatch.setenv("OPENAI_BASE_URL", "http://localhost:8080")
         monkeypatch.setenv("OPENAI_COMPATIBLE_BASE_URL", "https://example.test/v1")
+        monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.test.openai.azure.com")
         assert create_provider_from_env() is not None
 
     def test_key_env_var_maps_to_the_compatible_variable(self) -> None:

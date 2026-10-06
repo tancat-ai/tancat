@@ -122,6 +122,7 @@ def _session_defaults() -> dict[str, str]:
         "lm-studio": "LM_STUDIO_BASE_URL",
         "openai": "OPENAI_BASE_URL",
         "openai-local": "OPENAI_BASE_URL",
+        "azure-openai": "AZURE_OPENAI_ENDPOINT",
         "openai-compatible": "OPENAI_COMPATIBLE_BASE_URL",
         "openrouter": "OPENAI_COMPATIBLE_BASE_URL",
     }
@@ -130,6 +131,7 @@ def _session_defaults() -> dict[str, str]:
         "lm-studio": "LM_STUDIO_MODEL",
         "openai": "OPENAI_MODEL",
         "openai-local": "OPENAI_MODEL",
+        "azure-openai": "AZURE_OPENAI_DEPLOYMENT",
         "openai-compatible": "OPENAI_COMPATIBLE_MODEL",
         "openrouter": "OPENAI_COMPATIBLE_MODEL",
     }

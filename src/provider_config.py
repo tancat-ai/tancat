@@ -6,6 +6,7 @@ import os
 
 CLOUD_OPENAI_PROVIDER = "openai"
 LOCAL_OPENAI_PROVIDER = "openai-local"
+AZURE_OPENAI_PROVIDER = "azure-openai"
 OPENAI_COMPATIBLE_PROVIDER = "openai-compatible"
 OPENROUTER_PROVIDER = "openrouter"
 
@@ -14,6 +15,7 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
     "lm-studio",
     LOCAL_OPENAI_PROVIDER,
     CLOUD_OPENAI_PROVIDER,
+    AZURE_OPENAI_PROVIDER,
     OPENAI_COMPATIBLE_PROVIDER,
     OPENROUTER_PROVIDER,
 )
@@ -23,6 +25,7 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
 # factory all read and write the same variable.
 _PROVIDER_KEY_ENV: dict[str, str] = {
     CLOUD_OPENAI_PROVIDER: "OPENAI_API_KEY",
+    AZURE_OPENAI_PROVIDER: "AZURE_OPENAI_API_KEY",
     OPENAI_COMPATIBLE_PROVIDER: "OPENAI_COMPATIBLE_API_KEY",
     OPENROUTER_PROVIDER: "OPENAI_COMPATIBLE_API_KEY",
 }
@@ -32,6 +35,7 @@ PROVIDER_LABELS: dict[str, str] = {
     "lm-studio": "LM Studio (local)",
     LOCAL_OPENAI_PROVIDER: "OpenAI-Compatible (local)",
     CLOUD_OPENAI_PROVIDER: "OpenAI (cloud)",
+    AZURE_OPENAI_PROVIDER: "Azure OpenAI (cloud)",
     OPENAI_COMPATIBLE_PROVIDER: "OpenAI-Compatible (cloud)",
     OPENROUTER_PROVIDER: "OpenRouter (cloud)",
 }
@@ -47,6 +51,9 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
     endpoint can also be queried. The base URL defaults to OpenRouter's for both
     compatible keys (the long-standing behaviour) and is overridden by
     ``OPENAI_COMPATIBLE_BASE_URL`` when set.
+
+    Azure OpenAI has no default base URL or model either: the endpoint embeds
+    the customer's resource name and the "model" is a deployment they created.
     """
     if provider == "lm-studio":
         return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
@@ -54,6 +61,11 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
         return "http://localhost:8080", "llama"
     if provider == CLOUD_OPENAI_PROVIDER:
         return "https://api.openai.com/v1", "gpt-4o"
+    if provider == AZURE_OPENAI_PROVIDER:
+        # Azure is resource-specific: the endpoint is
+        # https://<resource>.openai.azure.com and the "model" is the deployment
+        # name in the URL. Neither has a safe default, so the user names both.
+        return "", ""
     if provider == OPENAI_COMPATIBLE_PROVIDER:
         return "https://openrouter.ai/api/v1", ""
     if provider == OPENROUTER_PROVIDER:
@@ -70,8 +82,9 @@ def api_key_env_var(provider: str) -> str:
 def provider_requires_openai_api_key(provider: str) -> bool:
     """Return True when the provider needs a cloud API key.
 
-    Covers OpenAI cloud and the OpenAI-compatible cloud providers (OpenRouter
-    and any generic compatible endpoint); the local providers need no key.
+    Covers OpenAI cloud, Azure OpenAI and the OpenAI-compatible cloud providers
+    (OpenRouter and any generic compatible endpoint); the local providers need
+    no key.
     """
     return provider in _PROVIDER_KEY_ENV
 
@@ -92,8 +105,9 @@ def sync_openai_api_key_to_env(provider: str, api_key: str | None) -> None:
     Never writes to disk. Platform injectors (Azure App Service, AWS, etc.) can
     still pre-populate the variable before the app starts. Writing to the
     provider's own variable (``OPENAI_API_KEY`` for OpenAI,
-    ``OPENAI_COMPATIBLE_API_KEY`` for the compatible providers) is what lets
-    fallback ``LLMClient()`` instances, built from env alone, pick the key up.
+    ``AZURE_OPENAI_API_KEY`` for Azure, ``OPENAI_COMPATIBLE_API_KEY`` for the
+    compatible providers) is what lets fallback ``LLMClient()`` instances,
+    built from env alone, pick the key up.
     """
     if provider_requires_openai_api_key(provider) and api_key:
         os.environ[api_key_env_var(provider)] = api_key

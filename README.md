@@ -86,6 +86,66 @@ bash launch_cli.sh
 
 For a full walkthrough of the CLI interactive menu, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Connect your LLM
+
+Pick the provider in the Streamlit sidebar or the CLI "Configure LLM" menu. The
+supported providers are: Ollama, LM Studio, OpenAI-compatible (local),
+OpenAI (cloud), **Azure OpenAI**, OpenAI-compatible (cloud), and OpenRouter.
+Local providers need no key. Cloud providers need a key; the app stores it in
+memory for the session unless you save it encrypted.
+
+Every provider is configured with **base URL + model + key**. For a generic
+endpoint the model is whatever the endpoint serves; for Azure OpenAI the "model"
+is your deployment name.
+
+### Azure OpenAI (first-class)
+
+Azure is not a plain OpenAI-compatible endpoint: the deployment name is in the
+request path, `api-version` is a query parameter, and the key goes in the
+`api-key` header. The app builds:
+
+```
+POST https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=2024-10-21
+api-key: <AZURE_OPENAI_API_KEY>
+```
+
+Set these in `.env` (or inject them from your platform's secret store):
+
+```
+LLM_PROVIDER=azure-openai
+AZURE_OPENAI_ENDPOINT=https://my-resource.openai.azure.com
+AZURE_OPENAI_DEPLOYMENT=my-gpt4o-deployment
+AZURE_OPENAI_API_KEY=...
+# AZURE_OPENAI_API_VERSION=2024-10-21   # optional; this is the default
+```
+
+### AWS Bedrock (via the Bedrock Access Gateway)
+
+Do **not** point TanCat at `bedrock-runtime` directly. AWS ships the
+[Bedrock Access Gateway](https://github.com/aws-samples/bedrock-access-gateway),
+an OpenAI-compatible API in front of Bedrock. Use the generic compatible
+provider --- no adapter needed:
+
+```
+LLM_PROVIDER=openai-compatible
+OPENAI_COMPATIBLE_BASE_URL=https://<api-id>.execute-api.<region>.amazonaws.com/api/v1
+OPENAI_COMPATIBLE_API_KEY=<bedrock-gateway-api-key>
+OPENAI_COMPATIBLE_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+```
+
+The base URL shape is the API Gateway invoke URL with a trailing `/api/v1`
+(add the stage if you deployed one):
+`https://<api-id>.execute-api.<region>.amazonaws.com/<stage>/api/v1`.
+The gateway speaks `/chat/completions` with `Authorization: Bearer`, which is
+exactly what the compatible provider sends.
+
+### Any other gateway
+
+The same compatible path covers LiteLLM, Portkey, Azure API Management,
+self-hosted vLLM/SGLang/TGI, Together, Groq, and DeepSeek: set the provider to
+OpenAI-compatible, paste the gateway's `/v1` base URL and key, and name the
+model. See [.env.example](.env.example) for the full list of variables.
+
 ## Architecture
 
 ```

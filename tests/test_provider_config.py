@@ -21,6 +21,7 @@ from src.provider_config import (
         ("lm-studio", ("http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF")),
         ("openai-local", ("http://localhost:8080", "llama")),
         ("openai", ("https://api.openai.com/v1", "gpt-4o")),
+        ("azure-openai", ("", "")),
     ],
 )
 def test_get_provider_defaults(provider: str, expected: tuple[str, str]) -> None:
@@ -34,6 +35,7 @@ def test_get_provider_defaults(provider: str, expected: tuple[str, str]) -> None
         ("lm-studio", False),
         ("openai-local", False),
         ("openai", True),
+        ("azure-openai", True),
     ],
 )
 def test_provider_requires_openai_api_key(provider: str, requires_key: bool) -> None:

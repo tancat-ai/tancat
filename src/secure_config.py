@@ -202,6 +202,7 @@ def resolve_key(provider: str) -> str | None:
     # 1. Environment variable (cloud injection / user preference)
     env_var_map: dict[str, str] = {
         "openai": "OPENAI_API_KEY",
+        "azure-openai": "AZURE_OPENAI_API_KEY",
         "ollama": "OLLAMA_API_KEY",
         "lm-studio": "LM_STUDIO_API_KEY",
         "openai-local": "OPENAI_API_KEY",

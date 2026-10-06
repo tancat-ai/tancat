@@ -180,6 +180,11 @@ class LLMClient:
             env_model = os.environ.get("OPENAI_COMPATIBLE_MODEL")
             if env_model:
                 return env_model
+        elif self._provider.provider_name == "azure-openai":
+            # For Azure the app's "model" is the deployment name.
+            env_model = os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+            if env_model:
+                return env_model
 
         # 2. For local providers that expose a loaded/available model endpoint,
         # prefer the model already hosted by the user's server.
@@ -206,6 +211,7 @@ class LLMClient:
             "lm-studio",
             "openai-local",
             "openai-compatible",
+            "azure-openai",
         ):
             try:
                 models = self.list_models(timeout=5)
@@ -227,6 +233,10 @@ class LLMClient:
             # OpenRouter id is not a Groq, Together or OpenCode id). Return an
             # empty model so the provider raises a clear "name a model" error
             # instead of sending a wrong id.
+            return ""
+        if self._provider.provider_name == "azure-openai":
+            # Azure deployments are account-specific, so there is no default;
+            # the provider raises a clear "name a deployment" error instead.
             return ""
         return "gpt-4o"
 
