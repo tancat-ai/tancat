@@ -16,6 +16,9 @@ import time
 from pathlib import Path
 
 from src.provider_config import (
+    PROVIDER_LABELS,
+    SUPPORTED_PROVIDERS,
+    api_key_env_var,
     get_provider_defaults,
     provider_requires_openai_api_key,
     sync_openai_api_key_to_env,
@@ -358,6 +361,19 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
             return []
         elif provider_name == "openai":
             return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        elif provider_name in ("openai-compatible", "openrouter"):
+            from src.llm_providers import BROWSER_USER_AGENT
+
+            key = os.environ.get("OPENAI_COMPATIBLE_API_KEY", "").strip()
+            headers = {"User-Agent": BROWSER_USER_AGENT}
+            if key:
+                headers["Authorization"] = f"Bearer {key}"
+            # The compatible base URL already carries its version path
+            # (e.g. https://openrouter.ai/api/v1). Cloud catalogues are larger
+            # than a local one, so allow a little more than the 2s local probe.
+            response = httpx.get(f"{provider_url.rstrip('/')}/models", timeout=8.0, headers=headers)
+            response.raise_for_status()
+            return [m["id"] for m in response.json().get("data", [])]
     except httpx.ConnectError as e:
         print(yellow(f"  ⚠ Cannot connect to {provider_url}: {e}"))
     except httpx.TimeoutException as e:
@@ -369,22 +385,29 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
     return []
 
 
-def _prompt_openai_api_key() -> str:
-    """Prompt for a cloud OpenAI API key, reusing platform env or encrypted
-    local storage when available."""
+def _prompt_openai_api_key(provider: str = "openai") -> str:
+    """Prompt for a cloud API key, reusing platform env or encrypted storage.
+
+    Works for OpenAI and the compatible cloud providers (OpenRouter and any
+    generic endpoint): the env var and the encrypted-storage key are both
+    provider-specific, so a key entered for one is never read for another.
+    """
     from src.secure_config import load_key, save_key
 
+    env_var = api_key_env_var(provider)
+    label = "OpenAI API Key" if provider == "openai" else "API Key"
+
     # 1. Check platform-provided key (env var / cloud injection)
-    existing = os.environ.get("OPENAI_API_KEY", "").strip()
+    existing = os.environ.get(env_var, "").strip()
     if existing:
-        print(green("  ✓ OpenAI API key available from environment (Azure/AWS/App Service)."))
+        print(green(f"  ✓ API key available from environment ({env_var})."))
         override = read_optional("  Press Enter to keep it, or paste a replacement key:", "")
         if override.strip():
             return override.strip()
         return existing
 
     # 2. Check encrypted local storage
-    stored = load_key("openai")
+    stored = load_key(provider)
     if stored:
         masked = stored[:4] + "****" + stored[-4:] if len(stored) > 8 else "****"
         print(green(f"  ✓ Found saved API key ({masked})."))
@@ -397,14 +420,14 @@ def _prompt_openai_api_key() -> str:
         elif use_saved == 2:
             from src.secure_config import delete_key
 
-            delete_key("openai")
+            delete_key(provider)
             print(green("  ✓ Saved key removed."))
             # Fall through to prompt for new key
         # use_saved == 1: fall through to prompt
 
     # 3. Prompt for new key
     while True:
-        key = getpass.getpass("  OpenAI API Key: ")
+        key = getpass.getpass(f"  {label}: ")
         if key.strip():
             save_for_future = print_menu(
                 ["Yes, save encrypted", "No, keep in memory only"],
@@ -412,30 +435,29 @@ def _prompt_openai_api_key() -> str:
             )
             if save_for_future == 0:
                 try:
-                    save_key("openai", key.strip())
+                    save_key(provider, key.strip())
                     print(green("  ✓ Key saved (encrypted) to ~/.ai-test-gen/config.enc"))
                 except ImportError:
                     print(yellow("  ⚠ cryptography package not installed — key not saved."))
                     print(yellow("    Install with: uv add cryptography"))
             return key.strip()
-        print(yellow("  API key is required for OpenAI (cloud)."))
+        print(yellow(f"  API key is required for {provider}."))
 
 
 def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, str, str]:
     """Let the user pick LLM provider and model. Returns (provider, base_url, model)."""
     print_header("LLM Configuration")
 
+    # Reconcile with the shared registry: the CLI menu, the Streamlit sidebar,
+    # the factory and create_provider_from_env all read SUPPORTED_PROVIDERS, so
+    # they can never drift again.
     providers: list[tuple[str, str, str]] = [
-        ("Ollama (local)", "ollama", "http://localhost:11434"),
-        ("LM Studio (local)", "lm-studio", "http://localhost:1234"),
-        ("OpenAI-Compatible (local)", "openai-local", "http://localhost:8080"),
-        ("OpenAI (cloud)", "openai", "https://api.openai.com"),
+        (PROVIDER_LABELS[key], key, get_provider_defaults(key)[0]) for key in SUPPORTED_PROVIDERS
     ]
 
     idx = print_menu(
         [p[0] for p in providers],
         "Select LLM provider",
-        shortcuts=[("O", "Ollama"), ("L", "LM Studio"), ("C", "OpenAI-Local"), ("A", "OpenAI")],
         back=BACK_LLM,
     )
     if idx < 0:
@@ -447,10 +469,11 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
     display_name, provider_key, default_url = providers[idx]
 
     if provider_requires_openai_api_key(provider_key):
-        api_key = _prompt_openai_api_key()
+        api_key = _prompt_openai_api_key(provider_key)
         sync_openai_api_key_to_env(provider_key, api_key)
 
-    url = read_optional("  Base URL", default_url)
+    # A generic compatible endpoint has no safe default URL — require one.
+    url = read_optional("  Base URL", default_url) if default_url else read_non_empty("  Base URL")
 
     models = _get_available_models(provider_key, url)
     if models:
@@ -470,7 +493,8 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
     else:
         print(f"\n  Could not auto-detect models for {provider_key}.")
         fallback = model_name or _default_model(provider_key)
-        selected_model = read_optional("  Model name", fallback)
+        # Compatible providers have no default model: the user must name one.
+        selected_model = read_optional("  Model name", fallback) if fallback else read_non_empty("  Model name")
 
     print(green(f"  ✓ Provider: {provider_key} | URL: {url} | Model: {selected_model}"))
     return provider_key, url, selected_model

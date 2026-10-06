@@ -176,10 +176,6 @@ class LLMClient:
             env_model = os.environ.get("OPENAI_MODEL")
             if env_model:
                 return env_model
-        elif self._provider.provider_name == "openai-local":
-            env_model = os.environ.get("OPENAI_MODEL")
-            if env_model:
-                return env_model
         elif self._provider.provider_name == "openai-compatible":
             env_model = os.environ.get("OPENAI_COMPATIBLE_MODEL")
             if env_model:
@@ -227,7 +223,11 @@ class LLMClient:
         if self._provider.provider_name == "openai-local":
             return "llama"
         if self._provider.provider_name == "openai-compatible":
-            return "openai/gpt-4o"
+            # No universal default exists across compatible endpoints (an
+            # OpenRouter id is not a Groq, Together or OpenCode id). Return an
+            # empty model so the provider raises a clear "name a model" error
+            # instead of sending a wrong id.
+            return ""
         return "gpt-4o"
 
     @property

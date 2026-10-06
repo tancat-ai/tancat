@@ -82,7 +82,9 @@ class TestProviderSelector:
         assert "8080" in str(base_url.value), f"Expected the :8080 base URL default, got '{base_url.value}'"
 
     def test_provider_selector_has_all_options(self, at: AppTest) -> None:
-        """Provider selectbox should list all four provider options."""
+        """Provider selectbox should list every supported provider."""
+        from src.provider_config import SUPPORTED_PROVIDERS
+
         provider_box = at.sidebar.selectbox[0]
         options = provider_box.options
         option_labels = [str(o) for o in options]
@@ -91,11 +93,58 @@ class TestProviderSelector:
         assert "Ollama" in option_text, f"Expected Ollama in options. Got: {option_labels}"
         assert "LM Studio" in option_text, f"Expected LM Studio in options. Got: {option_labels}"
         assert "OpenAI" in option_text, f"Expected OpenAI in options. Got: {option_labels}"
+        assert "OpenRouter" in option_text, f"Expected OpenRouter in options. Got: {option_labels}"
+        assert len(option_labels) == len(SUPPORTED_PROVIDERS)
 
-    def test_provider_selector_has_four_options(self, at: AppTest) -> None:
-        """Provider selectbox should have exactly four options."""
+    def test_provider_selector_has_every_supported_provider(self, at: AppTest) -> None:
+        """Provider selectbox should show one entry per supported provider."""
+        from src.provider_config import SUPPORTED_PROVIDERS
+
         provider_box = at.sidebar.selectbox[0]
-        assert len(provider_box.options) == 4, f"Expected 4 provider options, got {len(provider_box.options)}"
+        assert len(provider_box.options) == len(SUPPORTED_PROVIDERS), (
+            f"Expected {len(SUPPORTED_PROVIDERS)} provider options, got {len(provider_box.options)}"
+        )
+        # The two compatible cloud providers must be selectable, not just implemented.
+        assert "openai-compatible" in SUPPORTED_PROVIDERS
+        assert "openrouter" in SUPPORTED_PROVIDERS
+
+    def test_compatible_provider_is_selectable_and_asks_for_a_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Selecting a compatible cloud provider shows the key field + model prompt.
+
+        Uses a fresh AppTest (the module fixture is shared and must not be
+        mutated by an interaction test). Hermetic: the sidebar's key warning is
+        driven by the provider's own env var, so clear any ambient/leaked value
+        first (a leaked OPENAI_COMPATIBLE_API_KEY suppressed the warning on CI).
+        """
+        monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        mock_llm_instance = MagicMock()
+        mock_llm_instance.list_models.return_value = []
+        mock_llm_class = MagicMock()
+        mock_llm_class.return_value = mock_llm_instance
+        mock_llm_class.set_session_provider = MagicMock()
+
+        def fake_exists(self: Path) -> bool:
+            return False
+
+        with (
+            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch.object(Path, "exists", fake_exists),
+            patch("src.settings_store._load_settings", return_value={}),
+            patch("src.settings_store._save_settings"),
+        ):
+            at = AppTest.from_file(APP_PATH, default_timeout=15)
+            at.run(timeout=15)
+            at.sidebar.selectbox[0].select("openai-compatible")
+            at.run(timeout=15)
+
+            key_fields = [t for t in at.sidebar.text_input if t.key == "openai_api_key"]
+            assert key_fields, "expected an API key field for the compatible provider"
+            assert key_fields[0].label == "API Key"
+            warnings = [w.value for w in at.sidebar.warning]
+            assert any("API key" in w for w in warnings), f"expected a key warning. Got: {warnings}"
+            assert any("Name the model" in w for w in warnings), f"expected a model prompt. Got: {warnings}"
 
 
 # ---------------------------------------------------------------------------

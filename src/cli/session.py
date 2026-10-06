@@ -111,7 +111,10 @@ def _env_or_default(key: str, default: str) -> str:
 
 def _session_defaults() -> dict[str, str]:
     """Compute Session defaults from environment variables or provider fallbacks."""
-    provider = _env_or_default("LLM_PROVIDER", "ollama")
+    # AGENTS.md §5 / README: the documented default provider is openai-local
+    # (llama.cpp :8080). This used to default to "ollama", contradicting both
+    # the settings store and create_provider_from_env.
+    provider = _env_or_default("LLM_PROVIDER", "openai-local")
     base_url, model = get_provider_defaults(provider)
 
     url_env_keys: dict[str, str] = {
@@ -119,12 +122,16 @@ def _session_defaults() -> dict[str, str]:
         "lm-studio": "LM_STUDIO_BASE_URL",
         "openai": "OPENAI_BASE_URL",
         "openai-local": "OPENAI_BASE_URL",
+        "openai-compatible": "OPENAI_COMPATIBLE_BASE_URL",
+        "openrouter": "OPENAI_COMPATIBLE_BASE_URL",
     }
     model_env_keys: dict[str, str] = {
         "ollama": "OLLAMA_MODEL",
         "lm-studio": "LM_STUDIO_MODEL",
         "openai": "OPENAI_MODEL",
         "openai-local": "OPENAI_MODEL",
+        "openai-compatible": "OPENAI_COMPATIBLE_MODEL",
+        "openrouter": "OPENAI_COMPATIBLE_MODEL",
     }
 
     return {

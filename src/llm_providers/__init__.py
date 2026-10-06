@@ -13,6 +13,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+# Browser-like User-Agent for the OpenAI-compatible HTTP clients. Some
+# compatible gateways sit behind Cloudflare, which returns HTTP 1010
+# ("browser signature" block) for the default httpx/SDK User-Agent. The repo's
+# own debug proxy (scripts/debug/opencode_proxy) exists for exactly this reason
+# against opencode.ai/zen, so the product client sends the same kind of UA.
+BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+)
+
 
 @dataclass
 class ChatMessage:
@@ -342,7 +351,9 @@ class OpenAIProvider(LLMProvider):
         import httpx
 
         self._client = httpx.Client(
-            base_url=self._base_url, timeout=300, headers={"Authorization": f"Bearer {self._api_key}"}
+            base_url=self._base_url,
+            timeout=300,
+            headers={"Authorization": f"Bearer {self._api_key}", "User-Agent": BROWSER_USER_AGENT},
         )
 
     def _detect_local_url(self, timeout: float = 2.0) -> str:
@@ -415,7 +426,14 @@ class OpenAIProvider(LLMProvider):
         if self._is_local:
             model = model or os.environ.get("OPENAI_MODEL", "llama")
         elif self._is_openai_compatible:
-            model = model or os.environ.get("OPENAI_COMPATIBLE_MODEL", "openai/gpt-4o")
+            model = model or os.environ.get("OPENAI_COMPATIBLE_MODEL", "")
+            if not model:
+                # No safe cross-provider default: fail with a clear message
+                # instead of sending an invalid model id to the endpoint.
+                raise ValueError(
+                    "No model configured for the OpenAI-compatible provider. "
+                    "Name a model (or set OPENAI_COMPATIBLE_MODEL) — model ids differ per endpoint."
+                )
         else:
             model = model or os.environ.get("OPENAI_MODEL", "gpt-4o")
 
@@ -450,7 +468,9 @@ class OpenAIProvider(LLMProvider):
         import httpx
 
         with httpx.Client(
-            base_url=self._base_url, timeout=timeout, headers={"Authorization": f"Bearer {self._api_key}"}
+            base_url=self._base_url,
+            timeout=timeout,
+            headers={"Authorization": f"Bearer {self._api_key}", "User-Agent": BROWSER_USER_AGENT},
         ) as client:
             response = client.get("/models")
             # In local mode, 401 means the server is up but the dummy key is not recognized — still OK
@@ -616,7 +636,7 @@ def create_provider_from_env() -> LLMProvider:
     elif provider_name == "openrouter":
         return OpenAIProvider(
             api_key=os.environ.get("OPENAI_COMPATIBLE_API_KEY"),
-            base_url="https://openrouter.ai/api/v1",
+            base_url=os.environ.get("OPENAI_COMPATIBLE_BASE_URL") or "https://openrouter.ai/api/v1",
             is_openai_compatible=True,
         )
     else:
