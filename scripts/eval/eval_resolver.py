@@ -59,11 +59,20 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
     """Load all golden placeholders from dataset files.
 
     Returns flat list with keys: action, description, expected_locator,
-    tolerance_selectors, expected_page.
+    tolerance_selectors, expected_page, site, site_hash.
+
+    ``site_hash`` is the identity the RAG store scoped this dataset's golden
+    patterns under, so the scorer's golden-pattern bonus can match them. Without
+    it (the pre-t-0490 state) every pattern carried a non-empty site_hash and
+    the bonus was skipped, which is why the RAG A/B measured no difference.
     """
+    from src.rag_bundled import golden_site_hash
+
     placeholders: list[dict[str, Any]] = []
     for fpath in sorted(_DATASET_DIR.glob("*.json")):
         data = json.loads(fpath.read_text(encoding="utf-8"))
+        site_name = str(data.get("site", ""))
+        dataset_site_hash = golden_site_hash(site_name, str(data.get("base_url", "")))
         for crit in data.get("golden_resolutions", []):
             for ph in crit.get("placeholders", []):
                 placeholders.append(
@@ -77,7 +86,8 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
                         # golden url_assertion reaches _resolve_placeholder as
                         # None, so the no-fall-through guard never runs.
                         "expected_type": ph.get("expected_type", ""),
-                        "site": data.get("site", ""),
+                        "site": site_name,
+                        "site_hash": dataset_site_hash,
                         "story_id": data.get("id", ""),
                     }
                 )
@@ -160,6 +170,7 @@ def _resolve_placeholder(
     rag_retriever: Any | None = None,
     flow_store: Any | None = None,
     expected_type: str | None = None,
+    site_hash: str | None = None,
 ) -> str | None:
     """Resolve a single placeholder using ElementMatcher's multi-pass pipeline.
 
@@ -170,6 +181,9 @@ def _resolve_placeholder(
             element to match.
         flow_store: AI-042 cross-site flow memory store. ``None`` disables the
             flow path (baseline behavior).
+        site_hash: The site identity the golden patterns are scoped under. It
+            must reach the scorer or ``_golden_pattern_bonus`` skips every
+            pattern with a non-empty site_hash (t-0490).
 
     Returns:
         Resolved locator string, or None if not found.
@@ -244,6 +258,7 @@ def _resolve_placeholder(
             selector=selector,
             match_threshold=0.0,
             golden_patterns=golden_patterns,
+            site_hash=site_hash,
         )
         if score is not None and score > best_score:
             best_score = score
@@ -326,6 +341,7 @@ async def run_resolver_eval(
             rag_retriever=rag_retriever,
             flow_store=flow_store,
             expected_type=ph.get("expected_type"),
+            site_hash=ph.get("site_hash"),
         )
 
         expected = ph["expected_locator"]
