@@ -335,6 +335,18 @@ def test_shared_action_verb_is_not_identity() -> None:
     assert link_name_matches("Buy Pro link resolves", buy_pro)
 
 
+def test_link_name_match_is_word_bounded() -> None:
+    """t-0468: a short identity token must not match inside a longer word."""
+    product = {"tag": "a", "text": "Product catalogue", "href": "/products"}
+    assert not link_name_matches("Pro link resolves", product)
+    assert link_name_matches("Product link resolves", product)
+
+
+def test_link_name_match_treats_hyphen_and_space_as_equal() -> None:
+    """The rendered name may use a space where the criterion uses a hyphen."""
+    assert link_name_matches("Air-Gap link resolves", {"tag": "a", "text": "Air Gap"})
+
+
 # ---------------------------------------------------------------------------
 # Criterion 27 — section containment
 # ---------------------------------------------------------------------------

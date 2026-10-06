@@ -356,3 +356,19 @@ class TestB016SynonymExpansion:
         """B-037: 'card number' must not conflate with 'cardholder name'."""
         assert self.resolver.text_matches_description("Cardholder Name", "card number") is False
         assert self.resolver.text_matches_description("Card Number", "card number") is True
+
+    # --- t-0468: a shared action verb is not identity ---
+
+    def test_shared_action_verb_does_not_override_a_missing_identity_token(self) -> None:
+        """t-0468: 'Buy Air-Gap' must not match 'Buy Pro' on the shared verb.
+
+        The landing rewrite removed the Air-Gap tier; the lookalike Buy Pro
+        control shares only the action verb 'buy', never the identity token.
+        """
+        assert self.resolver.text_matches_description("Buy Pro", "Buy Air-Gap") is False
+
+    def test_identity_token_present_still_matches(self) -> None:
+        """The distinguishing-token gate only rejects when no identity token is present."""
+        assert self.resolver.text_matches_description("Buy Pro", "Buy Pro link resolves") is True
+        # Expanded tokens count, so a real synonym still matches.
+        assert self.resolver.text_matches_description("Sign Up", "Create account") is True

@@ -96,10 +96,10 @@ SITES: dict[str, SiteConfig] = {
             "6. Scroll back to the top and click the 'Noir Art' button in the hero panel\n"
             "7. Verify the noir artwork panel is shown and its image loads (no blank panel)\n"
             "8. Click the 'Copy Command' button and verify the visible install command contains 'git clone https://github.com/tancat-ai/tancat'\n"
-            "9. Verify the 'Watch 3-Min Walkthrough' button in the hero links to a real video: assert its href attribute does NOT contain the placeholder text 'YOUR_VIDEO_ID_HERE'\n"
+            "9. Click the 'See how it works' button in the hero and verify the 'See how plain English becomes ground-truth Pytest' heading is visible\n"
             "10. Verify the 'Buy Pro' button in the pricing section links to a real purchase URL: assert its href attribute does NOT contain 'TBD'\n"
-            "11. Verify the 'Buy Air-Gap' button in the pricing section links to a real purchase URL: assert its href attribute does NOT contain 'TBD'\n"
-            "12. Verify the 'Walkthrough' link in the footer links to a real video: assert its href attribute does NOT contain the placeholder text 'YOUR_VIDEO_ID_HERE'\n"
+            "11. Click the 'Install locally' button in the hero and verify the 'Clone + uv sync + run' heading is visible\n"
+            "12. Click the 'See how it works' link in the footer and verify the 'See how plain English becomes ground-truth Pytest' heading is visible\n"
             "(Total: 12 criteria)\n"
         ),
         expected_min_criteria=12,

@@ -159,6 +159,20 @@ def link_name_tokens(description: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(identity_tokens or tokens))
 
 
+def _token_in_haystack(token: str, haystack: str) -> bool:
+    """Word-boundary token presence, so a short token cannot over-match.
+
+    "pro" must not match inside "product"; "buy" must not match inside
+    "buyer". Hyphens are separators on both sides, so the token "air-gap"
+    matches the rendered name "Air Gap" as well as "Air-Gap".
+    """
+    parts = [re.escape(part) for part in token.replace("-", " ").split()]
+    if not parts:
+        return False
+    pattern = r"(?<![a-z0-9])" + r"\s+".join(parts) + r"(?![a-z0-9])"
+    return re.search(pattern, haystack.replace("-", " ")) is not None
+
+
 def link_name_matches(description: str, element: dict[str, Any] | None) -> bool:
     """Return True when the element plausibly is the link named by the criterion.
 
@@ -176,7 +190,7 @@ def link_name_matches(description: str, element: dict[str, Any] | None) -> bool:
         str(element.get(key, ""))
         for key in ("text", "aria_label", "accessible_name", "name", "id", "raw_href", "href", "selector")
     ).lower()
-    return any(token in haystack for token in tokens)
+    return any(_token_in_haystack(token, haystack) for token in tokens)
 
 
 def scope_pages_to_links(
