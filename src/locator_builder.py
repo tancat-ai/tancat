@@ -61,12 +61,21 @@ def _useful_class_terms(element: dict) -> frozenset[str]:
 
 
 def _same_node(a: dict, b: dict) -> bool:
-    """True when two element dicts are representations of the same DOM node."""
-    for key in ("id", "data_test", "selector"):
+    """True when two element dicts are representations of the same DOM node.
+
+    ``id`` and ``data-test`` are unique keys. A ``selector`` is not: the scraper
+    assigns the same class-based selector to distinct same-class headings, so a
+    selector match only identifies the same node when the text also matches.
+    """
+    for key in ("id", "data_test"):
         a_value = str(a.get(key, "")).strip()
         b_value = str(b.get(key, "")).strip()
         if a_value and a_value == b_value:
             return True
+    a_selector = str(a.get("selector", "")).strip()
+    b_selector = str(b.get("selector", "")).strip()
+    if a_selector and a_selector == b_selector:
+        return str(a.get("text", "")).strip() == str(b.get("text", "")).strip()
     return False
 
 

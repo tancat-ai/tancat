@@ -288,3 +288,29 @@ class TestQuotedHeadingLocatorPinning:
 
         locator = build_robust_locator(target, page_elements=pages["https://x.test/"])
         assert locator == "h2.font-extrabold.mt-2.sm\\:text-4xl.text-3xl.text-white"
+
+    def test_same_class_selector_with_different_text_still_pins(self) -> None:
+        """t-0484: distinct headings can share one class-based selector.
+
+        The scraper gives the same class-based selector to all four same-class
+        h2s, so _same_node must not merge them on selector alone - only a
+        same-selector AND same-text pair is one node.
+        """
+        shared_selector = "h2.font-extrabold.mt-2.sm\\:text-4xl.text-3xl.text-white"
+        target = {
+            "selector": shared_selector,
+            "text": "Per deployment, not per seat",
+            "tag": "h2",
+            "role": "heading",
+            "classes": self.SHARED_CLASSES,
+            "exact_text": "Per deployment, not per seat",
+        }
+        other = {
+            "selector": shared_selector,
+            "text": "See how plain English becomes ground-truth Pytest",
+            "tag": "h2",
+            "role": "heading",
+            "classes": self.SHARED_CLASSES,
+        }
+        locator = build_robust_locator(target, page_elements=[target, other])
+        assert locator == 'h2:has-text("Per deployment, not per seat")'
