@@ -42,7 +42,7 @@ tool's opinion. CI never mutates silently.
 ## 2. GitHub Action
 
 ```yaml
-- uses: tancat-ai/tancat/ai-test-generator@v1   # (or ./, in-repo)
+- uses: tancat-ai/tancat@v1   # (or ./, in-repo)
   with:
     mode: generate-and-run
     story: |
@@ -280,3 +280,40 @@ enforcement.
   duplicated, cache hit on re-run.
 - The eval harness gate (`scripts/eval/eval_harness.py`) covers resolution
   accuracy — run before shipping pipeline/resolver changes.
+
+## 12. Releases & versioning
+
+The product and the Action share one release path
+(`.github/workflows/release.yml`), triggered by a `v*` git tag:
+
+1. **Gates** — the exact `ci.yml` chain runs against the tagged commit (smoke,
+   lint, mypy, the resolver floor, the baseline check, the unit suite, and the
+   wheel build + `tancat --help` entry-point check below).
+2. **Build** — `uv build` produces the sdist and wheel. The tag must match
+   `[project].version` in `pyproject.toml` or the job fails, so the version has
+   one source of truth.
+3. **Release** — a GitHub Release titled with the tag, generated notes, and both
+   distributions attached.
+4. **`v1`** — 1.x releases force-move the floating `v1` tag.
+
+**Cutting a release:** bump `[project].version`, merge to `main`, then
+`git tag vX.Y.Z && git push origin vX.Y.Z`. The first release should be
+`v1.0.0`, so the moving `v1` tag exists for consumers to pin. The `v1` tag
+itself is excluded from the release trigger, so re-pointing it does not fire a
+second release.
+
+**Pinning the Action:** consumers use the moving major tag —
+`uses: tancat-ai/tancat@v1` — or an immutable `vX.Y.Z` tag for a reproducible
+pin. Before the first release the only option was `@main`, which moves and is
+unsafe for production use.
+
+**Build check (CI review t-0408):** the `ci.yml` test job builds the wheel,
+installs it over the synced environment, and runs `tancat --help`, so a broken
+package or a missing console script fails CI instead of shipping unnoticed.
+
+**GitHub Marketplace: yes.** The Action is a Docker action with `branding`, so
+it is marketplace-eligible. The listing is a one-time owner action on the first
+release (edit the release, tick "Publish this Action to the GitHub
+Marketplace", accepting the Marketplace Developer Agreement) - a workflow
+cannot set it. The Marketplace listing and the `v1` tag are independent: the tag
+is what `uses:` consumes either way.
