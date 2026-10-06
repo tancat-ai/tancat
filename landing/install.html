@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html class="scroll-smooth" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta name="description" content="Install TanCat and activate your Pro licence: environment variable, licence-file variable, or the default key file."/>
+<meta name="theme-color" content="#070b10"/>
+<title>Install &amp; activate TanCat Pro - TanCat</title>
+<link rel="canonical" href="https://tancat.dev/install.html"/>
+<link rel="icon" href="favicon.ico" sizes="any"/>
+<link rel="icon" href="icon-192.png" type="image/png" sizes="192x192"/>
+<link rel="apple-touch-icon" href="apple-touch-icon.png"/>
+<meta name="robots" content="index,follow"/>
+<link rel="stylesheet" href="tailwind.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  body{background-color:#070b10;color:#e2e8f0;overflow-x:hidden}
+  .film-grain{background-image:radial-gradient(rgba(245,158,11,0.04) 1px,transparent 0);background-size:24px 24px}
+  pre code{display:block;white-space:pre}
+</style>
+</head>
+<body class="font-sans antialiased selection:bg-amber-500/30 selection:text-amber-200 film-grain min-h-screen">
+<header class="sticky top-0 z-50 backdrop-blur-xl bg-midnight/80 border-b border-slate-800/80">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <a class="flex items-center gap-3 group" href="index.html">
+      <img alt="TanCat logo" class="w-9 h-9 rounded-lg object-contain" src="logo_transparent.png"/>
+      <span class="font-black text-xl tracking-tight text-white">Tan<span class="text-amber-400">Cat</span></span>
+    </a>
+    <nav class="flex items-center gap-6 text-sm font-medium text-slate-300">
+      <a class="hover:text-amber-400 transition-colors" href="index.html#pricing">Pricing</a>
+      <a class="hover:text-amber-400 transition-colors" href="terms.html">Terms</a>
+      <a class="hover:text-amber-400 transition-colors" href="privacy.html">Privacy</a>
+    </nav>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+  <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">Pro deployment</span>
+  <h1 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">Install &amp; activate your licence</h1>
+  <p class="text-slate-400 text-sm mt-3">One licence covers one deployment. Your key arrives by email when you purchase. This page mirrors the PDF that ships with every order.</p>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">1. Install</h2>
+    <p class="text-slate-400 text-xs mt-1">You need Python 3.14+, <code class="text-amber-300 font-mono">uv</code>, Chromium, and an OpenAI-compatible LLM endpoint you control (llama.cpp, Ollama, or LM Studio).</p>
+    <div class="mt-3 bg-midnight border border-slate-800 rounded-2xl p-4 font-mono text-xs text-slate-300 shadow-xl">
+<pre><code><span class="text-slate-500"># get the code and dependencies</span>
+git clone https://github.com/tancat-ai/tancat
+cd tancat &amp;&amp; uv sync &amp;&amp; playwright install chromium
+
+<span class="text-slate-500"># start the UI (or: bash launch_cli.sh)</span>
+bash launch_ui.sh</code></pre>
+    </div>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">2. Activate the licence</h2>
+    <p class="text-slate-400 text-xs mt-1">Give the key to the deployment in <strong class="text-slate-200">any one</strong> of these three ways. The order below is also the order the product reads them in, so the environment variable wins if more than one is set.</p>
+
+    <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way A &middot; Environment variable</div>
+      <p class="text-slate-300 text-xs mt-2">Best for CI and containerised runs. The key is passed inline and never written to disk.</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>AITEST_LICENSE_KEY="&lt;your key&gt;" bash launch_ui.sh</code></pre>
+    </div>
+
+    <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way B &middot; A file you point at</div>
+      <p class="text-slate-300 text-xs mt-2">Keep the key anywhere and name the path. Good when your secret store writes a file.</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>cp license.key /etc/tancat/license.key
+AITEST_LICENSE_FILE=/etc/tancat/license.key bash launch_ui.sh</code></pre>
+    </div>
+
+    <div class="mt-4 bg-cardbg border border-slate-800 rounded-2xl p-5">
+      <div class="text-xs font-mono uppercase tracking-wider text-amber-400">Way C &middot; The default key file</div>
+      <p class="text-slate-300 text-xs mt-2">Save the key at the default location and start the app normally. No environment variable needed.</p>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>mkdir -p ~/.ai-test-gen
+cp license.key ~/.ai-test-gen/license.key
+bash launch_ui.sh</code></pre>
+      <p class="text-slate-500 text-[11px] font-mono mt-2">On Windows, <code class="text-slate-300">~</code> is <code class="text-slate-300">%USERPROFILE%</code>, so the file is <code class="text-slate-300">%USERPROFILE%\.ai-test-gen\license.key</code>.</p>
+    </div>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">3. Check it worked</h2>
+    <p class="text-slate-400 text-xs mt-1">Open the UI and look at the <strong class="text-slate-200">License &amp; Usage</strong> panel in the sidebar.</p>
+    <div class="mt-4 border border-emerald-500/40 bg-emerald-500/10 rounded-2xl p-5">
+      <div class="text-xs font-mono uppercase tracking-wider text-emerald-400">A licensed deployment reports</div>
+<pre class="mt-3 bg-midnight border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300 overflow-x-auto"><code>License valid &mdash; pro tier (deployment acme-prod).</code></pre>
+      <p class="text-slate-300 text-xs mt-3">The panel then shows <code class="text-amber-300 font-mono">Runs: &lt;n&gt; (unlimited)</code> and <code class="text-amber-300 font-mono">Evidence exports: &lt;n&gt; (unlimited)</code>. The deployment id in the line is the one your key was issued for.</p>
+    </div>
+    <div class="mt-4 border border-slate-800 bg-cardbg rounded-2xl p-5">
+      <div class="text-xs font-mono uppercase tracking-wider text-slate-400">If the key is missing or invalid</div>
+      <p class="text-slate-300 text-xs mt-2">The product keeps working on the free tier and says so. It never locks you out of the open-source core. If you expected Pro and see the free-tier line, check that the key file has no extra blank lines and that nothing else is also setting a licence route.</p>
+    </div>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">In CI</h2>
+    <p class="text-slate-400 text-xs mt-1">Add the token as a secret (for example a GitHub Actions secret) and expose it as <code class="text-amber-300 font-mono">AITEST_LICENSE_KEY</code>. Nothing is written to disk and no network call is made to validate it: verification is offline against the trusted public key that ships with the product.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">Where your data goes</h2>
+    <p class="text-slate-400 text-xs mt-1">Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The runtime makes outbound calls only to <strong class="text-slate-200">your</strong> configured LLM endpoint and <strong class="text-slate-200">your</strong> target site &mdash; no telemetry, no update check, no vendor call. Cloud OpenAI and OpenRouter are supported if you choose them. The licensing path adds zero outbound traffic. Verified by an audit that runs in CI:
+      <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/egress-audit.md" rel="noopener noreferrer" target="_blank">docs/security/egress-audit.md</a>.</p>
+  </section>
+
+  <section class="mt-10">
+    <h2 class="text-lg font-bold text-white">More</h2>
+    <ul class="mt-3 space-y-2 text-sm">
+      <li><a class="text-amber-300 hover:underline" href="tancat-pro-install-and-licence.pdf">Download the install &amp; licence PDF</a></li>
+      <li><a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/security/license-key-ops.md" rel="noopener noreferrer" target="_blank">How licence keys are issued (key operations)</a></li>
+      <li><a class="text-amber-300 hover:underline" href="terms.html">Licence terms</a> &middot; <a class="text-amber-300 hover:underline" href="privacy.html">Privacy</a></li>
+      <li><a class="text-amber-300 hover:underline" href="mailto:hello@tancat.dev">hello@tancat.dev</a> &mdash; we reply as soon as we can.</li>
+    </ul>
+  </section>
+</main>
+
+<footer class="bg-midnight border-t border-slate-800/80 py-10 text-slate-400 text-xs">
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <p class="font-mono">&copy; TanCat. Per-deployment licence, billed monthly or yearly.</p>
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono">
+      <a class="hover:text-amber-400 transition-colors" href="index.html">Home</a>
+      <a class="hover:text-amber-400 transition-colors" href="index.html#pricing">Pricing</a>
+      <a class="hover:text-amber-400 transition-colors" href="terms.html">Terms</a>
+      <a class="hover:text-amber-400 transition-colors" href="privacy.html">Privacy</a>
+    </div>
+  </div>
+</footer>
+</body></html>
