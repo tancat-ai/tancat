@@ -361,6 +361,18 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
             return []
         elif provider_name == "openai":
             return ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]
+        elif provider_name == "azure-openai":
+            # Azure lists *deployments*, not models; the deployment name is what
+            # the app calls the model. get_provider reads the key/endpoint/api
+            # version from the environment (the CLI prompts for the key first).
+            from src.llm_providers import get_provider
+
+            provider = get_provider(
+                "azure-openai",
+                base_url=provider_url,
+                api_key=os.environ.get("AZURE_OPENAI_API_KEY") or None,
+            )
+            return provider.list_models(timeout=8)
         elif provider_name in ("openai-compatible", "openrouter"):
             from src.llm_providers import BROWSER_USER_AGENT
 

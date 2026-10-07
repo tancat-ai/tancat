@@ -484,6 +484,142 @@ class OpenAIProvider(LLMProvider):
         return []
 
 
+AZURE_OPENAI_API_VERSION_DEFAULT = "2024-10-21"
+
+
+class AzureOpenAIProvider(LLMProvider):
+    """Azure OpenAI provider.
+
+    Azure OpenAI is *not* a drop-in OpenAI-compatible endpoint. Three things
+    differ, and all three are load-bearing:
+
+    * the chat path carries the **deployment** name:
+      ``/openai/deployments/{deployment}/chat/completions``;
+    * every request needs an ``api-version`` query parameter;
+    * authentication uses the ``api-key`` header, not ``Authorization: Bearer``.
+
+    Because the deployment in the URL selects the model, the request body never
+    sends a ``model`` field. The app's "model" value for this provider is the
+    deployment name; ``AZURE_OPENAI_DEPLOYMENT`` is the environment fallback.
+    """
+
+    PROVIDER_NAME = "azure-openai"
+    DEFAULT_API_VERSION = AZURE_OPENAI_API_VERSION_DEFAULT
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        api_version: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        import os
+
+        resolved_key = api_key or os.environ.get("AZURE_OPENAI_API_KEY", "").strip()
+        if not resolved_key:
+            raise ValueError("API key is required for Azure OpenAI. Set AZURE_OPENAI_API_KEY in your .env file.")
+        self._api_key = resolved_key
+
+        resolved_endpoint = (base_url or os.environ.get("AZURE_OPENAI_ENDPOINT", "")).strip().rstrip("/")
+        if not resolved_endpoint:
+            raise ValueError(
+                "Azure OpenAI needs the resource endpoint. Set AZURE_OPENAI_ENDPOINT "
+                "(e.g. https://my-resource.openai.azure.com) or enter a base URL."
+            )
+        self._base_url = resolved_endpoint
+        self._api_version = (
+            api_version or os.environ.get("AZURE_OPENAI_API_VERSION", "").strip() or self.DEFAULT_API_VERSION
+        )
+
+        import httpx
+
+        self._client = httpx.Client(
+            base_url=self._base_url,
+            timeout=300,
+            # Azure authenticates with the api-key header, NOT Bearer.
+            headers={"api-key": self._api_key, "User-Agent": BROWSER_USER_AGENT},
+        )
+
+    @property
+    def provider_name(self) -> str:
+        return self.PROVIDER_NAME
+
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
+    @property
+    def api_version(self) -> str:
+        return self._api_version
+
+    def _deployment(self, model: str | None) -> str:
+        """Resolve the deployment name (the app's "model" for Azure)."""
+        import os
+
+        deployment = (model or os.environ.get("AZURE_OPENAI_DEPLOYMENT", "")).strip()
+        if not deployment:
+            raise ValueError(
+                "No deployment configured for Azure OpenAI. Name the deployment "
+                "(or set AZURE_OPENAI_DEPLOYMENT) - it is the model in the URL."
+            )
+        return deployment
+
+    def _chat_path(self, deployment: str) -> str:
+        """The Azure chat-completions path: deployment in the URL + api-version."""
+        return f"/openai/deployments/{deployment}/chat/completions?api-version={self._api_version}"
+
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        model: str | None = None,
+        timeout: int = 300,
+        temperature: float | None = None,
+        enable_thinking: bool | None = None,
+    ) -> ChatCompletion:
+        # Azure has no chat_template_kwargs switch; accepted for contract parity
+        # but never sent (an unknown body field would be a 400, not a fallback).
+        _ = enable_thinking
+
+        deployment = self._deployment(model)
+        openai_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
+
+        # No "model" key: the deployment in the URL already selects the model.
+        payload: dict[str, Any] = {"messages": openai_messages, "stream": False}
+        if temperature is not None:
+            payload["temperature"] = temperature
+        payload["max_tokens"] = generation_max_tokens()
+
+        response = self._client.post(self._chat_path(deployment), json=payload, timeout=timeout)
+
+        response.raise_for_status()
+        data = response.json()
+
+        return ChatCompletion(
+            content=data["choices"][0]["message"]["content"],
+            model=data.get("model", deployment),
+            usage={
+                "prompt_tokens": data.get("usage", {}).get("prompt_tokens", 0),
+                "completion_tokens": data.get("usage", {}).get("completion_tokens", 0),
+            }
+            if "usage" in data
+            else None,
+        )
+
+    def list_models(self, timeout: int = 30) -> list[str]:
+        """List the account's deployments (Azure's analogue of /models)."""
+        import httpx
+
+        with httpx.Client(
+            base_url=self._base_url,
+            timeout=timeout,
+            headers={"api-key": self._api_key, "User-Agent": BROWSER_USER_AGENT},
+        ) as client:
+            response = client.get(f"/openai/deployments?api-version={self._api_version}")
+            response.raise_for_status()
+            data = response.json()
+            return [d.get("id") or d.get("model") for d in data.get("data", []) if d.get("id") or d.get("model")]
+
+
 # Exported symbols
 __all__ = [
     "ChatMessage",
@@ -492,6 +628,8 @@ __all__ = [
     "OllamaProvider",
     "LMStudioProvider",
     "OpenAIProvider",
+    "AzureOpenAIProvider",
+    "AZURE_OPENAI_API_VERSION_DEFAULT",
     "get_provider",
     "create_provider_from_env",
     "auto_detect_provider",
@@ -564,6 +702,7 @@ def get_provider(provider_name: str, **kwargs: Any) -> LLMProvider:
         "lm-studio": LMStudioProvider,
         "openai": OpenAIProvider,
         "openai-local": OpenAIProvider,
+        "azure-openai": AzureOpenAIProvider,
         "openai-compatible": OpenAIProvider,
         "openrouter": OpenAIProvider,
     }
@@ -591,13 +730,16 @@ def create_provider_from_env() -> LLMProvider:
 
     This function reads the following env vars to determine which provider to use:
     - LLM_PROVIDER: 'ollama', 'lm-studio', 'openai', 'openai-local',
-      'openai-compatible', or 'openrouter' (default: 'ollama')
+      'azure-openai', 'openai-compatible', or 'openrouter'
+      (default: 'openai-local')
 
     Each provider has its own required environment variables:
     - ollama: OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
     - lm-studio: LM_STUDIO_BASE_URL, LM_STUDIO_MODEL
     - openai: OPENAI_API_KEY, OPENAI_MODEL
     - openai-local: OPENAI_BASE_URL, OPENAI_MODEL (no API key required)
+    - azure-openai: AZURE_OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT,
+      AZURE_OPENAI_DEPLOYMENT, AZURE_OPENAI_API_VERSION (optional)
     - openai-compatible: OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_BASE_URL,
       OPENAI_COMPATIBLE_MODEL
     - openrouter: OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_MODEL
@@ -627,6 +769,12 @@ def create_provider_from_env() -> LLMProvider:
         )
     elif provider_name == "openai":
         return OpenAIProvider(api_key=os.environ.get("OPENAI_API_KEY"), base_url=os.environ.get("OPENAI_BASE_URL"))
+    elif provider_name == "azure-openai":
+        return AzureOpenAIProvider(
+            api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+            base_url=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            api_version=os.environ.get("AZURE_OPENAI_API_VERSION"),
+        )
     elif provider_name == "openai-compatible":
         return OpenAIProvider(
             api_key=os.environ.get("OPENAI_COMPATIBLE_API_KEY"),
@@ -642,6 +790,6 @@ def create_provider_from_env() -> LLMProvider:
     else:
         raise ValueError(
             f"Unknown LLM_PROVIDER '{provider_name}'. Must be one of: "
-            f"ollama, lm-studio, openai, openai-local, openai-compatible, "
-            f"openrouter"
+            f"ollama, lm-studio, openai, openai-local, azure-openai, "
+            f"openai-compatible, openrouter"
         )

@@ -153,7 +153,7 @@ _model_value = (
 user_openai_api_key: str | None = None
 if provider_requires_openai_api_key(provider):
     _key_env = api_key_env_var(provider)
-    _key_label = "OpenAI API Key" if provider == "openai" else "API Key"
+    _key_label = {"openai": "OpenAI API Key", "azure-openai": "Azure OpenAI API Key"}.get(provider, "API Key")
     user_openai_api_key = st.sidebar.text_input(
         _key_label,
         type="password",

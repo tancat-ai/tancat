@@ -8,7 +8,8 @@ This module provides a unified interface for interacting with different LLM back
 - Ollama (native API)
 - LM Studio (OpenAI-compatible API)
 - OpenAI (cloud and local modes)
-- Any OpenAI-compatible local server
+- Azure OpenAI (deployment in the path, `api-version` query, `api-key` header)
+- Any OpenAI-compatible local server / cloud endpoint
 
 ## Architecture
 
