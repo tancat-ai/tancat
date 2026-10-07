@@ -23,7 +23,7 @@ except ImportError:
     pass
 
 from src.llm_client import LLMClient
-from src.project import apply_rag_scope
+from src.project import apply_rag_scope, project_workspace
 from src.provider_config import (
     api_key_env_var,
     get_provider_defaults,
@@ -75,7 +75,7 @@ def _init_session_state() -> None:
     # default workspace and the host[:port] RAG scope.
     stored_project = str(load_setting(SETTING_WORKSPACE, "") or "").strip()
     apply_rag_scope(stored_project)
-    workspace = stored_project or os.environ.get("WORKSPACE", "default")
+    workspace = project_workspace(stored_project, os.environ.get("WORKSPACE", ""))
     init_storage(workspace=workspace)
 
     defaults: dict[str, Any] = {

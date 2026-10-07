@@ -5,6 +5,8 @@ the extracted scorer module produces identical results to the original
 inline logic in PlaceholderResolver.
 """
 
+import pytest
+
 from src.placeholder_scorers import PlaceholderScorer
 from src.rag_store import RetrievedPattern
 
@@ -99,6 +101,21 @@ class TestComputeElementScore:
         assert base is not None and scored is not None
         assert base >= 100  # confirmed fast path
         assert scored - base == int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * 0.9)
+
+    def test_golden_from_another_scope_is_skipped_and_logged(self, caplog: pytest.LogCaptureFixture) -> None:
+        """t-0512: a host-keyed golden skipped under a project scope must be visible."""
+        from src.placeholder_scorers import golden_scope_skips
+
+        el = _element({"text": "Add to cart", "selector": "#scope-golden-el"})
+        golden = RetrievedPattern(
+            "Add to cart", "#scope-golden-el", "CLICK", 0.9, source="golden", site_hash="hosthash"
+        )
+        before = golden_scope_skips()
+        with caplog.at_level("INFO", logger="src.placeholder_scorers"):
+            bonus = PlaceholderScorer._golden_pattern_bonus(el, [golden], site_hash="scopehash")
+        assert bonus == 0
+        assert golden_scope_skips() == before + 1
+        assert any("skipped" in rec.getMessage() and "golden" in rec.getMessage() for rec in caplog.records)
 
     def test_container_haystack_penalized_specific_element_wins(self) -> None:
         """AI-064: a generic container ('main') matching via merged page text

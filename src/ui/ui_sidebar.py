@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, cast
 
 import streamlit as st
@@ -201,7 +202,11 @@ class SidebarConfig:
         SidebarConfig._render_learned_patterns()
         SidebarConfig._render_flow_memory()
 
-        return {"ocr_backend": ocr_backend, "workspace": project_workspace(project), "project": project}
+        return {
+            "ocr_backend": ocr_backend,
+            "workspace": project_workspace(project, os.environ.get("WORKSPACE", "")),
+            "project": project,
+        }
 
     @staticmethod
     def _render_project() -> str:

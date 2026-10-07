@@ -38,6 +38,12 @@ class TestProjectName:
         assert project_workspace("") == "default"
         assert project_workspace("acme") == "acme"
 
+    def test_workspace_falls_back_to_the_environment(self) -> None:
+        """t-0512: the WORKSPACE dev fallback must survive the first render."""
+        assert project_workspace("", "devws") == "devws"
+        assert project_workspace("acme", "devws") == "acme"
+        assert project_workspace("", "") == "default"
+
 
 class TestProjectRagScope:
     def test_named_project_sets_the_rag_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,10 +71,12 @@ class TestProjectRagScope:
 
 
 class _FakeRunService:
-    """Records every package it is asked to run and returns one passing test."""
+    """Records every package it is asked to run and returns one test result."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, status: str = "passed", duration: float = 1.5) -> None:
         self.calls: list[str] = []
+        self._status = status
+        self._duration = duration
 
     def run_saved_test(self, saved_path: str, **_kwargs: object) -> PipelineExecutionResult:
         self.calls.append(str(saved_path))
@@ -76,14 +84,16 @@ class _FakeRunService:
             results=[
                 TestResult(
                     name=f"test_{Path(saved_path).name}",
-                    status="passed",
-                    duration=0.1,
+                    status=self._status,
+                    duration=self._duration,
                     error_message="",
                     file_path="",
                 )
             ],
             total=1,
-            passed=1,
+            passed=1 if self._status == "passed" else 0,
+            partial_pass=1 if self._status == "partial_pass" else 0,
+            duration=self._duration,
         )
         return PipelineExecutionResult(command=[], run_result=result, display_output="ok", return_code=0)
 
@@ -107,6 +117,24 @@ class TestRunProject:
         assert outcome.run_result.total == 2
         assert outcome.run_result.passed == 2
         assert outcome.run_result.failed == 0
+        assert outcome.run_result.duration == 3.0
+
+    def test_run_project_carries_partial_pass_and_duration(self, tmp_path: Path) -> None:
+        """t-0512: the aggregate must carry partial_pass and a real duration."""
+        base = tmp_path / "generated_tests"
+        for name in ("pkg_a", "pkg_b"):
+            package = base / name
+            package.mkdir(parents=True)
+            (package / f"test_{name}.py").write_text("def test_x():\n    assert True\n", encoding="utf-8")
+
+        outcome = run_project_packages(
+            discover_project_packages(base),
+            run_service=_FakeRunService(status="partial_pass", duration=2.0),  # type: ignore[arg-type]
+        )
+
+        assert outcome.run_result.total == 2
+        assert outcome.run_result.partial_pass == 2
+        assert outcome.run_result.duration == 4.0
 
     def test_run_project_with_no_packages_is_empty(self, tmp_path: Path) -> None:
         base = tmp_path / "generated_tests"

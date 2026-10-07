@@ -77,6 +77,7 @@ def merge_rerun_results(previous: RunResult, rerun: RunResult) -> RunResult:
         failed=sum(1 for r in merged_results if r.status == "failed"),
         skipped=sum(1 for r in merged_results if r.status == "skipped"),
         errors=sum(1 for r in merged_results if r.status == "error"),
+        partial_pass=sum(1 for r in merged_results if r.status == "partial_pass"),
         duration=rerun.duration,
         raw_output=rerun.raw_output,
     )
@@ -214,10 +215,12 @@ def run_project_packages(
     results: list[TestResult] = []
     raw_parts: list[str] = []
     return_code = 0
+    duration = 0.0
     for package_dir in dirs:
         execution = service.run_saved_test(package_dir, persist=True)
         results.extend(execution.run_result.results)
         raw_parts.append(execution.display_output)
+        duration += execution.run_result.duration
         return_code = max(return_code, execution.return_code)
 
     aggregate = RunResult(
@@ -227,7 +230,8 @@ def run_project_packages(
         failed=sum(1 for r in results if r.status == "failed"),
         skipped=sum(1 for r in results if r.status == "skipped"),
         errors=sum(1 for r in results if r.status == "error"),
-        duration=0.0,
+        partial_pass=sum(1 for r in results if r.status == "partial_pass"),
+        duration=duration,
         raw_output="\n".join(raw_parts),
     )
     return ProjectRunResult(package_dirs=dirs, run_result=aggregate, return_code=return_code)

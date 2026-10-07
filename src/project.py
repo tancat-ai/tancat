@@ -32,13 +32,18 @@ def project_display_name(stored: str, first_url: str = "") -> str:
     return domain_from_url(first_url) or DEFAULT_PROJECT
 
 
-def project_workspace(stored: str) -> str:
+def project_workspace(stored: str, env_workspace: str = "") -> str:
     """The storage workspace directory for the project.
 
-    An unset project keeps today's ``default`` workspace, so no data moves
-    until the user explicitly names a project.
+    Priority: the explicit project, then the ``WORKSPACE`` dev fallback, then
+    today's ``default``. An unset project therefore keeps the environment's
+    workspace (and the default), so no data moves until the user names a
+    project (t-0512 regression fix).
     """
-    return (stored or "").strip() or DEFAULT_PROJECT
+    stored = (stored or "").strip()
+    if stored:
+        return stored
+    return (env_workspace or "").strip() or DEFAULT_PROJECT
 
 
 def rag_scope_for(stored: str) -> str | None:

@@ -112,6 +112,7 @@ class SavedPackagePanel:
                 f"Project run: {project_summary['packages']} package(s) · "
                 f"{project_summary['passed']} passed · {project_summary['failed']} failed · "
                 f"{project_summary['skipped']} skipped"
+                + (f" · {project_summary['partial_pass']} partial" if project_summary.get("partial_pass") else "")
             )
 
         labels = [_format_package_label(pkg) for pkg in packages]
@@ -170,6 +171,8 @@ class SavedPackagePanel:
             "failed": aggregate.failed,
             "skipped": aggregate.skipped,
             "errors": aggregate.errors,
+            "partial_pass": aggregate.partial_pass,
+            "duration": aggregate.duration,
         }
         st.sidebar.success(
             f"Ran {outcome.package_count} package(s): {aggregate.passed} passed, {aggregate.failed} failed."
