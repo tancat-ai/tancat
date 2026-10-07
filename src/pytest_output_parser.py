@@ -75,6 +75,9 @@ class RunResult:
     errors: int = 0
     duration: float = 0.0
     raw_output: str = ""
+    #: Tests whose assertion fell back (evidence_tracker ``partial_pass``).
+    #: Carried so an aggregate (Run Project) does not lose them silently.
+    partial_pass: int = 0
 
 
 def is_run_result(obj: object) -> TypeGuard[RunResult]:
@@ -288,6 +291,7 @@ def parse_pytest_output(raw: str) -> RunResult:
             results_by_name[base_name].duration = dur
 
     run.results = list(results_by_name.values())
+    run.partial_pass = sum(1 for r in run.results if r.status == "partial_pass")
 
     if run.passed + run.failed == 0 and len(run.results) > 0:
         # Summary line wasn't parsed — derive counts from per-test entries

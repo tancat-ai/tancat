@@ -8,11 +8,43 @@ Workflow:
   PlaceholderResolver.rank_candidates() -> compute_element_score() -> score adjustments
 """
 
+import logging
 import re
 from typing import Any
 
 from src.content_scoping import is_heading_criterion, is_heading_element, is_image_criterion, is_image_element
 from src.semantic_matcher import SemanticMatcher
+
+logger = logging.getLogger(__name__)
+
+#: Distinct (selector, run-scope) goldens skipped because of a project-scope
+#: mismatch. Surfaced by :func:`golden_scope_skips` and logged once each.
+_GOLDEN_SCOPE_SKIPS: set[tuple[str, str]] = set()
+
+
+def golden_scope_skips() -> int:
+    """Number of distinct golden patterns skipped for a project-scope mismatch."""
+    return len(_GOLDEN_SCOPE_SKIPS)
+
+
+def _note_golden_scope_skip(selector: str, pattern_site: str, site_hash: str | None) -> None:
+    """Say once that a host-keyed golden was skipped under a project scope.
+
+    t-0512: under a project scope the resolve-time identity is
+    ``scope:<project>`` while goldens stay host-keyed, so every golden silently
+    earns nothing. Make that visible for sites that ship bundled goldens.
+    """
+    key = (selector, site_hash or "")
+    if key in _GOLDEN_SCOPE_SKIPS:
+        return
+    _GOLDEN_SCOPE_SKIPS.add(key)
+    logger.info(
+        "golden pattern %r skipped: curated for site %s but this run's scope is %s "
+        "- project-scoped runs do not match host-keyed goldens (learned patterns still apply)",
+        selector,
+        pattern_site,
+        site_hash or "<unset>",
+    )
 
 
 class PlaceholderScorer:
@@ -871,6 +903,7 @@ class PlaceholderScorer:
                 continue
             pattern_site = getattr(pattern, "site_hash", "")
             if pattern_site and pattern_site != site_hash:
+                _note_golden_scope_skip(pattern.selector, pattern_site, site_hash)
                 continue
             if pattern.selector == element_selector:
                 return int(PlaceholderScorer.GOLDEN_PATTERN_BONUS * pattern.confidence)

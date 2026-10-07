@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, cast
 
 import streamlit as st
 
+from src.project import project_display_name, project_workspace
 from src.provider_config import PROVIDER_LABELS, SUPPORTED_PROVIDERS
 from src.settings_store import DEFAULT_SETTINGS, load_setting, save_setting
 
@@ -194,22 +196,45 @@ class SidebarConfig:
 
         with st.sidebar.expander("App Settings", expanded=False):
             ocr_backend = SidebarConfig._render_ocr_backend()
-
-            stored_workspace = cast(str, load_setting(SETTING_WORKSPACE, "default"))
-            workspace = st.text_input(
-                "Workspace",
-                value=stored_workspace,
-                help="Isolates generated tests / evidence under a subdirectory. Applies immediately.",
-                key="workspace_setting",
-            )
-            if workspace != stored_workspace:
-                save_setting(SETTING_WORKSPACE, workspace)
+            project = SidebarConfig._render_project()
 
         SidebarConfig._render_pdf_reader_notice()
         SidebarConfig._render_learned_patterns()
         SidebarConfig._render_flow_memory()
 
-        return {"ocr_backend": ocr_backend, "workspace": workspace}
+        return {
+            "ocr_backend": ocr_backend,
+            "workspace": project_workspace(project, os.environ.get("WORKSPACE", "")),
+            "project": project,
+        }
+
+    @staticmethod
+    def _render_project() -> str:
+        """Render the Project field; return the explicit project name ("" if unset).
+
+        t-0510: the storage workspace promoted to a user-facing concept. It
+        displays the host of the first story URL by default, but only an
+        explicitly named project is persisted - so a user who never names one
+        keeps today's ``default`` workspace and host[:port] RAG scope.
+        """
+        stored = str(load_setting(SETTING_WORKSPACE, "") or "").strip()
+        first_url = str(st.session_state.get("starting_url") or st.session_state.get("last_starting_url") or "")
+        host_default = project_display_name("", first_url)
+        project = st.text_input(
+            "Project",
+            value=stored or host_default,
+            help=(
+                "Groups this project's tests, evidence and learned patterns under one name. "
+                "Leave it as the host for a single environment; name it to share learning across ports."
+            ),
+            key="workspace_setting",
+        )
+        # The host default is implicit: leaving the field at it (or clearing
+        # back to it) forgets an explicit name, so today's behaviour is kept.
+        explicit = "" if project.strip() == host_default else project.strip()
+        if explicit != stored:
+            save_setting(SETTING_WORKSPACE, explicit)
+        return explicit
 
     @staticmethod
     def _render_ocr_refusal() -> None:
