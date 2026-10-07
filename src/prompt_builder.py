@@ -227,6 +227,14 @@ NO PROSE. NO EXPLANATIONS. START WITH IMPORTS.
     - OPEN criterion ('an item', 'a radio option', 'e.g. X', 'at least one',
       'any'): the ASSERT must check a PROPERTY of the outcome ('at least one
       item row', 'a gender radio is checked'), never one named instance.
+12. KEEP THE QUOTED CHECK. When a condition quotes the exact text it checks,
+    keep that quoted text in the ASSERT description - a short label that
+    drops it loses the check:
+    - 'verify the install command contains "git clone ..."'
+      -> {{ASSERT:install command contains 'git clone ...'}}
+    - "verify the 'Per deployment, not per seat' pricing section is visible"
+      -> {{ASSERT:'Per deployment, not per seat' pricing section}}
+    - "verify the 'X' heading is visible" -> {{ASSERT:'X' heading}}
 
 === PREREQUISITE STEPS ===
 Each test must be self-contained. If a test depends on earlier criteria
@@ -343,6 +351,14 @@ Expected: {target_condition_expected}
     - OPEN criterion ('an item', 'a radio option', 'e.g. X', 'at least one',
       'any'): the ASSERT must check a PROPERTY of the outcome ('at least one
       item row', 'a gender radio is checked'), never one named instance.
+11. KEEP THE QUOTED CHECK. When a condition quotes the exact text it checks,
+    keep that quoted text in the ASSERT description - a short label that
+    drops it loses the check:
+    - 'verify the install command contains "git clone ..."'
+      -> {{ASSERT:install command contains 'git clone ...'}}
+    - "verify the 'Per deployment, not per seat' pricing section is visible"
+      -> {{ASSERT:'Per deployment, not per seat' pricing section}}
+    - "verify the 'X' heading is visible" -> {{ASSERT:'X' heading}}
 
 === JOURNEY STRUCTURE (MANDATORY) ===
 1. Every step must appear on the page it belongs to. Follow the story order:

@@ -320,6 +320,22 @@ class PlaceholderResolver:
                 if word_ratio < 3 and (norm_text == phrase or phrase in norm_text or norm_text in phrase):
                     return True
 
+        # t-0468: a shared action verb is intent, not identity. When the
+        # description names an identity token (a non-verb, non-role word) and
+        # the element text contains none of them, it is a different control -
+        # do not let a shared verb or a half-word overlap stand as evidence.
+        # Expanded tokens are used so a real synonym in TOKEN_EXPANSIONS still
+        # counts as the same identity.
+        identity_tokens = (
+            SemanticMatcher.get_words(action_part, expand_aliases=True)
+            - PlaceholderResolver.ACTION_VERBS
+            - PlaceholderResolver.ACTION_CONTEXT_WORDS
+            - PlaceholderResolver.NAVIGATION_WORDS
+        )
+        element_tokens = SemanticMatcher.get_words(norm_text, expand_aliases=True)
+        if identity_tokens and not identity_tokens.intersection(element_tokens):
+            return False
+
         desc_words = set(action_part.split()) - PlaceholderResolver.ACTION_CONTEXT_WORDS
         text_words = set(norm_text.split())
         if desc_words and text_words:

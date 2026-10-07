@@ -103,3 +103,25 @@ def test_saved_output_contains_every_site() -> None:
     results = [_site("automationexercise", 12, 1), _site("saucedemo", 10, 3)]
     output_sites = [r.to_dict() for r in results]
     assert [s["site_id"] for s in output_sites] == ["automationexercise", "saucedemo"]
+
+
+def test_tancat_conditions_target_controls_that_exist_now() -> None:
+    """t-0468: the j-0089 landing rewrite removed the video, Air-Gap and footer
+    Walkthrough controls, so the tancat story must not name them."""
+    config = _load_uat_module().SITES["tancat"]
+    conditions = config.conditions
+    for removed in ("Watch 3-Min Walkthrough", "Buy Air-Gap", "walkthrough", "Walkthrough"):
+        assert removed not in conditions, f"stale control still named: {removed!r}"
+    for control in ("See how it works", "Install locally"):
+        assert control in conditions, f"replacement control missing: {control!r}"
+    assert config.expected_min_criteria == 12
+    assert "(Total: 12 criteria)" in conditions
+
+
+def test_tancat_conditions_match_the_landing_page() -> None:
+    """The named controls exist on the page, and the removed ones do not."""
+    page = (UAT_MODULE_PATH.parent.parent / "landing" / "index.html").read_text(encoding="utf-8")
+    for removed in ("Watch 3-Min Walkthrough", "Buy Air-Gap"):
+        assert removed not in page, f"removed control reappeared on the page: {removed!r}"
+    for control in ("See how it works", "Install locally"):
+        assert control in page, f"story names a control the page lacks: {control!r}"
