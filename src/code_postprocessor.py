@@ -237,6 +237,19 @@ def attribute_scheme(description: str) -> str | None:
     return None
 
 
+def _quoted_expected_text(description: str) -> str:
+    """Return the expected text quoted in *description*, or "" when none is.
+
+    A text-check criterion quotes what it checks: "the install command contains
+    'git clone ...'" / "'Per deployment, not per seat' pricing section". When a
+    description quotes more than once (a section name and the heading), the
+    longest phrase is the specific target. Returns "" when nothing is quoted, so
+    the caller can keep the visible-only fallback.
+    """
+    quoted = [m.strip() for m in re.findall(r"['\"]([^'\"]{2,300})['\"]", description) if m.strip()]
+    return max(quoted, key=len) if quoted else ""
+
+
 def attribute_predicate(description: str, attribute: str) -> tuple[bool, tuple[str, ...]]:
     """Derive ``(must_be_url, forbidden)`` for a per-element attribute assertion.
 
@@ -981,10 +994,14 @@ def _replace_token_in_line_impl(
 
         # B-020: route to correct evidence_tracker method by assertion_type
         et_method = _assertion_type_to_et_method(assertion_type)
-        # Guardrail: assert_text and assert_text_contains require (selector, expected, label)
-        # but we only have (selector, label) from the resolver. Fall back to assert_visible.
+        # A text assertion needs the expected string. The criterion quotes it
+        # when the skeleton keeps it, so thread it through; with no expected
+        # string there is nothing to check and the visible-only fallback stays.
+        expected_text = ""
         if et_method in ("assert_text", "assert_text_contains"):
-            et_method = "assert_visible"
+            expected_text = _quoted_expected_text(description)
+            if not expected_text:
+                et_method = "assert_visible"
         # t-0354: deterministic specificity guard. The prompt asks for this
         # shape; here, where the criterion's openness cue survives into the
         # description, the emitter enforces it. OPEN + instance-pinned check ->
@@ -1024,13 +1041,20 @@ def _replace_token_in_line_impl(
             attr_call = (
                 f"evidence_tracker.assert_attribute({assert_value}, {attr_name!r}, label={repr(step_label)}{extra})"
             )
+        text_call = None
+        if et_method in ("assert_text", "assert_text_contains") and expected_text:
+            text_call = f"evidence_tracker.{et_method}({assert_value}, {expected_text!r}, label={repr(step_label)})"
         if stripped == token:
             if et_method == "assert_attribute":
                 return f"{indent}{attr_call}"
+            if text_call is not None:
+                return f"{indent}{text_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         if re.search(r"expect\((?:self\.)?page\.locator\(.*?\)\)\.to_\w+\(.*\)", stripped):
             if et_method == "assert_attribute":
                 return f"{indent}{attr_call}"
+            if text_call is not None:
+                return f"{indent}{text_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         locator_only_patterns = {
             f"page.locator({token})",
@@ -1039,6 +1063,8 @@ def _replace_token_in_line_impl(
         if stripped in locator_only_patterns:
             if et_method == "assert_attribute":
                 return f"{indent}{attr_call}"
+            if text_call is not None:
+                return f"{indent}{text_call}"
             return f"{indent}evidence_tracker.{et_method}({assert_value}, label={repr(step_label)})"
         return line.replace(token, resolved_value)
 

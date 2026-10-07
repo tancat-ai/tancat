@@ -1341,7 +1341,7 @@ class PlaceholderOrchestrator:
                         )
                         continue
 
-                    robust_selector = build_robust_locator(matched)
+                    robust_selector = build_robust_locator(matched, page_elements=pages_to_search.get(url, []))
                     if not robust_selector:
                         robust_selector = str(matched.get("selector", "")).strip()
                     selector = repr(robust_selector)
@@ -1570,7 +1570,9 @@ class PlaceholderOrchestrator:
                 matched_out["element"] = matched_element
                 matched_out["source_page"] = source_page
 
-            robust_selector = build_robust_locator(matched_element)
+            robust_selector = build_robust_locator(
+                matched_element, page_elements=pages_to_search.get(current_url or "", [])
+            )
             if not robust_selector:
                 robust_selector = str(matched_element.get("selector", "")).strip()
             selector = repr(robust_selector)

@@ -108,12 +108,17 @@ class TestProviderSelector:
         assert "openai-compatible" in SUPPORTED_PROVIDERS
         assert "openrouter" in SUPPORTED_PROVIDERS
 
-    def test_compatible_provider_is_selectable_and_asks_for_a_key(self) -> None:
+    def test_compatible_provider_is_selectable_and_asks_for_a_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Selecting a compatible cloud provider shows the key field + model prompt.
 
         Uses a fresh AppTest (the module fixture is shared and must not be
-        mutated by an interaction test).
+        mutated by an interaction test). Hermetic: the sidebar's key warning is
+        driven by the provider's own env var, so clear any ambient/leaked value
+        first (a leaked OPENAI_COMPATIBLE_API_KEY suppressed the warning on CI).
         """
+        monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
         mock_llm_instance = MagicMock()
         mock_llm_instance.list_models.return_value = []
         mock_llm_class = MagicMock()

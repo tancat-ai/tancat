@@ -1,0 +1,137 @@
+# Release pipeline (CI review t-0408): the repo had NO release path at all — no
+# tag workflow, no build, no GitHub Release, and the reusable Action had no tag
+# for consumers to pin. This workflow turns a `v*` tag into a gated, reproducible
+# release.
+#
+#   v1.2.3 tag push
+#     -> gates    the exact ci.yml chain (smoke, lint, mypy, pytest, the wheel
+#                 install + `tancat --help` build check, ...)
+#     -> build    `uv build` (sdist + wheel); distributions uploaded
+#     -> release  GitHub Release titled with the tag, notes generated, wheel and
+#                 sdist attached
+#     -> move-v1  force-moves the floating `v1` tag so `uses: ...@v1` resolves
+#
+# Cutting a release: bump `[project].version` in pyproject.toml, merge to main,
+# then `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the
+# version or the build job fails (one source of truth). The **first** release
+# should be `v1.0.0` so the moving `v1` tag exists for consumers to pin.
+#
+# GitHub Marketplace: YES — the Action is published to the Marketplace. It is a
+# Docker action with `branding`, so it is eligible. The listing is a one-time
+# owner action on the first release (edit the release -> "Publish this Action to
+# the GitHub Marketplace", accepting the Marketplace Developer Agreement); it
+# cannot be set from a workflow file. After that, consumers pin the moving `v1`
+# tag (e.g. `uses: tancat-ai/tancat@v1`); the versioned `vX.Y.Z` tag is the
+# immutable fallback.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      # The moving Action tag is re-pointed by this workflow. Without this
+      # exclusion that force-push would fire the Release workflow again for
+      # tag `v1` (and fail the version check, which expects vX.Y.Z).
+      - "!v1"
+
+# Creating the Release and moving the `v1` tag both need write access.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate the release on the same chain main and PRs run. ci.yml exposes
+  # workflow_call for exactly this; `secrets: inherit` carries CODECOV_TOKEN to
+  # the coverage upload in the called workflow.
+  gates:
+    name: Gates
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    needs: gates
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Check the tag matches the packaged version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG_VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ "$TAG" != "v${PKG_VERSION}" ]; then
+            echo "::error::tag '${TAG}' does not match pyproject version 'v${PKG_VERSION}' — bump [project].version before tagging."
+            exit 1
+          fi
+          echo "Releasing ${TAG} (pyproject version ${PKG_VERSION})."
+
+      # The wheel's entry point is exercised by the gated ci.yml test job
+      # (install the wheel, run `tancat --help`); this job only produces the
+      # artifacts the Release attaches.
+      - name: Build the package (sdist + wheel)
+        run: uv build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*.whl dist/*.tar.gz
+
+  move-v1:
+    name: Move the v1 tag (Action pin)
+    runs-on: ubuntu-latest
+    needs: release
+    # Only 1.x releases move `v1`; a future v2 would get its own floating tag.
+    if: startsWith(github.ref_name, 'v1.')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Point v1 at this release
+        run: |
+          git tag -f v1 "${GITHUB_SHA}"
+          git push --force origin v1

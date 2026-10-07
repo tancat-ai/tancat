@@ -257,21 +257,33 @@ class ElementMatcher:
         if action != "ASSERT":
             return None
 
-        text = description
-        if (text.startswith('"') and text.endswith('"')) or (text.startswith("'") and text.endswith("'")):
-            text = text[1:-1]
-        if not text:
+        stripped_desc = description.strip()
+        if (stripped_desc.startswith('"') and stripped_desc.endswith('"')) or (
+            stripped_desc.startswith("'") and stripped_desc.endswith("'")
+        ):
+            targets = [stripped_desc[1:-1]]
+        else:
+            # A criterion may quote the exact text inside a longer description
+            # ("the 'Per deployment, not per seat' pricing section"): exact-match
+            # each quoted phrase before the loose scoring passes. Longest first so
+            # a specific heading wins over an incidental section name.
+            targets = sorted(
+                (m.strip() for m in re.findall(r"['\"]([^'\"]{2,})['\"]", description)),
+                key=len,
+                reverse=True,
+            )
+        if not targets:
             return None
 
-        norm_target = text.strip().lower()
-        if len(norm_target) < 2:
-            return None
-
-        for elements in pages_data.values():
-            for element in elements:
-                norm_text = normalise_element_text(element)
-                if norm_text == norm_target:
-                    return element
+        for target in targets:
+            norm_target = target.strip().lower()
+            if len(norm_target) < 2:
+                continue
+            for elements in pages_data.values():
+                for element in elements:
+                    norm_text = normalise_element_text(element)
+                    if norm_text == norm_target:
+                        return element
 
         return None
 
@@ -925,6 +937,8 @@ class ElementMatcher:
             golden_patterns=golden_patterns,
             site_hash=site_hash,
         )
+        if matched is not None and action == "ASSERT":
+            _set_exact_text_marker(action, description, matched)
         if (
             matched is not None
             and action == "ASSERT"
@@ -1186,11 +1200,16 @@ class ElementMatcher:
             validated = _validate_text_match(top_candidate, description, self._resolver)
             if validated is not None:
                 return validated
-            # Text validation failed: check if there's at least some word overlap
-            # before returning a fallback match. Zero overlap means the score came
-            # entirely from structural bonuses (e.g. button role for CLICK) with
-            # no semantic relationship to the description.
+            # Text validation failed: check for overlap before returning a
+            # fallback match. A shared action verb is not identity: "Buy Air-Gap"
+            # must not match a "Buy Pro" control on "buy" alone, so prefer the
+            # description's distinguishing tokens when it has any (t-0465).
+            # Zero overlap means the score came entirely from structural bonuses
+            # (e.g. button role for CLICK) with no semantic relationship.
             desc_words_check = SemanticMatcher.get_words(description)
+            distinguishing_words = desc_words_check - PlaceholderResolver.ACTION_VERBS
+            if not distinguishing_words:
+                distinguishing_words = desc_words_check
             candidate_haystack = str(
                 top_candidate.get("text", "")
                 + " "
@@ -1201,9 +1220,9 @@ class ElementMatcher:
                 + top_candidate.get("name", "")
             ).lower()
             candidate_words = SemanticMatcher.get_words(candidate_haystack, expand_aliases=False)
-            if not desc_words_check.intersection(candidate_words):
+            if not distinguishing_words.intersection(candidate_words):
                 logger.debug(
-                    "Top-ranked element '%s' has zero word overlap with '%s' — returning None",
+                    "Top-ranked element '%s' shares no distinguishing token with '%s' - returning None",
                     str(top_candidate.get("text", "")).strip(),
                     description,
                 )
@@ -1332,6 +1351,9 @@ class ElementMatcher:
             pass3_requests.append((i, action, description, all_ranked))  # type: ignore
 
         if not pass3_requests:
+            # A fast-pass resolution never reaches the final loop below, so the
+            # quoted-target marker must be applied here too (t-0481).
+            _apply_exact_text_markers(requests, results)
             return results
 
         # Phase 2: Batch Pass 3 LLM calls
@@ -1389,6 +1411,10 @@ class ElementMatcher:
         for i, _req in enumerate(requests):
             if results[i] is None and role_deferred_by_index.get(i):
                 results[i] = role_deferred_by_index[i][0]
+
+        # Carry the quoted target through for every resolved ASSERT, fast or
+        # LLM, so the locator builder can pin it (t-0477).
+        _apply_exact_text_markers(requests, results)
 
         # B-088: reject a link-resolution pick whose element does not match the
         # named link — an honest miss, not an assertion against a lookalike.
@@ -1500,6 +1526,42 @@ def _is_excluded(element: dict[str, str], excluded_selectors: set[str]) -> bool:
     if robust and robust in excluded_selectors:
         return True
     return False
+
+
+_QUOTED_PHRASE_RE = re.compile(r"['\"]([^'\"]{2,})['\"]")
+
+
+def _set_exact_text_marker(action: str, description: str, result: dict[str, str] | None) -> None:
+    """Record the quoted target on a resolved ASSERT element (t-0477)."""
+    if result is not None and action == "ASSERT":
+        quoted = _quoted_text_in_element(description, result)
+        if quoted:
+            result["exact_text"] = quoted
+
+
+def _apply_exact_text_markers(requests: list[dict[str, Any]], results: list[dict[str, str] | None]) -> None:
+    """Apply :func:`_set_exact_text_marker` to every resolved request."""
+    for i, req in enumerate(requests):
+        _set_exact_text_marker(str(req.get("action", "")), str(req.get("description", "")), results[i])
+
+
+def _quoted_text_in_element(description: str, element: dict[str, str]) -> str:
+    """Return the quoted phrase in *description* that the element text carries.
+
+    A criterion that quotes the target it checks ("the 'Per deployment, not per
+    seat' pricing section", "the 'Story -> ...' heading") names text that
+    identifies the element. Return that text so the locator can be pinned to it
+    when the element's class selector is shared by other elements (t-0477).
+    Returns "" when no quoted phrase is present in the element text.
+    """
+    element_text = str(element.get("text", "")).strip().lower()
+    if not element_text:
+        return ""
+    for phrase in _QUOTED_PHRASE_RE.findall(description or ""):
+        phrase = phrase.strip()
+        if len(phrase) >= 2 and phrase.lower() in element_text:
+            return phrase
+    return ""
 
 
 def _validate_text_match(

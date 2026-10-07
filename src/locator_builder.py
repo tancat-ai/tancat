@@ -48,12 +48,75 @@ def build_dot_classes(classes: str) -> str:
     return "." + ".".join(_css_escape_class_token(token) for token in tokens)
 
 
-def build_robust_locator(element: dict) -> str | None:
+#: UI-framework class prefixes that add no semantic value to a locator.
+_BRITTLE_CLASS_PREFIXES: tuple[str, ...] = ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-")
+
+
+def _useful_class_terms(element: dict) -> frozenset[str]:
+    """Return the element's classes with brittle framework prefixes removed."""
+    classes = str(element.get("classes", "")).strip().lower()
+    return frozenset(
+        term for term in classes.split() if term and not any(prefix in term for prefix in _BRITTLE_CLASS_PREFIXES)
+    )
+
+
+def _same_node(a: dict, b: dict) -> bool:
+    """True when two element dicts are representations of the same DOM node.
+
+    ``id`` and ``data-test`` are unique keys. A ``selector`` is not: the scraper
+    assigns the same class-based selector to distinct same-class headings, so a
+    selector match only identifies the same node when the text also matches.
+    """
+    for key in ("id", "data_test"):
+        a_value = str(a.get(key, "")).strip()
+        b_value = str(b.get(key, "")).strip()
+        if a_value and a_value == b_value:
+            return True
+    a_selector = str(a.get("selector", "")).strip()
+    b_selector = str(b.get("selector", "")).strip()
+    if a_selector and a_selector == b_selector:
+        return str(a.get("text", "")).strip() == str(b.get("text", "")).strip()
+    return False
+
+
+def _class_terms_shared(element: dict, page_elements: list[dict]) -> bool:
+    """True when another same-tag DOM node is matched by this element's class selector.
+
+    The built selector is ``tag.class1.class2``; it matches any same-tag element
+    whose class set is a SUPERSET of this element's. Duplicate representations of
+    the same node (the scraper can list one DOM node twice) do not count.
+    """
+    terms = _useful_class_terms(element)
+    if not terms:
+        return False
+    tag = str(element.get("tag", "")).strip().lower()
+    for other in page_elements:
+        if other is element or _same_node(element, other):
+            continue
+        if str(other.get("tag", "")).strip().lower() != tag:
+            continue
+        if terms.issubset(_useful_class_terms(other)):
+            return True
+    return False
+
+
+def _text_locator(tag_prefix: str, role: str, text: str) -> str:
+    """Build a text-pinned locator (tag/role + ``:has-text``)."""
+    escaped_text = text.replace('"', '\\"')
+    if tag_prefix:
+        return f'{tag_prefix}:has-text("{escaped_text}")'
+    if role and role not in ("", "div", "span"):
+        return f'{role}:has-text("{escaped_text}")'
+    return f':has-text("{escaped_text}")'
+
+
+def build_robust_locator(element: dict, page_elements: list[dict] | None = None) -> str | None:
     """Build a robust Playwright locator from scraped element metadata.
 
     Prefers stable, specific selectors (ID, href, data-attrs) over
     text-based locators when a stable selector is available.  Text-based
-    locators are used as a fallback when no stable selector exists.
+    locators are used as a fallback when no stable selector exists, and to
+    disambiguate a class selector that is not unique on the page.
 
     Priority order (most specific first):
     1. ID-based (e.g. ``#buy``)
@@ -68,6 +131,11 @@ def build_robust_locator(element: dict) -> str | None:
     Args:
         element: Dict with keys such as ``tag``, ``text``, ``role``,
             ``selector``, ``id``, ``aria_label``, ``classes``, ``href``.
+        page_elements: Optional scraped elements for the current page. When
+            supplied, an element matched by exact quoted text (its ``exact_text``
+            key is set) whose class selector is shared by another element is
+            emitted as a text-pinned locator instead, so the check cannot read
+            the first of several lookalike headings (t-0477).
 
     Returns:
         A robust locator string, or ``None`` if nothing stable can be built.
@@ -78,16 +146,11 @@ def build_robust_locator(element: dict) -> str | None:
     selector = str(element.get("selector", "")).strip()
     element_id = str(element.get("id", "")).strip()
     aria_label = str(element.get("aria_label", "")).strip()
-    classes = str(element.get("classes", "")).strip().lower()
     href = str(element.get("href", "")).strip()
 
     # Strip common UI framework class prefixes that add no semantic value
     # e.g. "btn btn-default add-to-cart" -> useful parts: "add-to-cart"
-    useful_class_terms = {
-        term
-        for term in classes.split()
-        if term and not any(prefix in term for prefix in ("btn-", "fa-", "fas", "far", "bi-", "mdi-", "icon-", "css-"))
-    }
+    useful_class_terms = _useful_class_terms(element)
 
     # Build tag prefix for the locator
     tag_prefix = tag if tag and tag not in ("div", "span", "a", "") else ""
@@ -142,9 +205,16 @@ def build_robust_locator(element: dict) -> str | None:
     # scraper builders.
     if useful_class_terms:
         class_part = "." + ".".join(_css_escape_class_token(t) for t in sorted(useful_class_terms))
-        if tag_prefix:
-            return f"{tag_prefix}{class_part}"
-        return class_part
+        class_locator = f"{tag_prefix}{class_part}" if tag_prefix else class_part
+        # An element matched by exact quoted text keeps that text as its
+        # identity. When its class selector is not unique on the page (four
+        # headings can share one Tailwind class list), pin the text instead -
+        # assert_* take the first match, so the class selector would read the
+        # wrong heading (t-0477).
+        exact_text = str(element.get("exact_text", "")).strip()
+        if exact_text and page_elements is not None and _class_terms_shared(element, page_elements):
+            return _text_locator(tag_prefix, role, exact_text)
+        return class_locator
 
     selector_class_matches = _CLASS_TOKEN_RE.findall(selector)
     if selector_class_matches:

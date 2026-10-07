@@ -308,6 +308,45 @@ def test_non_link_criterion_still_resolves_an_ordinary_element() -> None:
     assert matched is not None
 
 
+def test_shared_action_verb_is_not_identity() -> None:
+    """t-0465: a removed control must not resolve to a live one on a shared verb.
+
+    The landing copy rewrite removed the "Air-Gap" tier, leaving a "Buy Pro"
+    button. "Buy Air-Gap link resolves" shares only the action verb "buy" with
+    it, so the target's distinguishing token ("air-gap") appears in no
+    candidate. It must stay unresolved (-> pytest.skip), not check #buy-pro,
+    which is TC-10's element.
+    """
+    buy_pro = {
+        "selector": "#buy-pro",
+        "text": "Buy Pro",
+        "tag": "a",
+        "role": "a",
+        "href": "#contact",
+        "raw_href": "#contact",
+    }
+    pages = {"https://x.test/": [buy_pro]}
+
+    # The shared verb is dropped; only the identity token survives.
+    assert link_name_tokens("Buy Air-Gap link resolves") == ("air-gap",)
+    assert not link_name_matches("Buy Air-Gap link resolves", buy_pro)
+    assert _resolve(_matcher(), "Buy Air-Gap link resolves", pages) is None
+    # The real control still resolves to its own element.
+    assert link_name_matches("Buy Pro link resolves", buy_pro)
+
+
+def test_link_name_match_is_word_bounded() -> None:
+    """t-0468: a short identity token must not match inside a longer word."""
+    product = {"tag": "a", "text": "Product catalogue", "href": "/products"}
+    assert not link_name_matches("Pro link resolves", product)
+    assert link_name_matches("Product link resolves", product)
+
+
+def test_link_name_match_treats_hyphen_and_space_as_equal() -> None:
+    """The rendered name may use a space where the criterion uses a hyphen."""
+    assert link_name_matches("Air-Gap link resolves", {"tag": "a", "text": "Air Gap"})
+
+
 # ---------------------------------------------------------------------------
 # Criterion 27 — section containment
 # ---------------------------------------------------------------------------

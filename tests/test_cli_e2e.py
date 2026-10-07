@@ -85,3 +85,21 @@ class TestHelpSubcommand:
         result = _run_cli("help")
         assert result.returncode == 0
         assert "Playwright" in result.stdout
+
+
+# ── In-process help (guards the CI wheel build check) ─────────────────────
+
+
+def test_main_help_exits_zero_with_usage(capsys: pytest.CaptureFixture[str]) -> None:
+    """`tancat --help` prints usage and exits 0 without starting the session.
+
+    The CI build check runs this against the installed wheel, so the packaged
+    console script must not turn `--help` into an interactive launch.
+    """
+    from src.cli.main import main
+
+    assert main(["--help"]) == 0
+    out = capsys.readouterr().out
+    assert "Usage:" in out
+    assert "Playwright" in out
+    assert "Enter User Story" in out

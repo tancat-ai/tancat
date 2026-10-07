@@ -100,15 +100,16 @@ _MOCK_SITE_IDENTITY: dict[str, str] = {
 }
 
 
-def _site_identity_hash(site_name: str, base_url: str) -> str:
+def golden_site_hash(site_name: str, base_url: str) -> str:
     """One-way hash of a golden pattern's canonical site identity (B-047).
 
     Golden patterns are site-scoped so a saucedemo golden cannot award a +20
     bonus while resolving another site. Identity comes from the dataset
     ``base_url`` domain — except the mock datasets whose ``base_url`` predates
     B-047 (all three mocks on :8781); those use the canonical concurrent-serve
-    ports. Lazy import: ``src.rag_learn`` imports this module, so importing it
-    at module level would be circular.
+    ports. Public because the resolver eval must resolve under the same
+    identity the goldens were seeded with. Lazy import: ``src.rag_learn``
+    imports this module, so importing it at module level would be circular.
     """
     from src.rag_learn import domain_from_url, site_hash
 
@@ -131,7 +132,7 @@ def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
 
     for fpath in json_files:
         data = json.loads(fpath.read_text(encoding="utf-8"))
-        site_identity_hash = _site_identity_hash(data.get("site", ""), data.get("base_url", ""))
+        site_identity_hash = golden_site_hash(data.get("site", ""), data.get("base_url", ""))
         for criterion in data.get("golden_resolutions", []):
             for placeholder in criterion.get("placeholders", []):
                 patterns.append(

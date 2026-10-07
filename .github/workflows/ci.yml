@@ -5,6 +5,9 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  # Reusable: .github/workflows/release.yml calls this exact gate chain on a
+  # v* tag, so a released version is gated by the same jobs as main and PRs.
+  workflow_call:
 
 # Auto-cancel stale runs when a newer commit lands on the same branch/PR
 concurrency:
@@ -60,38 +63,17 @@ jobs:
       # so no project environment is needed — the runner's built-in Python is
       # enough. This runs in ~15s instead of a ~220-package `uv sync --frozen`,
       # which took >2m on cold-cache runners and flaked the 2-min budget
-      # (run 35748803163, 2026-09-22). Same pattern as graph-freshness and
-      # docs-coverage below. If the script ever imports a project dependency,
+      # (run 35748803163, 2026-09-22). Same pattern as docs-coverage below.
+      # If the script ever imports a project dependency,
       # restore setup-python + setup-uv + uv sync here.
       - name: Run Project Sanitizer (check-only)
         run: python3 scripts/maintenance/project_sanitizer.py --check-only
 
-  # ── Gate 1b: Graph freshness (warning-only, non-blocking) ─────────────
-  graph-freshness:
-    name: Graph Freshness Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Check knowledge graph freshness
-        run: |
-          if [ ! -f graphify-out/graph.json ]; then
-            echo "::warning::No graphify-out/graph.json found — knowledge graph not generated"
-            exit 0
-          fi
-          GRAPH_COMMIT=$(python -c "import json,sys; d=json.load(open('graphify-out/graph.json')); print(d.get('built_at_commit',''))" 2>/dev/null || echo "")
-          HEAD=$(git rev-parse HEAD)
-          if [ -z "$GRAPH_COMMIT" ]; then
-            echo "::warning::Could not read gitCommit from graph.json"
-          elif [ "$GRAPH_COMMIT" != "$HEAD" ]; then
-            echo "::warning::Knowledge graph is stale (graph: $GRAPH_COMMIT, head: $HEAD)"
-            echo "Run 'graphify update .' locally to refresh"
-          else
-            echo "✅ Knowledge graph is up to date"
-          fi
+  # Gate 1b (Graph Freshness) was deleted 2026-10-05 by the CI review (t-0408):
+  # graphify-out/ is gitignored and never present in a checkout, so the job hit
+  # "no graph.json -> warning -> exit 0" on every run — a green check that
+  # checked nothing. The knowledge graph is a local orientation view, not a CI
+  # gate. To re-add it, run `graphify update .` first and then compare.
 
   # ── Gate 1c: Documentation coverage (warning-only, non-blocking) ──────
   docs-coverage:
@@ -232,6 +214,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # The parity diff below needs the base commit (github.event.before or
+          # the PR base sha) in history; the default shallow clone omits it.
+          fetch-depth: 0
 
       - name: Set up Python 3.14
         uses: actions/setup-python@v5
@@ -253,23 +239,34 @@ jobs:
       # Pre-commit parity (B-059): the local mypy hook type-checks the
       # STAGED files of a commit (tests/ included; scripts/|fixtures/ excluded),
       # so a --no-verify push must not slip past CI what the hook would have
-      # rejected. Check exactly the in-scope .py files THIS push changed —
-      # not the whole tree every push (that re-checked hundreds of unchanged
-      # files for zero extra strictness: src/ cli/ is already re-checked
-      # strictly above, and an unchanged file was checked when it last
-      # changed). github.event.before is the ref's pre-push value, so
-      # multi-commit pushes are covered; all-zeros (first push) falls back
-      # to HEAD~1.
+      # rejected. Check exactly the in-scope .py files THIS change touched —
+      # not the whole tree every run.
+      #
+      # Fix (CI review t-0408): the base was always github.event.before, which
+      # is not the pre-push ref on a pull_request event. The diff failed and
+      # `|| true` swallowed it, so the step printed "parity pass skipped" and
+      # exited 0 — a type error in a changed test file passed PR checks. On a
+      # PR, use the PR's base sha; on a push, event.before. The job checks out
+      # full history above so the base is present.
       - name: Run mypy (changed files, pre-commit parity)
         run: |
-          BASE="${{ github.event.before }}"
-          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            BASE=HEAD~1
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="${{ github.event.before }}"
           fi
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE=$(git rev-parse HEAD~1)
+          fi
+          if ! git rev-parse --verify --quiet "$BASE^{commit}" >/dev/null; then
+            echo "::error::parity base '$BASE' is not in this checkout"
+            exit 1
+          fi
+          echo "Parity diff base: $BASE"
           CHANGED=$(git diff --name-only "$BASE" HEAD -- '*.py' \
             | grep -vE '^(scripts/|fixtures/|generated_tests/|exported_tests/|scratch/|notebooks/)' || true)
           if [ -z "$CHANGED" ]; then
-            echo "No in-scope .py files changed in this push — parity pass skipped."
+            echo "No in-scope .py files changed between $BASE and HEAD — parity pass skipped."
             exit 0
           fi
           echo "Parity-checking: $CHANGED"
@@ -386,6 +383,19 @@ jobs:
         run: |
           echo "CI environment detected: ${{ env.CI }}"
           uv run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=65
+
+      # Build check (CI review t-0408 item 3): the packaged entry point was
+      # never exercised, so a broken wheel or a missing console script could
+      # ship unnoticed. Build both distributions, install the wheel over the
+      # already-synced environment (--no-deps keeps it fast), and run the CLI
+      # help to prove the wheel's entry point works.
+      - name: Build the package (sdist + wheel)
+        run: uv build
+
+      - name: Install the built wheel and exercise the CLI entry point
+        run: |
+          uv pip install --force-reinstall --no-deps dist/*.whl
+          .venv/bin/tancat --help
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5

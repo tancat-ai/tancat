@@ -7,10 +7,11 @@ Modes:
     ``--mode static``    Uses frozen scraped data in ``scraped_pages/`` (fast, deterministic).
     ``--mode live``      Scrapes live sites first, then resolves (requires running servers).
 
-Supports RAG on/off via ``RAG_ENABLED`` env var for direct comparison::
+Supports RAG on/off via ``RAG_ENABLED`` for direct comparison. RAG follows the
+product gate: a missing ``RAG_ENABLED`` means ENABLED; ``RAG_ENABLED=0`` opts out::
 
-    python scripts/eval/eval_resolver.py   # RAG off
-    RAG_ENABLED=1 python scripts/eval/eval_resolver.py  # RAG on
+    python scripts/eval/eval_resolver.py   # RAG on (the product default)
+    RAG_ENABLED=0 python scripts/eval/eval_resolver.py  # RAG off
 
 Usage:
     # Fast — requires saved_scraped_data/ populated
@@ -21,7 +22,7 @@ Usage:
 
     # Compare RAG on/off
     python scripts/eval/eval_resolver.py --mode static
-    RAG_ENABLED=1 python scripts/eval/eval_resolver.py --mode static
+    RAG_ENABLED=0 python scripts/eval/eval_resolver.py --mode static
 """
 
 from __future__ import annotations
@@ -58,11 +59,20 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
     """Load all golden placeholders from dataset files.
 
     Returns flat list with keys: action, description, expected_locator,
-    tolerance_selectors, expected_page.
+    tolerance_selectors, expected_page, site, site_hash.
+
+    ``site_hash`` is the identity the RAG store scoped this dataset's golden
+    patterns under, so the scorer's golden-pattern bonus can match them. Without
+    it (the pre-t-0490 state) every pattern carried a non-empty site_hash and
+    the bonus was skipped, which is why the RAG A/B measured no difference.
     """
+    from src.rag_bundled import golden_site_hash
+
     placeholders: list[dict[str, Any]] = []
     for fpath in sorted(_DATASET_DIR.glob("*.json")):
         data = json.loads(fpath.read_text(encoding="utf-8"))
+        site_name = str(data.get("site", ""))
+        dataset_site_hash = golden_site_hash(site_name, str(data.get("base_url", "")))
         for crit in data.get("golden_resolutions", []):
             for ph in crit.get("placeholders", []):
                 placeholders.append(
@@ -76,7 +86,8 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
                         # golden url_assertion reaches _resolve_placeholder as
                         # None, so the no-fall-through guard never runs.
                         "expected_type": ph.get("expected_type", ""),
-                        "site": data.get("site", ""),
+                        "site": site_name,
+                        "site_hash": dataset_site_hash,
                         "story_id": data.get("id", ""),
                     }
                 )
@@ -159,6 +170,7 @@ def _resolve_placeholder(
     rag_retriever: Any | None = None,
     flow_store: Any | None = None,
     expected_type: str | None = None,
+    site_hash: str | None = None,
 ) -> str | None:
     """Resolve a single placeholder using ElementMatcher's multi-pass pipeline.
 
@@ -169,6 +181,9 @@ def _resolve_placeholder(
             element to match.
         flow_store: AI-042 cross-site flow memory store. ``None`` disables the
             flow path (baseline behavior).
+        site_hash: The site identity the golden patterns are scoped under. It
+            must reach the scorer or ``_golden_pattern_bonus`` skips every
+            pattern with a non-empty site_hash (t-0490).
 
     Returns:
         Resolved locator string, or None if not found.
@@ -243,6 +258,7 @@ def _resolve_placeholder(
             selector=selector,
             match_threshold=0.0,
             golden_patterns=golden_patterns,
+            site_hash=site_hash,
         )
         if score is not None and score > best_score:
             best_score = score
@@ -325,6 +341,7 @@ async def run_resolver_eval(
             rag_retriever=rag_retriever,
             flow_store=flow_store,
             expected_type=ph.get("expected_type"),
+            site_hash=ph.get("site_hash"),
         )
 
         expected = ph["expected_locator"]
@@ -393,6 +410,19 @@ def _format_summary(summary: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def rag_enabled_for_eval() -> bool:
+    """Whether this eval run has RAG on — the product's own gate.
+
+    Delegates to ``src.orchestrator.rag_enabled_by_config`` (B-036 semantics: a
+    missing ``RAG_ENABLED`` means ENABLED; only ``RAG_ENABLED=0`` opts out), so
+    the eval's label and the run agree with what the product actually does. The
+    old local ``== "1"`` check mislabelled and ran a default run RAG off.
+    """
+    from src.orchestrator import rag_enabled_by_config
+
+    return rag_enabled_by_config()
+
+
 async def _cmd_static() -> int:
     """Run resolver eval against pre-saved scraped data."""
     pages = load_scraped_pages()
@@ -401,7 +431,7 @@ async def _cmd_static() -> int:
         print("  Run first: python scripts/eval/eval_resolver.py --mode live", file=sys.stderr)
         return 1
 
-    rag_enabled = os.getenv("RAG_ENABLED", "").strip() == "1"
+    rag_enabled = rag_enabled_for_eval()
     rag_retriever = None
     if rag_enabled:
         try:
@@ -425,9 +455,9 @@ async def _cmd_static() -> int:
     print(_format_summary(summary))
 
     if rag_enabled:
-        print("\n[RAG: ENABLED]")
+        print("\n[RAG: ENABLED]  (product default; set RAG_ENABLED=0 to compare)")
     else:
-        print("\n[RAG: DISABLED]  (set RAG_ENABLED=1 to compare)")
+        print("\n[RAG: DISABLED]  (RAG_ENABLED=0)")
 
     return 0
 
