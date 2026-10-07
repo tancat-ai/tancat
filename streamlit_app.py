@@ -23,6 +23,7 @@ except ImportError:
     pass
 
 from src.llm_client import LLMClient
+from src.project import apply_rag_scope
 from src.provider_config import (
     api_key_env_var,
     get_provider_defaults,
@@ -70,7 +71,11 @@ def _init_session_state() -> None:
     """Initialise session state defaults — called once per module load."""
     # B-036 Phase 4: workspace comes from the persisted settings store first,
     # with the WORKSPACE env var as a dev fallback, then "default".
-    workspace = load_setting(SETTING_WORKSPACE, None) or os.environ.get("WORKSPACE", "default")
+    # t-0510: the stored value is the project name; an unset project keeps the
+    # default workspace and the host[:port] RAG scope.
+    stored_project = str(load_setting(SETTING_WORKSPACE, "") or "").strip()
+    apply_rag_scope(stored_project)
+    workspace = stored_project or os.environ.get("WORKSPACE", "default")
     init_storage(workspace=workspace)
 
     defaults: dict[str, Any] = {
@@ -241,6 +246,8 @@ SidebarConfig.render_license_usage()
 # learned-pattern stats). Re-initialises storage immediately when the
 # workspace setting changed, so evidence/tests land in the right place.
 _settings = SidebarConfig.render_settings()
+# t-0510: the project name is the RAG scope; an unset project keeps host[:port].
+apply_rag_scope(str(_settings.get("project", "") or ""))
 _workspace = str(_settings.get("workspace", "default") or "default")
 if get_storage().workspace != _workspace:
     init_storage(workspace=_workspace)

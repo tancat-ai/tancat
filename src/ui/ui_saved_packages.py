@@ -100,6 +100,20 @@ class SavedPackagePanel:
             st.sidebar.info("No saved packages found in `generated_tests/`.")
             return
 
+        # t-0510: one action runs every package in the project.
+        if st.sidebar.button(
+            "▶️ Run Project", key="run_project_button", help="Run every saved package in this project."
+        ):
+            self._handle_run_project()
+
+        project_summary = st.session_state.get("project_run_summary")
+        if project_summary:
+            st.sidebar.caption(
+                f"Project run: {project_summary['packages']} package(s) · "
+                f"{project_summary['passed']} passed · {project_summary['failed']} failed · "
+                f"{project_summary['skipped']} skipped"
+            )
+
         labels = [_format_package_label(pkg) for pkg in packages]
 
         selected_index = st.sidebar.selectbox(
@@ -137,6 +151,29 @@ class SavedPackagePanel:
         loaded = st.session_state.get("loaded_package_manifest")
         if loaded:
             self._render_loaded_summary()
+
+    def _handle_run_project(self) -> None:
+        """Run every package in the project and show the aggregate (t-0510)."""
+        from src.pipeline_run_service import discover_project_packages, run_project_packages
+
+        package_dirs = discover_project_packages(self._generated_tests_dir)
+        if not package_dirs:
+            st.sidebar.warning("No packages to run in this project.")
+            return
+        with st.sidebar.spinner(f"Running {len(package_dirs)} package(s)..."):
+            outcome = run_project_packages(package_dirs)
+        aggregate = outcome.run_result
+        st.session_state.project_run_summary = {
+            "packages": outcome.package_count,
+            "total": aggregate.total,
+            "passed": aggregate.passed,
+            "failed": aggregate.failed,
+            "skipped": aggregate.skipped,
+            "errors": aggregate.errors,
+        }
+        st.sidebar.success(
+            f"Ran {outcome.package_count} package(s): {aggregate.passed} passed, {aggregate.failed} failed."
+        )
 
     def _render_loaded_summary(self) -> None:
         loaded = st.session_state.get("loaded_package_manifest")

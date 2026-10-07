@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -170,3 +171,63 @@ class PipelineRunService:
             display_output=format_pytest_output_for_display(raw_output),
             return_code=completed.returncode,
         )
+
+
+@dataclass(frozen=True)
+class ProjectRunResult:
+    """Aggregate result of running every package in one project."""
+
+    package_dirs: list[str]
+    run_result: RunResult
+    return_code: int
+
+    @property
+    def package_count(self) -> int:
+        return len(self.package_dirs)
+
+
+def discover_project_packages(base_dir: str | Path) -> list[Path]:
+    """Return every saved package directory under *base_dir* (newest first).
+
+    Reuses the package discovery the sidebar already uses, so a project is
+    exactly the set of packages in its workspace.
+    """
+    from src.pipeline_artifact_manager import find_existing_packages
+
+    base = Path(base_dir)
+    return [base / manifest.package_name for manifest in find_existing_packages(base)]
+
+
+def run_project_packages(
+    package_dirs: Sequence[str | Path],
+    *,
+    run_service: PipelineRunService | None = None,
+) -> ProjectRunResult:
+    """Run every package in the project, aggregating the results.
+
+    Each package runs through the same :meth:`PipelineRunService.run_saved_test`
+    as a single-package "Run Tests", so the project run history stays
+    per-package and nothing new is learned.
+    """
+    service = run_service or PipelineRunService()
+    dirs = [str(Path(d)) for d in package_dirs]
+    results: list[TestResult] = []
+    raw_parts: list[str] = []
+    return_code = 0
+    for package_dir in dirs:
+        execution = service.run_saved_test(package_dir, persist=True)
+        results.extend(execution.run_result.results)
+        raw_parts.append(execution.display_output)
+        return_code = max(return_code, execution.return_code)
+
+    aggregate = RunResult(
+        results=results,
+        total=len(results),
+        passed=sum(1 for r in results if r.status == "passed"),
+        failed=sum(1 for r in results if r.status == "failed"),
+        skipped=sum(1 for r in results if r.status == "skipped"),
+        errors=sum(1 for r in results if r.status == "error"),
+        duration=0.0,
+        raw_output="\n".join(raw_parts),
+    )
+    return ProjectRunResult(package_dirs=dirs, run_result=aggregate, return_code=return_code)
