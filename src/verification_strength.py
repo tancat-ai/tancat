@@ -53,7 +53,9 @@ def is_global_container(locator: str) -> bool:
 
     ``body``, ``main``, ``#content`` and friends pass on any page of a broken
     app, so an assertion against one proves nothing about the criterion it was
-    resolved for.
+    resolved for. App chrome (``#page-footer``, ``main-content``) is the same
+    shape: t-0547 showed ``#page-footer`` winning an ASSERT, so a hyphen or
+    underscore after a container name now also matches.
     """
     if not locator:
         return False
@@ -61,7 +63,7 @@ def is_global_container(locator: str) -> bool:
     for container in _GLOBAL_CONTAINERS:
         if low == container:
             return True
-        if low.startswith(container) and len(low) > len(container) and low[len(container)] in ":[ >.#":
+        if low.startswith(container) and len(low) > len(container) and low[len(container)] in ":[ >.#-_":
             return True
     return False
 

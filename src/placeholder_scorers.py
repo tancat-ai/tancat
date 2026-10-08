@@ -268,6 +268,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._assert_visibility_penalty(action, element, description)
         score += PlaceholderScorer._click_text_penalty(action, description, desc_words, element)
         score += PlaceholderScorer._assert_single_class_penalty(action, selector, element)
+        score += PlaceholderScorer._assert_generic_winner_penalty(action, description, element, selector)
         score += PlaceholderScorer._visual_enrichment_bonus(
             action, description, element, lowered, icon_classes, visual_desc, parent_text
         )
@@ -383,6 +384,11 @@ class PlaceholderScorer:
           a specific element's 100+structural/href/role bonuses, but a page with
           NO specific candidate still keeps the container above ``match_threshold``
           (typically 0) as a last resort — honest degrade, not a hard removal.
+
+        t-0556: for ASSERT this last-resort behaviour is superseded by
+        ``_assert_generic_winner_penalty``, which demotes a generic container
+        (or prose run) off the candidate list entirely — a generic check can
+        never prove a criterion. This penalty still governs CLICK.
         """
         tag = str(element.get("tag", "")).strip().lower()
         role = str(element.get("role", "")).strip().lower()
@@ -433,6 +439,9 @@ class PlaceholderScorer:
     #: Tags whose text is a prose run rather than a named control. Headings are
     #: excluded: "practice form page title" legitimately resolves to a bare h5.
     _ASSERT_GENERIC_TEXT_RUN_TAGS: frozenset[str] = frozenset({"p", "span", "li"})
+    #: App chrome: a footer/header/nav check passes on any page of a broken app,
+    #: so it can never prove a content criterion (t-0547: ``#page-footer`` won).
+    _ASSERT_GENERIC_CHROME_TAGS: frozenset[str] = frozenset({"footer", "header", "nav", "aside"})
     #: Class names that carry no identity (a bare ``.text`` wrapper).
     _ASSERT_GENERIC_CLASSES: frozenset[str] = frozenset({"text", "content", "container", "wrapper", "row", "col"})
 
@@ -444,13 +453,28 @@ class PlaceholderScorer:
         already says a page-level container can never prove a criterion; the
         same must hold at ASSERT *resolution* time. A bare prose run
         (``<p>Blue Top</p>``, ``.text``) is the sibling shape: it carries no
-        identity, so it can only win on merged page text.
+        identity, so it can only win on merged page text. t-0547 extended the
+        net to app chrome (``footer``/``header``/``nav``/``aside`` tags and
+        ``#page-footer``-style selectors) and to a single generic class on any
+        tag (``div.text``).
+
+        A specific class (``p.account_balance``, ``.cart_total_price``) is NOT
+        generic: the same class shape is the golden for real criteria (e.g.
+        ".cart_total_price" for "product name and price"), so class-based
+        exclusion would demote the answers we want.
         """
         from src.verification_strength import is_global_container
 
         if is_global_container(selector):
             return True
         tag = str(element.get("tag", "")).strip().lower()
+        if tag in PlaceholderScorer._ASSERT_GENERIC_CHROME_TAGS:
+            return True
+        # A single bare wrapper class on any tag (``.text`` on a div).
+        stripped = selector.strip().lower()
+        if stripped.startswith(".") and stripped.count(".") == 1 and "[" not in stripped and "#" not in stripped:
+            if stripped[1:] in PlaceholderScorer._ASSERT_GENERIC_CLASSES:
+                return True
         if tag not in PlaceholderScorer._ASSERT_GENERIC_TEXT_RUN_TAGS:
             return False
         if str(element.get("id", "")).strip() or str(element.get("data_test", "")).strip():
