@@ -1,10 +1,24 @@
-name: Deploy Landing Page (GitHub Pages)
+name: Deploy Landing + Docs (GitHub Pages)
+
+# Publishes two things as one Pages artifact:
+#   /            the hand-written landing site (landing/)
+#   /docs/       the MkDocs user documentation built from docs/user/
+# Building both here keeps a single Pages deployment per push - two workflows
+# deploying the artifact would replace each other.
+#
+# Only docs/user/ is built. Internal material (docs/private, docs/sessions,
+# docs/specs, docs/plans, docs/analysis, docs/reviews, docs/archived,
+# markdown_docs) is outside the MkDocs docs_dir and never reaches the site.
 
 on:
   push:
     branches: [main]
     paths:
       - "landing/**"
+      - "docs/user/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - "uv.lock"
       - ".github/workflows/pages-deploy.yml"
   workflow_dispatch:
 
@@ -27,13 +41,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install the docs toolchain
+        run: uv sync --frozen --only-group docs --no-install-project
+
+      - name: Build the user docs (strict)
+        run: uv run --no-sync mkdocs build --strict
+
+      - name: Stage the site (landing at /, docs at /docs/)
+        run: |
+          mkdir -p _site/docs
+          cp -r landing/. _site/
+          cp -r site/. _site/docs/
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload landing/ as the Pages artifact
+      - name: Upload the staged site as the Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: landing
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment

@@ -165,3 +165,8 @@ ai-test-workspace/
 
 # local zvec-grep search index (dev-only, regenerable)
 .zvec-grep/
+
+# Published user docs: the MkDocs build output is regenerated, and the
+# screenshots under docs/user/assets/ are tracked despite the global *.png rule.
+site/
+!docs/user/assets/*.png
