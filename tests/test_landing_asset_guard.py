@@ -58,6 +58,41 @@ def test_changed_streamlit_screenshot_fails_and_names_the_previews(tmp_path: Pat
     assert any("preview_desktop_1280.png" in p and "preview_mobile_390.png" in p for p in problems)
 
 
+def test_manifest_tracks_the_logo_in_the_renders() -> None:
+    """The nav/footer logo is a source of the share card and both previews (t-0521)."""
+    guard = _load_guard()
+    manifest = json.loads(guard.MANIFEST.read_text(encoding="utf-8"))
+    logo = "landing/logo_transparent.png"
+    assert logo in manifest["sources"]
+    for render in (
+        "landing/og-card.png",
+        "landing/preview_desktop_1280.png",
+        "landing/preview_mobile_390.png",
+    ):
+        assert logo in manifest["assets"][render]
+
+
+def test_changed_logo_fails_and_names_the_renders(tmp_path: Path) -> None:
+    """A logo swap without a regeneration fails the guard (t-0521)."""
+    guard = _load_guard()
+    manifest = json.loads(guard.MANIFEST.read_text(encoding="utf-8"))
+    logo = "landing/logo_transparent.png"
+    # Pretend the logo changed after the assets were generated.
+    manifest["sources"][logo] = "0" * 40
+    stale = tmp_path / "asset-sources.json"
+    stale.write_text(json.dumps(manifest), encoding="utf-8")
+
+    problems = guard.check(stale, guard.REPO_ROOT)
+
+    logo_problem = next(p for p in problems if logo in p and "changed" in p)
+    for render in (
+        "landing/og-card.png",
+        "landing/preview_desktop_1280.png",
+        "landing/preview_mobile_390.png",
+    ):
+        assert render in logo_problem
+
+
 def test_missing_manifest_is_reported(tmp_path: Path) -> None:
     guard = _load_guard()
     problems = guard.check(tmp_path / "does-not-exist.json", tmp_path)
