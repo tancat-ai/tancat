@@ -73,6 +73,28 @@ def test_is_page_state_assertion_other_actions_ignored() -> None:
     assert not orchestrator._is_page_state_assertion("")
 
 
+def test_element_naming_terms_keep_an_assert_as_an_element() -> None:
+    """t-0542: a criterion that names an element must not become a URL assert.
+
+    The saucedemo element criteria ("Cart Summary", "Checkout Info form") and
+    their page-worded variants name an element; only a pure page-state
+    description ("cart page") routes to a URL assertion.
+    """
+    orchestrator = PlaceholderOrchestrator()
+    for desc in (
+        "Cart Summary",
+        "Checkout Info form",
+        "cart page summary",
+        "checkout page form",
+        "checkout page section",
+        "cart page panel",
+    ):
+        assert not orchestrator._is_page_state_assertion(desc), f"{desc!r} should be element-level"
+    # The pure page-state forms still route to a URL assertion.
+    for desc in ("cart page", "products page title", "checkout page", "home page loaded"):
+        assert orchestrator._is_page_state_assertion(desc), f"{desc!r} should be page-state"
+
+
 # ---------------------------------------------------------------------------
 # golden_validator trailing-slash comparison
 # ---------------------------------------------------------------------------

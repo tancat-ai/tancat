@@ -225,6 +225,9 @@ class PlaceholderScorer:
             # element the description actually names (exact id/short text)
             # must beat it. Page-level ASSERTs keep their sanctioned path.
             haystack_score += PlaceholderScorer._container_aggregate_penalty(action, description, element)
+            # t-0542: a generic text run / global container must not win an
+            # element ASSERT on its merged text alone (see the helper below).
+            haystack_score += PlaceholderScorer._assert_generic_winner_penalty(action, description, element, selector)
             # CLICK gates that the slow path applies must apply to the fast
             # path too — a short description like "OK" can match a substring
             # inside a hidden input's haystack ("csrfmiddlewareTOKen") and
@@ -426,6 +429,60 @@ class PlaceholderScorer:
             if any(term in lowered for term in PlaceholderScorer.PAGE_LEVEL_ASSERT_TERMS):
                 return 0
         return -40
+
+    #: Tags whose text is a prose run rather than a named control. Headings are
+    #: excluded: "practice form page title" legitimately resolves to a bare h5.
+    _ASSERT_GENERIC_TEXT_RUN_TAGS: frozenset[str] = frozenset({"p", "span", "li"})
+    #: Class names that carry no identity (a bare ``.text`` wrapper).
+    _ASSERT_GENERIC_CLASSES: frozenset[str] = frozenset({"text", "content", "container", "wrapper", "row", "col"})
+
+    @staticmethod
+    def _is_generic_assert_target(element: dict[str, Any], selector: str) -> bool:
+        """True when a candidate is a generic text run / global page container.
+
+        t-0542: the gate-2 rule (``verification_strength._GLOBAL_CONTAINERS``)
+        already says a page-level container can never prove a criterion; the
+        same must hold at ASSERT *resolution* time. A bare prose run
+        (``<p>Blue Top</p>``, ``.text``) is the sibling shape: it carries no
+        identity, so it can only win on merged page text.
+        """
+        from src.verification_strength import is_global_container
+
+        if is_global_container(selector):
+            return True
+        tag = str(element.get("tag", "")).strip().lower()
+        if tag not in PlaceholderScorer._ASSERT_GENERIC_TEXT_RUN_TAGS:
+            return False
+        if str(element.get("id", "")).strip() or str(element.get("data_test", "")).strip():
+            return False
+        classes = str(element.get("classes", "")).strip().lower().split()
+        return not classes or any(cls in PlaceholderScorer._ASSERT_GENERIC_CLASSES for cls in classes)
+
+    @staticmethod
+    def _assert_generic_winner_penalty(action: str, description: str, element: dict[str, Any], selector: str) -> int:
+        """Stop a generic text run / global container winning an element ASSERT.
+
+        t-0542: a generic candidate's merged text can contain the criterion
+        words (fast path 100) while the element the criterion names scores far
+        lower, so the generic wins the ranking (``p:has-text("Blue Top")``,
+        ``#content``, ``.text``). The penalty drops the generic below any
+        candidate that carries the criterion's distinctive tokens (structural
+        match +15 or better). A page with no specific candidate keeps the
+        generic above ``match_threshold`` as a last resort (honest degrade, not
+        a hard removal). Page-level ASSERTs keep their sanctioned path.
+        """
+        if action != "ASSERT":
+            return 0
+        lowered = description.replace("_", " ").lower()
+        if any(term in lowered for term in PlaceholderScorer.PAGE_LEVEL_ASSERT_TERMS):
+            return 0
+        if not PlaceholderScorer._is_generic_assert_target(element, selector):
+            return 0
+        # A generic candidate that carries the criterion's tokens in its own
+        # id/class/data-test is not generic for THIS description.
+        if PlaceholderScorer._structural_bonus(action, description, element) > 0:
+            return 0
+        return -90
 
     @staticmethod
     def _is_fillable(element: dict[str, Any]) -> bool:
