@@ -50,8 +50,8 @@ class TestBuildBundledPack:
         """B-047 residual: goldens carry a one-way site_hash from their dataset.
 
         The +20 golden bonus must be site-scoped like the learned +5. Mock
-        datasets whose ``base_url`` predates B-047 (all three mocks on :8781)
-        get their canonical concurrent-serve ports instead, so the three mocks
+        datasets whose ``base_url`` predates B-047 (all four mocks on :8781)
+        get their canonical concurrent-serve ports instead, so the mocks
         do not collapse into one bucket.
         """
         patterns = build_bundled_patterns()
@@ -62,12 +62,13 @@ class TestBuildBundledPack:
         assert site_hash("automationexercise.com") in hashes
         assert site_hash("demoqa.com") in hashes
         assert site_hash("the-internet.herokuapp.com") in hashes
-        # Mock sites: lv_insurance keeps :8781; banking/ecommerce use the
-        # canonical concurrent-serve ports (8782/8783) — no collision.
+        # Mock sites: lv_insurance keeps :8781; banking/ecommerce/ambiguous use
+        # the canonical concurrent-serve ports (8782/8783/8787) - no collision.
         assert site_hash("localhost:8781") in hashes  # lv_insurance
         assert site_hash("localhost:8782") in hashes  # banking_mock
         assert site_hash("localhost:8783") in hashes  # ecommerce_mock
-        assert len(hashes) == 7  # 4 real + 3 mock sites, all distinct
+        assert site_hash("localhost:8787") in hashes  # ambiguous_mock
+        assert len(hashes) == 8  # 4 real + 4 mock sites, all distinct
         assert all(p.site_hash for p in patterns)
 
     def test_bundled_docs_nonempty_and_wellformed(self) -> None:

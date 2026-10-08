@@ -47,7 +47,36 @@ if str(_PROJECT_ROOT) not in sys.path:
 _DATASET_DIR = _PROJECT_ROOT / "scripts" / "eval" / "dataset"
 _SCRAPED_DIR = _PROJECT_ROOT / "scripts" / "eval" / "scraped_pages"
 
+#: Root the eval's own store lives under. ``scratch/`` is gitignored, so an
+#: eval run never leaves tracked artefacts behind.
+EVAL_STORE_ROOT = _PROJECT_ROOT / "scratch" / "eval_store"
+
 logger = logging.getLogger(__name__)
+
+
+def isolate_eval_store(root: Path | None = None) -> Path:
+    """Point the eval at its own RAG store and return the store path (t-0515).
+
+    The resolver eval read the production store (``<root>/evidence/rag_store.db``)
+    and generated-test learning wrote to it too. Setting
+    ``AITEST_STORAGE_ROOT``/``AITEST_WORKSPACE`` before any store is built keeps
+    every eval read and write inside its own workspace; a child pytest process
+    (the generated-test conftest) inherits the env and lands there as well. An
+    operator who already set those variables keeps their choice.
+
+    The storage singleton is rebuilt so an in-process caller that already
+    resolved production storage cannot keep pointing at it.
+    """
+    import os
+
+    from src import storage as storage_mod
+
+    if not os.environ.get("AITEST_STORAGE_ROOT", "").strip():
+        os.environ["AITEST_STORAGE_ROOT"] = str(root or EVAL_STORE_ROOT)
+    if not os.environ.get("AITEST_WORKSPACE", "").strip():
+        os.environ["AITEST_WORKSPACE"] = "default"
+    storage_mod.reset_storage()
+    return storage_mod.get_storage().rag_path()
 
 
 # ---------------------------------------------------------------------------
@@ -431,10 +460,15 @@ async def _cmd_static() -> int:
         print("  Run first: python scripts/eval/eval_resolver.py --mode live", file=sys.stderr)
         return 1
 
+    # t-0515: every eval read/write stays in the eval's own store, never the
+    # production one. Set before any store (RAG or flow memory) is built.
+    isolate_eval_store()
+
     rag_enabled = rag_enabled_for_eval()
     rag_retriever = None
     if rag_enabled:
         try:
+            from src.rag_bundled import ensure_bundled_seeded
             from src.rag_retriever import RAGRetriever
             from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
             from src.storage import get_storage
@@ -446,8 +480,12 @@ async def _cmd_static() -> int:
                 embedder_identity=embedder.identity,
             )
             store = RAGStore(backend, embedder)
+            # Seed the deterministic bundled golden pack into the eval store so
+            # RAG-on still measures the goldens (production's learned patterns
+            # no longer leak in).
+            ensure_bundled_seeded(store=store)
             rag_retriever = RAGRetriever(store)
-            logger.info("RAG retriever initialised")
+            logger.info("RAG retriever initialised (isolated store: %s)", get_storage().rag_path())
         except Exception:
             logger.warning("RAG enabled but failed to init — disabling", exc_info=True)
 
