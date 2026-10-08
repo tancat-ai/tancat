@@ -102,6 +102,38 @@ jobs:
               print(f'✅ All {d.get(\"total\", 0)} files documented')
           "
 
+  # ── Gate 1h: User-docs build (BLOCKING) ────────────────────────────
+  # The published user docs are Markdown in docs/user/ built by MkDocs.
+  # `--strict` fails on a broken internal link or a missing nav page, the one
+  # doc failure mode that matters. Only the docs dependency group is installed
+  # (`--only-group docs`), so this does not pull the product's torch/streamlit
+  # stack - the build is seconds, not minutes.
+  docs-build:
+    name: Docs Build (mkdocs --strict)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install the docs toolchain
+        run: uv sync --frozen --only-group docs --no-install-project
+
+      - name: Build the user docs (strict)
+        run: uv run --no-sync mkdocs build --strict
+
   # ── Gate 1d: Kanban freshness (warning-only, non-blocking) ──────────
   kanban-freshness:
     name: Kanban Freshness Check

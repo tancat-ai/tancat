@@ -24,8 +24,14 @@ services:
       - ./scripts:/app/scripts:ro
       - ./notebooks:/app/notebooks:ro
     environment:
-      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Compose is the bundled-Ollama deployment. The app's own .env is
+      # host-oriented (LLM_PROVIDER=openai-local and localhost URLs by default),
+      # so it must not silently redirect the container. The provider and Ollama
+      # URL read Compose-specific variables that default to the bundled service;
+      # set COMPOSE_LLM_PROVIDER (and the matching base URL) to choose another
+      # provider inside Compose.
+      - LLM_PROVIDER=${COMPOSE_LLM_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=${COMPOSE_OLLAMA_BASE_URL:-http://ollama:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
       - LM_STUDIO_BASE_URL=${LM_STUDIO_BASE_URL:-http://host.docker.internal:1234}

@@ -1,0 +1,77 @@
+# MkDocs configuration for the published TanCat user documentation.
+#
+# Only `docs/user/` is built and published. Internal material (docs/private,
+# docs/sessions, docs/specs, docs/plans, docs/analysis, docs/reviews,
+# docs/archived, markdown_docs) is outside `docs_dir` and can never leak into
+# the site.
+#
+# Build locally:  uv sync --only-group docs && uv run mkdocs build --strict
+# Serve locally:  uv run mkdocs serve
+# CI:             the `docs-build` job in .github/workflows/ci.yml runs --strict
+# Pages:          .github/workflows/pages-deploy.yml stages this site at /docs/
+site_name: TanCat Docs
+site_description: User documentation for TanCat - generate Playwright pytest tests from user stories with your own LLM.
+site_url: https://tancat.dev/docs/
+docs_dir: docs/user
+site_dir: site
+strict: true
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: amber
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Get started:
+      - What TanCat is: getting-started/what-is-tancat.md
+      - Install: getting-started/install.md
+      - Configure your LLM: getting-started/configure-llm.md
+      - Your first run: getting-started/first-run.md
+  - Guides:
+      - How the pipeline works: guides/pipeline.md
+      - Placeholders, resolution and skips: guides/skips.md
+      - Evidence and reports: guides/evidence.md
+  - Reference:
+      - Licensing and tiers: reference/licensing.md
+
+extra:
+  generator: false
+
+copyright: TanCat - Apache-2.0

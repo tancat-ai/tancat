@@ -68,6 +68,13 @@ ocr = [
     "opencv-python-headless>=4.10.0",
 ]
 [dependency-groups]
+# Published user docs (docs/user/) built with MkDocs Material and deployed to
+# GitHub Pages. A separate group, not a project extra, so the docs build and
+# deploy can install it alone (`uv sync --only-group docs`) without pulling the
+# product's torch/streamlit stack.
+docs = [
+    "mkdocs-material>=9.6.0",
+]
 dev = [
     "ruff==0.16.7",
     "mypy==2.3.1",
