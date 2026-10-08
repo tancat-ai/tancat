@@ -22,7 +22,8 @@ Utility and automation scripts for the tancat-ai/tancat project.
 | `gate_full.py` | Full gate chain — smoke → unit → eval-static → verify_production → export_gate | `--offline` = nothing; full = Browser + LLM |
 | `maintenance/project_sanitizer.py` | Project housekeeping (CI) | Nothing |
 | `maintenance/cli_e2e_validation.py` | CLI pipeline syntax validation | Browser + LLM |
-| `maintenance/make_landing_assets.py` | Regenerate landing favicon/icons/OG card | Pillow + Chromium (OG card needs network) |
+| `maintenance/make_landing_assets.py` | Regenerate landing favicon/icons/OG card/previews/PDF + source fingerprint | Pillow + Chromium (OG card needs network) |
+| `maintenance/landing_assets_guard.py` | Fail when landing assets drift from their sources (CI + pre-commit) | Nothing - stdlib + git |
 | `eval/eval_harness.py` | Eval harness — regression detection vs. golden keys | Nothing (static) / Browser (full) |
 | `eval/learning_impact.py` | AI-059 sidecar metrics and controlled cold/warm store comparison | Nothing (metrics) / deterministic mock runner (baseline) |
 | `map_3d/*.py` | 3D documentation map generation | Nothing |
@@ -283,12 +284,14 @@ These remain as specialized tools for specific scenarios:
 |--------|---------|
 | `project_sanitizer.py` | Auto-move misplaced tests, purge junk, audit doc links |
 | `cli_e2e_validation.py` | CLI pipeline E2E with Python syntax validation |
-| `make_landing_assets.py` | Regenerate `landing/` favicon, icon set, and OG card from the logo |
+| `make_landing_assets.py` | Regenerate `landing/` favicon, icon set, OG card, previews and install PDF, and rewrite `landing/asset-sources.json` |
+| `landing_assets_guard.py` | CI/pre-commit guard: fail when a landing source changed without a regeneration (stdlib-only) |
 
 ```bash
 python scripts/maintenance/project_sanitizer.py --check-only   # CI mode
 python scripts/maintenance/cli_e2e_validation.py --url <url>
-python scripts/maintenance/make_landing_assets.py              # after a logo change
+python scripts/maintenance/make_landing_assets.py              # after any landing/install copy or logo change
+python scripts/maintenance/landing_assets_guard.py --check     # CI + pre-commit freshness gate
 ```
 
 ---
