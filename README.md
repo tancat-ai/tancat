@@ -6,25 +6,17 @@ Powered by local LLMs — no cloud API keys needed.
 
 | Metric | Status |
 |--------|--------|
-| CI/CD Pipeline | [![CI](https://github.com/lacattano/tancat-ai/tancat/actions/workflows/ci.yml/badge.svg)](https://github.com/lacattano/tancat-ai/tancat/actions) |
+| CI/CD Pipeline | [![CI](https://github.com/tancat-ai/tancat/actions/workflows/ci.yml/badge.svg)](https://github.com/tancat-ai/tancat/actions) |
 | Python Version | ![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg) |
 | License | ![License](https://img.shields.io/badge/license-Apache_2.0-green.svg) |
 | Code Quality | [![Ruff](https://img.shields.io/badge/linter-ruff-261230.svg)](https://github.com/astral-sh/ruff) |
 
 ## Demo
 
-<!--
-  TODO: record the demo asset.
-  1. Record a ~3 min walkthrough on Loom (story in → plan → generate → run → self-heal) and paste the URL below.
-  2. Record a short screen-capture GIF (terminal + browser) and save it to docs/demo/demo.gif.
-  The GIF renders on the repo page — recruiters/clients see it without clicking anything.
--->
-
-▶️ **Watch the 3-minute walkthrough:** [Loom — tancat-ai/tancat](https://www.loom.com/share/YOUR_VIDEO_ID_HERE)
-
-![Demo — paste a user story, get running Playwright tests](docs/demo/demo.gif)
-
-*A user story in → a living test plan → generated Playwright tests → executed against a real site, with a self-healed locator along the way.*
+A short walkthrough video is planned. Until it is recorded, the
+[Your first run](docs/user/getting-started/first-run.md) page in the user docs
+specifies exactly what the video will show, and walks the same story end to end
+with real expected output.
 
 ## How It Works
 
@@ -84,7 +76,9 @@ Or use the CLI:
 bash launch_cli.sh
 ```
 
-For a full walkthrough of the CLI interactive menu, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+For the CLI, run `bash launch_cli.sh`. It starts an interactive menu; the
+[Install](docs/user/getting-started/install.md) page covers the launch options,
+and `tancat --help` prints the usage text.
 
 ## Connect your LLM
 
@@ -200,12 +194,13 @@ Phase 3: PERSISTENCE + REPORTING
 ```
 
 For a full module map and dependency graph, see [ARCHITECTURE.md](docs/ARCHITECTURE.md).
-- [Interactive call-flow diagram](graphify-out/callflow.html) — generated from live code, 10 700+ nodes
+- Interactive call-flow diagram: generated locally with `graphify update .` (not committed to the repo).
 
 ## Documentation
 
 | Doc | Purpose |
 |-----|---------|
+| [docs/user/](docs/user/index.md) | User documentation - install, configure your LLM, first run, guides, licensing |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, data flows, dependency graph |
 | [PROJECT_KNOWLEDGE.md](docs/PROJECT_KNOWLEDGE.md) | Decisions, gotchas, recurring bugs |
 | [DEMO_GUIDE.md](docs/DEMO_GUIDE.md) | Step-by-step demo for stakeholders |
