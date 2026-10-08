@@ -1814,6 +1814,14 @@ class PlaceholderOrchestrator:
             "banner",
             "logo",
             "product card",
+            # t-0542: an element that happens to mention a page ("Cart
+            # Summary", "Checkout Info form", "cart page summary") must not be
+            # downgraded to a URL assertion. The criterion names an element.
+            "summary",
+            "form",
+            "container",
+            "section",
+            "panel",
         )
         if any(kw in lowered for kw in element_keywords):
             return False

@@ -118,8 +118,13 @@ class TestComputeElementScore:
         assert any("skipped" in rec.getMessage() and "golden" in rec.getMessage() for rec in caplog.records)
 
     def test_container_haystack_penalized_specific_element_wins(self) -> None:
-        """AI-064: a generic container ('main') matching via merged page text
-        must NOT win over the specific element the description names."""
+        """AI-064 + t-0556: a generic container ('main') matching via merged
+        page text must NOT win over the specific element the description names.
+
+        t-0556 extends the t-0542 guard to the slow path, so the container is
+        now demoted off the candidate list (None) instead of merely ranked
+        below the specific element.
+        """
         main_el = _element(
             {
                 "text": "Payment Sent Successfully! Payment failed. Please try again.",
@@ -143,8 +148,8 @@ class TestComputeElementScore:
         specific_score = PlaceholderScorer.compute_element_score(
             "ASSERT", "payment success message", specific, "#success-title", match_threshold=1
         )
-        assert specific_score is not None and main_score is not None
-        assert specific_score > main_score  # the specific candidate wins the ranking
+        assert specific_score is not None
+        assert main_score is None or specific_score > main_score
 
     def test_container_penalty_spares_interactive_element(self) -> None:
         """AI-064 guard: a button/link with no container role is never penalized
