@@ -101,8 +101,19 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
     "icon-512.png": ("landing/logo_transparent.png",),
     "apple-touch-icon.png": ("landing/logo_transparent.png",),
     "og-card.png": ("landing/index.html", "landing/tailwind.css"),
-    "preview_desktop_1280.png": ("landing/index.html", "landing/tailwind.css"),
-    "preview_mobile_390.png": ("landing/index.html", "landing/tailwind.css"),
+    # The previews are full-page captures, so they also depend on the images the
+    # page embeds: the hero shows landing/streamlit_real_1280x820.png. Swapping
+    # that screenshot without re-rendering leaves the previews stale.
+    "preview_desktop_1280.png": (
+        "landing/index.html",
+        "landing/tailwind.css",
+        "landing/streamlit_real_1280x820.png",
+    ),
+    "preview_mobile_390.png": (
+        "landing/index.html",
+        "landing/tailwind.css",
+        "landing/streamlit_real_1280x820.png",
+    ),
     "tancat-pro-install-and-licence.pdf": ("docs/implementation/tancat-pro-install-and-licence.html",),
 }
 

@@ -32,6 +32,32 @@ def test_committed_manifest_matches_sources() -> None:
     assert guard.check() == []
 
 
+def test_manifest_tracks_the_embedded_streamlit_screenshot() -> None:
+    """The hero screenshot is a preview source; the t-0517 blocker was that it was not."""
+    guard = _load_guard()
+    manifest = json.loads(guard.MANIFEST.read_text(encoding="utf-8"))
+    screenshot = "landing/streamlit_real_1280x820.png"
+    assert screenshot in manifest["sources"]
+    for preview in ("landing/preview_desktop_1280.png", "landing/preview_mobile_390.png"):
+        assert screenshot in manifest["assets"][preview]
+
+
+def test_changed_streamlit_screenshot_fails_and_names_the_previews(tmp_path: Path) -> None:
+    """A screenshot swap without a regeneration fails the guard (the t-0517 blocker)."""
+    guard = _load_guard()
+    manifest = json.loads(guard.MANIFEST.read_text(encoding="utf-8"))
+    screenshot = "landing/streamlit_real_1280x820.png"
+    # Pretend the screenshot changed after the assets were generated.
+    manifest["sources"][screenshot] = "0" * 40
+    stale = tmp_path / "asset-sources.json"
+    stale.write_text(json.dumps(manifest), encoding="utf-8")
+
+    problems = guard.check(stale, guard.REPO_ROOT)
+
+    assert any(screenshot in p for p in problems)
+    assert any("preview_desktop_1280.png" in p and "preview_mobile_390.png" in p for p in problems)
+
+
 def test_missing_manifest_is_reported(tmp_path: Path) -> None:
     guard = _load_guard()
     problems = guard.check(tmp_path / "does-not-exist.json", tmp_path)
