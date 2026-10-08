@@ -65,11 +65,17 @@ matches the Playwright version in the lockfile.
 
 ## Docker Compose
 
-`docker-compose.yml` starts the app together with a bundled Ollama service:
+`docker-compose.yml` starts the app together with a bundled Ollama service and
+runs the app against it:
 
 ```bash
 docker compose up
 ```
+
+The bundled Ollama is the Compose default and is **not** changed by your `.env` -
+that file is host-oriented (`openai-local` and localhost URLs). To run a
+different provider inside Compose, set `COMPOSE_LLM_PROVIDER` (and its base URL,
+for example `OPENAI_BASE_URL`) in `.env`.
 
 By design the Compose file publishes **no host port** - the app and Ollama talk
 over the `playwright-network` bridge, and the app is on port 8080 inside that
