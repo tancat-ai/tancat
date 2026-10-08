@@ -30,8 +30,16 @@ Run this after ANY landing or install-document copy change: a stale share image
 or PDF is the difference between a page that is fixed and one that still says
 the old thing.
 
+Every run also rewrites ``landing/asset-sources.json``, the fingerprint that
+``scripts/maintenance/landing_assets_guard.py`` checks in CI and in a pre-commit
+hook. The guard catches a source edit that was committed without this rebuild;
+it does not re-render, because browser captures and the PDF are not
+byte-reproducible across machines. Commit the manifest with the assets.
+
 Idempotent: same inputs + same Pillow/Chromium versions produce byte-similar
-output. Nothing here ships to the product runtime.
+output (the icons are byte-identical; the browser captures are not, so the
+guard uses a source fingerprint rather than a render diff). Nothing here ships
+to the product runtime.
 """
 
 from __future__ import annotations
@@ -45,7 +53,14 @@ from playwright.sync_api import sync_playwright
 if TYPE_CHECKING:
     from playwright.sync_api import Browser, Page, Playwright
 
-__all__ = ["main", "build_icons", "build_og_card", "build_previews", "build_install_pdf"]
+__all__ = [
+    "main",
+    "build_icons",
+    "build_og_card",
+    "build_previews",
+    "build_install_pdf",
+    "ASSET_SOURCES",
+]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LANDING = REPO_ROOT / "landing"
@@ -73,6 +88,22 @@ OG_SIZE: tuple[int, int] = (1200, 630)
 PREVIEW_VIEWPORTS: dict[str, tuple[int, int]] = {
     "preview_desktop_1280.png": (1280, 900),
     "preview_mobile_390.png": (390, 844),
+}
+
+#: Generated asset -> the repo-relative sources it is rendered from. This is the
+#: contract the freshness guard checks: edit a source here and the guard fails
+#: until the generator has re-rendered and rewritten the manifest. The browser
+#: captures also depend on the webfonts fetched from Google Fonts, which cannot
+#: be hashed; the fingerprint covers the files that are committed.
+ASSET_SOURCES: dict[str, tuple[str, ...]] = {
+    "favicon.ico": ("landing/logo_transparent.png",),
+    "icon-192.png": ("landing/logo_transparent.png",),
+    "icon-512.png": ("landing/logo_transparent.png",),
+    "apple-touch-icon.png": ("landing/logo_transparent.png",),
+    "og-card.png": ("landing/index.html", "landing/tailwind.css"),
+    "preview_desktop_1280.png": ("landing/index.html", "landing/tailwind.css"),
+    "preview_mobile_390.png": ("landing/index.html", "landing/tailwind.css"),
+    "tancat-pro-install-and-licence.pdf": ("docs/implementation/tancat-pro-install-and-licence.html",),
 }
 
 
@@ -170,6 +201,13 @@ def main() -> int:
     for path in build_previews():
         print(f"wrote {path.relative_to(REPO_ROOT)}")
     print(f"wrote {build_install_pdf().relative_to(REPO_ROOT)}")
+
+    # Imported here so the generator can be read/loaded without the guard on
+    # sys.path, and so the manifest format lives in exactly one place.
+    from landing_assets_guard import write_manifest
+
+    manifest = write_manifest(ASSET_SOURCES, generator_path=Path(__file__))
+    print(f"wrote {manifest.relative_to(REPO_ROOT)}")
     return 0
 
 

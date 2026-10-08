@@ -198,6 +198,7 @@ Two files track active work; each owns a different class of item. **This split i
 ### Housekeeping (run via ship-it skill or manually before commit)
 
 - `python scripts/maintenance/kanban.py` — regenerate kanban
+- If `landing/` or the install/licence doc changed: run `python scripts/maintenance/make_landing_assets.py` and commit the regenerated assets + `landing/asset-sources.json` (CI gate `landing-assets-freshness` fails otherwise)
 - If `graphify-out/graph.json` is stale: run `graphify update .` then regenerate callflow.html
 - If new `src/` files added: run `document-manager` skill to update markdown_docs
 - If notable changes shipped: update `CHANGELOG.md` [Unreleased] section

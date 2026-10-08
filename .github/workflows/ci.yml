@@ -145,6 +145,30 @@ jobs:
       - name: Fail if kanban.html carries content from docs/private/
         run: python3 scripts/maintenance/kanban.py --check-private
 
+  # ── Gate 1g: Landing asset freshness (BLOCKING) ─────────────────────
+  # landing/og-card.png and the two preview screenshots are real renders of
+  # landing/index.html, so a copy edit leaves them showing the old wording
+  # until someone reruns scripts/maintenance/make_landing_assets.py. That
+  # drift shipped once (the air-gap copy change left the old badge in
+  # og:image) and only a reviewer caught it. Browser captures are not
+  # byte-reproducible on a Linux runner (OS font rasterisation, network
+  # webfonts) and the Chromium PDF embeds a creation timestamp, so this
+  # guard does not re-render: it checks the committed source fingerprint
+  # (landing/asset-sources.json) against the current sources. Any source
+  # edit committed without a regeneration fails here.
+  landing-assets-freshness:
+    name: Landing Assets Freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # stdlib-only + git, so no uv sync (same reasoning as kanban-freshness).
+      - name: Check landing assets match their recorded sources
+        run: python3 scripts/maintenance/landing_assets_guard.py --check
+
   # Gate 1e: Gitleaks secret scan (blocking). Catches key shapes the stdlib
   # pre-commit scan does not know. Runs over the repo and its history, so a
   # key in any commit fails the build. The gitleaks binary is not installed

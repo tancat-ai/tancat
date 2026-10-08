@@ -54,6 +54,18 @@ repos:
         pass_filenames: false
         always_run: true
 
+      - id: landing-assets-freshness
+        name: Landing Assets Freshness
+        description: >-
+          Blocks a commit that edits a landing source (index.html, tailwind.css,
+          the logo, or the install/licence doc) without regenerating the derived
+          images and PDF via scripts/maintenance/make_landing_assets.py. The
+          share card drifted from the page once; this catches it before push.
+        entry: python scripts/maintenance/landing_assets_guard.py --check
+        language: system
+        pass_filenames: false
+        files: ^(landing/|docs/implementation/tancat-pro-install-and-licence\.html|scripts/maintenance/make_landing_assets\.py)
+
       - id: secret-scan
         name: Secret Scan (block hardcoded API keys)
         description: >-
