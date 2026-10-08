@@ -90,11 +90,13 @@ def build_default_store() -> RAGStore:
 
 
 #: Canonical ``host[:port]`` identity for mock datasets whose ``base_url``
-#: predates B-047 (all three mocks pointed at :8781). Real sites and
-#: lv_insurance derive their identity from ``base_url``. These MUST match the
-#: ports ``scripts/synthesize_stories.py`` assigns when it serves the mock
-#: sites concurrently (8781 lv_insurance / 8782 banking / 8783 ecommerce).
+#: predates B-047 (all four mocks point at :8781). Real sites derive their
+#: identity from ``base_url``. The ports follow the concurrent-serve scheme
+#: ``scripts/synthesize_stories.py`` uses (8781 lv_insurance / 8782 banking /
+#: 8783 ecommerce); ambiguous_mock is eval-only and gets the next free port
+#: (8784) so its goldens cannot share lv_insurance's bucket.
 _MOCK_SITE_IDENTITY: dict[str, str] = {
+    "ambiguous_mock": "localhost:8784",
     "banking_mock": "localhost:8782",
     "ecommerce_mock": "localhost:8783",
 }
@@ -106,7 +108,7 @@ def golden_site_hash(site_name: str, base_url: str) -> str:
     Golden patterns are site-scoped so a saucedemo golden cannot award a +20
     bonus while resolving another site. Identity comes from the dataset
     ``base_url`` domain — except the mock datasets whose ``base_url`` predates
-    B-047 (all three mocks on :8781); those use the canonical concurrent-serve
+    B-047 (all four mocks on :8781); those use the canonical concurrent-serve
     ports. Public because the resolver eval must resolve under the same
     identity the goldens were seeded with. Lazy import: ``src.rag_learn``
     imports this module, so importing it at module level would be circular.

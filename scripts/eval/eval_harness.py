@@ -78,6 +78,12 @@ def _setup_logging(verbose: bool = False) -> None:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute the evaluation harness."""
+    # t-0515: keep the eval's RAG reads/writes (and the generated-test
+    # conftest's learning, which inherits the env) in the eval's own store.
+    from scripts.eval.eval_resolver import isolate_eval_store
+
+    isolate_eval_store()
+
     # resolver mode delegates to the resolver-only evaluator
     if args.mode == "semantic" or args.semantic:
         from eval_runner import EvalRunner
