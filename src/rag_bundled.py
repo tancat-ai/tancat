@@ -93,10 +93,11 @@ def build_default_store() -> RAGStore:
 #: predates B-047 (all four mocks point at :8781). Real sites derive their
 #: identity from ``base_url``. The ports follow the concurrent-serve scheme
 #: ``scripts/synthesize_stories.py`` uses (8781 lv_insurance / 8782 banking /
-#: 8783 ecommerce); ambiguous_mock is eval-only and gets the next free port
-#: (8784) so its goldens cannot share lv_insurance's bucket.
+#: 8783 ecommerce); ambiguous_mock is eval-only and gets the next free port.
+#: 8784/8785/8786 are already taken (learning-loop e2e mock and the documented
+#: local mock runs), so ambiguous_mock uses 8787 - no number is shared.
 _MOCK_SITE_IDENTITY: dict[str, str] = {
-    "ambiguous_mock": "localhost:8784",
+    "ambiguous_mock": "localhost:8787",
     "banking_mock": "localhost:8782",
     "ecommerce_mock": "localhost:8783",
 }

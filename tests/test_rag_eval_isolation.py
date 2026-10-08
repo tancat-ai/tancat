@@ -45,6 +45,28 @@ def test_mock_datasets_have_distinct_site_identities() -> None:
     assert lv != ambiguous, "the two mock datasets still share one identity"
 
 
+def test_ambiguous_mock_port_is_not_shared_with_any_other_mock_or_test() -> None:
+    """t-0524: the owner wants nothing sharing a port number.
+
+    ambiguous_mock must not reuse the learning-loop e2e mock's 8784, the
+    documented local mock ports (8785/8786), or the other bundled mock ports.
+    """
+    from src.rag_bundled import golden_site_hash
+    from src.rag_learn import site_hash
+
+    ambiguous = golden_site_hash("ambiguous_mock", "http://localhost:8781/index.html")
+    assert ambiguous == site_hash("localhost:8787")
+    taken = {
+        "lv_insurance": site_hash("localhost:8781"),
+        "banking_mock": site_hash("localhost:8782"),
+        "ecommerce_mock": site_hash("localhost:8783"),
+        "learning-loop e2e mock": site_hash("localhost:8784"),
+        "documented local ecommerce": site_hash("localhost:8785"),
+        "documented local banking": site_hash("localhost:8786"),
+    }
+    assert ambiguous not in taken.values(), "ambiguous_mock reuses another mock's port"
+
+
 def test_eval_uses_its_own_store_and_leaves_production_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

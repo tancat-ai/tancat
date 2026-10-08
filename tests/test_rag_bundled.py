@@ -63,11 +63,11 @@ class TestBuildBundledPack:
         assert site_hash("demoqa.com") in hashes
         assert site_hash("the-internet.herokuapp.com") in hashes
         # Mock sites: lv_insurance keeps :8781; banking/ecommerce/ambiguous use
-        # the canonical concurrent-serve ports (8782/8783/8784) - no collision.
+        # the canonical concurrent-serve ports (8782/8783/8787) - no collision.
         assert site_hash("localhost:8781") in hashes  # lv_insurance
         assert site_hash("localhost:8782") in hashes  # banking_mock
         assert site_hash("localhost:8783") in hashes  # ecommerce_mock
-        assert site_hash("localhost:8784") in hashes  # ambiguous_mock
+        assert site_hash("localhost:8787") in hashes  # ambiguous_mock
         assert len(hashes) == 8  # 4 real + 4 mock sites, all distinct
         assert all(p.site_hash for p in patterns)
 
