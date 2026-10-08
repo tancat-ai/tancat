@@ -446,6 +446,20 @@ class PlaceholderScorer:
     _ASSERT_GENERIC_CLASSES: frozenset[str] = frozenset({"text", "content", "container", "wrapper", "row", "col"})
 
     @staticmethod
+    def _effective_tag(element: dict[str, Any], selector: str) -> str:
+        """Element tag, inferred from the selector when the scrape omitted it.
+
+        t-0560: the scraper leaves ``tag`` empty for many elements (the tag
+        lives in the selector, e.g. ``p`` or ``p:has-text("Blue Top")``), so a
+        bare ``<p>`` slipped past the text-run rule and won the ASSERT.
+        """
+        tag = str(element.get("tag", "")).strip().lower()
+        if tag:
+            return tag
+        match = re.match(r"^([a-zA-Z][a-zA-Z0-9]*)", selector.strip())
+        return match.group(1).lower() if match else ""
+
+    @staticmethod
     def _is_generic_assert_target(element: dict[str, Any], selector: str) -> bool:
         """True when a candidate is a generic text run / global page container.
 
@@ -456,7 +470,8 @@ class PlaceholderScorer:
         identity, so it can only win on merged page text. t-0547 extended the
         net to app chrome (``footer``/``header``/``nav``/``aside`` tags and
         ``#page-footer``-style selectors) and to a single generic class on any
-        tag (``div.text``).
+        tag (``div.text``). t-0560 infers the tag from the selector when the
+        scrape omitted it, so ``p:has-text("Blue Top")`` is caught.
 
         A specific class (``p.account_balance``, ``.cart_total_price``) is NOT
         generic: the same class shape is the golden for real criteria (e.g.
@@ -467,7 +482,7 @@ class PlaceholderScorer:
 
         if is_global_container(selector):
             return True
-        tag = str(element.get("tag", "")).strip().lower()
+        tag = PlaceholderScorer._effective_tag(element, selector)
         if tag in PlaceholderScorer._ASSERT_GENERIC_CHROME_TAGS:
             return True
         # A single bare wrapper class on any tag (``.text`` on a div).
@@ -507,6 +522,16 @@ class PlaceholderScorer:
         if PlaceholderScorer._structural_bonus(action, description, element) > 0:
             return 0
         return -90
+
+    @staticmethod
+    def is_generic_assert_winner(action: str, description: str, element: dict[str, Any], selector: str) -> bool:
+        """True when *element* is a generic ASSERT target that must not win.
+
+        Public wrapper for the text-overlap fast pass (t-0560): a generic run
+        accepted there on a two-word overlap must be skipped so the specific
+        candidate (or the scorer, which demotes it) decides.
+        """
+        return PlaceholderScorer._assert_generic_winner_penalty(action, description, element, selector) < 0
 
     @staticmethod
     def _is_fillable(element: dict[str, Any]) -> bool:
