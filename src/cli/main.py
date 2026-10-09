@@ -278,9 +278,11 @@ async def interactive_session() -> int:
         elif menu_items[idx] in ("Expand into Test Rows", "Review Test Rows"):
             build_test_table_interactive(session)
         elif menu_items[idx] == "Run Intelligent Pipeline":
+            # Clear the flag first so the exit code reflects THIS run, not a
+            # stale failure from an earlier one (run_pipeline does not reset it).
+            session.pipeline_error = ""
             await run_pipeline(session)
-            if session.pipeline_error:
-                exit_code = 1
+            exit_code = 1 if session.pipeline_error else 0
         elif menu_items[idx] == "View Generated Code":
             print_header("Generated Code")
             print(session.pipeline_results or "")

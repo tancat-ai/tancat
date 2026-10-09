@@ -132,6 +132,48 @@ def test_run_config_error_exits_two(capsys: pytest.CaptureFixture[str]) -> None:
     assert "not on the safe allow-list" in capsys.readouterr().err
 
 
+def test_interactive_exit_code_reflects_the_latest_run(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed run followed by a successful run must exit 0 (t-0569).
+
+    The interactive session used to keep the first failure's flag, so a session
+    that failed once and then succeeded still exited 1.
+    """
+    import asyncio
+
+    from src.cli.session import Session
+
+    session = Session(
+        raw_requirements="As a user I want to log in so that I can access my account.",
+        starting_url="https://example.com/",
+        plan_confirmed=True,
+    )
+    monkeypatch.setattr(cli_main, "create_session", lambda: session)
+    monkeypatch.setattr(cli_main, "_apply_session_llm_config", lambda _session: None)
+
+    runs = {"count": 0}
+
+    async def fake_run_pipeline(target: Session) -> None:
+        runs["count"] += 1
+        if runs["count"] == 1:
+            target.pipeline_error = "boom (first run)"
+
+    monkeypatch.setattr(cli_main, "run_pipeline", fake_run_pipeline)
+
+    choices = iter(["Run Intelligent Pipeline", "Run Intelligent Pipeline", "Exit"])
+
+    def fake_print_menu(options: list[str], *args: object, **kwargs: object) -> int:
+        return options.index(next(choices))
+
+    monkeypatch.setattr(cli_main, "print_menu", fake_print_menu)
+
+    rc = asyncio.run(cli_main.interactive_session())
+
+    assert runs["count"] == 2, "the test did not drive two runs"
+    assert rc == 0, "a successful latest run must exit 0 despite the earlier failure"
+
+
 @pytest.mark.slow
 @pytest.mark.integration
 def test_run_e2e_through_product_cli_matches_action_path(
