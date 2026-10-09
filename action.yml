@@ -2,7 +2,7 @@
 #
 # Docker action: the image is built from action/Dockerfile (uv + Playwright
 # chromium, same base as the product image), and action/entrypoint.sh is the
-# thin orchestrator over scripts/ci_generate.py + pytest + the AI-028
+# thin orchestrator over `tancat run` (the product CLI) + pytest + the AI-028
 # evidence exporter. All behaviour lives in this repo (scripts + image) so it
 # is testable with pytest, not only via GitHub.
 #

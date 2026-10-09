@@ -161,7 +161,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 
 | Module | Role |
 |--------|------|
-| `src/ci_ignore.py` | CI ignore-list parsing (`.ai-test-ignore.yml`): versioned, human-recorded known-benign test failures. `load_ignore_spec()` validates structure + compiles regexes (fails fast on malformed input); `IgnoreSpec.matches()`/`describe()` gate failures in the CI report so they surface as "known-benign ignored" instead of real failures. **`reason` is required per rule** (the anti-rug rule — an ignore without a recorded why is rejected). Consumed by `scripts/ci_generate.py`; run-phase gating lands in Phase 7b. |
+| `src/ci_ignore.py` | CI ignore-list parsing (`.ai-test-ignore.yml`): versioned, human-recorded known-benign test failures. `load_ignore_spec()` validates structure + compiles regexes (fails fast on malformed input); `IgnoreSpec.matches()`/`describe()` gate failures in the CI report so they surface as "known-benign ignored" instead of real failures. **`reason` is required per rule** (the anti-rug rule — an ignore without a recorded why is rejected). Consumed by `tancat run` (`src/cli/headless.py`); run-phase gating lands in Phase 7b. |
 
 ### 💾 Persistence & Reporting Layer
 
@@ -207,7 +207,7 @@ The headless CI/CD surface — the **same pipeline** (the src/ layers above) beh
 
 | Module | Role |
 |--------|------|
-| `scripts/ci_generate.py` | Headless generation driver — runs `ui_pipeline.run_pipeline()` non-interactively (exit codes 0/1/2, `--json`, workspace isolation, danger-zone allow-list). The front door every mode uses. |
+| `src/cli/headless.py` | Headless generation driver behind `tancat run` — runs `ui_pipeline.run_pipeline()` non-interactively (exit codes 0/1/2, `--json`, workspace isolation, danger-zone allow-list). The front door every mode uses. Promoted from `scripts/ci_generate.py`, which is now a shim. |
 | `scripts/fake_llm.py` | OpenAI-compatible fake LLM (canned skeletons) — makes generate-mode self-testable hermetically. |
 | `src/ci_ignore.py` | `.ai-test-ignore.yml` parser/validator/matcher (required-`reason` anti-rug rule). |
 | `action/entrypoint.sh` | Thin Docker-action orchestrator over the driver + pytest + report/adapt/flaky; reads the GitHub `INPUT_*` / GitLab underscore env surface; `detect_platform` routes comment posting to the right adapter. |

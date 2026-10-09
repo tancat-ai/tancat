@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-import scripts.ci_generate as ci_generate
+import src.cli.headless as ci_generate
 from scripts.fake_llm import FakeLLMServer
 from scripts.mock_server import MockServer
 from src.ci_ignore import load_ignore_spec
