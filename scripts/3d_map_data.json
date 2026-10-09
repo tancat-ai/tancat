@@ -25499,10 +25499,10 @@
     },
     {
       "id": 3185,
-      "label": "./scripts/ci_generate.py",
+      "label": "./src/cli/headless.py",
       "group": "Other",
       "type": "src",
-      "size": 315,
+      "size": 456,
       "color": "#AEB6BF"
     },
     {

@@ -3184,7 +3184,7 @@ label,group,size,color
 ./scripts/build_demo.py,Other,402,#AEB6BF
 ./scripts/build_finetune_dataset.py,Other,437,#AEB6BF
 ./scripts/ci_action_selftest.py,Other,1036,#AEB6BF
-./scripts/ci_generate.py,Other,315,#AEB6BF
+./src/cli/headless.py,Other,456,#AEB6BF
 ./scripts/ci_gitlab_real_project_test.py,Other,411,#AEB6BF
 ./scripts/ci_slash_commands.py,Other,190,#AEB6BF
 ./scripts/cli_walkthrough.py,Other,465,#AEB6BF
