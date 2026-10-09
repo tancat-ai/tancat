@@ -805,6 +805,14 @@ class ElementMatcher:
                         overlap = elem_words & desc_content_words
                         if len(overlap) < 2:
                             continue
+                    # t-0560: a generic text run / app chrome (bare <p>,
+                    # .text, #page-footer) must not be accepted on a two-word
+                    # overlap — skip it so a specific candidate (or the
+                    # scorer, which demotes it) decides.
+                    if PlaceholderScorer.is_generic_assert_winner(
+                        action, description, element, str(element.get("selector", ""))
+                    ):
+                        continue
                     return element
 
         return None

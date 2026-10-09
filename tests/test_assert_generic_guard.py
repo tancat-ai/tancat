@@ -25,6 +25,14 @@ a text-only generic on the slow path is demoted off the candidate list. A
 specific class (``p.account_balance``) is deliberately NOT caught: the same
 shape is the golden for real criteria (``.cart_total_price``), so
 class-based exclusion would demote the answers we want.
+
+t-0560 closed the last gap: the ASSERT text-overlap fast pass
+(``ElementMatcher.pass1_assert_text_match``) also returns a generic on a
+two-word overlap, before the scorer runs. It now calls
+``PlaceholderScorer.is_generic_assert_winner`` and skips it, and the tag is
+inferred from the selector when the scrape left it empty (a bare ``<p>``
+with selector ``p``). Before -> after: ``p``/``Blue Top added`` -> the bare
+``<p>`` / None; ``.text``/``practice form loaded`` -> ``.text`` / None.
 """
 
 from __future__ import annotations
@@ -215,3 +223,80 @@ def test_specific_class_winner_is_deliberately_not_caught() -> None:
         )
         is not None
     )
+
+
+# ---------------------------------------------------------------------------
+# t-0560: the ASSERT text-overlap fast pass
+# ---------------------------------------------------------------------------
+
+
+def test_effective_tag_is_inferred_from_the_selector() -> None:
+    """The scrape leaves ``tag`` empty for many elements; the tag lives in the
+    selector. A bare ``<p>`` must still be recognised as a text run."""
+    bare_p = _element({"tag": "", "selector": "p", "text": "Blue Top", "role": "paragraph"})
+    assert PlaceholderScorer._effective_tag(bare_p, "p") == "p"
+    assert PlaceholderScorer._is_generic_assert_target(bare_p, "p")
+    assert PlaceholderScorer._is_generic_assert_target(bare_p, 'p:has-text("Blue Top")')
+    # A named element with a class is still not generic.
+    named = _element({"tag": "", "selector": "p.cart_total_price", "classes": "cart_total_price"})
+    assert not PlaceholderScorer._is_generic_assert_target(named, "p.cart_total_price")
+
+
+def test_pass1_assert_text_pass_skips_a_bare_paragraph() -> None:
+    """Before t-0560 ``pass1_assert_text_match`` returned the bare ``<p>`` on a
+    two-word overlap ("Blue Top" vs "Blue Top added"); now it skips it."""
+    from src.element_matcher import ElementMatcher
+    from src.placeholder_resolver import PlaceholderResolver
+
+    matcher = ElementMatcher(PlaceholderResolver())
+    pool = {"p": [_element({"tag": "", "selector": "p", "text": "Blue Top", "role": "paragraph"})]}
+    assert matcher.pass1_assert_text_match("ASSERT", "Blue Top added", pool) is None
+
+
+def test_pass1_assert_text_pass_skips_a_generic_wrapper_class() -> None:
+    """The ``.text`` winner (t-0547/t-0558) is skipped by the same pass."""
+    from src.element_matcher import ElementMatcher
+    from src.placeholder_resolver import PlaceholderResolver
+
+    matcher = ElementMatcher(PlaceholderResolver())
+    pool = {
+        "p": [
+            _element(
+                {"tag": "div", "classes": "text", "selector": ".text", "text": "Practice Form", "role": "paragraph"}
+            )
+        ]
+    }
+    assert matcher.pass1_assert_text_match("ASSERT", "practice form loaded", pool) is None
+
+
+def test_pass1_assert_text_pass_keeps_a_named_heading() -> None:
+    """The guard must never skip a named element: the heading still resolves."""
+    from src.element_matcher import ElementMatcher
+    from src.placeholder_resolver import PlaceholderResolver
+
+    matcher = ElementMatcher(PlaceholderResolver())
+    heading = _element(
+        {
+            "tag": "h2",
+            "selector": "body > section > h2",
+            "text": "Per deployment, not per seat.",
+            "role": "heading",
+            "classes": "text-3xl font-bold",
+        }
+    )
+    assert not PlaceholderScorer.is_generic_assert_winner(
+        "ASSERT", "'Per deployment, not per seat' pricing section", heading, "body > section > h2"
+    )
+    assert matcher.pass1_assert_text_match("ASSERT", "Per deployment, not per seat.", {"p": [heading]}) is heading
+
+
+def test_descendant_selector_is_not_a_global_container() -> None:
+    """t-0560: ``body > section > h2`` names the CHILD, not ``body``. Space and
+    ``>`` are no longer container boundaries; ``#page-footer`` still is."""
+    from src.verification_strength import is_global_container
+
+    assert not is_global_container("body > section:nth-of-type(3) > h2")
+    assert not is_global_container("main > div > p")
+    assert is_global_container("#page-footer")
+    assert is_global_container("main-content")
+    assert is_global_container("body")
