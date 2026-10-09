@@ -6,7 +6,7 @@
 # scripts/ci_slash_commands.py — zero platform imports), and the SAME three
 # modes, driven by the AITEST_MODE CI variable:
 #
-#   generate-only     — headless generation via scripts/ci_generate.py, no
+#   generate-only     — headless generation via `tancat run`, no
 #                       test execution; the package is an artifact.
 #   generate-and-run  — generate (or restore from cache) -> pytest (referee)
 #                       -> evidence JUnit -> report + flaky markers -> MR

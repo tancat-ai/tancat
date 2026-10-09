@@ -66,14 +66,19 @@ class TestHelpOutput:
         assert "playwright" in combined, "help output should reference Playwright"
 
 
-# ── Test subcommand ────────────────────────────────────────────────────────
+# ── Unknown command/flag ────────────────────────────────────────────────
 
 
 @pytest.mark.subprocess
-class TestTestSubcommand:
-    def test_test_subcommand_runs(self) -> None:
+class TestUnknownArgument:
+    def test_unknown_command_errors(self) -> None:
+        """An unknown command is rejected, not silently turned into the menu."""
         result = _run_cli("test")
-        assert result.returncode == 0
+        assert result.returncode == 2
+
+    def test_unknown_flag_errors(self) -> None:
+        result = _run_cli("--definitely-not-a-flag")
+        assert result.returncode == 2
 
 
 # ── Help subcommand ────────────────────────────────────────────────────────

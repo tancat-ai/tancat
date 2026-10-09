@@ -341,9 +341,11 @@ FULL_STEPS: list[dict[str, Any]] = [
     dict(prompt="Press Enter to continue...", send="", expect="Enter selection:", timeout=30),
     dict(prompt="Enter selection:", send="28", expect="Press Enter to continue...", timeout=30),
     dict(prompt="Press Enter to continue...", send="", expect="Enter selection:", timeout=30),
-    # Save & Exit — note: after Clear Loaded Package the menu reverts to the
-    # non-package form, so Save & Exit is item 25 (not 29).
-    dict(prompt="Enter selection:", send="25", expect="Session saved. Goodbye!", timeout=30),
+    # Exit — note: after Clear Loaded Package the menu reverts to the
+    # non-package form, so Exit is item 25 (not 29).
+    dict(
+        prompt="Enter selection:", send="25", expect="Exiting. Your story, URL and plan are not persisted", timeout=30
+    ),
 ]
 
 
