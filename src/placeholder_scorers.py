@@ -235,6 +235,7 @@ class PlaceholderScorer:
             if action == "CLICK":
                 haystack_score += PlaceholderScorer._hidden_element_penalty(action, element)
                 haystack_score += PlaceholderScorer._click_text_penalty(action, description, desc_words, element)
+                haystack_score += PlaceholderScorer._commit_control_bonus(action, description, element)
             # AI-062: the RAG bonus applies on the fast path too. Previously it
             # was only added on the slow semantic path, so substring-matched
             # resolutions (the common haystack case) never received it —
@@ -262,6 +263,7 @@ class PlaceholderScorer:
         score += PlaceholderScorer._assert_cart_penalty(action, description, desc_words, element)
         score += PlaceholderScorer._assertion_candidate_bonus(action, element)
         score += PlaceholderScorer._role_bonus(action, description, element)
+        score += PlaceholderScorer._commit_control_bonus(action, description, element)
         score += PlaceholderScorer._journey_discovered_bonus(element)
         score += PlaceholderScorer._click_role_bonus(action, element)
         score += PlaceholderScorer._fill_bonus(action, element)
@@ -719,6 +721,40 @@ class PlaceholderScorer:
         }:
             bonus += 10
         return bonus
+
+    #: Commit-verb CLICK descriptions that name the form's submit action.
+    COMMIT_VERBS: tuple[str, ...] = ("pay", "place order", "submit", "confirm")
+
+    @staticmethod
+    def _commit_control_bonus(action: str, description: str, element: dict[str, Any]) -> int:
+        """Prefer the submit control over a nav/back anchor for a commit click (t-0572).
+
+        A commit-verb CLICK ("Pay", "Place Order", "Submit", "Confirm") must
+        target the form's submit control, not a navigation anchor whose text
+        merely contains the verb. On the banking mock the nav link "Pay Bills"
+        (``a[href="/payments.html"]``) tied the submit ``#pay-bill`` at the
+        fast-path 100 and won the longest-text tie-break, so the click never
+        navigated and the success ASSERT was scoped to the wrong page (t-0567).
+        A submit control gets a bonus that breaks that tie; a non-submit
+        element is untouched, so a nav link still wins when no submit control
+        is on the page.
+        """
+        if action != "CLICK":
+            return 0
+        lowered = description.replace("_", " ").lower()
+        if not any(verb in lowered for verb in PlaceholderScorer.COMMIT_VERBS):
+            return 0
+        tag = str(element.get("tag", "")).strip().lower()
+        role = str(element.get("role", "")).strip().lower()
+        computed_role = str(element.get("computed_role", "")).strip().lower()
+        type_attr = str(element.get("type", "")).strip().lower()
+        is_submit_control = (
+            tag == "button"
+            or (tag == "input" and type_attr in {"submit", "button"})
+            or role in {"button", "submit"}
+            or computed_role in {"button", "submit"}
+        )
+        return 15 if is_submit_control else 0
 
     @staticmethod
     def _journey_discovered_bonus(element: dict[str, Any]) -> int:
