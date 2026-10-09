@@ -112,8 +112,30 @@ except ImportError:
 # ── Main menu ─────────────────────────────────────────────────────────────
 
 
+def _apply_project_storage() -> None:
+    """Apply the persisted project's workspace + RAG scope (t-0581).
+
+    The Streamlit UI maps a named project to its storage workspace and RAG
+    scope (``src.project``); the interactive CLI did neither, so a UI project
+    and a CLI run of the same project used two stores and two identities. Reuse
+    the same mapping here so the CLI reads the answers the UI learned.
+    """
+    import os
+
+    from src.project import apply_rag_scope, project_workspace
+    from src.settings_store import load_setting
+    from src.storage import init_storage
+
+    # "workspace" is SETTING_WORKSPACE in src/ui/ui_sidebar.py; a literal here
+    # avoids importing the Streamlit module into the CLI.
+    stored_project = str(load_setting("workspace", "") or "").strip()
+    apply_rag_scope(stored_project)
+    init_storage(workspace=project_workspace(stored_project, os.environ.get("WORKSPACE", "")))
+
+
 async def interactive_session() -> int:
     """Run the full interactive CLI session. Returns the process exit code."""
+    _apply_project_storage()
     session = create_session()  # type: ignore[call-arg]
     _apply_session_llm_config(session)
     _reset_menu_stack()

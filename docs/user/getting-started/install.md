@@ -63,6 +63,22 @@ matches the Playwright version in the lockfile.
     to host port 8501 avoids the common clash with a llama.cpp server already
     using 8080. Open <http://localhost:8501>.
 
+## Share a project between the UI and the CLI
+
+The UI and the interactive CLI keep their learned locators in one store per
+project. Name a project in the UI and the interactive CLI follows it
+automatically. To point any other command (a headless `tancat run`,
+`ci_generate.py`, a script) at the same project, set the same two variables:
+
+```bash
+AITEST_WORKSPACE=<project> AITEST_RAG_SCOPE=<project> tancat
+```
+
+`AITEST_WORKSPACE` chooses the store (`<root>/<project>/evidence/rag_store.db`);
+`AITEST_RAG_SCOPE` tags each learned pattern `scope:<project>` so it follows the
+project across a new port or host. Leave both unset and the CLI keeps the legacy
+`default` workspace and the host[:port] identity.
+
 ## Docker Compose
 
 `docker-compose.yml` starts the app together with a bundled Ollama service and

@@ -84,6 +84,14 @@ The counts and time depend on the story and the site; the format is the point.
 Each passing test also writes an evidence sidecar - see
 [Evidence and reports](../guides/evidence.md).
 
+!!! tip "Learned answers follow the project"
+    The UI and the interactive CLI share one set of learned locators per
+    project, so a second run of the same project resolves faster. The
+    interactive CLI reads the project you named in the UI automatically; for any
+    other command, set
+    `AITEST_WORKSPACE=<project> AITEST_RAG_SCOPE=<project>` - see
+    [Install](install.md#share-a-project-between-the-ui-and-the-cli).
+
 ## Next
 
 - [How the pipeline works](../guides/pipeline.md)
