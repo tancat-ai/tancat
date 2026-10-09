@@ -67,7 +67,7 @@ class UrlGuardError(ValueError):
     """Raised when a target URL is refused by the SSRF guard.
 
     Subclasses ``ValueError`` so callers that already treat bad URLs as
-    config/runtime errors (the pipeline, ``scripts/ci_generate.py``) handle
+    config/runtime errors (the pipeline, ``tancat run``) handle
     it without new machinery.
     """
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Headless test-generation driver for the product CLI (``tancat run``).
 
-Promoted from ``scripts/ci_generate.py`` (Phase 7a) so a person, a script and
-the CI Action share one entry point. The GitHub Action and the GitLab template
-call ``tancat run``; ``scripts/ci_generate.py`` stays as a thin shim.
+Promoted from the old ``scripts/ci_generate.py`` (Phase 7a) so a person, a
+script and the CI Action share one entry point. The GitHub Action and the
+GitLab template call ``tancat run``; the old script was removed (t-0576).
 
 Runs the SAME production pipeline the UI/CLI use (``ui_pipeline.run_pipeline``)
 with zero interactive prompts. Contract:
@@ -448,7 +448,7 @@ def check_llm_main(args: argparse.Namespace) -> int:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Standalone entry point (``python scripts/ci_generate.py`` and tests)."""
+    """Standalone entry point (``python -m src.cli.headless`` and tests)."""
     return run(build_parser().parse_args(argv))
 
 

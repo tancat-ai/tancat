@@ -15,7 +15,7 @@ What it measures (all through the product's own machinery):
 4. **estimated story LLM time**                — skeleton + expected resolution
    calls per story, compared against the SLO (180s target)
 
-Usage (uses the configured provider, mirroring ``ci_generate``)::
+Usage (uses the configured provider, mirroring ``tancat run``)::
 
     python scripts/benchmark_latency.py --provider lm-studio --model qwen3.5:35b
     python scripts/benchmark_latency.py --json --save docs/benchmarks/latency.json
