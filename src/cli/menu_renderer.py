@@ -194,6 +194,7 @@ def print_menu(
     prompt: str = "Choose an option",
     shortcuts: list[tuple[str, str]] | None = None,
     back: int | None = None,
+    selected: int = 0,
 ) -> int:
     """Print a numbered retro menu and return the selected index (0-based).
 
@@ -215,9 +216,12 @@ def print_menu(
             ``None`` (the default), the Back/Main-Menu buttons are not shown
             and only ``Q``/Quit is always available — useful for menus that
             have no sensible "previous" screen.
+        selected: Index highlighted when the menu first renders (default 0).
+            Use it to pre-select the current value, e.g. the configured LLM
+            provider.
     """
     first_render = True
-    selected = 0
+    selected = max(0, min(selected, len(options) - 1))
     while True:
         if not first_render:
             clear_screen()
@@ -310,7 +314,7 @@ def print_menu(
                     if key.upper() == upper:
                         print(yellow(f"  Shortcut '{key}' is not available on this screen."))
                         return -1  # Return to caller; caller handles routing
-            print(yellow("  Invalid shortcut. Please try again."))
+            print(yellow("  Invalid shortcut. Enter a number, or press a listed shortcut key."))
             continue
 
         # ── Numeric selection (single or multi-digit) ──────────────────
@@ -322,7 +326,7 @@ def print_menu(
         except ValueError:
             pass
 
-        print(yellow("  Invalid choice. Please try again."))
+        print(yellow(f"  Invalid choice. Enter a number from 1 to {len(options)}."))
 
 
 # ── Text input ─────────────────────────────────────────────────────────────
@@ -387,13 +391,13 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
             response.raise_for_status()
             return [m["id"] for m in response.json().get("data", [])]
     except httpx.ConnectError as e:
-        print(yellow(f"  ⚠ Cannot connect to {provider_url}: {e}"))
+        print(yellow(f"  ⚠ Cannot connect to {provider_url}: {e} — run 'Check LLM', or start your LLM server."))
     except httpx.TimeoutException as e:
-        print(yellow(f"  ⚠ Connection to {provider_url} timed out: {e}"))
+        print(yellow(f"  ⚠ Connection to {provider_url} timed out: {e} — run 'Check LLM', or start your LLM server."))
     except httpx.HTTPStatusError as e:
-        print(yellow(f"  ⚠ HTTP error from {provider_url}: {e.response.status_code}"))
+        print(yellow(f"  ⚠ HTTP error from {provider_url}: {e.response.status_code} — check the URL and key."))
     except Exception as e:
-        print(yellow(f"  ⚠ Failed to list models: {e}"))
+        print(yellow(f"  ⚠ Failed to list models: {e} — run 'Check LLM' for the full report."))
     return []
 
 
@@ -466,11 +470,14 @@ def configure_llm(provider: str, base_url: str, model_name: str) -> tuple[str, s
     providers: list[tuple[str, str, str]] = [
         (PROVIDER_LABELS[key], key, get_provider_defaults(key)[0]) for key in SUPPORTED_PROVIDERS
     ]
+    provider_keys = [key for _label, key, _url in providers]
+    selected = provider_keys.index(provider) if provider in provider_keys else 0
 
     idx = print_menu(
         [p[0] for p in providers],
         "Select LLM provider",
         back=BACK_LLM,
+        selected=selected,
     )
     if idx < 0:
         # Back (BACK_LLM), Main Menu (BACK_MAIN), or Quit (-1): keep the
@@ -594,6 +601,14 @@ As a customer I want to browse products, add them to my cart, and proceed to che
 # ── URL collection ─────────────────────────────────────────────────────────
 
 
+def _is_valid_target_url(value: str) -> bool:
+    """True when *value* is an http(s) URL with a host (entry-time validation)."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(value.strip())
+    return parsed.scheme in ("http", "https") and bool(parsed.hostname)
+
+
 def collect_urls() -> tuple[str, str]:
     """Let user enter target URLs. Returns (starting_url, additional_urls)."""
     print_header("Target URLs")
@@ -608,7 +623,14 @@ def collect_urls() -> tuple[str, str]:
         print(green("  Baseline loaded."))
         return "https://automationexercise.com/", ""
 
-    starting = read_optional("  Starting URL (e.g. https://your-site.example/):")
+    # Validate at entry so an invalid URL fails here, not several steps later
+    # at the SSRF guard. An empty line keeps the current (empty) value.
+    while True:
+        starting = read_optional("  Starting URL (e.g. https://your-site.example/):").strip()
+        if not starting or _is_valid_target_url(starting):
+            break
+        print(yellow("  ⚠ Not a valid URL — include the scheme and host, e.g. https://your-site.example/"))
+
     print("  Additional URLs (one per line, empty line to finish):")
     urls: list[str] = []
     try:
@@ -617,7 +639,10 @@ def collect_urls() -> tuple[str, str]:
             if not line and urls:
                 break
             if line.strip():
-                urls.append(line.strip())
+                if _is_valid_target_url(line):
+                    urls.append(line.strip())
+                else:
+                    print(yellow(f"  ⚠ Ignored invalid URL (needs http(s) and a host): {line.strip()}"))
     except EOFError:
         pass
     return starting, "\n".join(urls)

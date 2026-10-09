@@ -6,14 +6,14 @@
 # locally with Docker, not only via GitHub. The platform seam (spec §5.5):
 #   - GitHub-specific surface: INPUT_* env vars, GITHUB_WORKSPACE,
 #     GITHUB_OUTPUT, GITHUB_TOKEN — handled here, in bash + ci/platform/.
-#   - Platform-neutral core: scripts/ci_generate.py (driver), action/report.py
-#     (JUnit -> report + repair candidates), action/export_evidence_junit.py
-#     (AI-028 evidence -> JUnit), action/adapt.py (verified adaptation),
+#   - Platform-neutral core: the product CLI (tancat run, src/cli/headless.py),
+#     action/report.py (JUnit -> report + repair candidates),
+#     action/export_evidence_junit.py (AI-028 evidence -> JUnit), action/adapt.py (verified adaptation),
 #     action/flaky_history.py (AI-011 markers), scripts/ci_slash_commands.py
 #     (slash-command replies) — zero GitHub imports.
 #
 # Public modes (spec §5.3):
-#   generate-only    — headless generation via ci_generate.py, exit 0/1/2
+#   generate-only    — headless generation via tancat run, exit 0/1/2
 #   generate-and-run — generate (or cache-hit) -> pytest -> evidence JUnit ->
 #                      report + flaky markers -> PR comment payload (+ post)
 #                      -> exit code = pytest's (referee); adapt: true re-runs
@@ -373,7 +373,7 @@ run_generate_only() {
   DRIVER_ARGS+=(--json)
 
   set +e
-  DRIVER_OUTPUT="$(python scripts/ci_generate.py "${DRIVER_ARGS[@]}" 2>"$RESULT_DIR/generate.err")"
+  DRIVER_OUTPUT="$(tancat run "${DRIVER_ARGS[@]}" 2>"$RESULT_DIR/generate.err")"
   DRIVER_RC=$?
   set -e
   printf '%s\n' "$DRIVER_OUTPUT" > "$RESULT_DIR/generate.json"
@@ -469,7 +469,7 @@ run_generate_and_run() {
     DRIVER_ARGS+=(--json)
 
     set +e
-    DRIVER_OUTPUT="$(python scripts/ci_generate.py "${DRIVER_ARGS[@]}" 2>"$RESULT_DIR/generate.err")"
+    DRIVER_OUTPUT="$(tancat run "${DRIVER_ARGS[@]}" 2>"$RESULT_DIR/generate.err")"
     DRIVER_RC=$?
     set -e
     printf '%s\n' "$DRIVER_OUTPUT" > "$RESULT_DIR/generate.json"

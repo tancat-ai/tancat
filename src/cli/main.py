@@ -14,6 +14,7 @@ This file is the slim orchestrator. Extracted modules:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import io
 import sys
@@ -32,6 +33,12 @@ from src.provider_config import resolve_openai_api_key, sync_openai_api_key_to_e
 from src.settings_store import save_setting, save_settings
 
 from .color import green, yellow
+from .headless import (
+    add_check_llm_parser,
+    add_run_parser,
+    check_llm_main,
+)
+from .headless import run as run_headless
 from .menu_renderer import (
     _reset_menu_stack,
     collect_authentication,
@@ -105,11 +112,12 @@ except ImportError:
 # ── Main menu ─────────────────────────────────────────────────────────────
 
 
-async def interactive_session() -> None:
-    """Run the full interactive CLI session."""
+async def interactive_session() -> int:
+    """Run the full interactive CLI session. Returns the process exit code."""
     session = create_session()  # type: ignore[call-arg]
     _apply_session_llm_config(session)
     _reset_menu_stack()
+    exit_code = 0
 
     while True:
         print_header("TanCat")
@@ -190,7 +198,7 @@ async def interactive_session() -> None:
         else:
             menu_items.append("Load Existing Generated Tests")
 
-        menu_items.extend(["Save & Exit", "Quit"])
+        menu_items.extend(["Exit", "Quit"])
 
         # Show current state summary
         state: list[str] = []
@@ -224,7 +232,7 @@ async def interactive_session() -> None:
         # print_menu returns -1 when user presses Q (Quit shortcut)
         if idx < 0:
             print(yellow("  Quitting without saving."))
-            return
+            return exit_code
 
         # Route to handler
         if idx == 0 and (menu_items[0] == "Configure LLM" or menu_items[0] == "Re-configure LLM"):
@@ -270,7 +278,11 @@ async def interactive_session() -> None:
         elif menu_items[idx] in ("Expand into Test Rows", "Review Test Rows"):
             build_test_table_interactive(session)
         elif menu_items[idx] == "Run Intelligent Pipeline":
+            # Clear the flag first so the exit code reflects THIS run, not a
+            # stale failure from an earlier one (run_pipeline does not reset it).
+            session.pipeline_error = ""
             await run_pipeline(session)
+            exit_code = 1 if session.pipeline_error else 0
         elif menu_items[idx] == "View Generated Code":
             print_header("Generated Code")
             print(session.pipeline_results or "")
@@ -311,12 +323,12 @@ async def interactive_session() -> None:
             _view_saved_package_diagnostics_inline(session)
         elif menu_items[idx] == "Clear Loaded Package":
             _clear_loaded_package(session)
-        elif menu_items[idx] == "Save & Exit":
-            print(green("  Session saved. Goodbye!"))
-            return
+        elif menu_items[idx] == "Exit":
+            print(green("  Exiting. Your story, URL and plan are not persisted between runs."))
+            return exit_code
         elif menu_items[idx] == "Quit":
             print(yellow("  Quitting without saving."))
-            return
+            return exit_code
 
 
 # ── Inline wrappers (mutate session via menu_renderer returns) ────────────
@@ -561,11 +573,16 @@ def _clear_loaded_package(session: Session) -> None:
     input()
 
 
-_USAGE = """TanCat - AI-powered Playwright test generator (interactive CLI)
+_USAGE = """TanCat - generate Playwright pytest tests from a user story with your own LLM.
 
 Usage:
-  tancat            Start the interactive session.
-  tancat --help     Show this message.
+  tancat                     Start the interactive session (the default).
+  tancat run [options]       Generate tests headlessly (CI/script friendly).
+  tancat check-llm [options] Probe the configured LLM endpoint.
+  tancat --help              Show this message.
+  tancat --version           Show the version.
+
+Run 'tancat run --help' or 'tancat check-llm --help' for the options.
 
 The interactive session walks through:
   1. Configure LLM      pick your provider, base URL and model
@@ -578,22 +595,75 @@ Docs: https://github.com/tancat-ai/tancat (README.md, docs/ci.md)
 """
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Main entry point — runs the interactive CLI session.
+def _version() -> str:
+    """Return the installed package version (fallback for a source checkout)."""
+    from importlib.metadata import PackageNotFoundError, version
 
-    ``tancat --help`` prints usage and exits 0. Any other arguments are
-    ignored: the CLI is interactive, so there is nothing else to parse. The
-    CI build check runs this help to exercise the packaged console script.
-    """
-    args = sys.argv[1:] if argv is None else argv
-    if any(arg in ("-h", "--help", "help") for arg in args):
-        print(_USAGE)
-        return 0
     try:
-        asyncio.run(interactive_session())
+        return version("tancat")
+    except PackageNotFoundError:
+        return "0.1.0"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the product CLI parser: the ``run`` and ``check-llm`` subcommands."""
+    parser = argparse.ArgumentParser(
+        prog="tancat",
+        description="TanCat - generate Playwright pytest tests from a user story with your own LLM.",
+        epilog="With no command, starts the interactive session. See 'tancat --help'.",
+    )
+    subparsers = parser.add_subparsers(dest="command", metavar="{run,check-llm}")
+    add_run_parser(subparsers)
+    add_check_llm_parser(subparsers)
+    return parser
+
+
+def _run_interactive() -> int:
+    """Run the interactive menu and translate its outcome into an exit code."""
+    try:
+        return asyncio.run(interactive_session())
     except KeyboardInterrupt:
         print("\n\nInterrupted. Goodbye!")
-    return 0
+        return 130
+    except Exception as exc:  # top-level guard: no raw traceback for the user
+        print(f"\nUnexpected error: {exc}")
+        return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Product CLI entry point.
+
+    - no args: the interactive menu
+    - ``--help`` / ``--version``: print and exit 0
+    - ``run`` / ``check-llm``: headless subcommands (see their ``--help``)
+    - an unknown flag or command: error and exit 2
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args:
+        return _run_interactive()
+    if args in (["--help"], ["-h"], ["help"]):
+        print(_USAGE)
+        return 0
+    if args in (["--version"], ["-V"]):
+        print(f"tancat {_version()}")
+        return 0
+
+    parser = build_parser()
+    try:
+        parsed = parser.parse_args(args)
+    except SystemExit as exc:
+        # argparse already printed help/usage; turn its exit into a return code
+        # so ``main()`` keeps its int contract (the console script wraps it).
+        code = exc.code
+        if code is None:
+            return 0
+        return code if isinstance(code, int) else 1
+
+    if parsed.command == "run":
+        return run_headless(parsed)
+    if parsed.command == "check-llm":
+        return check_llm_main(parsed)
+    return _run_interactive()
 
 
 if __name__ == "__main__":
