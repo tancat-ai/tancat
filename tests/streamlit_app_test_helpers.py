@@ -9,7 +9,9 @@ The sidebar is assembled from three places:
 The helpers pin the *exact* set of widgets the first render produces, so a
 restored or newly added widget fails the layout tests instead of hiding behind
 a ``>= 1`` count. That lenient style is exactly how the removed "Load baseline"
-preset could have slipped back in.
+preset could have slipped back in. When this guard fails because you added a
+widget on purpose, add that label to the expected set here - do not loosen the
+assertion back to ``>= 1``.
 
 Deliberately left OUT of the exact base inventory, with the reason:
 
