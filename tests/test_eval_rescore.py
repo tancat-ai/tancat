@@ -187,6 +187,10 @@ class TestEvidenceGuard:
         assert code == 0
         assert "GATE 1 (resolution accuracy): 0/1" in out
         assert "GATE 2 (hollow passes):       1" in out
+        # Pin the dated label against the file's own recorded_at, so the test
+        # follows a date change but still fails if recorded_at is stripped.
+        recorded_at = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8")).get("recorded_at")
+        assert f"Recorded last re-score (as of {recorded_at}):" in out
 
     def test_rescore_cli_fails_on_an_unexpected_number(self, tmp_path: Path) -> None:
         dataset_dir, run_dir = _build_run(tmp_path)
