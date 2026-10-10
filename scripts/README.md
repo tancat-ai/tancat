@@ -227,9 +227,9 @@ the same rules a live run uses. A run with no evidence is reported as *cannot
 recompute* (exit 5), never read as a zero. A persisted run also stores the
 per-criterion verification basis (golden / element / page / unverified) in the
 `eval_criteria` table, beside `eval_runs` - so a question is a query, not a
-script. The last recorded re-score
-(82/113 gate 1, 3 hollow passes) is in `scripts/eval/known_gate_scores.json`;
-the next live run must reproduce it.
+script. The last recorded re-score,
+as of 2026-09-25, is in `scripts/eval/known_gate_scores.json` (82/113 gate 1, 3 hollow
+passes); the next live run must reproduce it.
 
 **When to run:** Before shipping changes to pipeline/resolver/prompt files.
 **Not part of ship-it** — it's a pre-commit quality gate for pipeline changes.
