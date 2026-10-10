@@ -178,6 +178,7 @@ The last recorded re-score is `scripts/eval/known_gate_scores.json`:
 **82/113 gate 1 (72.6%)** and **3 hollow passes**. The run that produced it was
 deleted, so the next live held-out run must reproduce it, or explain the
 difference. The gates are unchanged: `>=90%` gate 1, zero hollow passes gate 2.
+A per-story caveat lives in the same file: see `flaky_story` - eval-004's number is not repeatable, so prefer the overall figure.
 
 ---
 

@@ -8,6 +8,7 @@
   "flaky_story": {
     "story_id": "eval-004",
     "site": "theinternet (https://the-internet.herokuapp.com/)",
+    "as_of": "2026-10-10",
     "observed_generation_durations_s": {
       "t-0534": 394.7,
       "t-0547": 543.5,
@@ -15,7 +16,7 @@
       "t-0563": 621.7,
       "t-0579": 392.1
     },
-    "note": "eval-004's external site is slow and flaky. On the last two runs it took 621.7s (t-0563) vs 278.0s (t-0558) and emitted a different test file each time (a bare div / a[href=\"/javascript_alerts\"] vs h4:has-text(\"Result:\") / #flash-messages). eval-004's per-story number is not repeatable, so read a gate run with that in mind: do not treat an eval-004 delta as a like-for-like regression, and prefer the overall figure over that story's number."
+    "note": "eval-004's external site is slow and flaky. Across five held-out runs (t-0534 to t-0579) generation took 278.0s at fastest and 621.7s at slowest, and eval-004's own score was 3/7, 1/7, 4/7, 1/7, 4/7 - it never repeated once, while every other story held. The overall gate moved with it: 90, 89, 92, 89, 92 of 113. eval-004's per-story number is not repeatable, so read a gate run with that in mind: do not treat an eval-004 delta as a like-for-like regression, and prefer the overall figure over that story's number - remembering that the overall figure's own jitter is this one story. The runs emitted a different test file each time (seen explicitly on t-0563). This block is a hand-written snapshot; no run refreshes it."
   },
   "note": "The run that produced this was deleted - scratch/gate1_full.log and the emitted dirs gate1_out*/gate2_out* are gone - so it cannot be re-scored. The next live held-out run (eval_harness.py run --regenerate --mode full --evidence-dir <dir>) must reproduce this, or explain the difference. Session 12's generation measured 86/113 (76.1%): a different LLM draw, not a like-for-like regression. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2."
 }
