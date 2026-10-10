@@ -1638,16 +1638,15 @@ Prompts for cloud OpenAI API key. Reuses existing env var if present.
 
 ### `collect_user_story() -> str`
 
-Interactive input with three modes:
+Interactive input with two modes:
 1. Paste text (multi-line, ends on empty line or EOF)
 2. Upload file (reads from path)
-3. Load baseline (pre-defined automationexercise.com user story)
 
 ## URL Collection
 
 ### `collect_urls() -> tuple[str, str]`
 
-Returns `(starting_url, additional_urls)`. Supports manual entry or baseline load.
+Returns `(starting_url, additional_urls)` via manual entry.
 
 ### `parse_target_urls(base_url, urls_input) -> list[str]`
 
@@ -2924,14 +2923,6 @@ Converts a session state dict to `JourneyStep`. Maps UI action names: `goto` →
 Streamlit component for entering user story requirements via text paste or file upload.
 
 ## Class: `RequirementsInput`
-
-### Constants
-
-| Constant | Description |
-|----------|-------------|
-| `BASELINE_STARTING_URL` | `"https://automationexercise.com/"` |
-| `BASELINE_ADDITIONAL_URLS` | `""` |
-| `BASELINE_REQUIREMENTS` | Pre-defined automationexercise.com user story with 8 acceptance criteria |
 
 ### `render(base_url, urls_input) -> tuple[str, str, str, str]` (static)
 

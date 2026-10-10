@@ -6,14 +6,6 @@ Streamlit component for entering user story requirements via text paste or file 
 
 ## Class: `RequirementsInput`
 
-### Constants
-
-| Constant | Description |
-|----------|-------------|
-| `BASELINE_STARTING_URL` | `"https://automationexercise.com/"` |
-| `BASELINE_ADDITIONAL_URLS` | `""` |
-| `BASELINE_REQUIREMENTS` | Pre-defined automationexercise.com user story with 8 acceptance criteria |
-
 ### `render(base_url, urls_input) -> tuple[str, str, str, str]` (static)
 
 Renders requirements input with two modes:

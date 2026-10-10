@@ -73,16 +73,15 @@ Prompts for cloud OpenAI API key. Reuses existing env var if present.
 
 ### `collect_user_story() -> str`
 
-Interactive input with three modes:
+Interactive input with two modes:
 1. Paste text (multi-line, ends on empty line or EOF)
 2. Upload file (reads from path)
-3. Load baseline (pre-defined automationexercise.com user story)
 
 ## URL Collection
 
 ### `collect_urls() -> tuple[str, str]`
 
-Returns `(starting_url, additional_urls)`. Supports manual entry or baseline load.
+Returns `(starting_url, additional_urls)` via manual entry.
 
 ### `parse_target_urls(base_url, urls_input) -> list[str]`
 

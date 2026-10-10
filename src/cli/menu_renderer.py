@@ -532,16 +532,10 @@ def collect_user_story() -> str:
     print_header("User Story Input")
 
     mode = print_menu(
-        ["Paste Text", "Upload File", "Load baseline (automationexercise.com)"],
+        ["Paste Text", "Upload File"],
         "Input method",
-        shortcuts=[("P", "Paste"), ("U", "Upload"), ("B", "Baseline")],
+        shortcuts=[("P", "Paste"), ("U", "Upload")],
     )
-
-    baseline_text = _get_baseline_text()
-
-    if mode == 2:
-        print(green("  Baseline loaded."))
-        return baseline_text
 
     if mode == 0:
         _drain_msvcrt_buffer_aggressive()
@@ -580,24 +574,6 @@ def collect_user_story() -> str:
         return collect_user_story()  # type: ignore[return-value]
 
 
-def _get_baseline_text() -> str:
-    return """## User Story
-As a customer I want to browse products, add them to my cart, and proceed to checkout
-
-## Acceptance Criteria
-1. [navigate] From the home page, click on a product category link (e.g. a link that says "Dress")
-2. [navigate] On the category page, click the "Add to cart" button next to a product
-3. [assert] A confirmation popup appears with text "Product added to cart!" and a "Continue Shopping" button
-4. [click] Click the "Continue Shopping" button to close the confirmation popup
-5. [navigate] Click the "Cart" link or cart icon in the page header
-6. [assert] The cart page displays a table showing the products I added, with product names, prices, and quantities
-7. [navigate] From the cart page, click the "Check Out" button
-8. [assert] The checkout page loads, showing a form to enter my details and an order summary
-
-(Total: 8 criteria)
-"""
-
-
 # ── URL collection ─────────────────────────────────────────────────────────
 
 
@@ -613,15 +589,11 @@ def collect_urls() -> tuple[str, str]:
     """Let user enter target URLs. Returns (starting_url, additional_urls)."""
     print_header("Target URLs")
 
-    choice = print_menu(
-        ["Enter manually", "Load baseline (automationexercise.com)"],
+    print_menu(
+        ["Enter manually"],
         "URL source",
-        shortcuts=[("M", "Manual"), ("B", "Baseline")],
+        shortcuts=[("M", "Manual")],
     )
-
-    if choice == 1:
-        print(green("  Baseline loaded."))
-        return "https://automationexercise.com/", ""
 
     # Validate at entry so an invalid URL fails here, not several steps later
     # at the SSRF guard. An empty line keeps the current (empty) value.
