@@ -12,7 +12,6 @@ Utility and automation scripts for the tancat-ai/tancat project.
 | `debug_step_through.py` | Step-by-step interactive debugger for generated tests (headed) | Browser + Enter |
 | `uat.py` | End-to-end pipeline validation (static checks) | Browser + LLM |
 | `verify_production.py` | Production gate — generates, executes, validates evidence | Browser + LLM |
-| `ci_generate.py` | Headless test-generation driver (Phase 7) — exit codes 0/1/2, `--json` | LLM endpoint (mock + fake LLM for hermetic runs) |
 | `fake_llm.py` | OpenAI-compatible fake LLM server (canned skeletons) — hermetic pipeline testing | Nothing — localhost |
 | `mock_server.py` | Robust mock-site HTTP server (concurrent Playwright-safe) | Nothing — localhost |
 | `ci_action_selftest.py` | Local Docker self-test for the Phase 7 CI action (build + generate/run/cache/comment/adapt gates, GitHub + GitLab mock APIs) | Docker |

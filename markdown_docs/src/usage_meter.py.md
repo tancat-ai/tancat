@@ -49,7 +49,7 @@ Resolves storage paths lazily (defaults to `get_storage()`), accepts injectable 
 ### `class UsageSummary`
 `tier`, `license_status`, `windows_start/end`, `runs_used/limit/remaining`,
 `exports_used/limit/remaining`, `storage_bytes`, `llm_tokens`, `enforcement_on`;
-`to_dict()` → the `--json` usage section shape used by the UI panel + `ci_generate`.
+`to_dict()` → the `--json` usage section shape used by the UI panel + `tancat run`.
 
 ### `class FreeTierLimitError(RuntimeError)`
 `run_remaining` / `export_remaining` + `upgrade_prompt` ("hit the free-tier limit — upgrade to a

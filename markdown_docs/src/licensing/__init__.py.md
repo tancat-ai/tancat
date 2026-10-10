@@ -28,4 +28,4 @@ The real logic lives in `src/licensing/license.py` (validation) and `src/licensi
 ## How It Works (internals)
 
 No private logic. Consumers: the usage meter (`effective_tier`, `is_paid_tier`), the UI
-sidebar license banner, and `ci_generate --json` (license + usage section).
+sidebar license banner, and `tancat run --json` (license + usage section).

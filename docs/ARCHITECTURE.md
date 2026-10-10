@@ -207,7 +207,7 @@ The headless CI/CD surface — the **same pipeline** (the src/ layers above) beh
 
 | Module | Role |
 |--------|------|
-| `src/cli/headless.py` | Headless generation driver behind `tancat run` — runs `ui_pipeline.run_pipeline()` non-interactively (exit codes 0/1/2, `--json`, workspace isolation, danger-zone allow-list). The front door every mode uses. Promoted from `scripts/ci_generate.py`, which is now a shim. |
+| `src/cli/headless.py` | Headless generation driver behind `tancat run` — runs `ui_pipeline.run_pipeline()` non-interactively (exit codes 0/1/2, `--json`, workspace isolation, danger-zone allow-list). The front door every mode uses. Promoted from the removed `scripts/ci_generate.py`. |
 | `scripts/fake_llm.py` | OpenAI-compatible fake LLM (canned skeletons) — makes generate-mode self-testable hermetically. |
 | `src/ci_ignore.py` | `.ai-test-ignore.yml` parser/validator/matcher (required-`reason` anti-rug rule). |
 | `action/entrypoint.sh` | Thin Docker-action orchestrator over the driver + pytest + report/adapt/flaky; reads the GitHub `INPUT_*` / GitLab underscore env surface; `detect_platform` routes comment posting to the right adapter. |

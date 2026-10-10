@@ -1169,12 +1169,12 @@ source,target,type
 ./scripts/ci_action_selftest.py,./action/cache_key.py,import
 ./scripts/ci_action_selftest.py,./src/flow_memory.py,import
 ./scripts/ci_action_selftest.py,./src/rag_learn.py,import
-./scripts/ci_generate.py,./src/ci_ignore.py,import
-./scripts/ci_generate.py,./src/journey_models.py,import
-./scripts/ci_generate.py,./src/provider_config.py,import
-./scripts/ci_generate.py,./src/storage.py,import
-./scripts/ci_generate.py,./src/ui_pipeline.py,import
-./scripts/ci_generate.py,./src/url_guard.py,import
+./src/cli/headless.py,./src/ci_ignore.py,import
+./src/cli/headless.py,./src/journey_models.py,import
+./src/cli/headless.py,./src/provider_config.py,import
+./src/cli/headless.py,./src/storage.py,import
+./src/cli/headless.py,./src/ui_pipeline.py,import
+./src/cli/headless.py,./src/url_guard.py,import
 ./scripts/debug.py,./src/llm_client.py,import
 ./scripts/debug.py,./src/orchestrator.py,import
 ./scripts/debug.py,./src/placeholder_resolver.py,import
@@ -1726,7 +1726,7 @@ source,target,type
 ./tests/test_ci_flow_memory_stats.py,./action/flow_memory_stats.py,import
 ./tests/test_ci_flow_memory_stats.py,./src/flow_memory.py,import
 ./tests/test_ci_flow_memory_stats.py,./src/rag_learn.py,import
-./tests/test_ci_generate.py,./scripts/ci_generate.py,import
+./tests/test_ci_generate.py,./src/cli/headless.py,import
 ./tests/test_ci_generate.py,./scripts/fake_llm.py,import
 ./tests/test_ci_generate.py,./scripts/mock_server.py,import
 ./tests/test_ci_generate.py,./src/ci_ignore.py,import
