@@ -114,18 +114,6 @@ def _init_session_state() -> None:
 # ---------------------------------------------------------------------------
 _init_session_state()
 
-# Handle delayed baseline load (triggered by sidebar button via st.rerun)
-if st.session_state.pop("_load_baseline_requested", False):
-    st.session_state.starting_url = RequirementsInput.BASELINE_STARTING_URL
-    st.session_state.additional_urls = RequirementsInput.BASELINE_ADDITIONAL_URLS
-    st.session_state.requirements_text = RequirementsInput.BASELINE_REQUIREMENTS
-    st.session_state.pipeline_error = ""
-    st.session_state.pipeline_results = ""
-    st.session_state.pipeline_skeleton = ""
-    st.session_state.pipeline_scrape_summary = ""
-    st.session_state.pipeline_saved_path = ""
-    st.session_state.pipeline_manifest_path = ""
-
 # ---------------------------------------------------------------------------
 # Shared sidebar (renders before pages so every page sees the same config)
 # ---------------------------------------------------------------------------
@@ -297,9 +285,6 @@ with st.sidebar.expander("Advanced", expanded=False):
     )
     if consent_mode != _stored_consent:
         save_setting(SETTING_CONSENT_MODE, consent_mode)
-    if st.button("Load baseline (automationexercise.com)", type="secondary"):
-        st.session_state._load_baseline_requested = True
-        st.rerun()
 
 # Persist the latest non-empty values so a rerun doesn't accidentally
 # wipe the run configuration during button-triggered rerenders.

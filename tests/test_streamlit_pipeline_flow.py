@@ -89,22 +89,6 @@ class TestPlanBuilderButtons:
         assert "Save And Sign Off Test Plan" not in labels
 
 
-class TestSidebarPipelineButtons:
-    """Tests for sidebar buttons related to pipeline configuration."""
-
-    def test_load_baseline_button_exists(self, _app_test: AppTest) -> None:
-        """Load baseline button exists in sidebar."""
-        assert len(_app_test.sidebar.button) >= 1
-        labels = [b.label for b in _app_test.sidebar.button]
-        assert "Load baseline (automationexercise.com)" in labels
-
-    def test_load_baseline_button_is_secondary(self, _app_test: AppTest) -> None:
-        """Load baseline button is a secondary action."""
-        baseline_btn = [b for b in _app_test.sidebar.button if b.label == "Load baseline (automationexercise.com)"][0]
-        # Button is accessible in the sidebar element tree
-        assert baseline_btn.label == "Load baseline (automationexercise.com)"
-
-
 class TestPipelineErrorDisplay:
     """Tests for pipeline error surfacing."""
 
