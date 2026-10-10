@@ -189,9 +189,17 @@ NAV_STEPS: list[dict[str, Any]] = [
     dict(prompt="Enter selection:", send="2", expect="User Story Input", timeout=30),
     dict(prompt="Enter selection:", send="1", expect="Paste your user story", timeout=30),
     dict(prompt="Paste your user story", send=STORY, expect="Enter selection:", timeout=60),
-    # 7. Enter Target URLs → baseline
+    # 7. Enter Target URLs -> manual entry (baseline preset removed, t-0597).
+    #    The URL menu is now a single option: pick it, give the starting URL,
+    #    then one extra URL (deduped) + a blank line to end the extra list.
     dict(prompt="Enter selection:", send="2", expect="Target URLs", timeout=30),
-    dict(prompt="Enter selection:", send="2", expect="Baseline loaded.", timeout=30),
+    dict(prompt="Enter selection:", send="1", expect="Starting URL", timeout=30),
+    dict(
+        prompt="Starting URL",
+        send="https://automationexercise.com/\nhttps://automationexercise.com/\n",
+        expect="Enter selection:",
+        timeout=30,
+    ),
     # 8. Consent Mode → auto-dismiss (opens a submenu, then pick option)
     dict(prompt="Enter selection:", send="3", expect="Enter selection:", timeout=30),
     dict(send="1", expect="Consent mode set", timeout=30),
@@ -235,9 +243,15 @@ FULL_STEPS: list[dict[str, Any]] = [
     dict(prompt="Enter selection:", send="2", expect="User Story Input", timeout=30),
     dict(prompt="Enter selection:", send="1", expect="Paste your user story", timeout=30),
     dict(prompt="Paste your user story", send=STORY, expect="Enter selection:", timeout=60),
-    # URLs
+    # URLs -> manual entry (baseline preset removed, t-0597)
     dict(prompt="Enter selection:", send="2", expect="Target URLs", timeout=30),
-    dict(prompt="Enter selection:", send="2", expect="Baseline loaded.", timeout=30),
+    dict(prompt="Enter selection:", send="1", expect="Starting URL", timeout=30),
+    dict(
+        prompt="Starting URL",
+        send="https://automationexercise.com/\nhttps://automationexercise.com/\n",
+        expect="Enter selection:",
+        timeout=30,
+    ),
     # Consent / POM
     dict(prompt="Enter selection:", send="3", expect="Enter selection:", timeout=30),
     dict(send="1", expect="Consent mode set", timeout=30),

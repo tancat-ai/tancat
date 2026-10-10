@@ -230,6 +230,48 @@ jobs:
       - name: Scan the repository and history
         run: /tmp/gitleaks-bin/gitleaks git --redact --verbose --exit-code 1
 
+  # ── Gate 1f: Rewrite tombstone guard (BLOCKING) ─────────────────────
+  # t-0242 section 5, backstop C (job t-0596). The 2026-10-01 key scrub
+  # removed six blobs from every commit. PR #36 later merged a branch still
+  # sitting on the pre-scrub lineage and made them reachable again (t-0242
+  # section 2). Nothing in the repo knew those ids must never be reachable,
+  # so nothing failed. This walks the pushed tip's object graph and fails if
+  # any of them is back. It runs on push and on pull_request: a reversed
+  # history arrives as a PR merge, and the check must report there too or a
+  # required status check on the merge would wait forever.
+  history-tombstone-guard:
+    name: History Tombstone Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # a shallow clone sees the tip only - nothing to walk
+
+      - name: Fail if a tombstoned blob is reachable from this tip
+        run: |
+          set -euo pipefail
+          tombstones=".github/rewrite-tombstones.txt"
+          if [ ! -s "$tombstones" ]; then
+            echo "::error::$tombstones is missing or empty - the guard would check nothing."
+            exit 1
+          fi
+          # Normalise CRLF (a Windows checkout can add \r) so the patterns match.
+          tr -d '\r' < "$tombstones" | sed '/^[[:space:]]*$/d' > /tmp/tombstones.txt
+          count="$(wc -l < /tmp/tombstones.txt | tr -d ' ')"
+          # `git rev-list --objects` prints "<sha>\t<path>" for every reachable
+          # object. -F = fixed strings, -f = read the sha list from the file,
+          # -w = whole-word so a 40-hex id cannot match inside a longer one.
+          hits="$(git rev-list --objects HEAD | grep -F -w -f /tmp/tombstones.txt || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::A tombstoned blob is reachable again (t-0242): history was reversed. Do not ship this tip."
+            echo "$hits"
+            exit 1
+          fi
+          echo "OK: none of the ${count} tombstoned blobs are reachable from HEAD."
+
   # ── Gate 2: Quality gates (run in parallel after smoke) ──────────────
   lint:
     name: Ruff Lint & Format

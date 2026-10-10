@@ -281,21 +281,6 @@ class TestRequirementsInput:
 class TestBaselineConfig:
     """Verify baseline configuration button and behavior."""
 
-    def test_baseline_load_button_exists(self, at: AppTest) -> None:
-        """A 'Load baseline config' button should be in the sidebar."""
-        buttons = at.sidebar.button
-        labels = [b.label for b in buttons]
-        assert any("baseline" in label.lower() for label in labels), (
-            f"Expected baseline button in sidebar. Got: {labels}"
-        )
-
-    def test_baseline_section_has_a_button(self, at: AppTest) -> None:
-        """The baseline section should offer at least one action button."""
-        buttons = at.sidebar.button
-        labels = [b.label for b in buttons]
-        baseline_buttons = [label for label in labels if "baseline" in label.lower()]
-        assert len(baseline_buttons) >= 1, f"Expected at least one baseline button. Got: {labels}"
-
     def test_run_button_locked_until_plan_signed_off(self) -> None:
         """Current-UI guard: typing requirements disables Run until sign-off.
 
