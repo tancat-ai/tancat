@@ -70,6 +70,52 @@ class TestProjectRagScope:
         assert rag_scope_for("default") is None
 
 
+class TestCliAppliesTheProject:
+    """t-0581: the interactive CLI applies the same project mapping as the UI.
+
+    Before: the CLI called neither ``apply_rag_scope`` nor ``init_storage``, so
+    a UI project (workspace ``landing`` + scope ``scope:landing``) and a CLI
+    run of the same project used the ``default`` workspace + host[:port].
+    """
+
+    def test_interactive_cli_applies_the_persisted_project(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import src.settings_store as settings_store
+        from src import storage as storage_mod
+        from src.cli import main as cli_main
+
+        monkeypatch.setattr(settings_store, "_settings_path", lambda: tmp_path / "settings.enc")
+        settings_store.save_setting("workspace", "landing")
+        monkeypatch.delenv("AITEST_RAG_SCOPE", raising=False)
+        monkeypatch.delenv("WORKSPACE", raising=False)
+        storage_mod.reset_storage()
+
+        cli_main._apply_project_storage()
+
+        assert os.environ["AITEST_RAG_SCOPE"] == "landing"
+        assert storage_mod.get_storage().workspace == "landing"
+        storage_mod.reset_storage()
+
+    def test_interactive_cli_keeps_the_defaults_when_no_project(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        import src.settings_store as settings_store
+        from src import storage as storage_mod
+        from src.cli import main as cli_main
+
+        monkeypatch.setattr(settings_store, "_settings_path", lambda: tmp_path / "settings.enc")
+        monkeypatch.setenv("AITEST_RAG_SCOPE", "stale")
+        monkeypatch.delenv("WORKSPACE", raising=False)
+        storage_mod.reset_storage()
+
+        cli_main._apply_project_storage()
+
+        assert "AITEST_RAG_SCOPE" not in os.environ
+        assert storage_mod.get_storage().workspace == "default"
+        storage_mod.reset_storage()
+
+
 class _FakeRunService:
     """Records every package it is asked to run and returns one test result."""
 
