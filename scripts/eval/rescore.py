@@ -149,8 +149,10 @@ def main(argv: list[str] | None = None) -> int:
 
     known = _known_scores()
     if known and not args.json:
+        recorded_at = known.get("recorded_at")
+        label = "Recorded last re-score" + (f" (as of {recorded_at})" if recorded_at else "")
         print(
-            "\nRecorded last re-score: "
+            f"\n{label}: "
             f"gate 1 {known.get('gate1_correct')}/{known.get('gate1_total')} "
             f"({known.get('gate1_accuracy_pct')}%), gate 2 {known.get('gate2_false_greens')}."
         )
