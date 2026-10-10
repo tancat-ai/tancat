@@ -245,6 +245,59 @@ def test_default_storage_root_is_none(monkeypatch: pytest.MonkeyPatch, capsys: p
 
 
 # ---------------------------------------------------------------------------
+# --workspace / $AITEST_WORKSPACE (t-0591: the documented UI/CLI share route)
+# ---------------------------------------------------------------------------
+
+
+def _capture_workspace(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    captured: dict[str, object] = {}
+
+    def fake_init_storage(root: object = None, workspace: str = "default") -> object:
+        captured["workspace"] = workspace
+        return object()
+
+    async def fake_run(**kwargs: object) -> None:  # noqa: ANN003
+        return None
+
+    monkeypatch.setattr(ci_generate, "init_storage", fake_init_storage)
+    monkeypatch.setattr(ci_generate, "_run_pipeline_async", fake_run)
+    return captured
+
+
+def test_aitest_workspace_env_is_honoured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """t-0591: without --workspace the driver honours $AITEST_WORKSPACE.
+
+    The install/first-run docs route the UI/CLI share through
+    ``AITEST_WORKSPACE``; the old "ci-workspace" default overrode it, so the
+    documented line did nothing for the store half of ``tancat run``.
+    """
+    captured = _capture_workspace(monkeypatch)
+    monkeypatch.setenv("AITEST_WORKSPACE", "landing")
+
+    ci_generate.main(["--story", "s", "--url", "http://localhost:8781/"])
+
+    assert captured["workspace"] == "landing"
+
+
+def test_explicit_workspace_beats_the_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_workspace(monkeypatch)
+    monkeypatch.setenv("AITEST_WORKSPACE", "landing")
+
+    ci_generate.main(["--story", "s", "--url", "http://localhost:8781/", "--workspace", "ws-name"])
+
+    assert captured["workspace"] == "ws-name"
+
+
+def test_default_workspace_is_ci_workspace_without_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = _capture_workspace(monkeypatch)
+    monkeypatch.delenv("AITEST_WORKSPACE", raising=False)
+
+    ci_generate.main(["--story", "s", "--url", "http://localhost:8781/"])
+
+    assert captured["workspace"] == "ci-workspace"
+
+
+# ---------------------------------------------------------------------------
 # E2E — full generation against the mock with the fake LLM (hermetic)
 # ---------------------------------------------------------------------------
 

@@ -183,7 +183,14 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--criteria", default="", help="Optional pre-written acceptance criteria; empty = derive from the story"
     )
-    parser.add_argument("--workspace", default="ci-workspace", help="AI-029 workspace name (default: ci-workspace)")
+    parser.add_argument(
+        "--workspace",
+        default="",
+        help=(
+            "AI-029 workspace name (default: $AITEST_WORKSPACE, else ci-workspace). "
+            "Set the env var to share a project's learned answers with the UI/CLI."
+        ),
+    )
     parser.add_argument(
         "--storage-root",
         default="",
@@ -297,7 +304,12 @@ def run(args: argparse.Namespace) -> int:
             return EXIT_CONFIG_ERROR
 
     # --- workspace isolation (AI-029) --------------------------------------
-    init_storage(root=Path(args.storage_root) if args.storage_root else None, workspace=args.workspace)
+    # t-0591: an explicit --workspace wins; otherwise honour $AITEST_WORKSPACE
+    # (the documented UI/CLI share route) before the CI default. Without this
+    # the default overrode the env var, so the docs' env line did not work for
+    # `tancat run` (the RAG scope half did).
+    workspace = args.workspace or os.environ.get("AITEST_WORKSPACE", "").strip() or "ci-workspace"
+    init_storage(root=Path(args.storage_root) if args.storage_root else None, workspace=workspace)
 
     # --- run the production pipeline ---------------------------------------
     session = PipelineSessionState()
@@ -358,7 +370,7 @@ def run(args: argparse.Namespace) -> int:
         "mode": "generate-only",
         "package": str(Path(saved_path).resolve()),
         "manifest": str(Path(manifest_path).resolve()) if manifest_path else "",
-        "workspace": args.workspace,
+        "workspace": workspace,
         "test_count": _count_test_functions(code),
         "conditions": len(conditions),
         "unresolved": len(unresolved),
