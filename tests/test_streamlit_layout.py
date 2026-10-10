@@ -9,7 +9,7 @@ Sidebar layout verified:
 - Page Object Model toggle and the "Check My LLM" probe
 - License & Usage and Settings (OCR backend, workspace, RAG/flow memory)
 - Saved Packages and Pages To Scrape (Starting URL, Additional URLs)
-- Advanced (Consent Handling selectbox, Load baseline)
+- Advanced (Consent Handling selectbox)
 Main content verified:
 - Logo header, Requirements input, Authentication expander
 - Run Intelligent Pipeline button
@@ -99,14 +99,6 @@ class TestSidebarWidgets:
         """Sidebar should have the 'Run Pipeline' button."""
         buttons = at.sidebar.button
         assert len(buttons) >= 1, "Sidebar should have at least one button (Run Pipeline)"
-
-    def test_sidebar_has_baseline_button(self, at: AppTest) -> None:
-        """Sidebar should have 'Load baseline' button."""
-        buttons = at.sidebar.button
-        button_labels = [b.label for b in buttons]
-        assert any("baseline" in label.lower() for label in button_labels), (
-            f"Siderbar should have a baseline button. Got: {button_labels}"
-        )
 
     def test_sidebar_has_consent_mode_selector(self, at: AppTest) -> None:
         """Consent Handling selectbox should exist in sidebar."""
