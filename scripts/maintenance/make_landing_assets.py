@@ -70,6 +70,15 @@ INDEX = LANDING / "index.html"
 #: an HTML file so the PDF can be rebuilt instead of hand-edited.
 INSTALL_HTML = REPO_ROOT / "docs" / "implementation" / "tancat-pro-install-and-licence.html"
 INSTALL_PDF = LANDING / "tancat-pro-install-and-licence.pdf"
+#: The install document's bundled OFL-1.1 fonts. Listed as PDF sources so the
+#: freshness guard fails when a font is swapped without re-rendering, and so a
+#: PDF can never silently fall back to a Microsoft font installed on the host.
+INSTALL_PDF_FONTS: tuple[str, ...] = (
+    "docs/implementation/fonts/inter-regular.woff2",
+    "docs/implementation/fonts/inter-bold.woff2",
+    "docs/implementation/fonts/inter-italic.woff2",
+    "docs/implementation/fonts/jetbrains-mono-regular.woff2",
+)
 
 # #070b10 -- keep in sync with `midnight` in landing/index.html.
 MIDNIGHT: tuple[int, int, int, int] = (7, 11, 16, 255)
@@ -121,7 +130,10 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
         "landing/streamlit_real_1280x820.png",
         "landing/logo_transparent.png",
     ),
-    "tancat-pro-install-and-licence.pdf": ("docs/implementation/tancat-pro-install-and-licence.html",),
+    "tancat-pro-install-and-licence.pdf": (
+        "docs/implementation/tancat-pro-install-and-licence.html",
+        *INSTALL_PDF_FONTS,
+    ),
 }
 
 
@@ -204,6 +216,10 @@ def build_install_pdf(source_html: Path = INSTALL_HTML, out_path: Path = INSTALL
     try:
         page = browser.new_page()
         page.goto(source_html.as_uri(), wait_until="load")
+        # The @font-face sources are local, so this resolves without network; it
+        # is what makes the embedded font set deterministic instead of "whatever
+        # the host had installed" (the Microsoft-font leak this fixes).
+        page.evaluate("() => document.fonts.ready")
         page.pdf(path=str(out_path), format="A4", print_background=True)
     finally:
         browser.close()

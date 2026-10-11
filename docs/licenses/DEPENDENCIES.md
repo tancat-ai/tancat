@@ -122,8 +122,30 @@ fonts from Google Fonts:
 | Newsreader | SIL Open Font License 1.1 | Copyright 2020 The Newsreader Project Authors |
 
 All three are OFL-1.1, which permits web and print use. They are fetched from
-Google's CDN at page load and are **not redistributed** in this repository, so no
-font files are bundled; this note records the licence regardless.
+Google's CDN at page load and are **not redistributed** by the landing page.
+
+The Pro install/licence PDF (`landing/tancat-pro-install-and-licence.pdf`) is
+different: it **redistributes** four font files, bundled in
+`docs/implementation/fonts/`, so the render cannot fall back to a font installed
+on the build machine (it used to embed Segoe UI and Consolas from the host). They
+are unmodified release files, all OFL-1.1:
+
+| File | Face | Licence | Copyright | SHA-256 |
+|---|---|---|---|---|
+| `inter-regular.woff2` | Inter Regular (400) | OFL-1.1 | Copyright (c) 2016 The Inter Project Authors | `e06f6b1bc553aaea4e4668023ed0ab0a147129c3107f511bc7d03d361b0ae085` |
+| `inter-bold.woff2` | Inter Bold (700) | OFL-1.1 | Copyright (c) 2016 The Inter Project Authors | `fa888127b6da015b65569f0351f3b5c391ad928904951f1c20e9f8462a8d95ea` |
+| `inter-italic.woff2` | Inter Italic (400) | OFL-1.1 | Copyright (c) 2016 The Inter Project Authors | `2d078cb3bc8f934740d53b39dd23b0678f2f97477e49ec785dd9d8acd8b96bfc` |
+| `jetbrains-mono-regular.woff2` | JetBrains Mono Regular (400) | OFL-1.1 | Copyright 2020 The JetBrains Mono Project Authors | `f1a7a03672cdd494ce0d5543fac6e4360fe22403c6de297fdc2e55a815f7baff` |
+
+The source repositories are Inter (`docs/font-files/`, github.com/rsms/inter)
+and JetBrains Mono (`fonts/webfonts/`, github.com/JetBrains/JetBrainsMono).
+Newsreader is **not bundled**: the install/licence document has no serif text, so
+the PDF never embeds it. The full OFL-1.1 text and both copyright notices are in
+`docs/implementation/fonts/OFL-1.1.md`, next to the fonts as the licence requires,
+and the four files are listed as PDF sources in `landing/asset-sources.json` so
+the landing asset guard fails if a font changes without a re-render. Verified by
+inspecting the rebuilt PDF: it embeds only `Inter-Regular`, `Inter-Bold`,
+`Inter-Italic` and `JetBrainsMono-Regular` (Type0 subsets), no Microsoft face.
 
 ## Original TanCat assets
 
