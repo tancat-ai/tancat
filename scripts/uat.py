@@ -37,13 +37,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import io
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import threading
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -740,6 +744,79 @@ def _rag_stack_versions() -> str:
     )
 
 
+_RAG_FAILURE_MARKER = "_InactiveRpcError"
+_RAG_GOAWAY_MARKER = "Received a GOAWAY"
+
+
+def count_rag_symptoms(text: str) -> tuple[int, int]:
+    """Count ``(failed operations, GOAWAYs received)`` in captured run output.
+
+    Both are gRPC "Too many pings" symptoms, but two different log strings - the
+    keepalive record asks a reader to keep both visible:
+
+    * failure - the Python ``_InactiveRpcError`` traceback line ("Too many
+      pings", spaces): the operation raised;
+    * GOAWAY - the C-core transport line ``Received a GOAWAY`` /
+      ``too_many_pings`` (underscore): the server throttled and the client
+      recovers. Counted on the ``Received a GOAWAY`` line alone, because the
+      same throttle also logs a ``Got goaway`` line that would double-count.
+    """
+    failures = goaways = 0
+    for line in text.splitlines():
+        if _RAG_FAILURE_MARKER in line:
+            failures += 1
+        if _RAG_GOAWAY_MARKER in line:
+            goaways += 1
+    return failures, goaways
+
+
+@contextlib.contextmanager
+def capture_stderr_to_file() -> Iterator[Path]:
+    """Copy this process's stderr to a temp file while the block runs.
+
+    grpc's C core writes its GOAWAY lines straight to fd 2, so a Python-level
+    capture would miss them. Duplicate fd 2 through a pipe and copy each chunk
+    to both the real stderr and the temp file: the run's live output is
+    unchanged, and the file can be counted once the run has finished.
+    """
+    tmp = tempfile.NamedTemporaryFile("wb", suffix=".uat-stderr.log", delete=False)
+    read_fd, write_fd = os.pipe()
+    saved_fd = os.dup(2)
+    sys.stderr.flush()
+    os.dup2(write_fd, 2)
+    os.close(write_fd)
+
+    def _pump() -> None:
+        while True:
+            try:
+                chunk = os.read(read_fd, 65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            try:
+                os.write(saved_fd, chunk)
+            except OSError:
+                break
+            tmp.write(chunk)
+
+    pump = threading.Thread(target=_pump, daemon=True)
+    pump.start()
+    try:
+        yield Path(tmp.name)
+    finally:
+        sys.stderr.flush()
+        # Point fd 2 back at the real stderr first: that closes the pipe's write
+        # end, so the pump drains, and saved_fd stays open until it has finished.
+        os.dup2(saved_fd, 2)
+        pump.join(timeout=5)
+        with contextlib.suppress(OSError):
+            os.close(saved_fd)
+        with contextlib.suppress(OSError):
+            os.close(read_fd)
+        tmp.close()
+
+
 async def main() -> int:
     args = parse_args()
     load_dotenv()
@@ -766,18 +843,19 @@ async def main() -> int:
     print("=" * 70)
 
     results: list[SiteResult] = []
-    for site_id in site_ids:
-        config = SITES[site_id]
-        site_result = await run_site_uat(
-            site_id=site_id,
-            config=config,
-            pom_mode=pom_mode,
-            run_tests=args.run,
-            provider=args.provider,
-            model=args.model,
-            base_url=args.base_url,
-        )
-        results.append(site_result)
+    with capture_stderr_to_file() as stderr_log:
+        for site_id in site_ids:
+            config = SITES[site_id]
+            site_result = await run_site_uat(
+                site_id=site_id,
+                config=config,
+                pom_mode=pom_mode,
+                run_tests=args.run,
+                provider=args.provider,
+                model=args.model,
+                base_url=args.base_url,
+            )
+            results.append(site_result)
 
     # Overall summary (aggregated across all sites)
     total_passed, total_failed, total_checks = summarize_results(results)
@@ -785,6 +863,11 @@ async def main() -> int:
     print(f"\n{'=' * 70}")
     print(f"OVERALL: {total_passed} passed, {total_failed} failed ({total_checks} total)")
     print(f"{'=' * 70}")
+
+    # t-0695: the two counts the keepalive record asks a reader to watch, so the
+    # run log does not have to be grepped for them.
+    failed_ops, goaways = count_rag_symptoms(stderr_log.read_text(encoding="utf-8", errors="replace"))
+    print(f"RAG symptoms: failed operations={failed_ops}, GOAWAYs received={goaways}")
 
     # Save / Compare
     output_data = {

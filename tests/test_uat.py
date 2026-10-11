@@ -125,3 +125,24 @@ def test_tancat_conditions_match_the_landing_page() -> None:
         assert removed not in page, f"removed control reappeared on the page: {removed!r}"
     for control in ("See how it works", "Install locally"):
         assert control in page, f"story names a control the page lacks: {control!r}"
+
+
+def test_count_rag_symptoms_separates_failures_from_goaways() -> None:
+    """t-0695: two counts, two log strings - a failure (spaces) and a GOAWAY
+    (underscore). The 'Got goaway ... too_many_pings' line is the same throttle
+    event as the 'Received a GOAWAY' line, so it must not be counted twice."""
+    log = (
+        "    raise _InactiveRpcError(state)  # Python failure\n"
+        'pymilvus.exceptions.MilvusException: <MilvusException: (code=2, ... "Too many pings")>\n'
+        "I1011 chttp2_transport.cc:1393] Got goaway [11] err=UNAVAILABLE:GOAWAY received; "
+        "Debug Text: too_many_pings {http2_error:11}\n"
+        "E1011 chttp2_transport.cc:1425] Received a GOAWAY with error code ENHANCE_YOUR_CALM "
+        'and debug data equal to "too_many_pings"\n'
+        "ordinary run output\n"
+    )
+
+    assert _load_uat_module().count_rag_symptoms(log) == (1, 1)
+
+
+def test_count_rag_symptoms_is_zero_on_a_clean_run() -> None:
+    assert _load_uat_module().count_rag_symptoms("OVERALL: 37 passed, 2 failed\n") == (0, 0)
