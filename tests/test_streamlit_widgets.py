@@ -9,7 +9,7 @@ Widget behaviors verified:
 - URL and story inputs accept/validate text
 - Consent mode options are correct
 - Requirements input mode (paste vs upload)
-- Baseline config button is present
+- Sidebar widget sets are exact, not "at least one" (see tests/streamlit_app_test_helpers.py)
 - The Run button stays locked until the Living Test Plan is signed off
 """
 
@@ -21,6 +21,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.streamlit_app_test_helpers import build_sidebar_app, expected_text_input_labels
+
 APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
 # ---------------------------------------------------------------------------
@@ -31,27 +33,7 @@ APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 @pytest.fixture(scope="module")
 def app_test() -> AppTest:
     """Create an AppTest instance with all backend dependencies mocked."""
-    mock_llm_instance = MagicMock()
-    mock_llm_instance.list_models.return_value = []  # Force manual model input
-
-    mock_llm_class = MagicMock()
-    mock_llm_class.return_value = mock_llm_instance
-    mock_llm_class.set_session_provider = MagicMock()
-
-    def fake_exists(self: Path) -> bool:
-        return False
-
-    with (
-        patch("streamlit_app.LLMClient", new=mock_llm_class),
-        patch.object(Path, "exists", fake_exists),
-        # Isolate the encrypted settings store so the test sees documented
-        # defaults, not whatever this machine has saved (and never writes to it).
-        patch("src.settings_store._load_settings", return_value={}),
-        patch("src.settings_store._save_settings"),
-    ):
-        at = AppTest.from_file(APP_PATH, default_timeout=15)
-        at.run(timeout=15)
-        return at
+    return build_sidebar_app()
 
 
 @pytest.fixture(scope="module")
@@ -129,7 +111,7 @@ class TestProviderSelector:
             return False
 
         with (
-            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch("src.llm_client.LLMClient", new=mock_llm_class),
             patch.object(Path, "exists", fake_exists),
             patch("src.settings_store._load_settings", return_value={}),
             patch("src.settings_store._save_settings"),
@@ -158,7 +140,7 @@ class TestProviderSelector:
             return False
 
         with (
-            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch("src.llm_client.LLMClient", new=mock_llm_class),
             patch.object(Path, "exists", fake_exists),
             patch("src.settings_store._load_settings", return_value={}),
             patch("src.settings_store._save_settings"),
@@ -191,11 +173,10 @@ class TestModelInput:
         a text_input for manual model entry rather than a selectbox.
         """
         # With no models available, we get a text_input for the model name
-        text_inputs = at.sidebar.text_input
-        assert len(text_inputs) >= 1, (
-            "Expected at least one text_input (Provider URL or Model) "
-            f"when no models available. Got {len(text_inputs)}."
-        )
+        labels = [w.label for w in at.sidebar.text_input]
+        assert "Model" in labels, f"Expected the manual 'Model' text_input. Got: {labels}"
+        selectbox_labels = {w.label for w in at.sidebar.selectbox}
+        assert "Select Model" not in selectbox_labels, f"Expected no 'Select Model' selectbox. Got: {selectbox_labels}"
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +188,14 @@ class TestUrlInputs:
     """Verify URL input widgets exist and have correct structure."""
 
     def test_has_sidebar_text_inputs(self, at: AppTest) -> None:
-        """Sidebar should have at least one text_input (Target URL)."""
-        assert len(at.sidebar.text_input) >= 1, "Expected at least one text_input in sidebar"
+        """Sidebar text_inputs must be exactly the expected set."""
+        labels = [w.label for w in at.sidebar.text_input]
+        assert set(labels) == expected_text_input_labels(), f"Sidebar text_input set changed. Got: {labels}"
 
     def test_additional_urls_text_area_exists(self, at: AppTest) -> None:
-        """Additional URLs text_area should be present in sidebar."""
-        assert len(at.sidebar.text_area) >= 1, "Expected Additional URLs text_area in sidebar"
+        """Additional URLs must be the only text_area in the sidebar."""
+        labels = [w.label for w in at.sidebar.text_area]
+        assert labels == ["Additional URLs"], f"Expected only the Additional URLs text_area. Got: {labels}"
 
     def test_url_input_has_help_text(self, at: AppTest) -> None:
         """Target URL input should have helpful placeholder or help text."""
@@ -297,7 +280,7 @@ class TestBaselineConfig:
             return False
 
         with (
-            patch("streamlit_app.LLMClient", new=mock_llm_class),
+            patch("src.llm_client.LLMClient", new=mock_llm_class),
             patch.object(Path, "exists", fake_exists),
             patch("src.settings_store._load_settings", return_value={}),
             patch("src.settings_store._save_settings"),
