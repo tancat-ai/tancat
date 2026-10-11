@@ -141,7 +141,7 @@ The source repositories are Inter (`docs/font-files/`, github.com/rsms/inter)
 and JetBrains Mono (`fonts/webfonts/`, github.com/JetBrains/JetBrainsMono).
 Newsreader is **not bundled**: the install/licence document has no serif text, so
 the PDF never embeds it. The full OFL-1.1 text and both copyright notices are in
-`docs/implementation/fonts/OFL.txt`, next to the fonts as the licence requires,
+`docs/implementation/fonts/OFL-1.1.md`, next to the fonts as the licence requires,
 and the four files are listed as PDF sources in `landing/asset-sources.json` so
 the landing asset guard fails if a font changes without a re-render. Verified by
 inspecting the rebuilt PDF: it embeds only `Inter-Regular`, `Inter-Bold`,
