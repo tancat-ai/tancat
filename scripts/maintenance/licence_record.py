@@ -25,6 +25,13 @@ committed file, so it runs as a fast blocking CI gate (the same shape as
 that needs ``uv``, the network and a full ``--all-extras`` sync, and its package
 list differs by platform (``appnope``/``pexpect``/``ptyprocess`` install only on
 POSIX). ``--write`` runs it on the machine that refreshes the record.
+
+What the guard does and does not prove: ``--check`` holds the package names,
+the versions, the appendix count and the direct-dependency section membership to
+``uv.lock``. It does **not** re-derive the licence strings - those are read from
+the committed document - so a green check is not a licence audit and a wrong
+licence name would pass. Only ``--write`` reads them fresh from ``pip-licenses``
+(with ``METADATA_OVERRIDES`` for the platform-gated packages).
 """
 
 from __future__ import annotations
@@ -211,6 +218,8 @@ That runs the licence metadata collector over the locked set:
 CI job `licence-freshness` runs `--check`, which renders this document from
 `uv.lock` and the committed licence metadata and fails when the two differ.
 
+Scope: that guard holds the names, versions, count and section membership to `uv.lock`; the licence strings are read from this document, so a green check is not a licence audit.
+
 ## Verdict
 
 - **Every direct dependency is permissive**: MIT, BSD-2/3-Clause, Apache-2.0,
@@ -345,7 +354,7 @@ def render(meta: Mapping[str, tuple[str, str]] | None = None) -> str:
     parts.append("")
 
     locked = [(name, version) for name, version in read_lock() if _norm(name) != _norm(ROOT_PACKAGE)]
-    parts.append(f"## Appendix: full locked set ({len(locked)} packages)")
+    parts.append(f"## Appendix: full locked set ({len(locked)} entries)")
     parts.append("")
     parts.append("The complete resolved environment, including transitive dependencies, for")
     parts.append("completeness. TanCat itself is described at the top of this file. Sorted by name.")
@@ -397,7 +406,7 @@ def check(text: str | None = None, path: Path = OUTPUT) -> list[str]:
                     f"direct dependency {name} is {direct[key][1]} in the record, {locked.get(key)} in uv.lock"
                 )
 
-    count = re.search(r"## Appendix: full locked set \((\d+) packages\)", committed)
+    count = re.search(r"## Appendix: full locked set \((\d+) entries\)", committed)
     appendix_section = committed.split("## Appendix: full locked set", 1)[-1]
     rows = sum(
         1
@@ -405,7 +414,7 @@ def check(text: str | None = None, path: Path = OUTPUT) -> list[str]:
         if line.startswith("|") and "---" not in line and not line.startswith("| Package ")
     )
     if count and int(count.group(1)) != rows:
-        problems.append(f"the appendix title says {count.group(1)} packages but the table has {rows} rows")
+        problems.append(f"the appendix title says {count.group(1)} entries but the table has {rows} rows")
 
     if not problems and render(parse_appendix_metadata(committed)) != committed:
         problems.append("the record differs from a fresh render (formatting or prose drift); re-run --write")

@@ -17,6 +17,8 @@ That runs the licence metadata collector over the locked set:
 CI job `licence-freshness` runs `--check`, which renders this document from
 `uv.lock` and the committed licence metadata and fails when the two differ.
 
+Scope: that guard holds the names, versions, count and section membership to `uv.lock`; the licence strings are read from this document, so a green check is not a licence audit.
+
 ## Verdict
 
 - **Every direct dependency is permissive**: MIT, BSD-2/3-Clause, Apache-2.0,
@@ -170,7 +172,7 @@ against the build machine.
 therefore cannot carry a hand-written note), so this originality record lives
 here instead.
 
-## Appendix: full locked set (224 packages)
+## Appendix: full locked set (224 entries)
 
 The complete resolved environment, including transitive dependencies, for
 completeness. TanCat itself is described at the top of this file. Sorted by name.

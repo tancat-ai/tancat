@@ -81,9 +81,7 @@ def test_wrong_appendix_count_is_detected() -> None:
     """A stale package count in the appendix title fails the guard."""
     guard = _load_guard()
     text = _record_text()
-    stale = text.replace(
-        "## Appendix: full locked set (224 packages)", "## Appendix: full locked set (230 packages)", 1
-    )
+    stale = text.replace("## Appendix: full locked set (224 entries)", "## Appendix: full locked set (230 entries)", 1)
     assert stale != text
 
     problems = guard.check(stale)
