@@ -83,9 +83,16 @@ class TestKeyRequired:
         monkeypatch.setenv("AZURE_OPENAI_API_KEY", "env-az-key")
         assert resolve_openai_api_key(provider="azure-openai", user_api_key=None) == "env-az-key"
 
-    def test_sync_writes_the_azure_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_sync_writes_the_azure_env_var(
+        self, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+    ) -> None:
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+        # sync writes os.environ directly, and monkeypatch.delenv does not undo a
+        # write made after it, so restore it by hand - otherwise the key leaks
+        # into any later test on the same worker (test_streamlit_widgets.py's
+        # Azure test then sees a key present and its key warning never fires).
+        request.addfinalizer(lambda: os.environ.pop("AZURE_OPENAI_API_KEY", None))
         sync_openai_api_key_to_env("azure-openai", "session-key")
         assert os.environ["AZURE_OPENAI_API_KEY"] == "session-key"
         assert os.environ.get("OPENAI_API_KEY") is None
