@@ -24,7 +24,7 @@ dependencies = [
     "pytest-timeout>=2.4.0",
     "cryptography>=49.0.0",
     "pymilvus[milvus-lite]==3.0.2",
-    "sentence-transformers==6.0.1",
+    "sentence-transformers==6.1.0",
     "milvus-lite==3.1.1",
     "langgraph>=1.2.9",
     # CPU-only torch. The container has no GPU and the embeddings
