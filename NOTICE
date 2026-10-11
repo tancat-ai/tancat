@@ -1,0 +1,20 @@
+TanCat
+Copyright 2026 lacattano
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+TanCat includes third-party software. The licence for every dependency, direct
+and transitive, is recorded in docs/licenses/DEPENDENCIES.md. Two transitive
+components are flagged there:
+
+  - text-unidecode 1.3 - dual-licensed GPL-2.0-or-later / Artistic-1.0
+    (the Artistic option is the permissive one relied on).
+  - a group of MPL-2.0 packages (certifi, pytest-base-url, orjson, tqdm, and
+    the dev-only fqdn and pathspec).
+
+The landing page loads the Inter, JetBrains Mono and Newsreader fonts from
+Google Fonts. All three are licensed under the SIL Open Font License 1.1.
+
+The TanCat logo (landing/logo_transparent.png, and the icon set derived from
+it) and the noir artwork (landing/noir_art.jpg) are original TanCat works,
+created for this project.
