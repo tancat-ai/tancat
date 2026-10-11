@@ -28,8 +28,6 @@ repos:
       - id: mypy
         args: [--ignore-missing-imports]
         exclude: ^(scripts/|fixtures/)
-        additional_dependencies:
-          - types-requests
 
   # Local hooks — run in the project environment
   - repo: local
