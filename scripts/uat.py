@@ -718,6 +718,28 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _dist_version(name: str) -> str:
+    """Return a distribution's version, or 'missing' when it is not installed."""
+    try:
+        from importlib.metadata import version
+
+        return version(name)
+    except Exception:
+        return "missing"
+
+
+def _rag_stack_versions() -> str:
+    """RAG-relevant dependency versions, printed so a bisect is self-evidencing.
+
+    t-0685: the RAG keepalive GOAWAY regression tracked pymilvus, but the run
+    output recorded no versions, so the comparison table had to be reconstructed
+    by hand. Print them at startup instead.
+    """
+    return " ".join(
+        f"{name}={_dist_version(name)}" for name in ("grpcio", "pymilvus", "milvus-lite", "sentence-transformers")
+    )
+
+
 async def main() -> int:
     args = parse_args()
     load_dotenv()
@@ -740,6 +762,7 @@ async def main() -> int:
     print(f"UAT Runner — {'POM' if pom_mode else 'Flat'} mode")
     print(f"Sites: {', '.join(site_ids)}")
     print(f"Run tests: {'yes' if args.run else 'no'}")
+    print(f"RAG stack: {_rag_stack_versions()}")
     print("=" * 70)
 
     results: list[SiteResult] = []
