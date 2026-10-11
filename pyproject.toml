@@ -23,7 +23,7 @@ dependencies = [
     "pyyaml>=6.0.0",
     "pytest-timeout>=2.4.0",
     "cryptography>=49.0.0",
-    "pymilvus[milvus-lite]==3.0.2",
+    "pymilvus[milvus-lite]==3.0.0",
     "sentence-transformers==6.1.0",
     "milvus-lite==3.2.1",
     "langgraph>=1.2.9",
@@ -158,6 +158,20 @@ ignore_missing_imports = true
 [tool.uv]
 override-dependencies = [
     "opencv-python ; python_version < '0'",
+]
+# RAG keepalive regression (t-0685). The multi-site/long path logged gRPC
+# "Too many pings" GOAWAYs that silently degraded RAG retrieval to no patterns.
+# A tancat-only UAT bisect (4 runs, grpcio and milvus-lite held fixed) shows the
+# cause is pymilvus 3.0.2, not grpcio: pymilvus 3.0.0 -> 0 GOAWAYs, pymilvus
+# 3.0.2 -> 4; and grpcio 1.84.0 with pymilvus 3.0.0 -> 0. 3.0.2 keeps the same
+# keepalive options but reworks the channel/reconnect lifecycle, which trips
+# the server's ping throttle. pymilvus is reverted to 3.0.0 in [project].
+# grpcio is transitive (via pymilvus) and was the original suspect; pinned back
+# to 1.83.0 to match the known-good t-0683 set even though the bisect cleared
+# it. Before the Python 3.15 move the grpcio pin must be lifted - 1.83.0 has no
+# cp315 wheel, so 3.15 needs a newer grpcio that does not reintroduce GOAWAYs.
+constraint-dependencies = [
+    "grpcio==1.83.0",
 ]
 
 # --- CPU-only PyTorch ------------------------------------------------------
