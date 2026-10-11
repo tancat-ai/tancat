@@ -1588,7 +1588,7 @@ wheels = [
 
 [[package]]
 name = "milvus-lite"
-version = "3.1.1"
+version = "3.2.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "faiss-cpu" },
@@ -1596,9 +1596,9 @@ dependencies = [
     { name = "numpy" },
     { name = "pyarrow" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d1/d0/3edb31f832287557c8a8bb0515aec2c73265512040dcd4fc43d747722d11/milvus_lite-3.1.1.tar.gz", hash = "sha256:0cbf8386a2e99b6464a5eda14cf8e31934b0e287e36c831e293aee614d9efc2e", size = 647172, upload-time = "2026-07-27T05:03:56.834Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/16/48/3826b9b18621aa38548ed59749a3a2df0578a1262f8aeeed5cdeb7a9fb94/milvus_lite-3.2.1.tar.gz", hash = "sha256:4d988fe0a6bbdfc708046014ad69f4b140c43567ecafd8b6df300ad7d37210f3", size = 722376, upload-time = "2026-08-25T03:14:40.772Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/22/51e60aaf1c1c69ca59d24b01a7f4b0703d6d5a5658385e7d3ed0f8a3a8b2/milvus_lite-3.1.1-py3-none-any.whl", hash = "sha256:0f343c9bf1e291d6c2fa615a52a57090ebbaf96b84bfb71f7eb73cd95cd7fc1c", size = 256749, upload-time = "2026-07-27T05:03:51.819Z" },
+    { url = "https://files.pythonhosted.org/packages/f8/ac/7534ce7526191f776e0d8f28c32ea69f0ae9516b1510a5653eeb5038e1b9/milvus_lite-3.2.1-py3-none-any.whl", hash = "sha256:0742fb4c54858bcc6fc3c2142ec651e2b0f4ae30f19e21d4fbc6db65b9e16c7b", size = 269551, upload-time = "2026-08-25T03:14:37.101Z" },
 ]
 
 [[package]]
@@ -3314,7 +3314,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langgraph", specifier = ">=1.2.9" },
-    { name = "milvus-lite", specifier = "==3.1.1" },
+    { name = "milvus-lite", specifier = "==3.2.1" },
     { name = "opencv-python-headless", marker = "extra == 'ocr'", specifier = ">=4.10.0" },
     { name = "pandas", specifier = "==3.0.6" },
     { name = "pdfplumber", marker = "extra == 'pdf'", specifier = ">=0.11.10" },

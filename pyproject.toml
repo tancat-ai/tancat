@@ -25,7 +25,7 @@ dependencies = [
     "cryptography>=49.0.0",
     "pymilvus[milvus-lite]==3.0.2",
     "sentence-transformers==6.1.0",
-    "milvus-lite==3.1.1",
+    "milvus-lite==3.2.1",
     "langgraph>=1.2.9",
     # CPU-only torch. The container has no GPU and the embeddings
     # (sentence-transformers) run on the CPU, but the default Linux wheel drags
