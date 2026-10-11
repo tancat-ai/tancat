@@ -201,6 +201,26 @@ jobs:
       - name: Check landing assets match their recorded sources
         run: python3 scripts/maintenance/landing_assets_guard.py --check
 
+  # ── Gate 1h: Dependency licence record freshness (BLOCKING) ─────────
+  # docs/licenses/DEPENDENCIES.md is generated from uv.lock (see
+  # scripts/maintenance/licence_record.py). A lock bump, a dropped
+  # dependency, a version change or a hand-edited table committed without
+  # regenerating the record fails here. The guard is stdlib-only and
+  # offline - it renders the expected tables from uv.lock and the licence
+  # metadata already in the committed record - so it needs no uv sync and
+  # is platform-independent (the pip-licenses package set is not).
+  licence-freshness:
+    name: Licence Record Freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check the dependency licence record matches uv.lock
+        run: python3 scripts/maintenance/licence_record.py --check
+
   # Gate 1e: Gitleaks secret scan (blocking). Catches key shapes the stdlib
   # pre-commit scan does not know. Runs over the repo and its history, so a
   # key in any commit fails the build. The gitleaks binary is not installed

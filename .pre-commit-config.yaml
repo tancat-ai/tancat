@@ -64,6 +64,19 @@ repos:
         pass_filenames: false
         files: ^(landing/|docs/implementation/tancat-pro-install-and-licence\.html|scripts/maintenance/make_landing_assets\.py)
 
+      - id: licence-freshness
+        name: Licence Record Freshness
+        description: >-
+          Blocks a commit that changes uv.lock (or pyproject.toml) without
+          regenerating docs/licenses/DEPENDENCIES.md via
+          scripts/maintenance/licence_record.py --write. The record is the
+          licence evidence a customer or store review reads, so a stale
+          version list is a real error. Stdlib-only and offline.
+        entry: python scripts/maintenance/licence_record.py --check
+        language: system
+        pass_filenames: false
+        files: ^(uv\.lock|pyproject\.toml|docs/licenses/DEPENDENCIES\.md|scripts/maintenance/licence_record\.py)$
+
       - id: secret-scan
         name: Secret Scan (block hardcoded API keys)
         description: >-
