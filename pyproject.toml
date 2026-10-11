@@ -11,12 +11,9 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.14"
 dependencies = [
-    "openai>=2.48.0",
     "playwright>=1.40.0",
     "pytest-playwright>=0.4.0",
     "python-dotenv>=1.1.1",
-    "requests>=2.32.5",
-    "ollama>=0.1.0",
     "streamlit==1.63.0",
     "httpx>=0.28.1",
     "beautifulsoup4>=4.14.3",
@@ -26,10 +23,9 @@ dependencies = [
     "pyyaml>=6.0.0",
     "pytest-timeout>=2.4.0",
     "cryptography>=49.0.0",
-    "pymilvus[milvus-lite]==3.0.0",
+    "pymilvus[milvus-lite]==3.0.2",
     "sentence-transformers==6.0.1",
     "milvus-lite==3.1.1",
-    "gitpython==3.1.57",
     "langgraph>=1.2.9",
     # CPU-only torch. The container has no GPU and the embeddings
     # (sentence-transformers) run on the CPU, but the default Linux wheel drags
@@ -76,21 +72,19 @@ docs = [
     "mkdocs-material>=9.6.0",
 ]
 dev = [
-    "ruff==0.16.7",
-    "mypy==2.3.1",
+    "ruff==0.17.0",
+    "mypy==2.4.0",
     "pytest>=8.3.0",
     "pytest-cov>=6.0.0",
     "pytest-xdist>=3.6.0",
-    "types-requests>=2.31.0",
-    "pre-commit==4.6.1",
+    "pre-commit==4.6.2",
     "pandas-stubs>=3.0.0.260204",
     "types-PyYAML>=6.0.0",
     "jupyter>=1.1.1",
     "ipykernel>=7.2.0",
     "nest-asyncio>=1.6.0",
-    "pandas>=2.3.3",
     "pytest-asyncio>=1.4.0",
-    "coverage==7.15.2",
+    "coverage==7.16.2",
 ]
 [tool.hatch.build.targets.wheel]
 packages = ["src", "cli"]
