@@ -51,7 +51,7 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 | pyyaml | 6.0.3 | MIT License |  |
 | pytest-timeout | 2.4.0 | DFSG approved; MIT License |  |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause |  |
-| pymilvus | 3.0.2 | Apache Software License |  |
+| pymilvus | 3.0.0 | Apache Software License |  |
 | sentence-transformers | 6.1.0 | Apache-2.0 |  |
 | milvus-lite | 3.2.1 | Apache Software License |  |
 | langgraph | 1.2.14 | MIT |  |
@@ -220,7 +220,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | fsspec | 2026.7.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | ghp-import | 2.1.0 | Apache Software License | https://github.com/c-w/ghp-import |
 | greenlet | 3.5.4 | MIT AND PSF-2.0 | https://greenlet.readthedocs.io |
-| grpcio | 1.84.0 | Apache-2.0 | https://grpc.io |
+| grpcio | 1.83.0 | Apache-2.0 | https://grpc.io |
 | h11 | 0.16.0 | MIT License | https://github.com/python-hyper/h11 |
 | hf-xet | 1.5.2 | Apache-2.0 | https://github.com/huggingface/xet-core |
 | httpcore | 1.0.9 | BSD-3-Clause | https://www.encode.io/httpcore/ |
@@ -327,7 +327,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | pyee | 13.0.1 | MIT License | https://github.com/jfhbrook/pyee |
 | pygments | 2.20.0 | BSD-2-Clause | https://pygments.org |
 | pymdown-extensions | 12.1 | MIT | https://github.com/facelessuser/pymdown-extensions |
-| pymilvus | 3.0.2 | Apache Software License | https://milvus.io |
+| pymilvus | 3.0.0 | Apache Software License | https://github.com/milvus-io/pymilvus |
 | pypdfium2 | 5.14.0 | BSD-3-Clause, Apache-2.0, dependency licenses | https://github.com/pypdfium2-team/pypdfium2 |
 | pytest | 9.1.1 | MIT | https://docs.pytest.org/en/latest/ |
 | pytest-asyncio | 1.4.0 | Apache-2.0 | https://github.com/pytest-dev/pytest-asyncio |
