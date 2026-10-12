@@ -4,11 +4,12 @@ A run keeps its evidence in one known place (`eval_evidence.py`), a re-score
 recomputes the gate numbers from that evidence with no model call and no live
 site, and a run whose evidence is gone is caught instead of read as a zero.
 
-The recorded last re-score (82/113 gate 1, 3 hollow passes) has **no surviving
-artifacts** - `scratch/gate1_full.log` and the emitted dirs were deleted - so
-these tests prove the mechanism on a synthetic run that reproduces a known
-number. The next live held-out run must reproduce
-`scripts/eval/known_gate_scores.json`.
+The current recorded re-score (2026-10-12: 94/113 gate 1, 0 hollow passes) kept
+its evidence, so it can be re-scored with no model. The superseded 2026-09-25
+record (82/113 gate 1, 3 hollow passes) has **no surviving artifacts** -
+`scratch/gate1_full.log` and the emitted dirs were deleted - so these tests
+prove the mechanism on a synthetic run that reproduces a known number.
+`scripts/eval/known_gate_scores.json` holds both records.
 """
 
 from __future__ import annotations
@@ -200,11 +201,16 @@ class TestEvidenceGuard:
         assert code == 2
 
     def test_recorded_score_file_is_present_and_honest(self) -> None:
-        """The recorded 82/113 + 3 is on disk, so the next run can be compared."""
+        """The current gate record is on disk and re-scorable; the old one is kept."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (82, 113)
-        assert payload["gate2_false_greens"] == 3
-        assert "deleted" in payload["note"]
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (94, 113)
+        assert payload["gate2_false_greens"] == 0
+        # The run that produced it kept its evidence, so the record is re-scorable.
+        assert payload["evidence_dir"].endswith("2026-10-12_heldout")
+        # The superseded 82/113 + 3 record is preserved, with the reason it was replaced.
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (82, 113)
+        assert payload["previous"]["gate2_false_greens"] == 3
+        assert "deleted" in payload["previous"]["note"]
 
 
 class TestHarnessEvidenceHook:

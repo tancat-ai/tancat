@@ -61,9 +61,9 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 
 ---
 
-## 🔴 B-093 — The Part C gates FAIL on a held-out set: 72.6% resolution, 3 false greens (the Session 7 landing-page numbers were site-specific; the "16" was a metric artefact)
+## 🔴 B-093 — The Part C gates FAIL on a held-out set: 83.2% resolution, 0 hollow passes (was 72.6% / 3; the Session 7 landing-page numbers were site-specific, the old "16" was a metric artefact)
 
-**Status:** 🟡 **in progress — gate 2 re-scored 2026-09-25 (Session 13): 3 false greens, not 16.** The metric was asking "did the test use the golden's selector?", which flagged legitimate page-arrival checks and the golden's own weak expectations, and it could not see the class that matters (a global container). It now asks "did this criterion's own test prove the claim?" — see §Session 13. What remains open is **gate 1's wrong-element resolver class**, listed there.
+**Status:** 🟡 **in progress — re-measured 2026-10-12 (t-0750, current main): 94/113 = 83.2%, 0 hollow passes.** Gate 2 now PASSES (was 3); gate 1 still FAILS the >=90% target. The 19 remaining misses: 14 `wrong_element`, 3 `target_never_captured`, 1 `weakened_to_visible_element`, 1 `element_instead_of_page_arrival`. Before that, gate 2 was re-scored 2026-09-25 (Session 13): 3 false greens, not 16. The metric was asking "did the test use the golden's selector?", which flagged legitimate page-arrival checks and the golden's own weak expectations, and it could not see the class that matters (a global container). It now asks "did this criterion's own test prove the claim?" — see §Session 13. What remains open is **gate 1's wrong-element resolver class**. Record: `docs/sessions/2026-10-12_heldout_gates.md`.
 **Measured originally:** 2026-09-24 (Session 10, branch `measure/session10-gates-1-3`). This is the gate re-score the plan asked for, done on held-out ground.
 **Priority:** **critical — it is the commercial go/no-go.** It decides whether the product can claim trustworthy output.
 **One-line:** live regeneration of the 9 committed golden stories (6 sites, 62 conditions, 113 placeholders) gives **75/113 = 66.4% resolution** and **16 false greens** — against gates of ≥90% and zero. The Session 7 landing-page result (0 wrong-element mappings, 0 false greens) does not generalize.
