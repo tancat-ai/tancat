@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from subprocess import CompletedProcess
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +34,60 @@ generated_tests/test_demo.py::test_checkout PASSED [100%]
     assert result.run_result.passed == 1
     assert "test_checkout PASSED" in result.display_output
     assert result.return_code == 0
+
+
+def test_run_saved_test_pins_utf8_decoding() -> None:
+    """The decode must be explicit, not the interpreter's locale default.
+
+    On Linux (CI) ``text=True`` already defaults to UTF-8, so a byte test alone
+    cannot catch a regression there. This asserts the kwargs the fix added, so
+    the Windows behaviour stays covered on every platform.
+    """
+    service = PipelineRunService()
+
+    with patch("src.pipeline_run_service.subprocess.run") as mock_run:
+        mock_run.return_value = CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        service.run_saved_test("generated_tests/test_demo.py", cwd=".")
+
+    kwargs = mock_run.call_args.kwargs
+    assert kwargs["encoding"] == "utf-8"
+    assert kwargs["errors"] == "replace"
+
+
+def test_run_saved_test_survives_non_cp1252_bytes_and_parses_results() -> None:
+    """A byte outside cp1252 in the output must not crash the run (t-0714).
+
+    The demo rehearsal (t-0706) hit a 0x81 byte in a pytest traceback: on
+    Windows ``text=True`` decoded it with the locale codec (cp1252) and the
+    reader thread raised UnicodeDecodeError, so Run & Fix parsed 0 tests. The
+    child below writes that byte to stdout followed by a normal "1 passed"
+    pytest summary; the service must still return the real result.
+    """
+    service = PipelineRunService()
+    real_run = subprocess.run
+    # ``chr(0x81).encode('utf-8')`` is C2 81: byte 0x81 is undefined in cp1252
+    # (the exact shape of the t-0706 crash).
+    child = (
+        "import sys\n"
+        "sys.stdout.buffer.write(chr(0x81).encode('utf-8'))\n"
+        "sys.stdout.flush()\n"
+        "print()\n"
+        "print('generated_tests/test_demo.py::test_probe PASSED [100%]')\n"
+        "print('=' * 30 + ' 1 passed in 0.01s ' + '=' * 30)\n"
+    )
+
+    def run_child(_command: list[str], **kwargs: Any) -> Any:
+        # Exercise the real subprocess decode path, with the service's kwargs,
+        # but with a child that emits the offending byte.
+        return real_run([sys.executable, "-c", child], **kwargs)
+
+    with patch("src.pipeline_run_service.subprocess.run", run_child):
+        result = service.run_saved_test("generated_tests/test_demo.py", cwd=".")
+
+    assert result.return_code == 0
+    assert result.run_result.total == 1
+    assert result.run_result.passed == 1
+    assert "test_probe PASSED" in result.display_output
 
 
 def test_run_saved_test_uses_failed_only_rerun_when_requested() -> None:
