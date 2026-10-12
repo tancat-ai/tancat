@@ -21,6 +21,7 @@ tells the app what the deployment is allowed to do.
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
 | Support and onboarding bundle | - | Yes |
+| Updates | - | 12 months included; later updates paid |
 | Runs | 25 per 30 days | Unlimited |
 | Evidence exports | 10 per 30 days | Unlimited |
 
@@ -30,6 +31,19 @@ The two counters are shown live in the UI sidebar.
 the evidence-export counter and storage used.](../assets/streamlit-license-usage.png)
 
 *The License & Usage panel. The counters reset every 30 days.*
+
+## Updates
+
+A licence is **perpetual for the version you buy**: it does not expire, and the
+version you hold keeps working. It includes **12 months of updates** from the
+date of purchase. After those 12 months, further updates are paid. Security
+fixes and bug fixes in the version line you bought stay free for the life of the
+licence.
+
+Updates are files, not a service. They arrive on Lemon Squeezy and on the
+[releases page](https://github.com/tancat-ai/tancat/releases), and you choose
+when to install them. TanCat makes **no runtime update check** and calls no
+vendor server to ask for one.
 
 ## Install a licence key
 
