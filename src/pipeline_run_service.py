@@ -141,6 +141,13 @@ class PipelineRunService:
             command,
             capture_output=True,
             text=True,
+            # pytest output is UTF-8. On Windows the default ``text=True`` codec
+            # is the locale (cp1252), and a byte outside it (0x81 in a failure
+            # traceback) raised UnicodeDecodeError in the reader thread, so
+            # Run & Fix returned a run result of 0 tests. Decode explicitly and
+            # replace un-decodable bytes instead of crashing a live run.
+            encoding="utf-8",
+            errors="replace",
             cwd=cwd or project_root,
             env=env,
             check=False,
