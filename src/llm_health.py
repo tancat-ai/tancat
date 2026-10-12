@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
-from src.provider_config import provider_requires_openai_api_key
+from src.provider_config import LOCAL_MODEL_LIST_TIMEOUT, provider_requires_openai_api_key
 
 if TYPE_CHECKING:
     from src.llm_client import LLMClient
@@ -188,6 +188,62 @@ def build_client(
     return LLMClient(provider=provider, model=model, base_url=base_url, api_key=api_key, **kwargs)
 
 
+# Names the app or a user may store to mean "whatever the local server loaded".
+# llama.cpp ignores the model field on a request and serves the loaded GGUF, so
+# the app's openai-local default ("llama") is valid even though /v1/models
+# advertises the GGUF path. See t-0715.
+_LOCAL_MODEL_ALIASES: frozenset[str] = frozenset({"llama", "local", "local-model", "local_model", "default", "model"})
+
+
+def _model_key(name: str) -> str:
+    """Normalise a model name or path for comparison.
+
+    Lower-cases, treats backslashes as separators, drops directories and strips
+    a known model file extension, so
+    ``C:\\models\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf`` becomes
+    ``qwen3.8-27b-ud-q4_k_xl_v2``.
+    """
+    key = name.strip().replace("\\", "/").rsplit("/", 1)[-1].lower()
+    for ext in (".gguf", ".bin", ".safetensors", ".pt"):
+        if key.endswith(ext):
+            return key[: -len(ext)]
+    return key
+
+
+def _model_matches(requested: str, available: list[str], *, provider: str = "") -> bool:
+    """True when *requested* names a model in *available* (exact, alias or substring).
+
+    A stored name rarely equals the advertised id: a local server advertises the
+    GGUF path (``C:\\...\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf``) while the app stores
+    a short default such as ``llama``. The match accepts, in order: an exact
+    case-insensitive name; a matching file stem (path and extension ignored); a
+    substring either way; and a generic local alias when the endpoint is
+    llama.cpp (``openai-local``, which ignores the model field) or advertises a
+    single model.
+    """
+    requested_clean = requested.strip()
+    if not requested_clean:
+        return True
+    if not available:
+        return False
+
+    requested_lower = requested_clean.lower()
+    keys = [_model_key(m) for m in available if m.strip()]
+    if requested_lower in keys:
+        return True
+
+    requested_key = _model_key(requested_clean)
+    for key in keys:
+        if not key or not requested_key:
+            continue
+        # A substring must be long enough to be a name, not a stray letter
+        # (a single-letter key would otherwise match any name containing it).
+        if min(len(requested_key), len(key)) >= 4 and (requested_key in key or key in requested_key):
+            return True
+
+    return requested_lower in _LOCAL_MODEL_ALIASES and (provider == "openai-local" or len(keys) == 1)
+
+
 def _is_auth_error(exc: BaseException) -> bool:
     """True when *exc* looks like an HTTP 401/403 auth rejection.
 
@@ -224,7 +280,7 @@ def check_llm(
     *,
     requested_model: str | None = None,
     probe_timeout: int = 20,
-    list_timeout: int = 10,
+    list_timeout: int = LOCAL_MODEL_LIST_TIMEOUT,
     context_floor: int | None = None,
 ) -> HealthCheckResult:
     """Run the BYO-LLM health checks against *client* and return a report.
@@ -286,8 +342,10 @@ def check_llm(
     #    no key, so key_ok stays True.
 
     # 3. Model availability — only meaningful when we got a model list.
+    #    The stored name may be a short alias ("llama") or a prefix rather than
+    #    the advertised GGUF path, so match on alias/stem/substring (t-0715).
     if result.available_models and model:
-        if model not in result.available_models:
+        if not _model_matches(model, result.available_models, provider=provider):
             result.model_available = False
             result.errors.append(
                 f"Model '{model}' is not in the {len(result.available_models)} models listed. "
