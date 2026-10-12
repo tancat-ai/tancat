@@ -22,13 +22,14 @@
   strong { color: #000; }
 </style></head><body>
 <h1>TanCat Pro Deployment Licence</h1>
-<p class="sub">Install and licence activation &mdash; one deployment, billed monthly, includes support and updates while your licence is active.</p>
+<p class="sub">Install and licence activation &mdash; one deployment. A licence is perpetual for the version you buy and includes 12 months of updates.</p>
 
 <h2>1. What this licence covers</h2>
 <ul>
   <li>One <strong>deployment</strong>: one installation of TanCat serving one organisation.</li>
   <li>Unlimited test runs and evidence exports on that deployment.</li>
-  <li>Support and product updates while the licence is active.</li>
+  <li>A perpetual licence for the version you buy, with 12 months of updates included.</li>
+  <li>Updates after the first 12 months are paid; security fixes and bug fixes in the version line you bought stay free.</li>
   <li>Not counted per user &mdash; your whole team may use it. Do not share or resell the key.</li>
 </ul>
 
@@ -57,7 +58,10 @@ bash launch_cli.sh     # interactive CLI</pre>
 <h2>5. Where your data goes</h2>
 <p>Your data stays on your machines when you point TanCat at a local or self-hosted LLM. The product runtime makes outbound calls only to <strong>your</strong> configured LLM endpoint and <strong>your</strong> target site &mdash; no telemetry, no update check, no vendor call. Cloud OpenAI and OpenRouter are supported if you choose them. Verified by an audit that runs in CI: <code>docs/security/egress-audit.md</code>.</p>
 
-<h2>6. Support</h2>
+<h2>6. Updates</h2>
+<p>Updates are files, not a service: they arrive on Lemon Squeezy and on the releases page (github.com/tancat-ai/tancat/releases), and you choose when to install them. The product makes <strong>no runtime update check</strong> and calls no vendor server.</p>
+
+<h2>7. Support</h2>
 <p>Email <strong>hello@tancat.dev</strong>. We reply as soon as we can.</p>
 
 <p class="foot">TanCat is a sole-trader business based in the United Kingdom. Licence terms: https://tancat.dev/terms.html &middot; Privacy: https://tancat.dev/privacy.html<br/>Merchant of record: Lemon Squeezy. Their terms govern the purchase transaction; these licence terms govern the software.</p>
