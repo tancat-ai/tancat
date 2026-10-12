@@ -600,7 +600,7 @@ returned as `{"fixable": false, "strategy": "skip_test", "confidence": 0.2}`. Th
 - [ ] **Add duration tracking:** wall-clock per criterion count (e.g., 12s per criterion)
 - [ ] **Add turns tracking:** LLM calls per story decomposition
 - [ ] **Add success rate per story type** (not just overall accuracy)
-- [ ] **Record results in `docs/plans/NEXT_SESSIONS_IMPROVEMENTS.md` §8 Appendix**
+- [ ] **Record results in the private improvement log (`docs/private/NEXT_SESSIONS_IMPROVEMENTS.md` §8 Appendix - not published)**
 **Why:** without cost/duration/turns, we cannot compare our tool to raw LLM+Playwright or to commercial competitors. AXI gave us the framework — we need to populate it with our own data.
 **Estimated sessions:** 0.5–1.
 
@@ -1401,7 +1401,7 @@ We don't need dedicated flakiness runs constantly. **Test trigger:** measure fla
 
 **Status:** 🟡 ready-for-agent — priority list folded into the Phase 6 spec as the 6a–6i build order (`docs/specs/FEATURE_SPEC_phase6_saas.md`, WRITTEN 2026-08-17 — Draft, §9 open questions to grill before 6a/6e build). **Phase 6 status → ROADMAP §13: Part 1 (6a–6i) code-complete 2026-09-05** (one-line pointer per AGENTS.md §10; full status lives in the roadmap item + evaluator records).
 **Priority:** High — commercial viability blockers, not nice-to-haves
-**Cross-ref:** `docs/plans/RESEARCH_SAAS_AND_LAUNCH.md` §8 (full audit with per-item severity); `docs/plans/RESEARCH_COMPETITIVE_LANDSCAPE.md` (why air-gap/no-egress is the wedge)
+**Cross-ref:** the private commercial research - `docs/private/RESEARCH_SAAS_AND_LAUNCH.md` §8 (full audit with per-item severity); `docs/private/RESEARCH_COMPETITIVE_LANDSCAPE.md` (why air-gap/no-egress is the wedge). Not published in this public tree.
 **Source:** code audit 2026-08-17 (read `rag_store.py`, `pdf_ingest.py`, `rag_bundled.py`, `llm_client.py`, `prompt_safety.py`, `secure_config.py`, `verify_production.py`, eval baseline)
 
 **Context:** competitive research concluded the differentiated revenue is the **air-gap/compliance tier** (BYO-LLM, no egress). These gaps are what must be true before that pitch is honest and before the Phase 6 spec is written. The `no data leaves your deployment` claim is the #1 sales argument — two of these gaps (SSRF, redaction) are security claims, not just features.
