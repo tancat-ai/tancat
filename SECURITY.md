@@ -94,3 +94,19 @@ uvx pip-audit
 
 We recommend running `uvx pip-audit` as part of your local review before submitting a PR that
 updates dependencies.
+
+### Automated updates (Dependabot)
+
+Dependabot is configured in [`.github/dependabot.yml`](.github/dependabot.yml) and replaces
+manual dependency watching.
+
+- **Weekly, on Mondays.** Update pull requests are opened on that schedule, grouped to keep
+the review queue small: one pull request for Python (`uv`) minor and patch bumps, and one for
+GitHub Actions. Major version bumps arrive as their own pull request, because this repo pins
+some dependencies on purpose (see the RAG notes in `pyproject.toml`).
+- **Security alerts are on.** A known vulnerability in a pinned dependency raises a Dependabot
+alert in the repository's Security tab, independent of the weekly update pull requests.
+- **There is no npm ecosystem** - the repo has no `package.json` or JS lockfile.
+
+Every Dependabot pull request is a normal pull request: it is reviewed and merged like any
+other change, and it does not merge itself.

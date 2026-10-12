@@ -1,0 +1,43 @@
+# Dependabot configuration for tancat-ai/tancat.
+#
+# Schedule: weekly, Monday. Each update arrives as a pull request to review.
+# A known vulnerability in a pinned dependency raises a Dependabot alert on the
+# repository (Security tab) in addition to any weekly update PR.
+# The durable note lives in SECURITY.md, section "Dependency Management".
+#
+# Ecosystems in use:
+#   - uv              -> pyproject.toml + uv.lock (the Python project)
+#   - github-actions  -> .github/workflows/*
+# There is no npm ecosystem: the repo has no package.json or JS lockfile.
+
+version: 2
+updates:
+  # --- Python project (pyproject.toml + uv.lock) ---------------------------
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Routine minor and patch bumps arrive as one pull request per week.
+      # Major bumps stay ungrouped so each is reviewed on its own - this repo
+      # pins some dependencies deliberately (see the RAG notes in pyproject.toml).
+      python-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- GitHub Actions ------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
