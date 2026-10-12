@@ -58,8 +58,6 @@ label,group,size,color
 ./docs/links.csv,Other,1805,#AEB6BF
 ./docs/nodes.csv,Other,3168,#AEB6BF
 ./docs/plans/AI-035_B036_P3_plan.md,Documentation,224,#F7DC6F
-./docs/plans/RESEARCH_COMPETITIVE_LANDSCAPE.md,Documentation,233,#F7DC6F
-./docs/plans/RESEARCH_SAAS_AND_LAUNCH.md,Documentation,233,#F7DC6F
 ./docs/plans/ROADMAP_ROADTO_PRODUCTION.md,Documentation,1001,#F7DC6F
 ./docs/plans/completed/AI-016_plan.md,Documentation,28,#F7DC6F
 ./docs/plans/completed/AI-017_plan.md,Documentation,26,#F7DC6F

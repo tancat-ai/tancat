@@ -1,8 +1,8 @@
 {
   "metadata": {
     "generated_at": "auto",
-    "total_nodes": 3642,
-    "total_links": 1976,
+    "total_nodes": 3640,
+    "total_links": 1960,
     "groups": [
       "interface",
       "orchestration",
@@ -487,22 +487,6 @@
       "group": "Documentation",
       "type": "doc",
       "size": 224,
-      "color": "#F7DC6F"
-    },
-    {
-      "id": 59,
-      "label": "./docs/plans/RESEARCH_COMPETITIVE_LANDSCAPE.md",
-      "group": "Documentation",
-      "type": "doc",
-      "size": 233,
-      "color": "#F7DC6F"
-    },
-    {
-      "id": 60,
-      "label": "./docs/plans/RESEARCH_SAAS_AND_LAUNCH.md",
-      "group": "Documentation",
-      "type": "doc",
-      "size": 233,
       "color": "#F7DC6F"
     },
     {
@@ -30130,102 +30114,6 @@
     {
       "id": 162,
       "source": 58,
-      "target": 3439,
-      "type": "proximity"
-    },
-    {
-      "id": 163,
-      "source": 59,
-      "target": 3387,
-      "type": "proximity"
-    },
-    {
-      "id": 164,
-      "source": 59,
-      "target": 3396,
-      "type": "proximity"
-    },
-    {
-      "id": 165,
-      "source": 59,
-      "target": 3400,
-      "type": "proximity"
-    },
-    {
-      "id": 166,
-      "source": 59,
-      "target": 3401,
-      "type": "proximity"
-    },
-    {
-      "id": 167,
-      "source": 59,
-      "target": 3402,
-      "type": "proximity"
-    },
-    {
-      "id": 168,
-      "source": 59,
-      "target": 3403,
-      "type": "proximity"
-    },
-    {
-      "id": 169,
-      "source": 59,
-      "target": 3425,
-      "type": "proximity"
-    },
-    {
-      "id": 170,
-      "source": 59,
-      "target": 3439,
-      "type": "proximity"
-    },
-    {
-      "id": 171,
-      "source": 60,
-      "target": 3387,
-      "type": "proximity"
-    },
-    {
-      "id": 172,
-      "source": 60,
-      "target": 3396,
-      "type": "proximity"
-    },
-    {
-      "id": 173,
-      "source": 60,
-      "target": 3400,
-      "type": "proximity"
-    },
-    {
-      "id": 174,
-      "source": 60,
-      "target": 3401,
-      "type": "proximity"
-    },
-    {
-      "id": 175,
-      "source": 60,
-      "target": 3402,
-      "type": "proximity"
-    },
-    {
-      "id": 176,
-      "source": 60,
-      "target": 3403,
-      "type": "proximity"
-    },
-    {
-      "id": 177,
-      "source": 60,
-      "target": 3425,
-      "type": "proximity"
-    },
-    {
-      "id": 178,
-      "source": 60,
       "target": 3439,
       "type": "proximity"
     },
