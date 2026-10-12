@@ -47,11 +47,51 @@
     "unverified": 1
   },
   "comparison": {
-    "previous_recorded_at": "2026-09-25",
-    "previous_gate1": "82/113 (72.6%)",
-    "previous_gate2_false_greens": 3,
-    "delta_gate1": "+12 placeholders (+10.6 percentage points)",
-    "note": "Not a like-for-like LLM draw: the previous record is Session 13's re-score of Session 10's generation. The fix classes landed since then are in HEAD for this run (B-054 hidden-step pool, B-096 same-page twins, t-0542/t-0556/t-0560 generic-ASSERT guards, B-100 global-container check). Gate 2 moved from 3 hollow passes to 0."
+    "same_settings_baseline": {
+      "settings": {
+        "provider": "openai-local",
+        "model": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+        "thinking": "off",
+        "temperature": 0.0,
+        "rag_enabled": true,
+        "harness_mode": "full --regenerate",
+        "dataset_tree_hash": "a8acb0fadb054bb67c58966280fd6258b034a94a",
+        "note": "Same provider, model file, thinking, temperature, RAG flag and harness mode, and the identical committed golden dataset (the last dataset change was c20c1d2 on 2026-10-03), as this 2026-10-12 run. The code commit differs - that is the change under measure - and the LLM draw is not seeded."
+      },
+      "latest_same_settings_run": {
+        "recorded_at": "2026-10-09",
+        "git_commit": "c68fe5f",
+        "gate1": "89/113 (78.8%)"
+      },
+      "same_settings_band": {
+        "runs": [
+          "2026-10-08T14:56 89/113 (d0444fd)",
+          "2026-10-08T19:32 92/113 (8e4366b)",
+          "2026-10-09T00:30 89/113 (c68fe5f)"
+        ],
+        "range": "89-92/113 (78.8-81.4%)"
+      },
+      "delta_vs_latest": "+5 placeholders (89 -> 94) = +4.4 percentage points",
+      "delta_vs_band_best": "+2 placeholders (92 -> 94) = +1.8 percentage points",
+      "per_story_delta_vs_latest": {
+        "eval-001": "17/20 -> 17/20",
+        "eval-002": "6/8 -> 6/8",
+        "eval-003": "7/8 -> 7/8",
+        "eval-004": "1/7 -> 4/7 (+3, the known flaky story)",
+        "eval-005": "21/24 -> 21/24",
+        "eval-006": "14/16 -> 14/16",
+        "eval-007": "11/13 -> 13/13 (+2, the code movement)",
+        "eval-008": "10/13 -> 10/13",
+        "eval-010": "2/4 -> 2/4"
+      },
+      "note": "Like-for-like on settings and fixtures. Of the +5 over the latest same-settings run, +3 is eval-004 (the flaky story: 1/7 on that draw, 4/7 on this one) and +2 is eval-007 (c6 pay-bill and c7 payment-success). Against the best of the same-settings band (92) the movement is +2. The unseeded LLM draw is the residual variance."
+    },
+    "superseded_latest_recorded": {
+      "recorded_at": "2026-09-25",
+      "gate1": "82/113 (72.6%)",
+      "gate2_false_greens": 3,
+      "note": "Not like-for-like: a different generation (Session 10), from before the B-054/B-096/t-0542 fixes, re-scored in Session 13; its evidence was deleted. Kept for history only - do not read 82 -> 94 as a same-settings gate movement."
+    }
   },
   "flaky_story": {
     "story_id": "eval-004",

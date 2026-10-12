@@ -82,15 +82,39 @@ asserting `#place-order`) are gone on this draw.
   per-story number is not repeatable; treat an eval-004 delta as draw noise, not a regression.
   The overall figure carries that jitter.
 
-## 5. Comparison with the recorded number
+## 5. Comparison - like-for-like on settings, not against the 82/113 record
 
-The recorded last re-score was **82/113 (72.6%) and 3 hollow passes** (2026-09-25, Session 13:
-a re-score of Session 10's generation). This run gives **94/113 (83.2%) and 0**. The difference is
-not one variable: the fix classes that landed since the record (B-054 hidden-step pool, B-096
-same-page twins, t-0542/t-0556/t-0560 generic-ASSERT guards, B-100 global-container check) are in
-HEAD for this run, and it is a different LLM draw. Nothing was adjusted to reach 83.2%. Both the
-reported 3 hollow passes and this 0 are consistent with the t-0749 scout: the container and
-same-page-twin classes are fixed in HEAD; the page-arrival, polarity and capture classes remain.
+The right comparison is the latest run with the **same settings**, not the 2026-09-25 record.
+
+Settings of the runs compared (this run and the same-settings baseline):
+
+- provider `openai-local`; model file `Qwen3.8-27B-UD-Q4_K_XL_v2.gguf`; thinking off;
+  temperature 0.0; `RAG_ENABLED=1`; harness mode `full --regenerate`.
+- The committed golden dataset is identical (tree hash `a8acb0fadb054bb67c58966280fd6258b034a94a`,
+  unchanged since the last dataset commit c20c1d2 on 2026-10-03).
+- The only differences are the code commit (the fixes under measure) and the unseeded LLM draw.
+
+Same-settings runs before this one (from `eval_runs`, same model / config / RAG / fixtures):
+
+| Run | Commit | Gate 1 |
+|---|---|---|
+| 2026-10-08 14:56 | d0444fd | 89/113 |
+| 2026-10-08 19:32 | 8e4366b | 92/113 |
+| 2026-10-09 00:30 (latest) | c68fe5f | 89/113 |
+| **2026-10-12 23:39 (this run)** | **1138cc5** | **94/113** |
+
+Movement: **+5 against the latest same-settings run (89 -> 94)**; **+2 against the best of the
+same-settings band (92 -> 94)**. Of the +5, **+3 is eval-004** (the known flaky story: 1/7 on that
+draw, 4/7 on this one) and **+2 is eval-007** (c6 pay-bill / c7 payment-success - the
+submit-control change). No other story moved, so the code-attributable movement is **+2** and the
+rest is draw noise.
+
+The 82/113 (2026-09-25) record is **not** a like-for-like baseline: a different generation
+(Session 10, before B-054/B-096/t-0542), re-scored in Session 13, with its evidence deleted. Do not
+read 82 -> 94 as a same-settings gate movement. Gate 2's move from 3 hollow passes to 0 is real for
+this run, but the two runs are not the same draw. Both the 3 then and the 0 now are consistent with
+the t-0749 scout: the container and same-page-twin classes are fixed in HEAD; page-arrival,
+polarity and capture remain.
 
 ## 6. Evidence
 
