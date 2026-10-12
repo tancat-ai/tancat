@@ -125,3 +125,43 @@ def test_tancat_conditions_match_the_landing_page() -> None:
         assert removed not in page, f"removed control reappeared on the page: {removed!r}"
     for control in ("See how it works", "Install locally"):
         assert control in page, f"story names a control the page lacks: {control!r}"
+
+
+def test_count_rag_symptoms_separates_failures_from_goaways() -> None:
+    """t-0695/t-0698: two counts, two log strings. The failure marker is the
+    gRPC symptom line 'details = "Too many pings"' - NOT '_InactiveRpcError'
+    (that class name appears twice per failure). The 'Got goaway ...
+    too_many_pings' line is the same throttle event as the 'Received a GOAWAY'
+    line, so it must not be counted twice."""
+    log = (
+        "grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:\n"
+        "\tstatus = StatusCode.UNAVAILABLE\n"
+        '\tdetails = "Too many pings"\n'
+        '\tdebug_error_string = "UNAVAILABLE:Too many pings"\n'
+        ">\n"
+        "I1011 chttp2_transport.cc:1393] Got goaway [11] err=UNAVAILABLE:GOAWAY received; "
+        "Debug Text: too_many_pings {http2_error:11}\n"
+        "E1011 chttp2_transport.cc:1425] Received a GOAWAY with error code ENHANCE_YOUR_CALM "
+        'and debug data equal to "too_many_pings"\n'
+        "ordinary run output\n"
+    )
+
+    assert _load_uat_module().count_rag_symptoms(log) == (1, 1)
+
+
+def test_count_rag_symptoms_ignores_an_unrelated_grpc_failure() -> None:
+    """t-0698: an unrelated gRPC failure is also an _InactiveRpcError, so the
+    old marker counted it. Only the 'Too many pings' symptom line counts."""
+    log = (
+        "grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:\n"
+        "\tstatus = StatusCode.DEADLINE_EXCEEDED\n"
+        '\tdetails = "Deadline Exceeded"\n'
+        '\tdebug_error_string = "DEADLINE_EXCEEDED:Deadline Exceeded"\n'
+        ">\n"
+    )
+
+    assert _load_uat_module().count_rag_symptoms(log) == (0, 0)
+
+
+def test_count_rag_symptoms_is_zero_on_a_clean_run() -> None:
+    assert _load_uat_module().count_rag_symptoms("OVERALL: 37 passed, 2 failed\n") == (0, 0)
