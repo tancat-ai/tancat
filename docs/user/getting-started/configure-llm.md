@@ -1,3 +1,7 @@
+---
+description: Point TanCat at your own LLM - local llama.cpp, Ollama, LM Studio, or a cloud provider. Providers, environment variables, and timeouts.
+---
+
 # Configure your LLM
 
 TanCat does not ship a model. You point it at one. Everything else - generation,

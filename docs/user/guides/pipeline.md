@@ -1,3 +1,7 @@
+---
+description: How the TanCat pipeline works - story analysis, live DOM scraping, skeleton generation, placeholder resolution, execution, and evidence.
+---
+
 # How the pipeline works
 
 The pipeline turns a story into a runnable test file in six stages. Two of them

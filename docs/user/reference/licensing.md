@@ -1,3 +1,7 @@
+---
+description: TanCat licensing and tiers - the free limits, how to install a Pro licence key, and what the paid tiers add to a deployment.
+---
+
 # Licensing and tiers
 
 TanCat runs unlicensed on the **Free** tier. A licence key raises the limits and

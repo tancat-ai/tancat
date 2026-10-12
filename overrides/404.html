@@ -1,0 +1,21 @@
+{#-
+  Docs-site 404. MkDocs builds this to /docs/404.html on every build.
+
+  Note: GitHub Pages serves only the ROOT 404.html for a missing URL, at any
+  depth, so `landing/404.html` is what a real /docs/<missing> request gets.
+  This page is the equivalent for a host that serves a per-directory 404, and
+  keeps the docs site self-contained. Links are absolute so the page works at
+  whatever path it is served from.
+-#}
+{% extends "main.html" %}
+{% block content %}
+  <h1>Page not found</h1>
+  <p>That documentation page does not exist, or the address has a typo.</p>
+  <ul>
+    <li><a href="/docs/">TanCat user documentation</a> - the docs home.</li>
+    <li><a href="/docs/getting-started/install/">Install</a> - requirements, <code>uv sync</code>, Chromium, Docker.</li>
+    <li><a href="/docs/getting-started/first-run/">Your first run</a> - one story end to end.</li>
+    <li><a href="https://tancat.dev/">Landing page</a> - the product site.</li>
+  </ul>
+  <p>Still stuck? Email <a href="mailto:hello@tancat.dev">hello@tancat.dev</a>.</p>
+{% endblock %}

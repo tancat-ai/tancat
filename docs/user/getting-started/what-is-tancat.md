@@ -1,3 +1,7 @@
+---
+description: What TanCat is - a self-hosted tool that turns a plain-language user story into executable Playwright pytest tests using your own LLM.
+---
+
 # What TanCat is
 
 TanCat turns a plain-language user story into executable Playwright pytest

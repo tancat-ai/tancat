@@ -16,6 +16,7 @@ on:
     paths:
       - "landing/**"
       - "docs/user/**"
+      - "overrides/**"
       - "mkdocs.yml"
       - "pyproject.toml"
       - "uv.lock"
