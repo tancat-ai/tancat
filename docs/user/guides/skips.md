@@ -1,3 +1,7 @@
+---
+description: Why TanCat skips an unresolved criterion instead of guessing - placeholders, score-gated resolution, and what a skip means in a test run.
+---
+
 # Placeholders, resolution and skips
 
 This is the feature that makes TanCat's output trustworthy: when the resolver is

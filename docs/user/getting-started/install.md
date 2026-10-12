@@ -1,3 +1,7 @@
+---
+description: Install TanCat - Python 3.14 or newer, uv sync, the Chromium browser, and Docker. Requirements and setup for the self-hosted test generator.
+---
+
 # Install
 
 ## Requirements

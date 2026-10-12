@@ -1,3 +1,7 @@
+---
+description: TanCat user documentation. Install the tool, configure your own LLM, and generate executable Playwright pytest tests from user stories.
+---
+
 # TanCat user documentation
 
 TanCat generates executable Playwright pytest tests from a user story. You paste

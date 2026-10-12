@@ -1,3 +1,7 @@
+---
+description: Your first TanCat run - one user story end to end, from paste to generated Playwright pytest test, with the expected output at each stage.
+---
+
 # Your first run
 
 This page takes one real story through the whole pipeline. It is the same story

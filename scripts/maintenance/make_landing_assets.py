@@ -19,7 +19,10 @@ Writes into ``landing/``:
 
 The icons come from ``landing/logo_transparent.png``, flattened onto the page's
 ``--midnight`` background (#070b10) so they look identical on light and dark
-browser chrome.
+browser chrome. The same ``favicon.ico`` is written to
+``docs/user/assets/favicon.ico`` for the MkDocs site (``theme.favicon``),
+because MkDocs will not read a path outside ``docs_dir``; the two copies are
+byte-identical and this generator keeps them in step.
 
 The OG card, both preview screenshots and the install/licence PDF are **real
 renders of their source pages**, not hand-made graphics -- so they can never
@@ -66,6 +69,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LANDING = REPO_ROOT / "landing"
 LOGO = LANDING / "logo_transparent.png"
 INDEX = LANDING / "index.html"
+#: MkDocs `theme.favicon` resolves inside docs_dir, so the icon is copied here.
+#: Kept byte-identical to landing/favicon.ico by build_icons().
+DOCS_FAVICON = REPO_ROOT / "docs" / "user" / "assets" / "favicon.ico"
 #: The one-page Pro install/licence document Lemon Squeezy ships. Its source is
 #: an HTML file so the PDF can be rebuilt instead of hand-edited.
 INSTALL_HTML = REPO_ROOT / "docs" / "implementation" / "tancat-pro-install-and-licence.html"
@@ -155,6 +161,10 @@ def build_icons(logo_path: Path = LOGO, out_dir: Path = LANDING) -> list[Path]:
     favicon_path = out_dir / "favicon.ico"
     _flattened_logo(256, logo).save(favicon_path, sizes=[(s, s) for s in FAVICON_SIZES])
     written.append(favicon_path)
+    # The docs site's favicon must live under docs_dir; keep it identical.
+    DOCS_FAVICON.parent.mkdir(parents=True, exist_ok=True)
+    DOCS_FAVICON.write_bytes(favicon_path.read_bytes())
+    written.append(DOCS_FAVICON)
 
     for name, size in PNG_ICONS.items():
         path = out_dir / name

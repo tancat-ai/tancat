@@ -1,3 +1,7 @@
+---
+description: The evidence and reports a TanCat run writes - per-step records, screenshots, run history, and HTML, CSV, NDJSON, and JUnit XML exports.
+---
+
 # Evidence and reports
 
 Every run writes evidence you can inspect. TanCat records each step, captures a
