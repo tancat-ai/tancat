@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -333,6 +335,55 @@ class TestRunPytest:
         )
         result = SelfHealingRunner._run_pytest(test_file, test_names=["test_a"])
         assert result.total == 1
+        assert result.failed == 0
+
+    def test_run_pytest_pins_utf8_decoding(self, tmp_path: Path) -> None:
+        """The decode must be explicit, not the interpreter's locale default.
+
+        On Linux (CI) ``text=True`` already defaults to UTF-8, so a byte test
+        alone cannot catch a regression there. This asserts the kwargs the fix
+        added, so the Windows behaviour stays covered on every platform.
+        """
+        test_file = tmp_path / "test_pin.py"
+        test_file.write_text("def test_pass():\n    assert True\n", encoding="utf-8")
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            SelfHealingRunner._run_pytest(test_file)
+
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs["encoding"] == "utf-8"
+        assert kwargs["errors"] == "replace"
+
+    def test_survives_non_cp1252_bytes_and_parses_results(self, tmp_path: Path) -> None:
+        """A byte outside cp1252 in the output must not crash the run (t-0717).
+
+        Same shape as the PipelineRunService fix (j-0141): the child writes
+        the 0x81 UTF-8 byte (undefined in cp1252) followed by a normal pytest
+        summary, and the real result must still parse.
+        """
+        test_file = tmp_path / "test_encoding.py"
+        test_file.write_text("def test_probe():\n    assert True\n", encoding="utf-8")
+        real_run = subprocess.run
+        child = (
+            "import sys\n"
+            "sys.stdout.buffer.write(chr(0x81).encode('utf-8'))\n"
+            "sys.stdout.flush()\n"
+            "print()\n"
+            "print('generated_tests/test_demo.py::test_probe PASSED [100%]')\n"
+            "print('=' * 30 + ' 1 passed in 0.01s ' + '=' * 30)\n"
+        )
+
+        def run_child(_cmd: list[str], **kwargs: Any) -> Any:
+            # Exercise the real subprocess decode path, with the kwargs
+            # _run_pytest passed, but with a child that emits the byte.
+            return real_run([sys.executable, "-c", child], **kwargs)
+
+        with patch("subprocess.run", run_child):
+            result = SelfHealingRunner._run_pytest(test_file)
+
+        assert result.total == 1
+        assert result.passed == 1
         assert result.failed == 0
 
 
