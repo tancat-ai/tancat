@@ -125,6 +125,81 @@ def test_model_not_in_list() -> None:
     assert "not in the" in " ".join(result.errors)
 
 
+def test_stored_alias_matches_advertised_gguf_path() -> None:
+    """llama.cpp advertises the GGUF path; the app stores 'llama' (t-0715).
+
+    On a fresh launch the openai-local default model is ``llama`` while
+    /v1/models advertises the loaded GGUF path. The health check must accept
+    the stored name as naming that model, so the report is green.
+    """
+    from src.llm_health import check_llm
+
+    client = FakeLLMClient(
+        provider="openai-local",
+        base_url="http://127.0.0.1:8080/v1",
+        model="llama",
+        models=[r"C:\Users\demo\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf"],
+        probe_result="pong",
+    )
+    result = check_llm(client, context_floor=0)
+
+    assert result.model_available is True
+    assert result.ok is True
+    assert "OK" in result.headline
+
+
+def test_substring_model_name_matches_advertised_path() -> None:
+    """A short stored name is accepted when it is a substring of the path."""
+    from src.llm_health import check_llm
+
+    client = FakeLLMClient(
+        provider="openai-local",
+        model="Qwen3.8-27B",
+        models=["/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf"],
+        probe_result="pong",
+    )
+    result = check_llm(client, context_floor=0)
+
+    assert result.model_available is True
+    assert result.ok is True
+
+
+def test_unrelated_model_still_not_available() -> None:
+    """The looser match must not turn a wrong model into a pass."""
+    from src.llm_health import check_llm
+
+    client = FakeLLMClient(
+        provider="openai-local",
+        model="totally-different-model",
+        models=[r"C:\models\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf"],
+        probe_result="pong",
+    )
+    result = check_llm(client, context_floor=0)
+
+    assert result.model_available is False
+    assert result.ok is False
+
+
+def test_alias_not_accepted_on_multi_model_endpoint() -> None:
+    """A generic alias only names the loaded model when one model is advertised."""
+    from src.llm_health import _model_matches
+
+    assert _model_matches("llama", [r"C:\models\a.gguf", r"C:\models\b.gguf"], provider="lm-studio") is False
+    assert _model_matches("llama", [r"C:\models\a.gguf"], provider="lm-studio") is True
+
+
+def test_check_llm_default_list_timeout_is_realistic() -> None:
+    """The health-check list timeout must clear a slow local server (t-0715)."""
+    import inspect
+
+    from src.llm_health import check_llm
+    from src.provider_config import LOCAL_MODEL_LIST_TIMEOUT
+
+    default = inspect.signature(check_llm).parameters["list_timeout"].default
+    assert default == LOCAL_MODEL_LIST_TIMEOUT
+    assert default >= 10  # 2s timed out on the demo server; 7s was too close.
+
+
 def test_empty_probe_response_is_not_ok() -> None:
     """A reachable endpoint that returns empty content is flagged (thinking-class)."""
     from src.llm_health import check_llm
