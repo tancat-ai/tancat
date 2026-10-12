@@ -37,7 +37,7 @@ dependencies = [
     #             (underscore) - the server throttled, recovery follows.
     # Keep both counts: failed operations must stay 0; a GOAWAY the client
     # cannot recover from is the leading indicator that this pin is broken.
-    "pymilvus[milvus-lite]==3.0.0",
+    "pymilvus[milvus-lite]==3.0.2",
     "sentence-transformers==6.1.0",
     "milvus-lite==3.2.1",
     "langgraph>=1.2.9",
