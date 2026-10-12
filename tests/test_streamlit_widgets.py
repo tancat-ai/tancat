@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from tests.streamlit_app_test_helpers import build_sidebar_app, expected_text_input_labels
+from tests.streamlit_app_test_helpers import EXACT_SET_HINT, build_sidebar_app, expected_text_input_labels
 
 APP_PATH = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
@@ -190,7 +190,9 @@ class TestUrlInputs:
     def test_has_sidebar_text_inputs(self, at: AppTest) -> None:
         """Sidebar text_inputs must be exactly the expected set."""
         labels = [w.label for w in at.sidebar.text_input]
-        assert set(labels) == expected_text_input_labels(), f"Sidebar text_input set changed. Got: {labels}"
+        assert set(labels) == expected_text_input_labels(), (
+            f"Sidebar text_input set changed. Got: {labels}{EXACT_SET_HINT}"
+        )
 
     def test_additional_urls_text_area_exists(self, at: AppTest) -> None:
         """Additional URLs must be the only text_area in the sidebar."""

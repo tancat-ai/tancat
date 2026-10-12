@@ -29,6 +29,7 @@ from tests.streamlit_app_test_helpers import (
     BASE_TEXT_AREA_LABELS,
     BASE_TOGGLE_LABELS,
     CHECK_LLM_BUTTON,
+    EXACT_SET_HINT,
     LICENCE_BUTTON_LABELS,
     build_sidebar_app,
     expected_selectbox_labels,
@@ -72,23 +73,29 @@ class TestSidebarWidgets:
     def test_sidebar_selectbox_set_is_exact(self, at: AppTest) -> None:
         """Sidebar selectboxes must be exactly the expected set, no more, no less."""
         labels = [w.label for w in at.sidebar.selectbox]
-        assert set(labels) == expected_selectbox_labels(), f"Sidebar selectbox set changed. Got: {labels}"
+        assert set(labels) == expected_selectbox_labels(), (
+            f"Sidebar selectbox set changed. Got: {labels}{EXACT_SET_HINT}"
+        )
         assert len(labels) == len(set(labels)), f"Duplicate selectbox labels. Got: {labels}"
 
     def test_sidebar_text_input_set_is_exact(self, at: AppTest) -> None:
         """Sidebar text_inputs must be exactly the expected set."""
         labels = [w.label for w in at.sidebar.text_input]
-        assert set(labels) == expected_text_input_labels(), f"Sidebar text_input set changed. Got: {labels}"
+        assert set(labels) == expected_text_input_labels(), (
+            f"Sidebar text_input set changed. Got: {labels}{EXACT_SET_HINT}"
+        )
 
     def test_sidebar_text_area_set_is_exact(self, at: AppTest) -> None:
         """Sidebar text_areas must be exactly the Additional URLs field."""
         labels = [w.label for w in at.sidebar.text_area]
-        assert set(labels) == set(BASE_TEXT_AREA_LABELS), f"Sidebar text_area set changed. Got: {labels}"
+        assert set(labels) == set(BASE_TEXT_AREA_LABELS), (
+            f"Sidebar text_area set changed. Got: {labels}{EXACT_SET_HINT}"
+        )
 
     def test_sidebar_toggle_set_is_exact(self, at: AppTest) -> None:
         """Sidebar toggles must be exactly the Page Object Model toggle."""
         labels = [w.label for w in at.sidebar.toggle]
-        assert set(labels) == set(BASE_TOGGLE_LABELS), f"Sidebar toggle set changed. Got: {labels}"
+        assert set(labels) == set(BASE_TOGGLE_LABELS), f"Sidebar toggle set changed. Got: {labels}{EXACT_SET_HINT}"
 
     def test_sidebar_button_set_is_exact(self, at: AppTest) -> None:
         """Sidebar buttons must be exactly "Check My LLM" plus one licence action.

@@ -23,11 +23,20 @@ def _app_test() -> Generator[AppTest]:
     mock_llm.generate = MagicMock(return_value="")
     mock_llm.list_models = MagicMock(return_value=[])
 
+    mock_llm_class = MagicMock()
+    mock_llm_class.return_value = mock_llm
+    mock_llm_class.set_session_provider = MagicMock()
+
     def _fake_exists(self: Path) -> bool:
         return False
 
     with (
-        patch("streamlit_app.LLMClient", new=mock_llm),
+        # Patch the SOURCE class. AppTest executes streamlit_app.py itself, and
+        # the script does ``from src.llm_client import LLMClient``, so patching
+        # ``streamlit_app.LLMClient`` (a separate import of the file) never
+        # reaches the executed script - the tests would then build a real
+        # client and call whatever LLM server the host has running.
+        patch("src.llm_client.LLMClient", new=mock_llm_class),
         patch.object(Path, "exists", _fake_exists),
     ):
         at = AppTest.from_file(APP_PATH)
