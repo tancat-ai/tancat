@@ -25,6 +25,7 @@ except ImportError:
 from src.llm_client import LLMClient
 from src.project import apply_rag_scope, project_workspace
 from src.provider_config import (
+    LOCAL_MODEL_LIST_TIMEOUT,
     api_key_env_var,
     get_provider_defaults,
     provider_requires_openai_api_key,
@@ -177,7 +178,9 @@ LLMClient.set_session_provider(provider, provider_base_url)
 available_models: list[str] = []
 try:
     temp_client = LLMClient(provider=provider, base_url=provider_base_url)
-    available_models = temp_client.list_models(timeout=2)
+    # t-0715: 2s was shorter than llama.cpp's first /v1/models answer (~7s on a
+    # cold load), so the dropdown rendered empty. Use the shared realistic cap.
+    available_models = temp_client.list_models(timeout=LOCAL_MODEL_LIST_TIMEOUT)
 except Exception:
     pass
 

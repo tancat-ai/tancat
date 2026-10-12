@@ -40,6 +40,15 @@ PROVIDER_LABELS: dict[str, str] = {
     OPENROUTER_PROVIDER: "OpenRouter (cloud)",
 }
 
+# Model-list timeout (seconds) for a local OpenAI-compatible server.
+#
+# A 2s probe was too short: llama.cpp can take several seconds to answer
+# `/v1/models` (7s seen at the t-0706 rehearsal) while it loads the model.
+# The UI sidebar swallowed the timeout and rendered an empty model dropdown.
+# 15s is the realistic ceiling shared by the sidebar, the CLI and the health
+# check so a slow first call still populates the list.
+LOCAL_MODEL_LIST_TIMEOUT = 15
+
 
 def get_provider_defaults(provider: str) -> tuple[str, str]:
     """Return (base_url, model) defaults for the given provider.

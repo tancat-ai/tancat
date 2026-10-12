@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from src.provider_config import (
+    LOCAL_MODEL_LIST_TIMEOUT,
     PROVIDER_LABELS,
     SUPPORTED_PROVIDERS,
     api_key_env_var,
@@ -351,15 +352,18 @@ def _get_available_models(provider_name: str, provider_url: str) -> list[str]:
 
     try:
         if provider_name == "ollama":
-            response = httpx.get(f"{provider_url}/api/tags", timeout=2.0)
+            # t-0715: local servers can take several seconds to answer the
+            # first model-list call (llama.cpp ~7s while loading). A 2s probe
+            # returned an empty list; use the shared realistic cap.
+            response = httpx.get(f"{provider_url}/api/tags", timeout=LOCAL_MODEL_LIST_TIMEOUT)
             response.raise_for_status()
             return [m["name"] for m in response.json().get("models", [])]
         elif provider_name == "lm-studio":
-            response = httpx.get(f"{provider_url}/v1/models", timeout=2.0)
+            response = httpx.get(f"{provider_url}/v1/models", timeout=LOCAL_MODEL_LIST_TIMEOUT)
             response.raise_for_status()
             return [m["id"] for m in response.json().get("data", [])]
         elif provider_name == "openai-local":
-            response = httpx.get(f"{provider_url}/v1/models", timeout=2.0)
+            response = httpx.get(f"{provider_url}/v1/models", timeout=LOCAL_MODEL_LIST_TIMEOUT)
             if response.status_code in (200, 401):
                 return [m["id"] for m in response.json().get("data", [])]
             return []
