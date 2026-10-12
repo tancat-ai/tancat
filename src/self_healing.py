@@ -429,6 +429,13 @@ class SelfHealingRunner:
                 cmd,
                 capture_output=True,
                 text=True,
+                # pytest output is UTF-8. On Windows the default ``text=True``
+                # codec is the locale (cp1252), and a byte outside it (0x81 in
+                # a failure traceback) raised UnicodeDecodeError - the same
+                # crash j-0141 fixed in PipelineRunService, reached here by the
+                # "Self-Heal Failed Tests" button. Decode explicitly.
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout_secs,
                 cwd=str(test_path.parent.parent),  # repo root
             )
