@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 
 _EVAL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "eval"
+_REPO_ROOT = _EVAL_DIR.parents[1]
 sys.path.insert(0, str(_EVAL_DIR))
 
 import rescore  # noqa: E402
@@ -201,16 +202,33 @@ class TestEvidenceGuard:
         assert code == 2
 
     def test_recorded_score_file_is_present_and_honest(self) -> None:
-        """The current gate record is on disk and re-scorable; the old one is kept."""
+        """The current gate record is on disk and its evidence is committed, so it re-scores."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         assert (payload["gate1_correct"], payload["gate1_total"]) == (94, 113)
         assert payload["gate2_false_greens"] == 0
-        # The run that produced it kept its evidence, so the record is re-scorable.
-        assert payload["evidence_dir"].endswith("2026-10-12_heldout")
+        # The evidence is in the tracked tree, not the worktree's gitignored scratch.
+        evidence_dir = _REPO_ROOT / payload["evidence_dir"]
+        assert evidence_dir.is_dir(), payload["evidence_dir"]
+        assert verify_run_evidence(evidence_dir) == []
         # The superseded 82/113 + 3 record is preserved, with the reason it was replaced.
         assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (82, 113)
         assert payload["previous"]["gate2_false_greens"] == 3
         assert "deleted" in payload["previous"]["note"]
+
+    def test_committed_heldout_evidence_rescores_to_the_record(self) -> None:
+        """The tracked evidence re-scores to the recorded 94/113 and 0 with no model.
+
+        This is the durability guard: the record depends on a committed re-score input,
+        not on a worktree's gitignored scratch directory.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        run_dir = _REPO_ROOT / payload["evidence_dir"]
+
+        report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
+
+        assert report.correct_resolutions == payload["gate1_correct"]
+        assert report.total_placeholders == payload["gate1_total"]
+        assert report.total_false_positives == payload["gate2_false_greens"]
 
 
 class TestHarnessEvidenceHook:

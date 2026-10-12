@@ -19,8 +19,9 @@
     "rag": "on (bundled pack)"
   },
   "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0750 --evidence-dir scratch/eval_runs/2026-10-12_heldout",
-  "evidence_dir": "scratch/eval_runs/2026-10-12_heldout",
-  "re_scored": "python scripts/eval/rescore.py --run-dir scratch/eval_runs/2026-10-12_heldout -> 94/113, 0",
+  "evidence_dir": "fixtures/heldout_runs/2026-10-12",
+  "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-12/ (manifest.json, results.json, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
+  "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-12 -> 94/113, 0 (from the tracked tree, no model)",
   "wall_clock_minutes": 51,
   "mean_generation_s": 210.4,
   "per_story": {
@@ -55,7 +56,7 @@
         "temperature": 0.0,
         "rag_enabled": true,
         "harness_mode": "full --regenerate",
-        "dataset_tree_hash": "a8acb0fadb054bb67c58966280fd6258b034a94a",
+        "dataset_tree_hash": "a8acb0fadb054bb67c58966280fd6258b034a90a",
         "note": "Same provider, model file, thinking, temperature, RAG flag and harness mode, and the identical committed golden dataset (the last dataset change was c20c1d2 on 2026-10-03), as this 2026-10-12 run. The code commit differs - that is the change under measure - and the LLM draw is not seeded."
       },
       "latest_same_settings_run": {
@@ -132,5 +133,5 @@
     "gate2_false_greens": 3,
     "note": "The run that produced this was deleted - scratch/gate1_full.log and the emitted dirs gate1_out*/gate2_out* are gone - so it cannot be re-scored. Superseded by the 2026-10-12 run, which kept its evidence and re-scores to the same numbers."
   },
-  "note": "The 2026-10-12 run kept its evidence in scratch/eval_runs/2026-10-12_heldout and re-scores with no model to the same 94/113 and 0 (scripts/eval/rescore.py). The superseded 82/113 + 3 record, whose evidence was deleted, is preserved under 'previous'. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-12_heldout_gates.md."
+  "note": "The minimal re-score input for the 2026-10-12 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-12/ and re-scores with no model to the same 94/113 and 0 from the repo alone (scripts/eval/rescore.py). The superseded 82/113 + 3 record, whose scratch evidence was deleted and never committed, is preserved under 'previous' - that is the durability difference this record fixes. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-12_heldout_gates.md."
 }

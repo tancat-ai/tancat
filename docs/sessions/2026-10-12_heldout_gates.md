@@ -90,7 +90,7 @@ Settings of the runs compared (this run and the same-settings baseline):
 
 - provider `openai-local`; model file `Qwen3.8-27B-UD-Q4_K_XL_v2.gguf`; thinking off;
   temperature 0.0; `RAG_ENABLED=1`; harness mode `full --regenerate`.
-- The committed golden dataset is identical (tree hash `a8acb0fadb054bb67c58966280fd6258b034a94a`,
+- The committed golden dataset is identical (tree hash `a8acb0fadb054bb67c58966280fd6258b034a90a`,
   unchanged since the last dataset commit c20c1d2 on 2026-10-03).
 - The only differences are the code commit (the fixes under measure) and the unseeded LLM draw.
 
@@ -120,6 +120,11 @@ polarity and capture remain.
 
 - Gate record: `scripts/eval/known_gate_scores.json` (updated 2026-10-12; the 82/113 + 3 record is
   preserved under `previous`).
-- Run evidence: `scratch/eval_runs/2026-10-12_heldout/` (gitignored, ~1 MB) - re-score with
-  `python scripts/eval/rescore.py --run-dir scratch/eval_runs/2026-10-12_heldout`.
-- Raw log: `scratch/t0750_heldout.log`; harness rollup: `scratch/t0750_report.txt` (gitignored).
+- Re-score input (tracked): `fixtures/heldout_runs/2026-10-12/` - `manifest.json`, `results.json`,
+  `emitted/` (the 9 per-story tests), `junit/` (the per-test outcomes) and
+  `verification_strength.json`. Re-score from the repo alone, no model:
+  `python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-12` -> 94/113, 0.
+  `tests/test_eval_rescore.py::test_committed_heldout_evidence_rescores_to_the_record` runs this
+  in CI, so the record cannot rot again.
+- Not committed (not needed by `rescore.py`): the raw pytest logs (`pytest/`), the harness log and
+  the full rollup. The worktree copy under `scratch/eval_runs/2026-10-12_heldout/` is transient.
