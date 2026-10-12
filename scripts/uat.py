@@ -744,7 +744,7 @@ def _rag_stack_versions() -> str:
     )
 
 
-_RAG_FAILURE_MARKER = "_InactiveRpcError"
+_RAG_FAILURE_MARKER = 'details = "Too many pings"'
 _RAG_GOAWAY_MARKER = "Received a GOAWAY"
 
 
@@ -754,8 +754,10 @@ def count_rag_symptoms(text: str) -> tuple[int, int]:
     Both are gRPC "Too many pings" symptoms, but two different log strings - the
     keepalive record asks a reader to keep both visible:
 
-    * failure - the Python ``_InactiveRpcError`` traceback line ("Too many
-      pings", spaces): the operation raised;
+    * failure - the gRPC symptom line ``details = "Too many pings"`` (spaces):
+      the operation raised. Deliberately NOT ``_InactiveRpcError`` - that class
+      name appears twice per failure and also on unrelated RPC errors such as
+      DEADLINE_EXCEEDED (t-0698);
     * GOAWAY - the C-core transport line ``Received a GOAWAY`` /
       ``too_many_pings`` (underscore): the server throttled and the client
       recovers. Counted on the ``Received a GOAWAY`` line alone, because the
@@ -867,6 +869,7 @@ async def main() -> int:
     # t-0695: the two counts the keepalive record asks a reader to watch, so the
     # run log does not have to be grepped for them.
     failed_ops, goaways = count_rag_symptoms(stderr_log.read_text(encoding="utf-8", errors="replace"))
+    stderr_log.unlink(missing_ok=True)
     print(f"RAG symptoms: failed operations={failed_ops}, GOAWAYs received={goaways}")
 
     # Save / Compare

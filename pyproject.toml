@@ -26,11 +26,13 @@ dependencies = [
     # RAG: do not bump without reading the keepalive note by the grpcio
     # constraint in [tool.uv]. 3.0.2 stopped the client recovering from the
     # gRPC ping throttle; 3.0.0 restores recovery, so the RPC FAILURES fall to
-    # zero (three-site UAT: 12 failed operations before -> 0 after) while the
+    # zero (three-site UAT: 6 failed operations before -> 0 after) while the
     # throttle itself is NOT gone - GOAWAYs actually rise (3 -> 4) and the
     # client recovers from them. Two different log strings measure the two:
-    #   failure = Python "_InactiveRpcError ... details = 'Too many pings'"
-    #             (spaces) - the operation raised;
+    #   failure = the gRPC symptom line 'details = "Too many pings"' (spaces) -
+    #             the operation raised; counted on that line alone, because an
+    #             "_InactiveRpcError" appears twice per failure and also for
+    #             unrelated RPC errors (e.g. DEADLINE_EXCEEDED);
     #   GOAWAY  = C-core transport "Received a GOAWAY" / "too_many_pings"
     #             (underscore) - the server throttled, recovery follows.
     # Keep both counts: failed operations must stay 0; a GOAWAY the client
@@ -171,19 +173,20 @@ ignore_missing_imports = true
 override-dependencies = [
     "opencv-python ; python_version < '0'",
 ]
-# RAG keepalive regression (t-0685, figures corrected t-0693). The
+# RAG keepalive regression (t-0685; figures corrected t-0693 and t-0698). The
 # multi-site/long path logged gRPC "Too many pings" that degraded RAG retrieval
 # to no patterns. The tancat-only UAT bisect was 4 runs; pymilvus varied
 # (3.0.2 -> 3.0.0), and grpcio (1.83.0 -> 1.84.0) and milvus-lite (3.2.1 ->
-# 3.1.1) each changed once. The bisect tracks the FAILED OPERATIONS (Python
-# _InactiveRpcError), not the GOAWAYs: run 1 (pymilvus 3.0.2) = 4 failed
-# operations / 1 GOAWAY; run 3 (3.0.0) = 0 / 1. 3.0.2 keeps the same keepalive
-# options but reworks the channel/reconnect lifecycle, so it no longer recovers
-# from the throttle. The three-site UAT agrees: 3.0.2 = 12 failed / 3 GOAWAYs,
-# 3.0.0 = 0 failed / 4 GOAWAYs. grpcio is transitive (via pymilvus) and was the
-# original suspect; it is pinned to 1.83.0 anyway, though the bisect cleared it.
-# Before the Python 3.15 move this pin must be lifted - 1.83.0 has no cp315
-# wheel, so 3.15 needs a newer grpcio.
+# 3.1.1) each changed once. The bisect tracks the FAILED OPERATIONS (the gRPC
+# symptom line 'details = "Too many pings"', once per failure), not the
+# GOAWAYs: run 1 (pymilvus 3.0.2) = 2 failed operations / 1 GOAWAY; run 3
+# (3.0.0) = 0 / 1. 3.0.2 keeps the same keepalive options but reworks the
+# channel/reconnect lifecycle, so it no longer recovers from the throttle. The
+# three-site UAT agrees: 3.0.2 = 6 failed / 3 GOAWAYs, 3.0.0 = 0 failed /
+# 4 GOAWAYs. grpcio is transitive (via pymilvus) and was the original suspect;
+# it is pinned to 1.83.0 anyway, though the bisect cleared it. Before the
+# Python 3.15 move this pin must be lifted - 1.83.0 has no cp315 wheel, so 3.15
+# needs a newer grpcio.
 constraint-dependencies = [
     "grpcio==1.83.0",
 ]
