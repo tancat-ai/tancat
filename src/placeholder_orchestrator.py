@@ -1270,56 +1270,49 @@ class PlaceholderOrchestrator:
             by_url.setdefault(url, []).append(da)
 
         for url, group in by_url.items():
-            await self._ensure_scraped(url, scraped_data, scraped_errors)
-            pages_data = self._build_scoped_pages(url, scraped_data, verified=strict_scope)
-            if not pages_data and strict_scope:
-                # AI-052: the recorded page is not in the scrape inventory —
-                # these asserts are unverifiable → honest unresolved, never an
-                # all-pages cross-page match.
-                for da in group:
-                    journey_unresolved.setdefault(journey_name, []).append(da["description"])
-                    placeholder = da["placeholder"]
-                    journey_unresolved_keys.setdefault(journey_name, set()).add(
-                        (placeholder.line_number, placeholder.token)
-                    )
-                continue
-            pages_to_search = pages_data if pages_data else scraped_data
-
-            # Build excluded selectors from the last CLICK/FILL step in the journey.
-            # All ASSERTs share the same previous_selector (last interactive action).
-            excluded: set[str] | None = None
+            # t-0754 Class A: resolve each ASSERT against its own page cursor
+            # and its own preceding-selector exclusion. The old batch used one
+            # page and one previous_selector for the whole group, so a later
+            # ASSERT could re-select an earlier step's control (eval-006 c7 chose
+            # #place-order) and never advanced to the page the previous match
+            # actually lived on (checkout.html, not checkout_success.html).
+            cursor = url
             for da in group:
-                if da["previous_selector"]:
-                    excluded = {da["previous_selector"]}
-                    for elements in pages_to_search.values():
-                        for element in elements:
-                            robust = build_robust_locator(element)
-                            raw = str(element.get("selector", "")).strip()
-                            if robust == da["previous_selector"] or raw == da["previous_selector"]:
-                                if robust:
-                                    excluded.add(robust)
-                                if raw:
-                                    excluded.add(raw)
-                    break
-
-            batch_requests: list[dict[str, str]] = [
-                {"action": da["action"], "description": da["description"]} for da in group
-            ]
-
-            batch_results = await self._element_matcher.find_best_elements_batch(
-                requests=batch_requests,
-                current_url=url,
-                pages_data=pages_to_search,
-                excluded_selectors=excluded,
-            )
-
-            for i, da in enumerate(group):
                 placeholder = da["placeholder"]
                 action = da["action"]
                 description = da["description"]
                 fill_value = da["fill_value"]
 
-                matched = batch_results[i] if i < len(batch_results) else None
+                await self._ensure_scraped(cursor, scraped_data, scraped_errors)
+                pages_data = self._build_scoped_pages(cursor, scraped_data, verified=strict_scope)
+                if not pages_data and strict_scope:
+                    # AI-052: the cursor page is not in the scrape inventory —
+                    # this assert is unverifiable → honest unresolved, never an
+                    # all-pages cross-page match.
+                    journey_unresolved.setdefault(journey_name, []).append(description)
+                    journey_unresolved_keys.setdefault(journey_name, set()).add(
+                        (placeholder.line_number, placeholder.token)
+                    )
+                    continue
+                pages_to_search = pages_data if pages_data else scraped_data
+
+                # Each ASSERT excludes the selector of the step immediately
+                # before IT, not the group's first step (B-014 applied per assert).
+                excluded = self._build_excluded_selectors(
+                    action,
+                    description,
+                    da["previous_selector"],
+                    da["previous_description"],
+                    pages_to_search,
+                )
+
+                batch_results = await self._element_matcher.find_best_elements_batch(
+                    requests=[{"action": action, "description": description}],
+                    current_url=cursor,
+                    pages_data=pages_to_search,
+                    excluded_selectors=excluded or None,
+                )
+                matched = batch_results[0] if batch_results else None
 
                 if matched is not None:
                     # B-069: fallback-resolved assertions are unverified. Emit an honest
@@ -1335,13 +1328,14 @@ class PlaceholderOrchestrator:
                                 resolved_value,
                                 description,
                                 fill_value,
-                                url,
+                                cursor,
                                 None,
                             )
                         )
                         continue
 
-                    robust_selector = build_robust_locator(matched, page_elements=pages_to_search.get(url, []))
+                    source_page = self._verify_page_context(description, matched, cursor, scraped_data)
+                    robust_selector = build_robust_locator(matched, page_elements=pages_to_search.get(cursor, []))
                     if not robust_selector:
                         robust_selector = str(matched.get("selector", "")).strip()
                     selector = repr(robust_selector)
@@ -1357,10 +1351,15 @@ class PlaceholderOrchestrator:
                             selector,
                             description,
                             fill_value,
-                            url,
+                            cursor,
                             assertion_type,
                         )
                     )
+                    # Advance the page cursor to where the matched element
+                    # actually lives, so the next ASSERT is not resolved against
+                    # a stale page pool.
+                    if source_page:
+                        cursor = source_page
                 else:
                     if _is_page_level_assert(action, description):
                         line_resolutions.setdefault(placeholder.line_number, []).append(
@@ -1370,7 +1369,7 @@ class PlaceholderOrchestrator:
                                 'pytest.skip("page-level check")',
                                 description,
                                 fill_value,
-                                url,
+                                cursor,
                                 None,
                             )
                         )
