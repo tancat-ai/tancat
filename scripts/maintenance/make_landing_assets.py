@@ -128,12 +128,18 @@ ASSET_SOURCES: dict[str, tuple[str, ...]] = {
         "landing/index.html",
         "landing/tailwind.css",
         "landing/streamlit_real_1280x820.png",
+        "landing/cli_run.png",
+        "landing/ci_action.png",
+        "landing/ci-badge.svg",
         "landing/logo_transparent.png",
     ),
     "preview_mobile_390.png": (
         "landing/index.html",
         "landing/tailwind.css",
         "landing/streamlit_real_1280x820.png",
+        "landing/cli_run.png",
+        "landing/ci_action.png",
+        "landing/ci-badge.svg",
         "landing/logo_transparent.png",
     ),
     "tancat-pro-install-and-licence.pdf": (
