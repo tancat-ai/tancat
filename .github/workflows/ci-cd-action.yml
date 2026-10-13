@@ -75,7 +75,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Compute cache key
         id: cache-key
@@ -94,19 +94,19 @@ jobs:
 
       - name: Restore generated-package cache
         id: cache-restore
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ai-test-workspace/cache
           key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
 
       - name: Restore run-history (per-branch flaky markers, AI-011)
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ai-test-workspace/run-history.json
           key: ai-testgen-history-${{ github.ref }}
 
       - name: 'Restore flow-memory store (learn: true — branch-scoped)'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ai-test-workspace/evidence/flow_memory.json
           key: ai-testgen-flowmem-${{ github.ref }}
@@ -171,21 +171,21 @@ jobs:
 
       - name: Save generated-package cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ai-test-workspace/cache
           key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
 
       - name: Save run-history
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ai-test-workspace/run-history.json
           key: ai-testgen-history-${{ github.ref }}
 
       - name: Upload run artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: core-selftest-results
           path: ai-test-workspace/results/
