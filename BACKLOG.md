@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-09-25 (SHIPPED — **Gate 2 re-scored: the metric was measuring the wrong thing, and the harness was hiding it.** Session 13 changed how a "false green" is counted and fixed four measurement-integrity defects in the harness itself. **The metric** now asks "did this criterion's own test prove the claim?" — an ASSERT counts as verified by the golden answer, by a distinctively-named element, or (for page criteria) by a URL assertion on the criterion's page; and a check against a **global container** (`body`, `#content`, `main`, `main:has-text(...)`) never counts, whatever text it carries. **Why:** saucedemo's goldens are the *weaker* test in two places — `[data-test="title"]` is the site's shared page header (present on every page) and `[data-test="cart-list-container"]` proves a list exists while the generated test proved *the backpack was in the cart* — both were counted as false greens. **The harness bug:** `pytest.ini` enables xdist, and under xdist the outcome prints *before* the node id, so per-test outcomes were scraped empty and **every run reported 0 false greens**; outcomes now come from JUnit XML with a loud conservative fallback. **Result: 3 false greens (was "16"), all in eval-006 (ecommerce_mock), all the same defect — the resolver answered the cart-page, checkout-page and order-success criteria with `#place-order`, a button that exists only on `checkout.html`.** Also shipped: page-mismatch now FAILS a step (record → fail, `PageMismatchError`; the old behaviour recorded the divergence and still passed), partial-run detection (banner + exit 3), `.env` loading in the harness, the `ollama` → `openai-local` env default (AGENTS.md §5), and a polarity guard after finding `#transfer-error` blessed as "transfer success message". Gate 1 stays strict and unchanged: **82/113 (72.6%)** on this generation — Session 12's 86/113 was a different LLM draw, not a regression. Gates: 3410 pytest / 3 skipped, smoke 39/39, ruff + format clean, mypy `src/ cli/` clean, eval static 97.9%. New: **B-098** (harness `.env` + provider default), **B-099** (harness measurement integrity — xdist parse, partial-run silence, timeout default), **B-100** (product should report its own verification strength), **B-101** (golden-quality audit). Record: `docs/sessions/2026-09-25_session13_gate2_false_greens.md`.)
+Last updated: 2026-10-13 (B-093 re-measured on current main: 94/113 = 83.2%, 0 hollow passes - gate 2 now PASSES, gate 1 still FAILS the >=90% target (t-0750); B-082 re-triaged; moved planning-doc cross-references repaired.)
+
+Previous: 2026-09-25 (SHIPPED — **Gate 2 re-scored: the metric was measuring the wrong thing, and the harness was hiding it.** Session 13 changed how a "false green" is counted and fixed four measurement-integrity defects in the harness itself. **The metric** now asks "did this criterion's own test prove the claim?" — an ASSERT counts as verified by the golden answer, by a distinctively-named element, or (for page criteria) by a URL assertion on the criterion's page; and a check against a **global container** (`body`, `#content`, `main`, `main:has-text(...)`) never counts, whatever text it carries. **Why:** saucedemo's goldens are the *weaker* test in two places — `[data-test="title"]` is the site's shared page header (present on every page) and `[data-test="cart-list-container"]` proves a list exists while the generated test proved *the backpack was in the cart* — both were counted as false greens. **The harness bug:** `pytest.ini` enables xdist, and under xdist the outcome prints *before* the node id, so per-test outcomes were scraped empty and **every run reported 0 false greens**; outcomes now come from JUnit XML with a loud conservative fallback. **Result: 3 false greens (was "16"), all in eval-006 (ecommerce_mock), all the same defect — the resolver answered the cart-page, checkout-page and order-success criteria with `#place-order`, a button that exists only on `checkout.html`.** Also shipped: page-mismatch now FAILS a step (record → fail, `PageMismatchError`; the old behaviour recorded the divergence and still passed), partial-run detection (banner + exit 3), `.env` loading in the harness, the `ollama` → `openai-local` env default (AGENTS.md §5), and a polarity guard after finding `#transfer-error` blessed as "transfer success message". Gate 1 stays strict and unchanged: **82/113 (72.6%)** on this generation — Session 12's 86/113 was a different LLM draw, not a regression. Gates: 3410 pytest / 3 skipped, smoke 39/39, ruff + format clean, mypy `src/ cli/` clean, eval static 97.9%. New: **B-098** (harness `.env` + provider default), **B-099** (harness measurement integrity — xdist parse, partial-run silence, timeout default), **B-100** (product should report its own verification strength), **B-101** (golden-quality audit). Record: `docs/sessions/2026-09-25_session13_gate2_false_greens.md`.)
 
 Previous: 2026-09-25 (SHIPPED — **B-094 + B-095 + B-096 closed (measurement integrity + Pass-1 twins):** three fixes that make the held-out gate trustworthy and move it. **B-095** — the eval harness never put the checkout on `sys.path`, so a worktree run silently imported the MAIN repo's `src`; `eval_harness.py` + `eval_resolver.py` now insert `_PROJECT_ROOT`, proven by a throwaway-checkout test with a control leg. **B-096** — the backlog's scrape-order guess was wrong: the required fields carry `text="Years Licensed *"` while the optional `addDriver*` twins do not, and the scraper records `accessible_name="*"` for the required fields, so `normalise_element_text` trusted the marker and the required field was never a Pass-1 candidate; fixed marker stripping + source fallback, Pass-1 candidate collection with a deterministic scorer tie-break, and word-boundary single-word phrases (`license` matched `licensed` and was blocked from `Driving License Number` by ratio `== 3`). Live lv_insurance **16/24 → 19/24 (79%)**. **B-094** — `_persist_regenerated_tests` named the file from the site, so eval-007/eval-008 overwrote each other; now `test_<story_id>.py`, no schema change. **Full held-out re-run: 82/113 (72.6%) → 86/113 (76.1%)** — six sites byte-identical (no regression), gain = lv +3, ecommerce +1; gate 2 unchanged at 16 false greens. Gates: 3454 pytest / 1 skipped, smoke 39/39, eval static 97.9%, ruff + mypy clean (one pre-existing B-079 mypy error in `eval_runner.py`). New: **B-097** (per-test `pytest.skip` granularity).
 
@@ -66,30 +68,28 @@ Previous: 2026-09-11 (B-058 DONE + B-059 FIXED. **B-058** — expected-red basel
 **Status:** 🟡 **in progress — re-measured 2026-10-12 (t-0750, current main): 94/113 = 83.2%, 0 hollow passes.** Gate 2 now PASSES (was 3); gate 1 still FAILS the >=90% target. The 19 remaining misses: 14 `wrong_element`, 3 `target_never_captured`, 1 `weakened_to_visible_element`, 1 `element_instead_of_page_arrival`. Before that, gate 2 was re-scored 2026-09-25 (Session 13): 3 false greens, not 16. The metric was asking "did the test use the golden's selector?", which flagged legitimate page-arrival checks and the golden's own weak expectations, and it could not see the class that matters (a global container). It now asks "did this criterion's own test prove the claim?" — see §Session 13. What remains open is **gate 1's wrong-element resolver class**. Record: `docs/sessions/2026-10-12_heldout_gates.md`.
 **Measured originally:** 2026-09-24 (Session 10, branch `measure/session10-gates-1-3`). This is the gate re-score the plan asked for, done on held-out ground.
 **Priority:** **critical — it is the commercial go/no-go.** It decides whether the product can claim trustworthy output.
-**One-line:** live regeneration of the 9 committed golden stories (6 sites, 62 conditions, 113 placeholders) gives **75/113 = 66.4% resolution** and **16 false greens** — against gates of ≥90% and zero. The Session 7 landing-page result (0 wrong-element mappings, 0 false greens) does not generalize.
-**Evidence:** `docs/sessions/2026-09-24_session10_heldout_gates.md`; raw log `scratch/gate1_full.log`; emitted tests `scratch/gate1_out/`.
+**One-line:** live regeneration of the 9 committed golden stories (6 sites, 62 conditions, 113 placeholders) gives **94/113 = 83.2% resolution** and **0 hollow passes** (2026-10-12, t-0750) - gate 2 **PASSES**; gate 1 still **FAILS** the >=90% target. The 19 misses: 14 `wrong_element`, 3 `target_never_captured`, 1 `weakened_to_visible_element`, 1 `element_instead_of_page_arrival`.
+**Evidence:** `docs/sessions/2026-10-12_heldout_gates.md` (current run); committed re-score inputs `fixtures/heldout_runs/2026-10-12/` and `scripts/eval/known_gate_scores.json`. Original 2026-09-24 record: `docs/sessions/2026-09-24_session10_heldout_gates.md`.
 
-**Per-story (held-out, live):**
+**Per-story (held-out, live, 2026-10-12):**
 
-| Story | Site | Accuracy | False pos |
+| Story | Site | Accuracy | Tests passed |
 |---|---|---|---|
-| eval-001 | saucedemo | 75% | 5 |
-| eval-002 | automationexercise | **100%** | 0 |
-| eval-003 | demoqa | 88% | 1 |
-| eval-004 | theinternet | 86% | 1 |
-| eval-005 | lv_insurance | **38%** | 0 |
-| eval-006 | ecommerce_mock | 69% | 4 |
-| eval-007 | banking_mock | 54% | 3 |
-| eval-008 | banking_mock | 77% | 1 |
-| eval-010 | ambiguous_mock | 50% | 1 |
+| eval-001 | saucedemo | 85% (17/20) | 6/6 |
+| eval-002 | automationexercise | 75% (6/8) | 6/6 |
+| eval-003 | demoqa | 88% (7/8) | 6/6 |
+| eval-004 | theinternet | 57% (4/7) | 1/5 |
+| eval-005 | lv_insurance | 88% (21/24) | 0/10 |
+| eval-006 | ecommerce_mock | 88% (14/16) | 7/8 |
+| eval-007 | banking_mock | **100%** (13/13) | 8/8 |
+| eval-008 | banking_mock | 77% (10/13) | 9/9 |
+| eval-010 | ambiguous_mock | 50% (2/4) | 1/4 |
 
-**Reading:** plain static public sites are healthy (automationexercise 100%, demoqa 88%, theinternet 86%). The deficit is concentrated in the **stateful / auth-gated / multi-step stories** — 36 of the 38 misses. That connects to **B-054** (single-candidate unrecoverable: the target page is never captured) and **B-055** (page-context/trail mis-assignment), not to the landing-page classes just fixed.
+**Reading:** the mock sites improved most (eval-007 100%, eval-005/eval-006 88%), and the static public sites are no longer uniformly healthy on this draw (eval-002 75%, eval-004 57%). The 14 `wrong_element` misses span six stories; the other 5 are capture/arrival classes (`target_never_captured` x3, `weakened_to_visible_element` x1, `element_instead_of_page_arrival` x1). That connects to **B-055** (page-context/trail mis-assignment), not to the landing-page classes fixed earlier.
 
-**False greens are still general.** B-090/B-092 added classifiers keyed to landing-page wording; on held-out pages a passing test still frequently rests on an ASSERT that is not the golden element. Concrete example: theinternet `tc04` "Accept the JavaScript alert popup" emits `assert_visible('#content', label='alert accepted')` — `#content` is the page container, always visible, proves nothing. A second weak assert (`h3 "JavaScript Alerts"` labelled "alert accepted") is not caught by the harness counter.
+**Gate 2 now passes.** The 2026-10-12 run recorded **0 hollow passes** (ASSERT split: by element golden 21, pipeline verdict 10, page arrival 5, unverified 1); the previous 3 (all eval-006 `#place-order`) are gone on this draw. A pass now has to be proven by the criterion's own test, not by the golden's selector string.
 
-**Re-scored 2026-09-24 after the B-054 pool fix (session 11):** **75/113 (66.4%) → 82/113 (72.6%)** —
-the entire gain is lv_insurance (9/24 → 16/24); every other story is identical. Gate 1 still **FAIL**
-(≥90%); gate 2 unchanged at **16 false greens**; tests passed 49/63 unchanged.
+**Trend:** 2026-09-24 75/113 (66.4%) -> 82/113 (72.6%, after the B-054 pool fix) -> **94/113 (83.2%)** on 2026-10-12. Gate 1 still FAILS the >=90% target; gate 2 PASSES.
 
 ---
 
@@ -298,7 +298,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ## 🆕 B-082 — Commercial copy defects: the landing pricing card contradicts the tier table, and the in-product upsell names a company that does not exist
 
-**Status:** 🆕 new — found 2026-09-23 while writing the commercial decision record (`docs/plans/DECISIONS_commercial_surface.md` §7). Both are **live**: `tancat.dev` is published, and the upsell strings ship in the product.
+**Status:** 🟡 **mostly closed 2026-10-13** - rows 1, 2, 3, 4, 6, 7 and 8 are fixed (t-0732 and the 2026-09-23/24 landing pass): the competitor anchors are gone, prices carry a period, the Pro card matches `src/licensing/tiers.py`, the "priority security patch queue" is gone, the sidebar no longer advertises the cap bypass, the Free card says unlimited evidence exports, and the Air-Gap tier is retired. Row 5 is re-scoped: the in-product upsell (`src/usage_meter.py` `_UPGRADE_PROMPT`, the sidebar limit warning) is fixed - it no longer names a company - but "Cat Tan Operations" still appears in `docs/security/license-key-ops.md:4` and `docs/launch/lemon-squeezy-checklist.html:48` (owner line). Fix those two strings to close it.
 **Priority:** high — a public page that misstates its own tiers, and a legal name that was never incorporated, shown to every user who hits the free-tier cap.
 **One-line:** seven concrete mismatches between what the page/product says and what the code does.
 
@@ -308,7 +308,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 | 2 | `landing/index.html` pricing cards | prices carry no period ("~$299-499 / deployment") | state the period (monthly) |
 | 3 | `landing/index.html` Pro card | lists self-healing and RAG as Pro features; `src/licensing/tiers.py` puts both in **free** | correct to match the tier table |
 | 4 | `landing/index.html` Pro card | promises a "priority security patch queue" that is in no tier table | add it to the table or remove the claim |
-| 5 | `src/usage_meter.py` `_UPGRADE_PROMPT` | says "see the license key from **Cat Tan Operations**" — never incorporated; the roadmap says keep "© TanCat", no Ltd | say TanCat (sole trader) |
+| 5 | product + docs naming | the product upsell no longer names a company (verified 2026-10-13), but "Cat Tan Operations" still appears in `docs/security/license-key-ops.md:4` and `docs/launch/lemon-squeezy-checklist.html:48` | say "TanCat (sole trader)" in both |
 | 6 | `src/ui/ui_sidebar.py` limit warning | advertises the bypass to the user who just hit the cap — "set `AITEST_ENFORCE_FREE_TIER=0` to disable the cap" | drop that sentence; keep the bypass documented in the docs, not in the upsell |
 | 7 | `landing/index.html` Free card | 10 exports/month is stated as a headline limit | see B-085 (only the compliance formats are metered; the HTML report is not metered at all) |
 | 8 | tier name "Air-Gap / Defence" (page card + `tiers.py` label) | names the *deployment*, not what the buyer pays for | see B-085 decision 3 |
@@ -320,7 +320,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ## 🆕 B-083 — Make the free-tier usage ledger tamper-EVIDENT (not tamper-proof), so the caps become contractual rather than a lock
 
-**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §3). The caps are a nudge today and always will be; this makes a reset *detectable* instead of silent.
+**Status:** 🆕 new — decided 2026-09-23 (`docs/private/DECISIONS_commercial_surface.md` §3). The caps are a nudge today and always will be; this makes a reset *detectable* instead of silent.
 **Priority:** medium — no revenue is lost today (nothing is enforced), but it is the cheapest way to give the caps any meaning without breaking the no-egress promise.
 **One-line:** `src/usage_meter.py` counts runs from a local SQLite DB and exports from a plain JSON ledger (`_load_ledger` / `_save_ledger`). Deleting the ledger resets the export count silently — that is **B-051**. Hash-chain each entry (store a fingerprint of the previous entry) and sign the head with the Ed25519 key already used for licences (`src/licensing/license.py`), so a reset or edit is detectable by a licence check, a support request, or an audit. The terms then say a broken chain voids the licence.
 **Explicitly NOT doing:** a runtime phone-home licence check. It would not leak customer data, but it would break the true-air-gap use case functionally and contradict the published egress claim — which `scripts/audit_egress.py` enforces in CI. If that trade is ever revisited, the audit doc and the gate change **first**.
@@ -331,7 +331,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ## 🆕 B-084 — 14-day self-serve Pro trial (the conversion door, instead of a cheap paid tier)
 
-**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §5). Today the only route from Free to Pro is "email us"; the industry norm (mabl, testRigor, Katalon) is a time-boxed self-serve trial.
+**Status:** 🆕 new — decided 2026-09-23 (`docs/private/DECISIONS_commercial_surface.md` §5). Today the only route from Free to Pro is "email us"; the industry norm (mabl, testRigor, Katalon) is a time-boxed self-serve trial.
 **Priority:** medium — this is the answer to "how do we get people in the door at a per-deployment price", and it is small.
 **One-line:** issue a time-boxed licence key (a new `expires_at` on the existing signed-licence format is enough — no new mechanism, no phone-home), self-serve, no email. It lifts the free-tier caps for 14 days. Do **not** add a cheap indie tier instead: the solo dev's alternative is $0 (Playwright MCP + a local model), they do not buy support, and a $19/mo tier would anchor the product's value at $19.
 **Estimated sessions:** 0.5.
@@ -340,7 +340,7 @@ Both output formats are lossless and pixel-identical — fidelity was never trad
 
 ## 🆕 B-085 — Tier-table cleanup: delete `self-serve`, and decide whether `feature_enabled` gets wired at all
 
-**Status:** 🆕 new — decided 2026-09-23 (`docs/plans/DECISIONS_commercial_surface.md` §6).
+**Status:** 🆕 new — decided 2026-09-23 (`docs/private/DECISIONS_commercial_surface.md` §6).
 **Priority:** medium — the code and the page disagree about how many tiers exist, which is how the drift in B-082 started.
 **One-line:** `src/licensing/tiers.py` defines **four** tiers (free, self-serve, pro, airgap); the page shows three. `self-serve` exists only to gate `jira_export` — a poor boundary. Two decisions, both recorded in the decision doc:
 1. **Delete `self-serve`** (or fold its one claim into `pro`). Three public tiers: Free / Pro / Air-Gap.
@@ -1040,7 +1040,7 @@ _Last updated header continued: 2026-09-06 (AI-064 verified COMPLETE — fix com
 
 ## ✅ AI-055 — Ingestion Improvements (Local): tiered CPU-first OCR + format scope + quality summary + cause-differentiated warning
 
-**Status:** ✅ **Core built 2026-08-25** — tier-1 CPU OCR backend, extended `get_ocr_backend()`, `[ocr]` extra, ingestion quality summary, format scope, **cause-differentiated skip warning** (with install fix), and the **CI regression test** are all built + tested. **Remaining (follow-up):** wire per-page OCR into the generation pipeline's direct-doc parse (protected file — needs sign-off); optional most-recent sidecar manifest for investigation. Roadmap ref: `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → #16.
+**Status:** ✅ **Core built 2026-08-25** — tier-1 CPU OCR backend, extended `get_ocr_backend()`, `[ocr]` extra, ingestion quality summary, format scope, **cause-differentiated skip warning** (with install fix), and the **CI regression test** are all built + tested. **Remaining (follow-up):** wire per-page OCR into the generation pipeline's direct-doc parse (protected file — needs sign-off); optional most-recent sidecar manifest for investigation. Roadmap ref: `docs/private/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → #16.
 **Built (this session, 2026-08-25):**
 - ✅ Tier-1 CPU OCR backend (`RapidOCRBackend` + `AutoOcrBackend` in `src/ocr_backends.py`); `get_ocr_backend()` extended (auto/cpu/high-accuracy/power); legacy names still map correctly.
 - ✅ `[ocr]` optional extra in `pyproject.toml` (fixed a `oocr`→`ocr` typo that would have broken `uv sync --extra ocr`).
@@ -1252,7 +1252,7 @@ Code-complete; the live measurement A/B is the only outstanding acceptance step.
 
 ---
 
-**Status:** 🆕 → **SUPERSEDED 2026-09-05 — merged into ROADMAP §12d** (Hybrid — LangGraph-orchestrated linear pipeline). One-line pointer only, per AGENTS.md §10. The full item (proposed shape, decision gate, open questions, today's updated data) lives there: `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` §12d.
+**Status:** 🆕 → **SUPERSEDED 2026-09-05 — merged into ROADMAP §12d** (Hybrid — LangGraph-orchestrated linear pipeline). One-line pointer only, per AGENTS.md §10. The full item (proposed shape, decision gate, open questions, today's updated data) lives there: `docs/private/ROADMAP_ROADTO_PRODUCTION.md` §12d.
 
 **The one-line version:** combine LangGraph's stateful routing, validation, retry, and human-checkpoint capabilities with LangChain-style Runnables inside nodes, while retaining the existing linear scraper/resolver as the stable execution seam.
 
@@ -3050,7 +3050,7 @@ is bitsandbytes-based QLoRA (4-bit).
 
 **Status:** 👤 Deferred 2026-08-13 — decision: use an off-the-shelf GUI-grounding model instead of training one; fine-tune only if eval shows a domain gap
 **Priority:** Low-Medium (portfolio + long-term differentiator) — "sees the page like a tester does"
-**Roadmap ref:** `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` Tier 4 §18
+**Roadmap ref:** `docs/private/ROADMAP_ROADTO_PRODUCTION.md` Tier 4 §18
 **Original estimate:** 5-8 sessions
 
 **Why deferred:** (1) AI-041 — the training-pipeline dependency — was closed FAILED 2026-08-11 (GGUF export physically impossible on 64GB Windows); (2) verified via tavily (2026-08-13) that open-source GUI-grounding models already do the core task: **UGround** (10M elements / 1.3M screenshots, ~95% web, LLaVA-based, SOTA on ScreenSpot), **OS-Atlas** (2.23M cross-platform), **UI-TARS**, **GUI-Actor** (attention-map grounding, no numeric coords). The product value (use screenshots for location; heatmap boxes from detection) is fully achievable off-the-shelf; training-own only pays off as a fine-tune-on-own-sidecars LoRA *after* measuring a gap.
@@ -4400,7 +4400,7 @@ a markdown summary of pass-rate regressions vs the previous eval run.
 **Status:** 🟡 ready-for-agent (measurement only — no code change authorised yet)
 **Priority:** Low (watch item — act only if the numbers say so).
 **Depends on:** 16b Phase 3 (citations per criterion) existing to measure.
-**Roadmap ref:** `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → **16b** decision D8; full spec `docs/specs/FEATURE_SPEC_test_to_document_traceability.md` §7.
+**Roadmap ref:** `docs/private/ROADMAP_ROADTO_PRODUCTION.md` → Tier 5 → **16b** decision D8; full spec `docs/specs/FEATURE_SPEC_test_to_document_traceability.md` §7.
 
 **One-line:** 16b's per-criterion `source_refs` + `justification` add prompt/output tokens to every generation run. D8 mandated tracking so overhead is seen in numbers, not vibes.
 
