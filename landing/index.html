@@ -117,7 +117,7 @@
     </div>
   </div>
   <div class="relative aspect-video max-h-[520px] w-full overflow-hidden bg-slate-950" id="view-product-ui">
-    <img alt="Real TanCat Streamlit App UI: AI Playwright Test Generator with target URL, parse mode, URL guard, max pages, and site health check." class="w-full h-full object-contain" loading="eager" src="streamlit_real_1280x820.png"/>
+    <img alt="Real TanCat Streamlit UI: the Run &amp; Fix view with the generated Playwright pytest code, the Final Code / Skeleton / Scrape Summary tabs, and the sidebar settings." class="w-full h-full object-contain" loading="eager" src="streamlit_real_1280x820.png"/>
     <div class="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-transparent to-transparent pointer-events-none"></div>
     <div class="absolute bottom-4 left-4 right-4 flex flex-wrap items-center justify-between gap-3 bg-slate-950/85 backdrop-blur-md border border-slate-800 p-3 rounded-xl">
       <div class="flex items-center gap-2.5"><span class="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">Streamlit Web UI</span><span class="text-xs text-slate-300 font-mono">Real product capture - launch_ui.sh output</span></div>
@@ -223,6 +223,35 @@
 </div>
 </div>
 </section>
+<section class="py-20 border-t border-slate-800 bg-slate-950 relative" id="cli-ci">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="text-center max-w-3xl mx-auto mb-16">
+  <span class="text-xs font-mono text-amber-400 tracking-wider uppercase font-semibold">UI, CLI and CI</span>
+  <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">One engine. Run it your way.</h2>
+  <p class="text-slate-400 text-sm mt-3">The Streamlit UI, the <code class="text-amber-300 font-mono text-xs">tancat</code> CLI, and the CI Action all run the same generation pipeline against your own LLM. There is no second implementation to trust.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+  <div class="bg-cardbg rounded-2xl border border-slate-800 p-5 shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-bold text-white">CLI &mdash; <span class="font-mono text-xs text-amber-300">tancat run</span></h3>
+      <span class="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[10px] font-mono text-slate-300">real run</span>
+    </div>
+    <img alt="TanCat CLI: a real tancat run generates five pytest tests from a short story; the pipeline stages and the final summary are shown." class="w-full rounded-xl border border-slate-800" loading="lazy" src="cli_run.png"/>
+    <p class="text-slate-400 text-xs mt-4 leading-relaxed">Generate, run, or gate an existing suite from the terminal or your own scripts. Same story, same LLM, same evidence as the UI.</p>
+  </div>
+  <div class="bg-cardbg rounded-2xl border border-slate-800 p-5 shadow-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-bold text-white">CI &mdash; GitHub Action &amp; GitLab template</h3>
+      <img alt="CI: passing" class="h-5" src="ci-badge.svg"/>
+    </div>
+    <img alt="TanCat CI: a real Action self-test run on main, showing the job steps - generate and run, assert, cache, upload artifacts." class="w-full rounded-xl border border-slate-800" loading="lazy" src="ci_action.png"/>
+    <p class="text-slate-400 text-xs mt-4 leading-relaxed">The GitHub Action and the GitLab <code class="text-amber-300 font-mono text-xs">include</code> template run the same headless pipeline on a pull or merge request: generate (or restore from cache), run pytest as the referee, attach JUnit evidence, and comment the result. The exit code is pytest's, so a red run is your change, not the tool's opinion.</p>
+    <p class="text-slate-400 text-xs mt-2 leading-relaxed">It runs on your runner against your own LLM endpoint - nothing is sent to a vendor cloud. <a class="text-amber-300 hover:underline" href="https://github.com/tancat-ai/tancat/blob/main/docs/ci.md" rel="noopener noreferrer" target="_blank">CI reference</a>.</p>
+  </div>
+</div>
+</div>
+</section>
+
 <section class="py-20 border-t border-slate-800 bg-midnight relative" id="regulated">
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 <div class="text-center max-w-3xl mx-auto mb-16">
