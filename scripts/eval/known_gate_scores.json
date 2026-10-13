@@ -1,15 +1,15 @@
 {
   "recorded_at": "2026-10-13",
-  "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure, current main with the accuracy A/C fixes, PR #91)",
-  "gate1_correct": 94,
+  "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure on task/gate1-wrong-element with the ASSERT-pool filter, j-0171/t-0790)",
+  "gate1_correct": 93,
   "gate1_total": 113,
-  "gate1_accuracy_pct": 83.2,
+  "gate1_accuracy_pct": 82.3,
   "gate2_false_greens": 0,
   "targets": {
     "gate1_min_accuracy_pct": 90,
     "gate2_max_false_greens": 0
   },
-  "verdict": "gate 1 FAIL (83.2% < 90%); gate 2 PASS (0 hollow passes)",
+  "verdict": "gate 1 FAIL (82.3% < 90%); gate 2 PASS (0 hollow passes)",
   "model": {
     "provider": "openai-local",
     "base_url": "http://127.0.0.1:8080/v1",
@@ -18,36 +18,36 @@
     "temperature": 0.0,
     "rag": "on (bundled pack)"
   },
-  "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0759 --evidence-dir scratch/eval_runs/2026-10-13_heldout",
-  "evidence_dir": "fixtures/heldout_runs/2026-10-13",
-  "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-13/ (manifest.json, results.json, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
-  "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-13 -> 94/113, 0 (from the tracked tree, no model)",
+  "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0814 --evidence-dir scratch/eval_runs/2026-10-13_gate1_filter",
+  "evidence_dir": "fixtures/heldout_runs/2026-10-13_gate1_filter",
+  "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-13_gate1_filter/ (manifest.json, results.json, summary.txt, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
+  "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-13_gate1_filter -> 93/113, 0 (from the tracked tree, no model)",
   "wall_clock_minutes": 47,
-  "mean_generation_s": 189.2,
+  "mean_generation_s": 191.5,
   "tests_executed": 62,
   "tests_passed": 40,
   "per_story": {
     "eval-001": "17/20",
     "eval-002": "6/8",
     "eval-003": "7/8",
-    "eval-004": "4/7",
-    "eval-005": "21/24",
+    "eval-004": "5/7",
+    "eval-005": "20/24",
     "eval-006": "14/16",
     "eval-007": "13/13",
-    "eval-008": "10/13",
+    "eval-008": "9/13",
     "eval-010": "2/4"
   },
   "gate1_misses_by_class": {
-    "wrong_element": 14,
+    "wrong_element": 15,
     "target_never_captured": 3,
     "weakened_to_visible_element": 1,
     "element_instead_of_page_arrival": 1
   },
   "assert_verification": {
     "by_element_golden": 20,
-    "by_element_pipeline_verdict": 11,
+    "by_element_pipeline_verdict": 9,
     "by_page_arrival": 5,
-    "unverified": 1
+    "unverified": 3
   },
   "comparison": {
     "same_settings_baseline": {
@@ -59,31 +59,31 @@
         "rag_enabled": true,
         "harness_mode": "full --regenerate",
         "dataset_tree_hash": "a8acb0fadb054bb67c58966280fd6258b034a90a",
-        "note": "The baseline and this run used the same provider, model file, thinking, temperature, RAG flag and harness mode, and the identical committed golden dataset (unchanged since c20c1d2 on 2026-10-03). The only differences are the code commit (the A/C fixes under measure) and the unseeded LLM draw."
+        "note": "The baseline and this run used the same provider, model file, thinking, temperature, RAG flag and harness mode, and the identical committed golden dataset (unchanged since c20c1d2 on 2026-10-03). The only differences are the code commit (the ASSERT-pool filter under measure) and the unseeded LLM draw."
       },
       "baseline_run": {
-        "recorded_at": "2026-10-12",
-        "git_commit": "1138cc5",
+        "recorded_at": "2026-10-13",
+        "git_commit": "1545807",
         "gate1": "94/113 (83.2%)",
         "gate2_false_greens": 0,
-        "evidence_dir": "fixtures/heldout_runs/2026-10-12"
+        "evidence_dir": "fixtures/heldout_runs/2026-10-13"
       },
-      "delta_gate1": "0 placeholders (94 -> 94) = 0.0 percentage points",
+      "delta_gate1": "-1 placeholder (94 -> 93) = -0.9 percentage points",
       "delta_gate2": "0 (0 -> 0)",
       "per_story_delta": {
         "eval-001": "17/20 -> 17/20",
         "eval-002": "6/8 -> 6/8",
         "eval-003": "7/8 -> 7/8",
-        "eval-004": "4/7 -> 4/7",
-        "eval-005": "21/24 -> 21/24",
+        "eval-004": "4/7 -> 5/7",
+        "eval-005": "21/24 -> 20/24",
         "eval-006": "14/16 -> 14/16",
         "eval-007": "13/13 -> 13/13",
-        "eval-008": "10/13 -> 10/13",
+        "eval-008": "10/13 -> 9/13",
         "eval-010": "2/4 -> 2/4"
       },
-      "gate1_misses_by_class": "identical (wrong_element 14, target_never_captured 3, weakened_to_visible_element 1, element_instead_of_page_arrival 1)",
-      "tests_passed": "44 -> 40",
-      "note": "No movement against the latest same-settings run. The A/C fixes changed the emitted code for eval-002, eval-007 and eval-008, but every story's correct count is unchanged and the per-class gate-1 breakdown is identical. Tests passed fell 44 -> 40 (some wrong-element asserts the fixes now turn into honest skips); gate 2 was already 0 on the baseline. The unseeded LLM draw is the residual variance."
+      "gate1_misses_by_class": "wrong_element 14 -> 15; target_never_captured 3 -> 3; weakened_to_visible_element 1 -> 1; element_instead_of_page_arrival 1 -> 1",
+      "tests_passed": "40 -> 40",
+      "note": "No improvement. The ASSERT-pool filter did not fix any of the 14 named wrong-element picks; the same wrong locators persist (eval-002/006 `.modal-title.w-100`, eval-003 `h1.text-center`, eval-005 `#dob`/`#quoteSubmit`, eval-010 `#order-error`, eval-001 inventory URL). The total fell by 1 placeholder (94 -> 93): eval-004 gained 1 (the known flaky story, 4/7 -> 5/7), eval-005 lost 1 (new weakened_to_visible_element on `quote reference number`), eval-008 lost 1 (`payment success message` -> `#accounts-list`). Within the same-settings band (89-94/113) this is draw jitter, not a code effect. The filter is not the lever; the wrong picks are made before/outside the ASSERT semantic pool (page-context and FILL/CLICK paths) or the target never enters the pool."
     },
     "history": [
       {
@@ -91,6 +91,13 @@
         "gate1": "82/113 (72.6%)",
         "gate2_false_greens": 3,
         "note": "Not like-for-like: a different generation (Session 10), from before the B-054/B-096/t-0542 fixes, re-scored in Session 13; its evidence was deleted. Do not read 82 -> 94 as a same-settings gate movement."
+      },
+      {
+        "recorded_at": "2026-10-12",
+        "gate1": "94/113 (83.2%)",
+        "gate2_false_greens": 0,
+        "evidence_dir": "fixtures/heldout_runs/2026-10-12",
+        "note": "The pre-A/C-fix same-settings baseline. Its evidence is committed and re-scores to 94/113 and 0."
       }
     ]
   },
@@ -105,7 +112,8 @@
       "t-0563": 621.7,
       "t-0579": 392.1,
       "t-0750": 273.8,
-      "t-0759": 259.2
+      "t-0759": 259.2,
+      "t-0814": 253.1
     },
     "observed_story_scores": {
       "t-0534": "3/7",
@@ -114,7 +122,8 @@
       "t-0563": "1/7",
       "t-0579": "4/7",
       "t-0750": "4/7",
-      "t-0759": "4/7"
+      "t-0759": "4/7",
+      "t-0814": "5/7"
     },
     "observed_gate1_totals": {
       "t-0534": "90/113",
@@ -123,19 +132,22 @@
       "t-0563": "89/113",
       "t-0579": "92/113",
       "t-0750": "94/113",
-      "t-0759": "94/113"
+      "t-0759": "94/113",
+      "t-0814": "93/113"
     },
-    "note": "eval-004's external site is slow and flaky. Across seven held-out runs (t-0534 to t-0759) generation took 259.2s at fastest and 621.7s at slowest, and eval-004's own score was 3/7, 1/7, 4/7, 1/7, 4/7, 4/7, 4/7 - it moves with the draw. The 2026-10-13 run scored it 4/7. eval-004's per-story number is not repeatable, so read a gate run with that in mind: do not treat an eval-004 delta as a like-for-like regression, and prefer the overall figure over that story's number - remembering that the overall figure's own jitter is this one story. This block is a hand-written snapshot; no run refreshes it."
+    "note": "eval-004's external site is slow and flaky. Across eight held-out runs (t-0534 to t-0814) generation took 253.1s at fastest and 621.7s at slowest, and eval-004's own score was 3/7, 1/7, 4/7, 1/7, 4/7, 4/7, 4/7, 5/7 - it moves with the draw. The 2026-10-13 gate1-filter run scored it 5/7. eval-004's per-story number is not repeatable, so read a gate run with that in mind: do not treat an eval-004 delta as a like-for-like movement, and prefer the overall figure over that story's number - remembering that the overall figure's own jitter is this one story. This block is a hand-written snapshot; no run refreshes it."
   },
   "previous": {
-    "recorded_at": "2026-10-12",
-    "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure)",
+    "recorded_at": "2026-10-13",
+    "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure, current main with the accuracy A/C fixes, PR #91)",
     "gate1_correct": 94,
     "gate1_total": 113,
     "gate1_accuracy_pct": 83.2,
     "gate2_false_greens": 0,
-    "evidence_dir": "fixtures/heldout_runs/2026-10-12",
-    "note": "The pre-A/C-fix baseline for this run's comparison. Its evidence is committed and re-scores to 94/113 and 0."
+    "evidence_dir": "fixtures/heldout_runs/2026-10-13",
+    "note": "The latest same-settings baseline, superseded by this run. Its evidence is committed and re-scores to 94/113 and 0."
   },
-  "note": "The minimal re-score input for the 2026-10-13 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-13/ and re-scores with no model to the same 94/113 and 0 from the repo alone (scripts/eval/rescore.py). The 2026-10-13 number equals the 2026-10-12 baseline: the A/C fixes did not move the held-out total on this draw. The superseded records (2026-10-12 under 'previous'; 2026-09-25 under 'comparison.history') are preserved. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-13_heldout_gates.md."
+  "note": "The minimal re-score input for the 2026-10-13 gate1-filter run is committed in the tracked tree at fixtures/heldout_runs/2026-10-13_gate1_filter/ and re-scores with no model to the same 93/113 and 0 from the repo alone (scripts/eval/rescore.py). The filter did NOT move the held-out gate: 94 -> 93 is -1 placeholder, inside the same-settings draw band, and the wrong_element class rose 14 -> 15. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2.",
+  "evidence_dir_previous": "fixtures/heldout_runs/2026-10-13",
+  "evidence_dir_history": "fixtures/heldout_runs/2026-10-12"
 }

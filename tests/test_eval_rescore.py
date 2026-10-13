@@ -205,17 +205,17 @@ class TestEvidenceGuard:
     def test_recorded_score_file_is_present_and_honest(self) -> None:
         """The current gate record is on disk and its evidence is committed, so it re-scores."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (94, 113)
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (93, 113)
         assert payload["gate2_false_greens"] == 0
         # The evidence is in the tracked tree, not the worktree's gitignored scratch.
         evidence_dir = _REPO_ROOT / payload["evidence_dir"]
         assert evidence_dir.is_dir(), payload["evidence_dir"]
         assert verify_run_evidence(evidence_dir) == []
-        # The superseded 2026-10-12 baseline is preserved, with its own committed evidence.
-        assert payload["previous"]["recorded_at"] == "2026-10-12"
+        # The superseded 2026-10-13 baseline is preserved, with its own committed evidence.
+        assert payload["previous"]["recorded_at"] == "2026-10-13"
         assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (94, 113)
         assert payload["previous"]["gate2_false_greens"] == 0
-        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
+        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
         # The older deleted-evidence record is kept as history.
         history = payload["comparison"]["history"]
         assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
