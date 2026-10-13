@@ -96,6 +96,14 @@ Each passing test also writes an evidence sidecar - see
     `AITEST_WORKSPACE=<project> AITEST_RAG_SCOPE=<project>` - see
     [Install](install.md#share-a-project-between-the-ui-and-the-cli).
 
+## The CLI
+
+`bash launch_cli.sh` opens the same pipeline as a menu, and `tancat run` runs it
+headlessly for scripts and CI. A real `tancat run` against a short story:
+
+![The TanCat CLI: a real tancat run generates five pytest tests from a short
+story, printing each pipeline stage and the final summary.](../assets/cli-run.png)
+
 ## Next
 
 - [How the pipeline works](../guides/pipeline.md)
