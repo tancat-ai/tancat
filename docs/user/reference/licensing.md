@@ -20,10 +20,12 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
-| Support and onboarding bundle | - | Yes |
+| Support | - | Email support, best effort - help getting set up |
 | Updates | - | 12 months included; later updates paid |
 | Runs | 25 per 30 days | Unlimited |
 | Evidence exports | 10 per 30 days | Unlimited |
+
+**Support.** Pro includes email support at hello@tancat.dev and help getting set up. It is best effort: there is no SLA and no 24/7 hotline, and we do not promise a response time.
 
 The two counters are shown live in the UI sidebar.
 
