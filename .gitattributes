@@ -3,3 +3,9 @@
 # `env: 'bash\r': No such file or directory`, which is how the local
 # scripts/ci_action_selftest.py run broke on a Windows checkout.
 *.sh text eol=lf
+
+# Vendored OCR models and their dictionary must check out byte-for-byte, even
+# with core.autocrlf=true: manifest.json pins each file's SHA256, and the
+# dictionary reader expects the exact upstream bytes. ``-text`` disables EOL
+# conversion for the whole directory.
+src/data/ocr/* -text
