@@ -100,8 +100,8 @@ pre-seedable; neither runs unless its feature is used.
 | Component | When | Source | Notes |
 |-----------|------|--------|-------|
 | RAG embedder (`SentenceTransformerEmbedder`, `src/rag_store.py`) | first embed, when RAG is enabled | Hugging Face (`sentence-transformers` model), one time | the default RAG store ships a bundled pattern pack; warming the model cache before going offline pre-seeds it |
-| Optional GPU OCR backend (`UnlimitedOCRBackend`, `src/ocr_backends.py`) | first PDF parse, only when `OCR_BACKEND=power` is set | Hugging Face (`baidu/Unlimited-OCR`, ~6 GB), one time | opt-in; needs CUDA/ROCm. The default OCR path (`RapidOCRBackend`, CPU) is offline. |
+| Optional GPU OCR backend (`src/ocr_backends.py`) | first PDF parse, only when `OCR_BACKEND=power` is set | Hugging Face (vision-language OCR model, ~6 GB), one time | opt-in; needs CUDA/ROCm and its live path is untested. The default OCR path (`RapidOCRBackend`, CPU) is offline. |
 
 No other runtime downloads. For a fully offline deployment: leave `OCR_BACKEND`
 at its default, and warm the RAG embedder's model cache (and, only if you use
-the GPU OCR tier, `baidu/Unlimited-OCR`) before the machine is air-gapped.
+the GPU OCR tier, its model) before the machine is air-gapped.
