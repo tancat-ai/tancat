@@ -467,7 +467,7 @@ class UnlimitedOCRBackend(OcrBackend):
 
         if not torch.cuda.is_available():
             raise RuntimeError(
-                "Unlimited-OCR requires a GPU with CUDA or ROCm support. "
+                "The GPU OCR backend requires a GPU with CUDA or ROCm support. "
                 "Install a GPU-compatible PyTorch build, or set "
                 "OCR_BACKEND=pymupdf for CPU-only PDF parsing."
             )
@@ -726,7 +726,7 @@ def _unavailable_line(name: str, source: str) -> str | None:
             return None
         return (
             f"OCR backend '{name}' requested {where} cannot run on this build: "
-            f"Unlimited-OCR (tier-3 GPU) needs a CUDA/ROCm GPU and the `transformers` package. "
+            f"The GPU OCR backend (tier-3) needs a CUDA/ROCm GPU and the `transformers` package. "
             f"Set OCR_BACKEND=cpu for CPU OCR, or choose Automatic in Settings. "
             f"Refusing instead of silently using a different engine."
         )

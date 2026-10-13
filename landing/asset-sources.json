@@ -43,7 +43,7 @@
   },
   "sources": {
     "landing/logo_transparent.png": "76403fa176ee398fa1d02e4add5ba6b528191bae",
-    "landing/index.html": "92b341a342ca5414a93c73e328b6486b44975969",
+    "landing/index.html": "bbff36148f50739b765f4c379b82911dc18e21e1",
     "landing/tailwind.css": "8a64af0e98f5d8fbb2e7b365d6dc98ea9e5f6f37",
     "landing/streamlit_real_1280x820.png": "e7e0d494ce7d513d847f94c34dcae0262e0de9bd",
     "docs/implementation/tancat-pro-install-and-licence.html": "0106661b8bca99a613bc14510132e4468cac4942",

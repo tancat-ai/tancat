@@ -5,6 +5,12 @@
 **customer's own target site** being scraped (which is itself SSRF-guarded).
 No telemetry, no update checks, no PyPI/uv calls, no third-party beacons.
 
+**Caveat - model weights (see section 6).** Two optional components fetch model
+weights from Hugging Face on first use: the RAG embedder, and the optional GPU
+OCR backend (`OCR_BACKEND=power`). They are library-level downloads, not `src/`
+call sites, so the scan in section 3 does not see them. Both can be pre-seeded;
+the default OCR path (RapidOCR, CPU) is offline.
+
 **Verified:** 2026-08-17 · **Gate:** `python scripts/audit_egress.py` — wired into
 `scripts/smoke.py` (Gate 0) and CI; **fails** if an unrecognised outbound call
 site is added to the product runtime.
@@ -81,3 +87,21 @@ python scripts/smoke.py                 # Gate 0 includes the egress audit
 target a user-configured endpoint or be deliberately allow-listed *in this
 document with a reason*. The gate fails otherwise — a "quick telemetry call"
 cannot land silently.
+
+---
+
+## 6. Model downloads (library-level, not caught by the call-site scan)
+
+The gate in section 3 scans the product's *own* outbound-HTTP call sites. Two
+components fetch model weights through their libraries, so they do not appear in
+that table and the gate cannot see them. Both are disclosed here; both are
+pre-seedable; neither runs unless its feature is used.
+
+| Component | When | Source | Notes |
+|-----------|------|--------|-------|
+| RAG embedder (`SentenceTransformerEmbedder`, `src/rag_store.py`) | first embed, when RAG is enabled | Hugging Face (`sentence-transformers` model), one time | the default RAG store ships a bundled pattern pack; warming the model cache before going offline pre-seeds it |
+| Optional GPU OCR backend (`src/ocr_backends.py`) | first PDF parse, only when `OCR_BACKEND=power` is set | Hugging Face (vision-language OCR model, ~6 GB), one time | opt-in; needs CUDA/ROCm and its live path is untested. The default OCR path (`RapidOCRBackend`, CPU) is offline. |
+
+No other runtime downloads. For a fully offline deployment: leave `OCR_BACKEND`
+at its default, and warm the RAG embedder's model cache (and, only if you use
+the GPU OCR tier, its model) before the machine is air-gapped.

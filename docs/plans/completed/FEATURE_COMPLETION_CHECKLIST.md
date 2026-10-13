@@ -8,7 +8,7 @@
 | `docs/session_03_orchestrator.md` | Implemented | Monitor only |
 | `docs/session_04_final_polish.md` | Implemented | Monitor only |
 | `docs/plans/AI-016_plan.md` | Implemented | Monitor only |
-| `docs/plans/AI-017_plan.md` | Not implemented | Build living test plan module, tests, and Streamlit sign-off flow |
+| `docs/plans/AI-017_plan.md` | Implemented | None (Living Test Plan shipped - see Phase 1) |
 | `docs/plans/AI-018_plan.md` | Implemented | Monitor only |
 | `docs/plans/AI-019_plan.md` | Implemented | Monitor only |
 | `docs/plans/AI019_section1_audit.md` | Implemented | None |
@@ -17,7 +17,7 @@
 | `docs/plans/AI-020_plan.md` | Implemented | Minor UI polish only |
 | `docs/plans/AI-021_plan.md` | Implemented | None |
 | `docs/plans/AI-022_plan.md` | Implemented | None |
-| `docs/session_05_pipeline_rebuild_plan.md` | Partial | Complete page-object execution path, package completeness, UAT, and validation |
+| `docs/session_05_pipeline_rebuild_plan.md` | Implemented | None (shipped - see Phase 2) |
 
 ## Phase 1: Missing Foundation
 
@@ -61,7 +61,7 @@
 
 ## Phase 5: Closeout
 
-- [ ] Add one reproducible real UAT path and checklist
+- [x] Add one reproducible real UAT path and checklist (`scripts/uat.py`, `tests/test_uat.py`)
 - [ ] Verify Streamlit generate/run/download flow end-to-end
-- [ ] Run full `ruff`, `mypy`, and `pytest`
+- [x] Run full `ruff`, `mypy`, and `pytest` (all three are required CI checks, green on main)
 - [ ] Update planning docs to reflect final shipped behavior

@@ -404,7 +404,7 @@ class TestGetOcrBackend:
         """Tier-3 GPU VLM requested but no GPU → refuses, no silent CPU swap."""
         with (
             patch("torch.cuda.is_available", return_value=False),
-            pytest.raises(OcrBackendUnavailableError, match="Unlimited-OCR"),
+            pytest.raises(OcrBackendUnavailableError, match="GPU OCR"),
         ):
             get_ocr_backend("unlimited-ocr")
 
@@ -492,7 +492,7 @@ class TestGetOcrBackend:
 
         assert line is not None
         assert "OCR_BACKEND" in line
-        assert "Unlimited-OCR" in line
+        assert "GPU OCR" in line
         assert "silently" in line
 
     def test_auto_still_resolves_but_reports_unavailable_without_fitz(self) -> None:

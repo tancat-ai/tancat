@@ -378,7 +378,7 @@ Document mode starts with a parsing step before the graph's `ingest` node. This 
 | Phase | Engine | Strengths | Limits |
 |---|---|---|---|
 | **Now** (AI-030 shipped) | `src/pdf_ingest.py` — PyMuPDF | Heading detection, table extraction as Markdown, chunking. Already wired into `rag_ingest.py`. Zero new dependencies. | No multi-column layout awareness. Table detection quality varies by PDF. |
-| **Upgrade path** | Unlimited OCR (arXiv:2606.23050) | Constant KV cache → dozens of pages in one 32K forward pass. R-SWA attention for long-document copying tasks. Open-source (Baidu, Apache 2.0). | Requires GPU infrastructure. June 2026 release — limited community, possible rough edges. |
+| **Upgrade path** | Unlimited OCR (arXiv:2606.23050) | Constant KV cache → dozens of pages in one 32K forward pass. R-SWA attention for long-document copying tasks. Open-source (Baidu, MIT; base models Apache-2.0). | Requires GPU infrastructure. June 2026 release — limited community, possible rough edges. |
 
 **Decision:** Start with PyMuPDF (already in the project). The unlimited-OCR paper is a compelling upgrade path but blocked on GPU infra. When GPU becomes available, swap the parsing node's engine — the downstream graph nodes are engine-agnostic (they consume `raw_document_text: str`, not PDF bytes).
 
