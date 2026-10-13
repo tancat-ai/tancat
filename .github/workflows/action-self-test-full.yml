@@ -1,0 +1,416 @@
+# Reusable: the complete six-mode Action self-test.
+#
+# Called by:
+#   - ci-cd-action.yml on the nightly cron and on manual dispatch. The nightly
+#     issue is filed from there, where github.event_name is the real trigger.
+#   - release.yml on every v* tag: all six modes must be green on the release
+#     commit before the release proceeds (t-0768 - before this a release could
+#     ship without the full suite ever running on the tag).
+#
+# The suite is hermetic (mock site on 127.0.0.1:8781 + fake LLM); its value is
+# runner-image / Actions-ecosystem drift, not live-site drift. The mode list and
+# the per-mode assertions are the ones documented in ci-cd-action.yml's header.
+
+name: 'Action Self-Test (full: six modes)'
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  action-self-test-full:
+    name: 'Action self-test (full: six modes)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Step 1: generate-only against hermetic mock + fake LLM ──────────
+      - name: Generate tests (self-test)
+        id: generate
+        uses: ./
+        with:
+          mode: generate-only
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert generate-only contract (stub step)
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          print('pwd:', os.getcwd())
+          print('workspace entries:', sorted(os.listdir('.'))[:30])
+
+          ws = Path('ai-test-workspace')
+          results = ws / 'results'
+
+          if not ws.exists():
+            print('ERROR: ai-test-workspace missing on runner')
+            print('GITHUB_WORKSPACE:', os.environ.get('GITHUB_WORKSPACE'))
+            raise SystemExit(2)
+          print('ai-test-workspace entries:', sorted(os.listdir(ws)))
+          if not results.exists():
+            print('ERROR: results dir missing; contents of ws:', sorted(os.listdir(ws)))
+            raise SystemExit(2)
+          print('results entries:', sorted(os.listdir(results)))
+
+          # Driver JSON contract (last stdout line of generate.json)
+          raw = (results / 'generate.json').read_text(encoding='utf-8').strip()
+          summary = json.loads(raw.splitlines()[-1])
+          assert summary['ok'] is True, summary
+          assert summary['exit_code'] == 0, summary
+          assert summary['mode'] == 'generate-only'
+          assert summary['test_count'] >= 1, summary
+          assert summary['conditions'] >= 1, summary
+
+          # Package artifact persists in the mounted workspace (runner-relative)
+          pkg_dir = ws / 'generated_tests'
+          assert pkg_dir.exists(), f'no generated package dir: {pkg_dir}'
+          pkgs = sorted(pkg_dir.rglob('test_*.py'))
+          assert pkgs, f'no test_*.py under {pkg_dir}'
+          print(f'generate-only OK: {summary["test_count"]} tests -> {pkgs[-1]}')
+          PY
+
+      - name: Upload generated package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-tests
+          path: ai-test-workspace/generated_tests/
+          if-no-files-found: warn
+
+      # ── Step 2: run-existing against the just-generated package ──────────
+      - name: Run generated tests (self-test)
+        id: run
+        uses: ./
+        with:
+          mode: run-existing
+          tests: ai-test-workspace/generated_tests
+          self-test: 'true'
+
+      - name: Assert run-existing artifacts (stub step)
+        if: steps.run.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+
+          # Raw pytest junit — must exist and be well-formed with real tests
+          junit = results / 'junit.xml'
+          assert junit.exists(), 'junit.xml missing'
+          root = ET.parse(junit).getroot()
+          suites = [root] if root.tag == 'testsuite' else list(root)
+          total = sum(int(s.get('tests', 0) or 0) for s in suites)
+          assert total >= 1, f'junit reports {total} tests'
+
+          # Evidence JUnit — AI-028 export against the package's sidecars
+          ev = results / 'junit-evidence.xml'
+          assert ev.exists(), 'junit-evidence.xml missing (sidecars were expected)'
+          ev_root = ET.parse(ev).getroot()
+          ev_total = sum(int(s.get('tests', 0) or 0) for s in ([ev_root] if ev_root.tag == 'testsuite' else list(ev_root)))
+          assert ev_total >= 1, f'evidence junit reports {ev_total} tests'
+
+          # Report payload — the comment shape, asserted via a stub step
+          report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
+          assert report['mode'] == 'run-existing'
+          assert report['tests']['total'] == total
+          assert (
+              report['tests']['passed'] + report['tests']['failed'] + report['tests']['errors'] + report['tests']['skipped'] == total
+          )
+          assert isinstance(report['repair_candidates'], list)
+          assert isinstance(report['failed_tests'], list)
+          md = (results / 'report.md').read_text(encoding='utf-8')
+          assert md.startswith('## 🤖 AI Test Generator — results'), md[:80]
+
+          print(f'run-existing OK: {total} tests ({report["tests"]["passed"]} passed, '
+                f'{report["tests"]["failed"]} failed), {len(report["repair_candidates"])} repair candidates')
+          PY
+
+      # ── Step 3: generate-and-run with actions/cache (spec §7) ────────────
+      # The cache key is computed by the same module the action uses (one
+      # source of truth). A run-specific prefix keeps the first restore a
+      # MISS on every run — deterministic self-test; the hit path is covered
+      # by scripts/ci_action_selftest.py + the adapter unit tests.
+      - name: Compute cache key
+        id: cache-key
+        run: |
+          KEY=$(python3 action/cache_key.py \
+            --story "$STORY" \
+            --url "$URL" \
+            --model fake-model \
+            --provider openai-local)
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+        env:
+          STORY: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          URL: http://127.0.0.1:8781/index.html
+
+      - name: Restore generated-package cache
+        id: cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Restore run-history (per-branch flaky markers, AI-011)
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      - name: 'Restore flow-memory store (learn: true — branch-scoped)'
+        uses: actions/cache/restore@v4
+        with:
+          path: ai-test-workspace/evidence/flow_memory.json
+          key: ai-testgen-flowmem-${{ github.ref }}
+
+      - name: Generate + run (self-test, cache miss)
+        id: genrun
+        uses: ./
+        with:
+          mode: generate-and-run
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          cache-dir: ai-test-workspace/cache
+          self-test: 'true'
+          # No github-token / pr-number: posting is skipped, payload asserted.
+
+      - name: Assert generate-and-run (stub step)
+        if: steps.genrun.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+
+          # Action-state surface: cache_key emitted + cache_hit=false.
+          # Docker actions never get GITHUB_OUTPUT from the runner — the
+          # entrypoint mirrors every output into action-state.txt for stubs.
+          outputs = {}
+          gf = results / 'action-state.txt'
+          if not gf.exists():
+              gf = results / 'github-output.txt'
+          for line in gf.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  k, _, v = line.partition('=')
+                  outputs[k.strip()] = v.strip()
+          assert outputs.get('cache_hit') == 'false', outputs
+          assert len(outputs.get('cache_key', '')) == 64, outputs.get('cache_key')
+
+          # Cache seeded for the workflow's save step
+          seeded = list(Path('ai-test-workspace/cache').rglob('test_*.py'))
+          assert seeded, 'cache was not seeded with the generated package'
+
+          # Comment payload — §6 shape (posting skipped: no token/PR)
+          md = (results / 'comment.md').read_text(encoding='utf-8')
+          assert md.startswith('## 🤖 AI Test Generator — results'), md[:80]
+          assert '| Metric | Value |' in md, md[:200]
+          assert '**Mode:** generate-and-run' in md, md[:200]
+
+          # Report carries the flaky-marker key (AI-011; empty on first run)
+          report = json.loads((results / 'report.json').read_text(encoding='utf-8'))
+          assert 'flaky' in report, report.keys()
+
+          # pytest junit + evidence junit exist
+          assert (results / 'junit.xml').exists()
+          assert (results / 'junit-evidence.xml').exists()
+          print(f'generate-and-run OK: cache_hit={outputs.get("cache_hit")}, '
+                f'{len(seeded)} cached test file(s), comment payload {len(md)} chars')
+          PY
+
+      - name: Save generated-package cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/cache
+          key: ai-testgen-pkg-${{ github.run_id }}-${{ steps.cache-key.outputs.key }}
+
+      - name: Save run-history
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/run-history.json
+          key: ai-testgen-history-${{ github.ref }}
+
+      # ── Step 4: learn: true — spec §3 goal 13 ────────────────────────────
+      # The conftest teardown learns within-test flows during pytest; the
+      # store lands in the workspace evidence dir (entrypoint points the
+      # lazy storage there) and is persisted branch-scoped above/below. The
+      # single -k test keeps this step ~20s; the full-suite seed/restore
+      # contract is proven locally by scripts/ci_action_selftest.py.
+      - name: Learn flows (self-test)
+        id: learn
+        uses: ./
+        with:
+          mode: generate-and-run
+          story: |
+            As a customer, I want to browse products on the store, add them to
+            my cart, proceed to checkout, and place an order.
+          url: http://127.0.0.1:8781/index.html
+          workspace: ai-test-workspace
+          cache-dir: ai-test-workspace/cache
+          pytest-args: -k test_04_go_to_cart_page
+          learn: 'true'
+          self-test: 'true'
+
+      - name: 'Assert learn: true (stub step)'
+        if: steps.learn.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+          outputs = {}
+          gf = results / 'action-state.txt'
+          if not gf.exists():
+              gf = results / 'github-output.txt'
+          for line in gf.read_text(encoding='utf-8').splitlines():
+              if '=' in line:
+                  k, _, v = line.partition('=')
+                  outputs[k.strip()] = v.strip()
+
+          # Learned-count reporting: flow_store + flow_patterns emitted.
+          assert outputs.get('flow_store'), outputs
+          assert int(outputs.get('flow_patterns') or 0) >= 1, outputs
+          assert int(outputs.get('flow_sites') or 0) >= 1, outputs
+
+          # The store persisted to the runner-mount workspace (cacheable).
+          store = Path('ai-test-workspace/evidence/flow_memory.json')
+          assert store.exists(), 'flow_memory.json missing after learn: true'
+          data = json.loads(store.read_text(encoding='utf-8'))
+          assert data['patterns'], 'empty store after a green learn run'
+
+          # RAG off in CI: no rag_store.db (no ~80 MB embedder on the runner).
+          assert not (Path('ai-test-workspace/evidence') / 'rag_store.db').exists(), \
+              'RAG leg ran despite RAG_ENABLED=0'
+          print(f'learn OK: {outputs["flow_patterns"]} patterns / {outputs["flow_sites"]} sites -> {store}')
+          PY
+
+      - name: Save flow-memory store
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ai-test-workspace/evidence/flow_memory.json
+          key: ai-testgen-flowmem-${{ github.ref }}
+
+      # ── Step 5: slash-command /adapt — verified adaptation (spec §9.6) ───
+      # Sabotage the Cart-link locator, then /adapt it: patch -> re-run ->
+      # assertion gate -> keep. Reply payload asserted; posting skipped.
+      # (sudo: the cached files were created by the container's root user;
+      # the runner edits them as root on an ephemeral scratch workspace.)
+      - name: Sabotage Cart-link locator
+        run: |
+          sudo python - <<'PY'
+          import re
+          from pathlib import Path
+
+          pkg_dir = Path('ai-test-workspace/cache/packages')
+          pkgs = [p for p in pkg_dir.rglob('*.py')]
+          assert pkgs, 'no cached package to sabotage'
+          target = None
+          for path in pkgs:
+              text = path.read_text(encoding='utf-8')
+              for i, line in enumerate(text.splitlines()):
+                  m = re.search(r"\.click\(\s*'([^']+)'\s*,\s*label='Cart link'", line)
+                  if not m:
+                      continue
+                  if m.group(1) == 'a[href="/bogus.html"]':
+                      continue
+                  path.write_text(text.replace(m.group(1), 'a[href="/bogus.html"]', 1), encoding='utf-8')
+                  target = (path, i + 1, m.group(1))
+                  break
+              if target:
+                  break
+          assert target, 'no Cart-link step found to sabotage'
+          print(f'sabotaged {target[0]}:{target[1]} {target[2]} -> a[href="/bogus.html"]')
+          PY
+
+      - name: Slash-command /adapt (self-test)
+        id: adapt
+        uses: ./
+        with:
+          mode: slash-command
+          comment-body: /adapt test_04_go_to_cart_page
+          tests: ai-test-workspace/cache/packages/${{ steps.cache-key.outputs.key }}
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert verified adaptation (stub step)
+        if: steps.adapt.outcome == 'success'
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = Path('ai-test-workspace/results')
+          report = json.loads((results / 'adaptation.json').read_text(encoding='utf-8'))
+          summary = report['summary']
+          assert summary['adapted'] >= 1, report
+          assert summary['reverted'] == 0, report
+          assert report['kept'][0]['new_locator'] != 'a[href="/bogus.html"]', report['kept']
+
+          # The sabotaged source is fixed on disk
+          fixed = True
+          for path in Path('ai-test-workspace/cache/packages').rglob('*.py'):
+              if 'a[href="/bogus.html"]' in path.read_text(encoding='utf-8'):
+                  fixed = False
+          assert fixed, 'bogus locator still present after adaptation'
+
+          # Reply payload rendered (posting skipped: no token/PR)
+          reply = (results / 'comment.md').read_text(encoding='utf-8')
+          assert 'Verified adaptation' in reply, reply[:200]
+          print(f'adapt OK: {summary["adapted"]} kept / {summary["reverted"]} reverted')
+          PY
+
+      # ── Step 6: slash-command /ignore — the YAML entry reply ─────────────
+      - name: Slash-command /ignore (self-test)
+        id: ignore
+        uses: ./
+        with:
+          mode: slash-command
+          comment-body: /ignore test_05_verify_cart_product_details
+          tests: ai-test-workspace/cache/packages/${{ steps.cache-key.outputs.key }}
+          workspace: ai-test-workspace
+          self-test: 'true'
+
+      - name: Assert /ignore reply (stub step)
+        if: steps.ignore.outcome == 'success'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          reply = (Path('ai-test-workspace/results') / 'comment.md').read_text(encoding='utf-8')
+          assert '.ai-test-ignore.yml' in reply, reply[:200]
+          assert 'test_05_verify_cart_product_details' in reply, reply[:200]
+          assert 'reason' in reply, reply[:200]
+          print(f'/ignore OK: reply {len(reply)} chars')
+          PY
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-existing-artifacts
+          path: ai-test-workspace/results/
+          if-no-files-found: warn

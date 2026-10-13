@@ -4,12 +4,15 @@
 # release.
 #
 #   v1.2.3 tag push
-#     -> gates    the exact ci.yml chain (smoke, lint, mypy, pytest, the wheel
-#                 install + `tancat --help` build check, ...)
-#     -> build    `uv build` (sdist + wheel); distributions uploaded
-#     -> release  GitHub Release titled with the tag, notes generated, wheel and
-#                 sdist attached
-#     -> move-v1  force-moves the floating `v1` tag so `uses: ...@v1` resolves
+#     -> gates            the exact ci.yml chain (smoke, lint, mypy, pytest, the
+#                         wheel install + `tancat --help` build check, ...)
+#     -> full-self-test   the complete six-mode Action self-test (t-0768). It is
+#                         the reusable action-self-test-full.yml the nightly runs,
+#                         so all six modes must be green on the release commit.
+#     -> build            `uv build` (sdist + wheel); distributions uploaded
+#     -> release          GitHub Release titled with the tag, notes generated, wheel
+#                         and sdist attached
+#     -> move-v1          force-moves the floating `v1` tag so `uses: ...@v1` resolves
 #
 # Cutting a release: bump `[project].version` in pyproject.toml, merge to main,
 # then `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the
@@ -52,10 +55,18 @@ jobs:
     uses: ./.github/workflows/ci.yml
     secrets: inherit
 
+  # The complete six-mode Action self-test is a required release step (t-0768):
+  # before this, release.yml called ci.yml only, and the full self-test was gated
+  # to schedule/workflow_dispatch, so a release could ship without it ever running
+  # on the tag. Same reusable workflow the nightly runs - one source of truth.
+  full-self-test:
+    name: 'Action self-test (full: six modes)'
+    uses: ./.github/workflows/action-self-test-full.yml
+
   build:
     name: Build sdist + wheel
     runs-on: ubuntu-latest
-    needs: gates
+    needs: [gates, full-self-test]
     permissions:
       contents: read
     steps:
