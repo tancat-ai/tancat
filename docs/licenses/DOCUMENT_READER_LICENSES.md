@@ -60,6 +60,27 @@ adds `opencv-python-headless`. Measured cost:
 That is **~14 MB smaller compressed**, and the image saving is larger again
 because the GUI runtime libraries are no longer needed.
 
+## Runtime-downloaded model - the optional GPU OCR backend
+
+The tier-3 GPU OCR backend is a Hugging Face model fetched at runtime on first
+use, not a build dependency, so `uv.lock` and the generated
+`docs/licenses/DEPENDENCIES.md` cannot see it. It is recorded here instead. The
+in-product label is generic ("GPU OCR"), but a licence record must name what it
+licences.
+
+| Model | Fetched by | Licence | Attribution |
+|---|---|---|---|
+| `baidu/Unlimited-OCR` | the optional GPU OCR backend, only when `OCR_BACKEND=power` is set (needs CUDA/ROCm) | MIT | Copyright (c) 2026 Baidu. Base models are Apache-2.0. |
+
+**Why MIT, not Apache-2.0.** The upstream GitHub `LICENSE` reads "Copyright (c)
+2026 Baidu" under the MIT licence, and the Hugging Face model card declares
+`license: mit`. Its base models are Apache-2.0. MIT is permissive and compatible
+with this product's Apache-2.0 licence.
+
+**Do not** replace the tier-3 model with one from the "Blocked" list below
+(non-commercial or AGPL) without re-checking this file. Re-check when tier 3 is
+re-picked (see `docs/specs/FEATURE_SPEC_ingestion_local.md`).
+
 ## Optional, proposed only (not shipped)
 
 Named here per the research (t-0185) recommendation; neither is added.
