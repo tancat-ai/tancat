@@ -4,11 +4,12 @@ A run keeps its evidence in one known place (`eval_evidence.py`), a re-score
 recomputes the gate numbers from that evidence with no model call and no live
 site, and a run whose evidence is gone is caught instead of read as a zero.
 
-The recorded last re-score (82/113 gate 1, 3 hollow passes) has **no surviving
-artifacts** - `scratch/gate1_full.log` and the emitted dirs were deleted - so
-these tests prove the mechanism on a synthetic run that reproduces a known
-number. The next live held-out run must reproduce
-`scripts/eval/known_gate_scores.json`.
+The current recorded re-score (2026-10-12: 94/113 gate 1, 0 hollow passes) kept
+its evidence, so it can be re-scored with no model. The superseded 2026-09-25
+record (82/113 gate 1, 3 hollow passes) has **no surviving artifacts** -
+`scratch/gate1_full.log` and the emitted dirs were deleted - so these tests
+prove the mechanism on a synthetic run that reproduces a known number.
+`scripts/eval/known_gate_scores.json` holds both records.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from pathlib import Path
 import pytest
 
 _EVAL_DIR = Path(__file__).resolve().parent.parent / "scripts" / "eval"
+_REPO_ROOT = _EVAL_DIR.parents[1]
 sys.path.insert(0, str(_EVAL_DIR))
 
 import rescore  # noqa: E402
@@ -200,11 +202,33 @@ class TestEvidenceGuard:
         assert code == 2
 
     def test_recorded_score_file_is_present_and_honest(self) -> None:
-        """The recorded 82/113 + 3 is on disk, so the next run can be compared."""
+        """The current gate record is on disk and its evidence is committed, so it re-scores."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (82, 113)
-        assert payload["gate2_false_greens"] == 3
-        assert "deleted" in payload["note"]
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (94, 113)
+        assert payload["gate2_false_greens"] == 0
+        # The evidence is in the tracked tree, not the worktree's gitignored scratch.
+        evidence_dir = _REPO_ROOT / payload["evidence_dir"]
+        assert evidence_dir.is_dir(), payload["evidence_dir"]
+        assert verify_run_evidence(evidence_dir) == []
+        # The superseded 82/113 + 3 record is preserved, with the reason it was replaced.
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (82, 113)
+        assert payload["previous"]["gate2_false_greens"] == 3
+        assert "deleted" in payload["previous"]["note"]
+
+    def test_committed_heldout_evidence_rescores_to_the_record(self) -> None:
+        """The tracked evidence re-scores to the recorded 94/113 and 0 with no model.
+
+        This is the durability guard: the record depends on a committed re-score input,
+        not on a worktree's gitignored scratch directory.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        run_dir = _REPO_ROOT / payload["evidence_dir"]
+
+        report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
+
+        assert report.correct_resolutions == payload["gate1_correct"]
+        assert report.total_placeholders == payload["gate1_total"]
+        assert report.total_false_positives == payload["gate2_false_greens"]
 
 
 class TestHarnessEvidenceHook:
