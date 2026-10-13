@@ -270,7 +270,10 @@ class RapidOCRBackend(OcrBackend):
             if importlib.util.find_spec("torch") is None:
                 logger.debug("torch not installed — the PyTorch OCR engine needs it")
                 return False
-        except ImportError, ValueError:
+        # The parentheses are required: without them this is a SyntaxError on
+        # Python 3.13 and older.  ruff format (target py314) would otherwise
+        # rewrite it to the PEP 758 paren-less form, so the line is pinned.
+        except (ImportError, ValueError):  # fmt: skip
             return False
         return True
 
