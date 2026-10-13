@@ -139,6 +139,69 @@ class PlaceholderScorer:
         "added to cart",
     )
 
+    # t-0754 Class C - a message-like ASSERT must name its outcome. Words that
+    # describe the SHAPE of the check (or carry no identity) do not count:
+    # "message" / "confirmation" / "visible" are shared by a success message and
+    # an error message alike. The remaining tokens are the identity.
+    _MESSAGE_STRUCTURE_WORDS: frozenset[str] = frozenset(
+        {
+            "message",
+            "confirmation",
+            "confirm",
+            "appears",
+            "appear",
+            "displayed",
+            "shown",
+            "visible",
+            "present",
+            "text",
+            "content",
+            "page",
+            "element",
+            "section",
+            "dialog",
+            "popup",
+            "notification",
+            "alert",
+            "successfully",
+            "area",
+        }
+    )
+    # Outcome polarity. A success criterion must not accept an error element,
+    # and an error criterion must not accept a success element (eval-007 c5:
+    # "transfer success message" was answered with #transfer-error).
+    _POSITIVE_OUTCOME_TERMS: tuple[str, ...] = (
+        "success",
+        "successful",
+        "confirmed",
+        "confirmation",
+        "thank",
+        "complete",
+        "completed",
+        "placed",
+        "created",
+        "saved",
+        "sent",
+        "approved",
+    )
+    _NEGATIVE_OUTCOME_TERMS: tuple[str, ...] = (
+        "error",
+        "fail",
+        "failed",
+        "failure",
+        "invalid",
+        "declined",
+        "denied",
+        "rejected",
+        "unable",
+        "problem",
+        "expired",
+        "timeout",
+    )
+    # An absence check ("no error message", "popup closed") asserts the
+    # OPPOSITE polarity on purpose; the polarity floor must not fire for it.
+    _ABSENCE_PREFIXES: tuple[str, ...] = ("no ", "not ", "never", "without", "hidden", "absent", "closed", "removed")
+
     # Terms that signal page-level semantic assertions.
     PAGE_LEVEL_ASSERT_TERMS: tuple[str, ...] = (
         "listed",
@@ -188,6 +251,10 @@ class PlaceholderScorer:
 
         # --- FILL gate ---
         if action == "FILL" and not PlaceholderScorer._is_fillable(element):
+            return None
+
+        # --- t-0754 Class C floor: identity + success-vs-error polarity ---
+        if action == "ASSERT" and PlaceholderScorer._assert_message_floor_rejects(description, element):
             return None
 
         # --- Visibility gate for ASSERT ---
@@ -1259,6 +1326,83 @@ class PlaceholderScorer:
         return any(term in lowered for term in PlaceholderScorer.MESSAGE_LIKE_TERMS)
 
     @staticmethod
+    def _identity_tokens(description: str) -> set[str]:
+        """Return the tokens that identify WHICH element a criterion names.
+
+        Action verbs, navigation words, context words and message-structure
+        words are removed. A success message and an error message share the
+        structure words; only an identity token proves the right element.
+        """
+        from src.placeholder_resolver import PlaceholderResolver
+
+        tokens = SemanticMatcher.get_words(description, expand_aliases=False)
+        return {
+            token
+            for token in tokens
+            if len(token) > 1
+            and token not in PlaceholderScorer._MESSAGE_STRUCTURE_WORDS
+            and token not in PlaceholderResolver.ACTION_VERBS
+            and token not in PlaceholderResolver.ACTION_CONTEXT_WORDS
+            and token not in PlaceholderResolver.NAVIGATION_WORDS
+        }
+
+    @staticmethod
+    def _message_outcome_conflict(description: str, element: dict[str, Any]) -> bool:
+        """True when a message criterion's outcome opposes the element's (Class C).
+
+        "transfer success message" must not accept ``#transfer-error``; an
+        error criterion must not accept a success element. An absence check
+        ("no error message", "popup closed") is exempt - it asserts the
+        opposite on purpose and is handled by the polarity assertion type.
+        """
+        lowered = description.lower()
+        if any(term in lowered for term in PlaceholderScorer._ABSENCE_PREFIXES):
+            return False
+        wants_positive = any(term in lowered for term in PlaceholderScorer._POSITIVE_OUTCOME_TERMS)
+        wants_negative = any(term in lowered for term in PlaceholderScorer._NEGATIVE_OUTCOME_TERMS)
+        if not (wants_positive or wants_negative):
+            return False
+        identity = " ".join(
+            str(element.get(key, ""))
+            for key in ("text", "selector", "id", "classes", "aria_label", "accessible_name", "data_test")
+        ).lower()
+        element_positive = any(term in identity for term in PlaceholderScorer._POSITIVE_OUTCOME_TERMS)
+        element_negative = any(term in identity for term in PlaceholderScorer._NEGATIVE_OUTCOME_TERMS)
+        if wants_positive and element_negative and not element_positive:
+            return True
+        if wants_negative and element_positive and not element_negative:
+            return True
+        return False
+
+    @staticmethod
+    def _assert_message_floor_rejects(description: str, element: dict[str, Any]) -> bool:
+        """True when a message-like ASSERT candidate is a guess (t-0754 Class C).
+
+        The candidate must share at least one identity token with the criterion
+        and must not carry the opposite outcome. Otherwise the criterion skips
+        honestly instead of passing on a wrong element.
+        """
+        if not PlaceholderScorer._is_message_like_assertion(description):
+            return False
+        if PlaceholderScorer._message_outcome_conflict(description, element):
+            return True
+        # The identity floor guards only the generic/weak shapes the generic
+        # guard already suspects (a bare wrapper, a merged-text run, app
+        # chrome). A specific class or id is a legitimate candidate: the same
+        # shape (``.account_balance``, ``.cart_total_price``) is a golden for
+        # real criteria, so it is never demoted by class alone.
+        selector = str(element.get("selector", "")).strip()
+        if not PlaceholderScorer._is_generic_assert_target(element, selector):
+            return False
+        identity = PlaceholderScorer._identity_tokens(description)
+        if not identity:
+            return False
+        element_tokens = SemanticMatcher.get_words(
+            PlaceholderScorer._build_haystack(element).lower(), expand_aliases=False
+        )
+        return not (identity & element_tokens)
+
+    @staticmethod
     def _assert_action_penalty(action: str, description: str, element: dict[str, Any]) -> int:
         """Penalize interactive elements for ASSERT targeting message-like descriptions.
 
@@ -1310,6 +1454,11 @@ class PlaceholderScorer:
             return 0
 
         if not PlaceholderScorer._is_message_like_assertion(description):
+            return 0
+
+        # t-0754 Class C: never reward a message element whose outcome opposes
+        # the criterion (an error sibling for a success message).
+        if PlaceholderScorer._message_outcome_conflict(description, element):
             return 0
 
         role = str(element.get("role", "")).strip().lower()
