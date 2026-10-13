@@ -4,12 +4,13 @@ A run keeps its evidence in one known place (`eval_evidence.py`), a re-score
 recomputes the gate numbers from that evidence with no model call and no live
 site, and a run whose evidence is gone is caught instead of read as a zero.
 
-The current recorded re-score (2026-10-12: 94/113 gate 1, 0 hollow passes) kept
-its evidence, so it can be re-scored with no model. The superseded 2026-09-25
-record (82/113 gate 1, 3 hollow passes) has **no surviving artifacts** -
-`scratch/gate1_full.log` and the emitted dirs were deleted - so these tests
+The current recorded re-score (2026-10-13: 94/113 gate 1, 0 hollow passes) kept
+its evidence, so it can be re-scored with no model. The 2026-10-12 baseline is
+preserved under ``previous`` (also committed and re-scorable); the older
+2026-09-25 record (82/113 gate 1, 3 hollow passes) has **no surviving artifacts**
+- `scratch/gate1_full.log` and the emitted dirs were deleted - so these tests
 prove the mechanism on a synthetic run that reproduces a known number.
-`scripts/eval/known_gate_scores.json` holds both records.
+`scripts/eval/known_gate_scores.json` holds all three.
 """
 
 from __future__ import annotations
@@ -210,10 +211,15 @@ class TestEvidenceGuard:
         evidence_dir = _REPO_ROOT / payload["evidence_dir"]
         assert evidence_dir.is_dir(), payload["evidence_dir"]
         assert verify_run_evidence(evidence_dir) == []
-        # The superseded 82/113 + 3 record is preserved, with the reason it was replaced.
-        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (82, 113)
-        assert payload["previous"]["gate2_false_greens"] == 3
-        assert "deleted" in payload["previous"]["note"]
+        # The superseded 2026-10-12 baseline is preserved, with its own committed evidence.
+        assert payload["previous"]["recorded_at"] == "2026-10-12"
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (94, 113)
+        assert payload["previous"]["gate2_false_greens"] == 0
+        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
+        # The older deleted-evidence record is kept as history.
+        history = payload["comparison"]["history"]
+        assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
+        assert "deleted" in history[0]["note"]
 
     def test_committed_heldout_evidence_rescores_to_the_record(self) -> None:
         """The tracked evidence re-scores to the recorded 94/113 and 0 with no model.

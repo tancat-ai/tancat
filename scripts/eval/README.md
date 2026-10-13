@@ -174,12 +174,14 @@ re-applies gate 2 to the kept per-test outcomes, using the same
 The harness exits `4` when a run with `--evidence-dir` fails to keep its
 evidence, distinct from `2` (accuracy below threshold) and `3` (partial run).
 
-The last recorded re-score (as of 2026-10-12, t-0750) is
-`scripts/eval/known_gate_scores.json`: **94/113 gate 1 (83.2%)** and **0 hollow
-passes** - gate 2 now passes, gate 1 still fails the 90% target. The run kept
-its evidence (`scratch/eval_runs/2026-10-12_heldout`) and re-scores to the same
-numbers with no model; the superseded 82/113 + 3 record is preserved under
-`previous`. The gates are unchanged: `>=90%` gate 1, zero hollow passes gate 2.
+The last recorded re-score (as of 2026-10-13, t-0759, current main with the
+accuracy A/C fixes) is `scripts/eval/known_gate_scores.json`: **94/113 gate 1
+(83.2%)** and **0 hollow passes** - gate 2 passes, gate 1 still fails the 90%
+target, and the number is unchanged from the 2026-10-12 baseline. The run kept
+its evidence (`fixtures/heldout_runs/2026-10-13`) and re-scores to the same
+numbers with no model; the 2026-10-12 baseline is preserved under `previous` and
+the older 82/113 + 3 record under `comparison.history`. The gates are unchanged:
+`>=90%` gate 1, zero hollow passes gate 2.
 A per-story caveat lives in the same file: see `flaky_story` - eval-004's number is not repeatable, so prefer the overall figure.
 
 ---
