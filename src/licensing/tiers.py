@@ -59,7 +59,7 @@ FEATURES = {
     "multi_site": "multi-site suites",
     "ci_runs": "CI / headless runs",
     "private_network": "private-network target support",
-    "support": "email support (best effort) + setup help",
+    "support": "email support and setup help - direct from the developer",
 }
 
 
