@@ -171,7 +171,7 @@ Two files track active work; each owns a different class of item. **This split i
 
 | File | Owns | Examples |
 |------|------|----------|
-| `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` | **Big features / phases** (multi-session, spec-backed, portfolio/GTM) | Phase 1–8, AI-010/011/026/028/029, traceability 16b, AI-042/043/044 |
+| `docs/private/ROADMAP_ROADTO_PRODUCTION.md` (private, untracked) | **Big features / phases** (multi-session, spec-backed, portfolio/GTM) | Phase 1–8, AI-010/011/026/028/029, traceability 16b, AI-042/043/044 |
 | `BACKLOG.md` | **Fixes and smaller changes** (bugs B-xxx, focused improvements, experiments, watch-items) | B-030 family, AI-058/061/062/063/064/065, AI-054 |
 
 **Rules (enforced to stop the muddle):**
