@@ -10,6 +10,11 @@ Class C (no identity / success-vs-error polarity floor): in
 identity token with its criterion, or that names the opposite outcome, returns
 ``None`` (an honest skip) instead of a wrong-element match.
 
+t-0825 follow-up: the polarity scan of element text is negation-aware. The
+t-0754 floor counted "completed" in "could not be completed" as positive, so
+the #order-error trap in mock_sites/ambiguous (eval-010 c3, 2026-10-13
+re-measure) still won "order success message".
+
 Every test here fails without its change.
 """
 
@@ -131,6 +136,55 @@ def test_absence_assert_is_exempt_from_polarity() -> None:
     error = _element(selector="#transfer-error", id="transfer-error", text="Transfer failed", role="alert")
 
     assert PlaceholderScorer._message_outcome_conflict("no error message appears", error) is False
+
+
+# ---------------------------------------------------------------------------
+# t-0825 - negation-aware polarity (the #order-error trap)
+# ---------------------------------------------------------------------------
+
+
+def test_success_message_rejects_error_sibling_with_negated_positive_text() -> None:
+    """eval-010 c3: "completed" inside "could not be completed" is not positive.
+
+    The element is the exact trap from mock_sites/ambiguous/index.html: a
+    hidden error paragraph whose id/class say error while its body text
+    contains the positive word "completed" inside a negation.
+    """
+    error = _element(
+        selector="#order-error",
+        id="order-error",
+        text="Your order could not be completed. Please fill in all fields and try again.",
+        role="paragraph",
+        tag="p",
+        classes="error-message",
+    )
+
+    score = PlaceholderScorer.compute_element_score(
+        "ASSERT", "order success message", error, "#order-error", match_threshold=1
+    )
+
+    assert score is None
+    assert PlaceholderScorer._message_outcome_conflict("order success message", error) is True
+
+
+def test_order_number_is_not_a_negation() -> None:
+    """ "no" only negates its immediate object; "Order no 123 confirmed" stays positive."""
+    success = _element(
+        selector="#order-confirmed",
+        id="order-confirmed",
+        text="Order no 123 confirmed",
+        role="paragraph",
+        tag="p",
+    )
+
+    assert PlaceholderScorer._message_outcome_conflict("order success message", success) is False
+
+
+def test_error_criterion_rejects_element_that_negates_its_error() -> None:
+    """Mirror: "No error found. Transfer confirmed." is a positive element."""
+    element = _element(selector="#payment-status", id="payment-status", text="No error found. Transfer confirmed.")
+
+    assert PlaceholderScorer._message_outcome_conflict("transfer error message", element) is True
 
 
 # ---------------------------------------------------------------------------
