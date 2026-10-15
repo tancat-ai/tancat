@@ -84,22 +84,22 @@ class TestPyMuPDFBackend:
 
 
 class TestRapidOCRBackend:
-    """Tier-1 CPU OCR backend (RapidOCR / PP-OCR, ONNX Runtime)."""
+    """Tier-1 CPU OCR backend (RapidOCR / PP-OCRv6, PyTorch engine)."""
 
     def test_name(self) -> None:
         assert RapidOCRBackend().name == "rapidocr"
 
     def test_not_available_without_engine(self) -> None:
-        """When ``rapidocr_onnxruntime`` can't be imported, reports unavailable."""
-        # Make the import inside ``available`` raise ImportError.
-        with patch.dict(sys.modules, {"rapidocr_onnxruntime": None}):
+        """When ``rapidocr`` can't be imported, reports unavailable."""
+        # Make the import inside ``engine_available`` raise ImportError.
+        with patch.dict(sys.modules, {"rapidocr": None}):
             backend = RapidOCRBackend()
             assert backend.available is False
 
     def test_available_when_engine_importable(self) -> None:
         """When the engine module and the PDF library are importable, reports available."""
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch.dict(sys.modules, {"rapidocr": MagicMock()}),
             patch("src.ocr_backends._pdf_library_available", return_value=True),
         ):
             backend = RapidOCRBackend()
@@ -108,8 +108,20 @@ class TestRapidOCRBackend:
     def test_available_is_false_without_the_pdf_library(self) -> None:
         """The engine alone is not enough: the page still needs PyMuPDF to render."""
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch.dict(sys.modules, {"rapidocr": MagicMock()}),
             patch("src.ocr_backends._pdf_library_available", return_value=False),
+        ):
+            backend = RapidOCRBackend()
+            assert backend.engine_available is True
+            assert backend.available is False
+
+    def test_available_is_false_without_the_vendored_models(self) -> None:
+        """The engine alone is not enough: without the vendored files the engine
+        would try to download them, so the backend reports unavailable."""
+        with (
+            patch.dict(sys.modules, {"rapidocr": MagicMock()}),
+            patch("src.ocr_backends._pdf_library_available", return_value=True),
+            patch("src.ocr_backends._vendored_ocr_models_present", return_value=False),
         ):
             backend = RapidOCRBackend()
             assert backend.engine_available is True
@@ -125,6 +137,40 @@ class TestRapidOCRBackend:
             result = backend.parse_page("/fake/doc.pdf", 99)
         assert result == ""
 
+    def test_ensure_engine_passes_explicit_vendored_model_paths(self) -> None:
+        """Every model path is explicit so rapidocr never builds a download URL."""
+        import src.ocr_backends as ob
+
+        backend = RapidOCRBackend()
+        fake_module = MagicMock()
+        fake_module.EngineType.TORCH = "torch"
+        with patch.dict(sys.modules, {"rapidocr": fake_module}):
+            backend._ensure_engine()
+
+        params = fake_module.RapidOCR.call_args.kwargs["params"]
+        for key in ("Det.model_path", "Rec.model_path", "Cls.model_path", "Rec.rec_keys_path"):
+            value = Path(str(params[key]))
+            assert value.parent == ob._OCR_MODEL_DIR
+            assert value.is_file(), f"{key} -> {value} is not a vendored file"
+        assert params["Det.engine_type"] == "torch"
+        assert params["Rec.engine_type"] == "torch"
+        assert params["Cls.engine_type"] == "torch"
+
+    def test_engine_builds_with_network_disabled(self) -> None:
+        """Building the PyTorch engine makes no HTTP call (models are vendored)."""
+        import src.ocr_backends as ob
+
+        if not ob._vendored_ocr_models_present():
+            pytest.skip("vendored OCR models not present")
+        pytest.importorskip("rapidocr")
+        backend = RapidOCRBackend()
+        with (
+            patch("requests.get", side_effect=AssertionError("network call attempted")),
+            patch("requests.post", side_effect=AssertionError("network call attempted")),
+        ):
+            engine = backend._ensure_engine()
+        assert engine is not None
+
     def test_result_to_text_boxes_texts_scores(self) -> None:
         """RapidOCR (boxes, texts, scores) tuple → joined text lines."""
         boxes = [[0, 0, 100, 20], [0, 30, 100, 50]]
@@ -136,8 +182,22 @@ class TestRapidOCRBackend:
         assert RapidOCRBackend._result_to_text(None) == ""
         assert RapidOCRBackend._result_to_text(()) == ""
 
+    def test_result_to_text_rapidocr_v3_output(self) -> None:
+        """rapidocr v3 returns a RapidOCROutput whose ``txts`` is a tuple of strings."""
+
+        class _FakeOutput:
+            txts = ("Hello TanCat OCR", "Invoice 12345 total 99.50")
+
+        assert RapidOCRBackend._result_to_text(_FakeOutput()) == ("Hello TanCat OCR\nInvoice 12345 total 99.50")
+
+    def test_result_to_text_rapidocr_v3_empty_output(self) -> None:
+        class _FakeOutput:
+            txts = ()
+
+        assert RapidOCRBackend._result_to_text(_FakeOutput()) == ""
+
     def test_result_to_text_rapidocr_14_results_elapse(self) -> None:
-        """RapidOCR 1.4.x returns (results, elapse); each row is [box, text, score]."""
+        """Legacy RapidOCR 1.4.x returned (results, elapse); each row is [box, text, score]."""
         rows = [
             [[[0, 0], [1, 0], [1, 1], [0, 1]], "Line one", 0.9],
             [[[0, 2], [1, 2], [1, 3], [0, 3]], "Line two", 0.8],
@@ -204,7 +264,7 @@ class TestAutoOcrBackend:
             text = backend.parse_page("/fake/doc.pdf", 2)
 
         assert text == ""
-        assert "CPU OCR engine (rapidocr_onnxruntime)" in caplog.text
+        assert "CPU OCR engine (rapidocr" in caplog.text
         assert "PDF library" not in caplog.text
 
     def test_parse_page_skip_log_names_the_pdf_library_when_it_is_missing(
@@ -384,7 +444,7 @@ class TestGetOcrBackend:
                 new_callable=PropertyMock,
                 return_value=False,
             ),
-            pytest.raises(OcrBackendUnavailableError, match="rapidocr_onnxruntime"),
+            pytest.raises(OcrBackendUnavailableError, match="rapidocr"),
         ):
             get_ocr_backend("cpu")
 
@@ -505,7 +565,7 @@ class TestGetOcrBackend:
     def test_cpu_refusal_names_the_pdf_library_when_that_is_the_cause(self) -> None:
         """With the engine present but fitz absent, the line blames the PDF library."""
         with (
-            patch.dict(sys.modules, {"rapidocr_onnxruntime": MagicMock()}),
+            patch.dict(sys.modules, {"rapidocr": MagicMock()}),
             patch("src.ocr_backends._pdf_library_available", return_value=False),
             pytest.raises(OcrBackendUnavailableError, match="PyMuPDF"),
         ):

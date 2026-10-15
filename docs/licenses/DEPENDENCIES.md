@@ -68,7 +68,7 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 
 | Package | Version | Licence | Flag |
 |---|---|---|---|
-| rapidocr_onnxruntime | 1.4.4 | Apache-2.0 |  |
+| rapidocr | 3.10.0 | Apache-2.0 |  |
 | opencv-python-headless | 5.0.0.93 | Apache Software License |  |
 
 ### Docs group (`[dependency-groups].docs`)
@@ -202,6 +202,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | charset-normalizer | 3.4.9 | MIT | https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md |
 | click | 8.4.2 | BSD-3-Clause | https://github.com/pallets/click/ |
 | colorama | 0.4.6 | BSD License | https://github.com/tartley/colorama |
+| colorlog | 6.12.0 | MIT License | https://github.com/borntyping/python-colorlog |
 | comm | 0.2.3 | BSD License | https://github.com/ipython/comm |
 | coverage | 7.16.2 | Apache-2.0 | https://github.com/coveragepy/coveragepy |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause | https://github.com/pyca/cryptography |
@@ -215,7 +216,6 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | faiss-cpu | 1.14.3 | MIT | https://github.com/facebookresearch/faiss |
 | fastjsonschema | 2.22.1 | BSD License | https://github.com/horejsek/python-fastjsonschema |
 | filelock | 3.32.0 | MIT | https://github.com/tox-dev/py-filelock |
-| flatbuffers | 25.12.19 | Apache Software License | https://google.github.io/flatbuffers/ |
 | fqdn | 1.5.1 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/ypcrts/fqdn |
 | fsspec | 2026.7.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | ghp-import | 2.1.0 | Apache Software License | https://github.com/c-w/ghp-import |
@@ -292,7 +292,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | notebook | 7.6.1 | BSD License | https://github.com/jupyter/notebook |
 | notebook-shim | 0.2.4 | BSD License | UNKNOWN |
 | numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://numpy.org |
-| onnxruntime | 1.29.0 | MIT License | https://onnxruntime.ai |
+| omegaconf | 2.4.0 | BSD License | https://github.com/hydra-ecosystem/omegaconf |
 | opencv-python-headless | 5.0.0.93 | Apache Software License | https://github.com/opencv/opencv-python |
 | orjson | 3.11.9 | MPL-2.0 AND (Apache-2.0 OR MIT) | https://github.com/ijl/orjson |
 | ormsgpack | 1.12.2 | Apache-2.0 OR MIT | https://github.com/ormsgpack/ormsgpack |
@@ -345,7 +345,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | pyyaml | 6.0.3 | MIT License | https://pyyaml.org/ |
 | pyyaml-env-tag | 1.1 | MIT | https://github.com/waylan/pyyaml-env-tag |
 | pyzmq | 27.1.0 | BSD License | https://pyzmq.readthedocs.org |
-| rapidocr-onnxruntime | 1.4.4 | Apache-2.0 | https://github.com/RapidAI/RapidOCR |
+| rapidocr | 3.10.0 | Apache-2.0 | https://github.com/RapidAI/RapidOCR/releases |
 | referencing | 0.37.0 | MIT | https://github.com/python-jsonschema/referencing |
 | regex | 2026.7.19 | Apache-2.0 AND CNRI-Python | https://github.com/mrabarnett/mrab-regex |
 | requests | 2.34.2 | Apache Software License | https://github.com/psf/requests |

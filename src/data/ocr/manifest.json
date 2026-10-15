@@ -1,0 +1,37 @@
+{
+  "engine": "torch",
+  "rapidocr_version": "3.10.0",
+  "licence": "Apache-2.0",
+  "source": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/torch/",
+  "note": "Vendored so the CPU OCR tier never downloads models at runtime (zero egress).",
+  "files": [
+    {
+      "name": "PP-OCRv6_det_small.pth",
+      "role": "det",
+      "sha256": "fbdc74c97ea7b770ab22cbdc1bba01a52bdf1975efcf3442057356d622b05d54",
+      "bytes": 10248727,
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/torch/PP-OCRv6/det/PP-OCRv6_det_small.pth"
+    },
+    {
+      "name": "PP-OCRv6_rec_small.pth",
+      "role": "rec",
+      "sha256": "0107b2ad694ccc9b1db7cf9ed3ffbc93d1795d9e08d9cf823127243a87bce516",
+      "bytes": 21326017,
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/torch/PP-OCRv6/rec/PP-OCRv6_rec_small.pth"
+    },
+    {
+      "name": "ch_ppocr_mobile_v2.0_cls_mobile.pth",
+      "role": "cls",
+      "sha256": "bfe13860824b3365c0c7f7ccfcddc8ff11645c60051739ff18bc9913f60c98e1",
+      "bytes": 588638,
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/torch/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.pth"
+    },
+    {
+      "name": "ppocrv6_dict.txt",
+      "role": "dict",
+      "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+      "bytes": 74947,
+      "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/ppocrv6_dict.txt"
+    }
+  ]
+}
