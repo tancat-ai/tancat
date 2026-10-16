@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="1" tests="6" time="151.976" timestamp="2026-10-16T20:10:20.339755+01:00" hostname="lacattano"><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_01_navigate_home[chromium]" time="8.923" /><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_02_click_products_link[chromium]" time="13.066" /><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_03_add_blue_top_to_cart[chromium]" time="7.339"><skipped type="pytest.skip" message="Skipping: unresolved placeholders for: 'Blue Top added'. 3 of 4 placeholders resolved">C:\Users\l_a_c\code\AI-Playwright-Test-Generator\.worktrees\maker\scratch\gate1_out_t0829\test_eval_002.py:22: Skipping: unresolved placeholders for: 'Blue Top added'. 3 of 4 placeholders resolved</skipped></testcase><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_04_verify_confirmation_message[chromium]" time="16.453" /><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_05_click_cart_link[chromium]" time="46.122" /><testcase classname="scratch.gate1_out_t0829.test_eval_002" name="test_06_verify_cart_contents[chromium]" time="52.098"><failure message="playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.&#10;Call log:&#10;  - waiting for locator(&quot;h4:has-text(\&quot;Blue Top\&quot;)&quot;).first to be visible">scratch\gate1_out_t0829\test_eval_002.py:51: in test_06_verify_cart_contents
+    evidence_tracker.assert_visible('h4:has-text("Blue Top")', label='Blue Top in cart', expected_page='https://automationexercise.com/view_cart')
+src\evidence_tracker.py:1142: in assert_visible
+    loc.wait_for(state="visible", timeout=5000)
+.venv\Lib\site-packages\playwright\sync_api\_generated.py:20696: in wait_for
+    self._sync(
+.venv\Lib\site-packages\playwright\_impl\_locator.py:752: in wait_for
+    await self._frame.wait_for_selector(
+.venv\Lib\site-packages\playwright\_impl\_frame.py:395: in wait_for_selector
+    await self._channel.send(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:76: in send
+    return await self._connection.wrap_api_call(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:632: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.
+E   Call log:
+E     - waiting for locator("h4:has-text(\"Blue Top\")").first to be visible</failure></testcase></testsuite></testsuites>
