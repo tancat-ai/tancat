@@ -510,7 +510,7 @@ def ingest_pdf(
             else:
                 logger.warning(
                     "  %s: page %d skipped (%d chars, likely image-only). "
-                    "Install the [ocr] extra (rapidocr_onnxruntime) or set "
+                    "Install the [ocr] extra (rapidocr, PyTorch engine) or set "
                     "OCR_BACKEND=cpu to extract scanned pages on CPU.",
                     source,
                     page_num + 1,

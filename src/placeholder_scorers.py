@@ -201,6 +201,31 @@ class PlaceholderScorer:
     # An absence check ("no error message", "popup closed") asserts the
     # OPPOSITE polarity on purpose; the polarity floor must not fire for it.
     _ABSENCE_PREFIXES: tuple[str, ...] = ("no ", "not ", "never", "without", "hidden", "absent", "closed", "removed")
+    # t-0825: element-text polarity is negation-aware. A positive outcome term
+    # inside a negation window ("could not be completed") is NOT a positive
+    # signal. The t-0754 floor did a flat substring scan, so "completed" in the
+    # #order-error trap text counted as positive and cancelled the error
+    # polarity of the id/class (eval-010 c3, 2026-10-13 re-measure).
+    _NEGATION_WINDOW: int = 4
+    # "no" also opens an order number ("Order no 123 confirmed"), so it only
+    # negates the very next token; the other negators take the full window.
+    _NEGATORS: frozenset[str] = frozenset(
+        {
+            "not",
+            "no",
+            "never",
+            "cannot",
+            "can't",
+            "couldn't",
+            "won't",
+            "wouldn't",
+            "without",
+            "failed",
+            "unable",
+            "avoid",
+            "prevent",
+        }
+    )
 
     # Terms that signal page-level semantic assertions.
     PAGE_LEVEL_ASSERT_TERMS: tuple[str, ...] = (
@@ -1347,6 +1372,31 @@ class PlaceholderScorer:
         }
 
     @staticmethod
+    def _polarity_term_in_text(text: str, terms: tuple[str, ...]) -> bool:
+        """True when `text` carries one of `terms` outside any negation window.
+
+        Token scan instead of substring scan: "could not be completed" does not
+        count as positive because "completed" sits within ``_NEGATION_WINDOW``
+        tokens of "not". The element's own name (id/selector/class) is scanned
+        separately and stays flat - a name is not phrased in sentences.
+        """
+        tokens = re.findall(r"[a-z']+", text.lower())
+        others = PlaceholderScorer._NEGATORS - {"no"}
+        for index, token in enumerate(tokens):
+            for term in terms:
+                if term not in token:
+                    continue
+                negated = False
+                for j in range(index - 1, max(-1, index - PlaceholderScorer._NEGATION_WINDOW - 1), -1):
+                    word = tokens[j]
+                    if (word == "no" and j == index - 1) or word in others:
+                        negated = True
+                        break
+                if not negated:
+                    return True
+        return False
+
+    @staticmethod
     def _message_outcome_conflict(description: str, element: dict[str, Any]) -> bool:
         """True when a message criterion's outcome opposes the element's (Class C).
 
@@ -1362,12 +1412,17 @@ class PlaceholderScorer:
         wants_negative = any(term in lowered for term in PlaceholderScorer._NEGATIVE_OUTCOME_TERMS)
         if not (wants_positive or wants_negative):
             return False
-        identity = " ".join(
+        text = str(element.get("text", "")).lower()
+        structure = " ".join(
             str(element.get(key, ""))
-            for key in ("text", "selector", "id", "classes", "aria_label", "accessible_name", "data_test")
+            for key in ("selector", "id", "classes", "aria_label", "accessible_name", "data_test")
         ).lower()
-        element_positive = any(term in identity for term in PlaceholderScorer._POSITIVE_OUTCOME_TERMS)
-        element_negative = any(term in identity for term in PlaceholderScorer._NEGATIVE_OUTCOME_TERMS)
+        element_positive = PlaceholderScorer._polarity_term_in_text(
+            text, PlaceholderScorer._POSITIVE_OUTCOME_TERMS
+        ) or any(term in structure for term in PlaceholderScorer._POSITIVE_OUTCOME_TERMS)
+        element_negative = PlaceholderScorer._polarity_term_in_text(
+            text, PlaceholderScorer._NEGATIVE_OUTCOME_TERMS
+        ) or any(term in structure for term in PlaceholderScorer._NEGATIVE_OUTCOME_TERMS)
         if wants_positive and element_negative and not element_positive:
             return True
         if wants_negative and element_positive and not element_negative:
