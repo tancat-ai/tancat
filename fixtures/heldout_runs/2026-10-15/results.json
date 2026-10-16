@@ -1,0 +1,1600 @@
+{
+ "stories": [
+  {
+   "story_id": "eval-001",
+   "site": "saucedemo",
+   "total_criteria": 6,
+   "criteria_with_skeletons": 6,
+   "resolutions": [
+    {
+     "action": "FILL",
+     "description": "username",
+     "expected_locator": "#user-name",
+     "tolerance_selectors": [
+      "input[name=\"user-name\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "password",
+     "expected_locator": "#password",
+     "tolerance_selectors": [
+      "input[name=\"password\"]"
+     ],
+     "generated_locator": "#password",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "login button",
+     "expected_locator": "#login-button",
+     "tolerance_selectors": [
+      "[data-test=\"submit\"]"
+     ],
+     "generated_locator": "#login-button",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "product list",
+     "expected_locator": "[data-test=\"inventory-item\"]",
+     "tolerance_selectors": [
+      "[data-test=\"inventory-item-description\"]"
+     ],
+     "generated_locator": ".shopping_cart_badge[data-test=\"shopping-cart-badge\"]",
+     "matched": false,
+     "criterion_index": 0,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "username",
+     "expected_locator": "#user-name",
+     "tolerance_selectors": [
+      "input[name=\"user-name\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "password",
+     "expected_locator": "#password",
+     "tolerance_selectors": [
+      "input[name=\"password\"]"
+     ],
+     "generated_locator": "#password",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "login button",
+     "expected_locator": "#login-button",
+     "tolerance_selectors": [
+      "[data-test=\"submit\"]"
+     ],
+     "generated_locator": "#login-button",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Add to cart (Backpack)",
+     "expected_locator": "#add-to-cart-sauce-labs-backpack",
+     "tolerance_selectors": [],
+     "generated_locator": "#add-to-cart-sauce-labs-backpack",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "cart badge updated",
+     "expected_locator": "[data-test=\"shopping-cart-badge\"]",
+     "tolerance_selectors": [
+      ".shopping_cart_link[data-test=\"shopping-cart-link\"]"
+     ],
+     "generated_locator": ".shopping_cart_badge[data-test=\"shopping-cart-badge\"]",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Cart icon",
+     "expected_locator": ".shopping_cart_link[data-test=\"shopping-cart-link\"]",
+     "tolerance_selectors": [
+      "a.shopping_cart_link"
+     ],
+     "generated_locator": "#login-button",
+     "matched": false,
+     "criterion_index": 2,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "Cart Summary",
+     "expected_locator": "#cart_contents_container",
+     "tolerance_selectors": [],
+     "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/inventory.html\")",
+     "matched": false,
+     "criterion_index": 2,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "backpack item in cart",
+     "expected_locator": "[data-test=\"remove-sauce-labs-backpack\"]",
+     "tolerance_selectors": [
+      "[data-test=\"inventory-item-name\"]:has-text(\"Sauce Labs Backpack\")",
+      "#remove-sauce-labs-backpack"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/inventory.html\")",
+     "matched": false,
+     "criterion_index": 3,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Checkout",
+     "expected_locator": "#checkout",
+     "tolerance_selectors": [],
+     "generated_locator": "#login-button",
+     "matched": false,
+     "criterion_index": 4,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "Checkout Info form",
+     "expected_locator": "#checkout_info_container",
+     "tolerance_selectors": [],
+     "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/inventory.html\")",
+     "matched": false,
+     "criterion_index": 4,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "First Name",
+     "expected_locator": "#first-name",
+     "tolerance_selectors": [
+      "input[name=\"firstName\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "Last Name",
+     "expected_locator": "#last-name",
+     "tolerance_selectors": [
+      "input[name=\"lastName\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "Zip/Postal Code",
+     "expected_locator": "#postal-code",
+     "tolerance_selectors": [
+      "input[name=\"postalCode\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Continue",
+     "expected_locator": "#continue",
+     "tolerance_selectors": [],
+     "generated_locator": "#login-button",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Finish",
+     "expected_locator": "#finish",
+     "tolerance_selectors": [],
+     "generated_locator": "#login-button",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "Thank You page",
+     "expected_locator": "[data-test=\"complete-header\"]",
+     "tolerance_selectors": [
+      "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-complete.html\")"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/inventory.html\")",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "page",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 6,
+   "tests_passed": 2,
+   "tests_false_positive": 0,
+   "generation_duration_s": 253.57457208633423,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-002",
+   "site": "automationexercise",
+   "total_criteria": 6,
+   "criteria_with_skeletons": 6,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "home page loaded",
+     "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com/\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Products link",
+     "expected_locator": "a[href=\"/products\"]",
+     "tolerance_selectors": [
+      "a.products_link",
+      "a[href=\"/products\"]"
+     ],
+     "generated_locator": "a[href=\"/products\"]",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "products page title",
+     "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "h2"
+     ],
+     "generated_locator": ".modal-title.w-100",
+     "matched": false,
+     "criterion_index": 1,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Add to cart for Blue Top",
+     "expected_locator": ".add-to-cart.btn",
+     "tolerance_selectors": [
+      ".add-to-cart.btn[data-product-id=\"1\"]"
+     ],
+     "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "add to cart confirmation",
+     "expected_locator": ".text-center",
+     "tolerance_selectors": [
+      ".modal-body"
+     ],
+     "generated_locator": ".modal-title.w-100",
+     "matched": false,
+     "criterion_index": 3,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Cart link",
+     "expected_locator": "a[href=\"/view_cart\"]",
+     "tolerance_selectors": [
+      ".cart",
+      "a[href=\"/view_cart\"]"
+     ],
+     "generated_locator": "a[href=\"/view_cart\"]",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "cart page title",
+     "expected_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#cart_item"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "product name and price",
+     "expected_locator": ".cart_total_price",
+     "tolerance_selectors": [
+      "#cart_item",
+      ".cart_table"
+     ],
+     "generated_locator": ".modal-title.w-100",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "subject",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 6,
+   "tests_passed": 4,
+   "tests_false_positive": 0,
+   "generation_duration_s": 421.0295469760895,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-003",
+   "site": "demoqa",
+   "total_criteria": 6,
+   "criteria_with_skeletons": 6,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "practice form page title",
+     "expected_locator": "h5:has-text(\"Student Registration Form\")",
+     "tolerance_selectors": [
+      "h5"
+     ],
+     "generated_locator": "h5:has-text(\"Student Registration Form\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "First Name",
+     "expected_locator": "#firstName",
+     "tolerance_selectors": [],
+     "generated_locator": "#firstName",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "Last Name",
+     "expected_locator": "#lastName",
+     "tolerance_selectors": [],
+     "generated_locator": "#lastName",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "Email",
+     "expected_locator": "#userEmail",
+     "tolerance_selectors": [],
+     "generated_locator": "#userEmail",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Male radio",
+     "expected_locator": "#gender-radio-1",
+     "tolerance_selectors": [],
+     "generated_locator": "#gender-radio-1",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "Male radio selected",
+     "expected_locator": "#gender-radio-1",
+     "tolerance_selectors": [],
+     "generated_locator": "#gender-radio-1",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Submit",
+     "expected_locator": "#submit",
+     "tolerance_selectors": [],
+     "generated_locator": "#submit",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "submission success message",
+     "expected_locator": ".group-header",
+     "tolerance_selectors": [
+      "table"
+     ],
+     "generated_locator": "h1.text-center",
+     "matched": false,
+     "criterion_index": 5,
+     "verification": "subject",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 6,
+   "tests_passed": 6,
+   "tests_false_positive": 0,
+   "generation_duration_s": 522.6549210548401,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-004",
+   "site": "theinternet",
+   "total_criteria": 5,
+   "criteria_with_skeletons": 5,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "all elements listing",
+     "expected_locator": ".heading",
+     "tolerance_selectors": [
+      "h3:has-text(\"All Elements\")",
+      "h1.heading"
+     ],
+     "generated_locator": "#result",
+     "matched": false,
+     "criterion_index": 0,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "JavaScript Alerts",
+     "expected_locator": "a[href=\"/javascript_alerts\"]",
+     "tolerance_selectors": [],
+     "generated_locator": "a[href=\"/javascript_alerts\"]",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "alert demonstration header",
+     "expected_locator": "h3:has-text(\"JavaScript Alerts\")",
+     "tolerance_selectors": [
+      "h3"
+     ],
+     "generated_locator": "#result",
+     "matched": false,
+     "criterion_index": 1,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Click for JS Alert",
+     "expected_locator": "button:has-text(\"Click for JS Alert\")",
+     "tolerance_selectors": [],
+     "generated_locator": "button:has-text(\"Click for JS Alert\")",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Click for JS Alert",
+     "expected_locator": "button:has-text(\"Click for JS Alert\")",
+     "tolerance_selectors": [],
+     "generated_locator": "button:has-text(\"Click for JS Alert\")",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Click for JS Alert",
+     "expected_locator": "button:has-text(\"Click for JS Alert\")",
+     "tolerance_selectors": [],
+     "generated_locator": "button:has-text(\"Click for JS Alert\")",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "result message text",
+     "expected_locator": "#result",
+     "tolerance_selectors": [
+      "h4:has-text(\"Result\")"
+     ],
+     "generated_locator": "#result",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 5,
+   "tests_passed": 5,
+   "tests_false_positive": 0,
+   "generation_duration_s": 64.68457698822021,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-005",
+   "site": "lv_insurance",
+   "total_criteria": 10,
+   "criteria_with_skeletons": 10,
+   "resolutions": [
+    {
+     "action": "FILL",
+     "description": "email address",
+     "expected_locator": "#email",
+     "tolerance_selectors": [
+      "input[type='email']"
+     ],
+     "generated_locator": "#email",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "password",
+     "expected_locator": "#password",
+     "tolerance_selectors": [
+      "input[type='password']"
+     ],
+     "generated_locator": "#password",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "first name",
+     "expected_locator": "#firstName",
+     "tolerance_selectors": [],
+     "generated_locator": "#firstName",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "last name",
+     "expected_locator": "#lastName",
+     "tolerance_selectors": [],
+     "generated_locator": "#lastName",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "postcode",
+     "expected_locator": "#postcode",
+     "tolerance_selectors": [],
+     "generated_locator": "#dob",
+     "matched": false,
+     "criterion_index": 0,
+     "verification": "unverified",
+     "verification_reason": "assertion targets a global container ('#page-account'), which passes on any page and proves nothing about this criterion"
+    },
+    {
+     "action": "CLICK",
+     "description": "Next button on account page",
+     "expected_locator": "#accountNext",
+     "tolerance_selectors": [],
+     "generated_locator": "#accountNext",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Car Insurance product card",
+     "expected_locator": "#productCar",
+     "tolerance_selectors": [
+      "h4:has-text('Car Insurance')"
+     ],
+     "generated_locator": "#quoteSubmit",
+     "matched": false,
+     "criterion_index": 1,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "cover start date",
+     "expected_locator": "#startDate",
+     "tolerance_selectors": [],
+     "generated_locator": "#startDate",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "scheme",
+     "expected_locator": "#scheme",
+     "tolerance_selectors": [],
+     "generated_locator": "#scheme",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "driving license number",
+     "expected_locator": "#mainLicenseNumber",
+     "tolerance_selectors": [],
+     "generated_locator": "#mainLicenseNumber",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "years licensed",
+     "expected_locator": "#mainLicenseYears",
+     "tolerance_selectors": [],
+     "generated_locator": "#mainLicenseYears",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "occupation select",
+     "expected_locator": "#mainOccupation",
+     "tolerance_selectors": [],
+     "generated_locator": "#mainOccupation",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "vehicle registration number",
+     "expected_locator": "#vehicleReg",
+     "tolerance_selectors": [],
+     "generated_locator": "#vehicleReg",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Look Up registration button",
+     "expected_locator": "#lookupRegBtn",
+     "tolerance_selectors": [],
+     "generated_locator": "#lookupRegBtn",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "usage type",
+     "expected_locator": "input[name='usageType'][value='SDP']",
+     "tolerance_selectors": [
+      "input[name='usageType']"
+     ],
+     "generated_locator": "input[name=\"usageType\"][value=\"SDP\"]",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "No Claims Discount (Years)",
+     "expected_locator": "#ncdYears",
+     "tolerance_selectors": [],
+     "generated_locator": "#ncdYears",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "overnight location",
+     "expected_locator": "#overnightLocation",
+     "tolerance_selectors": [],
+     "generated_locator": "#overnightLocation",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Add Vehicle button",
+     "expected_locator": "#addVehicleBtn",
+     "tolerance_selectors": [],
+     "generated_locator": "#quoteSubmit",
+     "matched": false,
+     "criterion_index": 6,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "estimated annual premium displayed",
+     "expected_locator": "#premiumPrice",
+     "tolerance_selectors": [
+      ".price-value",
+      ".price-display"
+     ],
+     "generated_locator": ".price-display",
+     "matched": true,
+     "criterion_index": 7,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "compulsory excess information",
+     "expected_locator": "#excessInfo",
+     "tolerance_selectors": [
+      "#excessValue"
+     ],
+     "generated_locator": "#excessInfo",
+     "matched": true,
+     "criterion_index": 7,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Pay in Full payment option",
+     "expected_locator": "#paymentFull",
+     "tolerance_selectors": [
+      "h4:has-text('Pay in Full')"
+     ],
+     "generated_locator": "#paymentFull",
+     "matched": true,
+     "criterion_index": 8,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Submit and Get Quote button",
+     "expected_locator": "#quoteSubmit",
+     "tolerance_selectors": [],
+     "generated_locator": "#quoteSubmit",
+     "matched": true,
+     "criterion_index": 8,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "quote generated successfully message",
+     "expected_locator": "#quoteSuccess",
+     "tolerance_selectors": [
+      "h2:has-text('Quote Generated')"
+     ],
+     "generated_locator": "#quoteSuccess",
+     "matched": true,
+     "criterion_index": 9,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "quote reference number",
+     "expected_locator": "#quoteRef",
+     "tolerance_selectors": [],
+     "generated_locator": "#quoteRef",
+     "matched": true,
+     "criterion_index": 9,
+     "verification": "golden",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 10,
+   "tests_passed": 0,
+   "tests_false_positive": 0,
+   "generation_duration_s": 252.82168292999268,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-006",
+   "site": "ecommerce_mock",
+   "total_criteria": 8,
+   "criteria_with_skeletons": 8,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "home page loaded",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Add to cart for Blue Top",
+     "expected_locator": "button.btn.btn-default.add-to-cart[data-product-id=\"1\"]",
+     "tolerance_selectors": [
+      ".add-to-cart.btn",
+      "[data-product-id]"
+     ],
+     "generated_locator": ".add-to-cart.btn[data-product-id=\"1\"]",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "add to cart confirmation",
+     "expected_locator": ".text-center",
+     "tolerance_selectors": [
+      ".modal-body",
+      ".modal-title",
+      "#cartModal"
+     ],
+     "generated_locator": "p.text-center",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Cart link",
+     "expected_locator": "a[href=\"/cart.html\"]",
+     "tolerance_selectors": [
+      ".cart"
+     ],
+     "generated_locator": "a[href=\"/cart.html\"]",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "cart page title",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#cart_items"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "product name and price",
+     "expected_locator": ".cart_total_price",
+     "tolerance_selectors": [
+      ".cart_price",
+      ".cart_description",
+      "#cart_items"
+     ],
+     "generated_locator": ".modal-title.w-100",
+     "matched": false,
+     "criterion_index": 4,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Proceed To Checkout",
+     "expected_locator": "a[href=\"/checkout.html\"]",
+     "tolerance_selectors": [
+      "a.check_out",
+      ".check_out"
+     ],
+     "generated_locator": "a[href=\"/checkout.html\"]",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "checkout page title",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#checkout-form"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "name",
+     "expected_locator": "#name",
+     "tolerance_selectors": [
+      "input[name=\"name\"]"
+     ],
+     "generated_locator": "#name",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "email address",
+     "expected_locator": "#email",
+     "tolerance_selectors": [
+      "input[type=\"email\"]"
+     ],
+     "generated_locator": "#email",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "address",
+     "expected_locator": "#address",
+     "tolerance_selectors": [
+      "input[name=\"address\"]"
+     ],
+     "generated_locator": "#address",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "city",
+     "expected_locator": "#city",
+     "tolerance_selectors": [
+      "input[name=\"city\"]"
+     ],
+     "generated_locator": "#city",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "zip code",
+     "expected_locator": "#zip",
+     "tolerance_selectors": [
+      "input[name=\"zip\"]"
+     ],
+     "generated_locator": "#zip",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "card number",
+     "expected_locator": "#card-number",
+     "tolerance_selectors": [
+      "input[name=\"card_number\"]"
+     ],
+     "generated_locator": "#card-number",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Place Order",
+     "expected_locator": "#place-order",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#place-order",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "order success message",
+     "expected_locator": "#success-title",
+     "tolerance_selectors": [
+      ".text-center",
+      "h1"
+     ],
+     "generated_locator": ".modal-title.w-100",
+     "matched": false,
+     "criterion_index": 7,
+     "verification": "subject",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 8,
+   "tests_passed": 7,
+   "tests_false_positive": 0,
+   "generation_duration_s": 205.53813290596008,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-007",
+   "site": "banking_mock",
+   "total_criteria": 8,
+   "criteria_with_skeletons": 8,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "bank sign-in page loaded",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#user-name"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "username",
+     "expected_locator": "#user-name",
+     "tolerance_selectors": [
+      "input[name=\"username\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "password",
+     "expected_locator": "#password",
+     "tolerance_selectors": [
+      "input[name=\"password\"]"
+     ],
+     "generated_locator": "#password",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "sign in button",
+     "expected_locator": "#login-button",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#login-button",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "account balances visible",
+     "expected_locator": ".account_balance",
+     "tolerance_selectors": [
+      ".account-card",
+      "#accounts-list"
+     ],
+     "generated_locator": "#accounts-list",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Transfer Money link",
+     "expected_locator": "#transfer-link",
+     "tolerance_selectors": [
+      "a[href=\"/transfer.html\"]",
+      "a[href=\"transfer.html\"]"
+     ],
+     "generated_locator": "#transfer-link",
+     "matched": true,
+     "criterion_index": 3,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "amount",
+     "expected_locator": "#amount",
+     "tolerance_selectors": [
+      "input[name=\"amount\"]"
+     ],
+     "generated_locator": "#amount",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "unverified",
+     "verification_reason": "2 of 9 placeholders unresolved: 'from account'; 'to account'"
+    },
+    {
+     "action": "CLICK",
+     "description": "Transfer Funds button",
+     "expected_locator": "#transfer-submit",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#transfer-submit",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "unverified",
+     "verification_reason": "2 of 9 placeholders unresolved: 'from account'; 'to account'"
+    },
+    {
+     "action": "ASSERT",
+     "description": "transfer success message",
+     "expected_locator": "#transfer-success-title",
+     "tolerance_selectors": [
+      "#transfer-success-message",
+      "h1"
+     ],
+     "generated_locator": "#transfer-success-title",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Pay a Bill link",
+     "expected_locator": "#pay-bill-link",
+     "tolerance_selectors": [
+      "a[href=\"/payments.html\"]",
+      "a[href=\"payments.html\"]"
+     ],
+     "generated_locator": "a[href=\"/payments.html\"]",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "payment amount",
+     "expected_locator": "#payment-amount",
+     "tolerance_selectors": [
+      "input[name=\"payment_amount\"]"
+     ],
+     "generated_locator": "#payment-amount",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "Pay Bill button",
+     "expected_locator": "#pay-bill",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#pay-bill",
+     "matched": true,
+     "criterion_index": 6,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "payment success message",
+     "expected_locator": "#payment-success-title",
+     "tolerance_selectors": [
+      "#payment-success-message",
+      "h1"
+     ],
+     "generated_locator": "#payment-success-title",
+     "matched": true,
+     "criterion_index": 7,
+     "verification": "golden",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 8,
+   "tests_passed": 5,
+   "tests_false_positive": 0,
+   "generation_duration_s": 671.0565829277039,
+   "tests_timed_out": false,
+   "test_resolution_counts": [
+    {
+     "test_name": "test_03_verify_balances",
+     "resolved": 4,
+     "unresolved": 1,
+     "total": 5
+    },
+    {
+     "test_name": "test_04_click_transfer_link",
+     "resolved": 5,
+     "unresolved": 1,
+     "total": 6
+    },
+    {
+     "test_name": "test_05_fill_transfer_form",
+     "resolved": 7,
+     "unresolved": 2,
+     "total": 9
+    }
+   ]
+  },
+  {
+   "story_id": "eval-008",
+   "site": "banking_mock",
+   "total_criteria": 9,
+   "criteria_with_skeletons": 9,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "bank sign-in page loaded",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#user-name"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "username",
+     "expected_locator": "#user-name",
+     "tolerance_selectors": [
+      "input[name=\"username\"]"
+     ],
+     "generated_locator": "#user-name",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "password",
+     "expected_locator": "#password",
+     "tolerance_selectors": [
+      "input[name=\"password\"]"
+     ],
+     "generated_locator": "#password",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "CLICK",
+     "description": "sign in button",
+     "expected_locator": "#login-button",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#login-button",
+     "matched": true,
+     "criterion_index": 1,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "accounts dashboard loaded",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/dashboard.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url"
+     ],
+     "generated_locator": "#accounts-list",
+     "matched": false,
+     "criterion_index": 2,
+     "verification": "subject",
+     "verification_reason": ""
+    },
+    {
+     "action": "GOTO",
+     "description": "go to the transfer page",
+     "expected_locator": "http://localhost:8781/transfer.html",
+     "tolerance_selectors": [
+      "http://localhost:8781/transfer.html"
+     ],
+     "generated_locator": null,
+     "matched": false,
+     "criterion_index": 3,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "amount",
+     "expected_locator": "#amount",
+     "tolerance_selectors": [
+      "input[name=\"amount\"]"
+     ],
+     "generated_locator": "#amount",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "unverified",
+     "verification_reason": "no element or page-arrival assertion was emitted for this criterion"
+    },
+    {
+     "action": "CLICK",
+     "description": "Transfer Funds button",
+     "expected_locator": "#transfer-submit",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#transfer-submit",
+     "matched": true,
+     "criterion_index": 4,
+     "verification": "unverified",
+     "verification_reason": "no element or page-arrival assertion was emitted for this criterion"
+    },
+    {
+     "action": "ASSERT",
+     "description": "transfer success message",
+     "expected_locator": "#transfer-success-title",
+     "tolerance_selectors": [
+      "h2#transfer-success-title"
+     ],
+     "generated_locator": "#transfer-success-title",
+     "matched": true,
+     "criterion_index": 5,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "GOTO",
+     "description": "navigate to bill payments",
+     "expected_locator": "http://localhost:8781/payments.html",
+     "tolerance_selectors": [
+      "http://localhost:8781/payments.html"
+     ],
+     "generated_locator": null,
+     "matched": false,
+     "criterion_index": 6,
+     "verification": "page",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "payment amount",
+     "expected_locator": "#payment-amount",
+     "tolerance_selectors": [
+      "input[name=\"payment-amount\"]"
+     ],
+     "generated_locator": "#payment-amount",
+     "matched": true,
+     "criterion_index": 7,
+     "verification": "unverified",
+     "verification_reason": "no element or page-arrival assertion was emitted for this criterion"
+    },
+    {
+     "action": "CLICK",
+     "description": "Pay Bill button",
+     "expected_locator": "#pay-bill",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#pay-bill",
+     "matched": true,
+     "criterion_index": 7,
+     "verification": "unverified",
+     "verification_reason": "no element or page-arrival assertion was emitted for this criterion"
+    },
+    {
+     "action": "ASSERT",
+     "description": "payment success message",
+     "expected_locator": "#payment-success-title",
+     "tolerance_selectors": [
+      "h2#payment-success-title"
+     ],
+     "generated_locator": "#payment-success-title",
+     "matched": true,
+     "criterion_index": 8,
+     "verification": "golden",
+     "verification_reason": ""
+    }
+   ],
+   "tests_executed": 9,
+   "tests_passed": 7,
+   "tests_false_positive": 0,
+   "generation_duration_s": 131.58606505393982,
+   "tests_timed_out": false,
+   "test_resolution_counts": []
+  },
+  {
+   "story_id": "eval-010",
+   "site": "ambiguous_mock",
+   "total_criteria": 4,
+   "criteria_with_skeletons": 4,
+   "resolutions": [
+    {
+     "action": "ASSERT",
+     "description": "store home page loaded",
+     "expected_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "tolerance_selectors": [
+      "expect(page).to_have_url",
+      "#order-form"
+     ],
+     "generated_locator": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+     "matched": true,
+     "criterion_index": 0,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "FILL",
+     "description": "quantity",
+     "expected_locator": "#quantity",
+     "tolerance_selectors": [
+      "input[name=\"quantity\"]"
+     ],
+     "generated_locator": null,
+     "matched": false,
+     "criterion_index": 1,
+     "verification": "unverified",
+     "verification_reason": "1 of 3 placeholders unresolved: 'quantity'"
+    },
+    {
+     "action": "CLICK",
+     "description": "Place Order button",
+     "expected_locator": "#place-order",
+     "tolerance_selectors": [
+      "button[type=\"submit\"]"
+     ],
+     "generated_locator": "#place-order",
+     "matched": true,
+     "criterion_index": 2,
+     "verification": "golden",
+     "verification_reason": ""
+    },
+    {
+     "action": "ASSERT",
+     "description": "order success message",
+     "expected_locator": "#order-success-title",
+     "tolerance_selectors": [
+      "#order-success-message",
+      "h1"
+     ],
+     "generated_locator": ":has-text(\"Item Blue Top Grey Hoodie Quantity Place Order Your order could not be completed. Please fill in all fields and try again.\")",
+     "matched": false,
+     "criterion_index": 3,
+     "verification": "unverified",
+     "verification_reason": "1 of 5 placeholders unresolved: 'quantity'"
+    }
+   ],
+   "tests_executed": 4,
+   "tests_passed": 1,
+   "tests_false_positive": 0,
+   "generation_duration_s": 104.43614387512207,
+   "tests_timed_out": false,
+   "test_resolution_counts": [
+    {
+     "test_name": "test_02_select_item_and_quantity",
+     "resolved": 2,
+     "unresolved": 1,
+     "total": 3
+    },
+    {
+     "test_name": "test_03_click_place_order",
+     "resolved": 3,
+     "unresolved": 1,
+     "total": 4
+    },
+    {
+     "test_name": "test_04_verify_success_message",
+     "resolved": 4,
+     "unresolved": 1,
+     "total": 5
+    }
+   ]
+  }
+ ],
+ "alignment": null
+}
