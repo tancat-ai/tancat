@@ -1,0 +1,519 @@
+{
+ "generated_at": "2026-10-13T17:54:30.311096+00:00",
+ "stories": {
+  "eval-001": [
+   {
+    "test_name": "test_01_login",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://www.saucedemo.com/inventory.html\")",
+    "page_url": "https://www.saucedemo.com/inventory.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_add_item_to_cart",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.shopping_cart_link[data-test=\"shopping-cart-link\"]'",
+    "page_url": "https://www.saucedemo.com/inventory.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_navigate_to_cart",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://www.saucedemo.com/cart.html\")",
+    "page_url": "https://www.saucedemo.com/cart.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_verify_item_in_cart",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.cart_item[data-test=\"inventory-item\"]'",
+    "page_url": "https://www.saucedemo.com/cart.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_navigate_to_checkout",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-step-one.html\")",
+    "page_url": "https://www.saucedemo.com/checkout-step-one.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_06_complete_checkout",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-complete.html\")",
+    "page_url": "https://www.saucedemo.com/checkout-complete.html",
+    "reason": ""
+   }
+  ],
+  "eval-002": [
+   {
+    "test_name": "test_01_navigate_home",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://automationexercise.com/\")",
+    "page_url": "https://automationexercise.com/",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_click_products_link",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://automationexercise.com/products\")",
+    "page_url": "https://automationexercise.com/products",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_add_blue_top_to_cart",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.modal-title.w-100'",
+    "page_url": "https://automationexercise.com/products",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_verify_confirmation_message",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#cartModal'",
+    "page_url": "https://automationexercise.com/products",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_click_cart_link",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://automationexercise.com/view_cart\")",
+    "page_url": "https://automationexercise.com/view_cart",
+    "reason": ""
+   },
+   {
+    "test_name": "test_06_verify_cart_contents",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 5 placeholders unresolved: 'Blue Top in cart'"
+   }
+  ],
+  "eval-003": [
+   {
+    "test_name": "test_01_navigate_to_practice_form",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'h1.text-center'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_fill_first_name",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#firstName'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_fill_last_name",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#lastName'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_fill_email",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#userEmail'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_select_male_radio",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#gender-radio-1'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   },
+   {
+    "test_name": "test_06_submit_form",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'h5:has-text(\"Student Registration Form\")'",
+    "page_url": "https://demoqa.com/automation-practice-form",
+    "reason": ""
+   }
+  ],
+  "eval-004": [
+   {
+    "test_name": "test_01_navigate_to_main_page",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://the-internet.herokuapp.com/\")",
+    "page_url": "https://the-internet.herokuapp.com/",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_click_javascript_alerts_link",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"https://the-internet.herokuapp.com/javascript_alerts\")",
+    "page_url": "https://the-internet.herokuapp.com/javascript_alerts",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_click_js_alert_button",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_04_accept_javascript_alert",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#result'",
+    "page_url": "https://the-internet.herokuapp.com/javascript_alerts",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_verify_result_message",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#result'",
+    "page_url": "https://the-internet.herokuapp.com/javascript_alerts",
+    "reason": ""
+   }
+  ],
+  "eval-005": [
+   {
+    "test_name": "test_01_create_account",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "assertion targets a global container ('#page-account'), which passes on any page and proves nothing about this criterion"
+   },
+   {
+    "test_name": "test_02_select_car_insurance",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'h4:has-text(\"🚗 Car Insurance\")'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_enter_policy_details",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'h2:has-text(\"Policy Details\")'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_enter_driver_details",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#vehicleDetails'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_add_vehicle",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#vehicleDetails'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_06_select_usage_type",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#paymentFull'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_07_set_ncd_and_parking",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#quoteSuccess'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_08_verify_extras_page",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.price-display'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_09_submit_quote",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#quoteSuccess'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_10_verify_confirmation",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#mainLicenseNumber'",
+    "page_url": "http://localhost:8781/generated_tests/mock_insurance_site.html",
+    "reason": ""
+   }
+  ],
+  "eval-006": [
+   {
+    "test_name": "test_01_navigate_home",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_add_blue_top",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.modal-title.w-100'",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_verify_confirmation",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'p.text-center'",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_go_to_cart",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/cart.html\")",
+    "page_url": "http://localhost:8781/cart.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_verify_cart_contents",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "':has-text(\"Proceed To Checkout\")'",
+    "page_url": "http://localhost:8781/cart.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_06_proceed_checkout",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/checkout.html\")",
+    "page_url": "http://localhost:8781/checkout.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_07_fill_checkout_form",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_08_verify_order_success",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#place-order'",
+    "page_url": "http://localhost:8781/checkout.html",
+    "reason": ""
+   }
+  ],
+  "eval-007": [
+   {
+    "test_name": "test_01_navigate_to_sign_in",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_sign_in",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#accounts-list'",
+    "page_url": "http://localhost:8781/dashboard.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_03_verify_account_balances",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'p.account_balance'",
+    "page_url": "http://localhost:8781/dashboard.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_click_transfer_money",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'.title'",
+    "page_url": "http://localhost:8781/transfer.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_fill_transfer_form",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_06_verify_transfer_success",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#transfer-success-title'",
+    "page_url": "http://localhost:8781/transfer_success.html?amount=100.00",
+    "reason": ""
+   },
+   {
+    "test_name": "test_07_pay_bills",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_08_verify_payment_success",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#payment-success-title'",
+    "page_url": "http://localhost:8781/payment_success.html?amount=50.00",
+    "reason": ""
+   }
+  ],
+  "eval-008": [
+   {
+    "test_name": "test_01_navigate_to_sign_in",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_sign_in",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_03_verify_dashboard",
+    "status": "verified_by_element",
+    "label": "verified by element",
+    "checked": "'#accounts-list'",
+    "page_url": "http://localhost:8781/dashboard.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_04_go_to_transfer",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/transfer.html\")",
+    "page_url": "http://localhost:8781/transfer.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_05_fill_transfer_amount",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_06_verify_transfer_success",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 8 placeholders unresolved: 'transfer success message'"
+   },
+   {
+    "test_name": "test_07_navigate_to_bill_payments",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/payments.html\")",
+    "page_url": "http://localhost:8781/payments.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_08_fill_payment_amount",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "no element or page-arrival assertion was emitted for this criterion"
+   },
+   {
+    "test_name": "test_09_verify_payment_success",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 8 placeholders unresolved: 'payment success message'"
+   }
+  ],
+  "eval-010": [
+   {
+    "test_name": "test_01_navigate_to_store_home_page",
+    "status": "verified_by_page_arrival",
+    "label": "verified by page arrival",
+    "checked": "expect(page).to_have_url(\"http://localhost:8781/index.html\")",
+    "page_url": "http://localhost:8781/index.html",
+    "reason": ""
+   },
+   {
+    "test_name": "test_02_select_item_and_set_quantity",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 3 placeholders unresolved: 'quantity'"
+   },
+   {
+    "test_name": "test_03_click_place_order_button",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 4 placeholders unresolved: 'quantity'"
+   },
+   {
+    "test_name": "test_04_verify_order_success_message",
+    "status": "unverified",
+    "label": "unverified",
+    "checked": "",
+    "page_url": "",
+    "reason": "1 of 5 placeholders unresolved: 'quantity'"
+   }
+  ]
+ }
+}

@@ -213,14 +213,20 @@ class TestEvidenceGuard:
         evidence_dir = _REPO_ROOT / payload["evidence_dir"]
         assert evidence_dir.is_dir(), payload["evidence_dir"]
         assert verify_run_evidence(evidence_dir) == []
-        # The superseded 2026-10-13 record is preserved, with its own committed evidence.
+        # The ASSERT-pool filter re-measure (j-0171) is the superseded record, with its own evidence.
         assert payload["previous"]["recorded_at"] == "2026-10-13"
-        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (94, 113)
-        assert payload["previous"]["gate2_false_greens"] == 0
-        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
-        # And the 2026-10-12 baseline is preserved one level further down the chain.
-        assert payload["previous"]["previous"]["recorded_at"] == "2026-10-12"
-        assert payload["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (93, 113)
+        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13_gate1_filter"
+        # The 2026-10-13 baseline is preserved one level further down the chain.
+        assert payload["previous"]["previous"]["recorded_at"] == "2026-10-13"
+        assert (payload["previous"]["previous"]["gate1_correct"], payload["previous"]["previous"]["gate1_total"]) == (
+            94,
+            113,
+        )
+        assert payload["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
+        # And the 2026-10-12 baseline is preserved one level further down still.
+        assert payload["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-12"
+        assert payload["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
         # The older deleted-evidence record is kept as history.
         history = payload["comparison"]["history"]
         assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
