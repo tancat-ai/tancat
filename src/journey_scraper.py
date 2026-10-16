@@ -687,6 +687,14 @@ class JourneyScraper:
         "/checkout",
         "/payment",
     )
+    # B-103: select-intent descriptions target a dropdown control, not a
+    # product link or a submit button.
+    _SELECT_INTENT_TERMS = (
+        "select",
+        "choose",
+        "pick",
+        "dropdown",
+    )
 
     @staticmethod
     def _has_product_intent(description: str) -> bool:
@@ -704,6 +712,16 @@ class JourneyScraper:
         if any(term in lowered for term in JourneyScraper._DISMISS_INTENT_TERMS):
             return True
         return bool(set(description.lower().split()) & JourneyScraper._CLOSE_INTENT_WORDS)
+
+    @staticmethod
+    def _has_select_intent(description: str) -> bool:
+        """True when a CLICK description targets a dropdown control (B-103).
+
+        "select item" / "choose an account" describe picking an option from a
+        <select>, not clicking a product card or a submit button.
+        """
+        lowered = f" {description.lower().strip()} "
+        return any(term in lowered for term in JourneyScraper._SELECT_INTENT_TERMS)
 
     @staticmethod
     def _has_browse_intent(description: str) -> bool:
@@ -821,6 +839,13 @@ class JourneyScraper:
             or text in ("continue shopping", "close", "dismiss", "ok", "got it", "cancel", "no thanks")
         )
 
+    @staticmethod
+    def _is_select_element(element: dict[str, Any]) -> bool:
+        """True when the element is a dropdown control (B-103)."""
+        role = str(element.get("role", "")).lower()
+        tag = str(element.get("tag", "")).lower()
+        return role in ("select", "combobox") or tag == "select"
+
     def _discover_selector(self, page: Any, action: str, description: str) -> str | None:
         """Find the best selector for a description on the current live page.
 
@@ -836,6 +861,10 @@ class JourneyScraper:
             (hidden modals like #cartModal are always in the e-commerce DOM)
           - product-intent hints: prefer product-card elements over nav chrome
           - modal-dismiss hints: prefer dismiss buttons over navigation links
+        B-103: dropdowns are legitimate click targets — role `select` /
+        `combobox` joined the CLICK whitelist, and select-intent descriptions
+        ("select item") get a +10 bonus on the dropdown so the step wins the
+        dropdown decisively instead of a tie with the submit button.
         """
         try:
             page.wait_for_load_state("networkidle", timeout=5000)
@@ -862,6 +891,8 @@ class JourneyScraper:
         has_browse_intent = has_product_intent and self._has_browse_intent(description)
         has_category_intent = has_product_intent and self._has_category_intent(description)
         has_dismiss_intent = action == "CLICK" and self._has_dismiss_intent(description)
+        # B-103: "select item" / "choose an account" target the dropdown.
+        has_select_intent = action == "CLICK" and self._has_select_intent(description)
 
         # B-028: a hidden modal container (e.g. #cartModal) is always present in
         # e-commerce DOMs. Only treat the page as modal-blocked when a modal-
@@ -916,6 +947,9 @@ class JourneyScraper:
                 "tab",
                 "checkbox",
                 "radio",
+                # B-103: dropdowns are legitimate click targets.
+                "select",
+                "combobox",
             ):
                 score -= 20
 
@@ -941,6 +975,11 @@ class JourneyScraper:
                 elif element.get("href"):
                     # Navigation links never dismiss a modal.
                     score -= 10
+            if has_select_intent and self._is_select_element(element):
+                # B-103: the dropdown itself is the target. The +10 margin
+                # keeps "select item" off a raw-score tie with the submit
+                # button (tie-breaks went by iteration order).
+                score += 10
 
             if score > best_score:
                 best_score = score
