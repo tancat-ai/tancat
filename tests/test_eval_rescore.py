@@ -278,8 +278,11 @@ class TestEvidenceGuard:
             if counts is not None:
                 assert sum(counts.values()) == total - correct, (entry["recorded_at"], counts)
             if "verdict" in entry:
-                pct = round(100 * correct / total, 1)
-                assert f"{pct}%" in entry["verdict"], (entry["recorded_at"], entry["verdict"])
+                assert entry["gate1_accuracy_pct"] == round(100 * correct / total, 1), (
+                    entry["recorded_at"],
+                    entry["gate1_accuracy_pct"],
+                )
+                assert f"{entry['gate1_accuracy_pct']}%" in entry["verdict"], (entry["recorded_at"], entry["verdict"])
             checked += 1
             entry = entry.get("previous")
         assert checked >= 5, checked
