@@ -9,7 +9,7 @@
     "gate1_min_accuracy_pct": 90,
     "gate2_max_false_greens": 0
   },
-  "verdict": "gate 1 FAIL (77.0% < 90%); gate 2 PASS (0 hollow passes)",
+  "verdict": "gate 1 FAIL (78.8% < 90%); gate 2 PASS (0 hollow passes)",
   "model": {
     "provider": "openai-local",
     "base_url": "http://127.0.0.1:8080/v1",
@@ -34,17 +34,17 @@
     "eval-005": "20/24",
     "eval-006": "14/16",
     "eval-007": "13/13",
-    "eval-008": "10/13",
+    "eval-008": "12/13",
     "eval-010": "4/4"
   },
   "gate1_misses_by_class": {
     "triaged": true,
     "counts": {
       "wrong_element": 23,
-      "target_never_captured": 2,
+      "target_never_captured": 0,
       "element_instead_of_page_arrival": 1
     },
-    "note": "Classified with scripts/eval/eval_criteria.classify_miss from the committed evidence. 2026-10-15 was wrong_element 23, target_never_captured 3, element_instead_of_page_arrival 2. The B-103 journey-cursor class is gone: both eval-010 misses (FILL quantity target_never_captured; ASSERT order-success wrong_element/degraded :has-text) now resolve, and the success ASSERT is scoped to success.html with expected_page=success.html. The 2 remaining target_never_captured are eval-008 GOTO misses (unresolved 'go to the transfer page' / 'navigate to bill payments') - present in both runs, a separate defect. wrong_element 23 -> 23 is composition: the eval-010 c3 wrong_element is out, one new eval-005 draw-noise miss in (#quoteRef -> #accountError). 12 of the 26 misses are eval-001 - the same bad saucedemo draw as 10-15 (skeleton stuck on the login page: #login-button / #user-name)."
+    "note": "Primary numbers are post t-0831 validator revision; values recorded at the time are stated in parentheses. Classified with scripts/eval/eval_criteria.classify_miss from the committed evidence: wrong_element 23 (pre-fix 23), element_instead_of_page_arrival 1 (pre-fix 1), target_never_captured 0 (pre-fix 2 - the eval-008 GOTO pair 'go to the transfer page' / 'navigate to bill payments': both were resolvable in this run, but the pre-fix harness could never match a GOTO golden - a permanent -2/113 mislabelled as a capture failure, fixed in t-0831). The B-103 journey-cursor class is gone: both eval-010 misses (FILL quantity target_never_captured; ASSERT order-success wrong_element/degraded :has-text) now resolve, and the success ASSERT is scoped to success.html with expected_page=success.html. wrong_element 23 -> 23 vs 2026-10-15 is composition: the eval-010 c3 wrong_element is out, one new eval-005 draw-noise miss in (#quoteRef -> #accountError). 12 of the 24 misses (pre-fix 26) are eval-001 - the same bad saucedemo draw as 10-15 (skeleton stuck on the login page: #login-button / #user-name). Pre-fix comparison: 2026-10-15 had wrong_element 23, target_never_captured 3, element_instead_of_page_arrival 2 (28 misses); this run had 26."
   },
   "assert_verification": {
     "by_element_golden": 21,
@@ -81,11 +81,11 @@
         "eval-005": "21/24 -> 20/24 (-1)",
         "eval-006": "14/16 -> 14/16",
         "eval-007": "13/13 -> 13/13",
-        "eval-008": "10/13 -> 10/13",
+        "eval-008": "12/13 -> 12/13 (post t-0831 validator; recorded 10/13 -> 10/13 at the time)",
         "eval-010": "2/4 -> 4/4 (+2)"
       },
       "tests_passed": "37 -> 41",
-      "note": "Code-attributable delta vs 2026-10-15: eval-010 2/4 -> 4/4 (+2, the B-103 journey-cursor fix - the scout's predicted flip, 'eval-010 2/4 -> 3-4/4'), eval-002 +1 (products-page title now a page-arrival assertion), eval-005 -1 (draw noise: #quoteRef -> #accountError). eval-001 is again the outlier (8/20, identical to 10-15: the bad saucedemo generation draw, skeleton stuck on the login page) - it is why the total sits at 87 instead of the 89-92 band. Do not read 87 as a regression against the 89-92 band: the band runs are 10-12/10-13 draws, and this run carries the same eval-001 outlier as 10-15."
+      "note": "Code-attributable delta vs 2026-10-15: eval-010 2/4 -> 4/4 (+2, the B-103 journey-cursor fix - the scout's predicted flip, 'eval-010 2/4 -> 3-4/4'), eval-002 +1 (products-page title now a page-arrival assertion), eval-005 -1 (draw noise: #quoteRef -> #accountError). eval-001 is again the outlier (8/20, identical to 10-15: the bad saucedemo generation draw, skeleton stuck on the login page) - it is why the total (89 under the t-0831 validator; recorded 87 at the time) sits at the bottom of the 89-92 band rather than above it. Do not read the recorded 87 as a regression against the 89-92 band: under the fixed validator this run is 89/113, inside the band (the -2 is the eval-008 GOTO pair the pre-fix harness could not credit). The band runs are 10-12/10-13 draws, and this run carries the same eval-001 outlier as 10-15."
     },
     "history": [
       {
@@ -147,7 +147,7 @@
       "gate1_min_accuracy_pct": 90,
       "gate2_max_false_greens": 0
     },
-    "verdict": "gate 1 FAIL (75.2% < 90%); gate 2 PASS (0 hollow passes)",
+    "verdict": "gate 1 FAIL (77.0% < 90%); gate 2 PASS (0 hollow passes)",
     "model": {
       "provider": "openai-local",
       "base_url": "http://127.0.0.1:8080/v1",
@@ -172,12 +172,12 @@
       "eval-005": "21/24",
       "eval-006": "14/16",
       "eval-007": "13/13",
-      "eval-008": "10/13",
+      "eval-008": "12/13",
       "eval-010": "2/4"
     },
     "gate1_misses_by_class": {
       "triaged": false,
-      "note": "Not fully re-triaged per class in this session - the 28 misses are dominated by the eval-001 bad-draw collapse (see comparison.note and the session doc). Known deltas vs 2026-10-13: eval-010 c3 is now weakened_to_visible_element (degraded full-page :has-text) instead of wrong_element (#order-error trap); the 2026-10-13 counts were wrong_element 14, target_never_captured 3, weakened_to_visible_element 1, element_instead_of_page_arrival 1."
+      "note": "Not fully re-triaged per class in this session - the 28 misses are dominated by the eval-001 bad-draw collapse (see comparison.note and the session doc). Known deltas vs 2026-10-13: eval-010 c3 is now weakened_to_visible_element (degraded full-page :has-text) instead of wrong_element (#order-error trap); the 2026-10-13 counts were wrong_element 14, target_never_captured 3, weakened_to_visible_element 1, element_instead_of_page_arrival 1. t-0831 validator revision: under the fixed validator this run re-scores to 87/113 with 26 misses (wrong_element 23, element_instead_of_page_arrival 1, target_never_captured 0) - both eval-008 GOTOs were resolvable in this run; the 28-miss figure above is as recorded at the time."
     },
     "assert_verification": {
       "by_element_golden": 20,
@@ -200,11 +200,11 @@
         "baseline_run": {
           "recorded_at": "2026-10-13",
           "git_commit": "1545807",
-          "gate1": "94/113 (83.2%)",
+          "gate1": "95/113 (84.1%; recorded 94/113 at the time)",
           "gate2_false_greens": 0,
           "evidence_dir": "fixtures/heldout_runs/2026-10-13"
         },
-        "delta_gate1": "-9 placeholders (94 -> 85) = -8.0 percentage points",
+        "delta_gate1": "-8 placeholders (95 -> 87 under the t-0831 validator; recorded -9, 94 -> 85, at the time)",
         "delta_gate2": "0 (0 -> 0)",
         "per_story_delta": {
           "eval-001": "17/20 -> 8/20 (-9)",
@@ -214,11 +214,11 @@
           "eval-005": "21/24 -> 21/24",
           "eval-006": "14/16 -> 14/16",
           "eval-007": "13/13 -> 13/13",
-          "eval-008": "10/13 -> 10/13",
+          "eval-008": "11/13 -> 12/13 (+1; post t-0831 - the 10-13 baseline's transfer GOTO had no arrival evidence in that draw; recorded 10/13 -> 10/13 at the time)",
           "eval-010": "2/4 -> 2/4"
         },
         "tests_passed": "40 -> 37",
-        "note": "DO NOT READ 94 -> 85 AS A t-0825 REGRESSION. The entire -9 is eval-001 (17 -> 8), and the t-0825 change is hard-scoped to message-like ASSERTs (both _message_outcome_conflict call sites are action==ASSERT gated) - it cannot affect the eval-001 FILL/CLICK picks that collapsed. This run's eval-001 skeleton is a bad LLM draw: it navigates to cart.html directly, resolves 'Checkout' to #react-burger-menu-btn (the burger menu) and 'First Name'/'Last Name'/'Zip Code' to .product_sort_container (a sort dropdown). The deterministic static gate is 91/96 = 94.8% both before and after t-0825. The same-settings band is 89-92/113; 85 sits below it as an outlier low draw. eval-010 c3 did NOT flip to the golden: the t-0825 floor rejected the #order-error trap (it worked), but the journey page-cursor defect (test_04's journey replays 'Place Order' on success.html, picks #back-to-store, and returns to index.html before scraping the success message) left #order-success-title out of scope, so the resolver emitted a degraded full-page :has-text(...) instead. The cursor defect predates t-0825 (2026-10-13 has the same expected_page=index.html on that assert). See docs/sessions/2026-10-15_heldout_remeasure.md."
+        "note": "[t-0831 validator revision: the analysis below is as recorded at the time (pre-fix numbers). Under the fixed validator this run re-scores 85 -> 87 and the 10-13 baseline 94 -> 95: the eval-008 GOTO pair, +2 in both.]\nDO NOT READ 94 -> 85 AS A t-0825 REGRESSION. The entire -9 is eval-001 (17 -> 8), and the t-0825 change is hard-scoped to message-like ASSERTs (both _message_outcome_conflict call sites are action==ASSERT gated) - it cannot affect the eval-001 FILL/CLICK picks that collapsed. This run's eval-001 skeleton is a bad LLM draw: it navigates to cart.html directly, resolves 'Checkout' to #react-burger-menu-btn (the burger menu) and 'First Name'/'Last Name'/'Zip Code' to .product_sort_container (a sort dropdown). The deterministic static gate is 91/96 = 94.8% both before and after t-0825. The same-settings band is 89-92/113; 85 sits below it as an outlier low draw. eval-010 c3 did NOT flip to the golden: the t-0825 floor rejected the #order-error trap (it worked), but the journey page-cursor defect (test_04's journey replays 'Place Order' on success.html, picks #back-to-store, and returns to index.html before scraping the success message) left #order-success-title out of scope, so the resolver emitted a degraded full-page :has-text(...) instead. The cursor defect predates t-0825 (2026-10-13 has the same expected_page=index.html on that assert). See docs/sessions/2026-10-15_heldout_remeasure.md."
       },
       "history": [
         {
@@ -279,7 +279,7 @@
         "gate1_min_accuracy_pct": 90,
         "gate2_max_false_greens": 0
       },
-      "verdict": "gate 1 FAIL (82.3% < 90%); gate 2 PASS (0 hollow passes)",
+      "verdict": "gate 1 FAIL (84.1% < 90%); gate 2 PASS (0 hollow passes)",
       "model": {
         "provider": "openai-local",
         "base_url": "http://127.0.0.1:8080/v1",
@@ -304,14 +304,23 @@
         "eval-005": "20/24",
         "eval-006": "14/16",
         "eval-007": "13/13",
-        "eval-008": "9/13",
+        "eval-008": "11/13",
         "eval-010": "2/4"
       },
       "gate1_misses_by_class": {
-        "wrong_element": 15,
-        "target_never_captured": 3,
-        "weakened_to_visible_element": 1,
-        "element_instead_of_page_arrival": 1
+        "counts": {
+          "wrong_element": 15,
+          "target_never_captured": 1,
+          "weakened_to_visible_element": 1,
+          "element_instead_of_page_arrival": 1
+        },
+        "pre_fix_counts": {
+          "wrong_element": 15,
+          "target_never_captured": 3,
+          "weakened_to_visible_element": 1,
+          "element_instead_of_page_arrival": 1
+        },
+        "note": "t-0831 validator revision: the two eval-008 GOTOs re-score (+2, 20 -> 18 misses); pre_fix_counts are as recorded at the time."
       },
       "assert_verification": {
         "by_element_golden": 20,
@@ -334,11 +343,11 @@
           "baseline_run": {
             "recorded_at": "2026-10-13",
             "git_commit": "1545807",
-            "gate1": "94/113 (83.2%)",
+            "gate1": "95/113 (84.1%; recorded 94/113 at the time)",
             "gate2_false_greens": 0,
             "evidence_dir": "fixtures/heldout_runs/2026-10-13"
           },
-          "delta_gate1": "-1 placeholder (94 -> 93) = -0.9 percentage points",
+          "delta_gate1": "0 placeholders (95 -> 95 under the t-0831 validator; recorded -1, 94 -> 93, at the time)",
           "delta_gate2": "0 (0 -> 0)",
           "per_story_delta": {
             "eval-001": "17/20 -> 17/20",
@@ -348,12 +357,12 @@
             "eval-005": "21/24 -> 20/24",
             "eval-006": "14/16 -> 14/16",
             "eval-007": "13/13 -> 13/13",
-            "eval-008": "10/13 -> 9/13",
+            "eval-008": "11/13 -> 11/13 (post t-0831 validator; recorded 10/13 -> 9/13 at the time)",
             "eval-010": "2/4 -> 2/4"
           },
-          "gate1_misses_by_class": "wrong_element 14 -> 15; target_never_captured 3 -> 3; weakened_to_visible_element 1 -> 1; element_instead_of_page_arrival 1 -> 1",
+          "gate1_misses_by_class": "wrong_element 14 -> 15; target_never_captured 1 -> 1; weakened_to_visible_element 1 -> 1; element_instead_of_page_arrival 1 -> 1 (post t-0831; recorded 'target_never_captured 3 -> 3' at the time - the 2 extra in both runs were the eval-008 GOTO pair the pre-fix harness could not credit)",
           "tests_passed": "40 -> 40",
-          "note": "No improvement. The ASSERT-pool filter did not fix any of the 14 named wrong-element picks; the same wrong locators persist (eval-002/006 `.modal-title.w-100`, eval-003 `h1.text-center`, eval-005 `#dob`/`#quoteSubmit`, eval-010 `#order-error`, eval-001 inventory URL). The total fell by 1 placeholder (94 -> 93): eval-004 gained 1 (the known flaky story, 4/7 -> 5/7), eval-005 lost 1 (new weakened_to_visible_element on `quote reference number`), eval-008 lost 1 (`payment success message` -> `#accounts-list`). Within the same-settings band (89-94/113) this is draw jitter, not a code effect. The filter is not the lever; the wrong picks are made before/outside the ASSERT semantic pool (page-context and FILL/CLICK paths) or the target never enters the pool."
+          "note": "[t-0831 validator revision: the analysis below is as recorded at the time (pre-fix numbers). Under the fixed validator this run re-scores 93 -> 95 and the 10-13 baseline 94 -> 95: the eval-008 GOTO pair, +2 in both - the -1 draw jitter of the recorded analysis is unchanged.]\nNo improvement. The ASSERT-pool filter did not fix any of the 14 named wrong-element picks; the same wrong locators persist (eval-002/006 `.modal-title.w-100`, eval-003 `h1.text-center`, eval-005 `#dob`/`#quoteSubmit`, eval-010 `#order-error`, eval-001 inventory URL). The total fell by 1 placeholder (94 -> 93): eval-004 gained 1 (the known flaky story, 4/7 -> 5/7), eval-005 lost 1 (new weakened_to_visible_element on `quote reference number`), eval-008 lost 1 (`payment success message` -> `#accounts-list`). Within the same-settings band (89-94/113) this is draw jitter, not a code effect. The filter is not the lever; the wrong picks are made before/outside the ASSERT semantic pool (page-context and FILL/CLICK paths) or the target never enters the pool."
         },
         "history": [
           {
@@ -415,7 +424,7 @@
         "gate1_accuracy_pct": 84.1,
         "gate2_false_greens": 0,
         "evidence_dir": "fixtures/heldout_runs/2026-10-13",
-        "note": "The latest same-settings baseline, superseded by this run. Its evidence is committed and re-scores to 94/113 and 0.",
+        "note": "The latest same-settings baseline, superseded by this run. Its evidence is committed and re-scores to 95/113 and 0 under the t-0831 validator (recorded 94/113 at the time - that draw's transfer GOTO had no arrival evidence, an honest miss).",
         "previous": {
           "recorded_at": "2026-10-12",
           "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure)",
@@ -424,7 +433,7 @@
           "gate1_accuracy_pct": 85.0,
           "gate2_false_greens": 0,
           "evidence_dir": "fixtures/heldout_runs/2026-10-12",
-          "note": "The pre-A/C-fix baseline for this run's comparison. Its evidence is committed and re-scores to 94/113 and 0.",
+          "note": "The pre-A/C-fix baseline for this run's comparison. Its evidence is committed and re-scores to 96/113 and 0 under the t-0831 validator (recorded 94/113 at the time - the eval-008 GOTO pair, +2).",
           "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 96/113; the number recorded at the time (94) is preserved here for history."
         },
         "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 95/113; the number recorded at the time (94) is preserved here for history. Note: only the payments GOTO re-scores in this run (95, not 96) - the transfer GOTO had no arrival evidence in that draw, an honest miss."
@@ -434,7 +443,7 @@
       "evidence_dir_history": "fixtures/heldout_runs/2026-10-12",
       "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 95/113; the number recorded at the time (93) is preserved here for history."
     },
-    "note": "The minimal re-score input for the 2026-10-15 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-15/ and re-scores with no model to 85/113 and 0 from the repo alone (scripts/eval/rescore.py). The 2026-10-15 total is an outlier low draw (band 89-92/113) dominated by a bad eval-001 generation draw, not a code regression - see comparison.note. The t-0825 polarity fix is confirmed working (the #order-error trap no longer wins eval-010 c3) but not sufficient: the criterion's remaining blocker is the journey page-cursor defect. The superseded 2026-10-13 record is preserved under 'previous' (the 2026-10-12 and 2026-09-25 records remain in its 'previous'/'comparison.history'). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-15_heldout_remeasure.md.",
+    "note": "The minimal re-score input for the 2026-10-15 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-15/ and re-scores with no model to 87/113 and 0 from the repo alone under the t-0831 validator (recorded 85/113 at the time - the -2 is the eval-008 GOTO pair) (scripts/eval/rescore.py). The 2026-10-15 total is an outlier low draw (band 89-92/113) dominated by a bad eval-001 generation draw, not a code regression - see comparison.note. The t-0825 polarity fix is confirmed working (the #order-error trap no longer wins eval-010 c3) but not sufficient: the criterion's remaining blocker is the journey page-cursor defect. The superseded 2026-10-13 record is preserved under 'previous' (the 2026-10-12 and 2026-09-25 records remain in its 'previous'/'comparison.history'). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-15_heldout_remeasure.md.",
     "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 87/113; the number recorded at the time (85) is preserved here for history."
   },
   "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 89/113; the number recorded at the time (87) is preserved here for history."

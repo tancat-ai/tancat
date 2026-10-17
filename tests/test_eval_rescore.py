@@ -253,6 +253,37 @@ class TestEvidenceGuard:
         assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
         assert "deleted" in history[0]["note"]
 
+    def test_record_is_internally_consistent(self) -> None:
+        """A half-updated record must not pass (t-0831 send-back: the 2026-10-16
+        record carried 89/113 in the headline while per_story, the verdict and the
+        miss-class block still held the pre-fix numbers).
+
+        Walks the whole chain: per-story counts must sum to the headline, miss-class
+        counts (where present) must sum to the missed placeholders, and the verdict
+        percentage (where present) must match the headline.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        entry = payload
+        checked = 0
+        while entry is not None:
+            correct, total = entry["gate1_correct"], entry["gate1_total"]
+            per_story = entry.get("per_story")
+            if per_story:
+                got = sum(int(v.split("/")[0]) for v in per_story.values())
+                over = sum(int(v.split("/")[1]) for v in per_story.values())
+                assert over == total, (entry["recorded_at"], per_story)
+                assert got == correct, (entry["recorded_at"], per_story)
+            miss_block = entry.get("gate1_misses_by_class")
+            counts = miss_block.get("counts") if isinstance(miss_block, dict) else None
+            if counts is not None:
+                assert sum(counts.values()) == total - correct, (entry["recorded_at"], counts)
+            if "verdict" in entry:
+                pct = round(100 * correct / total, 1)
+                assert f"{pct}%" in entry["verdict"], (entry["recorded_at"], entry["verdict"])
+            checked += 1
+            entry = entry.get("previous")
+        assert checked >= 5, checked
+
     def test_committed_heldout_evidence_rescores_to_the_record(self) -> None:
         """The tracked evidence re-scores to the recorded gate numbers with no model.
 
