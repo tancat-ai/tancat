@@ -67,7 +67,7 @@
       "baseline_run": {
         "recorded_at": "2026-10-15",
         "git_commit": "9bbc17f",
-        "gate1": "85/113 (75.2%)",
+        "gate1": "87/113 (77.0%; recorded 85/113 at the time - the eval-008 GOTO pair)",
         "gate2_false_greens": 0,
         "evidence_dir": "fixtures/heldout_runs/2026-10-15"
       },
@@ -177,7 +177,7 @@
     },
     "gate1_misses_by_class": {
       "triaged": false,
-      "note": "Not fully re-triaged per class in this session - the 28 misses are dominated by the eval-001 bad-draw collapse (see comparison.note and the session doc). Known deltas vs 2026-10-13: eval-010 c3 is now weakened_to_visible_element (degraded full-page :has-text) instead of wrong_element (#order-error trap); the 2026-10-13 counts were wrong_element 14, target_never_captured 3, weakened_to_visible_element 1, element_instead_of_page_arrival 1. t-0831 validator revision: under the fixed validator this run re-scores to 87/113 with 26 misses (wrong_element 23, element_instead_of_page_arrival 1, target_never_captured 0) - both eval-008 GOTOs were resolvable in this run; the 28-miss figure above is as recorded at the time."
+      "note": "Not fully re-triaged per class in this session - the 28 misses are dominated by the eval-001 bad-draw collapse (see comparison.note and the session doc). Known deltas vs 2026-10-13: eval-010 c3 is now weakened_to_visible_element (degraded full-page :has-text) instead of wrong_element (#order-error trap); the 2026-10-13 counts were wrong_element 14, target_never_captured 3, weakened_to_visible_element 1, element_instead_of_page_arrival 1. t-0831 validator revision: under the fixed validator this run re-scores to 87/113 with 26 misses (measured with scripts/eval/eval_criteria.classify_miss on the committed evidence: wrong_element 23, element_instead_of_page_arrival 2 - eval-002 products-page title, eval-008 dashboard ASSERT; target_never_captured 1 - the eval-010 quantity FILL, the journey-cursor defect fixed in B-103). Both eval-008 GOTOs were resolvable in this run; the 28-miss figure above is as recorded at the time."
     },
     "assert_verification": {
       "by_element_golden": 20,
