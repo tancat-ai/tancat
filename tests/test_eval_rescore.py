@@ -4,14 +4,18 @@ A run keeps its evidence in one known place (`eval_evidence.py`), a re-score
 recomputes the gate numbers from that evidence with no model call and no live
 site, and a run whose evidence is gone is caught instead of read as a zero.
 
-The current recorded re-score (2026-10-16: 87/113 gate 1, 0 hollow passes -
+The current recorded re-score (2026-10-16: 89/113 gate 1, 0 hollow passes -
 post-B-103 re-measure, eval-010 flipped 2/4 -> 4/4) kept its evidence, so it can
-be re-scored with no model. The 2026-10-15 record (85/113) is preserved under
-``previous`` and the 2026-10-13/2026-10-12 records further down the chain (all
-committed and re-scorable); the older 2026-09-25 record (82/113 gate 1, 3 hollow
-passes) has **no surviving artifacts** - `scratch/gate1_full.log` and the emitted
-dirs were deleted - so these tests prove the mechanism on a synthetic run that
-reproduces a known number. `scripts/eval/known_gate_scores.json` holds the chain.
+be re-scored with no model. Numbers are post t-0831 validator revision: the
+pre-fix golden validator could not credit GOTO goldens, so the eval-008 GOTO
+pair (worth +2) is now countable in every re-score; the numbers recorded at
+each run's time are preserved in the chain's `validator_revision` notes. The
+2026-10-15 record (87/113) is preserved under ``previous`` and the
+2026-10-13/2026-10-12 records further down the chain (all committed and
+re-scorable); the older 2026-09-25 record (82/113 gate 1, 3 hollow passes) has
+**no surviving artifacts** - `scratch/gate1_full.log` and the emitted dirs were
+deleted - so these tests prove the mechanism on a synthetic run that reproduces
+a known number. `scripts/eval/known_gate_scores.json` holds the chain.
 """
 
 from __future__ import annotations
@@ -207,7 +211,9 @@ class TestEvidenceGuard:
         """The current gate record is on disk and its evidence is committed, so it re-scores."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         # 2026-10-16 (t-0829): post-B-103 re-measure - eval-010 flipped 2/4 -> 4/4.
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (87, 113)
+        # Numbers are post t-0831 validator revision (the pre-fix harness could
+        # not credit GOTO goldens; the eval-008 GOTO pair is worth +2 here).
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (89, 113)
         assert payload["gate2_false_greens"] == 0
         # The evidence is in the tracked tree, not the worktree's gitignored scratch.
         evidence_dir = _REPO_ROOT / payload["evidence_dir"]
@@ -215,24 +221,29 @@ class TestEvidenceGuard:
         assert verify_run_evidence(evidence_dir) == []
         # The superseded 2026-10-15 record is preserved, with its own committed evidence.
         assert payload["previous"]["recorded_at"] == "2026-10-15"
-        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (85, 113)
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (87, 113)
         assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-15"
         # The ASSERT-pool filter re-measure (j-0171) is preserved one level further down the chain.
         assert payload["previous"]["previous"]["recorded_at"] == "2026-10-13"
         assert (payload["previous"]["previous"]["gate1_correct"], payload["previous"]["previous"]["gate1_total"]) == (
-            93,
+            95,
             113,
         )
         assert payload["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13_gate1_filter"
-        # The 2026-10-13 baseline is preserved one level further down.
+        # The 2026-10-13 baseline is preserved one level further down (95, not 96:
+        # that draw's transfer GOTO had no arrival evidence - an honest miss).
         assert payload["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-13"
         assert (
             payload["previous"]["previous"]["previous"]["gate1_correct"],
             payload["previous"]["previous"]["previous"]["gate1_total"],
-        ) == (94, 113)
+        ) == (95, 113)
         assert payload["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
         # And the 2026-10-12 baseline is preserved one level further down still.
         assert payload["previous"]["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-12"
+        assert (
+            payload["previous"]["previous"]["previous"]["previous"]["gate1_correct"],
+            payload["previous"]["previous"]["previous"]["previous"]["gate1_total"],
+        ) == (96, 113)
         assert (
             payload["previous"]["previous"]["previous"]["previous"]["evidence_dir"]
             == "fixtures/heldout_runs/2026-10-12"

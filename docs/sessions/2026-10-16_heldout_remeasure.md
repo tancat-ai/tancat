@@ -130,11 +130,41 @@ at or above the band.
 
 ## 8. Next
 
-1. **eval-001 saucedemo draw** - the skeleton sticks to the login page (12 of 26
-   misses). Needs a trace of why the generated journey navigates away from the
-   inventory page before the checkout criteria resolve.
-2. **eval-008 GOTO pair** - two unresolved GOTO placeholders (transfer/payments pages);
-   separate defect from the cursor class.
+1. **eval-001 saucedemo draw** - the skeleton sticks to the login page (12 of 24
+   misses under the fixed validator). Needs a trace of why the generated journey
+   navigates away from the inventory page before the checkout criteria resolve.
+2. ~~**eval-008 GOTO pair**~~ - traced 2026-10-16 (t-0831): a harness blind spot, not a
+   product defect. See the postscript below.
 3. The standing wrong_element family (23) - message/header ASSERT picks; the PR #109
    guard already constrains message claims to message elements, so the remaining picks
    are weak-locator classes (global headers, `#result`-style containers).
+
+## 9. Postscript (2026-10-16, t-0831): the GOTO pair was a harness blind spot
+
+**The eval-008 GOTO pair was not a product defect.** In this run (and every run back
+to 2026-10-12) the product resolved both GOTOs to the right URLs - the generated
+tests click through to transfer.html / payments.html and assert arrival with
+`expect(page).to_have_url(...)`. The golden validator reported them as
+target_never_captured because it could never match a GOTO golden: its extractor
+skipped every `evidence_tracker.navigate(...)` call, tagged every `to_have_url(...)`
+as ASSERT, and matching requires exact action equality - so a GOTO golden (a bare
+URL) had an empty candidate pool and was structurally unmatchable in every run.
+A permanent -2/113, mislabelled as a capture failure.
+
+Fixed in `scripts/eval/golden_validator.py`: `navigate(url)` is extracted as a GOTO
+locator; each `to_have_url(url)` is extracted as both an ASSERT (page-arrival
+goldens, unchanged) and a GOTO locator (the emitted form of a resolved GOTO when the
+journey replays navigation via clicks); and the URL comparison branch reduces
+bare-URL goldens and assertion expressions to their URL before comparing
+(trailing-slash-insensitive, as before). Gate 2 is unaffected (the hollow-pass rule
+is ASSERT-only); the static gate is 91/96 unchanged (no GOTO goldens in the static
+captures).
+
+Corrected re-scores of the committed runs: 10-12 94->96, 10-13 94->95 (that draw's
+transfer GOTO had no arrival evidence - an honest miss), 10-13_gate1_filter 93->95,
+10-15 85->87, **this run 87->89 (78.8%)** - inside the 89-92 band. Miss classes for
+this run under the fixed validator: wrong_element 23, element_instead_of_page_arrival
+1, target_never_captured 0. The gate chain in `scripts/eval/known_gate_scores.json`
+carries per-run `validator_revision` notes. Tests: `tests/test_t0831_eval008_goto_pair.py`
+(12, including "the test that says it passed": both GOTO steps resolve against this
+run's committed evidence).

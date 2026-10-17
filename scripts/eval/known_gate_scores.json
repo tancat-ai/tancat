@@ -1,9 +1,9 @@
 {
   "recorded_at": "2026-10-16",
   "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure, post-B-103 main: journey-discovery select fix bb3d232 + gate1 wrong-element guard PR #109 / 4354795)",
-  "gate1_correct": 87,
+  "gate1_correct": 89,
   "gate1_total": 113,
-  "gate1_accuracy_pct": 77.0,
+  "gate1_accuracy_pct": 78.8,
   "gate2_false_greens": 0,
   "targets": {
     "gate1_min_accuracy_pct": 90,
@@ -21,7 +21,7 @@
   "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0829 --evidence-dir scratch/eval_runs/2026-10-16_heldout",
   "evidence_dir": "fixtures/heldout_runs/2026-10-16",
   "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-16/ (manifest.json, results.json, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
-  "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-16 -> 87/113, 0 (from the tracked tree, no model)",
+  "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-16 -> 89/113, 0 (from the tracked tree, no model)",
   "wall_clock_minutes": 51,
   "mean_generation_s": 220.1,
   "tests_executed": 62,
@@ -71,7 +71,7 @@
         "gate2_false_greens": 0,
         "evidence_dir": "fixtures/heldout_runs/2026-10-15"
       },
-      "delta_gate1": "+2 placeholders (85 -> 87) = +1.8 percentage points",
+      "delta_gate1": "+2 placeholders (87 -> 89 under the t-0831 validator; recorded 85 -> 87 at the time)",
       "delta_gate2": "0 (0 -> 0)",
       "per_story_delta": {
         "eval-001": "8/20 -> 8/20",
@@ -92,7 +92,7 @@
         "recorded_at": "2026-09-25",
         "gate1": "82/113 (72.6%)",
         "gate2_false_greens": 3,
-        "note": "Not like-for-like: a different generation (Session 10), from before the B-054/B-096/t-0542 fixes, re-scored in Session 13; its evidence was deleted. Do not read 82 -> 94 as a same-settings gate movement."
+        "note": "Not like-for-like: a different generation (Session 10), from before the B-054/B-096/t-0542 fixes, re-scored in Session 13; its evidence was deleted. Do not read 82 -> 94 as a same-settings gate movement. Recorded under the pre-t-0831 validator; evidence deleted, not re-scored."
       }
     ]
   },
@@ -135,13 +135,13 @@
     },
     "note": "eval-004's external site is slow and flaky. Across nine held-out runs (t-0534 to t-0829) generation took 64.7s at fastest and 621.7s at slowest, and eval-004's own score was 3/7, 1/7, 4/7, 1/7, 4/7, 4/7, 4/7, 5/7, 5/7 - it moves with the draw. The 2026-10-16 run scored it 5/7. eval-004's per-story number is not repeatable, so read a gate run with that in mind: do not treat an eval-004 delta as a like-for-like regression, and prefer the overall figure over that story's number - remembering that the overall figure's own jitter is this one story. This block is a hand-written snapshot; no run refreshes it."
   },
-  "note": "The minimal re-score input for the 2026-10-16 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-16/ and re-scores with no model to 87/113 and 0 from the repo alone (scripts/eval/rescore.py). This is the first re-measure where eval-010 c3 could move, and it moved: 2/4 -> 4/4, the B-103 journey-cursor fix confirmed (success ASSERT now scoped to success.html). Gate 1 still FAILs at 77.0% (< 90%) - the remaining misses are the eval-001 bad-draw collapse (12 of 26), the eval-008 GOTO pair, and the standing wrong-element family. The superseded 2026-10-15 record is preserved under 'previous' (the 2026-10-13, 2026-10-12 and 2026-09-25 records remain further down the chain). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-16_heldout_remeasure.md.",
+  "note": "The minimal re-score input for the 2026-10-16 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-16/ and re-scores with no model to 89/113 and 0 (t-0831 validator revision; recorded 87/113 at the time - the -2 is the eval-008 GOTO pair the pre-fix harness could not credit) from the repo alone (scripts/eval/rescore.py). This is the first re-measure where eval-010 c3 could move, and it moved: 2/4 -> 4/4, the B-103 journey-cursor fix confirmed (success ASSERT now scoped to success.html). Gate 1 still FAILs at 77.0% (< 90%) - the remaining misses are the eval-001 bad-draw collapse (12 of 26), the eval-008 GOTO pair, and the standing wrong-element family. The superseded 2026-10-15 record is preserved under 'previous' (the 2026-10-13, 2026-10-12 and 2026-09-25 records remain further down the chain). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-16_heldout_remeasure.md. Validator revision (t-0831): the recorded 87/113 was computed by a harness that structurally could not match GOTO goldens; with the fixed validator the same committed evidence re-scores to 89/113 (both GOTOs were resolvable in this run), which is inside the 89-92 band. See tests/test_t0831_eval008_goto_pair.py.",
   "previous": {
     "recorded_at": "2026-10-15",
     "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure, current main with the negation-aware polarity floor, PR #106 / t-0825)",
-    "gate1_correct": 85,
+    "gate1_correct": 87,
     "gate1_total": 113,
-    "gate1_accuracy_pct": 75.2,
+    "gate1_accuracy_pct": 77.0,
     "gate2_false_greens": 0,
     "targets": {
       "gate1_min_accuracy_pct": 90,
@@ -159,7 +159,7 @@
     "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0826 --evidence-dir scratch/eval_runs/2026-10-15_heldout",
     "evidence_dir": "fixtures/heldout_runs/2026-10-15",
     "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-15/ (manifest.json, results.json, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
-    "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-15 -> 85/113, 0 (from the tracked tree, no model)",
+    "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-15 -> 87/113, 0 (from the tracked tree, no model)",
     "wall_clock_minutes": 59,
     "mean_generation_s": 291.9,
     "tests_executed": 62,
@@ -271,9 +271,9 @@
     "previous": {
       "recorded_at": "2026-10-13",
       "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure on task/gate1-wrong-element with the ASSERT-pool filter, j-0171/t-0790)",
-      "gate1_correct": 93,
+      "gate1_correct": 95,
       "gate1_total": 113,
-      "gate1_accuracy_pct": 82.3,
+      "gate1_accuracy_pct": 84.1,
       "gate2_false_greens": 0,
       "targets": {
         "gate1_min_accuracy_pct": 90,
@@ -291,7 +291,7 @@
       "command": "python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --test-output scratch/gate1_out_t0814 --evidence-dir scratch/eval_runs/2026-10-13_gate1_filter",
       "evidence_dir": "fixtures/heldout_runs/2026-10-13_gate1_filter",
       "evidence_kept": "The minimal re-score input is committed under fixtures/heldout_runs/2026-10-13_gate1_filter/ (manifest.json, results.json, summary.txt, emitted/ per-story tests, junit/ per-test outcomes, verification_strength.json). Raw pytest logs are not committed - rescore.py does not need them.",
-      "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-13_gate1_filter -> 93/113, 0 (from the tracked tree, no model)",
+      "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-13_gate1_filter -> 95/113, 0 (from the tracked tree, no model)",
       "wall_clock_minutes": 47,
       "mean_generation_s": 191.5,
       "tests_executed": 62,
@@ -410,27 +410,32 @@
       "previous": {
         "recorded_at": "2026-10-13",
         "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure, current main with the accuracy A/C fixes, PR #91)",
-        "gate1_correct": 94,
+        "gate1_correct": 95,
         "gate1_total": 113,
-        "gate1_accuracy_pct": 83.2,
+        "gate1_accuracy_pct": 84.1,
         "gate2_false_greens": 0,
         "evidence_dir": "fixtures/heldout_runs/2026-10-13",
         "note": "The latest same-settings baseline, superseded by this run. Its evidence is committed and re-scores to 94/113 and 0.",
         "previous": {
           "recorded_at": "2026-10-12",
           "source": "scripts/eval/eval_harness.py run --regenerate --mode full (live held-out re-measure)",
-          "gate1_correct": 94,
+          "gate1_correct": 96,
           "gate1_total": 113,
-          "gate1_accuracy_pct": 83.2,
+          "gate1_accuracy_pct": 85.0,
           "gate2_false_greens": 0,
           "evidence_dir": "fixtures/heldout_runs/2026-10-12",
-          "note": "The pre-A/C-fix baseline for this run's comparison. Its evidence is committed and re-scores to 94/113 and 0."
-        }
+          "note": "The pre-A/C-fix baseline for this run's comparison. Its evidence is committed and re-scores to 94/113 and 0.",
+          "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 96/113; the number recorded at the time (94) is preserved here for history."
+        },
+        "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 95/113; the number recorded at the time (94) is preserved here for history. Note: only the payments GOTO re-scores in this run (95, not 96) - the transfer GOTO had no arrival evidence in that draw, an honest miss."
       },
       "note": "The minimal re-score input for the 2026-10-13 gate1-filter run is committed in the tracked tree at fixtures/heldout_runs/2026-10-13_gate1_filter/ and re-scores with no model to the same 93/113 and 0 from the repo alone (scripts/eval/rescore.py). The filter did NOT move the held-out gate: 94 -> 93 is -1 placeholder, inside the same-settings draw band, and the wrong_element class rose 14 -> 15. The gates themselves are unchanged: >=90% gate 1, zero hollow passes gate 2.",
       "evidence_dir_previous": "fixtures/heldout_runs/2026-10-13",
-      "evidence_dir_history": "fixtures/heldout_runs/2026-10-12"
+      "evidence_dir_history": "fixtures/heldout_runs/2026-10-12",
+      "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 95/113; the number recorded at the time (93) is preserved here for history."
     },
-    "note": "The minimal re-score input for the 2026-10-15 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-15/ and re-scores with no model to 85/113 and 0 from the repo alone (scripts/eval/rescore.py). The 2026-10-15 total is an outlier low draw (band 89-92/113) dominated by a bad eval-001 generation draw, not a code regression - see comparison.note. The t-0825 polarity fix is confirmed working (the #order-error trap no longer wins eval-010 c3) but not sufficient: the criterion's remaining blocker is the journey page-cursor defect. The superseded 2026-10-13 record is preserved under 'previous' (the 2026-10-12 and 2026-09-25 records remain in its 'previous'/'comparison.history'). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-15_heldout_remeasure.md."
-  }
+    "note": "The minimal re-score input for the 2026-10-15 run is committed in the tracked tree at fixtures/heldout_runs/2026-10-15/ and re-scores with no model to 85/113 and 0 from the repo alone (scripts/eval/rescore.py). The 2026-10-15 total is an outlier low draw (band 89-92/113) dominated by a bad eval-001 generation draw, not a code regression - see comparison.note. The t-0825 polarity fix is confirmed working (the #order-error trap no longer wins eval-010 c3) but not sufficient: the criterion's remaining blocker is the journey page-cursor defect. The superseded 2026-10-13 record is preserved under 'previous' (the 2026-10-12 and 2026-09-25 records remain in its 'previous'/'comparison.history'). The gates are unchanged: >=90% gate 1, zero hollow passes gate 2. Full run record: docs/sessions/2026-10-15_heldout_remeasure.md.",
+    "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 87/113; the number recorded at the time (85) is preserved here for history."
+  },
+  "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 89/113; the number recorded at the time (87) is preserved here for history."
 }
