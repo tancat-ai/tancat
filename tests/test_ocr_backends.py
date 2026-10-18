@@ -214,6 +214,59 @@ class TestRapidOCRBackend:
 
 
 # ---------------------------------------------------------------------------
+# CPU OCR regression: scanned (image-only) page - t-0834
+# ---------------------------------------------------------------------------
+
+# The docs in the eval set are native-text PDFs, so without a scanned fixture
+# the tier-1 CPU OCR path (RapidOCRBackend.parse_page) is never exercised.
+# The fixture is a synthetic US-Letter page (a line-item table and a
+# bar-chart graphic) saved as an image-only 300 DPI PDF: the text is pixels,
+# there is no text layer.  Fully synthetic - no real LV or customer document.
+# Regenerate with `python scripts/maintenance/make_ocr_scanned_fixture.py`.
+_SCANNED_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "ocr_scanned_page.pdf"
+_KNOWN_TOKENS = ("Invoice", "Widget", "Gadget", "Total", "15.00")
+
+
+@pytest.fixture(scope="module")
+def scanned_page_ocr_text() -> str:
+    """OCR the synthetic scanned page once with the real tier-1 CPU engine.
+
+    Skips (does not fail) when the ``[ocr]`` extra or the vendored models are
+    absent, so the default install stays green.  Runs fully offline: the
+    models are vendored and every path is passed explicitly, so the engine
+    never builds a download URL.
+    """
+    backend = RapidOCRBackend()
+    if not backend.available:
+        pytest.skip("CPU OCR tier unavailable here (missing [ocr] extra or vendored models)")
+    assert _SCANNED_FIXTURE.is_file(), (
+        f"missing fixture {_SCANNED_FIXTURE} - regenerate it with "
+        "python scripts/maintenance/make_ocr_scanned_fixture.py"
+    )
+    return backend.parse_page(_SCANNED_FIXTURE, 1)
+
+
+class TestCpuOcrScannedPage:
+    """Offline regression: tier-1 CPU OCR recovers the text of a scanned page."""
+
+    def test_recovers_non_empty_text(self, scanned_page_ocr_text: str) -> None:
+        assert scanned_page_ocr_text.strip(), "OCR recovered no text from the scanned fixture page"
+
+    def test_recovers_known_tokens(self, scanned_page_ocr_text: str) -> None:
+        missing = [token for token in _KNOWN_TOKENS if token.lower() not in scanned_page_ocr_text.lower()]
+        assert not missing, f"OCR missed known tokens {missing}; recognised text:\n{scanned_page_ocr_text}"
+
+    def test_fixture_is_image_only(self) -> None:
+        """The fixture must carry no text layer, or the test would not be a scan."""
+        pdfplumber = pytest.importorskip("pdfplumber")
+        with pdfplumber.open(_SCANNED_FIXTURE) as pdf:
+            assert len(pdf.pages) == 1
+            assert pdf.pages[0].extract_text() in (None, ""), (
+                "fixture gained a text layer - it is no longer a scanned page"
+            )
+
+
+# ---------------------------------------------------------------------------
 # Auto backend (tier 0 whole-doc + tier-1 CPU per-page — AI-055 default)
 # ---------------------------------------------------------------------------
 
