@@ -41,7 +41,7 @@ _FONT_CANDIDATES = (
 )
 
 
-def _font(size: int) -> ImageFont.ImageFont:
+def _font(size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
     """A clean sans-serif at *size* px; falls back to Pillow's built-in font."""
     for path in _FONT_CANDIDATES:
         if Path(path).is_file():
