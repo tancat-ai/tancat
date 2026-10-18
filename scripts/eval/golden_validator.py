@@ -84,12 +84,27 @@ def _extract_locators_from_chunk(chunk: str) -> list[dict[str, str]]:
 
     Shared by the whole-file and per-test extractors so the two never
     drift apart in what counts as a locator.
+
+    GOTO handling (eval-008 GOTO pair, t-0831): a resolved GOTO placeholder
+    is emitted as a navigation the test actually performs — a
+    ``navigate(url)`` call, or (when the journey replays navigation via
+    clicks) the ``to_have_url(url)`` arrival assertion. Both forms are
+    extracted with action GOTO so a bare-URL GOTO golden can match them;
+    URL assertions are additionally kept as ASSERT for page-arrival
+    goldens.
     """
     results: list[dict[str, str]] = []
     for match in _EVIDENCE_CALL_RE.finditer(chunk):
         method = match.group(1)
         locator = match.group(3)
         if method == "navigate":
+            results.append(
+                {
+                    "method": "navigate",
+                    "action": "GOTO",
+                    "locator": locator,
+                }
+            )
             continue
         results.append(
             {
@@ -98,22 +113,33 @@ def _extract_locators_from_chunk(chunk: str) -> list[dict[str, str]]:
                 "locator": locator,
             }
         )
-    # B-021: Also extract URL assertions (expect(page).to_have_url(...))
+    # B-021: Also extract URL assertions (expect(page).to_have_url(...)).
+    # One entry per action they prove: ASSERT (page-arrival goldens) and
+    # GOTO (the emitted form of a resolved GOTO placeholder — the journey
+    # reaches the page via clicks and asserts arrival).
     for match in _TO_HAVE_URL_RE.finditer(chunk):
         url = match.group(1)
         full_expr = f'expect(page).to_have_url("{url}")'
-        results.append(
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": full_expr,
-            }
-        )
+        for action in ("ASSERT", "GOTO"):
+            results.append(
+                {
+                    "method": "to_have_url",
+                    "action": action,
+                    "locator": full_expr,
+                }
+            )
     # POM calls: inventory_page.click('Add to cart')
     for match in _POM_CALL_RE.finditer(chunk):
         method = match.group(2)
         desc = match.group(3)
         if method == "navigate":
+            results.append(
+                {
+                    "method": "navigate",
+                    "action": "GOTO",
+                    "locator": desc,
+                }
+            )
             continue
         results.append(
             {
@@ -290,12 +316,22 @@ def _has_text_content(locator: str) -> str | None:
 
 
 def _to_have_url_arg(expr: str) -> str | None:
-    """Return the URL argument from an ``expect(page).to_have_url(...)`` expr.
+    """Return the URL a locator targets.
+
+    Parses the URL argument of an ``expect(page).to_have_url(...)`` expr, and
+    also accepts a bare http(s) URL — GOTO goldens hold the bare form while
+    the generated code holds the assertion (or navigate) form, so the URL
+    comparison branch needs both sides reduced to their URL.
 
     Returns None for element locators or partial tolerance strings.
     """
     m = _TO_HAVE_URL_RE.match(expr)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+    stripped = expr.strip()
+    if stripped.lower().startswith(("http://", "https://")):
+        return stripped
+    return None
 
 
 def _same_url_without_slash(a: str, b: str) -> bool:
@@ -371,8 +407,10 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
     for t in tolerances:
         if _normalize_locator(resolved) == _normalize_locator(t):
             return True
-    # to_have_url assertions: trailing-slash-insensitive comparison
-    # (normalize_url emits the "/" form; goldens may hold the bare form).
+    # URL targets: to_have_url assertions (page-arrival ASSERT goldens, and
+    # the emitted form of a resolved GOTO) vs bare-URL GOTO goldens.
+    # Trailing-slash-insensitive (normalize_url emits the "/" form; goldens
+    # may hold the bare form).
     resolved_url = _to_have_url_arg(resolved)
     expected_url = _to_have_url_arg(expected)
     if resolved_url and expected_url and _same_url_without_slash(resolved_url, expected_url):

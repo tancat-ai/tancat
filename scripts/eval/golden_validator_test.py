@@ -83,10 +83,21 @@ class TestExtractLocators:
         assert len(locs) == 1
         assert locs[0]["locator"] == 'a[href="/products"]'
 
-    def test_navigate_skipped(self) -> None:
+    def test_navigate_extracted_as_goto(self) -> None:
+        # t-0831: navigate is the emitted form of a resolved GOTO placeholder,
+        # so it is extracted with action GOTO (it was previously skipped, which
+        # made GOTO goldens structurally unmatchable).
         code = "evidence_tracker.navigate('https://example.com')"
         locs = extract_locators_from_code(code)
-        assert len(locs) == 0
+        assert len(locs) == 1
+        assert locs[0]["action"] == "GOTO"
+        assert locs[0]["locator"] == "https://example.com"
+
+    def test_to_have_url_extracted_as_assert_and_goto(self) -> None:
+        code = 'expect(page).to_have_url("https://example.com/page.html")'
+        locs = extract_locators_from_code(code)
+        assert [item["action"] for item in locs] == ["ASSERT", "GOTO"]
+        assert all(item["locator"] == 'expect(page).to_have_url("https://example.com/page.html")' for item in locs)
 
     def test_multiple_calls(self) -> None:
         code = (
