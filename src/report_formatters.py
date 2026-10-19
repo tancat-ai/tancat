@@ -267,12 +267,18 @@ def generate_jira_report(
     return "\n".join(lines)
 
 
-def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path | None = None) -> str:
+def generate_html_report(
+    coverage: list[dict[str, Any]],
+    screenshots_dir: Path | None = None,
+    title: str = "",
+) -> str:
     """Generate self-contained HTML report with base64 embedded screenshots.
 
     Args:
         coverage: List of test coverage dictionaries with test_name, status, screenshots, duration
         screenshots_dir: Directory containing screenshot files (optional, used for embedding)
+        title: Optional package/story name shown under the heading so a report
+            saved on its own says which run it belongs to.
 
     Returns:
         HTML formatted report string as a complete standalone document
@@ -281,6 +287,11 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
 
     def embed_screenshot(screenshot_path: str) -> tuple[str, str]:
         """Embed screenshot as base64 data URI or return placeholder.
+
+        Evidence screenshots are full-page captures (~8,000-9,000 px tall).
+        Inlined at full width they made the report page ~17,000 px tall and
+        impossible to scan, so each image sits in a fixed-height scroll box:
+        full reading width, scroll inside, report layout stays compact.
 
         Returns:
             Tuple of (image_html, alt_text)
@@ -313,7 +324,9 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                 }.get(ext, "application/octet-stream")
 
                 return (
-                    f'<img src="data:{mime_type};base64,{base64_data}" style="max-width:100%;border:1px solid #ddd;border-radius:4px;padding:4px;" alt="screenshot">',
+                    '<div style="max-height:640px;overflow:auto;border:1px solid #ddd;border-radius:4px;padding:4px;background:#fafafa;">'
+                    f'<img src="data:{mime_type};base64,{base64_data}" style="display:block;width:100%;height:auto;" alt="screenshot">'
+                    "</div>",
                     screenshot_path,
                 )
         except Exception:
@@ -350,20 +363,29 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         "        .status-passed { background: #4caf50; color: white; }",
         "        .status-failed { background: #f44336; color: white; }",
         "        .status-pending { background: #f9a825; color: white; }",
+        "        .status-partial_pass { background: #fb8c00; color: white; }",
         "        .status-unknown { background: #9e9e9e; color: white; }",
+        "        .test-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; }",
+        "        .test-nav a { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid #ddd; border-radius: 16px; font-size: 12px; color: #333; text-decoration: none; background: #f9f9f9; }",
+        "        .test-nav a:hover { background: #e3f2fd; border-color: #90caf9; }",
+        "        .test-nav a.nav-failed { border-color: #f44336; color: #c62828; }",
+        "        .test-nav a.nav-partial_pass { border-color: #fb8c00; color: #e65100; }",
         "        .test-body { padding: 20px; }",
         "        .detail-row { display: flex; margin: 10px 0; }",
         "        .detail-label { font-weight: bold; width: 120px; color: #555; }",
         "        .screenshot-container { margin-top: 15px; padding: 10px; background: #fafafa; border-radius: 4px; }",
         "        .timestamp { color: #888; font-size: 12px; margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; }",
+        "        @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }",
         "        @media (max-width: 600px) { .summary { grid-template-columns: 1fr; } }",
         "    </style>",
         "</head>",
         "<body>",
         "    <div class='container'>",
         "        <h1>🧪 Test Coverage Report</h1>",
-        f"        <p class='timestamp'>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
-        "",
+        f"        <p class='timestamp'>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        + (f" &middot; Package: <code>{escape_html(title)}</code>" if title else "")
+        + "</p>",
+        "",  # test-nav inserted below (needs the rows first)
         "        <div class='summary'>",
         f"            <div class='stat total'><div class='stat-value'>{len(coverage)}</div><div class='stat-label'>Total Tests</div></div>",
         f"            <div class='stat passed'><div class='stat-value'>{passed_count}</div><div class='stat-label'>Passed</div></div>",
@@ -372,8 +394,22 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         f"            <div class='stat unknown'><div class='stat-value'>{unknown_count}</div><div class='stat-label'>Unknown</div></div>",
         "        </div>",
         "",
-        "        <h2>Test Details</h2>",
     ]
+
+    if coverage:
+        nav_links = []
+        for idx, test in enumerate(coverage, 1):
+            status = test.get("status", "unknown")
+            short = escape_html(str(test.get("test_name", ""))[:40])
+            cls = (
+                " class='nav-failed'"
+                if status == "failed"
+                else (" class='nav-partial_pass'" if status == "partial_pass" else "")
+            )
+            nav_links.append(f"<a href='#test-{idx}'{cls} title='{short}'>{_status_icon(status)} {idx}</a>")
+        lines.append("        <div class='test-nav'>" + "".join(nav_links) + "</div>")
+
+    lines.append("        <h2>Test Details</h2>")
 
     for idx, test in enumerate(coverage, 1):
         test_name = test.get("test_name", "Unknown Test")
@@ -382,12 +418,14 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         screenshots = test.get("screenshots", [])
         error_message = test.get("error_message", "")
 
-        status_class = f"status-{status}" if status in ["passed", "failed", "pending"] else "status-unknown"
+        status_class = (
+            f"status-{status}" if status in ["passed", "failed", "pending", "partial_pass"] else "status-unknown"
+        )
         status_icon = _status_icon(status)
 
         lines.extend(
             [
-                "        <div class='test-item'>",
+                f"        <div class='test-item' id='test-{idx}'>",
                 "            <div class='test-header'>",
                 f"                <span class='test-name'>{idx}. {escape_html(test_name)} {status_icon}</span>",
                 f"                <span class='status-badge {status_class}'>{status.upper()}</span>",
@@ -399,8 +437,12 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
 
         verification = verification_line(test)
         if verification:
+            # On a failed test the emit-time verdict reads like a pass
+            # ("verified by element"). Frame it as what the test was meant to
+            # check, so a red row cannot be skimmed as a green one.
+            label = "Intended check:" if status == "failed" else "Verification:"
             lines.append(
-                "                <div class='detail-row'><span class='detail-label'>Verification:</span>"
+                f"                <div class='detail-row'><span class='detail-label'>{label}</span>"
                 f"<span>{escape_html(verification)}</span></div>"
             )
 

@@ -44,6 +44,8 @@ def test_build_reports_returns_strings_and_saved_files(tmp_path: Path, monkeypat
     assert "# Test Coverage Report" in bundle.local_report
     assert "Project: PAYMENTS" in bundle.jira_report
     assert "<!DOCTYPE html>" in bundle.html_report
+    # The HTML report names the run so a saved report.html is self-describing.
+    assert f"Package: <code>{tmp_path.name}</code>" in bundle.html_report
     assert Path(bundle.local_report_path).exists()
     assert Path(bundle.jira_report_path).exists()
     assert Path(bundle.html_report_path).exists()

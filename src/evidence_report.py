@@ -370,6 +370,13 @@ def generate_annotated_screenshot(
   const timeline = document.getElementById("ev-timeline");
   let hoveredId = null;
 
+  // Step labels and failure notes are free text (site copy, error logs).
+  // They go through innerHTML below, so escape them — an unescaped "<" in a
+  // label broke the timeline row markup (and could inject HTML into the report).
+  function esc(v) {{
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }}
+
   function baseRadius(runCount) {{
     const rc = Number(runCount || 1);
     return 14 + Math.min(rc * 0.7, 20);
@@ -408,15 +415,15 @@ def generate_annotated_screenshot(
       let rowContent = `
         <div style="min-width:30px;height:30px;border-radius:999px;background:${{hasError ? "#dc2626" : COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
         <div style="flex:1;">
-          <div style="font-weight:600;color:#222;">${{label}}</div>
-          <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
+          <div style="font-weight:600;color:#222;">${{esc(label)}}</div>
+          <div style="font-size:12px;color:#666;">type=${{esc(t)}} · status=${{esc(status)}} · run_count=${{esc(runCount)}}</div>
       `;
 
       if (failureNote) {{
         rowContent += `
           <div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:120px;overflow-y:auto;white-space:pre-wrap;">
             <strong>Failure Diagnosis:</strong><br/>
-            <pre style="white-space:pre-wrap;margin:0;">${{failureNote}}</pre>
+            <pre style="white-space:pre-wrap;margin:0;">${{esc(failureNote)}}</pre>
           </div>
         `;
       }}
@@ -503,7 +510,7 @@ def generate_annotated_screenshot(
           <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="white" stroke-width="3" opacity="0.9" />
           <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="1.5" opacity="0.9" />
           <text x="${{cx}}" y="${{cy + 6}}" font-size="16" font-weight="900" fill="white" text-anchor="middle" style="pointer-events:none; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.8));">${{idx + 1}}</text>
-          <title>${{label}} (status: ${{status}})</title>
+          <title>${{esc(label)}} (status: ${{esc(status)}})</title>
         </g>
       `);
     }});
@@ -718,15 +725,17 @@ def _build_bug_report_text(
         if not isinstance(result, dict):
             result = {}
         step_status = str(result.get("status", ""))
-        error = str(result.get("error", "")) if result.get("error") else ""
+        # Mismatch failures carry error=None; str(None) would print "None".
+        error = str(result.get("error") or "")
 
         lines.append(f"  Step {i}: [{step_type}] {label}")
         if locator:
             lines.append(f"    Locator:     {locator}")
         lines.append(f"    Status:      {step_status}")
         if _is_failed_step(step):
-            lines.append(f"    Error:       {error}")
-            failure_note = str(result.get("failure_note", ""))
+            if error:
+                lines.append(f"    Error:       {error}")
+            failure_note = str(result.get("failure_note") or "")
             if failure_note:
                 for note_line in failure_note.splitlines():
                     lines.append(f"    {note_line}")

@@ -153,6 +153,44 @@ class TestGetFailureDiagnostics:
         assert failed["suggested_locators"]
         assert failed["available_elements"]
 
+    def test_failed_step_with_null_error_does_not_crash(self) -> None:
+        """AI-067 page-mismatch failures record ``error: null`` in the sidecar.
+
+        The demo bundle's tc01_07 had exactly this shape and
+        ``get_failure_diagnostics`` crashed on ``None[:500]``, which took the
+        whole report bundle (report.html et al.) down with it.
+        """
+        evidence = {
+            "test": {"name": "test_mismatch[chromium]", "status": "failed", "duration_s": 1.0},
+            "page": {"url": "https://example.com/"},
+            "steps": [
+                {
+                    "step": 1,
+                    "type": "click",
+                    "label": "Click link",
+                    "locator": "#link",
+                    "screenshot": None,
+                    "result": {
+                        "status": "failed",
+                        "elapsed_ms": 0,
+                        "run_count": 1,
+                        "matched_text": None,
+                        "error": None,
+                        "failure_note": "Step ran on 'https://example.com/#overlay' but resolved against 'https://example.com/'",
+                        "diagnosis": None,
+                    },
+                }
+            ],
+        }
+
+        diag = get_failure_diagnostics(evidence)
+
+        assert len(diag["failed_steps"]) == 1
+        failed = diag["failed_steps"][0]
+        assert failed["error"] == ""
+        assert failed["error_summary"] == ""
+        assert "#overlay" in failed["failure_note"]
+
     def test_returns_empty_failed_steps_when_all_passed(self) -> None:
         evidence = _make_evidence(status="passed")
         # Override steps to all passed
