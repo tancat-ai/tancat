@@ -98,14 +98,18 @@ def get_failure_diagnostics(evidence: dict[str, Any]) -> dict[str, Any]:
 
         diagnosis = result.get("diagnosis")
         failure_note = result.get("failure_note")
+        # AI-067 mismatch failures carry error=None (null in the sidecar JSON),
+        # so .get("error", "") returns None and slicing it below crashed the
+        # whole report bundle (report.html never written).
+        error_text = result.get("error") or ""
 
         step_diag: dict[str, Any] = {
             "step_number": step.get("step"),
             "step_type": step.get("type"),
             "label": step.get("label"),
             "locator": step.get("locator"),
-            "error": result.get("error", ""),
-            "error_summary": result.get("error", "")[:500],
+            "error": error_text,
+            "error_summary": error_text[:500],
             "failure_note": failure_note,
         }
 
