@@ -256,6 +256,11 @@ class EvidenceTracker:
         if not locator:
             return {}
 
+        # The URL this measurement is taken on. A click is measured BEFORE it
+        # runs, so the page it ran on is not the URL the step ends on (B-105).
+        # The overlay needs the measurement page, not the destination page.
+        measured_url = self._safe_page_url()
+
         loc = self.page.locator(locator).first
 
         tag = ""
@@ -284,6 +289,8 @@ class EvidenceTracker:
 
         bbox = None
         viewport_pct = None
+        doc_width: int | None = None
+        doc_height: int | None = None
 
         try:
             # Best effort: bring into view so bbox is meaningful.
@@ -298,6 +305,11 @@ class EvidenceTracker:
             )
             dw = max(doc_size["width"], 1)
             dh = max(doc_size["height"], 1)
+            # The document the percentage is relative to. The same percentage
+            # lands on a different pixel on a page of a different height, so
+            # the overlay may only draw this marker on a frame of this size.
+            doc_width = int(dw)
+            doc_height = int(dh)
 
             raw_bbox = loc.bounding_box()
             if raw_bbox:
@@ -347,6 +359,9 @@ class EvidenceTracker:
             "target": target if target else None,
             "bbox": bbox,
             "viewport_pct": viewport_pct,
+            "doc_width": doc_width,
+            "doc_height": doc_height,
+            "measured_url": measured_url,
         }
 
     def _record_step(
@@ -394,6 +409,9 @@ class EvidenceTracker:
                 step_run_count = prev_step.get("result", {}).get("run_count", 0) + 1
 
         screenshot_path = None
+        frame_url = ""
+        frame_doc_width: int | None = None
+        frame_doc_height: int | None = None
         if take_screenshot:
             screenshot_stem = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}"
             # Default name; the bytes path may re-point it when the adaptive
@@ -428,6 +446,20 @@ class EvidenceTracker:
                 # duration of the capture, then restore — evidence screenshots
                 # must never contain typed secrets in the clear.
                 with masked_screenshot_page(self.page):
+                    # The frame records the page it shows and the size of the
+                    # document it captured. A marker measured on another
+                    # document cannot be drawn on this frame (B-105).
+                    frame_url = self._safe_page_url()
+                    try:
+                        frame_doc = self.page.evaluate(
+                            "() => ({ width: document.documentElement.scrollWidth,"
+                            " height: document.documentElement.scrollHeight })"
+                        )
+                        if isinstance(frame_doc, dict):
+                            frame_doc_width = int(max(frame_doc.get("width") or 0, 1))
+                            frame_doc_height = int(max(frame_doc.get("height") or 0, 1))
+                    except Exception:
+                        pass
                     screenshot_bytes = self.page.screenshot(full_page=True)
                     if isinstance(screenshot_bytes, bytes):
                         # A5: lossless WebP at method=0 — or the original PNG
@@ -537,6 +569,9 @@ class EvidenceTracker:
                 "locator": locator,
                 "value": value,
                 "screenshot": screenshot_path,
+                "frame_url": frame_url,
+                "frame_doc_width": frame_doc_width,
+                "frame_doc_height": frame_doc_height,
                 "element": element_data,
                 "url": self._safe_page_url(),  # B-033: per-step URL so flow divergence is traceable
                 "result": result,

@@ -10,7 +10,19 @@ Evidence/annotated report generators that read `.evidence.json` sidecar files an
 ## Functions
 
 ### `generate_annotated_screenshot(*, sidecar_path, view_mode, title) -> str`
-Returns interactive HTML with SVG overlay on a single screenshot. View modes: `annotated`, `heatmap`, `clean`.
+Returns interactive HTML with SVG overlays. Every marker is drawn on the frame it was
+measured in (B-105): a marker's percentage is only meaningful against the document it
+came from, so a marker whose frame cannot be confirmed is not drawn and the step list
+says why. View modes: `annotated`, `heatmap`, `clean`.
+
+### `build_evidence_frames(steps) -> list[EvidenceFrame]`
+One frame per distinct screenshot in the sidecar, each carrying the URL it shows and the
+size of the document it captured.
+
+### `match_frame(frames, *, doc_width, doc_height, own_rel_path, step_index) -> FrameMatch`
+The frame a marker measured in that document may be drawn on. Only a frame of exactly
+that size is a legal target; a sidecar without the sizes falls back to the step's own
+frame and reports the match as unverified.
 
 ### `generate_annotated_journey(*, sidecar_path, view_mode, title) -> str`
 Multi-page journey viewer with segment selector for tests navigating across URLs.
@@ -22,6 +34,14 @@ Scans test package directory for `*.evidence.json` files, returns aggregated dat
 Generates consolidated HTML report for an entire test package.
 
 ## Classes
+
+### `EvidenceFrame` (dataclass)
+One captured page state: the screenshot path, the URL it shows, the document size it
+captured, and the index of the step that captured it.
+
+### `FrameMatch` (dataclass)
+Where a marker may be drawn: the frame, whether the placement is confirmed, and the
+reason when it is not.
 
 ### `EvidenceEntry` (dataclass)
 Single evidence record: timestamp, action, selector, status, screenshot_path, notes.
@@ -58,11 +78,14 @@ Private `_`-helpers — the module's real logic (12 items). Grouped under the pu
 - `_is_failed_step(step: dict[str, Any]) -> bool` (function) — Check if a step resulted in a failure.
 
 ### `generate_annotated_screenshot`
-- `_prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]` (function) — Return steps with labels normalized for UI rendering.
+- `_build_overlay_model(steps: list[dict[str, Any]]) -> dict[str, Any]` (function) — Work out which captured frame every step's marker belongs on.
+- `_prepare_steps_for_display(steps: list[dict[str, Any]], notes: dict[int, str] | None = None) -> list[dict[str, Any]]` (function) — Return steps with labels normalized for UI rendering.
+- `_resolve_evidence_image(sidecar_path: Path, rel_path: str) -> Path` (function) — Resolve a screenshot path recorded in a sidecar to a file on disk.
 - `_safe_embed_image_data_uri(image_path: Path) -> str | None` (function) — (no docstring)
 - `_safe_read_json(path: Path) -> dict[str, Any] | None` (function) — (no docstring)
 
 ### Internal utilities
+- `_as_int(value: Any) -> int | None` (function) — Return *value* as an int, or None when it is not a usable number.
 - `_clean_evidence_label(label: str) -> str` (function) — Convert raw placeholder-token labels into cleaner user-facing text.
 - `_format_label(label: str, matched_text: str | None = None, truncate: int = 80) -> str` (function) — Format a step label with optional matched text for user display.
 - `_normalise_url(url: str) -> str` (function) — Normalise URLs for matching across redirects and trailing slashes.
