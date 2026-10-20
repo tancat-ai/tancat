@@ -7,6 +7,7 @@ Entirely independent of the standard report renderers.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
+from src.evidence_image import embed_preview_data_uri
 from src.report_builder import escape_html
 
 _EVIDENCE_STEP_COLORS: dict[str, str] = {
@@ -477,11 +479,29 @@ def _build_overlay_model(steps: list[dict[str, Any]]) -> dict[str, Any]:
     return {"frames": frame_meta, "markers": markers, "ribbons": ribbons, "notes": notes}
 
 
+def overlay_counts(sidecar_path: Path) -> tuple[int, int]:
+    """Return (frames, markers) the annotated viewer would draw for a sidecar.
+
+    Used by the report to say what is inside the overlay before the reader
+    opens it.
+    """
+    sidecar = _safe_read_json(sidecar_path)
+    if sidecar is None:
+        return (0, 0)
+    steps = sidecar.get("steps", [])
+    if not isinstance(steps, list) or not steps:
+        return (0, 0)
+    model = _build_overlay_model(steps)
+    return (len({marker["frame"] for marker in model["markers"]}), len(model["markers"]))
+
+
 def generate_annotated_screenshot(
     *,
     sidecar_path: Path,
     view_mode: Literal["annotated", "heatmap", "clean"] = "annotated",
     title: str = "",
+    max_width: int = 0,
+    instance: str = "",
 ) -> str:
     """Return interactive HTML for an annotated evidence screenshot.
 
@@ -492,12 +512,26 @@ def generate_annotated_screenshot(
     markers on the wrong element (B-105). When the frame cannot be confirmed
     the marker is not drawn and the timeline says why: a wrong marker is
     worse than no marker.
+
+    Args:
+        sidecar_path: The ``.evidence.json`` sidecar to render.
+        view_mode: ``annotated`` (markers with step numbers), ``heatmap``
+            (rings only) or ``clean`` (no markers).
+        title: Optional heading.
+        max_width: Cap on the embedded image width in pixels. Above 0 the
+            frames are embedded as downscaled previews and the viewer says so;
+            0 embeds the full-resolution capture.
+        instance: Unique id for this viewer inside the page. A report can
+            carry one overlay per test, and each viewer's script must scope
+            itself to its own block. Defaults to a hash of the sidecar path.
     """
 
     sidecar = _safe_read_json(sidecar_path)
     if sidecar is None:
         escaped = escape_html(str(sidecar_path))
         return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Missing sidecar: <code>{escaped}</code></div>"
+
+    instance = instance or hashlib.sha1(str(sidecar_path).encode("utf-8")).hexdigest()[:10]
 
     steps = sidecar.get("steps", [])
     if not isinstance(steps, list) or not steps:
@@ -513,10 +547,26 @@ def generate_annotated_screenshot(
         used_frames = {f["id"] for f in model["frames"]}
 
     frame_blocks: list[str] = []
+    preview_note = ""
+    if max_width > 0:
+        preview_note = (
+            f"<div style='font-size:11px;color:#6b7280;margin-top:4px;'>"
+            f"Frames below are previews scaled to {max_width}px wide. "
+            f"The full-resolution lossless captures are the files named under each frame, in the package's "
+            f"<code>evidence/</code> folder."
+            f"</div>"
+        )
     for frame in model["frames"]:
         if frame["id"] not in used_frames:
             continue
-        image_data_uri = _safe_embed_image_data_uri(_resolve_evidence_image(sidecar_path, frame["rel_path"]))
+        image_path = _resolve_evidence_image(sidecar_path, frame["rel_path"])
+        image_data_uri = _safe_embed_image_data_uri(image_path)
+        previewed = False
+        if max_width > 0:
+            preview_uri = embed_preview_data_uri(image_path, max_width=max_width)
+            if preview_uri:
+                image_data_uri = preview_uri
+                previewed = True
         if not image_data_uri:
             continue
         border = "#fca5a5" if frame["has_failure"] else "#eee"
@@ -528,15 +578,21 @@ def generate_annotated_screenshot(
                 f"Step {ribbon['step']} failed - no element position was recorded, so no marker could be placed"
                 "</div>"
             )
+        source_note = (
+            f"<div style='font-size:10px;color:#9ca3af;margin-top:3px;'>Source: <code>{escape_html(frame['rel_path'])}</code></div>"
+            if previewed
+            else ""
+        )
         frame_blocks.append(
             f"""
   <div class="ev-frame" data-frame-id="{frame["id"]}" style="margin-bottom:16px;">
     <div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:4px;">{escape_html(frame["label"])}</div>
-    <div class="ev-wrap" style="position:relative;width:100%;max-width:1100px;">
-      <img class="ev-img" data-frame-id="{frame["id"]}" src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid {border};" />
+    <div class="ev-wrap" style="position:relative;width:100%;max-width:{max_width or 1100}px;max-height:640px;overflow:auto;border:1px solid {border};border-radius:8px;background:#fafafa;">
+      <img class="ev-img" data-frame-id="{frame["id"]}" src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;" />
       <svg class="ev-svg" data-frame-id="{frame["id"]}" style="position:absolute;left:0;top:0;pointer-events:none;"></svg>
       {ribbon_html}
     </div>
+    {source_note}
   </div>"""
         )
 
@@ -554,12 +610,13 @@ def generate_annotated_screenshot(
     frames_json = json.dumps(model["frames"])
 
     return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
+<div class="ev-viewer" id="ev-viewer-{instance}" style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">{safe_title}</div>
   <div style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;">{safe_url}</div>
-  <div id="ev-frames">
+  <div class="ev-frames" id="ev-frames-{instance}">
 {"".join(frame_blocks)}
   </div>
+  {preview_note}
 
   <div style="display:flex;gap:10px;align-items:center;margin-top:10px;color:#555;font-size:12px;flex-wrap:wrap;">
     <span><strong>Mode</strong>: {escape_html(mode)}</span>
@@ -578,7 +635,7 @@ def generate_annotated_screenshot(
     says why in the list below.
   </div>
 
-  <div id="ev-timeline" style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px;">
+  <div class="ev-timeline" id="ev-timeline-{instance}" style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px;">
   </div>
 </div>
 
@@ -591,7 +648,10 @@ def generate_annotated_screenshot(
   const markers = {markers_json};
   const frames = {frames_json};
 
-  const timeline = document.getElementById("ev-timeline");
+  // Every viewer scopes itself: a report can carry one overlay per test, and
+  // the first viewer's script must not draw its markers on the others.
+  const ROOT = document.getElementById("ev-viewer-{instance}");
+  const timeline = ROOT.querySelector(".ev-timeline");
   let hoveredId = null;
 
   // Step labels and failure notes are free text (site copy, error logs).
@@ -700,9 +760,9 @@ def generate_annotated_screenshot(
   }}
 
   function renderOverlay() {{
-    document.querySelectorAll("svg.ev-svg").forEach((svg) => {{
+    ROOT.querySelectorAll("svg.ev-svg").forEach((svg) => {{
       const frameId = svg.getAttribute("data-frame-id");
-      const img = document.querySelector(`img.ev-img[data-frame-id="${{frameId}}"]`);
+      const img = svg.closest(".ev-wrap").querySelector("img.ev-img");
       if (!img) return;
       const rect = img.getBoundingClientRect();
       const w = rect.width;
@@ -754,8 +814,8 @@ def generate_annotated_screenshot(
   }}
 
   const ro = new ResizeObserver(() => renderOverlay());
-  ro.observe(document.getElementById("ev-frames"));
-  document.querySelectorAll("img.ev-img").forEach((img) => {{
+  ro.observe(ROOT);
+  ROOT.querySelectorAll("img.ev-img").forEach((img) => {{
     img.addEventListener("load", () => renderOverlay());
   }});
 

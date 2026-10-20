@@ -48,6 +48,18 @@ Generate markdown report in Jira attachment format.
 
 Generate self-contained HTML report with base64 embedded screenshots.
 
+The report carries the evidence overlay (B-105, t-0844): the annotated per-test viewer
+(every marker on the frame its step was measured in) and the per-URL suite heatmap. Both
+are the artifacts this product sells, so they belong in the file the customer keeps.
+
+Every embedded image is a **preview** scaled to `EMBED_PREVIEW_MAX_WIDTH` (640 px); the
+lossless capture stays in the package's `evidence/` folder and every preview names its
+source file. The report states the policy once, at the top.
+
+Private helpers: `_index_sidecars` (sidecar index for a package), `_match_sidecar` (the
+sidecar that belongs to a report row), `_overlay_block` (the per-test overlay disclosure),
+`_suite_heatmap_lines` (the per-URL heatmap section).
+
 ## Public API Additions
 
 Refreshed 2026-10-02: public symbols present in the source and not listed above.

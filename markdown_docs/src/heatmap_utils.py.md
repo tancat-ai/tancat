@@ -34,7 +34,8 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 | `build_story_confidence(evidence_dir, test_plan_state)` | Aggregates .evidence.json into StoryConfidence list per story |
 | `build_confidence_heatmap(stories)` | Builds Plotly treemap for story confidence levels |
 | `_extract_step_points_by_url(sidecar)` | Extracts (points_by_url, frames_by_url) from one sidecar; every step is attributed to the page it RAN on |
-| `generate_suite_heatmap(evidence_dir, page_url)` | Renders per-URL heatmap as HTML with SVG circle overlays |
+| `list_evidence_urls(evidence_dir)` | The page URLs that have evidence points, most-covered first (drives the heatmap picker and the report's heatmap section) |
+| `generate_suite_heatmap(evidence_dir, page_url, max_width=0, instance="")` | Renders per-URL heatmap as HTML with SVG circle overlays |
 
 ## Key Logic
 
@@ -71,6 +72,8 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 - Filter buttons for all/passed/partial/failed views
 - Element details table with hover highlighting
 - Uses ResizeObserver for responsive SVG resizing
+- Each heatmap scopes its script to its own root (`suite-heat-<id>`), so a report can carry one heatmap per page without the instances drawing on each other
+- `max_width` embeds the background as a downscaled preview (the embed-size policy)
 
 ## How It Works (Internals)
 

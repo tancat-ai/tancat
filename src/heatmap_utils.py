@@ -7,6 +7,7 @@ This module also houses the Tier 3 per-URL suite heatmap rendering logic
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from src.evidence_image import embed_preview_data_uri
 from src.report_builder import escape_html
 
 
@@ -433,10 +435,31 @@ def _dominant_status(status_counts: dict[str, int]) -> str:
     return max(status_counts.items(), key=lambda kv: (kv[1], severity.get(kv[0], 0)))[0]
 
 
+def list_evidence_urls(evidence_dir: Path) -> list[str]:
+    """Return the page URLs that have evidence points, most-covered first.
+
+    Each URL is one page of the product under test; the suite heatmap is
+    rendered per URL, so this is the list of pages a report can show.
+    """
+    if not evidence_dir.exists():
+        return []
+    counts: dict[str, int] = {}
+    for sidecar_path in evidence_dir.glob("*.evidence.json"):
+        sidecar = _safe_read_json(sidecar_path)
+        if not sidecar:
+            continue
+        points_by_url, _frames = _extract_step_points_by_url(sidecar)
+        for url, points in points_by_url.items():
+            counts[url] = counts.get(url, 0) + len(points)
+    return [url for url, _count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+
+
 def generate_suite_heatmap(
     *,
     evidence_dir: Path,
     page_url: str,
+    max_width: int = 0,
+    instance: str = "",
 ) -> str:
     """Render a suite-level heatmap for one page URL across all sidecars.
 
@@ -445,6 +468,16 @@ def generate_suite_heatmap(
     - Circle size proportional to test count
     - Tooltips show locator, element info, and test results
     - Filterable by test status
+
+    Args:
+        evidence_dir: The package's ``evidence/`` directory.
+        page_url: The page to render.
+        max_width: Cap on the embedded background width in pixels. Above 0 the
+            background is embedded as a downscaled preview; 0 embeds the
+            full-resolution capture.
+        instance: Unique id for this heatmap inside the page. A report can
+            carry one heatmap per page, and each heatmap's script must scope
+            itself to its own block. Defaults to a hash of the page URL.
     """
     if not evidence_dir.exists():
         return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Evidence directory not found.</div>"
@@ -502,6 +535,10 @@ def generate_suite_heatmap(
             else (evidence_dir / background_rel).resolve()
         )
         image_data_uri = _safe_embed_image_data_uri(image_path)
+        if max_width > 0:
+            preview_uri = embed_preview_data_uri(image_path, max_width=max_width)
+            if preview_uri:
+                image_data_uri = preview_uri
 
     # Aggregate per-element: group by (x, y) position and collect statuses
     # Elements within 2% of each other are considered the same element.
@@ -576,10 +613,11 @@ def generate_suite_heatmap(
     colors_json = json.dumps(_EVIDENCE_STEP_COLORS)
     status_colors_json = json.dumps(_STATUS_COLORS)
     safe_url = escape_html(page_url)
+    instance = instance or hashlib.sha1(page_url.encode("utf-8")).hexdigest()[:10]
     bg_html = (
-        f'<img id="suite-img" src="{image_data_uri}" alt="suite screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" />'
+        f'<img class="suite-img" id="suite-img-{instance}" src="{image_data_uri}" alt="suite screenshot" style="display:block;width:100%;max-width:{max_width or 1100}px;height:auto;" />'
         if image_data_uri
-        else '<div id="suite-img" style="width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;color:#666;">No screenshot available for this page. Rendering points only.</div>'
+        else '<div class="suite-img" id="suite-img-{instance}" style="width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;color:#666;">No screenshot available for this page. Rendering points only.</div>'
     )
     unplotted_html = (
         f"<span style='color:#b45309;font-weight:700;'>Not drawn: {not_plotted}</span>"
@@ -590,7 +628,7 @@ def generate_suite_heatmap(
     arrival_html = f"<span style='color:#6b7280;'>Page arrivals: {arrival_count}</span>" if arrival_count else ""
 
     return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
+<div class="suite-heatmap" id="suite-heat-{instance}" style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">Suite Heatmap — Per-URL Element Coverage</div>
   <div style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;">{safe_url}</div>
 
@@ -613,9 +651,9 @@ def generate_suite_heatmap(
     <button class="heatmap-filter-btn" data-filter="failed" style="padding:4px 12px;border:1px solid #F09595;border-radius:16px;background:#F09595;color:#333;cursor:pointer;font-size:12px;">Failed</button>
   </div>
 
-  <div id="suite-wrap" style="position:relative;width:100%;max-width:1100px;">
+  <div class="suite-wrap" id="suite-wrap-{instance}" style="position:relative;width:100%;max-width:{max_width or 1100}px;max-height:640px;overflow:auto;border:1px solid #eee;border-radius:8px;background:#fafafa;">
     {bg_html}
-    <svg id="suite-svg" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
+    <svg class="suite-svg" id="suite-svg-{instance}" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
   </div>
 
   <!-- Element details table -->
@@ -633,7 +671,7 @@ def generate_suite_heatmap(
           <th style="padding:6px;">Failed</th>
         </tr>
       </thead>
-      <tbody id="element-table-body">
+      <tbody class="element-table-body" id="element-table-body-{instance}">
       </tbody>
     </table>
   </div>
@@ -658,10 +696,13 @@ def generate_suite_heatmap(
   const allPoints = {points_json};
   const plottedPoints = {plotted_json};
   const aggregated = {aggregated_json};
-  const wrap = document.getElementById("suite-wrap");
-  const svg = document.getElementById("suite-svg");
-  const img = document.getElementById("suite-img");
-  const tableBody = document.getElementById("element-table-body");
+  // Every heatmap scopes itself: a report can carry one heatmap per page,
+  // and the first heatmap's script must not drive the others.
+  const ROOT = document.getElementById("suite-heat-{instance}");
+  const wrap = ROOT.querySelector(".suite-wrap");
+  const svg = ROOT.querySelector("svg.suite-svg");
+  const img = ROOT.querySelector(".suite-img");
+  const tableBody = ROOT.querySelector(".element-table-body");
 
   let currentFilter = "all";
 
@@ -777,7 +818,7 @@ def generate_suite_heatmap(
   }}
 
   // Filter button handlers
-  document.querySelectorAll(".heatmap-filter-btn").forEach(btn => {{
+  ROOT.querySelectorAll(".heatmap-filter-btn").forEach(btn => {{
     btn.addEventListener("click", () => {{
       currentFilter = btn.dataset.filter;
       render();
