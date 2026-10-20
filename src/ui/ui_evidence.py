@@ -9,14 +9,20 @@ import pandas as pd
 import streamlit as st
 
 from src.evidence_export import export_csv, export_junit_xml, export_ndjson
+from src.evidence_image import EMBED_PREVIEW_MAX_WIDTH
 from src.evidence_index import EvidenceIndex
 from src.gantt_utils import (
     build_gantt_chart,
     build_gantt_summary_sentences,
     load_gantt_entries,
 )
-from src.heatmap_utils import build_confidence_heatmap, build_story_confidence
-from src.report_utils import generate_annotated_journey
+from src.heatmap_utils import (
+    build_confidence_heatmap,
+    build_story_confidence,
+    generate_suite_heatmap,
+    list_evidence_urls,
+)
+from src.report_utils import generate_annotated_journey, generate_annotated_screenshot
 from src.storage import get_storage
 
 
@@ -134,7 +140,7 @@ class EvidenceViewer:
             ],
         )
 
-        top_tabs = st.tabs(["📊 Dashboard & Search", "🌡️ Coverage Heatmap", "⏱️ Gantt Timeline"])
+        top_tabs = st.tabs(["📊 Dashboard & Search", "🎯 Suite Heatmap", "🌡️ Coverage Heatmap", "⏱️ Gantt Timeline"])
 
         with top_tabs[0]:
             self._render_dashboard(current_dir)
@@ -142,9 +148,12 @@ class EvidenceViewer:
             self._render_advanced_search(sidecars)
 
         with top_tabs[1]:
-            self._render_coverage_heatmap(current_dir)
+            self._render_suite_heatmap(current_dir)
 
         with top_tabs[2]:
+            self._render_coverage_heatmap(current_dir)
+
+        with top_tabs[3]:
             self._render_gantt_timeline(current_dir)
 
     # ── Level 1: Dashboard ───────────────────────────────────────────────
@@ -424,7 +433,7 @@ class EvidenceViewer:
             f"·  **Pack:** {_short_package_name(selected_result.test_package)}"
         )
 
-        debug_tab, history_tab = st.tabs(["📋 Execution Detail", "📈 Run History"])
+        debug_tab, overlay_tab, history_tab = st.tabs(["📋 Execution Detail", "🎯 Annotated Overlay", "📈 Run History"])
 
         sidecar_path = index.get_test_package_path(selected_result.sidecar_path)
 
@@ -457,8 +466,69 @@ class EvidenceViewer:
                 except Exception as e:
                     st.error(f"Failed to render evidence: {e}")
 
+        with overlay_tab:
+            self._render_annotated_overlay(sidecar_path, clean_name)
+
         with history_tab:
             self._render_test_run_history(selected_result.test_name)
+
+    def _render_annotated_overlay(self, sidecar_path: Path, clean_name: str) -> None:
+        """Render the annotated overlay: every step's marker on its own frame.
+
+        The overlay draws a marker on the frame the step was measured in, so a
+        marker can never land on a different element than the one the test
+        touched. The page scripts are ours and the sidecar's free text is
+        escaped inside the payload, so the HTML is safe to run here.
+        """
+        if not sidecar_path.exists():
+            st.warning(f"Sidecar file not found on disk: `{sidecar_path}`")
+            return
+        st.caption(
+            "Each marker sits on the frame its step was measured in. A step with no marker "
+            "says why in the list below. The frames are previews; the full-resolution captures "
+            "are in the package's `evidence/` folder."
+        )
+        try:
+            html = generate_annotated_screenshot(
+                sidecar_path=sidecar_path,
+                title=clean_name,
+                max_width=EMBED_PREVIEW_MAX_WIDTH,
+            )
+            st.html(html, unsafe_allow_javascript=True)
+        except Exception as e:
+            st.error(f"Failed to render the evidence overlay: {e}")
+
+    # ── Suite Heatmap tab ─────────────────────────────────────────────────
+
+    def _render_suite_heatmap(self, evidence_dir: Path | None) -> None:
+        """Per-URL element coverage across the whole suite (the Tier 3 heatmap)."""
+        st.subheader("🎯 Suite Heatmap — Per-URL Element Coverage")
+        st.caption(
+            "Which elements each page of the product was exercised on, across the whole suite. "
+            "A circle's number is how many times that element was hit; its colour is the outcome. "
+            "Every marker sits on the frame the step was measured on."
+        )
+
+        if evidence_dir is None:
+            st.info("No heatmap data yet. Run generated tests to produce `.evidence.json` sidecars.")
+            return
+        st.caption(f"Showing package: `{_short_package_name(evidence_dir.parent.name)}`")
+
+        urls = list_evidence_urls(evidence_dir)
+        if not urls:
+            st.info("No evidence points yet. Run generated tests to produce `.evidence.json` sidecars.")
+            return
+
+        page_url = st.selectbox("Page", options=urls, key="suite_heatmap_page")
+        try:
+            html = generate_suite_heatmap(
+                evidence_dir=evidence_dir,
+                page_url=page_url,
+                max_width=EMBED_PREVIEW_MAX_WIDTH,
+            )
+            st.html(html, unsafe_allow_javascript=True)
+        except Exception as e:
+            st.error(f"Failed to render the suite heatmap: {e}")
 
     def _render_test_run_history(self, test_name: str) -> None:
         from src.run_result_persistence import load_all_run_results

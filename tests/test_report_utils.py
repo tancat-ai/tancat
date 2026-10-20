@@ -206,8 +206,9 @@ def test_generate_html_report_with_screenshots_in_dir() -> None:
         result = generate_html_report(sample_data, screenshots_dir=screenshot_dir)
 
         assert "Test Coverage Report" in result
-        # Should have embedded image with base64 data URI
-        assert "data:image/png;base64" in result
+        # Should have embedded image with base64 data URI. The embed is a
+        # downscaled preview (the embed-size policy), so it is a WebP.
+        assert "data:image/webp;base64" in result
 
 
 def test_coverage_with_unknown_status() -> None:
@@ -514,7 +515,7 @@ def test_html_report_caps_full_page_screenshot_height() -> None:
         )
         result = generate_html_report(sample_data, screenshots_dir=screenshot_dir)
 
-    assert "data:image/png;base64" in result
+    assert "data:image/webp;base64" in result
     assert "max-height:640px" in result
     assert "overflow:auto" in result
 

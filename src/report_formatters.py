@@ -6,12 +6,109 @@ a string in the corresponding format (local markdown, Jira markdown, or HTML).
 
 from __future__ import annotations
 
-import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.evidence_image import EMBED_PREVIEW_MAX_WIDTH, embed_preview_data_uri
+from src.evidence_report import generate_annotated_screenshot, overlay_counts
+from src.heatmap_utils import generate_suite_heatmap, list_evidence_urls
 from src.report_builder import _status_icon, _status_summary, escape_html
+
+
+def _index_sidecars(evidence_dir: Path | None) -> dict[str, Path]:
+    """Map every evidence sidecar of a package to its path, keyed by test name."""
+    if evidence_dir is None or not evidence_dir.is_dir():
+        return {}
+    return {path.stem.replace(".evidence", ""): path for path in sorted(evidence_dir.glob("*.evidence.json"))}
+
+
+def _match_sidecar(row: dict[str, Any], sidecar_index: dict[str, Path]) -> Path | None:
+    """Return the evidence sidecar that belongs to one report row.
+
+    A row names its tests in ``expected_locators``; the sidecars are keyed by
+    the test name, with the pytest parameterisation suffix (``[chromium]``)
+    on one side or the other.
+    """
+    names = row.get("expected_locators") or []
+    if isinstance(names, str):
+        names = [names]
+    for raw in names:
+        name = str(raw)
+        base = name.split("[", 1)[0]
+        if name in sidecar_index:
+            return sidecar_index[name]
+        if base in sidecar_index:
+            return sidecar_index[base]
+        for key, path in sidecar_index.items():
+            if key.split("[", 1)[0] == base or key.startswith(base):
+                return path
+    return None
+
+
+def _overlay_block(row: dict[str, Any], sidecar_index: dict[str, Path]) -> str:
+    """Return the annotated evidence overlay for one report row.
+
+    Empty when the row has no evidence sidecar. The block is a disclosure:
+    open for a failed test (that is where the reader needs the picture) and
+    closed otherwise, so the report stays a document rather than a gallery.
+    """
+    sidecar_path = _match_sidecar(row, sidecar_index)
+    if sidecar_path is None:
+        return ""
+    try:
+        html = generate_annotated_screenshot(
+            sidecar_path=sidecar_path,
+            title=str(row.get("test_name", "")),
+            max_width=EMBED_PREVIEW_MAX_WIDTH,
+        )
+        frames, markers = overlay_counts(sidecar_path)
+    except Exception:
+        return ""
+    if markers:
+        summary = f"Annotated overlay - {markers} step(s) marked on {frames} frame(s)"
+    else:
+        summary = "Annotated overlay - no element positions were recorded for this test"
+    open_attr = " open" if str(row.get("status", "")) == "failed" else ""
+    return (
+        f"                <details{open_attr} style='margin:15px 0;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;background:#fff;'>"
+        f"                    <summary style='cursor:pointer;font-weight:600;color:#333;'>{escape_html(summary)}</summary>"
+        f"                    <div style='margin-top:10px;'>{html}</div>"
+        "                </details>"
+    )
+
+
+def _suite_heatmap_lines(evidence_dir: Path | None, urls: list[str]) -> list[str]:
+    """Return the HTML lines for the per-URL suite heatmap section."""
+    if evidence_dir is None or not evidence_dir.is_dir() or not urls:
+        return []
+    lines = [
+        "        <h2>Suite Heatmap - Per-URL Element Coverage</h2>",
+        "        <p class='timestamp'>Which elements each page of the product was exercised on, across the whole suite. "
+        "A circle's number is how many times that element was hit; its colour is the outcome. "
+        "Every marker sits on the frame the step was measured on.</p>",
+    ]
+    for idx, url in enumerate(urls):
+        try:
+            html = generate_suite_heatmap(
+                evidence_dir=evidence_dir,
+                page_url=url,
+                max_width=EMBED_PREVIEW_MAX_WIDTH,
+            )
+        except Exception:
+            continue
+        open_attr = " open" if idx == 0 else ""
+        lines.extend(
+            [
+                f"        <details{open_attr} style='margin:10px 0;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;background:#fff;'>",
+                f"            <summary style='cursor:pointer;font-weight:600;'>{escape_html(url)}</summary>",
+                "            <div style='margin-top:10px;'>",
+                html,
+                "            </div>",
+                "        </details>",
+            ]
+        )
+    return lines
 
 
 def verification_line(test: dict[str, Any]) -> str:
@@ -274,6 +371,17 @@ def generate_html_report(
 ) -> str:
     """Generate self-contained HTML report with base64 embedded screenshots.
 
+    The report carries the evidence overlay (B-105): the annotated per-test
+    viewer, whose markers sit on the frame each step was measured in, and the
+    per-URL suite heatmap. Both are the artifacts this product sells, so they
+    belong in the file the customer keeps.
+
+    Every embedded image is a **preview** scaled to
+    ``EMBED_PREVIEW_MAX_WIDTH`` pixels wide. Evidence frames are full-page
+    captures (~8,000-9,000 px tall, ~2.5 MB each); embedding them whole made
+    the report unsendable. The full-resolution lossless captures stay in the
+    package's ``evidence/`` folder and every preview names its source file.
+
     Args:
         coverage: List of test coverage dictionaries with test_name, status, screenshots, duration
         screenshots_dir: Directory containing screenshot files (optional, used for embedding)
@@ -285,6 +393,10 @@ def generate_html_report(
     """
     passed_count, failed_count, pending_count, unknown_count = _status_summary(coverage)
 
+    evidence_dir = (Path(screenshots_dir) / "evidence") if screenshots_dir else None
+    sidecar_index = _index_sidecars(evidence_dir)
+    evidence_urls = list_evidence_urls(evidence_dir) if evidence_dir is not None else []
+
     def embed_screenshot(screenshot_path: str) -> tuple[str, str]:
         """Embed screenshot as base64 data URI or return placeholder.
 
@@ -292,6 +404,9 @@ def generate_html_report(
         Inlined at full width they made the report page ~17,000 px tall and
         impossible to scan, so each image sits in a fixed-height scroll box:
         full reading width, scroll inside, report layout stays compact.
+
+        The embed is a downscaled preview (the embed-size policy): the
+        lossless capture stays in ``evidence/``.
 
         Returns:
             Tuple of (image_html, alt_text)
@@ -311,24 +426,16 @@ def generate_html_report(
             )
 
         try:
-            with open(full_path, "rb") as f:
-                content = f.read()
-                base64_data = base64.b64encode(content).decode("utf-8")
-                ext = full_path.suffix.lower()
-                mime_type = {
-                    ".png": "image/png",
-                    ".jpg": "image/jpeg",
-                    ".jpeg": "image/jpeg",
-                    ".gif": "image/gif",
-                    ".webp": "image/webp",
-                }.get(ext, "application/octet-stream")
+            data_uri = embed_preview_data_uri(full_path)
+            if not data_uri:
+                raise OSError("preview failed")
 
-                return (
-                    '<div style="max-height:640px;overflow:auto;border:1px solid #ddd;border-radius:4px;padding:4px;background:#fafafa;">'
-                    f'<img src="data:{mime_type};base64,{base64_data}" style="display:block;width:100%;height:auto;" alt="screenshot">'
-                    "</div>",
-                    screenshot_path,
-                )
+            return (
+                '<div style="max-height:640px;overflow:auto;border:1px solid #ddd;border-radius:4px;padding:4px;background:#fafafa;">'
+                f'<img src="{data_uri}" style="display:block;width:100%;max-width:{EMBED_PREVIEW_MAX_WIDTH}px;height:auto;" alt="screenshot">'
+                "</div>",
+                screenshot_path,
+            )
         except Exception:
             return (
                 '<div style="background:#f0f0f0;padding:20px;text-align:center;color:#666;">⚠️ Error loading image</div>',
@@ -394,7 +501,17 @@ def generate_html_report(
         f"            <div class='stat unknown'><div class='stat-value'>{unknown_count}</div><div class='stat-label'>Unknown</div></div>",
         "        </div>",
         "",
+        "        <p class='timestamp'>Every image in this report is a preview scaled to "
+        f"{EMBED_PREVIEW_MAX_WIDTH}px wide, so the file stays small enough to send. The full-resolution "
+        "lossless captures are the files in the package's <code>evidence/</code> folder, named under each image. "
+        "Each test below carries an annotated overlay: every step's marker sits on the frame that step was "
+        "measured in.</p>",
+        "",
     ]
+
+    lines.extend(_suite_heatmap_lines(evidence_dir, evidence_urls))
+    if evidence_urls:
+        lines.append("")
 
     if coverage:
         nav_links = []
@@ -520,6 +637,10 @@ def generate_html_report(
                     + screenshot_html_parts
                     + ["                </div>"]
                 )
+
+        overlay_block = _overlay_block(test, sidecar_index)
+        if overlay_block:
+            lines.append(overlay_block)
 
         lines.extend(
             [

@@ -9,11 +9,19 @@ Evidence/annotated report generators that read `.evidence.json` sidecar files an
 
 ## Functions
 
-### `generate_annotated_screenshot(*, sidecar_path, view_mode, title) -> str`
+### `generate_annotated_screenshot(*, sidecar_path, view_mode, title, max_width=0, instance="") -> str`
 Returns interactive HTML with SVG overlays. Every marker is drawn on the frame it was
 measured in (B-105): a marker's percentage is only meaningful against the document it
 came from, so a marker whose frame cannot be confirmed is not drawn and the step list
 says why. View modes: `annotated`, `heatmap`, `clean`.
+
+`max_width` embeds the frames as downscaled previews (the embed-size policy) and says so;
+`instance` scopes the viewer's script to its own block, so a report can carry one overlay
+per test without the instances drawing on each other.
+
+### `overlay_counts(sidecar_path) -> tuple[int, int]`
+Returns (frames, markers) the annotated viewer would draw for a sidecar - what the report
+puts in the overlay's summary line before the reader opens it.
 
 ### `build_evidence_frames(steps) -> list[EvidenceFrame]`
 One frame per distinct screenshot in the sidecar, each carrying the URL it shows and the

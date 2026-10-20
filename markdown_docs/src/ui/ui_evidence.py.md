@@ -14,12 +14,26 @@ Initialises with the base output directory (typically `generated_tests/`).
 
 Renders the evidence viewer section with 4 tabs:
 
-1. **Annotated Screenshot**: Selectable evidence sidecars with view modes (annotated/heatmap/clean)
-2. **Gantt Timeline**: Plotly Gantt chart with grouping modes and execution details
+1. **Dashboard & Search**: run-health dashboard, flaky tests, search and export, and the single-test view
+2. **Suite Heatmap**: the per-URL element coverage heatmap (t-0844) - which elements each page of the product was exercised on, across the whole suite, with a page picker
 3. **Coverage Heat Map**: Story confidence heatmap with tester-confirmed/unreviewed/gap metrics
-4. **Run History**: Stacked bar chart with pass-rate overlay and flaky test detection
+4. **Gantt Timeline**: Plotly Gantt chart with grouping modes and execution details
 
-Plus a suite heatmap overview section.
+The single-test view has its own tabs: **Execution Detail** (the step journey),
+**Annotated Overlay** (t-0844 - every step's marker on the frame that step was
+measured in) and **Run History**.
+
+Both interactive artifacts are rendered with `st.html(..., unsafe_allow_javascript=True)`:
+Streamlit strips page scripts by default, and the markers would never appear.
+
+### `_render_annotated_overlay(sidecar_path, clean_name) -> None`
+The annotated overlay for one test: every step's marker sits on the frame the step was
+measured in. A step with no marker says why in the list below. The frames are previews
+(640 px wide); the full-resolution captures are in the package's `evidence/` folder.
+
+### `_render_suite_heatmap(evidence_dir) -> None`
+The per-URL suite heatmap for the package the user is working on. The page list comes
+from `list_evidence_urls()` (most-covered first).
 
 ### `_render_annotated_screenshot(sidecars) -> None`
 
@@ -55,8 +69,8 @@ Story confidence heatmap:
 ### `_render_suite_heatmap(sidecars, evidence_dirs) -> None`
 
 Suite-wide coverage overview:
-- Extracts unique URLs from all evidence sidecars (navigate steps)
-- Selectable page URL with full-page heatmap rendering
+- The page URLs that carry evidence points (`list_evidence_urls`), most-covered first
+- A page picker and the per-URL element-coverage heatmap (t-0844)
 
 ### `_render_run_history() -> None`
 
