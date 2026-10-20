@@ -33,12 +33,13 @@ True when a locator is a confirmation-modal close control (close-modal, Continue
 Loads run history and step data from sidecar JSON for incremental counters.
 
 ### `_get_element_metadata(locator) -> dict`
-Captures tag, id, data-testid, bounding box, and viewport percentages for an element. Uses full-document size for coordinates.
+Captures tag, id, data-testid, bounding box, and viewport percentages for an element. Uses full-document size for coordinates. Also records the document the measurement was taken in — `doc_width`, `doc_height` and `measured_url` — because a viewport percentage is only meaningful against the document it came from (B-105).
 
 ### `_record_step(step_type, label, locator, value, take_screenshot, error, matched_text, fallback_used, fallback_chain, elapsed_ms)`
 Core recording method. Builds step dict with:
 - Incremental `step_run_count` from previous runs
 - Full-page screenshot when requested, captured in the configured evidence image format — lossless WebP by default (`src.config.evidence_image_extension()` / `evidence_image_format()`, override with `AITEST_EVIDENCE_IMAGE_FORMAT=png`). Credential fields are masked for the duration of the capture.
+- `frame_url`, `frame_doc_width`, `frame_doc_height`: the page the captured frame shows and the size of the document it captured — the frame a marker may be drawn on (B-105)
 - Element metadata (bbox, tag, attributes)
 - Failure diagnosis via `FailureReporter.diagnose_failure()` on error
 - Status: `"passed"`, `"partial_pass"` (when fallback used), `"failed"`
