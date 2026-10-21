@@ -357,7 +357,27 @@ class JourneyScraper:
                                 self._dismiss_modals(page)
 
                                 selector = step.selector
-                                if not selector and step.description:
+                                if not selector and step.description and step.prefer_link:
+                                    # t-0847: a navigation whose URL is not in the
+                                    # human's input is performed the way a human
+                                    # performs it - by clicking the HYPERLINK that
+                                    # names the destination. Only an anchor counts:
+                                    # a button with the same words is a different
+                                    # action ("add to cart" is not "the cart page").
+                                    selector = self._discover_link_selector(page, step.description)
+                                    if selector is None:
+                                        self._context_log.append(
+                                            {
+                                                "event": "step_skipped",
+                                                "step": step_index,
+                                                "reason": "no_link_named_the_destination",
+                                                "action": step.action,
+                                                "description": step.description,
+                                                "page_url": page.url,
+                                            }
+                                        )
+                                        observed.error = "no_link_named_the_destination"
+                                elif not selector and step.description:
                                     selector = self._discover_selector(page, step.action, step.description)
                                     if selector is None:
                                         selector = self._discover_selector_relaxed(page, step.action, step.description)
@@ -620,6 +640,41 @@ class JourneyScraper:
                 }
             )
         return elements
+
+    def _discover_link_selector(self, page: Any, description: str) -> str | None:
+        """Find the HYPERLINK that names the destination of a navigation step.
+
+        t-0847: a GOTO whose URL is not in the human's input has no URL to
+        type. The human reaches the page by clicking a link on the page they
+        are on, so the journey does the same and the browser observes where
+        the click really lands. Only an anchor counts - a button with the
+        same words ("Add to cart") is a different action.
+        """
+        from src.navigation_target import find_navigation_anchor
+
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+
+        html = page.content()
+        elements = self._html_scraper._extract_elements_from_html(html, base_url=page.url)  # noqa: SLF001
+
+        try:
+            elements = capture_element_visibility_sync(page, elements)
+        except Exception:
+            pass
+
+        anchor = find_navigation_anchor(description, elements)
+        if anchor is None:
+            self._debug(f"No hyperlink names the destination '{description}'")
+            return None
+
+        robust = build_robust_locator(anchor)
+        selector = robust or str(anchor.get("selector", "")).strip()
+        if selector:
+            self._debug(f"Selected '{selector}' (hyperlink) for navigation '{description}'")
+        return selector or None
 
     def _discover_selector_relaxed(self, page: Any, action: str, description: str) -> str | None:
         """Find a selector using relaxed matching criteria."""

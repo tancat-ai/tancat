@@ -20,6 +20,7 @@ from src.journey_scraper import (
     JourneyStep,
     execute_journey,
 )
+from src.navigation_target import start_page_url
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import (
     GeneratedPageObject,
@@ -751,8 +752,30 @@ class TestOrchestrator:
                     action = placeholder.action.lower()
                     if action == "goto":
                         url = self._resolver.resolve_url(placeholder.description, {}, self._starting_url_list)
+                        if not url:
+                            # t-0847: "home" / "start page" names the entry page
+                            # the human gave us - a mock site lives at
+                            # /index.html, so the word does not have to be in
+                            # its path.
+                            url = start_page_url(placeholder.description, self._starting_url)
                         if url:
                             steps.append(JourneyStep(action="navigate", url=url, description=placeholder.description))
+                        else:
+                            # t-0847: the URL is not in the human's input and no
+                            # href proves it, so there is nothing to type. The
+                            # human reaches the page by clicking a link on the
+                            # page they are on - the journey does the same, so
+                            # the browser observes where the click really lands
+                            # and the trail carries the real transition. The
+                            # resolver then follows that observation instead of
+                            # guessing a URL and staying on the stale page.
+                            steps.append(
+                                JourneyStep(
+                                    action="click",
+                                    description=placeholder.description,
+                                    prefer_link=True,
+                                )
+                            )
                     elif action in ("click", "fill"):
                         fill_text: str | None = None
                         if action == "fill":

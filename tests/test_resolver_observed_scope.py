@@ -740,6 +740,11 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
     absence as divergence and pinned every later step to the start page — so a
     dashboard assert resolved against the login page and the rest of the
     journey skipped. Only a note that DISAGREES may latch.
+
+    The assert description is an ELEMENT one ("account balances visible").
+    t-0847 made "<noun> loaded" a page-state shape (it resolves to a URL
+    assertion), which would hide the element this test is about; the
+    page-state routing is covered by tests/test_t0847_page_cursor.py.
     """
     data: dict[str, list[dict[str, Any]]] = {
         SEED: [_el("#login-button", "login button")],
@@ -754,7 +759,7 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
             ObservedStep(
                 1,
                 "scrape",
-                description="accounts dashboard loaded",
+                description="account balances visible",
                 from_url=INVENTORY,
                 to_url=INVENTORY,
                 scraped=True,
@@ -763,7 +768,7 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
     )
     skeleton, journey = _build(
         "test_missing_note",
-        [("GOTO", "home"), ("CLICK", "login button"), ("ASSERT", "accounts dashboard loaded")],
+        [("GOTO", "home"), ("CLICK", "login button"), ("ASSERT", "account balances visible")],
     )
     code = _resolve(skeleton, [journey], data, {"test_missing_note": trail})
     # The discriminator: with the old latch the assert is declared UNRESOLVED
