@@ -30,6 +30,7 @@ from src.code_postprocessor import (
 from src.element_matcher import ElementMatcher
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
+from src.navigation_target import start_page_url
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import (
     GeneratedPageObject,
@@ -73,12 +74,17 @@ from src.url_resolver import UrlResolver, normalize_url
 from src.url_utils import (
     build_common_path_candidates,
     extract_route_concepts,
-    heuristic_url_from_description,
     is_stateful_cart_checkout_path,
 )
 from src.verification_strength import ResolvedAssertion, compute_test_verification_verdicts
 
 logger = logging.getLogger(__name__)
+
+#: t-0847: a page-state assertion shaped "<noun> loaded" - "accounts
+#: dashboard loaded" means the page arrived, not that an element is visible.
+#: The element-keyword guard in ``_is_page_state_assertion`` runs first, so a
+#: real element assertion is never swallowed by this shape.
+_NOUN_LOADED_RE = re.compile(r"[a-z0-9][a-z0-9' _\-/]*\s+loaded")
 
 
 #: Negative-state ASSERT descriptions assert the ABSENCE of an element — the
@@ -219,10 +225,26 @@ class PlaceholderOrchestrator:
             generator, timeout=resolution_timeout, enable_thinking=enable_thinking
         )
         self._rag_retriever = rag_retriever
+        # t-0847: the URLs the human gave us (the story's own target URLs).
+        # A GOTO may only name one of them - or a page the pipeline really
+        # scraped. Anything else is a guessed destination.
+        self._provided_target_urls: list[str] = []
         # B-097: per-test resolved/unresolved counts for the most recent run.
         self._test_resolution_counts: list[TestResolutionCounts] = []
         # B-100: per-test verification strength for the most recent run.
         self._test_verification_verdicts: list[TestVerificationVerdict] = []
+
+    def _provided_urls(self) -> list[str]:
+        """Return the URLs the human gave us - the story's own target URLs.
+
+        t-0847: a GOTO may only name one of these (or a page the pipeline
+        really scraped). A destination that comes from nowhere else is a
+        guess, and a guess is an unresolved step.
+        """
+        urls = list(self._provided_target_urls)
+        if self._starting_url and self._starting_url not in urls:
+            urls.append(self._starting_url)
+        return urls
 
     @property
     def test_resolution_counts(self) -> list[TestResolutionCounts]:
@@ -585,6 +607,9 @@ class PlaceholderOrchestrator:
         errors = scraped_errors or {}
 
         observed_trails = observed_trails or {}
+        # t-0847: remember the URLs the human gave us - they are the only
+        # "typed" destinations a GOTO may use.
+        self._provided_target_urls = list(seed_urls or [])
         journey_unresolved: dict[str, list[str]] = {}
         # B-097 charge 1: the placeholder occurrences the consolidated skip will
         # cover. Kept per occurrence (a set of (line, token) keys) so a deferred
@@ -690,11 +715,19 @@ class PlaceholderOrchestrator:
                         # where it actually landed instead of re-resolving the
                         # URL from keywords/href guessing.
                         observed_target = normalize_url(obs.to_url)
+                        # t-0847: the journey reached the page by CLICKING a
+                        # link - the human practice (the URL is not in the
+                        # human's input, so there is nothing to type). Replay
+                        # that proven click: the cursor follows the browser,
+                        # and the emitted step is what the customer does.
+                        proven_click = obs.action == "click" and obs.error is None and bool(obs.selector_used)
+                        emit_action = "CLICK" if proven_click else action
+                        emit_value = repr(obs.selector_used) if proven_click else repr(observed_target)
                         line_resolutions.setdefault(placeholder.line_number, []).append(
                             (
                                 placeholder.token,
-                                action,
-                                repr(observed_target),
+                                emit_action,
+                                emit_value,
                                 description,
                                 fill_value,
                                 current_url,
@@ -1414,6 +1447,23 @@ class PlaceholderOrchestrator:
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
 
         if action in {"GOTO", "URL"}:
+            # t-0847: a navigation is only valid when its destination is
+            # KNOWN. The known sources, in order:
+            #   1. the URL the human gave us (the entry page they named, or
+            #      a URL that is really in the input),
+            #   2. the keyword map built from the story's route concepts,
+            #   3. a page the pipeline scraped whose identity matches,
+            #   4. a learned cross-site transition (flow memory).
+            # With none of them the step is an honest unresolved: a guess
+            # would type a URL nobody gave us and leave the cursor on the
+            # stale page.
+            for provided in self._provided_urls():
+                entry = start_page_url(description, provided)
+                if entry:
+                    entry = normalize_url(entry)
+                    logger.debug("Provided entry page matched '%s' -> %s", description, entry)
+                    return repr(entry), entry, None
+
             # Step 1: Try UrlResolver
             url_from_resolver = self.url_resolver.resolve(description)
             if url_from_resolver:
@@ -1423,7 +1473,9 @@ class PlaceholderOrchestrator:
 
             # Step 2: Try PlaceholderResolver — GOTO navigates anywhere, so
             # search ALL verified pages, not just the current page's scope.
-            resolved_url = self.resolver.resolve_url(description, scraped_data)
+            # Strict: an unmatched description is never answered with an
+            # arbitrary page (that would be a guessed destination).
+            resolved_url = self.resolver.resolve_url(description, scraped_data, strict=True)
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
@@ -1447,22 +1499,7 @@ class PlaceholderOrchestrator:
                     logger.info("Flow memory resolved '%s' → %s (from %s)", description, flow_url, current_url)
                     return repr(flow_url), flow_url, None
 
-            # Step 3: Heuristic fallback
-            if current_url:
-                heuristic = heuristic_url_from_description(current_url, description)
-                if heuristic:
-                    heuristic = normalize_url(heuristic)
-                    await self._ensure_scraped(heuristic, scraped_data, scraped_errors)
-                    return repr(heuristic), heuristic, None
-
-            # Step 4: Try seed URL as last resort
-            seed_url = self.url_resolver.get_seed_url()
-            if seed_url:
-                seed_url = normalize_url(seed_url)
-                logger.debug("Falling back to seed URL for '%s': %s", description, seed_url)
-                return repr(seed_url), seed_url, None
-
-            error_msg = f"Locator for '{description}' not found on scraped pages."
+            error_msg = f"No known destination for '{description}'."
             if current_url and scraped_errors and current_url in scraped_errors:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
             return f'pytest.skip("{error_msg}")', None, None
@@ -1846,7 +1883,13 @@ class PlaceholderOrchestrator:
             "page shows",
             "returned to",
         )
-        return any(term in lowered for term in page_state_terms)
+        if any(term in lowered for term in page_state_terms):
+            return True
+        # t-0847: "<noun> loaded" is a page state too - "accounts dashboard
+        # loaded" means the dashboard page arrived, not that some element is
+        # visible. The element-keyword guard above has already run, so a real
+        # element assertion ("cart summary loaded") is never swallowed here.
+        return bool(_NOUN_LOADED_RE.fullmatch(lowered))
 
     def _build_scoped_pages(
         self,
@@ -1955,6 +1998,20 @@ class PlaceholderOrchestrator:
                         mapping[placeholder.token] = candidate
                         cursor = i + 1
                         break
+                else:
+                    # t-0847: a GOTO whose URL is not in the human's input is
+                    # performed by the journey as a click on the hyperlink that
+                    # names the destination (the human practice). The trail
+                    # records it as a click - the observation still belongs to
+                    # this placeholder, and the browser's landing page is the
+                    # fact the cursor must follow.
+                    if placeholder.action == "GOTO":
+                        for i in range(cursor, len(trail_steps)):
+                            candidate = trail_steps[i]
+                            if candidate.action == "click" and candidate.description == placeholder.description:
+                                mapping[placeholder.token] = candidate
+                                cursor = i + 1
+                                break
         return mapping
 
     def _apply_section_scoping(

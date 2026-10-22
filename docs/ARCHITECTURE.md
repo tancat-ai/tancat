@@ -98,7 +98,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/journey_enrichment.py` | DOM enrichment helpers for journey scraping: `capture_element_visibility_sync`, `capture_a11y_snapshot_sync`. Deduplicated — shared by `JourneyScraper` and `journey_executor`. |
 | `src/journey_subprocess.py` | Subprocess entry point for journey scraping — `run_journey_subprocess_entry`. Avoids Windows asyncio nested-loop issues. Extracted from `journey_scraper.py`. |
 | `src/journey_executor.py` | Subprocess-backed authenticated journey execution. Distinct from `JourneyScraper` — focuses on user interaction with auth guards (SSO/MFA/CAPTCHA detection via `journey_auth_detector.py`). Uses `journey_models.py` dataclasses. |
-| `src/journey_models.py` | Pure dataclasses for journey scraping: `JourneyStep`, `JourneyResult`, `CredentialProfile`, `substitute_templates()`. Lightweight — no Playwright imports. |
+| `src/journey_models.py` | Pure dataclasses for journey scraping: `JourneyStep`, `JourneyResult`, `CredentialProfile`, `substitute_templates()`. Lightweight — no Playwright imports. `JourneyStep.prefer_link` marks a navigation step that must click the hyperlink naming the destination. |
 | `src/journey_auth_detector.py` | Authentication detection helpers: `detect_auth_redirect()`, `detect_sso()`, `detect_mfa()`, `detect_captcha()`. Extracted from `journey_scraper.py`. |
 | `src/form_detector.py` | Form detection and element classification. Extracted from `journey_scraper.py`. |
 | `src/state_tracker.py` | DOM state tracking — detects changes and URL transitions. Extracted from `journey_scraper.py`. |
@@ -156,6 +156,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/url_inference.py` | URL transition inference for journey-aware placeholder resolution. Extracted from `placeholder_orchestrator.py`. |
 | `src/url_resolver.py` (`UrlResolver`) | Resolves LLM-generated page keywords (e.g., "cart", "checkout") to real URLs discovered by journey scraping. Uses heuristic matching against URL paths with fallback to common path candidates. |
 | `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
+| `src/navigation_target.py` | Decides which element on the current page IS the destination of a navigation step, and whether that destination is known at all. Only an anchor counts, and it must cover every identity word of the description. |
 
 #### CI/CD Integration (Phase 7)
 
