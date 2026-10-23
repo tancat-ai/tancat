@@ -509,18 +509,18 @@ class PlaceholderResolver:
         description: str,
         pages_data: dict[str, list[dict[str, Any]]],
         known_urls: list[str] | None = None,
-        *,
-        strict: bool = False,
     ) -> str | None:
         """Resolve navigation placeholders to the best matching scraped URL.
 
         First checks if description is a URL, then checks known_urls,
         then matches against already scraped pages.
 
-        ``strict`` (t-0847) drops the last-resort fallback of returning an
-        arbitrary page when nothing matches: a GOTO whose destination is not
-        known must stay an honest unresolved, never a guess at whichever page
-        happens to be first.
+        t-0877 (owner's rule, 2026-10-23): there is NO last-resort fallback.
+        When nothing matches, this returns ``None`` — an honest unresolved. The
+        old "return whichever page is first" branch (and the ``strict`` flag
+        that switched it off) is gone: a page nobody named and the browser
+        never reached is not a destination a real user would have, so choosing
+        one is a guess dressed as a resolution.
         """
         # 1. Direct URL match - but validate it exists in scraped data
         if description.startswith("http") or (description.startswith("/") and len(description) > 1):
@@ -578,7 +578,7 @@ class PlaceholderResolver:
 
         desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
-            return None if strict else next(iter(pages_data), None)
+            return None
 
         best_score = -1
         best_url: str | None = None
@@ -609,4 +609,4 @@ class PlaceholderResolver:
         if best_score > 0:
             return best_url
 
-        return None if strict else next(iter(pages_data), None)
+        return None

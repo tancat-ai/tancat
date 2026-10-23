@@ -869,7 +869,9 @@ def test_find_best_element_invisible_assert_returns_none_if_no_confidence() -> N
 def test_resolve_url_validates_against_scraped_data() -> None:
     """Test that resolve_url validates URLs exist in scraped data before returning them.
 
-    This prevents the LLM from generating non-existent URLs that cause 404 errors.
+    This prevents the LLM from generating non-existent URLs that cause 404 errors,
+    and (t-0877) it no longer substitutes an arbitrary scraped page when the
+    description matches nothing.
     """
     resolver = PlaceholderResolver()
 
@@ -897,8 +899,10 @@ def test_resolve_url_validates_against_scraped_data() -> None:
     assert result != "https://automationexercise.com/category_product.php?id=3", (
         f"URL validation failed: returned non-existent URL {result}"
     )
-    # Should fall back to a known URL
-    assert result in scraped_data, f"Expected fallback to known URL, got {result}"
+    # t-0877: and no arbitrary page either. This used to assert a fallback to
+    # "a known URL"; that fallback was "whichever page is first", a guess at a
+    # destination nobody named. The answer is now an honest None.
+    assert result is None, f"Expected an honest unresolved, got {result}"
 
 
 def test_resolve_url_validates_relative_urls_against_scraped_data() -> None:
@@ -914,8 +918,8 @@ def test_resolve_url_validates_relative_urls_against_scraped_data() -> None:
     # Relative URL that doesn't exist should not be returned
     result = resolver.resolve_url("/nonexistent-page", scraped_data)
     assert result != "/nonexistent-page", f"URL validation failed: returned non-existent URL {result}"
-    # Should fall back to a known URL
-    assert result in scraped_data, f"Expected fallback to known URL, got {result}"
+    # t-0877: no fallback to "whichever page is first" - an honest None.
+    assert result is None, f"Expected an honest unresolved, got {result}"
 
 
 # --------------------------------------------------------------------------

@@ -48,7 +48,7 @@ from src.spec_analyzer import TestCondition, infer_condition_intent
 from src.test_generator import TestGenerator
 from src.test_structure_assembler import rebuild_test_structure
 from src.url_guard import UrlGuard, UrlGuardError
-from src.url_utils import build_common_path_candidates, extract_route_concepts
+from src.url_utils import extract_route_concepts
 
 logger = logging.getLogger(__name__)
 
@@ -1190,9 +1190,12 @@ class TestOrchestrator:
                         elif desc.startswith("http"):
                             candidate_urls.append(desc)
 
-        # Add heuristic path candidates from user story and conditions
-        concepts = extract_route_concepts([user_story, conditions])
-        candidate_urls.extend(build_common_path_candidates(seed_urls, concepts))
+        # t-0877 (owner's rule, 2026-10-23): no invented addresses here. This
+        # used to add fixed route-vocabulary paths (/cart.html, /view_cart,
+        # /basket, /inventory.html, ...) built from the story's concepts; those
+        # pages were never something a real user named or the browser reached.
+        # Everything above this point comes from the human's URLs or a real
+        # href. Pages beyond them are found by following real links (t-0847).
 
         # Deduplicate while preserving order
         return list(dict.fromkeys(candidate_urls))

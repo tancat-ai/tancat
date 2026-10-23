@@ -143,3 +143,70 @@ def test_goto_branch_skips_when_the_url_resolver_has_nothing() -> None:
     )
     assert next_url is None
     assert resolved.startswith("pytest.skip(")
+
+
+# ── t-0877: every guessed-URL path is gone (owner's rule, 2026-10-23) ────
+
+
+def test_a_first_step_goto_records_an_honest_skip_not_a_guessed_page() -> None:
+    """The story-level behaviour: a guessed page becomes an honest skip.
+
+    Owner's rule (2026-10-23): "if its not something a real user would have then
+    its not accurate testing behaviour". A story whose first step is a GOTO at a
+    page nobody named, with only the home page scraped, used to end up pointed at
+    "whichever page is first" (the non-strict ``resolve_url`` fallback reached
+    from ``_select_initial_page_url``), and the test then asserted against the
+    wrong page. It now records a skip.
+    """
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+    skeleton = "def test_goto():\n    act('{{GOTO:accounts overview}}')\n"
+    journey = TestJourney(
+        test_name="test_goto",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line="    act('{{GOTO:accounts overview}}')",
+                placeholders=[
+                    PlaceholderUse(
+                        token="{{GOTO:accounts overview}}",
+                        action="GOTO",
+                        description="accounts overview",
+                        line_number=2,
+                        raw_line="    act('{{GOTO:accounts overview}}')",
+                    )
+                ],
+            )
+        ],
+    )
+    orchestrator = PlaceholderOrchestrator(starting_url=LOGIN, flow_store=None)
+
+    code = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="accounts")],
+            seed_urls=[LOGIN],
+            scraped_data={LOGIN: _elements()},
+            scraped_errors={},
+        )
+    )
+
+    assert "pytest.skip" in code, f"a guessed destination was emitted instead of a skip:\n{code}"
+    assert "h2x.html" not in code and "/accounts" not in code, code
+
+
+def test_resolve_url_has_no_non_strict_fallback_left() -> None:
+    """``resolve_url`` cannot be asked to guess any more - the flag is gone."""
+    import inspect
+
+    from src.placeholder_resolver import PlaceholderResolver
+
+    params = inspect.signature(PlaceholderResolver.resolve_url).parameters
+    assert "strict" not in params, "the non-strict fallback flag still exists"
+
+    resolver = PlaceholderResolver()
+    # A description that matches nothing, against real scraped pages, is None.
+    assert resolver.resolve_url("accounts overview", {LOGIN: _elements()}) is None

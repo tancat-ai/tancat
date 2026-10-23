@@ -246,13 +246,12 @@ def test_02_go_to_cart(page: Page):
         conditions="1. Go to cart\n2. Check out",
     )
 
-    # Concept-driven candidates ARE generated (re-enabled 2026-08-03), but
-    # strictly same-domain: SPA sites (saucedemo) expose no hrefs for journey
-    # discovery, so candidates from the shared route vocabulary fill the gap
-    # without cross-site hallucination.
-    assert discovered[0] == "https://example.com/"
-    assert all(url.startswith("https://example.com/") for url in discovered)
-    assert "https://example.com/cart" in discovered  # cart concept → /cart candidate
+    # t-0877 (owner's rule, 2026-10-23): the scrape list is the human's URLs and
+    # nothing else. This used to assert that a "cart" concept produced a
+    # /cart candidate from the shared route vocabulary - a page nobody named and
+    # the browser never reached. Inverted: the story's concepts must NOT create
+    # an address. Real pages are found by following real links (t-0847).
+    assert discovered == ["https://example.com/"], f"a page was invented: {discovered}"
 
 
 def test_run_pipeline_preserves_page_requirements_metadata() -> None:

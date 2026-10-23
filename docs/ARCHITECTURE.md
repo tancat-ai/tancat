@@ -155,7 +155,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 |--------|------|
 | `src/url_inference.py` | URL transition inference for journey-aware placeholder resolution. Extracted from `placeholder_orchestrator.py`. |
 | `src/url_resolver.py` (`UrlResolver`) | Resolves LLM-generated page keywords (e.g., "cart", "checkout") to real URLs discovered by journey scraping - heuristic matching against the paths of pages that were actually scraped. Since t-0855 (D1b) it fabricates nothing: with no scraped URLs a keyword stays unresolved (the old common-path-candidate fallback re-enabled 2026-08-03 was a guess, and the page-cursor fix made it unnecessary). |
-| `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
+| `src/url_utils.py` | URL helpers for real URLs only: `extract_seed_domain()`, `filter_urls_to_allowed_domain()`, `extract_route_concepts()`, `is_stateful_cart_checkout_path()`, path normalisation. The invented-address helpers (`build_common_path_candidates()` and its route table, `heuristic_url_from_description()`) were deleted in t-0877 - see the navigation rule under Phase 4. |
 | `src/navigation_target.py` | Decides which element on the current page IS the destination of a navigation step, and whether that destination is known at all. Only an anchor counts, and it must cover every identity word of the description. |
 
 #### CI/CD Integration (Phase 7)
@@ -269,6 +269,41 @@ Step-context ASSERT exclusion prevents self-matching (B-014).
 When top candidates are within a score threshold, `semantic_candidate_ranker.py` (called from `PlaceholderOrchestrator`, not the resolver) uses the LLM as tiebreaker.
 
 **Note:** `locator_scorer.py` is NOT part of design-time placeholder resolution. It is used by `locator_fallback.py` (runtime fallback when primary locator fails) and `failure_reporter.py` (diagnostic scoring).
+
+#### The navigation rule: a page is only named when it is KNOWN (owner, 2026-10-21 and 2026-10-23)
+
+The owner's rule, in his words: **"if its not something a real user would have then its not
+accurate testing behaviour."**
+
+A navigation step (a `GOTO`, or an assertion that a page is loaded) may only use a destination
+that is **known**:
+
+1. a URL the human gave us (the story's target URLs),
+2. a page the pipeline **really scraped** (so the browser really reached it),
+3. the real `href` of a link on the page the cursor is on - the human practice, so the browser
+   performs the navigation and we observe where it lands (`src/navigation_target.py`, t-0847),
+4. the browser's own **accessible name** for that link, when the markup cannot name it
+   (t-0855 cut (c)).
+
+Nothing else. With no known destination the step is an **honest unresolved** (`pytest.skip`),
+never a typed URL. The guessed-address paths are **deleted**, not disabled (t-0877):
+
+- `build_common_path_candidates` and its fixed route table (`/cart.html`, `/view_cart`,
+  `/basket`, `/inventory.html`, ...) - removed from `src/url_utils.py`, and from both scrape
+  candidate lists (`orchestrator._build_candidate_urls`,
+  `PlaceholderOrchestrator._build_candidate_urls`);
+- `heuristic_url_from_description` (`src/url_utils.py`) - removed;
+- `CartSeedingScraper._derive_products_url` and the `/products` fallback - removed; with no
+  products page among the scraped pages, cart seeding is skipped;
+- `PlaceholderResolver.resolve_url`'s "return whichever page is first" fallback (and the
+  `strict` flag that switched it off) - removed, so an unmatched description returns `None`;
+- the learned cross-site transition (flow memory) as a `GOTO` source - removed (t-0855).
+
+What stays, deliberately: matching keywords to **really scraped** pages (`UrlResolver`,
+`resolve_url`'s path/scoring passes, `infer_next_page_url`'s href-only evidence), because those
+read something that exists. Concepts still name the routes discovery looks for
+(`extract_route_concepts`); they never create an address.
+
 
 ### Phase 5: Prerequisite Injection
 `orchestrator.py` → `prerequisite_injector.py`

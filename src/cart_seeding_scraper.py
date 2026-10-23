@@ -6,8 +6,8 @@ common "seed cart then scrape" workflow.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
-from urllib.parse import urljoin
 
 from src.form_detector import (
     ADD_TO_CART_SELECTORS,
@@ -16,6 +16,8 @@ from src.form_detector import (
 )
 from src.journey_models import JourneyStep
 from src.journey_scraper import JourneyScraper
+
+logger = logging.getLogger(__name__)
 
 
 class CartSeedingScraper(JourneyScraper):
@@ -48,20 +50,16 @@ class CartSeedingScraper(JourneyScraper):
 
         Args:
             starting_url: The home page URL (used to establish session).
-            products_url: Optional explicit products page URL. If not provided,
-                          derived from starting_url by appending "/products".
+            products_url: The products page the browser really reached. When it
+                          is unknown there is no seeding - t-0877 removed the
+                          old guess that appended "/products" to the home URL
+                          (owner's rule, 2026-10-23: if it is not something a
+                          real user would have, it is not accurate testing
+                          behaviour).
             **kwargs: Additional arguments passed to JourneyScraper.
         """
         super().__init__(starting_url, **kwargs)
-        self.products_url = products_url or self._derive_products_url(starting_url)
-
-    @staticmethod
-    def _derive_products_url(home_url: str) -> str:
-        """Derive the products page URL from the home page URL.
-
-        Example: https://automationexercise.com/ → https://automationexercise.com/products
-        """
-        return urljoin(home_url, "/products")
+        self.products_url = products_url
 
     async def scrape_cart_pages(
         self,
@@ -80,6 +78,10 @@ class CartSeedingScraper(JourneyScraper):
         Returns:
             Dictionary mapping URL → list of scraped elements.
         """
+        if not self.products_url:
+            logger.info("Cart seeding skipped: no products page was observed, and no address is invented (t-0877)")
+            return {}
+
         steps: list[JourneyStep] = []
 
         # Step 1: Navigate to products page
