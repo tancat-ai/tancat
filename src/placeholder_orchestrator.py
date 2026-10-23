@@ -1452,11 +1452,17 @@ class PlaceholderOrchestrator:
             #   1. the URL the human gave us (the entry page they named, or
             #      a URL that is really in the input),
             #   2. the keyword map built from the story's route concepts,
-            #   3. a page the pipeline scraped whose identity matches,
-            #   4. a learned cross-site transition (flow memory).
+            #   3. a page the pipeline scraped whose identity matches.
             # With none of them the step is an honest unresolved: a guess
             # would type a URL nobody gave us and leave the cursor on the
             # stale page.
+            #
+            # t-0855 (D1a): a fourth source - a loosened cross-site
+            # transition learned by flow memory from earlier runs - used to
+            # fill the gap here. It is gone: a URL the owner's rule does not
+            # allow must not be typed just because a previous run saw one.
+            # Flow memory still serves the page-state ASSERT branches, which
+            # are a separate concern and out of this cut's scope.
             for provided in self._provided_urls():
                 entry = start_page_url(description, provided)
                 if entry:
@@ -1480,24 +1486,10 @@ class PlaceholderOrchestrator:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
 
-            # Step 2.5 (AI-042): cross-site flow memory — learned navigation
-            # shape rescues otherwise-unresolvable GOTO/URL assertions. Runs
-            # after all site-specific resolution (UrlResolver / resolve_url)
-            # so flow memory only fills gaps, never overrides site evidence.
-            if self._flow_store is not None and current_url:
-                from src.flow_memory import flow_resolved_url
-
-                flow_url = flow_resolved_url(
-                    self._flow_store,
-                    description=description,
-                    from_url=current_url,
-                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
-                )
-                if flow_url:
-                    flow_url = normalize_url(flow_url)
-                    await self._ensure_scraped(flow_url, scraped_data, scraped_errors)
-                    logger.info("Flow memory resolved '%s' → %s (from %s)", description, flow_url, current_url)
-                    return repr(flow_url), flow_url, None
+            # Step 2.5 (AI-042) used to sit here: cross-site flow memory, a
+            # learned transition from an earlier run, rescuing an
+            # otherwise-unresolvable GOTO. Cut in t-0855 (D1a) - see the
+            # source list above.
 
             error_msg = f"No known destination for '{description}'."
             if current_url and scraped_errors and current_url in scraped_errors:
