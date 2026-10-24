@@ -58,7 +58,36 @@ One narrower case also stays as it was: a page-state ASSERT that follows a GOTO 
 emitted as its own `navigate(...)` is not treated as an interaction, because the test itself
 commands the browser to go there - that is evidence, not inference.
 
-## 4. Tests (`tests/test_t0890_arrival_evidence.py`, 4)
+## 3b. The cost this rule accepts (recorded, t-0903 review)
+
+**One case that used to go RED is now a skip: an interaction that SUCCEEDED but whose landing was
+never recorded.**
+
+Before the rule, that case wrote an arrival assertion anyway. At run time the browser was on some
+page and the assertion named another, so the test failed - red, loudly, for a real reason: the run
+could not establish where the click landed, which is a capture defect worth seeing.
+
+Now the arrival is refused and the step is skipped with `page arrival not asserted: no observed
+landing after '<step>'`. That is the honest outcome, and it is the one the owner's rule asks for -
+but it must be said out loud that **the red signal is gone**: a suite can look greener while the
+journey still cannot be captured.
+
+Why that is acceptable:
+
+- A skip is **not** a pass. Gate 2 counts hollow passes, and a skipped step is not one, so the
+  metric does not read the skip as success.
+- The alternative was worse in both directions: a test that fails for the wrong reason (the
+  assertion, not the capture gap) trains people to ignore it, and on a page that happens to match
+  it would pass while proving nothing.
+- The reason string NAMES the missing landing and the interaction, so the capture gap is visible
+  in the evidence instead of being silent.
+- The underlying capture defects have their own work (B-109 cart click; the journey's click
+  timeouts). The rule does not hide them - it stops the test from lying about them.
+
+The one place this could bite: a suite whose green/red is the only signal. Anyone reading a skip as
+"fine" is reading it wrong; the generated evidence says `skipped` with the reason attached.
+
+## 4. Tests (`tests/test_t0890_arrival_evidence.py`, 7 after t-0903)
 
 | test | pins |
 |---|---|

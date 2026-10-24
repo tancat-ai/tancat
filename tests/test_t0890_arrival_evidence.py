@@ -202,3 +202,124 @@ def test_a_failed_click_is_named_not_hidden() -> None:
     # upgraded to a passing step.
     click_part = code.split("checkout page loaded")[0]
     assert "pytest.skip" in click_part or "click(" not in click_part, code
+
+
+# ── 4. first step, no interaction yet (t-0903, the review's demonstrated hole) ──
+
+
+def _first_step_journey() -> tuple[str, TestJourney]:
+    """A test whose FIRST step is a page-state assertion - nothing interacted."""
+    lines = [
+        "def test_checkout_page(page) -> None:",
+        "    act('{{ASSERT:checkout page loaded}}')",
+    ]
+    steps = [
+        TestStep(
+            line_number=2,
+            raw_line=lines[1],
+            placeholders=[
+                PlaceholderUse(
+                    token="{{ASSERT:checkout page loaded}}",
+                    action="ASSERT",
+                    description="checkout page loaded",
+                    line_number=2,
+                    raw_line=lines[1],
+                )
+            ],
+        )
+    ]
+    return "\n".join(lines), TestJourney(test_name="test_checkout_page", start_line=1, end_line=2, steps=steps)
+
+
+def _run_first_step(trail: ObservedTrail) -> str:
+    skeleton, journey = _first_step_journey()
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+    return asyncio.run(
+        orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[SHOP],
+            scraped_data=_scraped(),
+            observed_trails={"test_checkout_page": trail},
+        )
+    )
+
+
+def test_first_step_assertion_with_no_observation_is_a_skip() -> None:
+    """The reviewer's demonstrated case.
+
+    A trail exists for the test, nothing has interacted yet, and this assertion
+    has NO observation of its own - so nothing established that the browser is on
+    the checkout page. Keyword resolution happily names it; before t-0903 that
+    was written as `to_have_url("<checkout>")` while the browser sat on the shop
+    page. It must be refused.
+    """
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "scrape",
+                description="something else entirely",
+                from_url=SHOP,
+                to_url=SHOP,
+                navigated=False,
+                scraped=True,
+            )
+        ]
+    )
+    code = _run_first_step(trail)
+    assert "to_have_url" not in code, f"an arrival was asserted for a page never observed: {code}"
+    assert "pytest.skip" in code
+    assert "page arrival not asserted" in code
+    assert "never recorded" in code or "not the page the browser was observed on" in code, code
+
+
+def test_first_step_assertion_naming_an_unvisited_page_is_a_skip() -> None:
+    """Observed on the shop page, candidate is the checkout page -> refused."""
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "scrape",
+                description="checkout page loaded",
+                from_url=SHOP,
+                to_url=SHOP,
+                navigated=False,
+                scraped=True,
+            )
+        ]
+    )
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+    refusal = orch._arrival_refusal(  # noqa: SLF001
+        "checkout page loaded", None, trail.steps[0], lambda url: url, CART
+    )
+    assert refusal is not None
+    assert "not the page the browser was observed on" in refusal
+
+
+def test_first_step_assertion_naming_the_observed_page_is_written() -> None:
+    """The same shape, but the assertion names the page the browser was on."""
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "scrape",
+                description="checkout page loaded",
+                from_url=CART,
+                to_url=CART,
+                navigated=False,
+                scraped=True,
+            )
+        ]
+    )
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+    assert (
+        orch._arrival_refusal(  # noqa: SLF001
+            "checkout page loaded", None, trail.steps[0], lambda url: url, CART
+        )
+        is None
+    )
+    code = _run_first_step(trail)
+    assert f'to_have_url("{CART}")' in code, f"the observed page was not asserted: {code}"
+    assert "pytest.skip" not in code
