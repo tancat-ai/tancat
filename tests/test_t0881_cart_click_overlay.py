@@ -41,7 +41,7 @@ selector, changed no result while the others were in place):
 from __future__ import annotations
 
 from collections.abc import Generator, Iterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
@@ -231,6 +231,17 @@ class _FakePage:
         return None
 
 
+def _page_double() -> Page:
+    """A Page double for the retry tests (B-059 precedent: cast, never a blanket ignore).
+
+    These tests monkeypatch ``dismiss_consent_overlays`` / ``dismiss_blocking_modals``
+    on ``src.browser_utils``, so the page is never touched: it is only carried
+    through to those two functions. The cast states that the double serves the
+    part of ``Page`` the code under test uses.
+    """
+    return cast(Page, _FakePage(_ScriptedLocator([])))
+
+
 def test_the_click_retry_fires_once_after_an_interception(monkeypatch: pytest.MonkeyPatch) -> None:
     """One interception -> dismiss -> the SAME click again, once."""
     dismissals: list[str] = []
@@ -239,7 +250,7 @@ def test_the_click_retry_fires_once_after_an_interception(monkeypatch: pytest.Mo
     locator = _ScriptedLocator([_interception(), None])
     logs: list[str] = []
 
-    click_with_overlay_retry(object(), locator, 1000, log=logs.append)
+    click_with_overlay_retry(_page_double(), locator, 1000, log=logs.append)
 
     assert len(locator.calls) == 2, "the retry must attempt exactly one more click"
     assert dismissals == ["consent", "modal"], "the retry must dismiss before the second attempt"
@@ -255,7 +266,7 @@ def test_the_retry_re_raises_on_a_second_interception(monkeypatch: pytest.Monkey
     locator = _ScriptedLocator([_interception(), _interception()])
 
     with pytest.raises(RuntimeError, match="intercepts pointer events"):
-        click_with_overlay_retry(object(), locator, 1000)
+        click_with_overlay_retry(_page_double(), locator, 1000)
 
     assert len(locator.calls) == 2, "the retry is one extra attempt, not a loop"
 
@@ -268,7 +279,7 @@ def test_a_non_interception_error_is_not_retried(monkeypatch: pytest.MonkeyPatch
     locator = _ScriptedLocator([RuntimeError("Locator.click: Timeout 5000ms exceeded.\n - locator not found")])
 
     with pytest.raises(RuntimeError):
-        click_with_overlay_retry(object(), locator, 1000)
+        click_with_overlay_retry(_page_double(), locator, 1000)
 
     assert len(locator.calls) == 1
     assert dismissals == []
