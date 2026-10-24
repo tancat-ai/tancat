@@ -29,6 +29,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 from playwright.sync_api import sync_playwright
 
@@ -641,6 +642,72 @@ class JourneyScraper:
             )
         return elements
 
+    def _a11y_link_candidates(self, page: Any) -> list[dict[str, Any]]:
+        """Return the page's links as the BROWSER names them (t-0855, D1c).
+
+        Playwright's aria snapshot gives each link the accessible name the
+        browser computes from the web standard (aria-labelledby, a child
+        <img alt>, an SVG <title>, visible text) plus its real ``/url``. The
+        HTML scrape can only see what the markup literally says, so a link
+        whose visible text is missing or ambiguous - two "Shop" links, an
+        icon-only anchor - is named correctly only here.
+
+        Returns an empty list when the snapshot is unavailable; the caller
+        then behaves exactly as before.
+        """
+        try:
+            from src.aria_parser import parse_aria_snapshot
+
+            yaml_text = page.aria_snapshot(boxes=True)
+            aria_elements = parse_aria_snapshot(yaml_text)
+        except Exception:
+            self._debug("ARIA snapshot unavailable - link discovery sees markup only")
+            return []
+
+        links: list[dict[str, Any]] = []
+        for element in aria_elements:
+            if str(element.get("role", "")).strip().lower() not in {"link", "a"}:
+                continue
+            name = str(element.get("accessible_name") or element.get("text") or "").strip()
+            if name or element.get("href"):
+                links.append(element)
+        return links
+
+    @staticmethod
+    def _match_link_by_href(
+        elements: list[dict[str, Any]],
+        href: str,
+        current_url: str | None,
+    ) -> dict[str, Any] | None:
+        """Return the scraped anchor whose real href is *href*.
+
+        The a11y node supplies the identity (its accessible name) and the href;
+        the DOM element supplies the selector the journey actually clicks, so
+        the emitted locator stays the same shape as every other one.
+        """
+        if not href:
+            return None
+        try:
+            target = urljoin(current_url or "", href) if not href.startswith(("http://", "https://")) else href
+        except ValueError:
+            target = href
+        target = target.rstrip("/")
+        for element in elements:
+            element_href = str(element.get("raw_href") or element.get("href") or "").strip()
+            if not element_href:
+                continue
+            try:
+                absolute = (
+                    element_href
+                    if element_href.startswith(("http://", "https://"))
+                    else urljoin(current_url or "", element_href)
+                )
+            except ValueError:
+                continue
+            if absolute.rstrip("/") == target:
+                return element
+        return None
+
     def _discover_link_selector(self, page: Any, description: str) -> str | None:
         """Find the HYPERLINK that names the destination of a navigation step.
 
@@ -649,6 +716,11 @@ class JourneyScraper:
         are on, so the journey does the same and the browser observes where
         the click really lands. Only an anchor counts - a button with the
         same words ("Add to cart") is a different action.
+
+        t-0855 (D1c): the markup is tried first, unchanged. When it names no
+        link - the visible text is absent or ambiguous - the browser's own
+        accessible names are tried next, and the DOM anchor carrying that
+        href supplies the clickable selector.
         """
         from src.navigation_target import find_navigation_anchor
 
@@ -666,6 +738,26 @@ class JourneyScraper:
             pass
 
         anchor = find_navigation_anchor(description, elements)
+        if anchor is None:
+            # D1c: the browser-computed accessible name, as a back-up for a
+            # page whose own labels do not name the link.
+            aria_link = find_navigation_anchor(description, self._a11y_link_candidates(page))
+            if aria_link is not None:
+                named_by_a11y = str(aria_link.get("accessible_name") or aria_link.get("text") or "").strip()
+                dom_anchor = self._match_link_by_href(elements, str(aria_link.get("href") or ""), page.url)
+                if dom_anchor is not None:
+                    anchor = dom_anchor
+                    self._debug(
+                        f"Link for '{description}' named by the browser's accessible name "
+                        f"'{named_by_a11y}' -> {anchor.get('selector')}"
+                    )
+                else:
+                    anchor = aria_link
+                    self._debug(
+                        f"Link for '{description}' named by the browser's accessible name "
+                        f"'{named_by_a11y}' (no DOM anchor matched its href {aria_link.get('href')!r})"
+                    )
+
         if anchor is None:
             self._debug(f"No hyperlink names the destination '{description}'")
             return None

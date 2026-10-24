@@ -89,11 +89,17 @@ def test_exact_match_prefers_html_route_over_bare_static_guess() -> None:
 
 
 def test_build_mapping_with_concepts_no_scraped_urls() -> None:
-    """Concepts generate same-domain fallback candidates when nothing was scraped.
+    """Concepts never invent a destination when nothing was scraped.
 
-    Re-enabled 2026-08-03: SPA sites (saucedemo) expose no hrefs for journey
-    discovery to follow, so concept-driven candidates from the shared route
-    vocabulary fill the gap. Candidates are same-domain only.
+    2026-08-03 this test pinned the opposite: SPA sites (saucedemo) expose no
+    hrefs for journey discovery, so concept-driven candidates from a shared
+    route vocabulary filled the gap. t-0855 (D1b) removed that fabrication -
+    a GOTO may only name a URL the human gave us or a page the browser really
+    reached, so a generated /products or /cart is a guess, not a target. The
+    keyword stays unmapped and the GOTO becomes an honest skip.
+
+    Removing the fabrication is safe for the SPA case: the journey now reaches
+    such pages the human way, by clicking the link that names them (t-0847).
     """
     resolver = UrlResolver()
     resolver.build_mapping(
@@ -102,12 +108,9 @@ def test_build_mapping_with_concepts_no_scraped_urls() -> None:
         seed_url="https://www.example.com/",
         concepts=["products", "cart"],
     )
-    # Concept candidates are generated (same-domain), so keywords resolve
-    assert resolver.resolve("products") == "https://www.example.com/products"
-    # Sorted candidate order maps "cart" to /cart before /cart.html — both are
-    # same-domain candidates from the shared route vocabulary.
-    assert resolver.resolve("cart") == "https://www.example.com/cart"
-    # home/homepage/login are always mapped to seed_url
+    assert resolver.resolve("products") is None
+    assert resolver.resolve("cart") is None
+    # home/homepage/login are always mapped to the human's own URL
     assert resolver.resolve("home") == "https://www.example.com/"
     assert resolver.resolve("homepage") == "https://www.example.com/"
 

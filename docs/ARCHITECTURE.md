@@ -154,8 +154,8 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | Module | Role |
 |--------|------|
 | `src/url_inference.py` | URL transition inference for journey-aware placeholder resolution. Extracted from `placeholder_orchestrator.py`. |
-| `src/url_resolver.py` (`UrlResolver`) | Resolves LLM-generated page keywords (e.g., "cart", "checkout") to real URLs discovered by journey scraping. Uses heuristic matching against URL paths with fallback to common path candidates. |
-| `src/url_utils.py` | URL helpers: `extract_seed_domain()`, `build_common_path_candidates()`, `heuristic_url_from_description()`, `filter_urls_to_allowed_domain()`. |
+| `src/url_resolver.py` (`UrlResolver`) | Resolves LLM-generated page keywords (e.g., "cart", "checkout") to real URLs discovered by journey scraping - heuristic matching against the paths of pages that were actually scraped. Since t-0855 (D1b) it fabricates nothing: with no scraped URLs a keyword stays unresolved (the old common-path-candidate fallback re-enabled 2026-08-03 was a guess, and the page-cursor fix made it unnecessary). |
+| `src/url_utils.py` | URL helpers for real URLs only: `extract_seed_domain()`, `filter_urls_to_allowed_domain()`, `extract_route_concepts()`, `is_stateful_cart_checkout_path()`, path normalisation. The invented-address helpers (`build_common_path_candidates()` and its route table, `heuristic_url_from_description()`) were deleted in t-0877 - see the navigation rule under Phase 4. |
 | `src/navigation_target.py` | Decides which element on the current page IS the destination of a navigation step, and whether that destination is known at all. Only an anchor counts, and it must cover every identity word of the description. |
 
 #### CI/CD Integration (Phase 7)
@@ -182,7 +182,7 @@ The system is designed as an **Intelligence Pipeline** that transforms unstructu
 | `src/evidence_loader.py` | Loads evidence JSON from test packages for report generation. |
 | `src/artifact_validation.py` | AI-043 — deterministic validation of report artifacts (heatmap overlays, Gantt timelines, Plotly figures): heatmap points must be document-% in [0,100], embedded HTML payloads parseable/finite/consistent, Gantt durations finite ≥0, no NaN/None/empty chart series. Consumed by `scripts/validate_report_artifacts.py` + Gate-0 smoke checks over `fixtures/report_golden/`. |
 | `src/heatmap_alignment.py` | AI-043 Layer 3 — validates the suite heatmap against the live page: render the shipped artifact, map each overlay box centre (document-%) to pixels via the live document size, then one locator-scoped `elementFromPoint` + containment evaluate asserts the box hits the element it claims. Catches wrong-frame drift (page changed between steps) and stale locators. `scripts/validate_report_artifacts.py --full` + live mock tests. |
-| `src/flow_memory.py` | AI-042 — cross-site flow memory: learns navigation shape (from_route, action, description, to_route) from passing evidence; routes are normalized keywords (view_cart/basket→cart, inventory→products aliases) never raw URLs (AI-035 §4). `FlowMemoryStore` (JSON, dedup + site diversity + min_sites guardrail), `flow_resolved_url` consumption hook wired as step 2.5 in the orchestrator GOTO/URL + page-state ASSERT chains. F3 suite chaining (`learn_suite_flows`, `FlowPattern.source`) wired into every run path (conftest teardown, `PipelineRunService`, `verify_production`, `synthesize_stories`); sidebar stats + prune (F2). Eval holdout 0→6/11. |
+| `src/flow_memory.py` | AI-042 — cross-site flow memory: learns navigation shape (from_route, action, description, to_route) from passing evidence; routes are normalized keywords (view_cart/basket→cart, inventory→products aliases) never raw URLs (AI-035 §4). `FlowMemoryStore` (JSON, dedup + site diversity + min_sites guardrail), `flow_resolved_url` consumption hook wired in the page-state ASSERT chains - and, since t-0855 (D1a), NOT in the resolver's GOTO branch: a learned transition is not a known destination. F3 suite chaining (`learn_suite_flows`, `FlowPattern.source`) wired into every run path (conftest teardown, `PipelineRunService`, `verify_production`, `synthesize_stories`); sidebar stats + prune (F2). Eval holdout 0→6/11. |
 | `src/verify_baseline.py` | B-058 — expected-red baseline for `scripts/verify_production.py`. Records the known gate failures (the unresolved-ASSERT class: `Pipeline resolved all placeholders` + `No pytest.skip`, 2 per site) in `scripts/verify_production_baseline.json` so a fresh run fails only on NEW failures. `stable_gate_key()` normalises timed/provider-suffixed gate names; `load_baseline`/`parse_baseline` validate the file; `compare_site`/`compare_run` produce a regression verdict. Consumed by `--baseline` / `--save-baseline` / `--check-baseline` (the offline CI integrity gate). |
 | `src/evidence_serializer.py` | Evidence JSON serialization (sidecar file writing). Extracted from `evidence_tracker.py`. |
 | `src/screenshot_capture.py` | Screenshot capture and annotation utilities. Extracted from `evidence_tracker.py`. |
@@ -269,6 +269,41 @@ Step-context ASSERT exclusion prevents self-matching (B-014).
 When top candidates are within a score threshold, `semantic_candidate_ranker.py` (called from `PlaceholderOrchestrator`, not the resolver) uses the LLM as tiebreaker.
 
 **Note:** `locator_scorer.py` is NOT part of design-time placeholder resolution. It is used by `locator_fallback.py` (runtime fallback when primary locator fails) and `failure_reporter.py` (diagnostic scoring).
+
+#### The navigation rule: a page is only named when it is KNOWN (owner, 2026-10-21 and 2026-10-23)
+
+The owner's rule, in his words: **"if its not something a real user would have then its not
+accurate testing behaviour."**
+
+A navigation step (a `GOTO`, or an assertion that a page is loaded) may only use a destination
+that is **known**:
+
+1. a URL the human gave us (the story's target URLs),
+2. a page the pipeline **really scraped** (so the browser really reached it),
+3. the real `href` of a link on the page the cursor is on - the human practice, so the browser
+   performs the navigation and we observe where it lands (`src/navigation_target.py`, t-0847),
+4. the browser's own **accessible name** for that link, when the markup cannot name it
+   (t-0855 cut (c)).
+
+Nothing else. With no known destination the step is an **honest unresolved** (`pytest.skip`),
+never a typed URL. The guessed-address paths are **deleted**, not disabled (t-0877):
+
+- `build_common_path_candidates` and its fixed route table (`/cart.html`, `/view_cart`,
+  `/basket`, `/inventory.html`, ...) - removed from `src/url_utils.py`, and from both scrape
+  candidate lists (`orchestrator._build_candidate_urls`,
+  `PlaceholderOrchestrator._build_candidate_urls`);
+- `heuristic_url_from_description` (`src/url_utils.py`) - removed;
+- `CartSeedingScraper._derive_products_url` and the `/products` fallback - removed; with no
+  products page among the scraped pages, cart seeding is skipped;
+- `PlaceholderResolver.resolve_url`'s "return whichever page is first" fallback (and the
+  `strict` flag that switched it off) - removed, so an unmatched description returns `None`;
+- the learned cross-site transition (flow memory) as a `GOTO` source - removed (t-0855).
+
+What stays, deliberately: matching keywords to **really scraped** pages (`UrlResolver`,
+`resolve_url`'s path/scoring passes, `infer_next_page_url`'s href-only evidence), because those
+read something that exists. Concepts still name the routes discovery looks for
+(`extract_route_concepts`); they never create an address.
+
 
 ### Phase 5: Prerequisite Injection
 `orchestrator.py` → `prerequisite_injector.py`

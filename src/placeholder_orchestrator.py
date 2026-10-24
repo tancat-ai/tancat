@@ -71,11 +71,7 @@ from src.skip_manager import (
 from src.stateful_scraper import StatefulPageScraper
 from src.url_inference import infer_next_page_url
 from src.url_resolver import UrlResolver, normalize_url
-from src.url_utils import (
-    build_common_path_candidates,
-    extract_route_concepts,
-    is_stateful_cart_checkout_path,
-)
+from src.url_utils import is_stateful_cart_checkout_path
 from src.verification_strength import ResolvedAssertion, compute_test_verification_verdicts
 
 logger = logging.getLogger(__name__)
@@ -431,7 +427,12 @@ class PlaceholderOrchestrator:
                     products_url = url
                     break
             if not products_url:
-                products_url = urljoin(self._starting_url, "/products")
+                # t-0877: no guessed /products. Without a products page the
+                # browser really reached, there is nothing to seed a cart from,
+                # so the cart-seeding capture is skipped rather than aimed at an
+                # address nobody gave us.
+                logger.info("Cart seeding skipped: no products page among the scraped pages (no guessed /products)")
+                return self._drop_dead_pages(upgraded)
 
             cart_scraper = CartSeedingScraper(
                 self._starting_url,
@@ -1452,11 +1453,17 @@ class PlaceholderOrchestrator:
             #   1. the URL the human gave us (the entry page they named, or
             #      a URL that is really in the input),
             #   2. the keyword map built from the story's route concepts,
-            #   3. a page the pipeline scraped whose identity matches,
-            #   4. a learned cross-site transition (flow memory).
+            #   3. a page the pipeline scraped whose identity matches.
             # With none of them the step is an honest unresolved: a guess
             # would type a URL nobody gave us and leave the cursor on the
             # stale page.
+            #
+            # t-0855 (D1a): a fourth source - a loosened cross-site
+            # transition learned by flow memory from earlier runs - used to
+            # fill the gap here. It is gone: a URL the owner's rule does not
+            # allow must not be typed just because a previous run saw one.
+            # Flow memory still serves the page-state ASSERT branches, which
+            # are a separate concern and out of this cut's scope.
             for provided in self._provided_urls():
                 entry = start_page_url(description, provided)
                 if entry:
@@ -1475,29 +1482,15 @@ class PlaceholderOrchestrator:
             # search ALL verified pages, not just the current page's scope.
             # Strict: an unmatched description is never answered with an
             # arbitrary page (that would be a guessed destination).
-            resolved_url = self.resolver.resolve_url(description, scraped_data, strict=True)
+            resolved_url = self.resolver.resolve_url(description, scraped_data)
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
 
-            # Step 2.5 (AI-042): cross-site flow memory — learned navigation
-            # shape rescues otherwise-unresolvable GOTO/URL assertions. Runs
-            # after all site-specific resolution (UrlResolver / resolve_url)
-            # so flow memory only fills gaps, never overrides site evidence.
-            if self._flow_store is not None and current_url:
-                from src.flow_memory import flow_resolved_url
-
-                flow_url = flow_resolved_url(
-                    self._flow_store,
-                    description=description,
-                    from_url=current_url,
-                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
-                )
-                if flow_url:
-                    flow_url = normalize_url(flow_url)
-                    await self._ensure_scraped(flow_url, scraped_data, scraped_errors)
-                    logger.info("Flow memory resolved '%s' → %s (from %s)", description, flow_url, current_url)
-                    return repr(flow_url), flow_url, None
+            # Step 2.5 (AI-042) used to sit here: cross-site flow memory, a
+            # learned transition from an earlier run, rescuing an
+            # otherwise-unresolvable GOTO. Cut in t-0855 (D1a) - see the
+            # source list above.
 
             error_msg = f"No known destination for '{description}'."
             if current_url and scraped_errors and current_url in scraped_errors:
@@ -2146,13 +2139,23 @@ class PlaceholderOrchestrator:
         user_story: str,
         conditions: str,
     ) -> list[str]:
-        """Return a tightly-scoped list of URLs needed for the current journeys."""
-        keywords = [page_requirement.keyword for page_requirement in page_requirements]
-        placeholder_descriptions = [
-            placeholder.description for journey in journeys for placeholder in journey.placeholders
-        ]
-        concepts = extract_route_concepts([user_story, conditions, *placeholder_descriptions, *keywords])
-        return list(dict.fromkeys(seed_urls + build_common_path_candidates(seed_urls, concepts)))
+        """Return the URLs to scrape: the human's own, and nothing else.
+
+        t-0877 (owner's rule, 2026-10-23): the scrape list used to be extended
+        with a fixed route vocabulary (/cart.html, /view_cart, /basket,
+        /inventory.html, ...) derived from the story's concepts. A page invented
+        that way is exactly what the owner banned - "if its not something a real
+        user would have then its not accurate testing behaviour". Pages beyond
+        the seed are discovered the human way: the journey follows real links
+        (t-0847) and the link picker can read the browser's accessible name
+        (t-0855), and a page that really loads then counts as known because it
+        was scraped.
+
+        ``page_requirements``, ``journeys``, ``user_story`` and ``conditions``
+        are kept in the signature because the caller passes them and future
+        discovery hooks read them; none of them may create a URL here.
+        """
+        return list(dict.fromkeys(seed_urls))
 
     # ═════════════════════════════════════════════════════════════
     # Page selection
@@ -2175,6 +2178,9 @@ class PlaceholderOrchestrator:
             first_step = journey.steps[0]
             for placeholder in first_step.placeholders:
                 if placeholder.action in {"GOTO", "URL"}:
+                    # t-0877: a first-step GOTO resolves only to a page that is
+                    # really known. There is no "whichever page is first"
+                    # fallback left to reach - resolve_url returns None instead.
                     resolved_url = self.resolver.resolve_url(
                         placeholder.description,
                         self._page_requirements_to_pages(page_requirements, scraped_data) or scraped_data,

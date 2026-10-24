@@ -1,16 +1,20 @@
 """Resolve page keywords to actually discovered URLs from journey scraping.
 
 This module bridges the gap between LLM-generated page keywords (e.g., "cart",
-"checkout") and the real URLs discovered by the journey scraper. It uses
-heuristic matching against URL paths, then falls back to common path candidates.
+"checkout") and the real URLs discovered by the journey scraper. It matches
+heuristic keywords against URL paths that were really scraped - and only those.
+
+A keyword that matches nothing stays unresolved. t-0855 (D1b) removed the last
+fabrication path here: with no scraped URLs, the resolver used to generate
+candidate URLs from a shared route vocabulary (``/cart``, ``/checkout``, ...)
+and offer them as destinations. A GOTO may only name a URL the human gave us or
+a page the browser really visited, so a generated URL is a guess, not a target.
 """
 
 from __future__ import annotations
 
 import logging
 from urllib.parse import urlparse, urlunparse
-
-from src.url_utils import build_common_path_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -101,18 +105,13 @@ class UrlResolver:
                     self._keyword_to_url[c_lower] = resolved
                     logger.debug("Mapped concept '%s' → %s", concept, resolved)
 
-        # 4. If concepts provided and no scraped URLs, generate common path candidates
-        if not scraped_urls and concepts:
-            logger.info("No scraped URLs available — generating common path candidates")
-            candidates = build_common_path_candidates([seed_url], set(concepts))
-            for candidate_url in candidates:
-                # Extract a keyword-like path segment from the candidate
-                path = urlparse(candidate_url).path.lower().strip("/")
-                if path and path not in self._keyword_to_url.values():
-                    # Reverse-map: use the last path segment as a keyword
-                    segment = path.split("/")[-1].split(".")[0]
-                    if segment and segment not in self._keyword_to_url:
-                        self._keyword_to_url[segment] = candidate_url
+        # 4. t-0855 (D1b): removed. When nothing was scraped, this step used to
+        # fabricate same-domain candidates from a shared route vocabulary (a
+        # guessed /cart, /checkout, ...) and map keywords onto them. A guessed
+        # URL is exactly what the navigation rule forbids: the destination must
+        # come from the human's input or from a page the browser really
+        # reached. With no scraped URLs, keywords now stay unmapped and the
+        # GOTO resolves to an honest skip.
 
         # 5. Login fallback: if `login` wasn't mapped to a distinct page
         #    (no /login-style URL scraped), point it at the seed URL. This

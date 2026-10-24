@@ -38,12 +38,20 @@ def test_scrape_journeys_statefully_returns_trail() -> None:
 
     orchestrator = TestOrchestrator.__new__(TestOrchestrator)
     orchestrator._starting_url_list = ["http://a"]  # type: ignore[attr-defined]
+    # t-0877: with the resolver stub answering None, the GOTO now reaches the
+    # entry-page branch, which reads _starting_url. The __new__ fixture never
+    # set it, so the test only ever worked because a guess answered first.
+    orchestrator._starting_url = "http://a"  # type: ignore[attr-defined]
     orchestrator._debug = lambda msg: None  # type: ignore[method-assign,assignment]
     # _resolver is a property backed by _placeholder_orchestrator.resolver -
     # patch the backing attribute (the property has no setter).
     orchestrator._placeholder_orchestrator = type("P", (), {})()  # type: ignore[attr-defined]
+    # t-0877: this stub used to answer EVERY resolve_url call with "http://b",
+    # so the fixture could not tell a URL the trail carried from one the code
+    # invented - the assertion passed either way. It answers None now, so
+    # "http://b" can only come from the observed trail.
     orchestrator._placeholder_orchestrator.resolver = type(  # type: ignore[attr-defined]
-        "R", (), {"resolve_url": staticmethod(lambda *a, **kw: "http://b")}
+        "R", (), {"resolve_url": staticmethod(lambda *a, **kw: None)}
     )()
 
     known_trail = _make_trail()
