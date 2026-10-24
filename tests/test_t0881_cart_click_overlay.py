@@ -40,7 +40,9 @@ selector, changed no result while the others were in place):
 
 from __future__ import annotations
 
+import socket
 from collections.abc import Generator, Iterator
+from dataclasses import dataclass
 from typing import Any, cast
 
 import pytest
@@ -52,48 +54,68 @@ from src.browser_utils import MODAL_CONTAINERS, click_with_overlay_retry, dismis
 from src.journey_models import JourneyStep, ObservedStep
 from src.journey_scraper import JourneyScraper
 
-PORT = 8791
-BASE = f"http://localhost:{PORT}"
-
 _MODAL_STATE = (
     "() => { const m = document.getElementById('cartModal'); return m ? getComputedStyle(m).display : null; }"
 )
 
 
-@pytest.fixture(scope="module")
-def mock_site() -> Iterator[None]:
-    with MockServer.start(port=PORT, directory="mock_sites/ecommerce"):
-        yield
+@dataclass(frozen=True)
+class _Site:
+    """The running mock site: the port the OS gave us and its base URL."""
+
+    port: int
+    base: str
+
+
+def _free_port() -> int:
+    """Return a free ephemeral port (same helper as tests/test_ci_generate.py).
+
+    A hard-coded port is a shared resource. This file used 8791, which
+    ``tests/contract/test_mock_contracts.py`` also binds, so under ``pytest -n``
+    the two ran at once and CI failed with ``OSError: [Errno 98] Address already
+    in use``. Binding to port 0 lets the OS choose a port no other test holds,
+    now or later.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 @pytest.fixture(scope="module")
-def browser(mock_site: None) -> Generator[Browser]:
+def mock_site() -> Iterator[_Site]:
+    port = _free_port()
+    with MockServer.start(port=port, directory="mock_sites/ecommerce"):
+        yield _Site(port=port, base=f"http://localhost:{port}")
+
+
+@pytest.fixture(scope="module")
+def browser(mock_site: _Site) -> Generator[Browser]:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         yield browser
         browser.close()
 
 
-def _open_products(browser: Browser) -> Page:
+def _open_products(browser: Browser, site: _Site) -> Page:
     page = browser.new_page()
-    page.goto(f"{BASE}/products.html", wait_until="networkidle")
+    page.goto(f"{site.base}/products.html", wait_until="networkidle")
     return page
 
 
-def _scraper() -> JourneyScraper:
-    scraper = JourneyScraper(starting_url=f"{BASE}/products.html")
+def _scraper(site: _Site) -> JourneyScraper:
+    scraper = JourneyScraper(starting_url=f"{site.base}/products.html")
     # Localhost mock: the SSRF guard is for internal endpoints, not tests.
     scraper._url_guard_patched = True  # type: ignore[attr-defined]
     return scraper
 
 
-def test_the_dismiss_selector_never_resolves_to_the_modal_container(browser: Browser) -> None:
+def test_the_dismiss_selector_never_resolves_to_the_modal_container(browser: Browser, mock_site: _Site) -> None:
     """Cause 1: the dismiss control must be the button, not the modal box.
 
     The old comma-joined selector made ``.first`` the ``#cartModal`` div, and
     clicking a container is a no-op - so the modal was never dismissed.
     """
-    page = _open_products(browser)
+    page = _open_products(browser, mock_site)
     page.click('.add-to-cart[data-product-id="1"]')
     page.wait_for_timeout(200)
     assert page.evaluate(_MODAL_STATE) == "block"
@@ -108,9 +130,9 @@ def test_the_dismiss_selector_never_resolves_to_the_modal_container(browser: Bro
     page.close()
 
 
-def test_a_scrape_does_not_resurrect_a_dismissed_modal(browser: Browser) -> None:
+def test_a_scrape_does_not_resurrect_a_dismissed_modal(browser: Browser, mock_site: _Site) -> None:
     """Cause 2: revealing hidden SPA sections must leave overlays hidden."""
-    page = _open_products(browser)
+    page = _open_products(browser, mock_site)
     page.click('.add-to-cart[data-product-id="1"]')
     page.wait_for_timeout(200)
     page.click("#cartModal .close-modal")
@@ -123,10 +145,10 @@ def test_a_scrape_does_not_resurrect_a_dismissed_modal(browser: Browser) -> None
     page.close()
 
 
-def _run_cart_journey() -> tuple[dict[str, list[dict[str, Any]]], list[ObservedStep]]:
+def _run_cart_journey(site: _Site) -> tuple[dict[str, list[dict[str, Any]]], list[ObservedStep]]:
     """Run the real sync journey loop (own thread: it starts its own sync Playwright)."""
     trail: list[ObservedStep] = []
-    output = _scraper()._scrape_journey_sync(  # noqa: SLF001
+    output = _scraper(site)._scrape_journey_sync(  # noqa: SLF001
         [
             JourneyStep(
                 action="click",
@@ -140,7 +162,7 @@ def _run_cart_journey() -> tuple[dict[str, list[dict[str, Any]]], list[ObservedS
     return output, trail
 
 
-def test_cart_link_click_lands_and_the_cart_page_is_captured(mock_site: None) -> None:
+def test_cart_link_click_lands_and_the_cart_page_is_captured(mock_site: _Site) -> None:
     """The defect itself: add to cart -> scrape -> click Cart must navigate."""
     # The sync Playwright API cannot be entered on a thread that already owns an
     # event loop (pytest-asyncio), and production runs this loop in a subprocess
@@ -148,22 +170,23 @@ def test_cart_link_click_lands_and_the_cart_page_is_captured(mock_site: None) ->
     import concurrent.futures
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        output, trail = pool.submit(_run_cart_journey).result(timeout=180)
+        output, trail = pool.submit(_run_cart_journey, mock_site).result(timeout=180)
 
-    assert f"{BASE}/cart.html" in output, f"the cart page was never captured (pages: {sorted(output)})"
+    cart_url = f"{mock_site.base}/cart.html"
+    assert cart_url in output, f"the cart page was never captured (pages: {sorted(output)})"
     cart_step = trail[-1]
     assert cart_step.description == "Cart"
     assert cart_step.navigated is True, "the cart click was recorded as a non-navigation"
-    assert cart_step.to_url == f"{BASE}/cart.html"
+    assert cart_step.to_url == cart_url
     # The page really is the cart page, not a stale products page under a new URL.
-    assert any(el.get("selector", "").startswith("#cart") for el in output[f"{BASE}/cart.html"]) or any(
-        "cart" in str(el.get("text", "")).lower() for el in output[f"{BASE}/cart.html"]
+    assert any(el.get("selector", "").startswith("#cart") for el in output[cart_url]) or any(
+        "cart" in str(el.get("text", "")).lower() for el in output[cart_url]
     )
 
 
-def test_an_undismissable_overlay_still_fails_loudly(browser: Browser) -> None:
+def test_an_undismissable_overlay_still_fails_loudly(browser: Browser, mock_site: _Site) -> None:
     """Control: no force click, no swallowing - a blocked click still raises."""
-    page = _open_products(browser)
+    page = _open_products(browser, mock_site)
     page.evaluate(
         """
         () => {
@@ -174,7 +197,7 @@ def test_an_undismissable_overlay_still_fails_loudly(browser: Browser) -> None:
         }
         """
     )
-    scraper = _scraper()
+    scraper = _scraper(mock_site)
     with pytest.raises(Exception) as excinfo:  # noqa: PT011 - playwright's error type varies by version
         scraper._click_selector(page, 'a[href="/cart.html"]', 1000)  # noqa: SLF001
     assert "intercepts pointer events" in str(excinfo.value)
@@ -305,13 +328,13 @@ def test_click_selector_goes_through_the_retry(monkeypatch: pytest.MonkeyPatch) 
     assert seen.get("called") is True, "_click_selector swallowed the interception instead of retrying"
 
 
-def test_the_journey_dismiss_helper_really_dismisses_the_modal(browser: Browser) -> None:
+def test_the_journey_dismiss_helper_really_dismisses_the_modal(browser: Browser, mock_site: _Site) -> None:
     """The journey's ``_dismiss_modals`` itself (a revert to the comma selector fails here).
 
     ``dismiss_blocking_modals`` is covered directly above; this pins the journey
     delegate, which is where the t-0881 comma-joined selector lived.
     """
-    page = _open_products(browser)
+    page = _open_products(browser, mock_site)
     page.click('.add-to-cart[data-product-id="1"]')
     page.wait_for_timeout(200)
     assert page.evaluate(_MODAL_STATE) == "block"
