@@ -1,10 +1,10 @@
 Source: harness stderr of the 2026-10-24 rag_on_bundled leg on commit ad489aa
 (the PRE-fix baseline for the same day; full file 679 KB, not committed).
-Line numbers on the left are the ORIGINAL line numbers, so a citation of the form
-leg_rag_on_bundled_ad489aa.err:542 can be checked here directly.
+Extracted with: sed -n '540,545p;551p' scratch/t0880/leg_rag_on_bundled_ad489aa.err
 
-Extracted with:
-  sed -n '540,545p;551p' scratch/t0880/leg_rag_on_bundled_ad489aa.err
+CITATION CONVENTION: the left gutter is the ORIGINAL line number in the source
+log; this file's own line numbers are 1..N over the whole file (header included).
+The entries that cite this file give both numbers, e.g. 'original line 545 (excerpt file line 14)'.
 
  540  [journey_discovery] Selected 'a[href="/view_cart"]' (score=100) for 'Cart'
  541  [journey_discovery] Attempting to click selector: a[href="/view_cart"]

@@ -18,6 +18,10 @@ under `<run>/excerpts/` so a reviewer can open the citation from a clean checkou
 run does this (see its `README.md`); each excerpt names its source file and the `sed` command that
 produced it.
 
+Published runs are machine-neutral: pytest's `hostname` attribute is removed from every committed
+`junit/*.xml`, and absolute local paths inside skip messages are made relative. Test names and
+outcome counts are unchanged. The normalisation is documented per run (see `2026-10-24/README.md`).
+
 Re-score:
 
 ```bash

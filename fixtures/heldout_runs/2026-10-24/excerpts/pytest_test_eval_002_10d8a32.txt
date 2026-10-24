@@ -1,12 +1,13 @@
 Source: pytest log of eval-002 in the 2026-10-24 rag_on_bundled leg on commit 10d8a32
 (full file: scratch/eval_runs/2026-10-24_t0891_rag_on_bundled_10d8a32/pytest/test_eval_002.log,
 not committed - see fixtures/heldout_runs/README.md).
-Line numbers on the left are the ORIGINAL line numbers, so pytest/test_eval_002.log:35,
-:54 and :57 check directly here. The temp-file path and one traceback frame that named
-it are omitted; no cited line is omitted.
+Extracted with: sed -n '30,35p;52,54p;56,58p' <that log>
+The temp-file path and one traceback frame that named it are omitted; no cited
+line is omitted.
 
-Extracted with:
-  sed -n '30,35p;52,54p;56,58p' <that log>
+CITATION CONVENTION: the left gutter is the ORIGINAL line number in the source
+log; this file's own line numbers are 1..N over the whole file (header included).
+The entries that cite this file give both numbers, e.g. 'original line 545 (excerpt file line 14)'.
 
   30      evidence_tracker.click('.add-to-cart.btn[data-product-id="1"]', label='Add to cart', expected_page='https://automationexercise.com/products')
   31  src\evidence_tracker.py:875: in click

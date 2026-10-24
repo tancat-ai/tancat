@@ -1,10 +1,12 @@
 Source: harness stderr of the 2026-10-24 rag_on_bundled leg on commit 10d8a32
 (full file: scratch/t0891/leg.err, 620 KB, not committed).
-Line numbers on the left are the ORIGINAL line numbers in that file and match
-`grep -n` on the source, so a citation of the form leg.err:545 checks directly here.
+Extracted with: sed -n '540,546p;551,556p;560,563p;635,637p' scratch/t0891/leg.err
+Embedded carriage returns in progress-bar lines are shown as spaces, so one file
+line is one line for every reader; no other byte of a quoted line is changed.
 
-Extracted with:
-  sed -n '540,546p;551,556p;560,563p;635,637p' scratch/t0891/leg.err
+CITATION CONVENTION: the left gutter is the ORIGINAL line number in the source
+log; this file's own line numbers are 1..N over the whole file (header included).
+The entries that cite this file give both numbers, e.g. 'original line 545 (excerpt file line 14)'.
 
  540  [journey_discovery] Step 2/5: click 'Products'
  541  [journey_discovery] Scraped 412 elements for discovery of 'Products'
@@ -23,6 +25,6 @@ Extracted with:
  561  [pipeline] journey discovery enriched: https://automationexercise.com/products (350 elements)  [0.0s]
  562  [pipeline] journey discovery enriched: https://automationexercise.com/view_cart (43 elements)  [0.0s]
  563  [pipeline] journey discovery enriched: https://automationexercise.com/#google_vignette (412 elements)  [0.0s]
- 635  Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|##########| 1/1 [00:00<00:00, 237.91it/s]
+ 635   Batches:   0%|          | 0/1 [00:00<?, ?it/s] Batches: 100%|##########| 1/1 [00:00<00:00, 237.91it/s]
  636  15:41:17 [INFO] src.element_matcher: [RESOLVE] 'Cart' | pass=1 (text match) | selector=a[href="/view_cart"]
  637  [resolve] test_06_verify_cart_contents observed trail: [https://automationexercise.com/ -> https://automationexercise.com/#google_vignette -> https://automationexercise.com/view_cart]

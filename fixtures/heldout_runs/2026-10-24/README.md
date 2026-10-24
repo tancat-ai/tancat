@@ -45,6 +45,24 @@ reproduces the shape (`grep -n` in the excerpt headers names the exact source
 path). They are not committed because the raw logs carry local absolute paths
 and are ~620-680 KB each.
 
+## Normalised for publication
+
+The repository is public until release, so the `junit/` XML in every committed
+run (not only this one) is the run's output with two machine-identifying fields
+removed, and nothing else touched:
+
+- pytest's `hostname="<machine>"` attribute is removed from `<testsuite>`.
+- absolute local paths inside skip messages are made relative, in the same form
+  the sibling `classname`/`name` attributes already use, e.g.
+  `scratch/gate1_out_.../test_eval_001.py:44: specificity guard: ...`.
+
+Test, failure, skip and error counts and every test name are unchanged - the
+normalisation was scripted against a per-file fingerprint and refuses to write
+when the fingerprint would change. The excerpts are CR-free so one file line is
+one line for every reader, and each one states its citation convention (left
+gutter = the original log line; the entries give both that and the excerpt's own
+file line).
+
 ## Re-score
 
 ```bash
