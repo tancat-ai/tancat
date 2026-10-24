@@ -13,6 +13,10 @@ Layout: one directory per run, named for the run date. The files are exactly wha
 - `verification_strength.json` - the product's per-test verdicts.
 
 Not committed: the raw pytest logs (`pytest/`) and the harness log - `rescore.py` does not need them.
+Exception: when a backlog record cites a log line, that line is committed as a numbered excerpt
+under `<run>/excerpts/` so a reviewer can open the citation from a clean checkout. The 2026-10-24
+run does this (see its `README.md`); each excerpt names its source file and the `sed` command that
+produced it.
 
 Re-score:
 
