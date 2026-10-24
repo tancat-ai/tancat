@@ -20,10 +20,9 @@ that link is the target. The human clicks it; the resolver follows it.
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 __all__ = [
-    "anchor_href_target",
     "find_navigation_anchor",
     "identity_words",
     "is_anchor",
@@ -143,26 +142,6 @@ def find_navigation_anchor(description: str, elements: list[dict[str, Any]]) -> 
             best_score = score
             best = element
     return best if best_score >= 1.0 else None
-
-
-def anchor_href_target(element: dict[str, Any], current_url: str | None) -> str | None:
-    """Return the absolute URL an anchor really points at, or ``None``.
-
-    ``None`` means the anchor does not carry a href (a JS-driven link): its
-    destination is not knowable from the markup and must be observed in a
-    browser, never guessed.
-    """
-    href = str(element.get("href") or "").strip()
-    if not href or href.startswith(_NON_NAVIGABLE_PREFIXES):
-        return None
-    if href.startswith(("http://", "https://")):
-        return href
-    if not current_url:
-        return None
-    try:
-        return urljoin(current_url, href)
-    except ValueError:
-        return None
 
 
 #: Words that name the entry page - the URL the human gave us as the start.

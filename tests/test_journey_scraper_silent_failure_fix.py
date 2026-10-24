@@ -4,8 +4,13 @@ Covers:
 - _list_available_elements() returns clickable elements
 - build_selector_relaxed() matches when strict doesn't
 - Retry logic: strict fails -> relaxed succeeds
-- Skip tracking: step skipped -> appears in get_skipped_steps()
-- get_locator_warnings() exposes locator_not_found events
+
+Note: the ``get_skipped_steps()`` / ``get_locator_warnings()`` accessors and
+their tests were deleted (t-0907). Both read ``_context_log``, and no
+production code read that log: a skipped step is already surfaced to the
+caller as ``ObservedStep.error`` on the trail the orchestrator consumes
+(``scraped_errors``). A read-only accessor with no reader is a closed loop,
+not coverage.
 """
 
 from __future__ import annotations
@@ -111,53 +116,6 @@ class TestRelaxedSelectorBuilder:
         assert result is not None
 
 
-class TestSkipTracking:
-    """Test that skipped steps are tracked in context log."""
-
-    def test_get_skipped_steps_returns_skipped_entries(self) -> None:
-        scraper = JourneyScraper.__new__(JourneyScraper)
-        scraper._context_log = [
-            {"event": "locator_not_found", "step": 0, "description": "cart link"},
-            {"event": "step_skipped", "step": 0, "reason": "locator_not_found", "description": "cart link"},
-            {"event": "step_executed", "step": 1},
-            {
-                "event": "step_skipped",
-                "step": 2,
-                "reason": "locator_not_found_even_relaxed",
-                "description": "checkout button",
-            },
-        ]
-
-        result = scraper.get_skipped_steps()
-
-        assert len(result) == 2
-        assert result[0]["description"] == "cart link"
-        assert result[1]["description"] == "checkout button"
-
-    def test_get_skipped_steps_returns_empty_when_none_skipped(self) -> None:
-        scraper = JourneyScraper.__new__(JourneyScraper)
-        scraper._context_log = [
-            {"event": "step_executed", "step": 0},
-            {"event": "step_executed", "step": 1},
-        ]
-
-        result = scraper.get_skipped_steps()
-
-        assert result == []
-
-    def test_get_locator_warnings_returns_not_found_events(self) -> None:
-        scraper = JourneyScraper.__new__(JourneyScraper)
-        scraper._context_log = [
-            {"event": "locator_not_found", "step": 0, "description": "missing element"},
-            {"event": "step_executed", "step": 1},
-            {"event": "locator_not_found", "step": 2, "description": "another missing"},
-        ]
-
-        result = scraper.get_locator_warnings()
-
-        assert len(result) >= 1
-
-
 class TestRetryLogic:
     """Test retry logic: strict fails -> relaxed succeeds."""
 
@@ -189,35 +147,6 @@ class TestRetryLogic:
         relaxed_events = [e for e in scraper._context_log if e.get("event") == "locator_relaxed_fallback"]
         assert len(relaxed_events) == 1
         assert relaxed_events[0]["description"] == "cart link"
-
-    def test_double_failure_logged_when_both_strict_and_relaxed_fail(self) -> None:
-        scraper = JourneyScraper.__new__(JourneyScraper)
-        scraper._context_log = []
-
-        scraper._context_log.append(
-            {
-                "event": "locator_not_found",
-                "step": 0,
-                "action": "CLICK",
-                "description": "nonexistent element",
-                "page_url": "http://example.com/page",
-                "best_candidate_score": 0,
-                "available_elements": [],
-            }
-        )
-        scraper._context_log.append(
-            {
-                "event": "step_skipped",
-                "step": 0,
-                "reason": "locator_not_found_even_relaxed",
-                "description": "nonexistent element",
-                "page_url": "http://example.com/page",
-            }
-        )
-
-        skipped = scraper.get_skipped_steps()
-        assert len(skipped) == 1
-        assert skipped[0]["reason"] == "locator_not_found_even_relaxed"
 
 
 if __name__ == "__main__":
