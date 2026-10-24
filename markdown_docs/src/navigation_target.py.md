@@ -24,7 +24,6 @@ the cursor to a page nobody ever saw (the "Checkout" click that lands on the bur
 | `is_anchor(element)` | True when the element is a hyperlink (an anchor, or an element with a link role) |
 | `identity_words(element)` | The words that name an element - visible text, accessible name, aria-label, data attributes, href path |
 | `find_navigation_anchor(description, elements)` | The hyperlink on this page that names the destination, or None |
-| `anchor_href_target(element, current_url)` | The absolute URL an anchor really points at, or None (a JS-driven link carries no href) |
 | `names_start_page(description)` | True when the description names the entry page ("home", "start page") |
 | `start_page_url(description, seed_url)` | The entry page when the description names it, else None |
 

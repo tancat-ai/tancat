@@ -17,7 +17,6 @@ from __future__ import annotations
 from typing import Any
 
 from src.navigation_target import (
-    anchor_href_target,
     find_navigation_anchor,
     identity_words,
     is_anchor,
@@ -113,15 +112,6 @@ def test_find_navigation_anchor_ignores_hidden_elements() -> None:
     """A hidden link is not a click target."""
     hidden = dict(CART_LINK, is_visible=False)
     assert find_navigation_anchor("cart", [hidden]) is None
-
-
-def test_anchor_href_target_is_the_real_href() -> None:
-    """The href is the only proof of a link's destination."""
-    assert anchor_href_target(TRANSFER_LINK, "http://localhost:8781/dashboard.html") == (
-        "http://localhost:8781/transfer.html"
-    )
-    # A JS-driven link carries no href: its destination is not knowable here.
-    assert anchor_href_target(CART_LINK, "http://localhost:8781/dashboard.html") is None
 
 
 def test_start_page_url_names_the_entry_page() -> None:
