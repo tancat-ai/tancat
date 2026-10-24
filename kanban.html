@@ -115,7 +115,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 <body>
 <header>
     <h1>📋 Kanban Board</h1>
-    <p>Generated from <code>BACKLOG.md</code> (166) &mdash; private roadmap omitted &mdash; 2026-10-24 19:25 UTC</p>
+    <p>Generated from <code>BACKLOG.md</code> (166) &mdash; private roadmap omitted &mdash; 2026-10-24 23:07 UTC</p>
 </header>
 <div class="board">
     <div class="column todo">
@@ -401,7 +401,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column progress">
-    <h2>In Progress (10)</h2>
+    <h2>In Progress (11)</h2>
     
     <div class="">
     <div class="card">
@@ -410,6 +410,12 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     <div class="card-meta"><span>high - it is a customer-visible wrong result, not a slowdown: a page a real user reaches is never captured, and every later step of that test is written against the wrong page.</span>
 <span class="source-badge ">BACKLOG</span>
 <a class="card-link" href="BACKLOG.md#L114" target="_blank">BACKLOG.md:114</a></div>
+</div>
+<div class="card">
+    <div class="card-id">B-112</div>
+    <div class="card-title">Four production functions had no caller but their own test (t-0901 audit, deleted in t-0907)</div>
+    <div class="card-meta"><span class="source-badge ">BACKLOG</span>
+<a class="card-link" href="BACKLOG.md#L136" target="_blank">BACKLOG.md:136</a></div>
 </div>
 <div class="card">
     <div class="card-id">B-093</div>
@@ -473,16 +479,10 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
     </div>
 </div>
     <div class="column done">
-    <h2>Done (114)</h2>
-    <button id="toggle-done-btn" class="toggle-done">Show completed (114)</button>
+    <h2>Done (113)</h2>
+    <button id="toggle-done-btn" class="toggle-done">Show completed (113)</button>
     <div id="done-section" class="done-section">
     <div class="card">
-    <div class="card-id">B-112</div>
-    <div class="card-title">Four production functions had no caller but their own test (t-0901 audit, deleted in t-0907)</div>
-    <div class="card-meta"><span class="source-badge ">BACKLOG</span>
-<a class="card-link" href="BACKLOG.md#L136" target="_blank">BACKLOG.md:136</a></div>
-</div>
-<div class="card">
     <div class="card-id">B-095</div>
     <div class="card-title">`eval_harness.py` does not put the checkout on `sys.path`, so a worktree run silently tests the MAIN repo&#x27;s installed `src`</div>
     <div class="card-meta"><span>medium-high — a measurement-integrity trap. Any session that runs the harness from a worktree believes it tested its own code and did not.</span>
@@ -1224,7 +1224,7 @@ header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
 (function() {
     var btn = document.getElementById('toggle-done-btn');
     var section = document.getElementById('done-section');
-    var count = "114";
+    var count = "113";
     if (btn && section) {
         btn.addEventListener('click', function() {
             section.classList.toggle('open');
