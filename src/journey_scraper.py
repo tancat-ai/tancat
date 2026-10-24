@@ -1241,9 +1241,20 @@ class JourneyScraper:
         try:
             locator.click(timeout=min(5000, timeout_ms))
             self._debug(f"Clicked successfully: {selector}")
-        except Exception as e:
-            self._debug(f"Click exception: {e}")
-            raise
+        except Exception:
+            # t-0881: an open overlay (the "Added to cart" modal) intercepts the
+            # pointer, so the click never lands and the page after it is never
+            # captured. Dismiss the overlay and retry the SAME click once; the
+            # retry keeps full actionability checks (no force click) and a click
+            # that still does not land raises as before.
+            from src.browser_utils import click_with_overlay_retry
+
+            try:
+                click_with_overlay_retry(page, locator, min(5000, timeout_ms), log=self._debug)
+                self._debug(f"Clicked successfully: {selector}")
+            except Exception as e:
+                self._debug(f"Click exception: {e}")
+                raise
         page.wait_for_timeout(500)
         self._dismiss_consent_overlays(page)
         self._dismiss_modals(page)
@@ -1346,32 +1357,46 @@ class JourneyScraper:
         placeholder resolution can click/fill elements in any section.
         Best-effort — non-destructive if no section pattern is detected.
         """
+        # Local import keeps the playwright-typed module out of the scraper's
+        # import graph for callers that never touch a browser.
+        from src.browser_utils import OVERLAY_CONTAINER_SELECTOR
+
         try:
             page.evaluate(
                 """
-                () => {
+                (overlaySelector) => {
+                    // t-0881: never reveal an overlay. A modal the journey just
+                    // dismissed is inline ``display:none``, and pattern 2 below
+                    // would set it back to ``block`` - resurrecting the very
+                    // overlay that intercepts the next click.
+                    const isOverlay = (el) => el.matches(overlaySelector) || el.closest(overlaySelector) !== null;
+
                     // Pattern 1: .page { display:none } / .page.active { display:block }
                     const pages = document.querySelectorAll('.page');
                     pages.forEach(el => {
+                        if (isOverlay(el)) { return; }
                         el.style.display = 'block';
                         el.classList.add('active');
                     });
 
                     // Pattern 2: sections hidden via display:none in inline styles
                     document.querySelectorAll('[style*="display: none"], [style*="display:none"]').forEach(el => {
+                        if (isOverlay(el)) { return; }
                         el.style.display = 'block';
                     });
 
                     // Pattern 3: Any section/div that is a direct child of the form
                     // and is not visible, but has interactive elements
                     document.querySelectorAll('section, .section, [class*="Section"]').forEach(el => {
+                        if (isOverlay(el)) { return; }
                         const style = window.getComputedStyle(el);
                         if (style.display === 'none') {
                             el.style.display = 'block';
                         }
                     });
                 }
-                """
+                """,
+                OVERLAY_CONTAINER_SELECTOR,
             )
             page.wait_for_timeout(200)
         except Exception:
@@ -1388,38 +1413,15 @@ class JourneyScraper:
     def _dismiss_modals(page: Any) -> None:
         """Dismiss confirmation modals/popups that block pointer events.
 
-        B-023: On sites like automationexercise.com, the "Added to cart"
-        confirmation modal (#cartModal) intercepts clicks on navigation links.
-        This dismisses common modal patterns before click steps so the journey
-        scraper doesn't waste time retrying blocked clicks.
-
-        Non-destructive: if no modal is visible, these selectors won't match
-        and the dismissal is a no-op.
+        Delegates to :func:`src.browser_utils.dismiss_blocking_modals`, which
+        scopes every dismiss control inside a modal container. The previous
+        local version built a comma-joined CSS selector list, so ``.first``
+        resolved to the modal ``div`` itself and the dismissal never happened
+        (t-0881: the cart link stayed intercepted by ``#cartModal``).
         """
-        # B-015 lesson: never match generic button text globally — saucedemo's
-        # cart page has a visible "Continue Shopping" button that would get
-        # clicked and navigate the journey back to inventory. Text-based
-        # dismissal is scoped to modal/dialog containers only.
-        modal_containers = "#cartModal, .modal, [role='dialog'], .modal-dialog, .modal-content"
-        dismiss_selectors = [
-            f"{modal_containers} button:has-text('Continue Shopping')",
-            f"{modal_containers} .continue-shopping",
-            f"{modal_containers} .close",
-            f"{modal_containers} .modal-close",
-            f"{modal_containers} .close-btn",
-            f"{modal_containers} [data-dismiss='modal']",
-            f"{modal_containers} .modal-footer .btn",
-            "button.btn-success.close-modal",
-        ]
-        for selector in dismiss_selectors:
-            try:
-                locator = page.locator(selector).first
-                if locator.is_visible(timeout=200):
-                    locator.click(timeout=1000)
-                    page.wait_for_timeout(300)  # Allow modal animation to complete
-                    return  # Only dismiss one modal
-            except Exception:
-                continue
+        from src.browser_utils import dismiss_blocking_modals
+
+        dismiss_blocking_modals(page)
 
 
 # ─── Subprocess entry (delegates to journey_subprocess.py) ───

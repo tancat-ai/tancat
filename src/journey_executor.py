@@ -347,7 +347,14 @@ def _dismiss_consent_overlays(page: Any) -> None:
 
 
 def _click_with_locator(page: Any, selector: str, timeout_ms: int) -> None:
-    """Click an element by selector, with scroll-into-view."""
+    """Click an element by selector, with scroll-into-view.
+
+    t-0881: an open overlay (an "Added to cart" modal) intercepts the pointer,
+    so the click never lands. The same click is retried once after the overlay
+    is dismissed; a click that still does not land raises, as before.
+    """
+    from src.browser_utils import click_with_overlay_retry
+
     locator = page.locator(selector).first
     if locator.count() == 0:
         return
@@ -355,7 +362,7 @@ def _click_with_locator(page: Any, selector: str, timeout_ms: int) -> None:
         locator.scroll_into_view_if_needed(timeout=min(2000, timeout_ms))
     except Exception:
         pass
-    locator.click(timeout=min(5000, timeout_ms))
+    click_with_overlay_retry(page, locator, min(5000, timeout_ms))
     page.wait_for_timeout(500)
 
 
