@@ -7,7 +7,14 @@ lives in ``src/page_identity.py``; these tests hold both directions.
 
 from __future__ import annotations
 
-from src.page_identity import query_pairs, same_page, story_pins_query, story_query_pairs
+from src.page_identity import (
+    carries_story_query,
+    query_pairs,
+    same_page,
+    story_pins_query,
+    story_query_pairs,
+    story_query_url,
+)
 
 CART = "https://shop.example.com/cart.html"
 
@@ -35,8 +42,29 @@ def test_story_full_url_pins_the_query() -> None:
     assert story_pins_query(f"Open {CART}?item=blue-top and check the cart.", CART + "?item=blue-top")
 
 
-def test_story_cannot_pin_a_candidate_with_no_query() -> None:
-    assert not story_pins_query("The cart URL must contain item=blue-top.", CART)
+def test_story_pins_even_when_the_candidate_has_no_query() -> None:
+    assert story_pins_query("The cart URL must contain item=blue-top.", CART)
+
+
+def test_story_query_url_uses_the_story_pair_not_the_candidate_query() -> None:
+    assert story_query_url("The cart URL must contain item=blue-top.", CART + "?item=red-top") == (
+        CART + "?item=blue-top"
+    )
+    assert story_query_url("The cart URL must contain item=blue-top.", CART) == CART + "?item=blue-top"
+
+
+def test_story_full_url_is_the_expected_url() -> None:
+    story = "Open https://shop.example.com/cart.html?item=blue-top and check the cart."
+    assert story_query_url(story, CART + "?item=red-top") == "https://shop.example.com/cart.html?item=blue-top"
+
+
+def test_carries_story_query_allows_extra_tracking_parameters() -> None:
+    expected = CART + "?item=blue-top"
+    assert carries_story_query(CART + "?item=blue-top", expected)
+    assert carries_story_query(CART + "?item=blue-top&utm_source=x", expected)
+    assert not carries_story_query(CART + "?item=red-top", expected)
+    assert not carries_story_query(CART, expected)
+    assert not carries_story_query("https://shop.example.com/checkout.html?item=blue-top", expected)
 
 
 def test_query_pair_extraction_ignores_prose_punctuation() -> None:

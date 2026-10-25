@@ -32,7 +32,7 @@ from src.evidence_tracker import _same_page
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.navigation_target import start_page_url
-from src.page_identity import story_pins_query
+from src.page_identity import carries_story_query, story_query_url
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import (
     GeneratedPageObject,
@@ -898,24 +898,55 @@ class PlaceholderOrchestrator:
                                 # fails. (The failure path above still asserts
                                 # the candidate and names both pages.)
                                 #
-                                # Story-named-query exception (t-0937): identity
-                                # is not enough when the story names the bit
-                                # after the '?'. Then keep the candidate query
-                                # and record which rule applied. See
-                                # src/page_identity.py.
-                                assertion_url = resolved_url
+                                # Story-named-query exception (t-0937): when the
+                                # story names the bit after the '?', the story
+                                # owns the assertion. The pipeline's candidate
+                                # does not override it: a different pair, or no
+                                # query at all, becomes an honest failure that
+                                # names the story URL and the page reached.
+                                # When the story names no query, identity still
+                                # decides. See src/page_identity.py.
+                                story_expected = story_query_url(user_story, str(resolved_url or ""))
                                 query_rule = "identity"
-                                if story_pins_query(user_story, str(resolved_url or "")):
+                                if story_expected is not None:
                                     query_rule = "story-pins-query"
-                                elif obs is not None and str(obs.to_url).strip():
-                                    assertion_url = normalize_url(str(obs.to_url))
-                                resolved_value = self._page_expectation_value(
-                                    assertion_url,
-                                    obs,
-                                    producer,
-                                    description,
-                                    query_rule=query_rule,
-                                )
+                                    observed_url = ""
+                                    if obs is not None and str(getattr(obs, "to_url", "") or "").strip():
+                                        observed_url = str(obs.to_url).strip()
+                                    candidate_ok = carries_story_query(str(resolved_url or ""), story_expected)
+                                    observed_ok = not observed_url or carries_story_query(observed_url, story_expected)
+                                    if candidate_ok and observed_ok:
+                                        assertion_url = normalize_url(observed_url) if observed_url else story_expected
+                                        reason = ""
+                                        diverged = False
+                                    else:
+                                        assertion_url = story_expected
+                                        reached = observed_url or "(no page recorded)"
+                                        reason = (
+                                            f"the story pins {story_expected!r} but the candidate is "
+                                            f"{resolved_url!r} and the browser reached {reached!r}"
+                                        )
+                                        diverged = True
+                                    resolved_value = self._page_expectation_value(
+                                        assertion_url,
+                                        obs,
+                                        producer,
+                                        description,
+                                        reason=reason,
+                                        diverged_from_observation=diverged,
+                                        query_rule=query_rule,
+                                    )
+                                else:
+                                    assertion_url = resolved_url
+                                    if obs is not None and str(obs.to_url).strip():
+                                        assertion_url = normalize_url(str(obs.to_url))
+                                    resolved_value = self._page_expectation_value(
+                                        assertion_url,
+                                        obs,
+                                        producer,
+                                        description,
+                                        query_rule=query_rule,
+                                    )
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
                                         placeholder.token,

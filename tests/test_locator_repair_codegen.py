@@ -24,7 +24,7 @@ import pytest
 
 import src.locator_repair as locator_repair
 import src.ui.ui_run_results as ui_run_results
-from src.locator_repair import CodegenOutcome, _extract_locator, run_codegen_session
+from src.locator_repair import CodegenOutcome, _extract_locator, extract_locator_from_line, run_codegen_session
 
 
 class _FakeProc:
@@ -489,3 +489,14 @@ def test_locator_repair_panel_applies_a_captured_locator(monkeypatch: pytest.Mon
 
     assert applied and applied[0].repaired_locator == "#new"
     assert fake_st.session_state["repair_status"] == "patched"
+
+
+def test_extract_locator_from_line_unescapes_an_apostrophe() -> None:
+    """The single-line helper must return the value the generated line runs."""
+    line = r"    page.locator('text=Women\'s shoes').click()"
+    assert extract_locator_from_line(line) == "text=Women's shoes"
+
+
+def test_extract_locator_from_line_keeps_a_plain_locator() -> None:
+    line = '    page.locator("#submit-order").click()'
+    assert extract_locator_from_line(line) == "#submit-order"

@@ -13,8 +13,9 @@ That default is not always right. A story about one product, one filter, one
 search result or one variant DOES mean the query. When the story names the bit
 after the ``?``, the query is pinned:
 
-- the generated assertion carries the candidate query, not just the page
-  identity, so a different query fails;
+- the generated assertion carries the STORY's URL, not the pipeline's guess;
+- if the candidate carries a different pair, or none, the emitted assertion
+  fails and names both the story's URL and the page the browser reached;
 - the evidence record says ``query_rule='story-pins-query'`` instead of
   ``query_rule='identity'``.
 
@@ -30,14 +31,15 @@ A story that only says "the cart page" does not pin a query. Values alone
 word belongs to.
 
 The rule lives here so the next change reads it instead of rediscovering it.
-``EvidenceTracker._same_page`` delegates here, and the placeholder resolver
-imports :func:`story_pins_query`.
+``EvidenceTracker._same_page`` and the eval golden validator both delegate here,
+and the placeholder resolver imports :func:`story_query_url` and
+:func:`carries_story_query`.
 """
 
 from __future__ import annotations
 
 import re
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 # A key=value pair. The value stops at whitespace, another separator, or a
 # quote, so prose after the pair is not swallowed.
@@ -79,38 +81,72 @@ def query_pairs(url: str) -> set[tuple[str, str]]:
         return set()
 
 
+def _story_query_pair_list(story: str) -> list[tuple[str, str]]:
+    """Return the query pairs a story names, in the order they appear."""
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for match in _QUERY_PAIR.finditer(story or ""):
+        key = match.group(1)
+        value = match.group(2)
+        # A query pair in prose is often followed by a comma or a full stop.
+        if value and value[-1] in ".,;:!" and (match.end() == len(story or "") or (story or "")[match.end()].isspace()):
+            value = value[:-1]
+        pair = (key, value)
+        if pair not in seen:
+            seen.add(pair)
+            pairs.append(pair)
+    return pairs
+
+
 def story_query_pairs(story: str) -> set[tuple[str, str]]:
     """Return the query pairs a story names explicitly.
 
     Reads both ``key=value`` tokens and full URLs. A bare value (``blue-top``)
     is not a query pair: the writer must name the parameter too.
     """
-    pairs: set[tuple[str, str]] = set()
-    for match in _QUERY_PAIR.finditer(story or ""):
-        value = match.group(2)
-        # A query pair in prose is often followed by a comma or a full stop.
-        if value and value[-1] in ".,;:!" and (match.end() == len(story or "") or (story or "")[match.end()].isspace()):
-            value = value[:-1]
-        pairs.add((match.group(1), value))
+    pairs = set(_story_query_pair_list(story))
     for match in _FULL_URL.finditer(story or ""):
         pairs.update(query_pairs(match.group(0).rstrip(".,;:")))
     return pairs
 
 
-def story_pins_query(story: str, candidate_url: str) -> bool:
-    """Return True when the story pins the query of *candidate_url*.
+def story_query_url(story: str, candidate_url: str) -> str | None:
+    """Return the URL the story pins, or ``None`` when the story names no query.
 
-    A candidate with no query can never be pinned. A story pins it by naming
-    one of its ``key=value`` pairs, or by containing the candidate's exact
-    query string.
+    A full URL with a query in the story is used verbatim. Otherwise the story's
+    ``key=value`` pairs are applied to the candidate's scheme, host and path.
+    The candidate's own query is deliberately NOT used as the expected side:
+    the story is what the assertion must carry.
     """
-    candidate_pairs = query_pairs(candidate_url)
-    if not candidate_pairs:
-        return False
-
     story_text = story or ""
-    candidate_query = urlparse(str(candidate_url)).query
-    if candidate_query and candidate_query in story_text:
-        return True
+    for match in _FULL_URL.finditer(story_text):
+        url = match.group(0).rstrip(".,;:")
+        if urlparse(url).query:
+            return url
 
-    return bool(candidate_pairs & story_query_pairs(story_text))
+    pairs = _story_query_pair_list(story_text)
+    if not pairs:
+        return None
+
+    parsed = urlparse(str(candidate_url or ""))
+    if not parsed.netloc:
+        return None
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urlencode(pairs), ""))
+
+
+def carries_story_query(url: str, expected_url: str) -> bool:
+    """True when *url* is the story's page and carries every pinned query pair.
+
+    Extra query parameters are allowed: the story pins only the pairs it names,
+    so a tracking parameter does not turn a correct page into a failure.
+    """
+    if not expected_url:
+        return True
+    if not same_page(expected_url, url):
+        return False
+    return query_pairs(expected_url) <= query_pairs(url)
+
+
+def story_pins_query(story: str, candidate_url: str = "") -> bool:
+    """Return True when the story names a query, whether or not the candidate has one."""
+    return story_query_url(story, candidate_url) is not None

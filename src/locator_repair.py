@@ -695,6 +695,13 @@ def extract_locator_from_line(line: str) -> str | None:
         or ``None`` if no locator pattern is found.
     """
     match = _LOCATOR_ACTION_SPLIT.search(line)
-    if match:
-        return match.group(3)
-    return None
+    if not match:
+        return None
+    quote = match.group(2)
+    raw = match.group(3)
+    try:
+        # The regex keeps the source escape (for example Women's shoes). Read
+        # it as the Python string the generated line actually runs.
+        return str(ast.literal_eval(f"{quote}{raw}{quote}"))
+    except SyntaxError, ValueError:
+        return raw

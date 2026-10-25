@@ -429,3 +429,82 @@ def test_sidecar_page_expectation_records_the_query_rule(tmp_path: Path) -> None
 
     sidecar = json.loads(tracker.sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["page_expectations"][0]["query_rule"] == "story-pins-query"
+
+
+# -- 7. the story owns the query when the candidate disagrees (t-0940) ------
+
+
+def test_story_query_beats_a_candidate_with_a_different_pair() -> None:
+    candidate = CART + "?item=red-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed, user_story="The cart URL must contain item=blue-top.")
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert CART + "?item=blue-top" in message, message
+    assert observed in message, message
+    assert f'expect(page).to_have_url("{CART}?item=blue-top")' in code, code
+    assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+    assert tracker.records[0]["reason"], "the honest query failure did not record why"
+
+
+def test_story_query_beats_a_candidate_with_no_query() -> None:
+    candidate = CART
+    observed = CART
+    code = _resolve_custom(candidate, observed, user_story="The cart URL must contain item=blue-top.")
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert CART + "?item=blue-top" in message, message
+    assert observed in message, message
+    assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+def test_story_query_matches_the_candidate_pair_and_passes() -> None:
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=blue-top"
+    code = _resolve_custom(candidate, observed, user_story="The cart URL must contain item=blue-top.")
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(observed), tracker)
+
+    assert f'expect(page).to_have_url("{candidate}")' in code, code
+    assert "HONEST FAILURE" not in code, code
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+def test_story_without_a_query_still_lets_identity_decide() -> None:
+    candidate = CART + "?item=red-top"
+    observed = CART + "?item=blue-top"
+    code = _resolve_custom(candidate, observed, user_story="Open the checkout page and check the cart.")
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(observed), tracker)
+
+    assert f'expect(page).to_have_url("{observed}")' in code, code
+    assert "HONEST FAILURE" not in code, code
+    assert tracker.records[0]["query_rule"] == "identity", tracker.records
+
+
+def test_story_query_catches_the_browser_reaching_a_different_pair() -> None:
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed, user_story="The cart URL must contain item=blue-top.")
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert CART + "?item=blue-top" in message, message
+    assert observed in message, message
+    assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records

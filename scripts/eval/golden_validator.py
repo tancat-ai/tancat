@@ -10,11 +10,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
 
 from eval_metrics import ResolutionResult, StoryResult
+
+# The product owns the page-identity rule (src/page_identity.py). Eval must use
+# the same comparator, not a second copy: two comparators that disagree is how a
+# gate number drifts from the product. sys.path[0] is scripts/eval when this
+# module is run from there, so add the project root explicitly.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from src.page_identity import same_page as _same_page  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Code parsing
@@ -338,19 +348,13 @@ def _to_have_url_arg(expr: str) -> str | None:
 def _same_url_identity(a: str, b: str) -> bool:
     """True when two URLs name the same page: scheme + host + path.
 
-    Query and fragment are ignored, and trailing slashes are ignored. This is
-    the same identity rule as ``_same_page`` in ``src/evidence_tracker.py``:
-    SPA mocks encode state in the query (``success.html?item=blue-top``), so a
-    differing query is not evidence of a different page. Product
-    ``normalize_url`` canonicalizes root URLs to ``https://host/`` while
-    goldens may hold the no-slash form; identity treats those as equal too.
+    Delegates to the product's rule in ``src/page_identity.py``. Query and
+    fragment are ignored, trailing slashes are ignored, and a URL with no host
+    fails open exactly as the product does. Product ``normalize_url``
+    canonicalizes root URLs to ``https://host/`` while goldens may hold the
+    no-slash form; identity treats those as equal too.
     """
-
-    def _key(url: str) -> tuple[str, str, str]:
-        parsed = urlparse(str(url))
-        return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/") or "/")
-
-    return _key(a) == _key(b)
+    return _same_page(a, b)
 
 
 def _same_url_without_slash(a: str, b: str) -> bool:
