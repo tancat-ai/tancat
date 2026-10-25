@@ -22,6 +22,7 @@ class EvidenceSerializer:
         page_url: str,
         run_history: dict[str, int],
         steps: list[dict[str, Any]],
+        page_expectations: list[dict[str, Any]] | None = None,
         duration_s: float = 0.0,
         verification: dict[str, Any] | None = None,
     ) -> str:
@@ -46,6 +47,10 @@ class EvidenceSerializer:
                 "page": {"url": page_url},
                 "run_history": run_history,
                 "steps": steps,
+                # t-0929: the page the assertion expected, the observed step it
+                # was checked against, its timestamp, and which producer chose
+                # the candidate. Empty for older packages.
+                "page_expectations": page_expectations or [],
             },
             indent=2,
             ensure_ascii=False,

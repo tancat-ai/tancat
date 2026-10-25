@@ -54,7 +54,7 @@ A JSON patch with:
 |---|---|---|
 | `locator_timeout` | Replace locator with a more robust one from scraped data | `.click('#old-btn')` → `.click('[data-test="submit"]')` |
 | `strict_violation` | Add `.first` to locator or use more specific selector | `get_by_label("Name")` → `page.locator("#firstName")` |
-| `assertion_failure` | Replace with correct expected value or skip | `to_have_text("Wrong")` → `to_have_text("Correct")` |
+| `assertion_failure` | **Not healed - no healing pass may change an expectation** (pre-screened before any LLM call) | `to_have_text("Wrong")` stays as written; fix the capture, not the expectation |
 | `navigation_error` | Add explicit `page.goto()` before the failing step | Insert navigation step |
 
 ### Non-Fixable Cases

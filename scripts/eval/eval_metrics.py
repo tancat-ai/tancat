@@ -198,6 +198,7 @@ class HarnessReport:
             )
         lines += [
             f"  Test pass rate:           {self.test_pass_rate():.1f}%",
+            "  Pass-rate note:           page-arrival mismatches now fail honestly; expected: gate 1 unchanged (not measured in this run); gate 2 stays clean because a failing test cannot be a hollow pass (a false green requires the test to pass).",
             f"  False positives:          {self.total_false_positives}",
             f"  False positive rate:      {self.false_positive_rate():.1f}%",
             "",
