@@ -1,6 +1,6 @@
 """Tests for the UrlResolver module (keyword → URL mapping)."""
 
-from src.url_resolver import UrlResolver, resolve_keywords_to_urls
+from src.url_resolver import UrlResolver
 
 # ------------------------------------------------------------------
 # build_mapping
@@ -176,21 +176,6 @@ def test_get_all_mappings_returns_copy() -> None:
     # Mutating the returned dict should not affect internal state
     mappings["fake"] = "https://fake.com/"
     assert "fake" not in resolver.get_all_mappings()
-
-
-# ------------------------------------------------------------------
-# resolve_keywords_to_urls convenience function
-# ------------------------------------------------------------------
-
-
-def test_resolve_keywords_to_urls_returns_configured_resolver() -> None:
-    resolver = resolve_keywords_to_urls(
-        keywords=["cart"],
-        scraped_urls=["https://www.example.com/cart.html"],
-        seed_url="https://www.example.com/",
-    )
-    assert resolver.resolve("cart") == "https://www.example.com/cart.html"
-    assert resolver.resolve("home") == "https://www.example.com/"
 
 
 # ------------------------------------------------------------------

@@ -305,32 +305,3 @@ class UrlResolver:
                     return url  # First URL with any keyword word match
 
         return None
-
-
-# ------------------------------------------------------------------
-# Module-level convenience function
-# ------------------------------------------------------------------
-
-
-def resolve_keywords_to_urls(
-    keywords: list[str],
-    scraped_urls: list[str],
-    seed_url: str,
-    concepts: list[str] | None = None,
-) -> UrlResolver:
-    """Create and populate a UrlResolver in a single call.
-
-    This is a convenience function for the orchestrator pipeline.
-
-    Args:
-        keywords: Page keywords from PAGES_NEEDED.
-        scraped_urls: URLs discovered by journey scraping.
-        seed_url: The user-provided homepage URL.
-        concepts: Optional route concepts from the user story.
-
-    Returns:
-        A configured UrlResolver instance.
-    """
-    resolver = UrlResolver()
-    resolver.build_mapping(keywords, scraped_urls, seed_url, concepts)
-    return resolver
