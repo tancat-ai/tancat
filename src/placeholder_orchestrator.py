@@ -763,13 +763,14 @@ class PlaceholderOrchestrator:
                         # B-021: Page-state assertions become URL assertions —
                         # resolve immediately (no element matching or LLM needed).
                         if self._is_page_state_assertion(description):
+                            producer = "keyword"
                             resolved_url = self.resolver.resolve_url(
                                 description,
                                 scraped_data,
                                 known_urls=list(scraped_data.keys()),
                             )
                             # Post-login assertions ("logged in", "login
-                            # successful") must resolve to the page AFTER auth —
+                            # successful") must resolve to the page AFTER auth -
                             # the products/inventory page, not the login page.
                             if resolved_url and any(
                                 t in description.lower()
@@ -779,38 +780,20 @@ class PlaceholderOrchestrator:
                                     for url in scraped_data:
                                         if candidate in url.lower():
                                             resolved_url = url
+                                            producer = "post_login_override"
                                             break
                                     else:
                                         continue
                                     break
-                            # AI-051: the trail is the source of truth for where
-                            # the preceding action landed. When it evidences the
-                            # step's page DIFFERS from the one this assertion was
-                            # scoped to (e.g. a Login CLICK navigates
-                            # home -> /inventory.html, but /inventory.html was
-                            # never scraped, so keyword resolution above fell back
-                            # to the base URL), assert the OBSERVED landing URL —
-                            # a browser fact — not the keyword-inferred one.
-                            if (
-                                resolved_url
-                                and obs is not None
-                                and not diverged
-                                and pending_evidence is None
-                                and obs.to_url
-                            ):
-                                landing_key = canon(obs.to_url)
-                                if landing_key is not None and normalize_url(landing_key) != normalize_url(
-                                    resolved_url
-                                ):
-                                    logger.info(
-                                        "AI-051: page-state assert '%s' — asserting observed landing %s (trail to_url), not keyword-inferred %s",
-                                        description,
-                                        landing_key,
-                                        resolved_url,
-                                    )
-                                    resolved_url = landing_key
+                            # t-0929: AI-051's rewrite of the candidate to the
+                            # observed landing is deliberately GONE. The owner's
+                            # decision (2026-10-25) is to fail honestly when the
+                            # browser and the candidate disagree: rewriting the
+                            # expectation hides a capture defect. The arrival rule
+                            # below now decides between an honest failure and the
+                            # unchanged no-observation skip.
                             if not resolved_url and self._flow_store is not None and current_url:
-                                # AI-042: cross-site flow memory — learned navigation
+                                # AI-042: cross-site flow memory - learned navigation
                                 # shape can rescue a page-state assert when site
                                 # resolution finds nothing. It is still only a
                                 # CANDIDATE: the arrival rule below decides whether
@@ -824,8 +807,9 @@ class PlaceholderOrchestrator:
                                     scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
                                 )
                                 if flow_url:
-                                    logger.info("Flow memory resolved URL assertion '%s' → %s", description, flow_url)
+                                    logger.info("Flow memory resolved URL assertion '%s' -> %s", description, flow_url)
                                     resolved_url = flow_url
+                                    producer = "flow_memory"
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
                                 # t-0890 (t-0903 adds the first-step case): an
@@ -844,7 +828,17 @@ class PlaceholderOrchestrator:
                                     if trail_steps
                                     else None
                                 )
-                                if refusal:
+                                # t-0929 (owner's decision, 2026-10-25): two
+                                # shapes, two different results.
+                                #   no observation at all -> skip, exactly as
+                                #     before (nothing was established);
+                                #   an observation that is the WRONG page ->
+                                #     a real failing assertion naming both
+                                #     pages. A skip would hide the capture
+                                #     defect; rewriting the candidate (AI-051)
+                                #     would hide it too.
+                                observed_page = self._observed_page(obs, canon)
+                                if refusal and observed_page is None:
                                     message = refusal.replace('"', "'")
                                     logger.info("t-0890: arrival not asserted for '%s' - %s", description, refusal)
                                     line_resolutions.setdefault(placeholder.line_number, []).append(
@@ -864,11 +858,39 @@ class PlaceholderOrchestrator:
                                         (placeholder.line_number, placeholder.token)
                                     )
                                     continue
+                                if refusal:
+                                    logger.info("t-0929: honest arrival failure for '%s' - %s", description, refusal)
+                                    resolved_value = self._page_expectation_value(
+                                        resolved_url,
+                                        obs,
+                                        producer,
+                                        description,
+                                        reason=refusal,
+                                        diverged_from_observation=True,
+                                    )
+                                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                                        (
+                                            placeholder.token,
+                                            action,
+                                            resolved_value,
+                                            description,
+                                            fill_value,
+                                            current_url,
+                                            "url",
+                                        )
+                                    )
+                                    continue
+                                resolved_value = self._page_expectation_value(
+                                    resolved_url,
+                                    obs,
+                                    producer,
+                                    description,
+                                )
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
                                         placeholder.token,
                                         action,
-                                        f'expect(page).to_have_url("{resolved_url}")',
+                                        resolved_value,
                                         description,
                                         fill_value,
                                         current_url,
@@ -2034,6 +2056,71 @@ class PlaceholderOrchestrator:
         return last_verified_url
 
     @staticmethod
+    def _observed_page(obs: Any, canon: Any) -> str | None:
+        """Return the page the trail actually observed for this step, if any.
+
+        ``None`` means NOTHING was observed (no trail step, or a step with no
+        ``to_url``). That is the only shape that keeps the arrival skip; an
+        observed page that differs from the candidate is an honest failure
+        (t-0929).
+        """
+        if obs is None:
+            return None
+        to_url = str(getattr(obs, "to_url", "") or "").strip()
+        if not to_url:
+            return None
+        return str(canon(to_url) or to_url)
+
+    @staticmethod
+    def _trail_step_label(obs: Any) -> str:
+        """Serialise the observed trail step the candidate was checked against."""
+        return (
+            f"index={getattr(obs, 'index', '')}; "
+            f"action={getattr(obs, 'action', '')}; "
+            f"description={getattr(obs, 'description', '')!r}; "
+            f"from_url={getattr(obs, 'from_url', '')!r}; "
+            f"to_url={getattr(obs, 'to_url', '')!r}; "
+            f"navigated={bool(getattr(obs, 'navigated', False))}; "
+            f"timestamp={float(getattr(obs, 'timestamp', 0.0) or 0.0)}"
+        )
+
+    def _page_expectation_value(
+        self,
+        candidate: str,
+        obs: Any,
+        producer: str,
+        description: str,
+        *,
+        reason: str = "",
+        diverged_from_observation: bool = False,
+    ) -> str:
+        """Build the emitted page-arrival check.
+
+        t-0929: the assertion itself stays a LITERAL
+        ``expect(page).to_have_url("<candidate>")`` line so golden_validator
+        gate 1 can read it (``golden_validator.py:58-60``). The observed page is
+        named in the comment, the evidence record and the producer/step data,
+        and Playwright's own failure message names the expected and received
+        pages. The candidate is NEVER rewritten to the observation.
+        """
+        if obs is None:
+            # No trail at all: keep the legacy shape exactly as before.
+            return f'expect(page).to_have_url("{candidate}")'
+        observed_url = str(getattr(obs, "to_url", "") or "")
+        trail_step = self._trail_step_label(obs)
+        if diverged_from_observation:
+            comment = f"# HONEST FAILURE: expected {candidate!r}, browser observed on {observed_url!r}"
+        else:
+            comment = f"# Page arrival check: expected {candidate!r}, browser observed on {observed_url!r}"
+        record = (
+            "evidence_tracker.record_page_expectation("
+            f"expected_url={candidate!r}, observed_url={observed_url!r}, "
+            f"trail_step={trail_step!r}, producer={producer!r}, "
+            f"description={description!r}, reason={reason!r})"
+        )
+        return "\n".join([comment, record, f'expect(page).to_have_url("{candidate}")'])
+
+    @staticmethod
     def _arrival_refusal(
         description: str,
         last_interaction: dict[str, Any] | None,
@@ -2053,9 +2140,11 @@ class PlaceholderOrchestrator:
         Returns the reason (a short phrase naming exactly what was missing), or
         ``None`` when the arrival is evidenced and may be asserted.
 
-        Deliberately NOT a failure: when the interaction itself failed, the
-        reason NAMES that failure so it stays visible (``that step failed: ...``)
-        instead of being swallowed by a silent skip.
+        The reason is not itself the outcome. The caller decides the shape
+        (t-0929): a refusal with NO observation keeps the skip; a refusal with
+        an observation becomes an honest failing assertion. Either way the
+        reason NAMES a failed interaction (``that step failed: ...``) so it
+        stays visible instead of being swallowed.
 
         Scope: TRAIL journeys only (the caller passes ``obs`` from a real trail).
         A journey with no observed trail at all is a different contract - its
@@ -2066,11 +2155,7 @@ class PlaceholderOrchestrator:
         # The page the trail observed for THIS step is the only arrival a test may
         # name. It comes from the observation itself (not the scrape inventory):
         # a URL the browser was really on is evidence even if it was never scraped.
-        observed: str | None = None
-        if obs is not None:
-            to_url = str(getattr(obs, "to_url", "") or "").strip()
-            if to_url:
-                observed = str(canon(to_url) or to_url)
+        observed: str | None = PlaceholderOrchestrator._observed_page(obs, canon)
 
         if last_interaction is None:
             # Nothing has interacted yet, so no navigation we emitted and no click

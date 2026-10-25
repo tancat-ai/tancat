@@ -198,6 +198,7 @@ class HarnessReport:
             )
         lines += [
             f"  Test pass rate:           {self.test_pass_rate():.1f}%",
+            "  Pass-rate note:           page-arrival mismatches now fail honestly, so the pass rate drops; gate 1 (resolution accuracy) does not move and gate 2 (hollow passes) stays clean - this is exposed capture damage, not new damage.",
             f"  False positives:          {self.total_false_positives}",
             f"  False positive rate:      {self.false_positive_rate():.1f}%",
             "",

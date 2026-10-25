@@ -12,14 +12,18 @@ interaction ran on. Otherwise the step becomes an honest skip whose reason names
 exactly what was missing - including the interaction's own failure, so a broken
 click is never hidden behind a quiet skip.
 
+t-0929 (owner's decision, 2026-10-25) refines the second case: when an
+observation EXISTS and it is the wrong page, the arrival is a real FAILING
+assertion naming both pages, never a skip and never a rewrite of the candidate.
+Only "nothing observed at all" keeps the skip.
+
 Three cases are pinned here:
 
 1. the trail evidences the arrival  -> the assertion is written, as before;
-2. the trail does not               -> a skip with a stated reason, never a
-                                       URL naming the page we never left;
-3. the click itself failed          -> the failure stays visible: the click
-                                       step keeps its own skip, and the arrival
-                                       skip names the error.
+2. the trail observes the wrong page -> an honest failure naming both pages;
+   a step with NO observation keeps the skip;
+3. the click itself failed          -> the failure stays visible in the arrival
+                                       record/assertion.
 """
 
 from __future__ import annotations
@@ -141,26 +145,28 @@ def test_observed_landing_is_asserted() -> None:
     assert "pytest.skip" not in code, f"an evidenced arrival was skipped:\n{code}"
 
 
-# ── 2. the trail does not evidence it: skip, and say what was missing ────
+# -- 2. the trail observes the WRONG page: fail honestly (t-0929) ---------
 
 
-def test_unobserved_landing_is_an_honest_skip() -> None:
+def test_unobserved_landing_is_an_honest_failure() -> None:
     """The click resolved but the browser never left the shop page.
 
-    The old behaviour asserted the shop page as if it were the cart. Now the
-    step is a skip, and the reason names the missing landing and the page the
-    browser never left.
+    t-0929 (owner's decision): the candidate must not be rewritten to the
+    observation and the step must not be skipped. The emitted assertion names
+    the candidate checkout page and fails; the failure message names both the
+    expected and the observed page.
     """
     code = _resolve(_trail(clicked=True, navigated=False))
-    assert "to_have_url" not in code, f"an arrival was asserted without evidence:\n{code}"
-    assert "pytest.skip" in code
-    assert "page arrival not asserted" in code
-    assert "no observed landing" in code or "was not seen leaving" in code, code
+    assert f'to_have_url("{CART}")' in code, f"the candidate was not asserted:\n{code}"
+    assert "HONEST FAILURE" in code, code
+    assert CART in code and SHOP in code, code
+    assert f"observed_url='{SHOP}'" in code, code
+    assert "pytest.skip" not in code, f"an observed mismatch was hidden as a skip:\n{code}"
     # The click itself is still emitted as a click (not converted to a typed URL).
     assert "click(" in code, code
-    # The reason names the page the browser never left - that is the point of
-    # the message. What must NOT happen is an assertion naming it as an arrival.
-    assert "not seen leaving" in code and SHOP in code.split("pytest.skip")[1], code
+    # The evidence record sits immediately before the literal assertion.
+    record_at = code.index("record_page_expectation(")
+    assert code.index(f'to_have_url("{CART}")', record_at) > record_at, code
 
 
 def test_a_missing_trail_step_is_a_skip_not_an_assertion() -> None:
@@ -188,20 +194,19 @@ def test_a_missing_trail_step_is_a_skip_not_an_assertion() -> None:
 
 
 def test_a_failed_click_is_named_not_hidden() -> None:
-    """The click itself failed: the failure must surface, not vanish into a skip.
+    """The click itself failed: the failure must surface in the honest failure.
 
-    Both the click step and the arrival step are skipped, and the arrival skip
-    NAMES the click failure - so a reader of the evidence sees the broken click
-    rather than a quiet "not asserted".
+    The arrival is a failing assertion (t-0929) and its record NAMES the click
+    failure, so a reader of the evidence sees the broken capture rather than a
+    quiet "not asserted".
     """
     code = _resolve(_trail(clicked=False, navigated=False, error="locator_not_found_even_relaxed"))
-    assert "pytest.skip" in code
     assert "that step failed: locator_not_found_even_relaxed" in code, f"the click failure was hidden:\n{code}"
-    assert "to_have_url" not in code, f"an arrival was asserted after a failed click:\n{code}"
+    assert f'to_have_url("{CART}")' in code, code
+    assert "HONEST FAILURE" in code, code
     # The click step keeps its own visible outcome too - it is not silently
     # upgraded to a passing step.
-    click_part = code.split("checkout page loaded")[0]
-    assert "pytest.skip" in click_part or "click(" not in click_part, code
+    assert "evidence_tracker.click(" in code, code
 
 
 # ── 4. first step, no interaction yet (t-0903, the review's demonstrated hole) ──
@@ -275,7 +280,7 @@ def test_first_step_assertion_with_no_observation_is_a_skip() -> None:
     assert "never recorded" in code or "not the page the browser was observed on" in code, code
 
 
-def test_first_step_assertion_naming_an_unvisited_page_is_a_skip() -> None:
+def test_first_step_assertion_naming_an_unvisited_page_is_refused() -> None:
     """Observed on the shop page, candidate is the checkout page -> refused."""
     trail = ObservedTrail(
         steps=[

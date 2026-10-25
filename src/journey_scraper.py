@@ -345,6 +345,7 @@ class JourneyScraper:
                         action=step.action,
                         description=step.description or "",
                         from_url=current_url or "",
+                        timestamp=time.time(),
                     )
                     trail_steps.append(observed)
 

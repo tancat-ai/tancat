@@ -107,6 +107,10 @@ class EvidenceTracker:
         self.story_ref = story_ref
 
         self.steps: list[dict[str, Any]] = []
+        # t-0929: page arrivals the test EXPECTS, recorded immediately before
+        # the assertion. Separate from ``steps`` because an expectation is not
+        # a test step (it must not add to the pass/skip counts).
+        self.page_expectations: list[dict[str, Any]] = []
         self.start_time = time.time()
         # AI-067: the page a step actually RAN on — captured before the action,
         # because a click legitimately navigates away from the page its locator
@@ -604,6 +608,47 @@ class EvidenceTracker:
         except Exception:
             return ""
 
+    def record_page_expectation(
+        self,
+        expected_url: str,
+        *,
+        observed_url: str = "",
+        trail_step: str = "",
+        producer: str = "",
+        description: str = "",
+        reason: str = "",
+    ) -> None:
+        """Record what page the test expects before the arrival assertion runs.
+
+        t-0929 (owner's decision, 2026-10-25): when the run observed the browser
+        on a different page than the assertion's candidate, the emitted test
+        FAILS honestly instead of rewriting the expectation. This record keeps
+        the failure provable and readable:
+
+        - ``timestamp``: when this step was evaluated at run time;
+        - ``trail_step``: the observed step the candidate was checked against
+          (index/action/description/from/to/timestamp) - emit-time knowledge
+          that otherwise existed only in memory;
+        - ``producer``: which source chose the candidate (keyword resolver,
+          post-login override, or flow memory) - previously a log line only;
+        - ``actual_url``: what the browser was on when the expectation ran.
+        """
+        entry: dict[str, Any] = {
+            "timestamp": round(time.time(), 3),
+            "expected_url": expected_url,
+            "observed_url": observed_url,
+            "actual_url": self._safe_page_url(),
+            "trail_step": trail_step,
+            "producer": producer,
+            "description": description,
+        }
+        if reason:
+            entry["reason"] = reason
+        self.page_expectations.append(entry)
+        # Persist immediately: the assertion fails on the next line, and a
+        # later write() must never be the only place the record exists.
+        self._persist_sidecar("running")
+
     def _persist_sidecar(self, status: str) -> None:
         """Write the current steps + run history to the sidecar JSON.
 
@@ -619,6 +664,7 @@ class EvidenceTracker:
                 page_url=self._safe_page_url(),
                 run_history=self.run_history,
                 steps=self.steps,
+                page_expectations=self.page_expectations,
                 duration_s=time.time() - self.start_time,
                 verification=self.verification,
             )

@@ -916,6 +916,14 @@ def _replace_token_in_line_impl(
     stripped = line.strip()
     indent = line[: len(line) - len(line.lstrip())]
 
+    # t-0929: a page-arrival check emits an evidence record immediately before
+    # the literal ``to_have_url`` assertion. Indent every emitted line, and keep
+    # the assertion itself literal (golden_validator gate 1 reads its text).
+    if "\n" in resolved_value and "evidence_tracker.record_page_expectation(" in resolved_value:
+        return "\n".join(
+            f"{indent}{emitted}" if emitted.strip() else emitted for emitted in resolved_value.splitlines()
+        )
+
     # B-069 part b: page-level count assertions ("no TBD in links",
     # "all images have alt") need no element — emit the structural check
     # directly, before the unverified-skip path can replace the line.
