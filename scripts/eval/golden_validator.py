@@ -12,6 +12,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from eval_metrics import ResolutionResult, StoryResult
 
@@ -334,14 +335,27 @@ def _to_have_url_arg(expr: str) -> str | None:
     return None
 
 
-def _same_url_without_slash(a: str, b: str) -> bool:
-    """Trailing-slash-insensitive URL comparison for ``to_have_url`` assertions.
+def _same_url_identity(a: str, b: str) -> bool:
+    """True when two URLs name the same page: scheme + host + path.
 
-    Production ``normalize_url`` canonicalizes root URLs to ``https://host/``
-    (the site redirects), while goldens may hold the no-slash form — the two
-    must count as the same assertion target.
+    Query and fragment are ignored, and trailing slashes are ignored. This is
+    the same identity rule as ``_same_page`` in ``src/evidence_tracker.py``:
+    SPA mocks encode state in the query (``success.html?item=blue-top``), so a
+    differing query is not evidence of a different page. Product
+    ``normalize_url`` canonicalizes root URLs to ``https://host/`` while
+    goldens may hold the no-slash form; identity treats those as equal too.
     """
-    return a.rstrip("/") == b.rstrip("/")
+
+    def _key(url: str) -> tuple[str, str, str]:
+        parsed = urlparse(str(url))
+        return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/") or "/")
+
+    return _key(a) == _key(b)
+
+
+def _same_url_without_slash(a: str, b: str) -> bool:
+    """Backward-compatible name; now compares page identity (t-0934)."""
+    return _same_url_identity(a, b)
 
 
 # B-100 part 3: verification strength comes from the pipeline's own emit-time
@@ -413,11 +427,11 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
     # may hold the bare form).
     resolved_url = _to_have_url_arg(resolved)
     expected_url = _to_have_url_arg(expected)
-    if resolved_url and expected_url and _same_url_without_slash(resolved_url, expected_url):
+    if resolved_url and expected_url and _same_url_identity(resolved_url, expected_url):
         return True
     for t in tolerances:
         t_url = _to_have_url_arg(t)
-        if resolved_url and t_url and _same_url_without_slash(resolved_url, t_url):
+        if resolved_url and t_url and _same_url_identity(resolved_url, t_url):
             return True
     # AI-037 Phase 3: has-text substring equivalence (Playwright semantics).
     # Both locators must use :has-text() and the tag must match; then the

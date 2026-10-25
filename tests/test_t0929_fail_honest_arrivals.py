@@ -101,6 +101,55 @@ def _resolve(trail: ObservedTrail) -> str:
     )
 
 
+def _resolve_custom(candidate_url: str, observed_url: str) -> str:
+    """Resolve a checkout arrival where the candidate and observation differ.
+
+    The candidate is the only scraped checkout page; the trail observed a
+    different exact URL. This isolates page identity from the exact string.
+    """
+    skeleton, journey = _journey()
+    data = {
+        SHOP: _scraped()[SHOP],
+        candidate_url: [_el("h1", "Checkout", tag="h1")],
+    }
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "click",
+                description="Submit order",
+                from_url=SHOP,
+                to_url=observed_url,
+                navigated=True,
+                scraped=True,
+                selector_used="#submit-order",
+                timestamp=1_760_000_000.0,
+            ),
+            ObservedStep(
+                1,
+                "scrape",
+                description="checkout page loaded",
+                from_url=observed_url,
+                to_url=observed_url,
+                navigated=False,
+                scraped=True,
+                timestamp=1_760_000_001.0,
+            ),
+        ]
+    )
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+    return asyncio.run(
+        orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[SHOP],
+            scraped_data=data,
+            observed_trails={"test_go_to_cart": trail},
+        )
+    )
+
+
 def _trail(*, navigated: bool, with_assert_step: bool = True) -> ObservedTrail:
     steps = [
         ObservedStep(
@@ -223,6 +272,53 @@ def test_candidate_matches_observation_still_passes() -> None:
     assert "pytest.skip" not in code
     assert tracker.records[0]["expected_url"] == CART
     assert tracker.records[0]["observed_url"] == CART
+
+
+# -- 3b. page identity: a query difference is the same page (t-0934) -----
+
+
+def test_query_only_difference_passes_and_asserts_observed_url() -> None:
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed)
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(observed), tracker)
+
+    assert "pytest.skip" not in code, code
+    assert "HONEST FAILURE" not in code, code
+    assert f'expect(page).to_have_url("{observed}")' in code, code
+    assert f'expect(page).to_have_url("{candidate}")' not in code, code
+    assert tracker.records[0]["expected_url"] == observed
+
+
+def test_trailing_slash_difference_passes_and_asserts_observed_url() -> None:
+    candidate = CART
+    observed = CART + "/"
+    code = _resolve_custom(candidate, observed)
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(observed), tracker)
+
+    assert "pytest.skip" not in code, code
+    assert "HONEST FAILURE" not in code, code
+    assert f'expect(page).to_have_url("{observed}")' in code, code
+
+
+def test_different_path_still_fails_naming_both_pages() -> None:
+    candidate = CART
+    observed = "https://shop.example.com/other.html"
+    code = _resolve_custom(candidate, observed)
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert candidate in message, message
+    assert observed in message, message
+    assert "HONEST FAILURE" in code, code
+    assert f'expect(page).to_have_url("{candidate}")' in code, code
 
 
 # -- 4. the assertion line stays literal for golden_validator gate 1 ------

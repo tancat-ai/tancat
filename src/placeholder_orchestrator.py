@@ -28,6 +28,7 @@ from src.code_postprocessor import (
     section_contains_from_description,
 )
 from src.element_matcher import ElementMatcher
+from src.evidence_tracker import _same_page
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.navigation_target import start_page_url
@@ -880,8 +881,19 @@ class PlaceholderOrchestrator:
                                         )
                                     )
                                     continue
+                                # t-0934: page identity, not the exact string,
+                                # decides whether the candidate is the observed
+                                # page. When it is, assert the OBSERVED exact
+                                # URL: the assertion stays a literal, complete
+                                # to_have_url and cannot pass on a different
+                                # page, while a query-only difference no longer
+                                # fails. (The failure path above still asserts
+                                # the candidate and names both pages.)
+                                assertion_url = resolved_url
+                                if obs is not None and str(obs.to_url).strip():
+                                    assertion_url = normalize_url(str(obs.to_url))
                                 resolved_value = self._page_expectation_value(
-                                    resolved_url,
+                                    assertion_url,
                                     obs,
                                     producer,
                                     description,
@@ -2164,7 +2176,7 @@ class PlaceholderOrchestrator:
             # established - the first-step hole (t-0903).
             if observed is None:
                 return f"the browser's page was never recorded for '{description}'"
-            if resolved_url and normalize_url(resolved_url) != normalize_url(observed):
+            if resolved_url and not _same_page(resolved_url, observed):
                 return (
                     f"'{normalize_url(resolved_url)}' is not the page the browser was observed on "
                     f"('{normalize_url(observed)}'), and nothing has navigated yet in this test"
@@ -2179,10 +2191,10 @@ class PlaceholderOrchestrator:
 
         if landing is None:
             reason = f"no observed landing after '{interaction}' - the browser's next page was never recorded"
-        elif page and normalize_url(landing) == normalize_url(page):
+        elif page and _same_page(landing, page):
             reason = f"the browser was not seen leaving '{page}' after '{interaction}'"
         else:
-            if resolved_url and normalize_url(resolved_url) != normalize_url(landing):
+            if resolved_url and not _same_page(resolved_url, landing):
                 reason = (
                     f"'{normalize_url(resolved_url)}' is not the page the browser was observed on "
                     f"('{normalize_url(landing)}') after '{interaction}'"
