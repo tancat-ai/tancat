@@ -51,6 +51,54 @@ If you discover a security vulnerability, please do **not** open a public issue.
 
 ---
 
+## Public-repo safety
+
+This repository is public until release. A blocking CI job, **Private Content
+Guard**, runs:
+
+```bash
+python scripts/maintenance/kanban.py --check-private
+```
+
+It reads the committed public artefacts, never `docs/private/`, and fails with
+the file, line and match when it finds:
+
+- content from `docs/private/` in `kanban.html`;
+- an absolute Windows, macOS or Linux home path in a tracked fixture, evidence
+  file or committed run output (`fixtures/`, `docs/`, `exported_tests/`,
+  `generated_tests/`, `screenshots/`, `evidence/`, `training_data/`,
+  `scripts/archive/`);
+- an XML/HTML `hostname` attribute;
+- the current user's name (derived from the environment at check time) or the
+  current machine name in run output;
+- an absolute citation to a gitignored path that names a file, such as a local
+  `scratch/` or `docs/private/` path. The published relative form used by the
+  committed evidence (`scratch/gate1_out_.../test.py:44`) is allowed and
+  documented in `fixtures/heldout_runs/2026-10-24/README.md`.
+
+It cannot see:
+
+- text inside images, screenshots, PDFs or other binaries, for example a photo
+  of a desktop or a terminal;
+- untracked or gitignored files - they are not published;
+- secrets in source comments, root-level notes, or files outside the scanned
+  roots - the secret-scan and gitleaks jobs cover credentials;
+- a plain user or machine name written in prose under `docs/`. The hostname is
+  also the public handle, so those words are not flagged there; a home path in
+  the same docs is still caught.
+
+Run it locally before a release-shaped change:
+
+```bash
+python scripts/maintenance/kanban.py --check-private
+```
+
+`--check` keeps the board-only private check and the freshness comparison; it
+does not run the machine scan, so a pre-commit hook is not blocked by the
+historical findings the CI guard is there to surface.
+
+---
+
 ## Development Setup
 
 **Requirements:** Python 3.14+, [uv](https://github.com/astral-sh/uv), Git, Ollama
