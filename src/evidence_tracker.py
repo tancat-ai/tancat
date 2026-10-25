@@ -22,6 +22,7 @@ from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
+from src.page_identity import same_page as _page_identity_same_page
 from src.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -30,29 +31,12 @@ logger = logging.getLogger(__name__)
 def _same_page(expected: str, actual: str) -> bool:
     """Return True when two URLs address the same page.
 
-    Compares scheme + host + path only, ignoring query and fragment: SPA mocks
-    encode state in the query (``success.html?item=blue-top``) and a differing
-    query is not evidence of a different page. Trailing slashes are ignored.
-    Anything unparseable counts as a match so a parse failure never raises a
-    false mismatch.
+    Delegates to :func:`src.page_identity.same_page`, the one place that owns
+    the page-identity rule: scheme + host + path only, ignoring query and
+    fragment. The story-named-query exception (a story that names the bit after
+    the ``?`` pins the query) is also documented there.
     """
-
-    if not expected or not actual:
-        return True
-
-    def _key(url: str) -> tuple[str, str, str]:
-        parsed = urlparse(str(url))
-        return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/") or "/")
-
-    try:
-        left, right = _key(expected), _key(actual)
-    except Exception:
-        return True
-    # No host on either side means this is not a comparable absolute URL —
-    # fail open rather than raising a false mismatch.
-    if not left[1] or not right[1]:
-        return True
-    return left == right
+    return _page_identity_same_page(expected, actual)
 
 
 class _LocatorNotFoundError(RuntimeError):
@@ -617,6 +601,8 @@ class EvidenceTracker:
         producer: str = "",
         description: str = "",
         reason: str = "",
+        query_rule: str = "",
+        query_reason: str = "",
     ) -> None:
         """Record what page the test expects before the arrival assertion runs.
 
@@ -631,6 +617,10 @@ class EvidenceTracker:
           that otherwise existed only in memory;
         - ``producer``: which source chose the candidate (keyword resolver,
           post-login override, or flow memory) - previously a log line only;
+        - ``query_rule``: which page-identity rule applied (``identity`` by
+          default, or ``story-pins-query`` when the story named the bit after
+          the ``?`` - see ``src/page_identity.py``);
+        - ``query_reason``: why that rule fired or did not fire;
         - ``actual_url``: what the browser was on when the expectation ran.
         """
         entry: dict[str, Any] = {
@@ -644,6 +634,10 @@ class EvidenceTracker:
         }
         if reason:
             entry["reason"] = reason
+        if query_rule:
+            entry["query_rule"] = query_rule
+        if query_reason:
+            entry["query_reason"] = query_reason
         self.page_expectations.append(entry)
         # Persist immediately: the assertion fails on the next line, and a
         # later write() must never be the only place the record exists.

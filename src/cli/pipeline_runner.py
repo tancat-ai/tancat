@@ -893,22 +893,28 @@ def repair_locator_cli(session: Any) -> None:
     print()
 
     replacement = run_codegen_session(failure_url, timeout_seconds=120)
-    if not replacement:
-        print(yellow("  No locator captured — session timed out or was cancelled."))
+    if replacement.status == "cannot_replay":
+        print(red(f"  This step cannot be replayed: {replacement.reason}"))
+        return
+    if replacement.status == "failed":
+        print(red(f"  Codegen failed: {replacement.reason}"))
+        return
+    if not replacement.captured or not replacement.locator:
+        print(yellow("  No locator captured — the browser was closed or nothing was clicked."))
         return
 
     # Apply the patch
     test_file = result.file_path
     patch = LocatorPatch(
         original_locator=detail.raw_locator or "",
-        repaired_locator=replacement,
+        repaired_locator=replacement.locator,
         line_number=detail.line_number or 1,
         test_file=test_file,
     )
 
     try:
         apply_patch_to_file(patch)
-        print(green(f"  Patched `{replacement}` into {test_file}"))
+        print(green(f"  Patched `{replacement.locator}` into {test_file}"))
         print(yellow("  Run 'Run Generated Tests' to verify the fix."))
     except Exception as exc:
         print(red(f"  Patch failed: {exc}"))

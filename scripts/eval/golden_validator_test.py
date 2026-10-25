@@ -12,6 +12,7 @@ from golden_validator import (
     _classify_verification,
     _locators_match,
     _match_generated_to_golden,
+    _same_url_identity,
     _to_have_url_arg,
     _verification_reason,
     extract_locators_from_code,
@@ -165,6 +166,20 @@ class TestUrlIdentityMatching:
         assert _to_have_url_arg(expr) == "https://x/cart.html?item=red-top"
         locators = extract_locators_from_code(expr)
         assert locators[0]["locator"] == expr
+
+    def test_no_host_url_fails_open_like_the_product(self) -> None:
+        """Eval must use the product comparator, not a second copy (t-0940)."""
+        from src.page_identity import same_page
+
+        cases = [
+            ("cart.html", "https://x/cart.html"),
+            ("https://x/cart.html", "cart.html"),
+            ("", "https://x/cart.html"),
+            ("https://x/cart.html?item=blue-top", "https://x/cart.html?item=red-top"),
+            ("https://x/cart.html", "https://x/checkout.html"),
+        ]
+        for left, right in cases:
+            assert _same_url_identity(left, right) == same_page(left, right), (left, right)
 
     def test_extracts_url_from_the_emitted_record_and_assertion_block(self) -> None:
         """The t-0929 record line must not hide the quoted assertion from gate 1."""
@@ -560,7 +575,9 @@ class TestExtractLocatorsPerTest:
 # ---------------------------------------------------------------------------
 
 
-def _ph(action: str, desc: str, expected: str, criterion_index: int = 0, tol: list[str] | None = None):
+def _ph(
+    action: str, desc: str, expected: str, criterion_index: int = 0, tol: list[str] | None = None
+) -> dict[str, Any]:
     return {
         "criterion_index": criterion_index,
         "action": action,

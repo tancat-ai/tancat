@@ -32,6 +32,7 @@ from src.evidence_tracker import _same_page
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.navigation_target import start_page_url
+from src.page_identity import carries_story_query, story_query_url
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import (
     GeneratedPageObject,
@@ -595,8 +596,15 @@ class PlaceholderOrchestrator:
         scraped_data: dict[str, list[dict[str, str]]],
         scraped_errors: dict[str, str] | None = None,
         observed_trails: dict[str, ObservedTrail] | None = None,
+        user_story: str = "",
     ) -> str:
-        """Resolve placeholders step by step while tracking the active page for each test."""
+        """Resolve placeholders step by step while tracking the active page for each test.
+
+        ``user_story`` is the human's own text. It is read only by the
+        story-named-query rule: a story that names a query pair pins it, so the
+        arrival assertion carries the query instead of accepting any page with
+        the same scheme + host + path. See ``src/page_identity.py``.
+        """
         # B-097 charge 2: clear at entry so a run that raises mid-way can never
         # leave the PREVIOUS run's counts on the instance.
         self._test_resolution_counts = []
@@ -889,15 +897,60 @@ class PlaceholderOrchestrator:
                                 # page, while a query-only difference no longer
                                 # fails. (The failure path above still asserts
                                 # the candidate and names both pages.)
-                                assertion_url = resolved_url
-                                if obs is not None and str(obs.to_url).strip():
-                                    assertion_url = normalize_url(str(obs.to_url))
-                                resolved_value = self._page_expectation_value(
-                                    assertion_url,
-                                    obs,
-                                    producer,
-                                    description,
-                                )
+                                #
+                                # Story-named-query exception (t-0937): when the
+                                # story names the bit after the '?', the story
+                                # owns the assertion. The pipeline's candidate
+                                # does not override it: a different pair, or no
+                                # query at all, becomes an honest failure that
+                                # names the story URL and the page reached.
+                                # When the story names no query, identity still
+                                # decides. See src/page_identity.py.
+                                story_expected = story_query_url(user_story, str(resolved_url or ""))
+                                query_rule = "identity"
+                                query_reason = "story names no query in an address context; page identity decided"
+                                if story_expected is not None:
+                                    query_rule = "story-pins-query"
+                                    query_reason = f"story names the query in an address context: {story_expected!r}"
+                                    observed_url = ""
+                                    if obs is not None and str(getattr(obs, "to_url", "") or "").strip():
+                                        observed_url = str(obs.to_url).strip()
+                                    candidate_ok = carries_story_query(str(resolved_url or ""), story_expected)
+                                    observed_ok = not observed_url or carries_story_query(observed_url, story_expected)
+                                    if candidate_ok and observed_ok:
+                                        assertion_url = normalize_url(observed_url) if observed_url else story_expected
+                                        reason = ""
+                                        diverged = False
+                                    else:
+                                        assertion_url = story_expected
+                                        reached = observed_url or "(no page recorded)"
+                                        reason = (
+                                            f"the story pins {story_expected!r} but the candidate is "
+                                            f"{resolved_url!r} and the browser reached {reached!r}"
+                                        )
+                                        diverged = True
+                                    resolved_value = self._page_expectation_value(
+                                        assertion_url,
+                                        obs,
+                                        producer,
+                                        description,
+                                        reason=reason,
+                                        diverged_from_observation=diverged,
+                                        query_rule=query_rule,
+                                        query_reason=query_reason,
+                                    )
+                                else:
+                                    assertion_url = resolved_url
+                                    if obs is not None and str(obs.to_url).strip():
+                                        assertion_url = normalize_url(str(obs.to_url))
+                                    resolved_value = self._page_expectation_value(
+                                        assertion_url,
+                                        obs,
+                                        producer,
+                                        description,
+                                        query_rule=query_rule,
+                                        query_reason=query_reason,
+                                    )
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
                                         placeholder.token,
@@ -2105,6 +2158,8 @@ class PlaceholderOrchestrator:
         *,
         reason: str = "",
         diverged_from_observation: bool = False,
+        query_rule: str = "",
+        query_reason: str = "",
     ) -> str:
         """Build the emitted page-arrival check.
 
@@ -2128,7 +2183,8 @@ class PlaceholderOrchestrator:
             "evidence_tracker.record_page_expectation("
             f"expected_url={candidate!r}, observed_url={observed_url!r}, "
             f"trail_step={trail_step!r}, producer={producer!r}, "
-            f"description={description!r}, reason={reason!r})"
+            f"description={description!r}, reason={reason!r}, "
+            f"query_rule={query_rule!r}, query_reason={query_reason!r})"
         )
         return "\n".join([comment, record, f'expect(page).to_have_url("{candidate}")'])
 
