@@ -32,7 +32,7 @@ box is NOT memory-starved; the 48 GB VRAM allocation is what llama.cpp uses.
 **Decision:** lm-eval pointed **at the live llama-server** via the OpenAI-compatible chat-completions backend. (Loading a second GGUF copy was possible given 64 GB, but pointing at the live server was simpler and avoided holding two copies resident.)
 
 ### Installed + validated
-- Separate venv at `C:\Users\l_a_c\code\lm-eval-bench\.venv` (Python 3.13.14).
+- Separate venv at `../lm-eval-bench/.venv` (Python 3.13.14).
 - `lm-eval 0.4.12` + `lm-eval[api]` (tenacity).
 - Backend: `--model local-chat-completions
   --model_args base_url=http://localhost:8080/v1/chat/completions`.
@@ -153,7 +153,7 @@ Both thinking-ON legs ran to completion (H=3.6, I=3.8). Full verified table:
 - `AITEST_RESOLUTION_TIMEOUT` (default 120) and `AITEST_GENERATION_TIMEOUT`
   (default 600) env-driven so thinking legs can raise budgets fairly (constant-
   in-code defaults, no silent drift).
-- lm-eval 0.4.12 in separate py3.13 venv (`C:\Users\l_a_c\code\lm-eval-bench`),
+- lm-eval 0.4.12 in separate py3.13 venv (`../lm-eval-bench`),
   local-chat-completions backend → live server.
 - Results + logs: scratch/eval_{H,I}_thinkingon*.log, scratch/lmeval_ext_*.log,
   scratch/model_ab_all_conditions.md, manifests manifest_thinkingon_{36,38}.json.

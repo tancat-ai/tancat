@@ -93,8 +93,8 @@ llama-server --model <gguf> --port 8080 --host 0.0.0.0 --ctx-size 156072
   --cont-batching --reasoning-preserve --cache-ram 0 --ctx-checkpoints 0
 ```
 (no `--spec-*` flags). Models:
-- 3.6: `C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.6-27B-MTP-GGUF\Qwen3.6-27B-UD-Q4_K_XL.gguf`
-- 3.8: `C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q4_K_XL.gguf`
+- 3.6: `<home>/.lmstudio/models/unsloth/Qwen3.6-27B-MTP-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf`
+- 3.8: `<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf`
 
 **Per-leg protocol:** capture manifest BEFORE the run
 (`scratch/manifest_<model>.json` ← /v1/models + /slots + /props), verify

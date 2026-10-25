@@ -8,7 +8,7 @@
       "pom_mode": true,
       "checks": [
         {
-          "name": "LLM client (openai-local / C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf)",
+          "name": "LLM client (openai-local / <home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf)",
           "passed": true,
           "detail": ""
         },
@@ -84,7 +84,7 @@
       "pom_mode": true,
       "checks": [
         {
-          "name": "LLM client (openai-local / C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf)",
+          "name": "LLM client (openai-local / <home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf)",
           "passed": true,
           "detail": ""
         },
