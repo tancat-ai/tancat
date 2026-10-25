@@ -425,12 +425,12 @@ def test_sidecar_page_expectation_records_the_query_rule(tmp_path: Path) -> None
         producer="keyword",
         description="cart with blue-top",
         query_rule="story-pins-query",
-        query_reason="story names the query in a url/path context",
+        query_reason="story names the query in an address context",
     )
 
     sidecar = json.loads(tracker.sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["page_expectations"][0]["query_rule"] == "story-pins-query"
-    assert "url/path" in sidecar["page_expectations"][0]["query_reason"]
+    assert "address context" in sidecar["page_expectations"][0]["query_reason"]
 
 
 # -- 7. the story owns the query when the candidate disagrees (t-0940) ------
@@ -469,7 +469,7 @@ def test_story_query_beats_a_candidate_with_no_query() -> None:
     assert observed in message, message
     assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
     assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
-    assert "url/path" in tracker.records[0]["query_reason"], tracker.records
+    assert "address context" in tracker.records[0]["query_reason"], tracker.records
 
 
 def test_story_query_matches_the_candidate_pair_and_passes() -> None:
@@ -496,7 +496,8 @@ def test_story_without_a_query_still_lets_identity_decide() -> None:
     assert f'expect(page).to_have_url("{observed}")' in code, code
     assert "HONEST FAILURE" not in code, code
     assert tracker.records[0]["query_rule"] == "identity", tracker.records
-    assert "no query" in tracker.records[0]["query_reason"], tracker.records
+    assert "no query in an address context" in tracker.records[0]["query_reason"], tracker.records
+    assert "page identity decided" in tracker.records[0]["query_reason"], tracker.records
 
 
 def test_story_query_catches_the_browser_reaching_a_different_pair() -> None:
@@ -528,7 +529,8 @@ def test_prose_pair_does_not_pin_a_correct_arrival() -> None:
     assert "HONEST FAILURE" not in code, code
     assert f'expect(page).to_have_url("{CART}")' in code, code
     assert tracker.records[0]["query_rule"] == "identity", tracker.records
-    assert "no query" in tracker.records[0]["query_reason"], tracker.records
+    assert "no query in an address context" in tracker.records[0]["query_reason"], tracker.records
+    assert "page identity decided" in tracker.records[0]["query_reason"], tracker.records
 
 
 def test_path_story_pins_against_a_different_candidate_pair() -> None:
@@ -559,3 +561,20 @@ def test_path_story_pins_against_a_candidate_with_no_query() -> None:
     message = str(excinfo.value)
     assert CART + "?item=blue-top" in message, message
     assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+# -- 9. the stated limit: a page noun is not an address (t-0946) -----------
+
+
+def test_page_noun_story_does_not_pin_and_says_identity_decided() -> None:
+    story = "the cart page must contain item=blue-top"
+    code = _resolve_custom(CART, CART, user_story=story)
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(CART), tracker)
+
+    assert "HONEST FAILURE" not in code, code
+    assert f'expect(page).to_have_url("{CART}")' in code, code
+    assert tracker.records[0]["query_rule"] == "identity", tracker.records
+    assert "no query in an address context" in tracker.records[0]["query_reason"], tracker.records
+    assert "page identity decided" in tracker.records[0]["query_reason"], tracker.records

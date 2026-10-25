@@ -908,10 +908,10 @@ class PlaceholderOrchestrator:
                                 # decides. See src/page_identity.py.
                                 story_expected = story_query_url(user_story, str(resolved_url or ""))
                                 query_rule = "identity"
-                                query_reason = "story names no query in a url/path context"
+                                query_reason = "story names no query in an address context; page identity decided"
                                 if story_expected is not None:
                                     query_rule = "story-pins-query"
-                                    query_reason = f"story names the query in a url/path context: {story_expected!r}"
+                                    query_reason = f"story names the query in an address context: {story_expected!r}"
                                     observed_url = ""
                                     if obs is not None and str(getattr(obs, "to_url", "") or "").strip():
                                         observed_url = str(obs.to_url).strip()

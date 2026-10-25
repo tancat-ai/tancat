@@ -32,6 +32,12 @@ about page content, not an address, so it leaves page identity in charge. The
 same goes for a bare value ("blue-top"): the writer must name the parameter and
 put it next to the address.
 
+STATED LIMIT: a page noun with no cue does not pin. "the cart page must contain
+item=blue-top" falls back to page identity. Page nouns are endless, so a rule
+that guessed them would keep producing false pins. To make the pin fire, name
+the address (``/cart?item=blue-top``, ``cart.html?item=blue-top``) or use a cue
+word (``url``, ``address``, ``path``, ``query``, ``params``).
+
 The rule lives here so the next change reads it instead of rediscovering it.
 ``EvidenceTracker._same_page`` and the eval golden validator both delegate here,
 and the placeholder resolver imports :func:`story_query_url` and
@@ -163,8 +169,11 @@ def _is_address_token(token: str) -> bool:
         return True
     if cleaned.startswith(("/", "./", "../", "?")):
         return True
-    if "/" in cleaned or "?" in cleaned:
+    if "?" in cleaned:
         return True
+    # A slash between ordinary words is prose, not a path: "in/out", "A/B",
+    # "and/or". Only a slash that starts the token, a query marker, a full URL,
+    # or a dotted file name reads as an address.
     return bool(_PATH_FILE.match(cleaned))
 
 

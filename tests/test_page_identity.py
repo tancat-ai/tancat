@@ -41,6 +41,21 @@ def test_story_that_names_the_query_pair_pins_it() -> None:
 def test_path_token_pins_the_query() -> None:
     assert story_pins_query("the shopper opens /cart?item=blue-top", CART + "?item=red-top")
     assert story_query_pairs("the shopper opens /cart?item=blue-top") == {("item", "blue-top")}
+    assert story_pins_query("cart.html?item=blue-top", CART)
+    assert story_pins_query("the url must contain item=blue-top", CART)
+
+
+def test_slash_between_prose_words_does_not_pin() -> None:
+    assert not story_pins_query("sign in/out total=10", CART)
+    assert story_query_pairs("sign in/out total=10") == set()
+
+    assert not story_pins_query("the A/B test variant=blue", CART)
+    assert story_query_pairs("the A/B test variant=blue") == set()
+
+
+def test_a_page_noun_without_a_cue_does_not_pin() -> None:
+    assert not story_pins_query("the cart page must contain item=blue-top", CART)
+    assert story_query_pairs("the cart page must contain item=blue-top") == set()
 
 
 def test_pair_after_a_path_token_pins_the_query() -> None:
