@@ -9,3 +9,10 @@
 # dictionary reader expects the exact upstream bytes. ``-text`` disables EOL
 # conversion for the whole directory.
 src/data/ocr/* -text
+
+# Held-out evidence excerpts must check out LF-only on every platform. A blob
+# stored with CRLF and checked out under core.autocrlf=true doubles the CR
+# (\r\r\n), so wc/sed/awk count 30 lines where a reader splitting on LF counts
+# 60 - and the excerpt headers, and the citations into them, promise one line
+# per line. eol=lf pins the blob and the checkout to the same bytes.
+fixtures/heldout_runs/**/excerpts/* text eol=lf

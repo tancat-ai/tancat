@@ -13,6 +13,14 @@ Layout: one directory per run, named for the run date. The files are exactly wha
 - `verification_strength.json` - the product's per-test verdicts.
 
 Not committed: the raw pytest logs (`pytest/`) and the harness log - `rescore.py` does not need them.
+Exception: when a backlog record cites a log line, that line is committed as a numbered excerpt
+under `<run>/excerpts/` so a reviewer can open the citation from a clean checkout. The 2026-10-24
+run does this (see its `README.md`); each excerpt names its source file and the `sed` command that
+produced it.
+
+Published runs are machine-neutral: pytest's `hostname` attribute is removed from every committed
+`junit/*.xml`, and absolute local paths inside skip messages are made relative. Test names and
+outcome counts are unchanged. The normalisation is documented per run (see `2026-10-24/README.md`).
 
 Re-score:
 
