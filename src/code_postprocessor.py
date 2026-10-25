@@ -7,6 +7,7 @@ Orchestrates normalization by delegating to specialised sub-modules:
 
 from __future__ import annotations
 
+import ast
 import logging
 import re
 from dataclasses import dataclass
@@ -1285,6 +1286,95 @@ def _strip_tracker_asserts(code: str, *, tracker: str, page_expr: str) -> str:
     return code
 
 
+def _strip_page_expectation_calls(code: str) -> str:
+    """Remove ``evidence_tracker.record_page_expectation(...)`` lines.
+
+    t-0929 emits this record immediately before the literal
+    ``expect(page).to_have_url(...)``. It has no Playwright equivalent, so the
+    clean export must drop it. The call is normally one line, but consume
+    continuation lines too so a wrapped call cannot leave a dangling `)`.
+    """
+    lines = code.splitlines(keepends=True)
+    output: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if re.search(r"\bevidence_tracker\.record_page_expectation\s*\(", line):
+            depth = line.count("(") - line.count(")")
+            index += 1
+            while depth > 0 and index < len(lines):
+                depth += lines[index].count("(") - lines[index].count(")")
+                index += 1
+            continue
+        output.append(line)
+        index += 1
+    return "".join(output)
+
+
+def _remove_evidence_tracker_param_from_signature(line: str) -> str:
+    """Drop the ``evidence_tracker`` parameter from one def line.
+
+    Handles the bare form, a type annotation, a middle position, and a return
+    annotation (``-> None:``), which the old regexes (matching only ``):``)
+    missed.
+    """
+    line = re.sub(
+        r",\s*evidence_tracker(?:\s*:\s*[^,)]+)?(?=\s*[,)])",
+        "",
+        line,
+        count=1,
+    )
+    line = re.sub(
+        r"\(\s*evidence_tracker(?:\s*:\s*[^,)]+)?\s*,\s*",
+        "(",
+        line,
+        count=1,
+    )
+    return re.sub(
+        r"\(\s*evidence_tracker(?:\s*:\s*[^,)]+)?\s*\)",
+        "()",
+        line,
+        count=1,
+    )
+
+
+def _strip_unused_evidence_tracker_param(code: str) -> str:
+    """Drop each test's ``evidence_tracker`` parameter only when its body is clean.
+
+    The clean export has no ``evidence_tracker`` fixture. Dropping the
+    parameter from a test that still calls the tracker would turn the import
+    into a ``NameError`` at run time. Keeping the parameter makes the missing
+    fixture fail loudly instead, so the condition is per test body: only drop it
+    when no ``evidence_tracker.`` call remains there.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return code
+
+    lines = code.splitlines(keepends=True)
+    changed = False
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not node.name.startswith("test_"):
+            continue
+        params = [arg.arg for arg in (*node.args.args, *node.args.kwonlyargs)]
+        if "evidence_tracker" not in params:
+            continue
+        body_start = min(stmt.lineno for stmt in node.body)
+        body_end = node.end_lineno or len(lines)
+        body_text = "".join(lines[body_start - 1 : body_end])
+        if "evidence_tracker." in body_text:
+            continue
+        def_index = node.lineno - 1
+        new_line = _remove_evidence_tracker_param_from_signature(lines[def_index])
+        if new_line != lines[def_index]:
+            lines[def_index] = new_line
+            changed = True
+    return "".join(lines) if changed else code
+
+
 def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False) -> str:
     """Convert evidence-aware test code to clean Playwright test code.
 
@@ -1361,40 +1451,9 @@ def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False
         result,
     )
 
-    # --- Clean up test signatures: remove evidence_tracker parameter ---
-    # Handle type-hinted parameter first: evidence_tracker: EvidenceTracker
-    result = re.sub(
-        r"(def\s+test_\w+)\(page,\s*evidence_tracker\s*:\s*EvidenceTracker\s*\):",
-        r"\1(page):",
-        result,
-    )
-    # Handle bare parameter: evidence_tracker
-    result = re.sub(
-        r"(def\s+test_\w+)\(page,\s*evidence_tracker\s*\):",
-        r"\1(page):",
-        result,
-    )
-    # Handle evidence_tracker in middle position (type-hinted)
-    result = re.sub(
-        r"(def\s+test_\w+\([^)]*?)\s*,\s*evidence_tracker\s*:\s*EvidenceTracker(.*?)\):",
-        lambda m: f"{m.group(1)}{m.group(2)}):",
-        result,
-    )
-    # Handle evidence_tracker in middle position (bare)
-    result = re.sub(
-        r"(def\s+test_\w+\([^)]*?)\s*,\s*evidence_tracker(.*?)\):",
-        lambda m: f"{m.group(1)}{m.group(2)}):",
-        result,
-    )
-
-    # --- Import cleanup ---
-    # Remove EvidenceTracker import
-    result = re.sub(
-        r"^from src\.evidence_tracker import EvidenceTracker\s*$",
-        "",
-        result,
-        flags=re.MULTILINE,
-    )
+    # t-0929: the page-expectation record has no Playwright equivalent. Strip
+    # it with the other evidence calls so a clean export never sees it.
+    result = _strip_page_expectation_calls(result)
 
     # Remove dismiss_consent_overlays import
     result = re.sub(
@@ -1474,6 +1533,16 @@ def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False
             r"page.get_by_label('\2').fill('\4')",
             result,
         )
+
+    # t-0929: drop each test's ``evidence_tracker`` parameter only when its
+    # body no longer calls the tracker. Keep the import for a surviving call so
+    # a clean export fails on the missing fixture (loud) instead of a NameError
+    # from a stale annotation.
+    result = _strip_unused_evidence_tracker_param(result)
+    import_line = r"^from src\.evidence_tracker import EvidenceTracker\s*$"
+    without_import = re.sub(import_line, "", result, flags=re.MULTILINE)
+    if "evidence_tracker" not in without_import:
+        result = without_import
 
     # Remove blank lines that were left behind (collapse multiple blank lines to one)
     result = re.sub(r"\n{3,}", "\n\n", result)
