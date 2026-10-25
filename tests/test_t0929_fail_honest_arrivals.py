@@ -86,7 +86,7 @@ def _journey() -> tuple[str, TestJourney]:
     return "\n".join(lines), TestJourney(test_name="test_go_to_cart", start_line=1, end_line=3, steps=steps)
 
 
-def _resolve(trail: ObservedTrail) -> str:
+def _resolve(trail: ObservedTrail, user_story: str = "") -> str:
     skeleton, journey = _journey()
     orch = PlaceholderOrchestrator(starting_url=SHOP)
     return asyncio.run(
@@ -97,11 +97,12 @@ def _resolve(trail: ObservedTrail) -> str:
             seed_urls=[SHOP],
             scraped_data=_scraped(),
             observed_trails={"test_go_to_cart": trail},
+            user_story=user_story,
         )
     )
 
 
-def _resolve_custom(candidate_url: str, observed_url: str) -> str:
+def _resolve_custom(candidate_url: str, observed_url: str, user_story: str = "") -> str:
     """Resolve a checkout arrival where the candidate and observation differ.
 
     The candidate is the only scraped checkout page; the trail observed a
@@ -146,6 +147,7 @@ def _resolve_custom(candidate_url: str, observed_url: str) -> str:
             seed_urls=[SHOP],
             scraped_data=data,
             observed_trails={"test_go_to_cart": trail},
+            user_story=user_story,
         )
     )
 
@@ -364,3 +366,66 @@ def test_evidence_record_carries_timestamp_trail_step_and_producer(tmp_path: Pat
     assert record["trail_step"].startswith("index=1; action=scrape;")
     assert record["producer"] == "keyword"
     assert record["reason"]
+
+
+# -- 6. the story-named-query rule (t-0937) --------------------------------
+
+
+def test_identity_only_story_passes_across_query_difference() -> None:
+    """A story that does not name the query leaves identity in charge."""
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed, user_story="Add a top to the cart and open the checkout page.")
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(observed), tracker)
+
+    assert f'expect(page).to_have_url("{observed}")' in code, code
+    assert tracker.records[0]["query_rule"] == "identity", tracker.records
+
+
+def test_query_naming_story_pins_the_candidate_query() -> None:
+    """A story that names item=blue-top must fail on red-top."""
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed, user_story="The cart URL must contain item=blue-top.")
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert candidate in message, message
+    assert observed in message, message
+    assert f'expect(page).to_have_url("{candidate}")' in code, code
+    assert tracker.records[0]["expected_url"] == candidate
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+def test_full_url_in_story_also_pins_the_query() -> None:
+    candidate = CART + "?item=blue-top"
+    observed = CART + "?item=red-top"
+    code = _resolve_custom(candidate, observed, user_story=f"Open {candidate} and check the cart.")
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError):
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+def test_sidecar_page_expectation_records_the_query_rule(tmp_path: Path) -> None:
+    page = MagicMock()
+    page.url = CART + "?item=red-top"
+    tracker = EvidenceTracker(page, "test_checkout", evidence_root=tmp_path)
+
+    tracker.record_page_expectation(
+        expected_url=CART + "?item=blue-top",
+        observed_url=CART + "?item=red-top",
+        producer="keyword",
+        description="cart with blue-top",
+        query_rule="story-pins-query",
+    )
+
+    sidecar = json.loads(tracker.sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["page_expectations"][0]["query_rule"] == "story-pins-query"

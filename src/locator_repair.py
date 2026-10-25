@@ -9,12 +9,17 @@ Design-time only — not used at test runtime.
 
 from __future__ import annotations
 
+import ast
+import os
 import re
+import signal
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Literal
 
 
 @dataclass
@@ -40,6 +45,34 @@ class SetupScriptResult:
 
     state_file: str | None
     page_url: str | None
+
+
+CodegenStatus = Literal["captured", "no_click", "failed", "cannot_replay"]
+
+
+@dataclass(frozen=True)
+class CodegenOutcome:
+    """What a headed codegen session actually produced.
+
+    The old API returned ``str | None``, so a timeout and a human who changed
+    their mind were indistinguishable. The status is the distinction the UI
+    needs:
+
+    - ``captured``: a locator was recorded (``locator`` holds it);
+    - ``no_click``: the browser closed or the recording held no action;
+    - ``failed``: the session crashed, timed out, or could not be read;
+    - ``cannot_replay``: a state file was required but is missing, so the
+      step cannot be replayed from the journey's real state.
+    """
+
+    status: CodegenStatus
+    locator: str | None = None
+    reason: str = ""
+
+    @property
+    def captured(self) -> bool:
+        """True when a locator was captured."""
+        return self.status == "captured" and bool(self.locator)
 
 
 def translate_setup_step_to_python(step: str) -> list[str]:
@@ -380,11 +413,189 @@ def apply_patch_to_file(patch: LocatorPatch) -> None:
     test_path.write_text(patched_source, encoding="utf-8")
 
 
-def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> str | None:
-    """Launch headed Playwright codegen and capture the first locator from the recorded script.
+_CODEGEN_CALL = re.compile(
+    r"(?m)^[ \t]*page[.](locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder|get_by_role)[(]",
+)
+_CODEGEN_LOCATOR_METHODS = {
+    "locator",
+    "get_by_test_id",
+    "get_by_label",
+    "get_by_text",
+    "get_by_title",
+    "get_by_placeholder",
+}
 
-    When a state_file is provided, the codegen session loads saved cookies/localStorage
-    so that cart contents, consent preferences, and login state are preserved.
+
+def _call_argument_source(source: str, open_paren: int) -> str | None:
+    """Return the text inside the balanced call whose ``(`` ends at *open_paren*.
+
+    Scans quotes and nested brackets so a wrapped codegen call (the common case
+    for a long role name) and a ``)`` inside a quoted name are both read
+    correctly. Returns ``None`` for an unbalanced call.
+    """
+    depth = 1
+    index = open_paren
+    quote: str | None = None
+    escaped = False
+    while index < len(source):
+        char = source[index]
+        if quote is not None:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        else:
+            if char in ("'", '"'):
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    return source[open_paren:index]
+        index += 1
+    return None
+
+
+def _parse_call_arguments(argument_source: str) -> tuple[list[str | None], dict[str, str]]:
+    """Parse Python call arguments without executing them.
+
+    Returns positional string arguments (``None`` for non-literals) and keyword
+    string arguments. Uses the AST so escaped quotes and an apostrophe inside a
+    name are read exactly as Python writes them, not by a fragile character
+    class.
+    """
+    try:
+        call = ast.parse(f"_f({argument_source})", mode="eval").body
+    except SyntaxError:
+        return [], {}
+    if not isinstance(call, ast.Call):
+        return [], {}
+
+    positional: list[str | None] = []
+    for arg in call.args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            positional.append(arg.value)
+        else:
+            positional.append(None)
+
+    keywords: dict[str, str] = {}
+    for keyword in call.keywords:
+        if keyword.arg and isinstance(keyword.value, ast.Constant) and isinstance(keyword.value.value, str):
+            keywords[keyword.arg] = keyword.value.value
+    return positional, keywords
+
+
+def _single_quote(value: str) -> str:
+    """Return *value* as a single-quoted Python string literal."""
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _extract_locator(content: str) -> str | None:
+    """Extract the first real locator from a codegen recording.
+
+    The call must start a line with the ``page`` receiver, so a locator-looking
+    string inside a ``print`` or a comment is not a match. Calls are read one at
+    a time and balanced-scanned, so a first call without a name cannot cross
+    into a second call on a later line.
+    """
+    for match in _CODEGEN_CALL.finditer(content):
+        method = match.group(1)
+        argument_source = _call_argument_source(content, match.end())
+        if argument_source is None:
+            continue
+        positional, keywords = _parse_call_arguments(argument_source)
+
+        if method == "get_by_role":
+            role = positional[0] if positional else None
+            if not role:
+                continue
+            name = keywords.get("name")
+            if name:
+                return f"get_by_role({_single_quote(role)}, name={_single_quote(name)})"
+            return f"get_by_role({_single_quote(role)})"
+
+        if method in _CODEGEN_LOCATOR_METHODS:
+            value = positional[0] if positional else None
+            if value is None:
+                value = keywords.get("name") or keywords.get("text") or keywords.get("label")
+            if value is not None:
+                return value
+    return None
+
+
+def _kill_process_tree(proc: subprocess.Popen[Any]) -> None:
+    """Kill the codegen process and every child it spawned.
+
+    ``proc.kill()`` only kills the Playwright shim. On Windows the browser is a
+    child of that shim, so it survives and keeps the profile locked; taskkill
+    /T walks the tree. On POSIX the session was started in its own process
+    group, so the whole group is killed.
+    """
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+                timeout=10,
+            )
+        except OSError, subprocess.TimeoutExpired:
+            pass
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        return
+
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except OSError, ProcessLookupError, PermissionError:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _wait_quietly(proc: subprocess.Popen[Any], timeout: float = 5.0) -> None:
+    """Wait for exit, but never let a second TimeoutExpired escape to the UI."""
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _remove_codegen_workdir(work_dir: Path) -> None:
+    """Remove the recording and its private directory, always."""
+    try:
+        for child in work_dir.iterdir():
+            try:
+                child.unlink()
+            except OSError:
+                pass
+        work_dir.rmdir()
+    except OSError:
+        pass
+
+
+def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | None = None) -> CodegenOutcome:
+    """Launch headed Playwright codegen and capture the first recorded locator.
+
+    When a state_file is provided, the codegen session loads saved cookies and
+    localStorage so cart contents, consent preferences, and login state are
+    preserved. A state file that was requested but does not exist is REFUSED:
+    replaying from the wrong state would make the human blame the page for a
+    failure the tool caused.
+
+    The recording is written inside a private directory and removed in a
+    ``finally``. Codegen records every value the human typed (``fill`` calls),
+    so a leaked script is a secret on disk.
 
     Args:
         url: URL to navigate to.
@@ -392,69 +603,83 @@ def run_codegen_session(url: str, timeout_seconds: int = 120, state_file: str | 
         state_file: Optional path to a storage state JSON file to load.
 
     Returns:
-        The locator string captured from the clicked element, or None.
+        A :class:`CodegenOutcome` naming the distinct result.
     """
     import logging
 
     _log = logging.getLogger(__name__)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    tmp_dir = tempfile.gettempdir()
-    output_file = str(Path(tmp_dir) / f"repair_locator_{timestamp}.py")
-
-    # Verify state file exists before passing to codegen
     if state_file and not Path(state_file).exists():
-        _log.warning("State file %s does not exist — codegen will open without saved state", state_file)
-        state_file = None
-    elif state_file:
+        reason = f"the saved state '{state_file}' is missing, so this step cannot be replayed"
+        _log.warning("Refusing codegen session: %s", reason)
+        return CodegenOutcome("cannot_replay", reason=reason)
+
+    if state_file:
         _log.info("Loading saved state from %s (%d bytes)", state_file, Path(state_file).stat().st_size)
 
-    cmd = ["playwright", "codegen", "--output", output_file]
-    if state_file:
-        cmd.extend(["--load-storage", state_file])
-    cmd.append(url)
-
-    _log.info("Launching codegen: %s", " ".join(cmd))
-
-    # Use DEVNULL to avoid pipe deadlocks with headed browser GUI process on Windows.
-    # The browser writes to output_file directly, we don't need its stdout/stderr.
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    work_dir = Path(tempfile.mkdtemp(prefix="tancat_codegen_"))
+    output_file = work_dir / f"repair_locator_{timestamp}.py"
     try:
-        proc.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
-        return None
+        try:
+            os.chmod(work_dir, 0o700)
+        except OSError:
+            pass
 
-    if not Path(output_file).exists():
-        return None
+        cmd = ["playwright", "codegen", "--output", str(output_file)]
+        if state_file:
+            cmd.extend(["--load-storage", state_file])
+        cmd.append(url)
 
-    content = Path(output_file).read_text(encoding="utf-8")
-    try:
-        Path(output_file).unlink(missing_ok=True)
-    except OSError:
-        pass
+        _log.info("Launching codegen: %s", " ".join(cmd))
 
-    locator_pattern = re.compile(
-        r'\.(?:locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder)\(\s*["\']([^"\']+)["\']',
-    )
-    match = locator_pattern.search(content)
-    if match:
-        return match.group(1)
+        popen_kwargs: dict[str, Any] = {}
+        if os.name != "nt":
+            # Own process group so a timeout can kill the browser too.
+            popen_kwargs["start_new_session"] = True
 
-    role_pattern = re.compile(r'\.get_by_role\(\s*["\']([^"\']+)["\'].*?name=\s*["\']([^"\']+)["\']')
-    role_match = role_pattern.search(content)
-    if role_match:
-        role = role_match.group(1)
-        name = role_match.group(2)
-        return f"get_by_role('{role}', name='{name}')"
+        # Use DEVNULL to avoid pipe deadlocks with headed browser GUI process on Windows.
+        # The browser writes to output_file directly, we do not need its stdout/stderr.
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                **popen_kwargs,
+            )
+        except OSError as exc:
+            return CodegenOutcome("failed", reason=f"could not start Playwright codegen: {exc}")
 
-    return None
+        try:
+            proc.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(proc)
+            _wait_quietly(proc)
+            return CodegenOutcome("failed", reason=f"codegen timed out after {timeout_seconds}s")
+
+        if not output_file.exists():
+            if proc.returncode not in (0, None):
+                return CodegenOutcome(
+                    "failed", reason=f"codegen exited with status {proc.returncode} without a recording"
+                )
+            return CodegenOutcome("no_click", reason="the browser was closed without recording an action")
+
+        try:
+            os.chmod(output_file, 0o600)
+        except OSError:
+            pass
+
+        try:
+            content = output_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            return CodegenOutcome("failed", reason=f"could not read the codegen recording: {exc}")
+
+        locator = _extract_locator(content)
+        if locator is None:
+            return CodegenOutcome("no_click", reason="the recording contains no locator")
+        return CodegenOutcome("captured", locator=locator)
+    finally:
+        _remove_codegen_workdir(work_dir)
 
 
 def extract_locator_from_line(line: str) -> str | None:

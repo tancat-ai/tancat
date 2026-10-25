@@ -609,6 +609,7 @@ class TestOrchestrator:
             scraped_data=scraped_data,
             scraped_errors=scraped_errors,
             observed_trails=observed_trails,
+            user_story=user_story,
         )
         self._debug("phase=resolve_placeholders done")
 

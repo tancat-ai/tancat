@@ -32,6 +32,7 @@ from src.evidence_tracker import _same_page
 from src.journey_models import CredentialProfile, ObservedStep, ObservedTrail
 from src.locator_builder import build_robust_locator
 from src.navigation_target import start_page_url
+from src.page_identity import story_pins_query
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import (
     GeneratedPageObject,
@@ -595,8 +596,15 @@ class PlaceholderOrchestrator:
         scraped_data: dict[str, list[dict[str, str]]],
         scraped_errors: dict[str, str] | None = None,
         observed_trails: dict[str, ObservedTrail] | None = None,
+        user_story: str = "",
     ) -> str:
-        """Resolve placeholders step by step while tracking the active page for each test."""
+        """Resolve placeholders step by step while tracking the active page for each test.
+
+        ``user_story`` is the human's own text. It is read only by the
+        story-named-query rule: a story that names a query pair pins it, so the
+        arrival assertion carries the query instead of accepting any page with
+        the same scheme + host + path. See ``src/page_identity.py``.
+        """
         # B-097 charge 2: clear at entry so a run that raises mid-way can never
         # leave the PREVIOUS run's counts on the instance.
         self._test_resolution_counts = []
@@ -889,14 +897,24 @@ class PlaceholderOrchestrator:
                                 # page, while a query-only difference no longer
                                 # fails. (The failure path above still asserts
                                 # the candidate and names both pages.)
+                                #
+                                # Story-named-query exception (t-0937): identity
+                                # is not enough when the story names the bit
+                                # after the '?'. Then keep the candidate query
+                                # and record which rule applied. See
+                                # src/page_identity.py.
                                 assertion_url = resolved_url
-                                if obs is not None and str(obs.to_url).strip():
+                                query_rule = "identity"
+                                if story_pins_query(user_story, str(resolved_url or "")):
+                                    query_rule = "story-pins-query"
+                                elif obs is not None and str(obs.to_url).strip():
                                     assertion_url = normalize_url(str(obs.to_url))
                                 resolved_value = self._page_expectation_value(
                                     assertion_url,
                                     obs,
                                     producer,
                                     description,
+                                    query_rule=query_rule,
                                 )
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
@@ -2105,6 +2123,7 @@ class PlaceholderOrchestrator:
         *,
         reason: str = "",
         diverged_from_observation: bool = False,
+        query_rule: str = "",
     ) -> str:
         """Build the emitted page-arrival check.
 
@@ -2128,7 +2147,8 @@ class PlaceholderOrchestrator:
             "evidence_tracker.record_page_expectation("
             f"expected_url={candidate!r}, observed_url={observed_url!r}, "
             f"trail_step={trail_step!r}, producer={producer!r}, "
-            f"description={description!r}, reason={reason!r})"
+            f"description={description!r}, reason={reason!r}, "
+            f"query_rule={query_rule!r})"
         )
         return "\n".join([comment, record, f'expect(page).to_have_url("{candidate}")'])
 

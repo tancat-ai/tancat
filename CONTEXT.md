@@ -51,6 +51,14 @@ _Avoid_: previous step, last action, context
 A filtering strategy that applies a preference (e.g., display-only elements for ASSERT) but falls back to all elements if no preferred candidates score above threshold. Logged as low-confidence but never produces a skip solely due to filtering.
 _Avoid_: best-effort filtering, graceful degradation
 
+**Page identity**:
+The scheme, host and path of a URL. The query and fragment are not identity by default, because a page that encodes state in the query (for example `cart.html?item=blue-top`) is the same page as `cart.html?item=red-top`.
+_Avoid_: full URL, exact URL, page key
+
+**Story-named query**:
+The exception to page identity. When the story names a query pair (`item=blue-top`) or the full URL, the query is pinned: the generated assertion carries the candidate query, so a different query fails. A story that says only "the cart page" does not pin one.
+_Avoid_: query rule, URL pin, product pin
+
 ### Insurance Domain (LV Mock Site)
 
 **Underwriting Guide**:
