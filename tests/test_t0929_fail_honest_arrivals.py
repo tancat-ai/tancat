@@ -425,10 +425,12 @@ def test_sidecar_page_expectation_records_the_query_rule(tmp_path: Path) -> None
         producer="keyword",
         description="cart with blue-top",
         query_rule="story-pins-query",
+        query_reason="story names the query in a url/path context",
     )
 
     sidecar = json.loads(tracker.sidecar_path.read_text(encoding="utf-8"))
     assert sidecar["page_expectations"][0]["query_rule"] == "story-pins-query"
+    assert "url/path" in sidecar["page_expectations"][0]["query_reason"]
 
 
 # -- 7. the story owns the query when the candidate disagrees (t-0940) ------
@@ -449,6 +451,7 @@ def test_story_query_beats_a_candidate_with_a_different_pair() -> None:
     assert f'expect(page).to_have_url("{CART}?item=blue-top")' in code, code
     assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
     assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+    assert tracker.records[0]["query_reason"], "the record does not say why the pin fired"
     assert tracker.records[0]["reason"], "the honest query failure did not record why"
 
 
@@ -466,6 +469,7 @@ def test_story_query_beats_a_candidate_with_no_query() -> None:
     assert observed in message, message
     assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
     assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+    assert "url/path" in tracker.records[0]["query_reason"], tracker.records
 
 
 def test_story_query_matches_the_candidate_pair_and_passes() -> None:
@@ -492,6 +496,7 @@ def test_story_without_a_query_still_lets_identity_decide() -> None:
     assert f'expect(page).to_have_url("{observed}")' in code, code
     assert "HONEST FAILURE" not in code, code
     assert tracker.records[0]["query_rule"] == "identity", tracker.records
+    assert "no query" in tracker.records[0]["query_reason"], tracker.records
 
 
 def test_story_query_catches_the_browser_reaching_a_different_pair() -> None:
@@ -507,4 +512,50 @@ def test_story_query_catches_the_browser_reaching_a_different_pair() -> None:
     assert CART + "?item=blue-top" in message, message
     assert observed in message, message
     assert tracker.records[0]["expected_url"] == CART + "?item=blue-top"
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+
+
+# -- 8. prose is not a query pin (t-0943) ----------------------------------
+
+
+def test_prose_pair_does_not_pin_a_correct_arrival() -> None:
+    story = "the receipt shows total=10"
+    code = _resolve_custom(CART, CART, user_story=story)
+    tracker = _FakeTracker()
+
+    _run_emitted(code, _FakePage(CART), tracker)
+
+    assert "HONEST FAILURE" not in code, code
+    assert f'expect(page).to_have_url("{CART}")' in code, code
+    assert tracker.records[0]["query_rule"] == "identity", tracker.records
+    assert "no query" in tracker.records[0]["query_reason"], tracker.records
+
+
+def test_path_story_pins_against_a_different_candidate_pair() -> None:
+    candidate = CART + "?item=red-top"
+    observed = CART + "?item=red-top"
+    story = "the shopper opens /cart?item=blue-top"
+    code = _resolve_custom(candidate, observed, user_story=story)
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(observed), tracker)
+
+    message = str(excinfo.value)
+    assert CART + "?item=blue-top" in message, message
+    assert observed in message, message
+    assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records
+    assert tracker.records[0]["query_reason"], tracker.records
+
+
+def test_path_story_pins_against_a_candidate_with_no_query() -> None:
+    story = "the shopper opens /cart?item=blue-top"
+    code = _resolve_custom(CART, CART, user_story=story)
+    tracker = _FakeTracker()
+
+    with pytest.raises(AssertionError) as excinfo:
+        _run_emitted(code, _FakePage(CART), tracker)
+
+    message = str(excinfo.value)
+    assert CART + "?item=blue-top" in message, message
     assert tracker.records[0]["query_rule"] == "story-pins-query", tracker.records

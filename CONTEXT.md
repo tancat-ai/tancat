@@ -56,7 +56,7 @@ The scheme, host and path of a URL. The query and fragment are not identity by d
 _Avoid_: full URL, exact URL, page key
 
 **Story-named query**:
-The exception to page identity. When the story names a query pair (`item=blue-top`) or the full URL, the story owns the assertion: it carries the story's URL, so a candidate with a different pair or no query fails and names both. A story that says only "the cart page" does not pin one.
+The exception to page identity. When the story names a query pair in a URL or path context (`/cart?item=blue-top`, "the cart URL must contain item=blue-top") or names the full URL, the story owns the assertion: it carries the story's URL, so a candidate with a different pair or no query fails and names both. A bare pair in prose ("the receipt shows total=10") and a story that says only "the cart page" do not pin one.
 _Avoid_: query rule, URL pin, product pin
 
 ### Insurance Domain (LV Mock Site)

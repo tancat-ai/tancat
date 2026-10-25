@@ -11,7 +11,7 @@ by default, because the SPA mocks encode state in the query
 
 That default is not always right. A story about one product, one filter, one
 search result or one variant DOES mean the query. When the story names the bit
-after the ``?``, the query is pinned:
+after the ``?`` in a URL-EYED context, the query is pinned:
 
 - the generated assertion carries the STORY's URL, not the pipeline's guess;
 - if the candidate carries a different pair, or none, the emitted assertion
@@ -21,14 +21,16 @@ after the ``?``, the query is pinned:
 
 WHAT A STORY WRITER TYPES
 -------------------------
-Put the query pair, or the full URL, in the story. Either shape pins it::
+Put the query pair in a URL or path context, or put the full URL in the story::
 
-    The cart URL must contain item=blue-top.
+    the shopper opens /cart?item=blue-top
+    the cart URL must contain item=blue-top
     Open https://shop.example.com/cart.html?item=blue-top
 
-A story that only says "the cart page" does not pin a query. Values alone
-("blue-top") are not enough, because the tool cannot know which parameter the
-word belongs to.
+A bare pair in prose does NOT pin. "the receipt shows total=10" is a statement
+about page content, not an address, so it leaves page identity in charge. The
+same goes for a bare value ("blue-top"): the writer must name the parameter and
+put it next to the address.
 
 The rule lives here so the next change reads it instead of rediscovering it.
 ``EvidenceTracker._same_page`` and the eval golden validator both delegate here,
@@ -81,15 +83,155 @@ def query_pairs(url: str) -> set[tuple[str, str]]:
         return set()
 
 
+# A token that names an address rather than page content. The cue words let a
+# story say "the cart URL must contain item=blue-top" without a literal path.
+_ADDRESS_CUES = frozenset(
+    {
+        "url",
+        "uri",
+        "address",
+        "path",
+        "route",
+        "endpoint",
+        "link",
+        "href",
+        "query",
+        "querystring",
+        "query-string",
+        "params",
+        "parameters",
+        "param",
+        "parameter",
+    }
+)
+
+# A list join only continues the scan when the token before it is another query
+# pair. That keeps "the URL is /cart and total=10" from pinning total.
+_LIST_CONNECTORS = frozenset({"and", "or", "&"})
+
+# Small words that may sit between an address/cue token and the query pair. A
+# prose word that is not here stops the backward scan, so "the receipt shows
+# total=10" is not URL-eyed.
+_CONNECTORS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "be",
+        "must",
+        "should",
+        "has",
+        "have",
+        "contain",
+        "contains",
+        "include",
+        "includes",
+        "use",
+        "uses",
+        "using",
+        "with",
+        "and",
+        "or",
+        "to",
+        "at",
+        "on",
+        "for",
+        "of",
+        "in",
+        "from",
+    }
+)
+
+# A relative file path such as cart.html or success.php.
+_PATH_FILE = re.compile(r"^[\w.~-]+\.(?:html?|php|aspx?|jsp|json)$")
+
+
+def _clean_token(token: str) -> str:
+    return token.strip("\"'`()[]{}<>,.;:!").lower()
+
+
+def _is_address_token(token: str) -> bool:
+    """True when a token reads as a URL, a path, or a page-address cue."""
+    cleaned = _clean_token(token)
+    if not cleaned:
+        return False
+    if cleaned in _ADDRESS_CUES:
+        return True
+    if "://" in cleaned:
+        return True
+    if cleaned.startswith(("/", "./", "../", "?")):
+        return True
+    if "/" in cleaned or "?" in cleaned:
+        return True
+    return bool(_PATH_FILE.match(cleaned))
+
+
+def _token_is_url_eyed(tokens: list[tuple[str, int, int]], cleaned: list[str], index: int) -> bool:
+    """True when the pair in *tokens[index]* sits in a URL-eyed context.
+
+    Same-token shapes (``/cart?item=blue-top``) are address tokens by their own
+    prefix. Otherwise scan back over connector words only: the first meaningful
+    token must be an address/cue, or another query pair that is itself
+    URL-eyed. A plain prose word stops the scan.
+    """
+    raw = tokens[index][0]
+    equals = raw.find("=")
+    if equals > 0:
+        prefix = raw[:equals]
+        if "/" in prefix or "?" in prefix:
+            return True
+
+    cursor = index - 1
+    while cursor >= 0:
+        token = cleaned[cursor]
+        if not token:
+            cursor -= 1
+            continue
+        if token in _LIST_CONNECTORS:
+            peek = cursor - 1
+            while peek >= 0 and (not cleaned[peek] or cleaned[peek] in _CONNECTORS):
+                peek -= 1
+            if peek < 0 or "=" not in tokens[peek][0]:
+                return False
+            cursor -= 1
+            continue
+        if token in _CONNECTORS:
+            cursor -= 1
+            continue
+        if _is_address_token(token):
+            return True
+        if "=" in tokens[cursor][0]:
+            return _token_is_url_eyed(tokens, cleaned, cursor)
+        return False
+    return False
+
+
 def _story_query_pair_list(story: str) -> list[tuple[str, str]]:
-    """Return the query pairs a story names, in the order they appear."""
+    """Return the query pairs a story names in a URL-eyed context, in order.
+
+    A bare ``key=value`` in prose ("the receipt shows total=10") is not a query
+    pin. A pair inside or next to an address is ("/cart?item=blue-top",
+    "the cart URL must contain item=blue-top").
+    """
+    text = story or ""
+    tokens = [(match.group(0), match.start(), match.end()) for match in re.finditer(r"\S+", text)]
+    cleaned = [_clean_token(token) for token, _start, _end in tokens]
+
     pairs: list[tuple[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for match in _QUERY_PAIR.finditer(story or ""):
+    for match in _QUERY_PAIR.finditer(text):
+        token_index = next(
+            (index for index, (_token, start, end) in enumerate(tokens) if start <= match.start() < end),
+            None,
+        )
+        if token_index is None or not _token_is_url_eyed(tokens, cleaned, token_index):
+            continue
         key = match.group(1)
         value = match.group(2)
         # A query pair in prose is often followed by a comma or a full stop.
-        if value and value[-1] in ".,;:!" and (match.end() == len(story or "") or (story or "")[match.end()].isspace()):
+        if value and value[-1] in ".,;:!" and (match.end() == len(text) or text[match.end()].isspace()):
             value = value[:-1]
         pair = (key, value)
         if pair not in seen:

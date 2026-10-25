@@ -35,7 +35,37 @@ def test_story_that_names_no_query_does_not_pin() -> None:
 
 def test_story_that_names_the_query_pair_pins_it() -> None:
     assert story_pins_query("The cart URL must contain item=blue-top.", CART + "?item=blue-top")
-    assert story_pins_query("Filter: color=blue&size=large", CART + "?color=blue&size=large")
+    assert story_pins_query("Filter: /products?color=blue&size=large", CART + "?color=blue&size=large")
+
+
+def test_path_token_pins_the_query() -> None:
+    assert story_pins_query("the shopper opens /cart?item=blue-top", CART + "?item=red-top")
+    assert story_query_pairs("the shopper opens /cart?item=blue-top") == {("item", "blue-top")}
+
+
+def test_pair_after_a_path_token_pins_the_query() -> None:
+    assert story_pins_query("the shopper opens /cart with item=blue-top", CART)
+
+
+def test_bare_pair_in_prose_does_not_pin() -> None:
+    assert not story_pins_query("the receipt shows total=10", CART)
+    assert story_query_pairs("the receipt shows total=10") == set()
+    assert story_query_url("the receipt shows total=10", CART) is None
+
+
+def test_a_url_elsewhere_in_the_sentence_does_not_pin_a_prose_pair() -> None:
+    story = "The URL is /cart and the receipt shows total=10"
+    assert not story_pins_query(story, CART)
+    assert story_query_pairs(story) == set()
+
+    # "and" only chains to another query pair, never to a bare prose pair.
+    assert story_query_pairs("The URL is /cart and total=10") == set()
+
+
+def test_a_cue_before_the_pair_pins_it() -> None:
+    assert story_pins_query("the page address is item=blue-top", CART)
+    story = "the cart URL must contain item=blue-top and size=large"
+    assert story_query_pairs(story) == {("item", "blue-top"), ("size", "large")}
 
 
 def test_story_full_url_pins_the_query() -> None:
@@ -68,7 +98,7 @@ def test_carries_story_query_allows_extra_tracking_parameters() -> None:
 
 
 def test_query_pair_extraction_ignores_prose_punctuation() -> None:
-    pairs = story_query_pairs("Expect item=blue-top, then size=large.")
+    pairs = story_query_pairs("Expect /cart?item=blue-top, then /cart?size=large.")
     assert ("item", "blue-top") in pairs
     assert ("size", "large") in pairs
     assert not any(key == "then" for key, _ in pairs)

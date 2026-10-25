@@ -908,8 +908,10 @@ class PlaceholderOrchestrator:
                                 # decides. See src/page_identity.py.
                                 story_expected = story_query_url(user_story, str(resolved_url or ""))
                                 query_rule = "identity"
+                                query_reason = "story names no query in a url/path context"
                                 if story_expected is not None:
                                     query_rule = "story-pins-query"
+                                    query_reason = f"story names the query in a url/path context: {story_expected!r}"
                                     observed_url = ""
                                     if obs is not None and str(getattr(obs, "to_url", "") or "").strip():
                                         observed_url = str(obs.to_url).strip()
@@ -935,6 +937,7 @@ class PlaceholderOrchestrator:
                                         reason=reason,
                                         diverged_from_observation=diverged,
                                         query_rule=query_rule,
+                                        query_reason=query_reason,
                                     )
                                 else:
                                     assertion_url = resolved_url
@@ -946,6 +949,7 @@ class PlaceholderOrchestrator:
                                         producer,
                                         description,
                                         query_rule=query_rule,
+                                        query_reason=query_reason,
                                     )
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
@@ -2155,6 +2159,7 @@ class PlaceholderOrchestrator:
         reason: str = "",
         diverged_from_observation: bool = False,
         query_rule: str = "",
+        query_reason: str = "",
     ) -> str:
         """Build the emitted page-arrival check.
 
@@ -2179,7 +2184,7 @@ class PlaceholderOrchestrator:
             f"expected_url={candidate!r}, observed_url={observed_url!r}, "
             f"trail_step={trail_step!r}, producer={producer!r}, "
             f"description={description!r}, reason={reason!r}, "
-            f"query_rule={query_rule!r})"
+            f"query_rule={query_rule!r}, query_reason={query_reason!r})"
         )
         return "\n".join([comment, record, f'expect(page).to_have_url("{candidate}")'])
 

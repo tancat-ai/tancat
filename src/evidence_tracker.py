@@ -602,6 +602,7 @@ class EvidenceTracker:
         description: str = "",
         reason: str = "",
         query_rule: str = "",
+        query_reason: str = "",
     ) -> None:
         """Record what page the test expects before the arrival assertion runs.
 
@@ -619,6 +620,7 @@ class EvidenceTracker:
         - ``query_rule``: which page-identity rule applied (``identity`` by
           default, or ``story-pins-query`` when the story named the bit after
           the ``?`` - see ``src/page_identity.py``);
+        - ``query_reason``: why that rule fired or did not fire;
         - ``actual_url``: what the browser was on when the expectation ran.
         """
         entry: dict[str, Any] = {
@@ -634,6 +636,8 @@ class EvidenceTracker:
             entry["reason"] = reason
         if query_rule:
             entry["query_rule"] = query_rule
+        if query_reason:
+            entry["query_reason"] = query_reason
         self.page_expectations.append(entry)
         # Persist immediately: the assertion fails on the next line, and a
         # later write() must never be the only place the record exists.
