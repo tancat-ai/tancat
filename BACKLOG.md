@@ -1,7 +1,9 @@
 # BACKLOG.md
 ## AI Playwright Test Generator
 
-Last updated: 2026-10-24 (t-0908, evidence made durable - the t-0906 review could not open a single citation for B-110 or B-111, because both pointed into `scratch/`, which is gitignored and absent from a fresh checkout): the 10d8a32 leg is now committed as `fixtures/heldout_runs/2026-10-24/` in the layout the other held-out runs use (manifest, results, summary, verification_strength, emitted/, junit/), plus `excerpts/` holding every cited log line VERBATIM with its original line number in a left gutter, and a README naming both legs. B-110 and B-111 now paste their pivotal lines and cite only committed paths, and every citation names BOTH numbers - the original log line and the line in the committed excerpt file - because a gutter number is not a file line. The junit files are normalised for publication: pytest's `hostname="<machine>"` attribute is removed from all 54 committed junit files (every run, not just this one) and the absolute local paths inside skip messages are made relative. B-109's quote gained the same pointer. Two accuracy faults fixed: `_same_page` is now cited with its exact endpoints (`src/evidence_tracker.py:30-55` - the `def` at 30, the `return` at 55; line 56 is the blank separator, which is where a 30-56 range comes from), and the dismissal note no longer says "only after a navigation" - `dismiss_consent_overlays` runs before each click step too (`journey_scraper.py:357`), just not between the ad's move and the click.
+Last updated: 2026-10-24 (t-0907, dead-code cleanup on `task/dead-code-cleanup`, not pushed): the t-0901 test audit found four production functions whose only caller was the test written for them - a closed loop, not coverage. **Four** are deleted with their tests (`resolve_keywords_to_urls`, `anchor_href_target`, `get_skipped_steps`, `get_locator_warnings`), one (`anchor_href_target`) was **added by the page-cursor work t-0847 (`d639a93`) and never wired** - the fact worth recording is that a merged change carried dead code. Suite 4013 -> 4007 selected tests (6 deleted, exact). Also: the audit's `resolve_url called without strict=` ast-grep rule needs no action, because no ast-grep config, `sgconfig` or rule file exists anywhere in the tracked tree (`grep -rn 'ast-grep\|sgconfig' .` finds only this note) - `strict` itself was deleted on 2026-10-23 (B-093). Separately, `tests/integration/test_learning_loop_e2e.py` was found **red**, not merely excluded - its fourth test asserted the GOTO flow-memory path cut in t-0855 (D1a). It now asserts the surviving page-state ASSERT consumer and passes 4/4; it stays out of the default gate for cost and shared-artifact reasons, recorded in the file and in **B-113**. Tool lessons in **B-112**.
+
+Previous: 2026-10-24 (t-0908, evidence made durable - the t-0906 review could not open a single citation for B-110 or B-111, because both pointed into `scratch/`, which is gitignored and absent from a fresh checkout): the 10d8a32 leg is now committed as `fixtures/heldout_runs/2026-10-24/` in the layout the other held-out runs use (manifest, results, summary, verification_strength, emitted/, junit/), plus `excerpts/` holding every cited log line VERBATIM with its original line number in a left gutter, and a README naming both legs. B-110 and B-111 now paste their pivotal lines and cite only committed paths, and every citation names BOTH numbers - the original log line and the line in the committed excerpt file - because a gutter number is not a file line. The junit files are normalised for publication: pytest's `hostname="<machine>"` attribute is removed from all 54 committed junit files (every run, not just this one) and the absolute local paths inside skip messages are made relative. B-109's quote gained the same pointer. Two accuracy faults fixed: `_same_page` is now cited with its exact endpoints (`src/evidence_tracker.py:30-55` - the `def` at 30, the `return` at 55; line 56 is the blank separator, which is where a 30-56 range comes from), and the dismissal note no longer says "only after a navigation" - `dismiss_consent_overlays` runs before each click step too (`journey_scraper.py:357`), just not between the ad's move and the click.
 
 Previous: 2026-10-24 (t-0900, RECORD ONLY - two hazards the j-0196 measurement on `10d8a32` exposed now that the cart page is really reached and the steps really run): **B-110 - a third-party ad interstitial becomes "a page"** (the Google vignette moved the browser to `/#google_vignette`, the pipeline captured that URL as a page of its own with 412 elements, and a click resolved against `/products` ran there - PageMismatchError, a red test with a correct locator); **B-111 - a generated test must be self-contained** (each test runs in a fresh browser context, and nothing enforces that a test's assertions are covered by steps in the same test). Both are recorded NOT FIXED. Also: **B-109 is now marked MERGED** - PR #122 (`b0a794c`), CI green.
 
@@ -191,6 +193,40 @@ pytest.skip("Skipping: unresolved placeholders for: 'Blue Top in cart'. 4 of 5 p
 **What a user sees:** a test that fails on a clean run and passes when the file runs in order (or the reverse), with a message that blames the assertion instead of the missing setup.
 **Out of scope:** no code change in this job; not measured.
 **Estimated sessions:** 1-2 (the generator check is the smaller half).
+
+---
+
+## 🟡 B-112 - Four production functions had no caller but their own test (t-0901 audit, deleted in t-0907)
+
+**Status:** 🟡 in progress - built 2026-10-24 on `task/dead-code-cleanup` (t-0907), **NOT pushed and NOT merged**, so not shipped yet. The code, docs and tests are on the branch.
+**Rule applied:** a function whose only reader is the test written for it is a closed loop, not coverage. Delete it, or wire it into something that needs it - never leave it.
+**How to check any row below on a fresh checkout:** the symbol is absent, so `grep -rn '<name>' src/ cli/ tests/ scripts/` must find nothing but a docstring note; the "was :NNN" column is the pre-deletion position, recoverable with `git show <commit>^:<file>`.
+
+| Deleted (was at) | Its test (was at) | Why it was dead |
+|---------|----------|-----------------|
+| `src/url_resolver.py` `resolve_keywords_to_urls()` (was :315) | `tests/test_url_resolver.py:186` | 0 production references; the pipeline builds `UrlResolver` and calls `build_mapping` directly |
+| `src/navigation_target.py` `anchor_href_target()` (was :148) | `tests/test_navigation_target.py:118` | 0 production references; the live path is `find_navigation_anchor` (`src/journey_scraper.py:717`, called at `:732` and `:736`), which keeps its own coverage. **Added by the page-cursor work (t-0847, `d639a93`) and never wired** - a merged change carried dead code, which is the fact worth recording |
+| `src/journey_scraper.py` `get_skipped_steps()` (was :622) | 2 tests in `tests/test_journey_scraper_silent_failure_fix.py` | read `_context_log`, which no production code reads; a skipped step is already surfaced as `ObservedStep.error` on the trail the orchestrator consumes (`src/orchestrator.py:501-502` builds `scraped_errors`) |
+| `src/journey_scraper.py` `get_locator_warnings()` (was :626) | 1 test, same file, plus 1 test that asserted through it | duplicate of the same channel |
+
+**Counts (the point of the exercise):** default selection **4013 -> 4007** collected-and-selected tests; 6 deleted, exactly the 6 that named the deleted symbols. Nothing else moved.
+**Residual, recorded not fixed:** `_context_log` is still appended to by `src/journey_scraper.py` (10 sites, on the tip: `:370`, `:386`, `:396`, `:424`, `:450`, `:460`, `:473`, `:1149`, `:1163`, `:1178`) and now has no reader at all - write-only state. Removing it is a wider change than this cleanup, so it is left with this note.
+**Tool lessons for the next audit:**
+- **graphify's call edges miss `self.method()` dispatch**, so an orphan claim from the graph is a lead, never a finding - every deletion here was confirmed by `grep` for the symbol across `src/ cli/ streamlit_app.py scripts/`.
+- **coverage's default core silently drops per-test contexts** unless `COVERAGE_CORE=ctrace` is set; a "0 callers" claim read from a coverage report without it can be wrong.
+
+---
+
+## 🆕 B-113 - The only end-to-end learn-then-resolve proof never runs, and was red when it did
+
+**Status:** 🆕 open. File repaired in t-0907 (4/4 pass, 77 s); still excluded from the default gate and from CI.
+**File:** `tests/integration/test_learning_loop_e2e.py`.
+**Two defects found:**
+1. **It was red, not merely excluded.** Its fourth test asserted the orchestrator's GOTO flow-memory source ("step 2.5"), which was cut in t-0855 (D1a) - a GOTO may only name a URL the human gave us or a page the browser really visited. The placeholder came back unresolved (`page.goto('{{GOTO:view cart}}')` unchanged). It now asserts the surviving consumer, the page-state ASSERT branch, and all four tests pass.
+2. **Nothing runs it.** `pytest.ini` `addopts` excludes `slow`/`integration`, and no CI job runs `-m integration`, so the module only runs when asked.
+**Why it stays out of the default gate** (~80 s, real Playwright subprocess runs): it takes exclusive use of the machine-local flow store at `evidence/flow_memory.json` - the path `FlowMemoryStore` defaults to (`src/flow_memory.py:342` names it, `:348` sets `DEFAULT_FILE`), and `evidence/` is gitignored, so on a fresh checkout that file does not exist until a run creates it. The module snapshots, wipes and restores it, so a crash mid-run loses a developer's learned flows. It also needs the fixed port 8784 (`PORT = 8784` in the module).
+**Ask for it explicitly:** `pytest tests/integration/test_learning_loop_e2e.py -v -o addopts=""`
+**Open work:** give it a gate that runs it (a CI job on `-m integration`, or a nightly leg), so the loop is proved by a machine and not by memory. The audit's count was 8 tests; the file has 4.
 
 ---
 

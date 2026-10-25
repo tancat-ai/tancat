@@ -619,14 +619,6 @@ class JourneyScraper:
 
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 
-    def get_skipped_steps(self) -> list[dict]:
-        """Return steps that were skipped during the journey."""
-        return [e for e in self._context_log if e.get("event") == "step_skipped"]
-
-    def get_locator_warnings(self) -> list[dict]:
-        """Return locator-not-found events from the context log."""
-        return [e for e in self._context_log if e.get("event") == "locator_not_found"]
-
     @staticmethod
     def _list_available_elements(page: Any, limit: int = 10) -> list[dict]:
         """List clickable elements on the page for diagnostic purposes."""
