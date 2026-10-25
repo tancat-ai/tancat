@@ -304,6 +304,29 @@ What stays, deliberately: matching keywords to **really scraped** pages (`UrlRes
 read something that exists. Concepts still name the routes discovery looks for
 (`extract_route_concepts`); they never create an address.
 
+#### The arrival rule: never assert a page the browser was not seen to reach (owner, 2026-10-24)
+
+The owner's rule, in his words: **"if its not something a real user would have then its not
+accurate testing behaviour."** The navigation rule above decides which *addresses* may be used.
+This rule decides which *claims* may be made about them.
+
+A page-state assertion ("cart page loaded") becomes an arrival check
+(`expect(page).to_have_url(...)`). It may only be written when the run established the arrival:
+
+- **Trail journeys** (`placeholder_orchestrator._arrival_refusal`): the observed trail must show
+  the step after the last click/fill on a page *different* from the one that interaction ran on.
+  If it does not - no landing recorded, or the browser never left the page - the step becomes an
+  honest skip whose reason names exactly what was missing, including the interaction's own error
+  (`that step failed: ...`), so a broken click is never hidden behind a quiet skip.
+- **Trailless journeys** are a different contract (their assertions come from keyword resolution
+  and are checked at run time by the page-mismatch record), so the rule leaves them alone.
+- `_resolve_placeholder_for_page` takes `arrival_evidenced` (default `False`): the second, direct
+  arrival site can only assert a page when its caller says the arrival was observed.
+
+Before this rule, eval-002 and eval-006 shipped arrival checks naming the page the test had never
+left, because a failed cart click left the trail on the shop page and the check was written
+anyway - a test that fails, or passes, for the wrong reason.
+
 
 ### Phase 5: Prerequisite Injection
 `orchestrator.py` → `prerequisite_injector.py`

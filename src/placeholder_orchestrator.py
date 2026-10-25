@@ -673,6 +673,10 @@ class PlaceholderOrchestrator:
             last_description: str | None = None
             resolved_steps: list[str] = []
             deferred_asserts: list[dict[str, Any]] = []
+            # t-0890: the last interaction we emitted in THIS test, kept so a
+            # page-state assertion can prove the browser actually left the page
+            # that interaction ran on. None before any click/fill.
+            last_interaction: dict[str, Any] | None = None
 
             for step in journey.steps:
                 if current_url is None:
@@ -735,6 +739,14 @@ class PlaceholderOrchestrator:
                                 None,
                             )
                         )
+                        if proven_click:
+                            # t-0890: a proven click is an interaction - the
+                            # arrival after it must be observed, not assumed.
+                            last_interaction = {
+                                "description": description,
+                                "page": current_url,
+                                "error": obs.error,
+                            }
                         target_key = canon(obs.to_url)
                         if target_key:
                             current_url = target_key
@@ -797,8 +809,61 @@ class PlaceholderOrchestrator:
                                         resolved_url,
                                     )
                                     resolved_url = landing_key
+                            if not resolved_url and self._flow_store is not None and current_url:
+                                # AI-042: cross-site flow memory — learned navigation
+                                # shape can rescue a page-state assert when site
+                                # resolution finds nothing. It is still only a
+                                # CANDIDATE: the arrival rule below decides whether
+                                # it may be asserted.
+                                from src.flow_memory import flow_resolved_url
+
+                                flow_url = flow_resolved_url(
+                                    self._flow_store,
+                                    description=description,
+                                    from_url=current_url,
+                                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
+                                )
+                                if flow_url:
+                                    logger.info("Flow memory resolved URL assertion '%s' → %s", description, flow_url)
+                                    resolved_url = flow_url
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
+                                # t-0890 (t-0903 adds the first-step case): an
+                                # ARRIVAL may only name the page the browser was
+                                # OBSERVED on for this step. That covers both the
+                                # interaction case (the browser never left the
+                                # previous page) and the no-interaction case (the
+                                # assertion names a page the trail never saw the
+                                # browser on at all).
+                                # Only a journey the scraper actually walked can
+                                # judge an arrival: with no trail there is nothing
+                                # to evidence or refute (that mode's own contract
+                                # is the runtime page-mismatch record).
+                                refusal = (
+                                    self._arrival_refusal(description, last_interaction, obs, canon, resolved_url)
+                                    if trail_steps
+                                    else None
+                                )
+                                if refusal:
+                                    message = refusal.replace('"', "'")
+                                    logger.info("t-0890: arrival not asserted for '%s' - %s", description, refusal)
+                                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                                        (
+                                            placeholder.token,
+                                            action,
+                                            f'pytest.skip("page arrival not asserted: {message}")',
+                                            description,
+                                            fill_value,
+                                            current_url,
+                                            None,
+                                        )
+                                    )
+                                    strict_skipped_tokens.add(placeholder.token)
+                                    journey_unresolved[journey.test_name].append(description)
+                                    journey_unresolved_keys.setdefault(journey.test_name, set()).add(
+                                        (placeholder.line_number, placeholder.token)
+                                    )
+                                    continue
                                 line_resolutions.setdefault(placeholder.line_number, []).append(
                                     (
                                         placeholder.token,
@@ -811,35 +876,6 @@ class PlaceholderOrchestrator:
                                     )
                                 )
                                 continue
-                            # AI-042: flow-memory fallback for page-state asserts —
-                            # learned cross-site navigation shape can rescue the
-                            # URL when site-specific resolution finds nothing
-                            # (mirrors the same fallback in
-                            # ``_resolve_placeholder_for_current_page``).
-                            if self._flow_store is not None and current_url:
-                                from src.flow_memory import flow_resolved_url
-
-                                flow_url = flow_resolved_url(
-                                    self._flow_store,
-                                    description=description,
-                                    from_url=current_url,
-                                    scraped_urls=list(scraped_data.keys()) if isinstance(scraped_data, dict) else [],
-                                )
-                                if flow_url:
-                                    flow_url = normalize_url(flow_url)
-                                    logger.info("Flow memory resolved URL assertion '%s' → %s", description, flow_url)
-                                    line_resolutions.setdefault(placeholder.line_number, []).append(
-                                        (
-                                            placeholder.token,
-                                            action,
-                                            f'expect(page).to_have_url("{flow_url}")',
-                                            description,
-                                            fill_value,
-                                            current_url,
-                                            "url",
-                                        )
-                                    )
-                                    continue
                         # Defer element-based ASSERT for batch resolution.
                         deferred_asserts.append(
                             {
@@ -1012,6 +1048,15 @@ class PlaceholderOrchestrator:
                             last_description = description
                             selector_short = resolved_value.strip("'\"")
                             resolved_steps.append(f"{action}: {description} -> {selector_short}")
+                            # t-0890: remember what this interaction ran on, and
+                            # whether the trail recorded a failure for it, so an
+                            # arrival assertion after it can be checked (and a
+                            # broken click can be NAMED, never hidden).
+                            last_interaction = {
+                                "description": description,
+                                "page": current_url,
+                                "error": (obs.error if obs is not None else None),
+                            }
 
                     if trail_steps:
                         # AI-052: advance the verified anchor on OBSERVED,
@@ -1429,6 +1474,7 @@ class PlaceholderOrchestrator:
         resolved_steps: list[str] | None = None,
         strict_scope: bool = False,
         matched_out: dict[str, Any] | None = None,
+        arrival_evidenced: bool = False,
     ) -> tuple[str, str | None, str | None]:
         """Resolve one placeholder using the active page first, then fall back to known pages.
 
@@ -1443,6 +1489,11 @@ class PlaceholderOrchestrator:
             matched_out: AI-052 — optional dict; when provided, receives the matched
                 element under key ``"element"`` so callers can compare their own
                 choice against the trail's proven selector.
+            arrival_evidenced: t-0890 — True only when the CALLER has observed
+                that the browser reached the page this page-state assertion would
+                name. Default False: a page-state arrival is never asserted from
+                keyword resolution alone, because naming a page the run never
+                established is the same class of claim as a guessed address.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
@@ -1521,6 +1572,25 @@ class PlaceholderOrchestrator:
         # B-021: For ASSERT placeholders describing page state ("home page visible",
         # "dress products page"), resolve as URL assertions instead of element matches.
         if action == "ASSERT" and self._is_page_state_assertion(description):
+            if not arrival_evidenced:
+                # t-0890 / t-0903: the SECOND arrival site (the sequential resolver
+                # is the first and the only production one). No production path
+                # routes a page-state ASSERT here today, so this guard does not fire
+                # in production - it is defence in depth, kept rather than deleted
+                # because deleting it would let any future caller name a page
+                # nobody observed.
+                #
+                # The caller that WOULD pass arrival_evidenced=True: the
+                # batch/deferred resolver (_batch_resolve_deferred_asserts), if it
+                # ever carries the trail's ObservedStep per placeholder - that is
+                # what would let it evidence a landing. Until then it stays False,
+                # and the skip message names the flag so such a caller is told what
+                # to do instead of being trapped.
+                reason = (
+                    f"page arrival not asserted: no observed landing for '{description}' (arrival_evidenced=False)"
+                ).replace('"', "'")
+                logger.info("t-0890: %s", reason)
+                return f'pytest.skip("{reason}")', None, None
             resolved_url = self.resolver.resolve_url(description, scraped_data, known_urls=list(scraped_data.keys()))
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
@@ -1962,6 +2032,86 @@ class PlaceholderOrchestrator:
                 if actual:
                     return actual
         return last_verified_url
+
+    @staticmethod
+    def _arrival_refusal(
+        description: str,
+        last_interaction: dict[str, Any] | None,
+        obs: Any,
+        canon: Any,
+        resolved_url: str | None = None,
+    ) -> str | None:
+        """Why a page-state ARRIVAL must not be asserted, or ``None`` if it may.
+
+        t-0890 (owner's rule, 2026-10-24). An arrival assertion answers "the test
+        got to this page". It may only be written when the run established that:
+        the trail must show the step AFTER the last interaction on a page
+        different from the one the interaction ran on. Otherwise the assertion
+        would name the page the browser never left - a claim the run never
+        established, the same class of error as a guessed address.
+
+        Returns the reason (a short phrase naming exactly what was missing), or
+        ``None`` when the arrival is evidenced and may be asserted.
+
+        Deliberately NOT a failure: when the interaction itself failed, the
+        reason NAMES that failure so it stays visible (``that step failed: ...``)
+        instead of being swallowed by a silent skip.
+
+        Scope: TRAIL journeys only (the caller passes ``obs`` from a real trail).
+        A journey with no observed trail at all is a different contract - its
+        page-state assertions come from keyword resolution and are already
+        checked at run time by the page-mismatch record - so this rule leaves it
+        alone rather than turning its assertions into skips wholesale.
+        """
+        # The page the trail observed for THIS step is the only arrival a test may
+        # name. It comes from the observation itself (not the scrape inventory):
+        # a URL the browser was really on is evidence even if it was never scraped.
+        observed: str | None = None
+        if obs is not None:
+            to_url = str(getattr(obs, "to_url", "") or "").strip()
+            if to_url:
+                observed = str(canon(to_url) or to_url)
+
+        if last_interaction is None:
+            # Nothing has interacted yet, so no navigation we emitted and no click
+            # can account for the browser being anywhere but the page the trail
+            # observed. Naming any other page is still a claim the run never
+            # established - the first-step hole (t-0903).
+            if observed is None:
+                return f"the browser's page was never recorded for '{description}'"
+            if resolved_url and normalize_url(resolved_url) != normalize_url(observed):
+                return (
+                    f"'{normalize_url(resolved_url)}' is not the page the browser was observed on "
+                    f"('{normalize_url(observed)}'), and nothing has navigated yet in this test"
+                )
+            return None
+
+        interaction = str(last_interaction.get("description") or "the step")
+        page = str(last_interaction.get("page") or "").strip()
+        error = str(last_interaction.get("error") or "").strip()
+
+        landing = observed
+
+        if landing is None:
+            reason = f"no observed landing after '{interaction}' - the browser's next page was never recorded"
+        elif page and normalize_url(landing) == normalize_url(page):
+            reason = f"the browser was not seen leaving '{page}' after '{interaction}'"
+        else:
+            if resolved_url and normalize_url(resolved_url) != normalize_url(landing):
+                reason = (
+                    f"'{normalize_url(resolved_url)}' is not the page the browser was observed on "
+                    f"('{normalize_url(landing)}') after '{interaction}'"
+                )
+                if error:
+                    reason += f" (that step failed: {error})"
+                return reason
+            return None
+
+        if error:
+            # Keep the failure in the reason: a skip that hides a broken click
+            # would be worse than the wrong assertion it replaces.
+            reason += f" (that step failed: {error})"
+        return reason
 
     @staticmethod
     def _map_trail_to_placeholders(
