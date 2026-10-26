@@ -11,13 +11,21 @@ import logging
 import os
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from src.intent_matcher import IntentMatcher
+from src.page_identity import same_page
 from src.placeholder_scorers import PlaceholderScorer
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
+
+# A result/status page is reached by an action, not usually by a nav link.
+# When the description names one, a link must name it too before the link can
+# win; otherwise the parent page's "Transfer" link would beat the success page.
+_RESULT_WORDS = frozenset(
+    {"success", "successful", "confirmation", "confirmed", "error", "failure", "failed", "receipt", "message", "thank"}
+)
 
 
 def _css_escape_id(value: str) -> str:
@@ -504,13 +512,135 @@ class PlaceholderResolver:
                 discovered.add(absolute)
         return discovered
 
+    @staticmethod
+    def _link_text(element: dict[str, Any]) -> str:
+        """Return the words a human sees on a link."""
+        return " ".join(
+            str(element.get(key, "")) for key in ("text", "aria_label", "accessible_name", "name", "title")
+        ).strip()
+
+    def _links_on_page(
+        self,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, Any]]],
+    ) -> list[tuple[str, str]]:
+        """Return (absolute URL, link text) for the links on the current page.
+
+        Only links the browser could click from ``current_url`` are returned:
+        anchors with an href, same origin, fragment removed. A page's other
+        elements are not page addresses.
+        """
+        if not current_url:
+            return []
+        elements = pages_data.get(current_url)
+        if elements is None:
+            for url, candidate_elements in pages_data.items():
+                if same_page(current_url, url):
+                    elements = candidate_elements
+                    break
+        if not elements:
+            return []
+
+        origin = urlparse(current_url).netloc
+        by_url: dict[str, list[str]] = {}
+        for element in elements:
+            href = str(element.get("href") or element.get("raw_href") or "").strip()
+            if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                continue
+            try:
+                absolute = urljoin(current_url, href)
+            except ValueError:
+                continue
+            parsed = urlparse(absolute)
+            if not parsed.netloc or parsed.netloc != origin:
+                continue
+            clean = urlunparse(parsed._replace(fragment=""))
+            by_url.setdefault(clean, []).append(self._link_text(element))
+        return [(url, " ".join(texts).strip()) for url, texts in by_url.items()]
+
+    def resolve_url_from_links(
+        self,
+        description: str,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, Any]]],
+        trail_url: str | None = None,
+    ) -> str | None:
+        """Pick a page address from the current page's links, then the trail.
+
+        This is the only page picker used by the production GOTO and page-state
+        ASSERT paths. The order is deliberate (owner's design, 2026-10-26):
+
+        1. a link on the page the browser is on before the step;
+        2. the trail's recorded landing for the step;
+        3. None, which the caller turns into an honest skip.
+
+        There is NO fallback to the full scraped page list. The old full-list
+        scoring is what named the dashboard for a transfer step. Path words rank
+        link candidates only: they break a tie when visible text matches, and
+        they can name an icon link whose target path is the only signal. They
+        never reach across pages.
+        """
+        from src.url_resolver import normalize_url
+
+        desc_words = set(SemanticMatcher.get_words(description))
+        root_words = desc_words & {"home", "start", "landing", "store"}
+        desc_result_words = desc_words & _RESULT_WORDS
+
+        text_best_url: str | None = None
+        text_best_key: tuple[int, int, int, int, str] | None = None
+        path_best_url: str | None = None
+        path_best_key: tuple[int, int, int, str] | None = None
+        for url, text in self._links_on_page(current_url, pages_data):
+            parsed = urlparse(url)
+            path = (parsed.path or "/").strip("/")
+            clean_path = path.rsplit(".", 1)[0]
+            path_words = set(SemanticMatcher.get_words(clean_path.replace("/", " "), expand_aliases=False))
+            text_words = set(SemanticMatcher.get_words(text, expand_aliases=False))
+
+            # A result/status step is not the parent page's nav link.
+            if desc_result_words and not (desc_result_words & text_words):
+                continue
+
+            text_matches = len(desc_words & text_words)
+            if not text_matches and root_words and not clean_path:
+                text_matches = 1
+            path_matches = len(desc_words & path_words)
+
+            if text_matches:
+                # Visible text wins; path words only rank links that match.
+                key = (-text_matches, -path_matches, len(path_words), len(clean_path), url)
+                if text_best_key is None or key < text_best_key:
+                    text_best_key = key
+                    text_best_url = url
+            elif path_matches:
+                # An icon link with no accessible text still carries its target
+                # path (the cart icon's /cart.html). Path words rank only these
+                # link candidates; they never reach across pages.
+                path_key = (-path_matches, len(path_words), len(clean_path), url)
+                if path_best_key is None or path_key < path_best_key:
+                    path_best_key = path_key
+                    path_best_url = url
+
+        if text_best_url is not None:
+            return normalize_url(text_best_url)
+        if path_best_url is not None:
+            return normalize_url(path_best_url)
+        if trail_url:
+            return normalize_url(trail_url)
+        return None
+
     def resolve_url(
         self,
         description: str,
         pages_data: dict[str, list[dict[str, Any]]],
         known_urls: list[str] | None = None,
     ) -> str | None:
-        """Resolve navigation placeholders to the best matching scraped URL.
+        """Resolve against an explicit URL list or page map.
+
+        This is the legacy resolver, kept for callers that pass only the
+        human's URLs (``pages_data={}`` plus ``known_urls``). The production
+        GOTO and page-state ASSERT paths use :meth:`resolve_url_from_links` so
+        they cannot reach across the full scraped page list.
 
         First checks if description is a URL, then checks known_urls,
         then matches against already scraped pages.

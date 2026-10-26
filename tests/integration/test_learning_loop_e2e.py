@@ -496,6 +496,9 @@ class _NullResolver:
     def resolve_url(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
         return None
 
+    def resolve_url_from_links(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
+        return None
+
 
 def _real_flow_store() -> Any:
     """The REAL FlowMemoryStore loaded from evidence/flow_memory.json."""

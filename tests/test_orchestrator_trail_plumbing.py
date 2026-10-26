@@ -51,7 +51,12 @@ def test_scrape_journeys_statefully_returns_trail() -> None:
     # invented - the assertion passed either way. It answers None now, so
     # "http://b" can only come from the observed trail.
     orchestrator._placeholder_orchestrator.resolver = type(  # type: ignore[attr-defined]
-        "R", (), {"resolve_url": staticmethod(lambda *a, **kw: None)}
+        "R",
+        (),
+        {
+            "resolve_url": staticmethod(lambda *a, **kw: None),
+            "resolve_url_from_links": staticmethod(lambda *a, **kw: None),
+        },
     )()
 
     known_trail = _make_trail()

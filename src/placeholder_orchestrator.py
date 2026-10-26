@@ -773,10 +773,11 @@ class PlaceholderOrchestrator:
                         # resolve immediately (no element matching or LLM needed).
                         if self._is_page_state_assertion(description):
                             producer = "keyword"
-                            resolved_url = self.resolver.resolve_url(
+                            resolved_url = self.resolver.resolve_url_from_links(
                                 description,
+                                current_url,
                                 scraped_data,
-                                known_urls=list(scraped_data.keys()),
+                                trail_url=obs.to_url if obs is not None and obs.to_url else None,
                             )
                             # Post-login assertions ("logged in", "login
                             # successful") must resolve to the page AFTER auth -
@@ -1562,6 +1563,7 @@ class PlaceholderOrchestrator:
         strict_scope: bool = False,
         matched_out: dict[str, Any] | None = None,
         arrival_evidenced: bool = False,
+        trail_url: str | None = None,
     ) -> tuple[str, str | None, str | None]:
         """Resolve one placeholder using the active page first, then fall back to known pages.
 
@@ -1616,11 +1618,15 @@ class PlaceholderOrchestrator:
                 logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
                 return repr(url_from_resolver), url_from_resolver, None
 
-            # Step 2: Try PlaceholderResolver — GOTO navigates anywhere, so
-            # search ALL verified pages, not just the current page's scope.
-            # Strict: an unmatched description is never answered with an
-            # arbitrary page (that would be a guessed destination).
-            resolved_url = self.resolver.resolve_url(description, scraped_data)
+            # Step 2: pick a page from the links on the current page, then the
+            # trail's landing. Never search the full scraped page list: that
+            # full-list guess is what named the dashboard for a transfer step.
+            resolved_url = self.resolver.resolve_url_from_links(
+                description,
+                current_url,
+                scraped_data,
+                trail_url=trail_url,
+            )
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
@@ -1678,7 +1684,12 @@ class PlaceholderOrchestrator:
                 ).replace('"', "'")
                 logger.info("t-0890: %s", reason)
                 return f'pytest.skip("{reason}")', None, None
-            resolved_url = self.resolver.resolve_url(description, scraped_data, known_urls=list(scraped_data.keys()))
+            resolved_url = self.resolver.resolve_url_from_links(
+                description,
+                current_url,
+                scraped_data,
+                trail_url=trail_url,
+            )
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
@@ -2481,12 +2492,15 @@ class PlaceholderOrchestrator:
             first_step = journey.steps[0]
             for placeholder in first_step.placeholders:
                 if placeholder.action in {"GOTO", "URL"}:
-                    # t-0877: a first-step GOTO resolves only to a page that is
-                    # really known. There is no "whichever page is first"
-                    # fallback left to reach - resolve_url returns None instead.
-                    resolved_url = self.resolver.resolve_url(
+                    # The first step has no page behind it yet: the page the
+                    # browser is on is the human's seed. Read that page's links
+                    # first; if the GOTO is not a link there, the normal start
+                    # page selection below still names the entry page.
+                    seed = seed_urls[0] if seed_urls else None
+                    resolved_url = self.resolver.resolve_url_from_links(
                         placeholder.description,
-                        self._page_requirements_to_pages(page_requirements, scraped_data) or scraped_data,
+                        seed,
+                        scraped_data,
                     )
                     if resolved_url:
                         return resolved_url
