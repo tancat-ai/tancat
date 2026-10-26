@@ -16,6 +16,7 @@ import asyncio
 
 import pytest
 
+from src.pipeline_models import PlaceholderUse, TestJourney, TestStep
 from src.placeholder_orchestrator import PlaceholderOrchestrator
 from src.placeholder_resolver import PlaceholderResolver
 
@@ -168,3 +169,87 @@ def test_the_index_page_also_resolves_through_the_trail_when_no_link_names_it() 
     resolver = PlaceholderResolver()
 
     assert resolver.resolve_url_from_links("home page loaded", TRANSFER, _pages(), trail_url=HOME) == HOME
+
+
+def _page_state_assert_journey(description: str) -> tuple[str, TestJourney]:
+    token = "{{ASSERT:" + description + "}}"
+    raw = f"    act('{token}')"
+    skeleton = "def test_assert(page):\n" + raw + "\n"
+    journey = TestJourney(
+        test_name="test_assert",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line=raw,
+                placeholders=[
+                    PlaceholderUse(
+                        token=token,
+                        action="ASSERT",
+                        description=description,
+                        line_number=2,
+                        raw_line=raw,
+                    )
+                ],
+            )
+        ],
+    )
+    return skeleton, journey
+
+
+def test_page_state_assert_with_no_link_or_trail_skips_instead_of_cross_page_element() -> None:
+    """The reviewer's exact probe: #dash-title exists only on dashboard.html."""
+    orchestrator = PlaceholderOrchestrator()
+    skeleton, journey = _page_state_assert_journey("dashboard loaded")
+    data = {
+        HOME: [],
+        DASH: [{"selector": "#dash-title", "text": "Dashboard", "tag": "h1"}],
+    }
+
+    code = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[HOME],
+            scraped_data=data,
+        )
+    )
+
+    assert "pytest.skip" in code, code
+    assert "#dash-title" not in code, code
+
+
+def test_page_state_assert_never_falls_through_to_the_full_list_resolver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No link and no trail must stop at the skip, not reach element resolution."""
+
+    async def _forbidden(*args: object, **kwargs: object) -> tuple[str, str | None, str | None]:
+        raise AssertionError("the page-state ASSERT fell through to element resolution")
+
+    def _forbidden_url(*args: object, **kwargs: object) -> str | None:
+        raise AssertionError("the old full-list resolve_url was consulted")
+
+    orchestrator = PlaceholderOrchestrator()
+    skeleton, journey = _page_state_assert_journey("dashboard loaded")
+    data = {
+        HOME: [],
+        DASH: [{"selector": "#dash-title", "text": "Dashboard", "tag": "h1"}],
+    }
+    monkeypatch.setattr(orchestrator, "_resolve_placeholder_for_page", _forbidden)
+    monkeypatch.setattr(orchestrator.resolver, "resolve_url", _forbidden_url)
+
+    code = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[HOME],
+            scraped_data=data,
+        )
+    )
+
+    assert "pytest.skip" in code, code
+    assert "#dash-title" not in code, code

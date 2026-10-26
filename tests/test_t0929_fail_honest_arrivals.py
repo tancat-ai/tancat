@@ -39,11 +39,12 @@ def _el(selector: str, text: str, **extra: Any) -> dict[str, Any]:
     return element
 
 
-def _scraped() -> dict[str, list[dict[str, Any]]]:
+def _scraped(checkout_url: str = CART) -> dict[str, list[dict[str, Any]]]:
     return {
         SHOP: [
             _el("#submit-order", "Submit order", tag="button", role="button"),
             _el("#cancel", "Cancel", tag="button", role="button"),
+            _el(f"a[href='{checkout_url}']", "Checkout", tag="a", role="link", href=checkout_url),
         ],
         CART: [_el("h1", "Checkout", tag="h1")],
     }
@@ -110,7 +111,7 @@ def _resolve_custom(candidate_url: str, observed_url: str, user_story: str = "")
     """
     skeleton, journey = _journey()
     data = {
-        SHOP: _scraped()[SHOP],
+        SHOP: _scraped(candidate_url)[SHOP],
         candidate_url: [_el("h1", "Checkout", tag="h1")],
     }
     trail = ObservedTrail(
@@ -228,6 +229,8 @@ def _run_emitted(code: str, page: Any, tracker: _FakeTracker) -> None:
 
 
 def test_candidate_vs_observed_checkout_failure_names_both_pages() -> None:
+    """The trail has no landing (the click stayed put), so a link candidate is
+    still an honest failure naming both the link target and the observed page."""
     code = _resolve(_trail(navigated=False))
     tracker = _FakeTracker()
 

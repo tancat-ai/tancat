@@ -820,6 +820,34 @@ class PlaceholderOrchestrator:
                                     logger.info("Flow memory resolved URL assertion '%s' -> %s", description, flow_url)
                                     resolved_url = flow_url
                                     producer = "flow_memory"
+                            if not resolved_url:
+                                # t-0968: the page-state route stops here. With no
+                                # link on the current page and no trail landing,
+                                # there is no page address to assert. Falling
+                                # through to element resolution would let a
+                                # same-word element on ANOTHER page become the
+                                # step - the full-page guess this design removes.
+                                reason = (
+                                    f"no link on '{current_url}' and no trail landing for '{description}'"
+                                ).replace('"', "'")
+                                logger.info("t-0968: page arrival not asserted for '%s' - %s", description, reason)
+                                line_resolutions.setdefault(placeholder.line_number, []).append(
+                                    (
+                                        placeholder.token,
+                                        action,
+                                        f'pytest.skip("page arrival not asserted: {reason}")',
+                                        description,
+                                        fill_value,
+                                        current_url,
+                                        None,
+                                    )
+                                )
+                                strict_skipped_tokens.add(placeholder.token)
+                                journey_unresolved[journey.test_name].append(description)
+                                journey_unresolved_keys.setdefault(journey.test_name, set()).add(
+                                    (placeholder.line_number, placeholder.token)
+                                )
+                                continue
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
                                 # t-0890 (t-0903 adds the first-step case): an
@@ -1583,6 +1611,9 @@ class PlaceholderOrchestrator:
                 name. Default False: a page-state arrival is never asserted from
                 keyword resolution alone, because naming a page the run never
                 established is the same class of claim as a guessed address.
+            trail_url: the trail landing for a page-state ASSERT. A GOTO with a
+                trail landing is consumed earlier by the observed-target block
+                (t-0847), so production GOTO does not need it here.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)

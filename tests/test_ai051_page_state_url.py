@@ -145,10 +145,14 @@ def test_no_trail_and_no_current_page_link_skips_honestly() -> None:
         ],
     )
     # The base page has no link to the home page and there is no trail, so the
-    # step is unresolved. The old full-list fallback would have guessed the base.
-    result = _resolve(skeleton, [journey], _login_data(), None)
+    # step is unresolved. A matching element on the other page must not be
+    # reached by the old full-list element resolver either.
+    data = _login_data()
+    data[INVENTORY].append(_el("#home-title", "Home page loaded", tag="h1"))
+    result = _resolve(skeleton, [journey], data, None)
     assert "pytest.skip" in result
     assert "to_have_url" not in result
+    assert "#home-title" not in result
 
 
 def test_assert_on_scraped_landing_stays_on_landing() -> None:
