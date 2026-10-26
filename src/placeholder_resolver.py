@@ -544,17 +544,37 @@ class PlaceholderResolver:
         def _matches_root() -> bool:
             return bool(desc_tokens & {"home", "start", "landing", "store"})
 
-        # 2. Match against known URLs (provided by orchestrator)
+        # 2. Match against known URLs by PATH WORD, before element text.
+        # A page's own URL is stronger evidence than a word on another page:
+        # the banking dashboard links to "Transfer" and "Bill Payments", and
+        # the sign-in page says "transfer money, and pay bills". Scoring those
+        # page bodies first named the dashboard/index for a transfer or
+        # payments arrival. Prefer the most path words, then the shorter path,
+        # so ``transfer`` beats ``transfer_success`` on a bare transfer step.
+        desc_words = set(SemanticMatcher.get_words(description))
         if known_urls:
+            path_best_url: str | None = None
+            path_best_key: tuple[int, int, int, str] | None = None
             for url in known_urls:
                 parsed = urlparse(url)
-                path_norm = (parsed.path or "/").lower().replace("/", " ")
-                if not path_norm.strip():
+                path = (parsed.path or "/").strip("/")
+                clean_path = path.rsplit(".", 1)[0]
+                if not clean_path:
                     if _matches_root():
                         return url
                     continue
-                if desc_norm in path_norm or path_norm in desc_norm:
-                    return url
+                path_words = set(SemanticMatcher.get_words(clean_path.replace("/", " "), expand_aliases=False))
+                if not path_words:
+                    continue
+                matched = len(path_words & desc_words)
+                if matched == 0:
+                    continue
+                key = (-matched, len(path_words), len(clean_path), url)
+                if path_best_key is None or key < path_best_key:
+                    path_best_key = key
+                    path_best_url = url
+            if path_best_url is not None:
+                return path_best_url
 
         # 3. Discover URLs from anchor hrefs in already-scraped pages.
         #    Links like <a href="./cart.html"> on inventory.html are
@@ -576,7 +596,6 @@ class PlaceholderResolver:
         if not pages_data:
             return None
 
-        desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
             return None
 

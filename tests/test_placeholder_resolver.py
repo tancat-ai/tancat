@@ -982,3 +982,113 @@ def test_resolve_url_single_word_keywords_unchanged() -> None:
     resolver, pages, known = _three_page_fixture()
     assert resolver.resolve_url("cart", pages, known_urls=known) == "https://automationexercise.com/view_cart"
     assert resolver.resolve_url("products", pages, known_urls=known) == "https://automationexercise.com/products"
+
+
+# ---------------------------------------------------------------------------
+# Page arrival: the page's own URL beats another page's body text
+# ---------------------------------------------------------------------------
+
+
+def _banking_pages() -> dict[str, list[dict[str, str]]]:
+    """The banking mock's shape: dashboard and sign-in both name the destination."""
+    return {
+        "http://localhost:8781/index.html": [
+            {
+                "selector": "p",
+                "text": "Sign in to view your accounts, transfer money, and pay bills.",
+                "tag": "p",
+                "role": "",
+            }
+        ],
+        "http://localhost:8781/dashboard.html": [
+            {
+                "selector": "#pay-bill-link",
+                "text": "Bill Payments",
+                "tag": "a",
+                "role": "link",
+            },
+            {
+                "selector": 'a[href="/transfer.html"]',
+                "text": "Transfer",
+                "tag": "a",
+                "role": "link",
+            },
+        ],
+        "http://localhost:8781/transfer.html": [
+            {"selector": "#amount", "text": "amount", "tag": "input", "role": "textbox"}
+        ],
+        "http://localhost:8781/payments.html": [
+            {"selector": "#payment-amount", "text": "payment amount", "tag": "input", "role": "textbox"}
+        ],
+        "http://localhost:8781/transfer_success.html?amount=100": [
+            {"selector": "#transfer-success-title", "text": "Transfer successful", "tag": "h2", "role": ""}
+        ],
+        "http://localhost:8781/payment_success.html?amount=50": [
+            {"selector": "#payment-success-title", "text": "Payment successful", "tag": "h2", "role": ""}
+        ],
+    }
+
+
+def test_page_arrival_prefers_its_own_path_over_other_page_text() -> None:
+    """t-0961: 'transfer page loaded' is transfer.html, not index.html.
+
+    The sign-in page says 'transfer money' and the dashboard links to
+    'Transfer'/'Bill Payments'. Body text on another page must not beat the
+    destination page's own path.
+    """
+    resolver = PlaceholderResolver(match_threshold=1)
+    pages = _banking_pages()
+
+    assert (
+        resolver.resolve_url("transfer page loaded", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/transfer.html"
+    )
+    assert (
+        resolver.resolve_url("bill payments page loaded", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/payments.html"
+    )
+
+
+def test_goto_prefers_its_own_path_over_other_page_text() -> None:
+    """The GOTO forms used by eval-008 name the landed page, not the dashboard."""
+    resolver = PlaceholderResolver(match_threshold=1)
+    pages = _banking_pages()
+
+    assert (
+        resolver.resolve_url("go to the transfer page", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/transfer.html"
+    )
+    assert (
+        resolver.resolve_url("navigate to bill payments", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/payments.html"
+    )
+
+
+def test_landing_that_really_is_the_index_page_still_resolves_index() -> None:
+    """The fix must not push every page arrival off the entry page."""
+    resolver = PlaceholderResolver(match_threshold=1)
+    pages = _banking_pages()
+
+    assert (
+        resolver.resolve_url("home page loaded", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/index.html"
+    )
+    assert (
+        resolver.resolve_url("bank sign-in page loaded", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/index.html"
+    )
+
+
+def test_success_pages_are_not_confused_with_their_parent_page() -> None:
+    """A success arrival must name the success page, not transfer/payments."""
+    resolver = PlaceholderResolver(match_threshold=1)
+    pages = _banking_pages()
+
+    assert (
+        resolver.resolve_url("transfer success message", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/transfer_success.html?amount=100"
+    )
+    assert (
+        resolver.resolve_url("payment success message", pages, known_urls=list(pages.keys()))
+        == "http://localhost:8781/payment_success.html?amount=50"
+    )
