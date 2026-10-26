@@ -821,12 +821,36 @@ class PlaceholderOrchestrator:
                                     resolved_url = flow_url
                                     producer = "flow_memory"
                             if not resolved_url:
-                                # t-0968: the page-state route stops here. With no
-                                # link on the current page and no trail landing,
-                                # there is no page address to assert. Falling
-                                # through to element resolution would let a
-                                # same-word element on ANOTHER page become the
-                                # step - the full-page guess this design removes.
+                                # t-0970: the link picker had nothing, but the
+                                # current page may still hold the element this
+                                # page-state ASSERT names. Scope the element
+                                # fallback to the current page only; it must not
+                                # reach across pages.
+                                scoped_value, scoped_next, scoped_at = await self._resolve_placeholder_for_page(
+                                    action=action,
+                                    description=description,
+                                    current_url=current_url,
+                                    scraped_data=scraped_data,
+                                    scraped_errors=errors,
+                                    previous_selector=last_selector,
+                                    previous_description=last_description,
+                                    resolved_steps=resolved_steps,
+                                    strict_scope=True,
+                                    page_state_element_fallback=True,
+                                )
+                                if "pytest.skip" not in scoped_value:
+                                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                                        (
+                                            placeholder.token,
+                                            action,
+                                            scoped_value,
+                                            description,
+                                            fill_value,
+                                            current_url,
+                                            scoped_at,
+                                        )
+                                    )
+                                    continue
                                 reason = (
                                     f"no link on '{current_url}' and no trail landing for '{description}'"
                                 ).replace('"', "'")
@@ -1592,6 +1616,7 @@ class PlaceholderOrchestrator:
         matched_out: dict[str, Any] | None = None,
         arrival_evidenced: bool = False,
         trail_url: str | None = None,
+        page_state_element_fallback: bool = False,
     ) -> tuple[str, str | None, str | None]:
         """Resolve one placeholder using the active page first, then fall back to known pages.
 
@@ -1619,12 +1644,14 @@ class PlaceholderOrchestrator:
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
 
         if action in {"GOTO", "URL"}:
-            # t-0847: a navigation is only valid when its destination is
-            # KNOWN. The known sources, in order:
+            # t-0847 / t-0970: a navigation is only valid when its destination
+            # is KNOWN. The known sources, in order:
             #   1. the URL the human gave us (the entry page they named, or
             #      a URL that is really in the input),
-            #   2. the keyword map built from the story's route concepts,
-            #   3. a page the pipeline scraped whose identity matches.
+            #   2. a link on the page the browser is on before the step,
+            #   3. the trail's landing for the step,
+            #   4. the story's keyword map, only when there is no current page
+            #      to read links from.
             # With none of them the step is an honest unresolved: a guess
             # would type a URL nobody gave us and leave the cursor on the
             # stale page.
@@ -1642,14 +1669,7 @@ class PlaceholderOrchestrator:
                     logger.debug("Provided entry page matched '%s' -> %s", description, entry)
                     return repr(entry), entry, None
 
-            # Step 1: Try UrlResolver
-            url_from_resolver = self.url_resolver.resolve(description)
-            if url_from_resolver:
-                url_from_resolver = normalize_url(url_from_resolver)
-                logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
-                return repr(url_from_resolver), url_from_resolver, None
-
-            # Step 2: pick a page from the links on the current page, then the
+            # Step 1: pick a page from the links on the current page, then the
             # trail's landing. Never search the full scraped page list: that
             # full-list guess is what named the dashboard for a transfer step.
             resolved_url = self.resolver.resolve_url_from_links(
@@ -1661,6 +1681,17 @@ class PlaceholderOrchestrator:
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
+
+            # Step 2: the story's keyword map may answer only when there is no
+            # current page to read links from. A page that exists but has no
+            # matching link is not licence to take a whole-site mapping.
+            has_current_page = bool(current_url and any(_same_page(current_url, url) for url in scraped_data))
+            if not has_current_page:
+                url_from_resolver = self.url_resolver.resolve(description)
+                if url_from_resolver:
+                    url_from_resolver = normalize_url(url_from_resolver)
+                    logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
+                    return repr(url_from_resolver), url_from_resolver, None
 
             # Step 2.5 (AI-042) used to sit here: cross-site flow memory, a
             # learned transition from an earlier run, rescuing an
@@ -1695,7 +1726,7 @@ class PlaceholderOrchestrator:
 
         # B-021: For ASSERT placeholders describing page state ("home page visible",
         # "dress products page"), resolve as URL assertions instead of element matches.
-        if action == "ASSERT" and self._is_page_state_assertion(description):
+        if action == "ASSERT" and self._is_page_state_assertion(description) and not page_state_element_fallback:
             if not arrival_evidenced:
                 # t-0890 / t-0903: the SECOND arrival site (the sequential resolver
                 # is the first and the only production one). No production path

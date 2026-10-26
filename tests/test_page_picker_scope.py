@@ -13,6 +13,7 @@ tie-break among links whose visible text already matches.
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -219,15 +220,45 @@ def test_page_state_assert_with_no_link_or_trail_skips_instead_of_cross_page_ele
 
     assert "pytest.skip" in code, code
     assert "#dash-title" not in code, code
+    assert "no link on" in code, code
+    assert "no trail landing" in code, code
 
 
-def test_page_state_assert_never_falls_through_to_the_full_list_resolver(
+def test_page_state_assert_element_on_the_current_page_still_acts() -> None:
+    """The fallback is scoped, not deleted: a same-page element must act."""
+    orchestrator = PlaceholderOrchestrator()
+    skeleton, journey = _page_state_assert_journey("dashboard loaded")
+    data = {DASH: [{"selector": "#dash-title", "text": "Dashboard", "tag": "h1"}]}
+
+    code = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[DASH],
+            scraped_data=data,
+        )
+    )
+
+    assert "#dash-title" in code, code
+    assert "pytest.skip" not in code, code
+
+
+def test_page_state_assert_fallback_is_scoped_to_the_current_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No link and no trail must stop at the skip, not reach element resolution."""
+    """The element fallback may run, but only with strict current-page scope."""
 
-    async def _forbidden(*args: object, **kwargs: object) -> tuple[str, str | None, str | None]:
-        raise AssertionError("the page-state ASSERT fell through to element resolution")
+    calls: list[dict[str, Any]] = []
+    orchestrator_resolve = PlaceholderOrchestrator._resolve_placeholder_for_page
+
+    async def _scoped_only(
+        self: PlaceholderOrchestrator, *args: Any, **kwargs: Any
+    ) -> tuple[str, str | None, str | None]:
+        calls.append(kwargs)
+        assert kwargs.get("strict_scope") is True, kwargs
+        assert kwargs.get("page_state_element_fallback") is True, kwargs
+        return await orchestrator_resolve(self, *args, **kwargs)
 
     def _forbidden_url(*args: object, **kwargs: object) -> str | None:
         raise AssertionError("the old full-list resolve_url was consulted")
@@ -238,7 +269,7 @@ def test_page_state_assert_never_falls_through_to_the_full_list_resolver(
         HOME: [],
         DASH: [{"selector": "#dash-title", "text": "Dashboard", "tag": "h1"}],
     }
-    monkeypatch.setattr(orchestrator, "_resolve_placeholder_for_page", _forbidden)
+    monkeypatch.setattr(PlaceholderOrchestrator, "_resolve_placeholder_for_page", _scoped_only)
     monkeypatch.setattr(orchestrator.resolver, "resolve_url", _forbidden_url)
 
     code = asyncio.run(
@@ -251,5 +282,90 @@ def test_page_state_assert_never_falls_through_to_the_full_list_resolver(
         )
     )
 
+    assert calls, "the scoped element fallback was not tried"
     assert "pytest.skip" in code, code
     assert "#dash-title" not in code, code
+
+
+def test_goto_with_no_link_or_trail_does_not_take_the_keyword_map_page() -> None:
+    orchestrator = PlaceholderOrchestrator(starting_url=HOME)
+    orchestrator.url_resolver.build_mapping(
+        keywords=["transfer"],
+        scraped_urls=[HOME, TRANSFER],
+        seed_url=HOME,
+        concepts=["transfer"],
+    )
+    data: dict[str, list[dict[str, str]]] = {HOME: [], TRANSFER: []}
+
+    resolved, next_url, _assertion = asyncio.run(
+        orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
+            action="GOTO",
+            description="go to the transfer page",
+            current_url=HOME,
+            scraped_data=data,
+        )
+    )
+
+    assert next_url is None, resolved
+    assert resolved.startswith("pytest.skip("), resolved
+    assert TRANSFER not in resolved
+
+
+def test_a_link_wins_over_the_keyword_map() -> None:
+    orchestrator = PlaceholderOrchestrator(starting_url=HOME)
+    orchestrator.url_resolver.build_mapping(
+        keywords=["transfer"],
+        scraped_urls=[HOME, HIDDEN],
+        seed_url=HOME,
+        concepts=["transfer"],
+    )
+    data = {DASH: _pages()[DASH], TRANSFER: [], HIDDEN: []}
+
+    resolved, next_url, _assertion = asyncio.run(
+        orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
+            action="GOTO",
+            description="go to the transfer page",
+            current_url=DASH,
+            scraped_data=data,
+        )
+    )
+
+    assert next_url == TRANSFER, resolved
+    assert HIDDEN not in resolved
+
+
+def test_goto_with_no_current_page_still_uses_the_keyword_map() -> None:
+    orchestrator = PlaceholderOrchestrator(starting_url=HOME)
+    orchestrator.url_resolver.build_mapping(
+        keywords=["transfer"],
+        scraped_urls=[HOME, TRANSFER],
+        seed_url=HOME,
+        concepts=["transfer"],
+    )
+
+    resolved, next_url, _assertion = asyncio.run(
+        orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
+            action="GOTO",
+            description="go to the transfer page",
+            current_url=None,
+            scraped_data={HOME: [], TRANSFER: []},
+        )
+    )
+
+    assert next_url == TRANSFER, resolved
+
+
+def test_goto_still_uses_a_url_the_human_supplied() -> None:
+    orchestrator = PlaceholderOrchestrator(starting_url=HOME)
+    orchestrator._provided_target_urls = [HOME]
+
+    resolved, next_url, _assertion = asyncio.run(
+        orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
+            action="GOTO",
+            description="home",
+            current_url=HOME,
+            scraped_data={HOME: []},
+        )
+    )
+
+    assert next_url == HOME, resolved
