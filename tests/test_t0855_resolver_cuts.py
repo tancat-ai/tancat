@@ -83,7 +83,7 @@ def test_goto_branch_ignores_the_learned_store(tmp_path: Path) -> None:
 
     assert next_url is None, f"the GOTO still moved the cursor to {next_url}"
     assert resolved.startswith("pytest.skip("), f"a URL was still typed: {resolved}"
-    assert "No known destination" in resolved
+    assert f"no link on '{LOGIN}' and no trail landing for 'dashboard'" in resolved
 
 
 # ── (b) the common-path-candidate fabrication is gone ────────────────────

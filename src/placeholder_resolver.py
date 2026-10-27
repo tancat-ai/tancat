@@ -593,6 +593,8 @@ class PlaceholderResolver:
         for url, text in self._links_on_page(current_url, pages_data):
             parsed = urlparse(url)
             path = (parsed.path or "/").strip("/")
+            # Known limit (t-0982): rsplit('.') treats a dotted directory with
+            # no extension as a file. /api.v1.2/transfer loses "transfer".
             clean_path = path.rsplit(".", 1)[0]
             path_words = set(SemanticMatcher.get_words(clean_path.replace("/", " "), expand_aliases=False))
             text_words = set(SemanticMatcher.get_words(text, expand_aliases=False))

@@ -220,8 +220,7 @@ def test_page_state_assert_with_no_link_or_trail_skips_instead_of_cross_page_ele
 
     assert "pytest.skip" in code, code
     assert "#dash-title" not in code, code
-    assert "no link on" in code, code
-    assert "no trail landing" in code, code
+    assert f"no link on '{HOME}' and no trail landing for 'dashboard loaded'" in code, code
 
 
 def test_page_state_assert_element_on_the_current_page_still_acts() -> None:
@@ -287,6 +286,30 @@ def test_page_state_assert_fallback_is_scoped_to_the_current_page(
     assert "#dash-title" not in code, code
 
 
+def test_page_state_element_fallback_implies_strict_scope() -> None:
+    """The flag cannot open the all-pages pool when strict_scope is omitted."""
+    orchestrator = PlaceholderOrchestrator()
+    data = {
+        HOME: [],
+        DASH: [{"selector": "#dash-title", "text": "Dashboard", "tag": "h1"}],
+    }
+
+    resolved, next_url, _assertion = asyncio.run(
+        orchestrator._resolve_placeholder_for_page(  # noqa: SLF001
+            action="ASSERT",
+            description="dashboard loaded",
+            current_url=HOME,
+            scraped_data=data,
+            page_state_element_fallback=True,
+            # strict_scope deliberately omitted
+        )
+    )
+
+    assert next_url is None
+    assert resolved.startswith("pytest.skip("), resolved
+    assert "#dash-title" not in resolved
+
+
 def test_goto_with_no_link_or_trail_does_not_take_the_keyword_map_page() -> None:
     orchestrator = PlaceholderOrchestrator(starting_url=HOME)
     orchestrator.url_resolver.build_mapping(
@@ -308,6 +331,7 @@ def test_goto_with_no_link_or_trail_does_not_take_the_keyword_map_page() -> None
 
     assert next_url is None, resolved
     assert resolved.startswith("pytest.skip("), resolved
+    assert f"no link on '{HOME}' and no trail landing for 'go to the transfer page'" in resolved
     assert TRANSFER not in resolved
 
 

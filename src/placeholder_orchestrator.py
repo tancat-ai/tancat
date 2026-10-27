@@ -1641,6 +1641,11 @@ class PlaceholderOrchestrator:
                 (t-0847), so production GOTO does not need it here.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
+        if page_state_element_fallback:
+            # The flag means "fall back to an element on the CURRENT page".
+            # It must never open the all-pages pool if a caller forgets to pass
+            # strict_scope as well.
+            strict_scope = True
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
 
         if action in {"GOTO", "URL"}:
@@ -1698,7 +1703,10 @@ class PlaceholderOrchestrator:
             # otherwise-unresolvable GOTO. Cut in t-0855 (D1a) - see the
             # source list above.
 
-            error_msg = f"No known destination for '{description}'."
+            if current_url:
+                error_msg = f"no link on '{current_url}' and no trail landing for '{description}'"
+            else:
+                error_msg = f"no current page to read links from and no trail landing for '{description}'"
             if current_url and scraped_errors and current_url in scraped_errors:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
             return f'pytest.skip("{error_msg}")', None, None
