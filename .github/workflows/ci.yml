@@ -162,8 +162,9 @@ jobs:
   # ── Gate 1e: Private-content guard (BLOCKING) ───────────────────────
   # Split from kanban-freshness on the owner's word: a committed artefact
   # carrying private material must fail the build; board freshness stays a
-  # warning because that check has a history of flaking. The guard is the
-  # same code kanban.py runs before its freshness comparison.
+  # warning because that check has a history of flaking. The guard now also
+  # scans tracked fixtures/evidence/run output for developer-machine shapes
+  # (t-0941).
   private-content-guard:
     name: Private Content Guard
     runs-on: ubuntu-latest
@@ -174,7 +175,7 @@ jobs:
         uses: actions/checkout@v4
 
       # stdlib-only, same reasoning as kanban-freshness above: no uv sync.
-      - name: Fail if kanban.html carries content from docs/private/
+      - name: Fail if public artefacts carry private or developer-machine content
         run: python3 scripts/maintenance/kanban.py --check-private
 
   # ── Gate 1g: Landing asset freshness (BLOCKING) ─────────────────────

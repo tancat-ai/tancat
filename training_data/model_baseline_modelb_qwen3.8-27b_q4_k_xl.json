@@ -1,7 +1,7 @@
 {
-  "model": "C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL.gguf",
+  "model": "<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf",
   "runtime": {
-    "model_path": "C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL.gguf",
+    "model_path": "<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf",
     "total_slots": 1,
     "temperature": 1.0,
     "n_ctx": 156160

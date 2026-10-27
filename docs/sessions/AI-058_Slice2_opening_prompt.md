@@ -4,7 +4,7 @@
 
 ---
 
-You are continuing **AI-058 Slice 2** in the `AI-Playwright-Test-Generator` repo (working dir `C:/Users/l_a_c/code/AI-Playwright-Test-Generator`). The repo is clean on top of commit **`281e1bb`**, which already shipped: AI-059 (isolation harness + usage trace + effect trace), AI-061 (project-scoped RAG identity, `AITEST_RAG_SCOPE`), AI-062 (fastpath rebalance — RAG bonus now applied on the haystack fast path), and **AI-058 Slice 1** (contrastive learned store: `learned_negative` entries + net scoring). Read `docs/sessions/2026-08-28_ai058_slice1_handoff.md` FIRST — it carries the full Slice-1 design, decisions, and gotchas.
+You are continuing **AI-058 Slice 2** in the `AI-Playwright-Test-Generator` repo (working dir: the project folder). The repo is clean on top of commit **`281e1bb`**, which already shipped: AI-059 (isolation harness + usage trace + effect trace), AI-061 (project-scoped RAG identity, `AITEST_RAG_SCOPE`), AI-062 (fastpath rebalance — RAG bonus now applied on the haystack fast path), and **AI-058 Slice 1** (contrastive learned store: `learned_negative` entries + net scoring). Read `docs/sessions/2026-08-28_ai058_slice1_handoff.md` FIRST — it carries the full Slice-1 design, decisions, and gotchas.
 
 ## Task (AI-058 Slice 2 — wire negatives in, then measure the metric-first gate)
 

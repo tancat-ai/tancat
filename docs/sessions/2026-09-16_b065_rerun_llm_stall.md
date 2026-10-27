@@ -93,7 +93,7 @@ but a different config, "thinking turned off"**.
 - Machine: AMD Strix Halo / Radeon 8060S, 64GB unified memory, ~48GB GPU commit.
   Qwen3.8-27B Q4_K_XL + KV ≈ 36GB → ~12GB headroom. Windows 11.
 - Server: LM Studio (llama.cpp Vulkan build, rolling builds in
-  `C:\Users\l_a_c\llama.ccp config\` — outside this repo), OpenAI-compatible
+  `<home>/llama.ccp config/` — outside this repo), OpenAI-compatible
   `:8080`. `.env`: `LLM_PROVIDER=openai-local`, `OPENAI_BASE_URL=http://localhost:8080`.
 - Client: `src/llm_client.py` → `src/llm_providers/__init__.py`
   (`LMStudioProvider`/`OpenAIProvider`): one long-lived `httpx.Client`
@@ -101,7 +101,7 @@ but a different config, "thinking turned off"**.
   `timeout=600` for generation). Exact payload for the failing call type:
   ```json
   {
-    "model": "C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "model": "<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
     "messages": [
       {"role": "system", "content": "<617-char instruction>"},
       {"role": "user", "content": "<~7.1K-char per-condition skeleton prompt, ~2040 prompt_tokens>"}
@@ -199,7 +199,7 @@ it stalls specific requests.
    excluded (the patch only touched httpx pooling).
 4. **Windows/network-stack interaction** with the specific llama.cpp build —
    test by serving the same GGUF via a plain `llama-server` (the user's
-   llama.cpp builds live in `C:\Users\l_a_c\llama.ccp config\`) instead of
+   llama.cpp builds live in `<home>/llama.ccp config/`) instead of
    LM Studio.
 
 **Suggested first experiments (cheap → expensive):**

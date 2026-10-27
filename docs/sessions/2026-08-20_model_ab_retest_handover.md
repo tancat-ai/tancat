@@ -10,7 +10,7 @@
 > - `docs/sessions/2026-08-18_llm_model_ab_investigation.md` (mistakes catalogue §14)
 > - `docs/sessions/2026-08-19_thinking_collapse_and_ab.md` (the thinking fix + handover)
 > - `docs/sessions/2026-08-19_external_benchmark_and_thinking_on_ab.md` (this A/B + correction)
-> - Evidence: `/c/Users/l_a_c/code/llm-benchmarks/evidence/model-ab-2026-08-20/`
+> - Evidence: `../llm-benchmarks/evidence/model-ab-2026-08-20/`
 
 ---
 
@@ -72,7 +72,7 @@ Key caveats baked in:
 ## 3. Verify the new quant (do this first — gate the whole re-test)
 
 ```bash
-cd /c/Users/l_a_c/code && /c/Users/l_a_c/code/lm-eval-bench/.venv/Scripts/python -c "
+cd .. && lm-eval-bench/.venv/Scripts/python -c "
 import gguf
 bpp={0:32.0,1:16.0,3:8.5,8:4.5,12:8.5,13:2.5625,14:3.4375,15:4.5,17:6.5625,23:4.5,26:4.25}
 r=gguf.GGUFReader(r'<NEW_3.8_GGUF_ABS_PATH>')
@@ -90,7 +90,7 @@ Compare with the 3.6 reference: `gguf_quantization_confound.md` (3.6 = 6.71 bpw,
 attn_qkv 6.29). **Abort if the new file is <5 bpw.**
 
 (Generate the 3.6 side profile with the same script on
-`C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.6-27B-MTP-GGUF\Qwen3.6-27B-UD-Q4_K_XL.gguf`.)
+`<home>/.lmstudio/models/unsloth/Qwen3.6-27B-MTP-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf`.)
 
 ---
 
@@ -102,7 +102,7 @@ community-consensus draft settings.** Verified our build (b10483) supports all f
 ```bash
 # Launch llama-server DIRECTLY (llmctl still has the flash-attn bool bug).
 # Use the proven binary:
-BIN="/c/Users/l_a_c/llama.ccp config/vulkan/llama-server.exe"
+BIN="<home>/llama.ccp config/vulkan/llama-server.exe"
 # 3.6 leg: MODEL=.../Qwen3.6-27B-MTP-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf
 # 3.8 leg: MODEL=<NEW matched-precision 3.8 gguf>
 "$BIN" --model "$MODEL" --port 8080 --host 0.0.0.0 --ctx-size 156072 \
@@ -130,10 +130,10 @@ python scripts/eval/eval_harness.py run --mode full --regenerate
 
 **Benchmark plan (per model, thinking ON):**
 1. **Project A/B** (above) — the primary number: resolution accuracy on 8 stories.
-2. **External GSM8K** via lm-eval (venv `C:\Users\l_a_c\code\lm-eval-bench`,
+2. **External GSM8K** via lm-eval (venv `../lm-eval-bench`,
    py3.13, lm-eval 0.4.12) pointed at the live server:
    ```
-   cd /c/Users/l_a_c/code/lm-eval-bench
+   cd ../lm-eval-bench
    PYTHONIOENCODING=utf-8 OPENAI_API_KEY=LOCAL ./.venv/Scripts/python -m lm_eval run \
      --model local-chat-completions \
      --model_args base_url=http://localhost:8080/v1/chat/completions \
@@ -175,7 +175,7 @@ the review. Server currently left as old 3.8 (under-quantized), spec-OFF.
 ## 7. Evidence & references index
 
 **Evidence folder (canonical):**
-`/c/Users/l_a_c/code/llm-benchmarks/evidence/model-ab-2026-08-20/`
+`../llm-benchmarks/evidence/model-ab-2026-08-20/`
 - `README.md` — provenance + file index
 - `gguf_quantization_confound.md` — *read first*: the model-file bpw confound
 - `model_ab_all_conditions.md` — the four-condition table
