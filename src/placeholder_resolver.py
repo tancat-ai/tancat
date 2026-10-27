@@ -482,7 +482,30 @@ class PlaceholderResolver:
             if score is not None:
                 ranked.append((score, element))
 
-        # Sort globally: 1) score desc, 2) text length desc, 3) selector specificity desc.
+        # t-1004: text evidence outranks every bonus. A candidate that shares
+        # no word with the step can only have scored on the bonuses a kind or a
+        # role earns - a button earns +10 role and +15 commit on a description
+        # that merely names a submit verb - so it must never sit above a
+        # candidate whose own haystack names the step. eval-005 lost CLICK
+        # "Pay in Full" to a visible "Back" button (31) while the hidden,
+        # exactly-named #paymentFull scored 30 (100 for the text, -30 hidden,
+        # -40 container).
+        #
+        # The tier uses the words the scorer already scored, so it adds no third
+        # vocabulary: 1 when the description is a literal part of the element's
+        # haystack (the scorer's fast path) or shares a word with it (its slow
+        # path), else 0. It only orders the candidates that are already in this
+        # page's list: it never adds one back and never compares across pages.
+        def _text_tier(element: dict[str, Any]) -> int:
+            haystack = self._build_element_haystack(element).lower()
+            if normalized_description and normalized_description in haystack:
+                return 1
+            return int(bool(desc_words & SemanticMatcher.get_words(haystack, expand_aliases=False)))
+
+        textual = {id(element): _text_tier(element) for _score, element in ranked}
+
+        # Sort globally: 1) text evidence, 2) score desc, 3) the CLICK tie-break
+        # below, 4) text length desc, 5) selector specificity desc.
         #
         # t-0998: a CLICK target is the element that names itself, not its wrapper
         # and not its label. A page-section wrapper's haystack is the merged text
@@ -532,6 +555,7 @@ class PlaceholderResolver:
 
         ranked.sort(
             key=lambda item: (
+                textual.get(id(item[1]), 0),
                 item[0],
                 not demoted.get(id(item[1]), False),
                 len(str(item[1].get("text", "")).strip()),

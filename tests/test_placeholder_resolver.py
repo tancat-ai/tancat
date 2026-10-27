@@ -1155,3 +1155,113 @@ def test_click_tie_prefers_the_named_card_over_its_page_section_wrapper() -> Non
     assert ranked[0][1]["selector"] == "#productCar"
     # The wrapper is still a candidate, just no longer the winner.
     assert "#page-product" in [element["selector"] for _score, element in ranked]
+
+
+# ---------------------------------------------------------------------------
+# t-1004 — text evidence outranks every bonus
+# ---------------------------------------------------------------------------
+
+
+def _payment_options_page() -> list[dict]:
+    """The lv_insurance extras state, shapes copied from the real scrape.
+
+    The payment options sit in a section that is display:none until the user is
+    on it, so the two visible controls on the page are "Back" and "Next". Both
+    share no word with "Pay in Full" but collect +10 role and +15 commit on the
+    submit verb "pay" (31 each). The hidden option is an exact text match that
+    pays -30 hidden and -40 container and lands at 30.
+    """
+    return [
+        {
+            "selector": "#paymentFull",
+            "text": "Pay in Full One card payment today",
+            "tag": "div",
+            "role": "div",
+            "id": "paymentFull",
+            "classes": "card-option",
+            "is_visible": False,
+        },
+        {
+            "selector": "#extrasBack",
+            "text": "\u2190 Back",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasBack",
+            "classes": "btn-secondary",
+            "is_visible": True,
+        },
+        {
+            "selector": "#extrasNext",
+            "text": "Next \u2192",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasNext",
+            "classes": "",
+            "is_visible": True,
+        },
+    ]
+
+
+def test_exact_text_match_beats_visible_controls_with_no_shared_word() -> None:
+    """eval-005: the hidden "Pay in Full" option must beat "Back" and "Next".
+
+    Before t-1004 the ranking was #extrasBack 31, #extrasNext 31, #paymentFull
+    30: a role and commit bonus with zero word overlap outranked the element
+    whose own text is the step.
+    """
+    resolver = PlaceholderResolver()
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full", _payment_options_page())
+
+    assert ranked[0][1]["selector"] == "#paymentFull"
+    # The bonuses still count; they just cannot outrank text evidence.
+    assert {"#extrasBack", "#extrasNext"} <= {element["selector"] for _score, element in ranked}
+
+
+def test_a_page_with_no_text_match_still_returns_its_local_candidate() -> None:
+    """The tier orders ONE page's list; it never reaches across pages.
+
+    The same step on a page that does not hold the option (the pool the picker
+    is scoped to) must still resolve to what that page has, not to nothing and
+    not to another page's element.
+    """
+    resolver = PlaceholderResolver()
+    this_page = [element for element in _payment_options_page() if element["selector"] != "#paymentFull"]
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full", this_page)
+
+    assert ranked, "a zero-overlap page must still offer its best local candidate"
+    assert ranked[0][1]["selector"] in {"#extrasBack", "#extrasNext"}
+
+
+def test_the_text_tier_never_resurrects_a_dropped_candidate() -> None:
+    """A hidden element with no literal text match stays dropped by the pool gate."""
+    resolver = PlaceholderResolver()
+    page = [
+        {
+            "selector": "#extrasBack",
+            "text": "\u2190 Back",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasBack",
+            "classes": "btn-secondary",
+            "is_visible": True,
+        },
+        {
+            # Shares "payment" with the step, so the text tier would rank it -
+            # but the hidden gate drops it first and the tier must not bring it
+            # back.
+            "selector": "#paymentDetails",
+            "text": "Payment details",
+            "tag": "div",
+            "role": "div",
+            "id": "paymentDetails",
+            "classes": "",
+            "is_visible": False,
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full payment option", page)
+
+    assert "#paymentDetails" not in [element["selector"] for _score, element in ranked]
+    assert ranked and ranked[0][1]["selector"] == "#extrasBack"
