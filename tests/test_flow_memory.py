@@ -399,6 +399,9 @@ class _NullResolver:
     def resolve_url(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
         return None
 
+    def resolve_url_from_links(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
+        return None
+
 
 def test_goto_resolves_via_flow_memory_when_site_resolution_fails(tmp_path: Path) -> None:
     """The orchestrator's GOTO chain: after UrlResolver and resolve_url both

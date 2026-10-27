@@ -773,10 +773,11 @@ class PlaceholderOrchestrator:
                         # resolve immediately (no element matching or LLM needed).
                         if self._is_page_state_assertion(description):
                             producer = "keyword"
-                            resolved_url = self.resolver.resolve_url(
+                            resolved_url = self.resolver.resolve_url_from_links(
                                 description,
+                                current_url,
                                 scraped_data,
-                                known_urls=list(scraped_data.keys()),
+                                trail_url=obs.to_url if obs is not None and obs.to_url else None,
                             )
                             # Post-login assertions ("logged in", "login
                             # successful") must resolve to the page AFTER auth -
@@ -819,6 +820,58 @@ class PlaceholderOrchestrator:
                                     logger.info("Flow memory resolved URL assertion '%s' -> %s", description, flow_url)
                                     resolved_url = flow_url
                                     producer = "flow_memory"
+                            if not resolved_url:
+                                # t-0970: the link picker had nothing, but the
+                                # current page may still hold the element this
+                                # page-state ASSERT names. Scope the element
+                                # fallback to the current page only; it must not
+                                # reach across pages.
+                                scoped_value, scoped_next, scoped_at = await self._resolve_placeholder_for_page(
+                                    action=action,
+                                    description=description,
+                                    current_url=current_url,
+                                    scraped_data=scraped_data,
+                                    scraped_errors=errors,
+                                    previous_selector=last_selector,
+                                    previous_description=last_description,
+                                    resolved_steps=resolved_steps,
+                                    strict_scope=True,
+                                    page_state_element_fallback=True,
+                                )
+                                if "pytest.skip" not in scoped_value:
+                                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                                        (
+                                            placeholder.token,
+                                            action,
+                                            scoped_value,
+                                            description,
+                                            fill_value,
+                                            current_url,
+                                            scoped_at,
+                                        )
+                                    )
+                                    continue
+                                reason = (
+                                    f"no link on '{current_url}' and no trail landing for '{description}'"
+                                ).replace('"', "'")
+                                logger.info("t-0968: page arrival not asserted for '%s' - %s", description, reason)
+                                line_resolutions.setdefault(placeholder.line_number, []).append(
+                                    (
+                                        placeholder.token,
+                                        action,
+                                        f'pytest.skip("page arrival not asserted: {reason}")',
+                                        description,
+                                        fill_value,
+                                        current_url,
+                                        None,
+                                    )
+                                )
+                                strict_skipped_tokens.add(placeholder.token)
+                                journey_unresolved[journey.test_name].append(description)
+                                journey_unresolved_keys.setdefault(journey.test_name, set()).add(
+                                    (placeholder.line_number, placeholder.token)
+                                )
+                                continue
                             if resolved_url:
                                 resolved_url = normalize_url(resolved_url)
                                 # t-0890 (t-0903 adds the first-step case): an
@@ -1562,6 +1615,8 @@ class PlaceholderOrchestrator:
         strict_scope: bool = False,
         matched_out: dict[str, Any] | None = None,
         arrival_evidenced: bool = False,
+        trail_url: str | None = None,
+        page_state_element_fallback: bool = False,
     ) -> tuple[str, str | None, str | None]:
         """Resolve one placeholder using the active page first, then fall back to known pages.
 
@@ -1581,17 +1636,27 @@ class PlaceholderOrchestrator:
                 name. Default False: a page-state arrival is never asserted from
                 keyword resolution alone, because naming a page the run never
                 established is the same class of claim as a guessed address.
+            trail_url: the trail landing for a page-state ASSERT. A GOTO with a
+                trail landing is consumed earlier by the observed-target block
+                (t-0847), so production GOTO does not need it here.
         """
         await self._ensure_scraped(current_url, scraped_data, scraped_errors)
+        if page_state_element_fallback:
+            # The flag means "fall back to an element on the CURRENT page".
+            # It must never open the all-pages pool if a caller forgets to pass
+            # strict_scope as well.
+            strict_scope = True
         scoped_pages = self._build_scoped_pages(current_url, scraped_data, verified=strict_scope)
 
         if action in {"GOTO", "URL"}:
-            # t-0847: a navigation is only valid when its destination is
-            # KNOWN. The known sources, in order:
+            # t-0847 / t-0970: a navigation is only valid when its destination
+            # is KNOWN. The known sources, in order:
             #   1. the URL the human gave us (the entry page they named, or
             #      a URL that is really in the input),
-            #   2. the keyword map built from the story's route concepts,
-            #   3. a page the pipeline scraped whose identity matches.
+            #   2. a link on the page the browser is on before the step,
+            #   3. the trail's landing for the step,
+            #   4. the story's keyword map, only when there is no current page
+            #      to read links from.
             # With none of them the step is an honest unresolved: a guess
             # would type a URL nobody gave us and leave the cursor on the
             # stale page.
@@ -1609,28 +1674,39 @@ class PlaceholderOrchestrator:
                     logger.debug("Provided entry page matched '%s' -> %s", description, entry)
                     return repr(entry), entry, None
 
-            # Step 1: Try UrlResolver
-            url_from_resolver = self.url_resolver.resolve(description)
-            if url_from_resolver:
-                url_from_resolver = normalize_url(url_from_resolver)
-                logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
-                return repr(url_from_resolver), url_from_resolver, None
-
-            # Step 2: Try PlaceholderResolver — GOTO navigates anywhere, so
-            # search ALL verified pages, not just the current page's scope.
-            # Strict: an unmatched description is never answered with an
-            # arbitrary page (that would be a guessed destination).
-            resolved_url = self.resolver.resolve_url(description, scraped_data)
+            # Step 1: pick a page from the links on the current page, then the
+            # trail's landing. Never search the full scraped page list: that
+            # full-list guess is what named the dashboard for a transfer step.
+            resolved_url = self.resolver.resolve_url_from_links(
+                description,
+                current_url,
+                scraped_data,
+                trail_url=trail_url,
+            )
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 return repr(resolved_url), resolved_url, None
+
+            # Step 2: the story's keyword map may answer only when there is no
+            # current page to read links from. A page that exists but has no
+            # matching link is not licence to take a whole-site mapping.
+            has_current_page = bool(current_url and any(_same_page(current_url, url) for url in scraped_data))
+            if not has_current_page:
+                url_from_resolver = self.url_resolver.resolve(description)
+                if url_from_resolver:
+                    url_from_resolver = normalize_url(url_from_resolver)
+                    logger.debug("UrlResolver matched '%s' -> %s", description, url_from_resolver)
+                    return repr(url_from_resolver), url_from_resolver, None
 
             # Step 2.5 (AI-042) used to sit here: cross-site flow memory, a
             # learned transition from an earlier run, rescuing an
             # otherwise-unresolvable GOTO. Cut in t-0855 (D1a) - see the
             # source list above.
 
-            error_msg = f"No known destination for '{description}'."
+            if current_url:
+                error_msg = f"no link on '{current_url}' and no trail landing for '{description}'"
+            else:
+                error_msg = f"no current page to read links from and no trail landing for '{description}'"
             if current_url and scraped_errors and current_url in scraped_errors:
                 error_msg += f" (Note: scraping {current_url} failed with {scraped_errors[current_url]})"
             return f'pytest.skip("{error_msg}")', None, None
@@ -1658,7 +1734,7 @@ class PlaceholderOrchestrator:
 
         # B-021: For ASSERT placeholders describing page state ("home page visible",
         # "dress products page"), resolve as URL assertions instead of element matches.
-        if action == "ASSERT" and self._is_page_state_assertion(description):
+        if action == "ASSERT" and self._is_page_state_assertion(description) and not page_state_element_fallback:
             if not arrival_evidenced:
                 # t-0890 / t-0903: the SECOND arrival site (the sequential resolver
                 # is the first and the only production one). No production path
@@ -1678,7 +1754,12 @@ class PlaceholderOrchestrator:
                 ).replace('"', "'")
                 logger.info("t-0890: %s", reason)
                 return f'pytest.skip("{reason}")', None, None
-            resolved_url = self.resolver.resolve_url(description, scraped_data, known_urls=list(scraped_data.keys()))
+            resolved_url = self.resolver.resolve_url_from_links(
+                description,
+                current_url,
+                scraped_data,
+                trail_url=trail_url,
+            )
             if resolved_url:
                 resolved_url = normalize_url(resolved_url)
                 logger.info("URL assertion resolved '%s' → %s", description, resolved_url)
@@ -2308,6 +2389,36 @@ class PlaceholderOrchestrator:
                                 mapping[placeholder.token] = candidate
                                 cursor = i + 1
                                 break
+                    # t-0978: a page-state ASSERT after a click that really
+                    # navigated has a landing even when the scraper recorded no
+                    # separate "scrape" step for it. Fill that landing from the
+                    # click, so the trail names the page the browser reached
+                    # instead of falling to an honest skip. Only a successful
+                    # navigation qualifies; a failed or static click must not
+                    # become evidence of an arrival.
+                    if placeholder.action == "ASSERT":
+                        for i in range(cursor - 1, -1, -1):
+                            candidate = trail_steps[i]
+                            if candidate.action not in {"click", "navigate"}:
+                                continue
+                            moved = (
+                                candidate.action == "navigate" and (candidate.navigated or not candidate.from_url)
+                            ) or (candidate.action == "click" and candidate.navigated)
+                            if not moved or candidate.error is not None or not candidate.to_url:
+                                # The nearest mover did not move (or failed): an
+                                # earlier mover is not evidence for this arrival.
+                                break
+                            mapping[placeholder.token] = ObservedStep(
+                                index=candidate.index,
+                                action="scrape",
+                                description=placeholder.description,
+                                from_url=candidate.to_url,
+                                to_url=candidate.to_url,
+                                navigated=False,
+                                scraped=bool(candidate.scraped),
+                                timestamp=candidate.timestamp,
+                            )
+                            break
         return mapping
 
     def _apply_section_scoping(
@@ -2481,12 +2592,15 @@ class PlaceholderOrchestrator:
             first_step = journey.steps[0]
             for placeholder in first_step.placeholders:
                 if placeholder.action in {"GOTO", "URL"}:
-                    # t-0877: a first-step GOTO resolves only to a page that is
-                    # really known. There is no "whichever page is first"
-                    # fallback left to reach - resolve_url returns None instead.
-                    resolved_url = self.resolver.resolve_url(
+                    # The first step has no page behind it yet: the page the
+                    # browser is on is the human's seed. Read that page's links
+                    # first; if the GOTO is not a link there, the normal start
+                    # page selection below still names the entry page.
+                    seed = seed_urls[0] if seed_urls else None
+                    resolved_url = self.resolver.resolve_url_from_links(
                         placeholder.description,
-                        self._page_requirements_to_pages(page_requirements, scraped_data) or scraped_data,
+                        seed,
+                        scraped_data,
                     )
                     if resolved_url:
                         return resolved_url
