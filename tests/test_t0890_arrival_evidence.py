@@ -356,3 +356,105 @@ def test_a_navigated_click_fills_the_landing_for_a_missing_scrape_step() -> None
 
     assert f'to_have_url("{CART}")' in code, code
     assert "pytest.skip" not in code, code
+
+
+# ── 6. a navigate step is a mover too (t-0980) ───────────────────────────
+
+
+TRANSFER = "https://shop.example.com/transfer.html"
+
+
+def test_a_navigate_step_is_the_landing_for_the_assertion() -> None:
+    """click -> A, navigate -> B, page-state ASSERT -> the assertion names B."""
+    lines = [
+        "def test_navigate_then_assert(page) -> None:",
+        "    act('{{CLICK:login button}}')",
+        "    act('{{GOTO:go to transfer}}')",
+        "    act('{{ASSERT:transfer page loaded}}')",
+    ]
+    steps = [
+        TestStep(
+            line_number=2,
+            raw_line=lines[1],
+            placeholders=[
+                PlaceholderUse(
+                    token="{{CLICK:login button}}",
+                    action="CLICK",
+                    description="login button",
+                    line_number=2,
+                    raw_line=lines[1],
+                )
+            ],
+        ),
+        TestStep(
+            line_number=3,
+            raw_line=lines[2],
+            placeholders=[
+                PlaceholderUse(
+                    token="{{GOTO:go to transfer}}",
+                    action="GOTO",
+                    description="go to transfer",
+                    line_number=3,
+                    raw_line=lines[2],
+                )
+            ],
+        ),
+        TestStep(
+            line_number=4,
+            raw_line=lines[3],
+            placeholders=[
+                PlaceholderUse(
+                    token="{{ASSERT:transfer page loaded}}",
+                    action="ASSERT",
+                    description="transfer page loaded",
+                    line_number=4,
+                    raw_line=lines[3],
+                )
+            ],
+        ),
+    ]
+    skeleton = "\n".join(lines)
+    journey = TestJourney(test_name="test_navigate_then_assert", start_line=1, end_line=4, steps=steps)
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "click",
+                description="login button",
+                from_url=SHOP,
+                to_url=CART,
+                navigated=True,
+                scraped=True,
+                selector_used="#login",
+            ),
+            ObservedStep(
+                1,
+                "navigate",
+                description="go to transfer",
+                from_url=CART,
+                to_url=TRANSFER,
+                navigated=True,
+                scraped=True,
+            ),
+        ]
+    )
+    data = {
+        SHOP: [_el("#login", "login button", tag="button", role="button")],
+        CART: [],
+        TRANSFER: [],
+    }
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+
+    code = asyncio.run(
+        orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[SHOP],
+            scraped_data=data,
+            observed_trails={"test_navigate_then_assert": trail},
+        )
+    )
+
+    assert f'to_have_url("{TRANSFER}")' in code, code
+    assert f'to_have_url("{CART}")' not in code, code

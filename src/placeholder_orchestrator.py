@@ -2391,23 +2391,26 @@ class PlaceholderOrchestrator:
                     if placeholder.action == "ASSERT":
                         for i in range(cursor - 1, -1, -1):
                             candidate = trail_steps[i]
-                            if (
-                                candidate.action == "click"
-                                and candidate.navigated
-                                and candidate.error is None
-                                and candidate.to_url
-                            ):
-                                mapping[placeholder.token] = ObservedStep(
-                                    index=candidate.index,
-                                    action="scrape",
-                                    description=placeholder.description,
-                                    from_url=candidate.to_url,
-                                    to_url=candidate.to_url,
-                                    navigated=False,
-                                    scraped=bool(candidate.scraped),
-                                    timestamp=candidate.timestamp,
-                                )
+                            if candidate.action not in {"click", "navigate"}:
+                                continue
+                            moved = (
+                                candidate.action == "navigate" and (candidate.navigated or not candidate.from_url)
+                            ) or (candidate.action == "click" and candidate.navigated)
+                            if not moved or candidate.error is not None or not candidate.to_url:
+                                # The nearest mover did not move (or failed): an
+                                # earlier mover is not evidence for this arrival.
                                 break
+                            mapping[placeholder.token] = ObservedStep(
+                                index=candidate.index,
+                                action="scrape",
+                                description=placeholder.description,
+                                from_url=candidate.to_url,
+                                to_url=candidate.to_url,
+                                navigated=False,
+                                scraped=bool(candidate.scraped),
+                                timestamp=candidate.timestamp,
+                            )
+                            break
         return mapping
 
     def _apply_section_scoping(
