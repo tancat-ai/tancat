@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.journey_models import ObservedStep, ObservedTrail
 from src.journey_scraper import CredentialProfile
 from src.orchestrator import TestOrchestrator
 from src.spec_analyzer import TestCondition
@@ -923,7 +924,25 @@ def test_02_add_item(page):
                 "https://www.saucedemo.com/inventory.html",
                 "https://www.saucedemo.com/cart.html",
             ],
-            {},  # observed_trails (AI-052)
+            {
+                # t-0978: the login redirect is the landing for "products
+                # page loaded". The scraper records the click; the ASSERT has
+                # no separate scrape step, so the trail completion fills it.
+                "test_01_login": ObservedTrail(
+                    steps=[
+                        ObservedStep(
+                            0,
+                            "click",
+                            description="login button",
+                            from_url="https://www.saucedemo.com",
+                            to_url="https://www.saucedemo.com/inventory.html",
+                            navigated=True,
+                            scraped=True,
+                            selector_used="#login-button",
+                        )
+                    ]
+                )
+            },
         )
     )
     # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data

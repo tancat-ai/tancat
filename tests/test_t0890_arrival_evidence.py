@@ -50,6 +50,7 @@ def _scraped() -> dict[str, list[dict[str, Any]]]:
         SHOP: [
             _el("#submit-order", "Submit order", tag="button", role="button"),
             _el("#cancel", "Cancel", tag="button", role="button"),
+            _el(f"a[href='{CART}']", "Checkout", tag="a", role="link", href=CART),
         ],
         CART: [_el("h1", "Checkout", tag="h1")],
     }
@@ -328,3 +329,30 @@ def test_first_step_assertion_naming_the_observed_page_is_written() -> None:
     code = _run_first_step(trail)
     assert f'to_have_url("{CART}")' in code, f"the observed page was not asserted: {code}"
     assert "pytest.skip" not in code
+
+
+# ── 5. a navigated click fills a missing scrape step (t-0978) ────────────
+
+
+def test_a_navigated_click_fills_the_landing_for_a_missing_scrape_step() -> None:
+    """The trail completion: a click that navigated is the landing for the
+    assertion that follows, even when no separate scrape step was recorded."""
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "click",
+                description="Submit order",
+                from_url=SHOP,
+                to_url=CART,
+                navigated=True,
+                scraped=True,
+                selector_used="#submit-order",
+            )
+        ]
+    )
+
+    code = _resolve(trail)
+
+    assert f'to_have_url("{CART}")' in code, code
+    assert "pytest.skip" not in code, code

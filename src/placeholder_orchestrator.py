@@ -2381,6 +2381,33 @@ class PlaceholderOrchestrator:
                                 mapping[placeholder.token] = candidate
                                 cursor = i + 1
                                 break
+                    # t-0978: a page-state ASSERT after a click that really
+                    # navigated has a landing even when the scraper recorded no
+                    # separate "scrape" step for it. Fill that landing from the
+                    # click, so the trail names the page the browser reached
+                    # instead of falling to an honest skip. Only a successful
+                    # navigation qualifies; a failed or static click must not
+                    # become evidence of an arrival.
+                    if placeholder.action == "ASSERT":
+                        for i in range(cursor - 1, -1, -1):
+                            candidate = trail_steps[i]
+                            if (
+                                candidate.action == "click"
+                                and candidate.navigated
+                                and candidate.error is None
+                                and candidate.to_url
+                            ):
+                                mapping[placeholder.token] = ObservedStep(
+                                    index=candidate.index,
+                                    action="scrape",
+                                    description=placeholder.description,
+                                    from_url=candidate.to_url,
+                                    to_url=candidate.to_url,
+                                    navigated=False,
+                                    scraped=bool(candidate.scraped),
+                                    timestamp=candidate.timestamp,
+                                )
+                                break
         return mapping
 
     def _apply_section_scoping(

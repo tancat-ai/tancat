@@ -330,6 +330,13 @@ class TestEndToEndEmit:
         scraped_data = {
             "https://example.com/": [
                 {"selector": "#home", "tag": "div", "role": "div", "text": "Home"},
+                {
+                    "selector": "a[href='/cart']",
+                    "tag": "a",
+                    "role": "link",
+                    "text": "Cart",
+                    "href": "/cart",
+                },
             ],
             "https://example.com/cart": [
                 {"selector": "#cart-item", "tag": "div", "role": "div", "text": "Item"},
