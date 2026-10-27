@@ -1092,3 +1092,66 @@ def test_success_pages_are_not_confused_with_their_parent_page() -> None:
         resolver.resolve_url("payment success message", pages, known_urls=list(pages.keys()))
         == "http://localhost:8781/payment_success.html?amount=50"
     )
+
+
+# ---------------------------------------------------------------------------
+# t-0998 — a CLICK target is the element that names itself
+# ---------------------------------------------------------------------------
+
+
+def _insurance_product_page() -> list[dict]:
+    """The lv_insurance product section: wrapper, card, and the card's heading.
+
+    Shapes copied from the real scrape (see tests). The wrapper's haystack is
+    the merged text of both product cards, so it ties the card for a
+    "Car Insurance" click; the ``h4`` label inside the card ties too.
+    """
+    return [
+        {
+            "selector": "#page-product",
+            "text": (
+                "Select a Product Car Insurance Comprehensive cover for your vehicle "
+                "Home Insurance Buildings contents cover Please select a product Back Next"
+            ),
+            "tag": "div",
+            "role": "heading",
+            "id": "page-product",
+            "classes": "page",
+            "is_visible": True,
+        },
+        {
+            "selector": "#productCar",
+            "text": "Car Insurance Comprehensive cover for your vehicle",
+            "tag": "div",
+            "role": "heading",
+            "id": "productCar",
+            "classes": "card-option",
+            "is_visible": True,
+        },
+        {
+            "selector": "h4",
+            "text": "Car Insurance",
+            "tag": "h4",
+            "role": "statictext",
+            "id": "",
+            "classes": "",
+            "is_visible": True,
+        },
+    ]
+
+
+def test_click_tie_prefers_the_named_card_over_its_page_section_wrapper() -> None:
+    """eval-005 crit 1: a section wrapper must not beat the card it contains.
+
+    The wrapper and the card score the same (both are div containers that match
+    on merged text). Before t-0998 the tie was broken by text length, so the
+    wrapper - whose text is the whole section - won, and the emitted test
+    clicked the section instead of the Car Insurance card.
+    """
+    resolver = PlaceholderResolver(match_threshold=1)
+
+    ranked = resolver.rank_candidates("CLICK", "Car Insurance", _insurance_product_page())
+
+    assert ranked[0][1]["selector"] == "#productCar"
+    # The wrapper is still a candidate, just no longer the winner.
+    assert "#page-product" in [element["selector"] for _score, element in ranked]
