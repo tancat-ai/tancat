@@ -122,6 +122,9 @@ Thinking-ON is threaded and green; the model verdict is still pending valid runs
 > (3.6 = 6.71 bpw, 3.8 = 3.30 bpw) - so this is NOT a clean architecture
 > comparison and does NOT support a "3.6 wins" or "3.8 is worse" verdict.
 > See §7 CORRECTION. Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/`.
+> (Citation note, 2026-10-28: that folder is in the separate `llm-benchmarks`
+> checkout, so it is in no clone of this repo; every figure this record uses is
+> quoted inline below.)
 
 ## 6 (original). Thinking-ON A/B results (files as-tested, per-condition)
 
@@ -209,4 +212,4 @@ not "which model". No matched-precision Qwen3.8 is available to test.
 
 **Corrected bottom line:** AI-046 has NO defensible architecture verdict from
 current data. A valid re-test requires a Qwen3.8 at ~6.7 bpw (matching 3.6).
-Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/`.
+Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/` (outside this repo; the figures above are the record).
