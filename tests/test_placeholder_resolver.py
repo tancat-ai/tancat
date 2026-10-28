@@ -1,5 +1,7 @@
 """Tests for placeholder resolution."""
 
+import pytest
+
 from src.placeholder_resolver import PlaceholderResolver
 from tests.resolver_test_helpers import best_ranked_element, resolve_placeholders
 
@@ -1265,3 +1267,44 @@ def test_the_text_tier_never_resurrects_a_dropped_candidate() -> None:
 
     assert "#paymentDetails" not in [element["selector"] for _score, element in ranked]
     assert ranked and ranked[0][1]["selector"] == "#extrasBack"
+
+
+def test_a_word_form_is_not_dom_nesting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """t-1011: "Pay Bills" does not contain the submit control "Pay Bill".
+
+    The CLICK tie-break demotes a candidate whose text contains another tied
+    candidate's text, because a wrapper's text is the merged text of its
+    children. A word form is not that: the banking nav link "Pay Bills" holds
+    the STRING "Pay Bill" but not the button, and reading it as nesting
+    silently replaced the pre-t-0572 tie that tests/test_submit_preference.py
+    pins. With the commit bonus removed the two still tie at 100 and the nav
+    link still wins on the longest-text tie-break.
+    """
+    from src.placeholder_scorers import PlaceholderScorer
+
+    monkeypatch.setattr(PlaceholderScorer, "_commit_control_bonus", staticmethod(lambda *a, **k: 0))
+    nav = {
+        "selector": 'a[href="/payments.html"]',
+        "text": "Pay Bills",
+        "role": "a",
+        "tag": "a",
+        "href": "/payments.html",
+        "is_visible": True,
+    }
+    submit = {
+        "selector": "#pay-bill",
+        "text": "Pay Bill",
+        "role": "button",
+        "tag": "button",
+        "id": "pay-bill",
+        "type": "submit",
+        "is_visible": True,
+    }
+
+    assert PlaceholderResolver._is_embedded_text("pay bill", "pay bills") is False
+    assert PlaceholderResolver._is_embedded_text("pay bill", "pay bill now") is True
+
+    ranked = PlaceholderResolver().rank_candidates("CLICK", "Pay", [nav, submit])
+
+    assert [score for score, _element in ranked] == [100, 100]
+    assert ranked[0][1]["selector"] == 'a[href="/payments.html"]'

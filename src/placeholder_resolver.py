@@ -114,6 +114,22 @@ class PlaceholderResolver:
         return 0
 
     @staticmethod
+    def _is_embedded_text(text: str, container: str) -> bool:
+        """True when *text* sits inside *container* as whole words (t-1011).
+
+        The CLICK tie-break reads one candidate's text inside another's as DOM
+        nesting: a wrapper's text is the merged text of its children, so it
+        holds a child's text verbatim. Whole words matter, because a word form
+        is not nesting - the banking nav link "Pay Bills" contains the string
+        "Pay Bill", but it does not contain the submit control of that name,
+        and demoting the nav link there silently replaced the pre-t-0572 tie
+        that ``tests/test_submit_preference.py`` pins.
+        """
+        if not text or not container or text == container:
+            return False
+        return re.search(rf"(?<!\w){re.escape(text)}(?!\w)", container) is not None
+
+    @staticmethod
     def _is_assertion_candidate(element: dict[str, Any]) -> bool:
         """Return True when the scraped element is plausible for visibility assertions."""
         role = str(element.get("role", "")).strip().lower()
@@ -536,12 +552,12 @@ class PlaceholderResolver:
                 if not other_text or other_text == own:
                     continue
                 other_kind = PlaceholderResolver._identity_kind(other)
-                if other_text in own:
-                    # Another tied candidate's text sits inside mine: I am the
-                    # wrapper that matched on aggregate text.
+                if PlaceholderResolver._is_embedded_text(other_text, own):
+                    # Another tied candidate's whole text sits inside mine: I am
+                    # the wrapper that matched on aggregate text.
                     if other_kind >= kind:
                         return True
-                elif own in other_text and kind == 0 and other_kind >= 1:
+                elif PlaceholderResolver._is_embedded_text(own, other_text) and kind == 0 and other_kind >= 1:
                     # A bare label inside an identified target: not the target.
                     return True
             return False
