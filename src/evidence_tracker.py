@@ -533,7 +533,16 @@ class EvidenceTracker:
         # mismatch must never pass silently.
         page_mismatch: dict[str, str] | None = None
         if expected_page:
-            actual_page = self._step_entry_url or self._safe_page_url()
+            # A navigation runs on the page it LANDS on, so read the live URL.
+            # Every other step runs on the page it was entered on, which the
+            # caller records before acting - reading the live URL there would
+            # compare against a page the step itself may have changed (t-1031:
+            # a goto that trusted the entry URL compared the PREVIOUS step's
+            # page and failed a correct arrival).
+            if step_type == "navigate":
+                actual_page = self._safe_page_url()
+            else:
+                actual_page = self._step_entry_url or self._safe_page_url()
             if not _same_page(expected_page, actual_page):
                 page_mismatch = {"expected": expected_page, "actual": actual_page}
 
@@ -758,6 +767,10 @@ class EvidenceTracker:
             response = self.page.goto(url)
             status = _response_status(response)
             final_url = self._safe_page_url()
+            # The step now runs on the page it landed on. Keep the tracker's
+            # entry URL truthful too, so no later reader sees the page the
+            # navigation started from (t-1031).
+            self._step_entry_url = final_url
             navigation = {
                 "requested": safe_url,
                 "final": final_url,
