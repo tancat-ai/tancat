@@ -205,3 +205,69 @@ def test_a_test_double_page_still_passes(tmp_path: Path) -> None:
 )
 def test_response_status_reads_only_a_real_status_code(response: Any, expected: int | None) -> None:
     assert _response_status(response) == expected
+
+
+# ---------------------------------------------------------------------------
+# t-1031 (j-0217 review): the goto mismatch must compare the page it LANDED on,
+# not the page the previous step was entered on.
+# ---------------------------------------------------------------------------
+
+
+def test_navigate_with_expected_page_after_an_element_step_still_passes(tmp_path: Path) -> None:
+    """The entry URL of the previous step must not leak into the goto's check.
+
+    fill/click/assert_visible record ``_step_entry_url`` before they act. A
+    navigate never did, so the goto compared its expected page against the
+    PREVIOUS step's page and failed a correct arrival.
+    """
+    page = _page("https://shop.example.com/login", 200)
+    tracker = _tracker(page, tmp_path)
+    tracker.fill("#user-name", "standard_user")  # an element step on /login
+    assert tracker._step_entry_url == "https://shop.example.com/login"
+
+    landed = "https://shop.example.com/cart.html"
+    page.url = landed
+    page.goto.return_value.status = 200
+
+    tracker.navigate(landed, expected_page=landed)
+
+    step = tracker.steps[-1]
+    assert step["type"] == "navigate"
+    assert step["result"]["status"] == "passed"
+    assert "page_mismatch" not in step["result"]
+    assert tracker._step_entry_url == landed
+
+
+def test_navigate_with_a_wrong_expected_page_after_an_element_step_still_fails(tmp_path: Path) -> None:
+    """The fix must not weaken the check: the landed page is still compared."""
+    page = _page("https://shop.example.com/login", 200)
+    tracker = _tracker(page, tmp_path)
+    tracker.fill("#user-name", "standard_user")
+
+    page.url = "https://shop.example.com/inventory.html"
+    page.goto.return_value.status = 200
+
+    with pytest.raises(PageMismatchError):
+        tracker.navigate(
+            "https://shop.example.com/inventory.html",
+            expected_page="https://shop.example.com/cart.html",
+        )
+
+    assert tracker.steps[-1]["result"]["page_mismatch"] == {
+        "expected": "https://shop.example.com/cart.html",
+        "actual": "https://shop.example.com/inventory.html",
+    }
+
+
+def test_an_element_step_still_compares_the_page_it_entered_on(tmp_path: Path) -> None:
+    """AI-067 is unchanged: an element step is judged against its entry page."""
+    page = _page("https://shop.example.com/cart.html", 200)
+    tracker = _tracker(page, tmp_path)
+
+    with pytest.raises(PageMismatchError):
+        tracker.fill("#coupon", "SAVE10", expected_page="https://shop.example.com/login")
+
+    assert tracker.steps[-1]["result"]["page_mismatch"] == {
+        "expected": "https://shop.example.com/login",
+        "actual": "https://shop.example.com/cart.html",
+    }

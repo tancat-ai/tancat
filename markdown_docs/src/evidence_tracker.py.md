@@ -47,7 +47,7 @@ Core recording method. Builds step dict with:
 
 ### `navigate(url, label="", expected_page="")` — Navigate + dismiss overlays + screenshot
 1. Read the navigation response. 4xx/5xx → the step is **failed** (`NavigationStatusError`) and names the status and both addresses; the screenshot and the final address stay as evidence
-2. An `expected_page` was supplied and the browser is not on it → the same failed shape a wrong-page step uses (`page_mismatch`, `PageMismatchError`)
+2. An `expected_page` was supplied and the browser is not on it → the same failed shape a wrong-page step uses (`page_mismatch`, `PageMismatchError`). The comparison reads the page the navigation **landed on**, never the page the previous step was entered on - a navigation has no "entry page" of its own (t-1031)
 3. A redirect to another address with no expected page supplied → both addresses and a note on the step, not judged: a canonical redirect and an auth bounce look identical here
 ### `fill(locator, value, label="")` — Fill form field
 ### `click(locator, label="")` — Click with layered fallback:
