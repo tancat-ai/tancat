@@ -102,8 +102,9 @@
         {
           "action": "ASSERT",
           "description": "Cart Summary",
-          "expected_locator": "#cart_contents_container",
-          "tolerance_selectors": [],
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/cart.html\")",
+          "tolerance_selectors": ["#cart_contents_container"],
           "expected_page": "https://www.saucedemo.com/cart.html"
         }
       ]
@@ -138,8 +139,9 @@
         {
           "action": "ASSERT",
           "description": "Checkout Info form",
-          "expected_locator": "#checkout_info_container",
-          "tolerance_selectors": [],
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://www.saucedemo.com/checkout-step-one.html\")",
+          "tolerance_selectors": ["#checkout_info_container"],
           "expected_page": "https://www.saucedemo.com/checkout-step-one.html"
         }
       ]

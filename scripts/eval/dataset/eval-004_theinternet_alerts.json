@@ -19,8 +19,10 @@
         {
           "action": "ASSERT",
           "description": "all elements listing",
-          "expected_locator": ".heading",
+          "expected_type": "url_assertion",
+          "expected_locator": "expect(page).to_have_url(\"https://the-internet.herokuapp.com\")",
           "tolerance_selectors": [
+            ".heading",
             "h3:has-text(\"All Elements\")",
             "h1.heading"
           ],
