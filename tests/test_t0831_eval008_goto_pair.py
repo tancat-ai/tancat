@@ -133,12 +133,14 @@ class TestGotoPairOnCommittedEvidence:
             gotos["navigate to bill payments"][1] == 'expect(page).to_have_url("http://localhost:8781/payments.html")'
         )
 
-    def test_2026_10_16_rescores_to_89(self) -> None:
+    def test_2026_10_16_rescores_to_90(self) -> None:
         report = rescore.rescore(_RUNS / "2026-10-16", _DATASET)
 
-        # 87 under the pre-fix validator; the +2 is the GOTO pair (both were
-        # resolvable in that run). Gate 2 is unaffected (ASSERT-only rule).
-        assert (report.correct_resolutions, report.total_placeholders) == (89, 113)
+        # 87 under the pre-fix validator; +2 is the GOTO pair (both were
+        # resolvable in that run). 89 -> 90 is t-1014: eval-004 c0 is a page
+        # criterion whose key now accepts the arrival the run emitted, so the
+        # corrected key recovers it. Gate 2 is unaffected (ASSERT-only rule).
+        assert (report.correct_resolutions, report.total_placeholders) == (90, 113)
         assert report.total_false_positives == 0
 
     def test_goto_without_arrival_evidence_stays_a_miss(self) -> None:
@@ -150,7 +152,10 @@ class TestGotoPairOnCommittedEvidence:
 
         assert gotos["go to the transfer page"][0] is False
         assert gotos["navigate to bill payments"][0] is True
-        assert (report.correct_resolutions, report.total_placeholders) == (95, 113)
+        # 95 is the GOTO-fix number; 98 is t-1014 (eval-001 c2, eval-001 c4 and
+        # eval-004 c0 are page criteria whose corrected keys accept the arrival
+        # that run emitted). The GOTO assertion above is this test's subject.
+        assert (report.correct_resolutions, report.total_placeholders) == (98, 113)
         assert report.total_false_positives == 0
 
     def test_dataset_has_no_goto_targeting_a_base_url(self) -> None:
