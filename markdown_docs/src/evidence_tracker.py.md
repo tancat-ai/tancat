@@ -43,8 +43,12 @@ Core recording method. Builds step dict with:
 - Element metadata (bbox, tag, attributes)
 - Failure diagnosis via `FailureReporter.diagnose_failure()` on error
 - Status: `"passed"`, `"partial_pass"` (when fallback used), `"failed"`
+- On a `navigate` step: a `navigation` block — `requested`, `final`, `status` (the HTTP status, when one exists), and a `note` when the browser was redirected somewhere else. Recorded, not judged, unless the caller named an expected page (d-0032)
 
-### `navigate(url, label="")` — Navigate + dismiss overlays + screenshot
+### `navigate(url, label="", expected_page="")` — Navigate + dismiss overlays + screenshot
+1. Read the navigation response. 4xx/5xx → the step is **failed** (`NavigationStatusError`) and names the status and both addresses; the screenshot and the final address stay as evidence
+2. An `expected_page` was supplied and the browser is not on it → the same failed shape a wrong-page step uses (`page_mismatch`, `PageMismatchError`)
+3. A redirect to another address with no expected page supplied → both addresses and a note on the step, not judged: a canonical redirect and an auth bounce look identical here
 ### `fill(locator, value, label="")` — Fill form field
 ### `click(locator, label="")` — Click with layered fallback:
 1. Scroll into view + direct click (`.first` to avoid strict-mode)
@@ -97,11 +101,14 @@ Refreshed 2026-10-02: public symbols present in the source and not listed above.
 
 Private `_`-helpers - the module's real logic (21 items). Grouped under the public function that calls them.
 
-### `EvidenceTracker.navigate(url: str, label: str = '') -> None` - method of `EvidenceTracker`
+### `EvidenceTracker.navigate(url: str, label: str = '', expected_page: str = '') -> None` - method of `EvidenceTracker`
+
+- `_response_status(response) -> int | None` (module helper): the HTTP status of a navigation response, or None when unknown (a same-document navigation, a test double). An unknown status is never an error status.
+  - d-0032: Playwright raises only on network, protocol and timeout failures, so a 404/500 used to record a PASSED navigation step, with a screenshot of the error page as its evidence. A page the browser was not seen to reach is not evidence of arrival.
 
 - `_dismiss_consent_overlays() -> None` (method of `EvidenceTracker`): Delegate to central consent dismissal utility.
 - `_dismiss_ad_overlays() -> None` (method of `EvidenceTracker`): Delegate to central consent dismissal utility (includes ad overlay handling).
-- `_record_step(step_type: str, label: str, locator: str | None = None, value: str | None = None, take_screenshot: bool = False, error: str | None = None, matched_text: str | None = None, fallback_used: bool = False, fallback_chain: list[dict[str, Any]] | None = None, elapsed_ms: int | None = None, fast_fail: bool = False, element_metadata: dict[str, Any] | None = None, expected_page: str = '') -> None` (method of `EvidenceTracker`): Record one evidence step. Args: expected_page: The page this step's locator was resolved against. When the step actually runs somewhere else the mismatch is recorded on the step result (page_mismatch) so a wrong-p...
+- `_record_step(step_type: str, label: str, locator: str | None = None, value: str | None = None, take_screenshot: bool = False, error: str | None = None, matched_text: str | None = None, fallback_used: bool = False, fallback_chain: list[dict[str, Any]] | None = None, elapsed_ms: int | None = None, fast_fail: bool = False, element_metadata: dict[str, Any] | None = None, expected_page: str = '', navigation: dict[str, Any] | None = None, mismatch_wording: str = 'its locator was resolved against') -> None` (method of `EvidenceTracker`): Record one evidence step. Args: expected_page: The page this step was supposed to run on - the page its locator was resolved against, or, for a navigation, the page it was asked to reach. When the step actually runs somewhere else the mismatch is recorded on the step result (page_mismatch) so a wrong-p...
 
 ### `EvidenceTracker.click(locator: str, label: str = '', expected_page: str = '') -> None` - method of `EvidenceTracker`
 

@@ -60,6 +60,34 @@ class PageMismatchError(RuntimeError):
     """
 
 
+class NavigationStatusError(RuntimeError):
+    """Raised when a navigation reaches an HTTP error page (d-0032).
+
+    Playwright raises only on network, protocol and timeout failures, so a
+    404 or a 500 used to be recorded as a PASSED navigation step, with a
+    screenshot of the error page as its evidence. A page the browser was not
+    seen to reach is not evidence of arrival, so the step is recorded as
+    failed - naming the status, the requested address and the address the
+    browser actually ended on - and the test stops there.
+    """
+
+
+def _response_status(response: Any) -> int | None:
+    """Return the HTTP status of a navigation response, or None when unknown.
+
+    None covers the honest unknowns: a same-document navigation has no
+    response, and a test double returns something that is not an integer. An
+    unknown status is never treated as an error status.
+    """
+    try:
+        status = getattr(response, "status", None)
+    except Exception:
+        return None
+    if isinstance(status, bool) or not isinstance(status, int):
+        return None
+    return status
+
+
 class EvidenceTracker:
     def __init__(
         self,
@@ -367,15 +395,25 @@ class EvidenceTracker:
         fast_fail: bool = False,
         element_metadata: dict[str, Any] | None = None,
         expected_page: str = "",
+        navigation: dict[str, Any] | None = None,
+        mismatch_wording: str = "its locator was resolved against",
     ) -> None:
         """Record one evidence step.
 
         Args:
-            expected_page: The page this step's locator was resolved against.
-                When the step actually runs somewhere else the mismatch is
-                recorded on the step result (``page_mismatch``) so a wrong-page
-                resolution is visible instead of silently passing. Empty means
-                "not checked".
+            expected_page: The page this step was supposed to run on - the page
+                its locator was resolved against, or, for a navigation step,
+                the page it was asked to reach. When the step actually runs
+                somewhere else the mismatch is recorded on the step result
+                (``page_mismatch``) so a wrong-page resolution is visible
+                instead of silently passing. Empty means "not checked".
+            navigation: What the browser did for a navigation step
+                (``requested``, ``final``, ``status``, and a ``note`` when a
+                redirect was recorded but not judged). Stored on the step so
+                the evidence names where the browser actually went.
+            mismatch_wording: How the expectation is described in the failure
+                text - "its locator was resolved against" for an element step,
+                "the step was asked for" for a navigation.
             fast_fail: True when the step failed because the locator does not
                 exist on the current page. Skips the expensive element-metadata
                 capture (waits ~5s per Playwright call on a missing element),
@@ -515,8 +553,8 @@ class EvidenceTracker:
             failure_note = str(error)[:300]
         elif page_mismatch is not None:
             failure_note = (
-                f"Step ran on '{page_mismatch['actual']}' but its locator was "
-                f"resolved against '{page_mismatch['expected']}' — the flow "
+                f"Step ran on '{page_mismatch['actual']}' but {mismatch_wording} "
+                f"'{page_mismatch['expected']}' — the flow "
                 "diverged, so this check did not verify its condition."
             )
 
@@ -548,6 +586,9 @@ class EvidenceTracker:
 
         if page_mismatch is not None:
             result["page_mismatch"] = page_mismatch
+
+        if navigation is not None:
+            result["navigation"] = navigation
 
         self.steps.append(
             {
@@ -581,7 +622,7 @@ class EvidenceTracker:
         if page_mismatch is not None and not error:
             raise PageMismatchError(
                 f"{step_type} '{label}' ran on '{page_mismatch['actual']}' but "
-                f"was resolved against '{page_mismatch['expected']}'. The flow "
+                f"{mismatch_wording} '{page_mismatch['expected']}'. The flow "
                 "diverged from the resolved page context; this check did not "
                 "verify its condition."
             )
@@ -666,13 +707,37 @@ class EvidenceTracker:
         except Exception as exc:
             logger.warning("incremental evidence persistence failed: %s", exc)
 
-    def navigate(self, url: str, label: str = "") -> None:
+    def navigate(self, url: str, label: str = "", expected_page: str = "") -> None:
         """Navigate to a URL and record the navigation.
 
         Args:
             url: The URL to navigate to.
             label: Optional human-readable label for the step. Defaults to
                    "Navigate to <url>" when empty.
+            expected_page: The page this step is supposed to reach, when the
+                   caller knows it. When it is given and the browser ends up
+                   somewhere else, the step is recorded as failed and names
+                   both pages. Empty means "the caller did not say" - a
+                   redirect is then recorded (``navigation`` on the step) but
+                   not judged; see the note below.
+
+        d-0032: a navigation step used to pass on "no exception raised", and
+        Playwright raises only on network, protocol and timeout failures - so a
+        404, a 500 or a bounce home was recorded as PASSED with a screenshot of
+        the error page. The response is now read:
+
+        - 4xx/5xx -> failed, naming the status, the requested address and the
+          address the browser actually reached (``NavigationStatusError``).
+        - an ``expected_page`` was given and the browser is not on it -> the
+          same failed shape a wrong-page step already uses (``page_mismatch``
+          on the step, ``PageMismatchError`` raised).
+        - otherwise a redirect to a different address is recorded on the step
+          under ``navigation`` with a note naming both addresses, and is not
+          judged: a canonical redirect and an auth bounce look the same from
+          here, so failing both would be a false red. Say it, do not guess.
+
+        The screenshot and the recorded final address stay on the step either
+        way - they are the evidence for what the browser reached.
         """
         if not label:
             label = f"Navigate to {redact_url_credentials(url)}"
@@ -690,7 +755,43 @@ class EvidenceTracker:
             pass
         _t0 = time.time()
         try:
-            self.page.goto(url)
+            response = self.page.goto(url)
+            status = _response_status(response)
+            final_url = self._safe_page_url()
+            navigation = {
+                "requested": safe_url,
+                "final": final_url,
+                "status": status,
+            }
+            if status is not None and status >= 400:
+                # An HTTP error page is not arrival. Record the failure with
+                # the evidence (screenshot, both addresses) and stop.
+                error = f"navigation returned HTTP {status}: asked for '{safe_url}', the browser reached '{final_url}'"
+                self._record_step(
+                    "navigate",
+                    label,
+                    value=safe_url,
+                    take_screenshot=True,
+                    error=error,
+                    elapsed_ms=int((time.time() - _t0) * 1000),
+                    navigation=navigation,
+                    # There is no element to diagnose - the error names the
+                    # status and both addresses, so it is its own diagnosis.
+                    # The screenshot is still taken (it is the evidence of the
+                    # page the browser reached).
+                    fast_fail=True,
+                )
+                raise NavigationStatusError(f"navigate '{label}': {error}")
+            if not _same_page(final_url, safe_url):
+                # The browser left the address that was asked for. Record both,
+                # so the step is never a silent pass - and judge it only when
+                # the caller said where it should land.
+                navigation["redirected"] = True
+                navigation["note"] = f"the browser was redirected from '{safe_url}' to '{final_url}'; " + (
+                    "that is not the expected page"
+                    if expected_page
+                    else "no expected page was supplied, so this redirect is recorded, not judged"
+                )
             self._dismiss_consent_overlays()
             self._dismiss_ad_overlays()
             # Short settle so the evidence shot captures a rendered page, not
@@ -698,8 +799,22 @@ class EvidenceTracker:
             # ``_record_step``).
             self.page.wait_for_timeout(500)
             self._record_step(
-                "navigate", label, value=safe_url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
+                "navigate",
+                label,
+                value=safe_url,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
+                navigation=navigation,
+                mismatch_wording="the step was asked for",
             )
+        except NavigationStatusError:
+            # Already recorded with its own evidence - re-raise, do not record
+            # the same failure twice.
+            raise
+        except PageMismatchError:
+            # Recorded by the success path of _record_step (B-093) - re-raise.
+            raise
         except Exception as e:
             self._record_step(
                 "navigate",
@@ -708,6 +823,7 @@ class EvidenceTracker:
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 
