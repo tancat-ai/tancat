@@ -27,15 +27,13 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from src.code_normalizer import ensure_test_navigation
 from src.code_postprocessor import (
     normalise_generated_code,
     replace_token_in_line,
     strip_evidence_from_test_code,
 )
-from src.evidence_tracker import EvidenceTracker, PageMismatchError
+from src.evidence_tracker import EvidenceTracker
 
 # ---------------------------------------------------------------------------
 # The emitters name the page
@@ -145,7 +143,9 @@ def _page(url: str, status: int = 200) -> MagicMock:
 
 
 def _tracker(page: Any, tmp_path: Path) -> EvidenceTracker:
-    return EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def _emitted_goto(url: str) -> str:
@@ -179,10 +179,10 @@ def test_a_redirect_to_another_page_fails_and_names_both_addresses(tmp_path: Pat
     page = _page(landed)
     tracker = _tracker(page, tmp_path)
 
-    with pytest.raises(PageMismatchError) as raised:
-        eval(_emitted_goto(asked_for), {"evidence_tracker": tracker})  # noqa: S307
+    eval(_emitted_goto(asked_for), {"evidence_tracker": tracker})  # noqa: S307
 
-    message = str(raised.value)
+    # t-1057: recorded, not raised at the step; the test fails once at its end.
+    message = tracker.journey_summary()
     assert asked_for in message
     assert landed in message
 

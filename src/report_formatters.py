@@ -111,6 +111,41 @@ def _suite_heatmap_lines(evidence_dir: Path | None, urls: list[str]) -> list[str
     return lines
 
 
+def journey_lines(test: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Return the t-1063 journey summary as (step, expected, reached) rows.
+
+    One row per failed step, plus the off-course note as a final row whose
+    ``step`` is "Later steps". Empty for a clean test and for an older package
+    that carries no journey block, so nothing is invented.
+    """
+    journey = test.get("journey") or {}
+    if not isinstance(journey, dict) or not journey:
+        return []
+    rows: list[tuple[str, str, str]] = []
+    for failure in journey.get("failed_steps") or []:
+        if not isinstance(failure, dict):
+            continue
+        page = failure.get("page") or {}
+        expected = str(page.get("expected") or "") if isinstance(page, dict) else ""
+        reached = str(page.get("actual") or "") if isinstance(page, dict) else ""
+        detail = str(failure.get("error") or "")
+        if not expected and detail:
+            expected = detail
+        rows.append((f"Step {failure.get('step')}", expected, reached))
+    later = int(journey.get("later_steps") or 0)
+    passed = int(journey.get("later_passed_off_course") or 0)
+    off_course = journey.get("off_course") or {}
+    if later:
+        reached = str(off_course.get("actual") or "") if isinstance(off_course, dict) else ""
+        note = f"{later} ran, {passed} passed"
+        if reached:
+            note += f" on '{reached}'; none of those passes is clean"
+        else:
+            note += " after the failure; none of those passes is clean"
+        rows.append(("Later steps", "", note))
+    return rows
+
+
 def verification_line(test: dict[str, Any]) -> str:
     """Return the B-100 one-line verification summary for a report row.
 
@@ -195,7 +230,7 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
             lines.append(f"- **Error:** {error_message[:200]}")
 
         # Failure diagnostics section (only for failed tests with diagnostic data)
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             lines.append("")
             lines.append("#### Failure Diagnostics")
             if page_url:
@@ -208,6 +243,17 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
                 lines.append(f"- **Failure Note:** {fn}")
             if suggested_locators:
                 lines.append("- **Suggested Alternatives:** " + ", ".join(f"`{s}`" for s in suggested_locators[:5]))
+            journey_rows = journey_lines(test)
+            if journey_rows:
+                lines.append("")
+                lines.append("#### Journey")
+                for step, expected, reached in journey_rows:
+                    parts = [f"**{step}**"]
+                    if expected:
+                        parts.append(f"expected {expected}")
+                    if reached:
+                        parts.append(f"reached {reached}")
+                    lines.append("- " + " - ".join(parts))
             if available_elements:
                 # Summarize by role/tag
                 roles: dict[str, int] = {}
@@ -323,7 +369,7 @@ def generate_jira_report(
             lines.append(f"*Error:* {error_message[:200]}")
 
         # Failure diagnostics section
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             lines.append("")
             lines.append("*-- Failure Diagnostics --*")
             if page_url:
@@ -578,7 +624,7 @@ def generate_html_report(
         page_url = test.get("page_url", "")
         page_title = test.get("page_title", "")
 
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             diag_border = "border-left:4px solid #f44336;padding-left:15px;margin:15px 0;background:#fff5f5;padding:10px;border-radius:4px;"
             lines.append(f"                <div style='{diag_border}'>")
             lines.append("                    <strong style='color:#c62828;'>Failure Diagnostics</strong>")
@@ -595,6 +641,11 @@ def generate_html_report(
                 fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
                 lines.append(
                     f"                    <div class='detail-row'><span class='detail-label'>Failure Note:</span><span style='white-space:pre-wrap;'>{escape_html(fn)}</span></div>"
+                )
+            for step, expected, reached in journey_lines(test):
+                detail = " - ".join(part for part in (expected, reached) if part)
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>{escape_html(step)}:</span><span>{escape_html(detail)}</span></div>"
                 )
             if suggested_locators:
                 loc_html = ", ".join(f"<code>{escape_html(s)}</code>" for s in suggested_locators[:5])
