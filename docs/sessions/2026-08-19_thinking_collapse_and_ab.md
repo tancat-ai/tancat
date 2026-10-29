@@ -18,25 +18,25 @@ isolation work touches no `src/` so no entanglement risk.)
 
 ## 2. Evidence steps (in order)
 
-1. **Temp pin delivery proven** — `scratch/determinism_check.py` run 1:
+1. **Temp pin delivery proven** — `scratch/determinism_check.py` [gone] run 1:
    both calls logged `temp=0.0`. But gen2 returned **0 chars** (235s, no
    error) → the collapse reproduced at the level of ONE bare LLM call: no
    orchestrator, no eval harness, no retry logic.
-2. **Raw-response probe** (`scratch/raw_probe.py`): the response had
+2. **Raw-response probe** (`scratch/raw_probe.py` [gone]): the response had
    `reasoning_content` ~16.9k chars and `content=''`, `finish_reason=length`,
    `completion_tokens=4096`. **The thinking phase ate the whole max_tokens
    budget.** Provider only reads `message.content` → all thinking discarded.
-3. **Fix candidates** (`scratch/thinking_fix_probe.py`, 3.8):
+3. **Fix candidates** (`scratch/thinking_fix_probe.py` [gone], 3.8):
    - `chat_template_kwargs={"enable_thinking": False}` → **18.2s/18.1s,
      reasoning=0, content every time** ← winner, per-request, llama.cpp honors it
    - `/no_think` in-band → model ignores it (still 160–185s of thinking)
    - max_tokens 16384 → works, 313s (17× slower)
-4. **3.6 fairness probe** (`scratch/probe_36.py`, byte-identical prompt):
+4. **3.6 fairness probe** (`scratch/probe_36.py` [gone], byte-identical prompt):
    3.6 is ALSO a thinking model — default calls collapsed **2/2**
    (162s/156s, `content=0`); thinking-off = 16.3s/16.3s byte-stable.
    → Run C's "3.6 tolerates the 156k config" was retry luck. The collapse
    was NEVER a server-config flag. Both models equalized by thinking-off.
-5. **Determinism** (`scratch/determinism_check.py` post-fix): thinking off +
+5. **Determinism** (`scratch/determinism_check.py` [gone] post-fix): thinking off +
    temp 0 + spec ON → still not byte-identical (naming jitter:
    `test_02_fill_username` vs `..._field`) → **draft-MTP spec decode is the
    residual non-determinism source**. Server relaunched without spec flags →
@@ -103,8 +103,8 @@ model path + n_ctx + `speculative=False`, then
 (persist ON → eval_runs records model, temperature_sent=0.0, thinking=off,
 server_defaults). Never run pytest concurrently (deadlock rule).
 
-- Leg F (3.6, spec off): log `scratch/eval_F_36_specoff.log` — **DONE**
-- Leg G (3.8, spec off): log `scratch/eval_G_38_specoff.log` — **DONE**
+- Leg F (3.6, spec off): log `scratch/eval_F_36_specoff.log` [gone] — **DONE**
+- Leg G (3.8, spec off): log `scratch/eval_G_38_specoff.log` [gone] — **DONE**
 
 **Validity conditions finally all true:** same flags both legs; temp pinned +
 recorded; thinking off + recorded; timeouts non-silent at 120s; generation
@@ -209,6 +209,10 @@ Current server at end of session: **3.8, spec OFF** (leg G config). If the box
 was rebooted, relaunch with the exact flags in §5 (spawn llama-server directly —
 llmctl flash-attn bug still open). Verify `/v1/models` + `/slots` before
 trusting anything.
+
+**Artifact status (2026-10-28):** every file listed below is gone from this machine; the figures
+this record relies on are in the body above, so the listing is the map of what was run, not a
+promise that the files can be opened.
 
 ```
 scratch/determinism_check.py        # same story twice via linear path, diff

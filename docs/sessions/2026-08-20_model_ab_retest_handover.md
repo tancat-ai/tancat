@@ -10,9 +10,8 @@
 > - `docs/sessions/2026-08-18_llm_model_ab_investigation.md` (mistakes catalogue §14)
 > - `docs/sessions/2026-08-19_thinking_collapse_and_ab.md` (the thinking fix + handover)
 > - `docs/sessions/2026-08-19_external_benchmark_and_thinking_on_ab.md` (this A/B + correction)
-> - Evidence: `../llm-benchmarks/evidence/model-ab-2026-08-20/` (a separate
->   checkout next to this repo - in no clone of it; the numbers this handover
->   relies on are restated inline below)
+> - Evidence: `../llm-benchmarks/evidence/model-ab-2026-08-20/`
+>   (llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 
 ---
 
@@ -31,9 +30,8 @@ eval-005 that timed out under MTP OFF now completes), 2.0x decode speedup
 within noise. So MTP is a speed/feasibility win, NOT a quality fix; the ~13pt 3.8
 deficit persists and still needs a matched-precision file to judge. A 3.6 MTP-ON
 leg was not run (MTP output == MTP-off output, so 3.6 stays ~73%). See
-`llm-benchmarks/evidence/model-ab-2026-08-20/leg_J_mtpon_results.md` (outside
-this repo; the four results it adds - 8/8 stories, 2.0x decode, 63.5% vs 62.4% -
-are in the paragraph above).
+`llm-benchmarks/evidence/model-ab-2026-08-20/leg_J_mtpon_results.md`
+(llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 
 ---
 
@@ -179,8 +177,8 @@ the review. Server currently left as old 3.8 (under-quantized), spec-OFF.
 ## 7. Evidence & references index
 
 **Evidence folder (canonical):**
-`../llm-benchmarks/evidence/model-ab-2026-08-20/` (outside this repo - it is in
-no clone of this one; the figures this handover uses are quoted in §0 and §1)
+`../llm-benchmarks/evidence/model-ab-2026-08-20/`
+(llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 - `README.md` — provenance + file index
 - `gguf_quantization_confound.md` — *read first*: the model-file bpw confound
 - `model_ab_all_conditions.md` — the four-condition table
