@@ -380,7 +380,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | toml | 0.10.2 | MIT License | https://github.com/uiri/toml |
 | torch | 2.14.1 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
 | torch | 2.14.1+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
-| tornado | 6.5.7 | Apache Software License | http://www.tornadoweb.org/ |
+| tornado | 6.6 | Apache Software License | http://www.tornadoweb.org/ |
 | tqdm | 4.70.0 | MPL-2.0 AND MIT | https://tqdm.github.io |
 | traitlets | 5.15.1 | BSD License | https://github.com/ipython/traitlets |
 | transformers | 5.17.0 | Apache 2.0 License | https://github.com/huggingface/transformers |
