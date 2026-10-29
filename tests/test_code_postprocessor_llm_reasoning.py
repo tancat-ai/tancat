@@ -206,7 +206,8 @@ def test_01_checkout(page: Page):
     assert "def __init__(self, page: Page) -> None:" in fixed
     assert "CartPage(page)" in fixed
     assert "dismiss_consent_overlays(self.page)" in fixed
-    assert 'evidence_tracker.navigate("https://example.com/")' in fixed
+    # t-1049: the rewritten goto names the page it expects.
+    assert 'evidence_tracker.navigate("https://example.com/", expected_page="https://example.com/")' in fixed
 
 
 def test_normalise_generated_code_rewrites_hallucinated_evidence_launcher_fixture() -> None:
@@ -415,7 +416,11 @@ def test_replace_token_in_line_goto_replaces_quoted_placeholder_without_double_q
         description="products page",
     )
 
-    assert fixed.strip() == "evidence_tracker.navigate('https://example.com/products')"
+    # t-1049: the expected page is the address the pipeline just chose.
+    assert (
+        fixed.strip()
+        == "evidence_tracker.navigate('https://example.com/products', expected_page='https://example.com/products')"
+    )
 
 
 def test_replace_remaining_placeholders_converts_placeholders_in_function_calls() -> None:

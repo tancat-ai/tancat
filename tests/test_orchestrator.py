@@ -689,10 +689,14 @@ def test_02_verify_cart(page: Page):
         )
     )
 
-    assert "evidence_tracker.navigate('https://example.com/')" in final_code
+    # t-1049: the emitted goto names the page it expects.
+    assert "evidence_tracker.navigate('https://example.com/', expected_page='https://example.com/')" in final_code
     # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
     assert "evidence_tracker.click('a[href=\"/view_cart\"]'" in final_code
-    assert "evidence_tracker.navigate('https://example.com/view_cart')" in final_code
+    assert (
+        "evidence_tracker.navigate('https://example.com/view_cart', "
+        "expected_page='https://example.com/view_cart')" in final_code
+    )
     # B-020: ASSERT can resolve to assert_visible or assert_text depending on LLM assertion_type
     assert (
         "evidence_tracker.assert_visible('#cart-summary'" in final_code
@@ -825,7 +829,8 @@ def test_checkout(page: Page):
     # page.goto is normalised to evidence_tracker.navigate
     # evidence_tracker.navigate() calls dismiss_consent_overlays internally,
     # so no explicit injection is needed in auto-dismiss mode
-    assert 'evidence_tracker.navigate("https://example.com/")' in final_code
+    # t-1049: the emitted goto names the page it expects.
+    assert 'evidence_tracker.navigate("https://example.com/", expected_page="https://example.com/")' in final_code
     assert "page.goto(" not in final_code
 
 

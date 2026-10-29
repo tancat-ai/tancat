@@ -49,6 +49,7 @@ Core recording method. Builds step dict with:
 1. Read the navigation response. 4xx/5xx → the step is **failed** (`NavigationStatusError`) and names the status and both addresses; the screenshot and the final address stay as evidence
 2. An `expected_page` was supplied and the browser is not on it → the same failed shape a wrong-page step uses (`page_mismatch`, `PageMismatchError`). The comparison reads the page the navigation **landed on**, never the page the previous step was entered on - a navigation has no "entry page" of its own (t-1031)
 3. A redirect to another address with no expected page supplied → both addresses and a note on the step, not judged: a canonical redirect and an auth bounce look identical here
+4. A redirect that lands on a page the identity rule calls the same (a trailing slash, a locale prefix, a session bounce that returns) → the step passes **and** the step record says `redirected` with both addresses, so a redirect the user did not choose is visible and they can decide about it (t-1049)
 ### `fill(locator, value, label="")` — Fill form field
 ### `click(locator, label="")` — Click with layered fallback:
 1. Scroll into view + direct click (`.first` to avoid strict-mode)
