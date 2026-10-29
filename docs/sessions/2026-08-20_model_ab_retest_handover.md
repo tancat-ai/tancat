@@ -11,6 +11,7 @@
 > - `docs/sessions/2026-08-19_thinking_collapse_and_ab.md` (the thinking fix + handover)
 > - `docs/sessions/2026-08-19_external_benchmark_and_thinking_on_ab.md` (this A/B + correction)
 > - Evidence: `../llm-benchmarks/evidence/model-ab-2026-08-20/`
+>   (llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 
 ---
 
@@ -29,7 +30,8 @@ eval-005 that timed out under MTP OFF now completes), 2.0x decode speedup
 within noise. So MTP is a speed/feasibility win, NOT a quality fix; the ~13pt 3.8
 deficit persists and still needs a matched-precision file to judge. A 3.6 MTP-ON
 leg was not run (MTP output == MTP-off output, so 3.6 stays ~73%). See
-`llm-benchmarks/evidence/model-ab-2026-08-20/leg_J_mtpon_results.md`.
+`llm-benchmarks/evidence/model-ab-2026-08-20/leg_J_mtpon_results.md`
+(llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 
 ---
 
@@ -176,6 +178,7 @@ the review. Server currently left as old 3.8 (under-quantized), spec-OFF.
 
 **Evidence folder (canonical):**
 `../llm-benchmarks/evidence/model-ab-2026-08-20/`
+(llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 - `README.md` — provenance + file index
 - `gguf_quantization_confound.md` — *read first*: the model-file bpw confound
 - `model_ab_all_conditions.md` — the four-condition table

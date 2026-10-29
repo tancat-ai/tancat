@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "test": {
+    "name": "test_t02_navigate_to_cart[chromium]",
+    "condition_ref": "T02",
+    "story_ref": "S02",
+    "status": "failed",
+    "duration_s": 2.31,
+    "verification": {}
+  },
+  "page": {"url": "http://127.0.0.1:8123/login.html"},
+  "run_history": {"total_runs": 1, "passed_runs": 0, "failed_runs": 1},
+  "steps": [
+    {"step": 1, "type": "navigate", "label": "Navigate to http://127.0.0.1:8123/index.html",
+     "locator": null, "value": "http://127.0.0.1:8123/index.html", "status": "passed",
+     "url": "http://127.0.0.1:8123/login.html",
+     "navigation": {"requested": "http://127.0.0.1:8123/index.html",
+                    "final": "http://127.0.0.1:8123/login.html", "status": 200,
+                    "redirected": true,
+                    "note": "the browser was redirected from 'http://127.0.0.1:8123/index.html' to 'http://127.0.0.1:8123/login.html'; no expected page was supplied, so this redirect is recorded, not judged"}},
+    {"step": 2, "type": "click", "label": "go to cart", "locator": "#go-cart",
+     "value": null, "status": "failed", "url": "http://127.0.0.1:8123/login.html",
+     "expected_page": "http://127.0.0.1:8123/index.html",
+     "page_mismatch": {"expected": "http://127.0.0.1:8123/index.html",
+                       "actual": "http://127.0.0.1:8123/login.html"},
+     "error": "click 'go to cart' ran on 'http://127.0.0.1:8123/login.html' but the step was asked for 'http://127.0.0.1:8123/index.html'"}
+  ]
+}

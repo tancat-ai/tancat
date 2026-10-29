@@ -148,6 +148,7 @@ def build_report_dicts(
         # B-100: the emit-time verdict for this criterion's test, read from its
         # evidence sidecar. Empty when the package predates the field.
         verification: dict[str, Any] = {}
+        journey: dict[str, Any] = {}
 
         if evidence_map and run is not None:
             evidence = match_evidence_to_test(evidence_map, run.name)
@@ -175,6 +176,8 @@ def build_report_dicts(
                     available_elements = [e for e in raw_elements if isinstance(e, dict)]
 
                 screenshot_paths = get_screenshot_paths(evidence)
+                # t-1063: the journey failure summary the user reads.
+                journey = diag.get("journey", {}) or {}
 
         tc_id_display = str(tc_id)
         icon = _status_icon(status)
@@ -205,6 +208,8 @@ def build_report_dicts(
                 # B-100: what this test proved, straight from its evidence
                 # sidecar (label + checked target + reason for unverified).
                 "verification": verification,
+                # t-1063: the failed step and what the journey did after it.
+                "journey": journey,
             }
         )
 

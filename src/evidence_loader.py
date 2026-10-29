@@ -133,6 +133,9 @@ def get_failure_diagnostics(evidence: dict[str, Any]) -> dict[str, Any]:
         "test_duration_s": test_info.get("duration_s", 0.0),
         "condition_ref": test_info.get("condition_ref", ""),
         "story_ref": test_info.get("story_ref", ""),
+        # t-1063: what failed and what the journey did afterwards. Empty for a
+        # clean test and for sidecars written before this field existed.
+        "journey": evidence.get("journey", {}) or {},
     }
 
 

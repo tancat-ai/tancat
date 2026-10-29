@@ -345,6 +345,25 @@ def _to_have_url_arg(expr: str) -> str | None:
     return None
 
 
+def accepts_page_arrival(placeholder: dict[str, Any]) -> bool:
+    """True when this golden placeholder is satisfied by arriving at its page.
+
+    A criterion that says only "go to the page" (``criterion_kind: "page"``)
+    is proved by the browser being on that page. The key says so when its
+    expected locator - or one of its tolerances - is a ``to_have_url``
+    expression: the matcher then compares page identity, not an element, so an
+    arrival at the right page passes and an arrival at any other page does not
+    (``_locators_match``).
+
+    A page criterion keyed only to an element cannot accept arrival at all.
+    ``eval_harness.py dataset --validate`` names those keys instead of leaving
+    them silent, so the defect this function answers (t-1014) cannot return.
+    """
+    locators = [str(placeholder.get("expected_locator") or "")]
+    locators.extend(str(item) for item in placeholder.get("tolerance_selectors") or [])
+    return any(_to_have_url_arg(locator) for locator in locators)
+
+
 def _same_url_identity(a: str, b: str) -> bool:
     """True when two URLs name the same page: scheme + host + path.
 

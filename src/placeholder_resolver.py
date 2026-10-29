@@ -100,6 +100,36 @@ class PlaceholderResolver:
         return re.sub(r"[_-]+", " ", raw_haystack)
 
     @staticmethod
+    def _identity_kind(element: dict[str, Any]) -> int:
+        """Return how strongly an element names itself (0 = a bare tag).
+
+        Used by the CLICK tie-break in ``rank_candidates`` (t-0998): a wrapper
+        and its own heading can tie the real target on score, and only the
+        element with an id / data-test / class / name is the control.
+        """
+        if str(element.get("id", "")).strip() or str(element.get("data_test", "")).strip():
+            return 2
+        if str(element.get("classes", "")).strip() or str(element.get("name", "")).strip():
+            return 1
+        return 0
+
+    @staticmethod
+    def _is_embedded_text(text: str, container: str) -> bool:
+        """True when *text* sits inside *container* as whole words (t-1011).
+
+        The CLICK tie-break reads one candidate's text inside another's as DOM
+        nesting: a wrapper's text is the merged text of its children, so it
+        holds a child's text verbatim. Whole words matter, because a word form
+        is not nesting - the banking nav link "Pay Bills" contains the string
+        "Pay Bill", but it does not contain the submit control of that name,
+        and demoting the nav link there silently replaced the pre-t-0572 tie
+        that ``tests/test_submit_preference.py`` pins.
+        """
+        if not text or not container or text == container:
+            return False
+        return re.search(rf"(?<!\w){re.escape(text)}(?!\w)", container) is not None
+
+    @staticmethod
     def _is_assertion_candidate(element: dict[str, Any]) -> bool:
         """Return True when the scraped element is plausible for visibility assertions."""
         role = str(element.get("role", "")).strip().lower()
@@ -468,10 +498,82 @@ class PlaceholderResolver:
             if score is not None:
                 ranked.append((score, element))
 
-        # Sort globally: 1) score desc, 2) text length desc, 3) selector specificity desc.
+        # t-1004: text evidence outranks every bonus. A candidate that shares
+        # no word with the step can only have scored on the bonuses a kind or a
+        # role earns - a button earns +10 role and +15 commit on a description
+        # that merely names a submit verb - so it must never sit above a
+        # candidate whose own haystack names the step. eval-005 lost CLICK
+        # "Pay in Full" to a visible "Back" button (31) while the hidden,
+        # exactly-named #paymentFull scored 30 (100 for the text, -30 hidden,
+        # -40 container).
+        #
+        # The tier uses the words the scorer already scored, so it adds no third
+        # vocabulary: 1 when the description is a literal part of the element's
+        # haystack (the scorer's fast path) or shares a word with it (its slow
+        # path), else 0. It only orders the candidates that are already in this
+        # page's list: it never adds one back and never compares across pages.
+        def _text_tier(element: dict[str, Any]) -> int:
+            haystack = self._build_element_haystack(element).lower()
+            if normalized_description and normalized_description in haystack:
+                return 1
+            return int(bool(desc_words & SemanticMatcher.get_words(haystack, expand_aliases=False)))
+
+        textual = {id(element): _text_tier(element) for _score, element in ranked}
+
+        # Sort globally: 1) text evidence, 2) score desc, 3) the CLICK tie-break
+        # below, 4) text length desc, 5) selector specificity desc.
+        #
+        # t-0998: a CLICK target is the element that names itself, not its wrapper
+        # and not its label. A page-section wrapper's haystack is the merged text
+        # of its children, so it ties a real target inside it and then wins on
+        # text length (eval-005: the product card ``#productCar`` lost a 3-way tie
+        # to the ``#page-product`` section wrapper). A bare ``h4``/``span`` label
+        # inside an identified control ties for the same reason and must not win
+        # either - clicking a bare tag selector is not clicking the control.
+        # Only CLICK is reordered: an ASSERT legitimately targets a section
+        # container (``#cart_contents_container``), so the same demotion there
+        # would drop correct answers.
+        click_text = (
+            {id(element): " ".join(str(element.get("text", "")).lower().split()) for _score, element in ranked}
+            if action == "CLICK"
+            else {}
+        )
+
+        def _loses_to_tied_neighbour(score: int, element: dict[str, Any]) -> bool:
+            """True when a tied candidate with a stronger identity owns this text."""
+            own = click_text.get(id(element), "")
+            if not own:
+                return False
+            kind = PlaceholderResolver._identity_kind(element)
+            for other_score, other in ranked:
+                if other is element or other_score != score:
+                    continue
+                other_text = click_text.get(id(other), "")
+                if not other_text or other_text == own:
+                    continue
+                other_kind = PlaceholderResolver._identity_kind(other)
+                if PlaceholderResolver._is_embedded_text(other_text, own):
+                    # Another tied candidate's whole text sits inside mine: I am
+                    # the wrapper that matched on aggregate text.
+                    if other_kind >= kind:
+                        return True
+                elif PlaceholderResolver._is_embedded_text(own, other_text) and kind == 0 and other_kind >= 1:
+                    # A bare label inside an identified target: not the target.
+                    return True
+            return False
+
+        # Compute the demotion BEFORE sorting: ``list.sort`` empties the list
+        # while it runs, so a key function that reads ``ranked`` would see no
+        # neighbours and never demote anything.
+        demoted = {
+            id(element): _loses_to_tied_neighbour(score, element) for score, element in ranked if action == "CLICK"
+        }
+
         ranked.sort(
             key=lambda item: (
+                textual.get(id(item[1]), 0),
                 item[0],
+                not demoted.get(id(item[1]), False),
                 len(str(item[1].get("text", "")).strip()),
                 len(str(item[1].get("selector", "")).strip()),
             ),

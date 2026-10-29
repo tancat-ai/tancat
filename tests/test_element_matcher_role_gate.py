@@ -186,3 +186,48 @@ def test_excluded_selectors_never_leak_through_the_fallback() -> None:
         )
     )
     assert matched is None
+
+
+def test_click_card_named_by_its_own_heading_is_not_skipped_as_a_heading() -> None:
+    """t-0998: a card that CONTAINS a heading is the click target, not a heading.
+
+    The accessible role of a container is computed from its content, so the
+    lv_insurance product card (``div#productCar``, text inside its ``h4``)
+    reports ``computed_role="heading"``. Pass 1 skipped it as if it were the
+    heading, so the click resolved to the section wrapper ``#page-product``.
+    """
+    card = _el(
+        "#productCar",
+        "Car Insurance Comprehensive cover for your vehicle",
+        tag="div",
+        role="div",
+        computed_role="heading",
+        id="productCar",
+        classes="card-option",
+    )
+    heading = _el("h4", "Car Insurance", tag="h4", role="statictext", computed_role="heading")
+    wrapper = _el(
+        "#page-product",
+        (
+            "Select a Product Car Insurance Comprehensive cover for your vehicle "
+            "Home Insurance Buildings contents cover Please select a product Back Next"
+        ),
+        tag="div",
+        role="div",
+        id="page-product",
+        classes="page",
+    )
+    pages = {"https://x.test/insurance": [wrapper, card, heading]}
+
+    result = _matcher().pass1_text_match("CLICK", "Car Insurance", pages)
+
+    assert result is not None
+    assert result["selector"] == "#productCar"
+
+
+def test_click_bare_heading_is_still_skipped() -> None:
+    """The tag, not the role, decides: an ``h4`` stays out of the fast pass."""
+    heading = _el("h4", "Car Insurance", tag="h4", role="statictext", computed_role="heading")
+    pages = {"https://x.test/insurance": [heading]}
+
+    assert _matcher().pass1_text_match("CLICK", "Car Insurance", pages) is None

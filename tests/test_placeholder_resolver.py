@@ -1,5 +1,7 @@
 """Tests for placeholder resolution."""
 
+import pytest
+
 from src.placeholder_resolver import PlaceholderResolver
 from tests.resolver_test_helpers import best_ranked_element, resolve_placeholders
 
@@ -1092,3 +1094,217 @@ def test_success_pages_are_not_confused_with_their_parent_page() -> None:
         resolver.resolve_url("payment success message", pages, known_urls=list(pages.keys()))
         == "http://localhost:8781/payment_success.html?amount=50"
     )
+
+
+# ---------------------------------------------------------------------------
+# t-0998 — a CLICK target is the element that names itself
+# ---------------------------------------------------------------------------
+
+
+def _insurance_product_page() -> list[dict]:
+    """The lv_insurance product section: wrapper, card, and the card's heading.
+
+    Shapes copied from the real scrape (see tests). The wrapper's haystack is
+    the merged text of both product cards, so it ties the card for a
+    "Car Insurance" click; the ``h4`` label inside the card ties too.
+    """
+    return [
+        {
+            "selector": "#page-product",
+            "text": (
+                "Select a Product Car Insurance Comprehensive cover for your vehicle "
+                "Home Insurance Buildings contents cover Please select a product Back Next"
+            ),
+            "tag": "div",
+            "role": "heading",
+            "id": "page-product",
+            "classes": "page",
+            "is_visible": True,
+        },
+        {
+            "selector": "#productCar",
+            "text": "Car Insurance Comprehensive cover for your vehicle",
+            "tag": "div",
+            "role": "heading",
+            "id": "productCar",
+            "classes": "card-option",
+            "is_visible": True,
+        },
+        {
+            "selector": "h4",
+            "text": "Car Insurance",
+            "tag": "h4",
+            "role": "statictext",
+            "id": "",
+            "classes": "",
+            "is_visible": True,
+        },
+    ]
+
+
+def test_click_tie_prefers_the_named_card_over_its_page_section_wrapper() -> None:
+    """eval-005 crit 1: a section wrapper must not beat the card it contains.
+
+    The wrapper and the card score the same (both are div containers that match
+    on merged text). Before t-0998 the tie was broken by text length, so the
+    wrapper - whose text is the whole section - won, and the emitted test
+    clicked the section instead of the Car Insurance card.
+    """
+    resolver = PlaceholderResolver(match_threshold=1)
+
+    ranked = resolver.rank_candidates("CLICK", "Car Insurance", _insurance_product_page())
+
+    assert ranked[0][1]["selector"] == "#productCar"
+    # The wrapper is still a candidate, just no longer the winner.
+    assert "#page-product" in [element["selector"] for _score, element in ranked]
+
+
+# ---------------------------------------------------------------------------
+# t-1004 — text evidence outranks every bonus
+# ---------------------------------------------------------------------------
+
+
+def _payment_options_page() -> list[dict]:
+    """The lv_insurance extras state, shapes copied from the real scrape.
+
+    The payment options sit in a section that is display:none until the user is
+    on it, so the two visible controls on the page are "Back" and "Next". Both
+    share no word with "Pay in Full" but collect +10 role and +15 commit on the
+    submit verb "pay" (31 each). The hidden option is an exact text match that
+    pays -30 hidden and -40 container and lands at 30.
+    """
+    return [
+        {
+            "selector": "#paymentFull",
+            "text": "Pay in Full One card payment today",
+            "tag": "div",
+            "role": "div",
+            "id": "paymentFull",
+            "classes": "card-option",
+            "is_visible": False,
+        },
+        {
+            "selector": "#extrasBack",
+            "text": "\u2190 Back",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasBack",
+            "classes": "btn-secondary",
+            "is_visible": True,
+        },
+        {
+            "selector": "#extrasNext",
+            "text": "Next \u2192",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasNext",
+            "classes": "",
+            "is_visible": True,
+        },
+    ]
+
+
+def test_exact_text_match_beats_visible_controls_with_no_shared_word() -> None:
+    """eval-005: the hidden "Pay in Full" option must beat "Back" and "Next".
+
+    Before t-1004 the ranking was #extrasBack 31, #extrasNext 31, #paymentFull
+    30: a role and commit bonus with zero word overlap outranked the element
+    whose own text is the step.
+    """
+    resolver = PlaceholderResolver()
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full", _payment_options_page())
+
+    assert ranked[0][1]["selector"] == "#paymentFull"
+    # The bonuses still count; they just cannot outrank text evidence.
+    assert {"#extrasBack", "#extrasNext"} <= {element["selector"] for _score, element in ranked}
+
+
+def test_a_page_with_no_text_match_still_returns_its_local_candidate() -> None:
+    """The tier orders ONE page's list; it never reaches across pages.
+
+    The same step on a page that does not hold the option (the pool the picker
+    is scoped to) must still resolve to what that page has, not to nothing and
+    not to another page's element.
+    """
+    resolver = PlaceholderResolver()
+    this_page = [element for element in _payment_options_page() if element["selector"] != "#paymentFull"]
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full", this_page)
+
+    assert ranked, "a zero-overlap page must still offer its best local candidate"
+    assert ranked[0][1]["selector"] in {"#extrasBack", "#extrasNext"}
+
+
+def test_the_text_tier_never_resurrects_a_dropped_candidate() -> None:
+    """A hidden element with no literal text match stays dropped by the pool gate."""
+    resolver = PlaceholderResolver()
+    page = [
+        {
+            "selector": "#extrasBack",
+            "text": "\u2190 Back",
+            "tag": "button",
+            "role": "button",
+            "id": "extrasBack",
+            "classes": "btn-secondary",
+            "is_visible": True,
+        },
+        {
+            # Shares "payment" with the step, so the text tier would rank it -
+            # but the hidden gate drops it first and the tier must not bring it
+            # back.
+            "selector": "#paymentDetails",
+            "text": "Payment details",
+            "tag": "div",
+            "role": "div",
+            "id": "paymentDetails",
+            "classes": "",
+            "is_visible": False,
+        },
+    ]
+
+    ranked = resolver.rank_candidates("CLICK", "Pay in Full payment option", page)
+
+    assert "#paymentDetails" not in [element["selector"] for _score, element in ranked]
+    assert ranked and ranked[0][1]["selector"] == "#extrasBack"
+
+
+def test_a_word_form_is_not_dom_nesting(monkeypatch: pytest.MonkeyPatch) -> None:
+    """t-1011: "Pay Bills" does not contain the submit control "Pay Bill".
+
+    The CLICK tie-break demotes a candidate whose text contains another tied
+    candidate's text, because a wrapper's text is the merged text of its
+    children. A word form is not that: the banking nav link "Pay Bills" holds
+    the STRING "Pay Bill" but not the button, and reading it as nesting
+    silently replaced the pre-t-0572 tie that tests/test_submit_preference.py
+    pins. With the commit bonus removed the two still tie at 100 and the nav
+    link still wins on the longest-text tie-break.
+    """
+    from src.placeholder_scorers import PlaceholderScorer
+
+    monkeypatch.setattr(PlaceholderScorer, "_commit_control_bonus", staticmethod(lambda *a, **k: 0))
+    nav = {
+        "selector": 'a[href="/payments.html"]',
+        "text": "Pay Bills",
+        "role": "a",
+        "tag": "a",
+        "href": "/payments.html",
+        "is_visible": True,
+    }
+    submit = {
+        "selector": "#pay-bill",
+        "text": "Pay Bill",
+        "role": "button",
+        "tag": "button",
+        "id": "pay-bill",
+        "type": "submit",
+        "is_visible": True,
+    }
+
+    assert PlaceholderResolver._is_embedded_text("pay bill", "pay bills") is False
+    assert PlaceholderResolver._is_embedded_text("pay bill", "pay bill now") is True
+
+    ranked = PlaceholderResolver().rank_candidates("CLICK", "Pay", [nav, submit])
+
+    assert [score for score, _element in ranked] == [100, 100]
+    assert ranked[0][1]["selector"] == 'a[href="/payments.html"]'
