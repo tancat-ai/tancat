@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "test": {
+    "name": "test_t01_home_page_loads[chromium]",
+    "condition_ref": "T01",
+    "story_ref": "S01",
+    "status": "passed",
+    "duration_s": 1.42,
+    "verification": {"by_element": 1}
+  },
+  "page": {"url": "http://127.0.0.1:8123/index.html"},
+  "run_history": {"total_runs": 1, "passed_runs": 1, "failed_runs": 0},
+  "steps": [
+    {"step": 1, "type": "navigate", "label": "Navigate to http://127.0.0.1:8123/index.html",
+     "locator": null, "value": "http://127.0.0.1:8123/index.html", "status": "passed",
+     "url": "http://127.0.0.1:8123/index.html",
+     "navigation": {"requested": "http://127.0.0.1:8123/index.html",
+                    "final": "http://127.0.0.1:8123/index.html", "status": 200}},
+    {"step": 2, "type": "assertion", "label": "home page loaded", "locator": "#title",
+     "value": null, "status": "passed", "url": "http://127.0.0.1:8123/index.html",
+     "expected_page": null, "page_mismatch": null}
+  ]
+}
