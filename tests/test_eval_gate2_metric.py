@@ -90,7 +90,7 @@ class TestPerTestOutcomes:
         code = "def test_01_a(page):\n    evidence_tracker.assert_visible('#wrong', label='a')\n"
 
         def fake_run(
-            test_file: Path, pytest_timeout: float = 120.0
+            test_file: Path, pytest_timeout: float = 120.0, **kwargs: object
         ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
             return (1, 1, 0, 0, 1.0, "=== 1 passed in 1.0s ===\n", {})
 

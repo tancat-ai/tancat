@@ -47,13 +47,19 @@ def _conftest_module() -> Any:
 
 
 def _page(url: str, *, closed: bool = False) -> MagicMock:
+    """A page double that lands on *url* when its goto runs (or is closed)."""
     page = MagicMock()
-    page.url = url
+    page.url = "about:blank"
     page.is_closed.return_value = closed
     page.context.is_closed.return_value = False
     response = MagicMock()
     response.status = 200
-    page.goto.return_value = response
+
+    def _goto(target: str) -> Any:
+        page.url = url  # the configured landing page
+        return response
+
+    page.goto.side_effect = _goto
     return page
 
 
