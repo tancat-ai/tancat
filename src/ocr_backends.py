@@ -6,10 +6,14 @@ conversion (AI-055 tiered CPU-first OCR):
 - **Tier 0 — PDF text layer** (always on, pdfplumber): extracts embedded text directly.  Fast,
   zero OCR cost, handles text-based PDFs.  Whole documents always go through
   this tier so a mostly-text PDF stays fast.
-- **Tier 1 — RapidOCR / PP-OCR (ONNX Runtime)** (AI-055 new default OCR tier):
+- **Tier 1 — RapidOCR / PP-OCRv6 (PyTorch engine)** (AI-055 new default OCR tier):
   CPU-only OCR for scanned / image-only pages on **any machine, no network**.
-  The ``auto`` backend (default) uses tier 0 for whole docs and tier 1 for
-  image-only pages, so a scanned page is handled on any customer hardware.
+  The PyTorch engine is used because only it has Python 3.15 wheels and torch
+  already ships with the product.  The PP-OCRv6 models are **vendored in the
+  repo** (``src/data/ocr/``) and pinned by SHA256, so no download ever happens
+  at runtime.  The ``auto`` backend (default) uses tier 0 for whole docs and
+  tier 1 for image-only pages, so a scanned page is handled on any customer
+  hardware.
 - **Tier 3 — Unlimited-OCR** (existing wired GPU VLM, opt-in): Baidu's 3B
   vision-language model for the hardest complex docs.  Kept as the single
   tier-3 for v1 (spec §5); re-pick deferred to TanCat Cloud.
@@ -45,6 +49,7 @@ showing one misleading boolean.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -67,6 +72,38 @@ def _pdf_library_available() -> bool:
     from src.pdf_ingest import pdf_reader_available
 
     return pdf_reader_available()
+
+
+# ---------------------------------------------------------------------------
+# Vendored OCR models (t-0810)
+# ---------------------------------------------------------------------------
+
+# rapidocr v3 with the PyTorch engine resolves its models from ModelScope URLs
+# (`rapidocr/default_models.yaml`) and downloads them on first use unless an
+# explicit local path is given.  These four files ship in the repo so the
+# zero-egress rule holds; provenance, licence (Apache-2.0) and SHA256 are in
+# the manifest beside them.  Passing explicit paths below means rapidocr never
+# constructs a URL for them.
+_OCR_MODEL_DIR = Path(__file__).resolve().parent / "data" / "ocr"
+_OCR_DET_MODEL = "PP-OCRv6_det_small.pth"
+_OCR_REC_MODEL = "PP-OCRv6_rec_small.pth"
+_OCR_CLS_MODEL = "ch_ppocr_mobile_v2.0_cls_mobile.pth"
+_OCR_REC_DICT = "ppocrv6_dict.txt"
+
+
+def _vendored_ocr_models() -> dict[str, Path]:
+    """The four vendored OCR files by role (det / rec / cls / dict)."""
+    return {
+        "det": _OCR_MODEL_DIR / _OCR_DET_MODEL,
+        "rec": _OCR_MODEL_DIR / _OCR_REC_MODEL,
+        "cls": _OCR_MODEL_DIR / _OCR_CLS_MODEL,
+        "dict": _OCR_MODEL_DIR / _OCR_REC_DICT,
+    }
+
+
+def _vendored_ocr_models_present() -> bool:
+    """Whether every vendored OCR file is on disk (offline, no I/O beyond stat)."""
+    return all(path.is_file() for path in _vendored_ocr_models().values())
 
 
 # ---------------------------------------------------------------------------
@@ -163,19 +200,23 @@ class PyMuPDFBackend(OcrBackend):
 
 
 class RapidOCRBackend(OcrBackend):
-    """Tier-1 **CPU** OCR backend (RapidOCR / PP-OCRv5-v6 via ONNX Runtime).
+    """Tier-1 **CPU** OCR backend (RapidOCR / PP-OCRv6, PyTorch engine).
 
     Scanned / image-only pages are handled on **any machine, CPU-only, no
     network** — the new default OCR tier for the local air-gapped product
     (AI-055).  Rasterises the single page to a 300 DPI PNG via PyMuPDF and
-    runs the ONNX OCR on it.  PaddleOCR-level recognition accuracy at
-    ~50–80 MB and 0.5–1 s/page.
+    runs the PP-OCRv6 OCR on it.  PaddleOCR-level recognition accuracy at
+    ~31 MB of models and 0.5–1 s/page.
 
     Requires:
-        - ``pip install rapidocr_onnxruntime`` (the CPU-only distribution)
-          — installed as the ``[ocr]`` optional extra so the default install
-          stays light and an air-gapped customer who doesn't need OCR
-          doesn't pull it.
+        - ``uv sync --extra ocr`` — the ``[ocr]`` extra installs ``rapidocr``
+          v3; the PyTorch engine (``torch``) is part of the base install.
+        - the PP-OCRv6 models, **vendored in the repo** at ``src/data/ocr/``
+          and pinned by SHA256, so rapidocr never downloads them.
+
+    The PyTorch engine is used because only it has Python 3.15 wheels and torch
+    already ships with the product; ``rapidocr_onnxruntime`` stopped at 1.4.4
+    (2025-01) and caps below Python 3.13.
 
     The engine is lazily loaded on first ``parse_page()`` call.  This
     backend only implements :meth:`parse_page` (the per-page image-only
@@ -185,7 +226,8 @@ class RapidOCRBackend(OcrBackend):
     PyMuPDF on the whole doc) but is not used by the production ingest
     path.
 
-    Zero egress: a local CPU ONNX model makes **no** network calls.
+    Zero egress: a local CPU model with an explicit local path makes **no**
+    network calls.
     """
 
     def __init__(self) -> None:
@@ -199,34 +241,80 @@ class RapidOCRBackend(OcrBackend):
     def available(self) -> bool:
         """Whether this backend can OCR a page here.
 
-        Both halves are needed: the PDF library rasterises the page and the
-        CPU ONNX engine recognises the text.  Without ``fitz`` the page cannot
-        be rendered even when the engine is installed.
+        Three parts are needed: the PDF library rasterises the page, the
+        PyTorch engine recognises the text, and the vendored models must be
+        on disk (otherwise the engine would try to download them).
         """
-        return _pdf_library_available() and self.engine_available
+        return _pdf_library_available() and self.engine_available and _vendored_ocr_models_present()
 
     @property
     def engine_available(self) -> bool:
-        """Whether the CPU ONNX engine is importable (ignores the PDF library)."""
+        """Whether the CPU OCR engine is importable (ignores the PDF library).
+
+        ``rapidocr`` v3 needs ``torch`` for the PyTorch engine; torch is a
+        base dependency, so both are normally present once the ``[ocr]``
+        extra is installed.
+
+        ``rapidocr`` is imported for a robust absence check.  ``torch`` is
+        probed with ``find_spec`` instead: importing it loads its native
+        runtime, which is slow and can collide with an already-loaded OpenMP
+        runtime on Windows.  The real torch import happens once, lazily, in
+        :meth:`_ensure_engine`.
+        """
         try:
-            import rapidocr_onnxruntime  # noqa: F401
+            import rapidocr  # noqa: F401
         except ImportError:
-            logger.debug(
-                "rapidocr_onnxruntime not installed — run: pip install rapidocr_onnxruntime (or the [ocr] extra)"
-            )
+            logger.debug("rapidocr not installed — run: uv sync --extra ocr (installs the [ocr] extra)")
+            return False
+        try:
+            if importlib.util.find_spec("torch") is None:
+                logger.debug("torch not installed — the PyTorch OCR engine needs it")
+                return False
+        # The parentheses are required: without them this is a SyntaxError on
+        # Python 3.13 and older.  ruff format (target py314) would otherwise
+        # rewrite it to the PEP 758 paren-less form, so the line is pinned.
+        except (ImportError, ValueError):  # fmt: skip
             return False
         return True
 
     def _ensure_engine(self) -> Any:
-        """Lazy-load the ONNX OCR engine on first use."""
+        """Lazy-load the PyTorch OCR engine on first use.
+
+        Every model path is passed explicitly, so rapidocr resolves local files
+        and never builds a ModelScope URL.  If a vendored file is missing the
+        engine refuses instead of silently downloading it — that would break
+        the zero-egress guarantee.
+        """
         if self._engine is not None:
             return self._engine
 
-        import rapidocr_onnxruntime  # type: ignore[import-not-found]
+        models = _vendored_ocr_models()
+        missing = [path.name for path in models.values() if not path.is_file()]
+        if missing:
+            raise OcrBackendUnavailableError(
+                "the vendored OCR models are missing ("
+                f"{', '.join(missing)}) from {_OCR_MODEL_DIR}. "
+                "Re-run `python scripts/maintenance/vendor_ocr_models.py` to restore them."
+            )
 
-        logger.info("Loading RapidOCR (PP-OCR, ONNX Runtime) — pure CPU, no network...")
-        self._engine = rapidocr_onnxruntime.RapidOCR()
-        logger.info("RapidOCR loaded successfully.")
+        from rapidocr import EngineType, RapidOCR  # type: ignore[import-not-found]
+
+        logger.info("Loading RapidOCR (PP-OCRv6, PyTorch engine) — CPU, vendored models, no network...")
+        self._engine = RapidOCR(
+            params={
+                "Det.engine_type": EngineType.TORCH,
+                "Rec.engine_type": EngineType.TORCH,
+                "Cls.engine_type": EngineType.TORCH,
+                "Global.model_root_dir": str(_OCR_MODEL_DIR),
+                "Det.model_path": str(models["det"]),
+                "Rec.model_path": str(models["rec"]),
+                "Cls.model_path": str(models["cls"]),
+                "Rec.rec_keys_path": str(models["dict"]),
+                # The library's default log level is verbose; keep the product log clean.
+                "Global.log_level": "warning",
+            }
+        )
+        logger.info("RapidOCR loaded successfully (PyTorch engine, PP-OCRv6, vendored models).")
         return self._engine
 
     def parse_pdf(self, path: str | Path) -> str:
@@ -249,9 +337,9 @@ class RapidOCRBackend(OcrBackend):
     def parse_page(self, path: str | Path, page_number: int) -> str:
         """OCR a single PDF page (1-indexed) — the image-only-page fallback.
 
-        Rasterises just that page to a 300 DPI PNG and runs the CPU ONNX OCR
-        on the single image.  Returns the recognised text (may be empty for a
-        genuinely blank page).  Zero network calls — the model is local.
+        Rasterises just that page to a 300 DPI PNG and runs the CPU OCR on the
+        single image.  Returns the recognised text (may be empty for a
+        genuinely blank page).  Zero network calls — the models are local.
         """
         import shutil
         import tempfile
@@ -286,14 +374,21 @@ class RapidOCRBackend(OcrBackend):
     def _result_to_text(result: Any) -> str:
         """Convert a RapidOCR result to plain text.
 
-        RapidOCR 1.4.x returns ``(results, elapse)``, where each row of
-        ``results`` is ``[box, text, score]``.  Older builds returned
-        ``(boxes, texts, scores)``.  Both shapes (and a dict, and a flat list
-        of lines) are handled so the adapter does not silently join the wrong
-        field - which is what turned a scanned page into elapsed timings.
+        rapidocr v3 returns a ``RapidOCROutput`` (``.txts`` is a tuple of
+        strings); that shape is handled first.  The older shapes are kept for
+        the adapter's own tests and for forward-compatibility: RapidOCR 1.4.x
+        returned ``(results, elapse)`` where each row was ``[box, text, score]``,
+        and even older builds returned ``(boxes, texts, scores)``.  A dict and a
+        flat list of lines are handled too, so the adapter does not silently
+        join the wrong field - which is what once turned a scanned page into
+        elapsed timings.
         """
         if not result:
             return ""
+        # rapidocr v3 returns a RapidOCROutput whose ``txts`` is a tuple of strings.
+        txts = getattr(result, "txts", None)
+        if txts is not None:
+            return "\n".join(str(t) for t in txts if t)
         if isinstance(result, dict):
             texts = result.get("texts") or result.get("rec_texts") or []
             return "\n".join(str(t) for t in texts if t)
@@ -378,13 +473,14 @@ class AutoOcrBackend(OcrBackend):
         for a missing optional tier).
         """
         if not self._ocr.available:
-            missing = (
-                "the PDF library (PyMuPDF)"
-                if not _pdf_library_available()
-                else "the CPU OCR engine (rapidocr_onnxruntime)"
-            )
+            if not _pdf_library_available():
+                missing = "the PDF library (PyMuPDF)"
+            elif not self._ocr.engine_available:
+                missing = "the CPU OCR engine (rapidocr, PyTorch)"
+            else:
+                missing = "the vendored OCR models (src/data/ocr)"
             logger.debug(
-                "auto.parse_page: %s is not installed — image-only page %d will be skipped",
+                "auto.parse_page: %s is not available — image-only page %d will be skipped",
                 missing,
                 page_number,
             )
@@ -467,7 +563,7 @@ class UnlimitedOCRBackend(OcrBackend):
 
         if not torch.cuda.is_available():
             raise RuntimeError(
-                "Unlimited-OCR requires a GPU with CUDA or ROCm support. "
+                "The GPU OCR backend requires a GPU with CUDA or ROCm support. "
                 "Install a GPU-compatible PyTorch build, or set "
                 "OCR_BACKEND=pymupdf for CPU-only PDF parsing."
             )
@@ -707,10 +803,17 @@ def _unavailable_line(name: str, source: str) -> str | None:
                 f"Refusing instead of silently using a different engine."
             )
         if RapidOCRBackend().engine_available:
-            return None
+            if _vendored_ocr_models_present():
+                return None
+            return (
+                f"OCR backend '{name}' requested {where} cannot run on this build: "
+                f"the vendored OCR models are missing from {_OCR_MODEL_DIR}. "
+                f"Re-run `python scripts/maintenance/vendor_ocr_models.py`, or choose Automatic in Settings. "
+                f"Refusing instead of silently downloading them."
+            )
         return (
             f"OCR backend '{name}' requested {where} cannot run on this build: "
-            f"the CPU OCR engine (rapidocr_onnxruntime) is not installed. "
+            f"the CPU OCR engine (rapidocr, PyTorch) is not installed. "
             f"Install it with `uv sync --extra ocr`, or choose Automatic in Settings. "
             f"Refusing instead of silently using a different engine."
         )
@@ -726,7 +829,7 @@ def _unavailable_line(name: str, source: str) -> str | None:
             return None
         return (
             f"OCR backend '{name}' requested {where} cannot run on this build: "
-            f"Unlimited-OCR (tier-3 GPU) needs a CUDA/ROCm GPU and the `transformers` package. "
+            f"The GPU OCR backend (tier-3) needs a CUDA/ROCm GPU and the `transformers` package. "
             f"Set OCR_BACKEND=cpu for CPU OCR, or choose Automatic in Settings. "
             f"Refusing instead of silently using a different engine."
         )

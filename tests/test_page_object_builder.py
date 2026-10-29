@@ -146,7 +146,9 @@ def test_evidence_aware_pom_navigate_delegates_to_tracker() -> None:
 
     page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
 
-    assert "self.tracker.navigate(self.URL)" in page_object.module_source
+    # d-0043: the page object names the page it expects, so a redirect is judged
+    # there exactly as a flat-mode goto is (j-0226).
+    assert "self.tracker.navigate(self.URL, expected_page=self.URL)" in page_object.module_source
     assert "self.page.goto" not in page_object.module_source
 
 
@@ -198,7 +200,7 @@ def test_evidence_aware_pom_navigate_method() -> None:
 
     page_object = builder.build_page_object(scraped_page, use_evidence_tracker=True)
 
-    assert "self.tracker.navigate(self.URL)" in page_object.module_source
+    assert "self.tracker.navigate(self.URL, expected_page=self.URL)" in page_object.module_source
 
 
 def test_evidence_aware_pom_select_delegates_to_tracker() -> None:

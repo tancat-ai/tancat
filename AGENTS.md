@@ -165,13 +165,26 @@ Full table with causes: see `docs/reference/agents_archive.md` §7.
 - Use `document-manager` skill to generate/update
 - Check `markdown_docs/.sweep_progress.json` for coverage status
 
+### Citation markers in records
+
+A committed record that cites an untracked artefact marks it, so the record stays honest from a
+clean clone and the deletion list is mechanical:
+
+- `[gone]` - the file is not on this machine any more. The sentence stays: it is the record of
+  what was checked. Never delete the sentence to tidy it up.
+- `[disposable]` - the file exists but is gitignored, and the record already states what it
+  proved. It can go when the owner says so.
+
+Both lists come from one grep: `grep -rn "\[gone\]\|\[disposable\]" --include="*.md"`. A path in a
+runnable command is never marked in place - it would corrupt the command.
+
 ### Work tracking — split of responsibility
 
 Two files track active work; each owns a different class of item. **This split is the single source of truth for where an item lives.**
 
 | File | Owns | Examples |
 |------|------|----------|
-| `docs/plans/ROADMAP_ROADTO_PRODUCTION.md` | **Big features / phases** (multi-session, spec-backed, portfolio/GTM) | Phase 1–8, AI-010/011/026/028/029, traceability 16b, AI-042/043/044 |
+| `docs/private/ROADMAP_ROADTO_PRODUCTION.md` (private, untracked) | **Big features / phases** (multi-session, spec-backed, portfolio/GTM) | Phase 1–8, AI-010/011/026/028/029, traceability 16b, AI-042/043/044 |
 | `BACKLOG.md` | **Fixes and smaller changes** (bugs B-xxx, focused improvements, experiments, watch-items) | B-030 family, AI-058/061/062/063/064/065, AI-054 |
 
 **Rules (enforced to stop the muddle):**

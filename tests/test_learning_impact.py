@@ -585,10 +585,12 @@ def test_seeded_negative_roundtrips_and_flips_step_scoped_score() -> None:
 
 def test_resolver_ab_downweights_wrong_pick_on_own_step() -> None:
     """AI-064/AI-058 resolver-level A/B (deterministic, no LLM): on the frozen
-    payments-only pool (the historical test_09 context), control ranks the
-    wrong hidden ``#payment-error`` first; with the seeded negative its score
-    drops and the correct title is unscathed; a different step is unchanged.
-    Mirrors ``scripts/ai058_resolver_ab.py`` with a fake embedder (no model).
+    payments-only pool (the historical test_09 context), the t-0754
+    success-vs-error polarity floor now removes the wrong hidden
+    ``#payment-error`` from the control; a seeded negative still down-weights
+    the wrong pick that remains, while the correct title is unscathed and a
+    different step is unchanged. Mirrors ``scripts/ai058_resolver_ab.py`` with a
+    fake embedder (no model).
 
     The frozen ``scraped_pages/`` dumps are gitignored (CI-only artifact);
     skip cleanly when absent (CI) and run fully when present (local/eval).
@@ -609,10 +611,18 @@ def test_resolver_ab_downweights_wrong_pick_on_own_step() -> None:
     success_pool = success if isinstance(success, list) else success["elements"]
     from src.rag_store import RetrievedPattern
 
+    resolver = PlaceholderResolver(match_threshold=0)
+    ctrl = resolver.rank_candidates("ASSERT", "payment success message", pool, golden_patterns=None, site_hash=sentinel)
+    # t-0754 Class C: the success-vs-error polarity floor removes the error
+    # sibling for a success message, so the historical wrong pick is no longer a
+    # candidate for a learned negative to down-weight.
+    assert not any(e["selector"] == "#payment-error" for _, e in ctrl)
+    # The down-weighting mechanism still applies to the wrong pick that remains.
+    wrong_top = ctrl[0][1]["selector"]
     seed_pat = [
         RetrievedPattern(
             description="ASSERT: payment success message",
-            selector="#payment-error",
+            selector=wrong_top,
             action_type="ASSERT",
             confidence=1.0,
             source="learned_negative",
@@ -621,18 +631,15 @@ def test_resolver_ab_downweights_wrong_pick_on_own_step() -> None:
             last_seen=0.0,
         )
     ]
-
-    resolver = PlaceholderResolver(match_threshold=0)
-    ctrl = resolver.rank_candidates("ASSERT", "payment success message", pool, golden_patterns=None, site_hash=sentinel)
     treat = resolver.rank_candidates(
         "ASSERT", "payment success message", pool, golden_patterns=seed_pat, site_hash=sentinel
     )
-    ctrl_top = ctrl[0][1]["selector"]
-    treat_err = [s for s, e in treat if e["selector"] == "#payment-error"]
-    ctrl_err = [s for s, e in ctrl if e["selector"] == "#payment-error"]
-    assert ctrl_top == "#payment-error"  # historical wrong-pick context reproduced
-    assert ctrl_err and treat_err
-    assert treat_err[0] < ctrl_err[0]  # seeded negative down-weights it
+    ctrl_top_scores = [s for s, e in ctrl if e["selector"] == wrong_top]
+    treat_top_scores = [s for s, e in treat if e["selector"] == wrong_top]
+    assert ctrl_top_scores
+    # The seeded negative either removes the wrong pick (below threshold) or
+    # lowers its score - both are the down-weight.
+    assert not treat_top_scores or treat_top_scores[0] < ctrl_top_scores[0]
 
     # Consolidated pool (both pages): the correct winner is unscathed.
     both = pool + [dict(e) for e in success_pool]

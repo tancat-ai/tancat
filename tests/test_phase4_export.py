@@ -1,5 +1,7 @@
 """Tests for Phase 4: Export UI — Streamlit + CLI export functionality."""
 
+import subprocess
+import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -98,6 +100,20 @@ class TestStripEvidenceSignature:
         code = "def test_login(page, evidence_tracker: EvidenceTracker):\n    pass"
         clean = strip_evidence_from_test_code(code)
         assert "def test_login(page):" in clean
+
+    def test_strip_evidence_removes_fixture_param_with_return_annotation(self) -> None:
+        """t-0931: a `-> None:` test kept the fixture parameter before the fix."""
+        code = "def test_login(page, evidence_tracker) -> None:\n    pass"
+        clean = strip_evidence_from_test_code(code)
+        assert "def test_login(page) -> None:" in clean
+        assert "evidence_tracker" not in clean
+
+    def test_strip_evidence_keeps_param_when_a_call_survives(self) -> None:
+        """t-0931: only drop the fixture parameter when the body is clean."""
+        code = "def test_login(page, evidence_tracker) -> None:\n    evidence_tracker.unknown_call()\n"
+        clean = strip_evidence_from_test_code(code)
+        assert "def test_login(page, evidence_tracker) -> None:" in clean
+        assert "evidence_tracker.unknown_call()" in clean
 
     def test_strip_evidence_removes_import(self) -> None:
         code = "from src.evidence_tracker import EvidenceTracker\n\ndef test_x(page):\n    pass"
@@ -590,3 +606,62 @@ class TestCliExportMenuOption:
     def test_cli_export_pom_mode(self) -> None:
         """CLI export in POM mode produces correct output."""
         pass
+
+
+class TestExportPageExpectationRecord:
+    """t-0931: the t-0929 record line must not break the clean export."""
+
+    @pytest.mark.parametrize("export_mode", [ExportMode.FLAT, ExportMode.POM])
+    def test_clean_export_strips_record_line_and_runs(self, export_mode: ExportMode) -> None:
+        """The exported package has no evidence_tracker and its test passes.
+
+        Reproduces the blocker: a generated test with a return annotation, the
+        new ``record_page_expectation`` call, and the literal
+        ``expect(page).to_have_url(...)`` after it. Before the fix the call
+        survived, the fixture parameter survived (``-> None:`` defeated the old
+        signature regex), and the exported test failed.
+        """
+        with TemporaryDirectory() as tmpdir:
+            source_dir = Path(tmpdir) / "source"
+            source_dir.mkdir()
+            (source_dir / "test_arrival.py").write_text(
+                "from playwright.sync_api import Page, expect\n"
+                "\n"
+                "\n"
+                "def test_arrival(page: Page, evidence_tracker) -> None:\n"
+                '    page.goto("data:text/html,<h1>checkout</h1>")\n'
+                "    # HONEST FAILURE: expected checkout, observed shop\n"
+                "    evidence_tracker.record_page_expectation(\n"
+                '        expected_url="data:text/html,<h1>checkout</h1>",\n'
+                '        observed_url="https://shop.example.com/",\n'
+                '        trail_step="index=1; action=scrape",\n'
+                '        producer="keyword",\n'
+                "    )\n"
+                '    expect(page).to_have_url("data:text/html,<h1>checkout</h1>")\n',
+                encoding="utf-8",
+            )
+
+            result = export_clean_suite(
+                source_package_dir=source_dir,
+                export_mode=export_mode,
+                output_base_dir=str(Path(tmpdir) / "output"),
+                story_slug="arrival",
+            )
+
+            exported_test = Path(result.export_dir) / "test_arrival.py"
+            content = exported_test.read_text(encoding="utf-8")
+            assert "evidence_tracker" not in content
+            assert "def test_arrival(page: Page) -> None:" in content
+
+            # Run the exported test with the real pytest-playwright page
+            # fixture. It navigates to a data: URL, so the literal assertion
+            # runs without a network site.
+            completed = subprocess.run(
+                [sys.executable, "-m", "pytest", str(exported_test), "-q", "-p", "no:cacheprovider"],
+                cwd=str(Path(result.export_dir)),
+                capture_output=True,
+                text=True,
+                timeout=120,
+                check=False,
+            )
+            assert completed.returncode == 0, completed.stdout + completed.stderr

@@ -20,7 +20,6 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 | `UrlResolver.get_seed_url()` | Return seed URL as fallback |
 | `UrlResolver.get_all_mappings()` | Return copy of all keyword→URL mappings |
 | `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using multi-tier strategy |
-| `resolve_keywords_to_urls(keywords, scraped_urls, seed_url, concepts)` | Convenience: creates and populates UrlResolver |
 
 ## Matching Strategy (priority order)
 1. Exact path match: "cart" → `/cart`

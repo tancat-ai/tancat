@@ -53,6 +53,14 @@ BASE_SELECTBOX_LABELS = frozenset({"LLM Provider", "Consent Handling"})
 BASE_TEXT_AREA_LABELS = frozenset({"Additional URLs"})
 BASE_TOGGLE_LABELS = frozenset({"Page Object Model"})
 
+#: Appended to the exact-set assertion messages (the five "set changed" guards).
+#: A person reading only the pytest terminal needs to know where the expected
+#: set lives, or they will loosen the assertion instead of updating it.
+EXACT_SET_HINT = (
+    " If this is deliberate, add the label to the expected set in "
+    "tests/streamlit_app_test_helpers.py (do not loosen the assertion)."
+)
+
 
 def expected_selectbox_labels(*, with_models: bool = False) -> set[str]:
     """The exact sidebar selectbox label set for this build.
@@ -106,6 +114,13 @@ def build_sidebar_app(models: list[str] | None = None) -> AppTest:
         patch("src.settings_store._save_settings"),
         # Saved-package widgets depend on generated_tests/ contents, not layout.
         patch("src.pipeline_artifact_manager.find_existing_packages", return_value=[]),
+        # The RAG/flow "Prune learned ..." buttons render only when THIS machine's
+        # stores hold learned data. Isolate them so the exact inventory is
+        # build-shaped, not machine-shaped - the same reason as the two patches
+        # above. Without this a developer machine with a populated store fails
+        # test_sidebar_button_set_is_exact.
+        patch("src.rag_bundled.store_stats", return_value={}),
+        patch("src.flow_memory.FlowMemoryStore.stats", return_value={"patterns": 0}),
     ):
         at = AppTest.from_file(APP_PATH, default_timeout=15)
         at.run(timeout=15)

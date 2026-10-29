@@ -28,6 +28,17 @@ from src.pytest_output_parser import RunResult, TestResult, parse_pytest_output
 
 logger = logging.getLogger(__name__)
 
+# t-0929 (owner's decision, 2026-10-25): no healing pass may change an
+# expectation. A failed expectation is a capture defect to expose, not a code
+# defect to rewrite. This is enforced at the pre-screen, before any LLM call.
+_EXPECTATION_FAILURE_CATEGORIES: frozenset[FailureCategory] = frozenset({FailureCategory.ASSERTION_FAILURE})
+
+
+def _is_expectation_failure(detail: FailureDetail) -> bool:
+    """True when the failure is a failed expectation the healer must not touch."""
+    return detail.category in _EXPECTATION_FAILURE_CATEGORIES
+
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -277,6 +288,14 @@ class SelfHealingRunner:
                     report.iterations = iteration
                     report.final_results = run_result.results
                     report.attempt_history = dict(per_test_attempts)
+                    # Honesty: patches applied earlier in this heal were never
+                    # verified by a collecting re-run, so none of them may be
+                    # counted as fixed. A dedented patch makes the file fail to
+                    # import - this used to report "fixed 1 / remaining 0" on a
+                    # suite that no longer collects.
+                    if report.patches:
+                        report.fixed = 0
+                        report.remaining = report.total_failures
                     report.run_error = f"Self-heal test run produced no results — {run_result.raw_output[:200]}"
                     return report
                 _progress("All tests pass — healing complete!")
@@ -368,15 +387,29 @@ class SelfHealingRunner:
             _progress("No patches applied — reusing last run results (no extra test pass)")
         else:
             final_run = self._run_pytest(test_path, current_test_names)
-        report.remaining = len([r for r in final_run.results if r.status == "failed"])
+        if report.patches and not final_run.results:
+            # Honesty: the verification re-run could not collect (or timed
+            # out). The patches were never proven to fix anything, so they
+            # must not be reported as fixed.
+            report.fixed = 0
+            report.remaining = report.total_failures
+            report.run_error = (
+                "Patched re-run produced no results (collection error or "
+                f"timeout) - {report.total_failures} failure(s) unverified; "
+                "the patch may have broken collection."
+            )
+        else:
+            report.remaining = len([r for r in final_run.results if r.status == "failed"])
         report.iterations = iteration
         report.final_results = final_run.results
         report.attempt_history = dict(per_test_attempts)
         if self._llm_failures:
-            report.run_error = (
+            llm_note = (
                 f"LLM reviewer unavailable for {len(self._llm_failures)} failure(s) "
                 f"({', '.join(self._llm_failures)}) — check the LLM Provider / Base URL in the sidebar."
             )
+            # Never clobber a more severe collection-error message.
+            report.run_error = f"{report.run_error} {llm_note}".strip() if report.run_error else llm_note
         return report
 
     # ------------------------------------------------------------------
@@ -454,17 +487,19 @@ class SelfHealingRunner:
         """Pre-screen: return True if failure is worth sending to the LLM.
 
         Skips the LLM call for failures that cannot be fixed by code changes:
-        - ASSERTION_FAILURE: logic/test error, not a locator issue
+        - ASSERTION_FAILURE: a failed expectation. No healing pass may change
+          an expectation (t-0929) - the capture is wrong, not the assertion.
         - NAVIGATION_ERROR: site down, connection refused — nothing to fix
         - OTHER: unknown error with no actionable locator signal
 
         LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review — the LLM
         can suggest better selectors or disambiguation strategies.
         """
-        if detail.category in (
-            FailureCategory.ASSERTION_FAILURE,
-            FailureCategory.NAVIGATION_ERROR,
-        ):
+        # Enforced by name, before any other classification: an expectation is
+        # never healed, so a failed one never reaches the reviewer prompt.
+        if _is_expectation_failure(detail):
+            return False
+        if detail.category == FailureCategory.NAVIGATION_ERROR:
             return False
         if detail.category == FailureCategory.OTHER:
             return False
@@ -832,6 +867,23 @@ Analyze this failure and suggest a fix."""
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _reindent_replacement(text: str, indent: str) -> str:
+        """Re-apply the source line's leading whitespace to a replacement.
+
+        B-042 class: the reviewer's replacement is stored stripped (no leading
+        whitespace), so writing it back verbatim dedents a patched line inside
+        a test function to module scope. The module then fails to import
+        (IndentationError) and pytest collects 0 tests. Prefix every non-empty
+        line with the original line's indent; leave lines that already start
+        with it untouched so an already-indented replacement is not doubled.
+        """
+        if not indent:
+            return text
+        return "\n".join(
+            line if (not line.strip() or line.startswith(indent)) else indent + line for line in text.split("\n")
+        )
+
+    @staticmethod
     def _apply_patch(
         test_path: Path,
         test_source: str,
@@ -854,12 +906,18 @@ Analyze this failure and suggest a fix."""
             old_lines = patch.old_text.split("\n")
             src_lines = test_source.split("\n")
             actual_old = patch.old_text  # fallback
+            indent = ""
             for i, line in enumerate(src_lines):
                 if line.strip().replace('"', "'") == old_norm.split("\n")[0].strip():
                     actual_old = "\n".join(src_lines[i : i + len(old_lines)])
+                    # Carry the matched line's leading whitespace into the
+                    # replacement (B-042 class) so the patched line keeps its
+                    # column and the module still collects.
+                    indent = line[: len(line) - len(line.lstrip())]
                     break
 
-            new_source = test_source.replace(actual_old, patch.new_text, 1)
+            replacement = SelfHealingRunner._reindent_replacement(patch.new_text, indent)
+            new_source = test_source.replace(actual_old, replacement, 1)
             test_path.write_text(new_source, encoding="utf-8")
             logger.info(
                 "Applied patch for '%s' (%s): %s",

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="6" time="131.465" timestamp="2026-10-24T15:55:28.022563+01:00"><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_01_navigate_home[chromium]" time="10.145" /><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_02_click_products_link[chromium]" time="16.867" /><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_03_add_blue_top_to_cart[chromium]" time="21.684" /><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_04_verify_confirmation_message[chromium]" time="21.940" /><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_05_click_cart_link[chromium]" time="18.961"><failure message="src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.">scratch\gate1_out_t0891_rag_on_bundled\test_eval_002.py:39: in test_05_click_cart_link
+    evidence_tracker.click('.add-to-cart.btn[data-product-id="1"]', label='Add to cart', expected_page='https://automationexercise.com/products')
+src\evidence_tracker.py:875: in click
+    self._record_step(
+src\evidence_tracker.py:594: in _record_step
+    raise PageMismatchError(
+E   src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.</failure></testcase><testcase classname="scratch.gate1_out_t0891_rag_on_bundled.test_eval_002" name="test_06_verify_cart_contents[chromium]" time="30.673"><failure message="playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.&#10;Call log:&#10;  - waiting for locator(&quot;h4:has-text(\&quot;Blue Top\&quot;)&quot;).first to be visible">scratch\gate1_out_t0891_rag_on_bundled\test_eval_002.py:50: in test_06_verify_cart_contents
+    evidence_tracker.assert_visible('h4:has-text("Blue Top")', label='Blue Top in cart', expected_page='https://automationexercise.com/view_cart')
+src\evidence_tracker.py:1177: in assert_visible
+    loc.wait_for(state="visible", timeout=5000)
+.venv\Lib\site-packages\playwright\sync_api\_generated.py:20696: in wait_for
+    self._sync(
+.venv\Lib\site-packages\playwright\_impl\_locator.py:752: in wait_for
+    await self._frame.wait_for_selector(
+.venv\Lib\site-packages\playwright\_impl\_frame.py:395: in wait_for_selector
+    await self._channel.send(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:76: in send
+    return await self._connection.wrap_api_call(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:632: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.
+E   Call log:
+E     - waiting for locator("h4:has-text(\"Blue Top\")").first to be visible</failure></testcase></testsuite></testsuites>

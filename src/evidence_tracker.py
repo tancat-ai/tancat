@@ -1,7 +1,10 @@
+import functools
 import logging
+import os
 import re
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urljoin, urlparse
@@ -22,6 +25,7 @@ from src.evidence_serializer import EvidenceSerializer
 from src.failure_reporter import FailureReporter
 from src.hover_click_utils import try_hover_and_click
 from src.locator_fallback import LocatorFallback
+from src.page_identity import same_page as _page_identity_same_page
 from src.storage import get_storage
 
 logger = logging.getLogger(__name__)
@@ -30,29 +34,12 @@ logger = logging.getLogger(__name__)
 def _same_page(expected: str, actual: str) -> bool:
     """Return True when two URLs address the same page.
 
-    Compares scheme + host + path only, ignoring query and fragment: SPA mocks
-    encode state in the query (``success.html?item=blue-top``) and a differing
-    query is not evidence of a different page. Trailing slashes are ignored.
-    Anything unparseable counts as a match so a parse failure never raises a
-    false mismatch.
+    Delegates to :func:`src.page_identity.same_page`, the one place that owns
+    the page-identity rule: scheme + host + path only, ignoring query and
+    fragment. The story-named-query exception (a story that names the bit after
+    the ``?`` pins the query) is also documented there.
     """
-
-    if not expected or not actual:
-        return True
-
-    def _key(url: str) -> tuple[str, str, str]:
-        parsed = urlparse(str(url))
-        return (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/") or "/")
-
-    try:
-        left, right = _key(expected), _key(actual)
-    except Exception:
-        return True
-    # No host on either side means this is not a comparable absolute URL —
-    # fail open rather than raising a false mismatch.
-    if not left[1] or not right[1]:
-        return True
-    return left == right
+    return _page_identity_same_page(expected, actual)
 
 
 class _LocatorNotFoundError(RuntimeError):
@@ -74,6 +61,220 @@ class PageMismatchError(RuntimeError):
     B-093, a recorded mismatch fails the step: a passing test must
     provably have checked its condition on the page it was resolved for.
     """
+
+
+class NavigationStatusError(RuntimeError):
+    """Raised when a navigation reaches an HTTP error page (d-0032).
+
+    Playwright raises only on network, protocol and timeout failures, so a
+    404 or a 500 used to be recorded as a PASSED navigation step, with a
+    screenshot of the error page as its evidence. A page the browser was not
+    seen to reach is not evidence of arrival, so the step is recorded as
+    failed - naming the status, the requested address and the address the
+    browser actually ended on - and the test stops there.
+    """
+
+
+def _response_status(response: Any) -> int | None:
+    """Return the HTTP status of a navigation response, or None when unknown.
+
+    None covers the honest unknowns: a same-document navigation has no
+    response, and a test double returns something that is not an integer. An
+    unknown status is never treated as an error status.
+    """
+    try:
+        status = getattr(response, "status", None)
+    except Exception:
+        return None
+    if isinstance(status, bool) or not isinstance(status, int):
+        return None
+    return status
+
+
+def _redirect_chain(response: Any) -> list[str]:
+    """Return the addresses a navigation was redirected through, oldest first.
+
+    Playwright keeps the hops on ``response.request.redirected_from``. This
+    catches a redirect that ends where it started (a session bounce that
+    returns to the same address), which the final URL alone cannot show. A
+    response that does not expose the chain - a test double, a same-document
+    navigation - yields ``[]``, never a guess.
+    """
+    urls: list[str] = []
+    node = getattr(response, "request", None)
+    for _ in range(10):
+        node = getattr(node, "redirected_from", None)
+        if node is None:
+            break
+        address = getattr(node, "url", None)
+        if not isinstance(address, str):
+            break
+        urls.append(address)
+    return list(reversed(urls))
+
+
+def _address_changed(requested: str, final: str) -> bool:
+    """True when the browser ended on a different address than it was asked for.
+
+    A plain string comparison, used only to REPORT a redirect when the page
+    identity already matches - so it must not treat a relative address (which
+    the browser resolves to an absolute one) as a redirect, and it must not
+    hide a trailing-slash or query change, which is a redirect the user may
+    want to know about.
+    """
+    if not requested or not final:
+        return False
+    if urlparse(requested).scheme not in ("http", "https"):
+        return False
+    return requested != final
+
+
+# t-1063: the tracker and the generated conftest must agree on what "a failed
+# step carries on" means. A package shipping a new tracker with an old conftest
+# would carry on and never fail the test - a silent success. Both sides declare
+# this marker; the fixture refuses to run when they differ.
+JOURNEY_PROTOCOL = "carry-on-2"
+
+# t-1095: the owner's rules for when a generated test stops. A journey carries on
+# after what the STEP wanted went wrong (a missing element, a dead click, an
+# assertion, a 404 page with a document); it stops only for a reason that has
+# nothing to do with the step's intent. Each reason is named in plain words in the
+# record and the report.
+STOP_PAGE_GONE = (
+    "the page or browser was closed, the target crashed, or a protocol error came back - nothing further can run"
+)
+STOP_UNRESPONSIVE = (
+    "the page stopped responding - a liveness check after the failure raised, so nothing further can run"
+)
+STOP_NO_ARRIVAL = "the journey never reached its next page"
+STOP_TIME_LIMIT = "the per-test time limit was reached"
+
+STOP_REASONS = {
+    "page_gone": STOP_PAGE_GONE,
+    "unresponsive": STOP_UNRESPONSIVE,
+    "no_arrival": STOP_NO_ARRIVAL,
+    "time_limit": STOP_TIME_LIMIT,
+}
+
+#: Default per-test time limit in seconds. A backstop, not the rule: a journey
+#: that runs this long is stopped and marked timed out, and the rest of the story
+#: still reports. ``AITEST_TEST_TIME_LIMIT`` overrides it; ``0`` disables it.
+DEFAULT_TEST_TIME_LIMIT_S = 300.0
+
+#: Messages that mean the page itself is gone, whatever the step wanted.
+_PAGE_GONE_MARKERS = (
+    "has been closed",
+    "target closed",
+    "target crashed",
+    "browser closed",
+    "protocol error",
+    "session closed",
+    "page crashed",
+)
+
+
+class JourneyStopped(RuntimeError):
+    """Raised when the journey stops for a reason that is not the step's intent.
+
+    The tracker has already recorded the stop (``stop`` on the journey record, in
+    the sidecar) and the failed steps before it. The message carries the whole
+    journey summary, so the test fails once with everything a reader needs.
+    """
+
+
+def _normalised_address(url: str) -> tuple[str, str, str, str, str]:
+    """The full address as a comparable tuple: scheme, host, path, query, fragment.
+
+    The path's trailing slash is dropped - "/cart" and "/cart/" are the same
+    address for this question (t-1098). Query and fragment are KEPT: "/products"
+    -> "/products?page=2" and "/" -> "/#pricing" are moves, even though the page
+    identity rule ignores them by design.
+    """
+    parsed = urlparse(str(url))
+    return (
+        parsed.scheme.lower(),
+        parsed.netloc.lower(),
+        parsed.path.rstrip("/") or "/",
+        parsed.query,
+        parsed.fragment,
+    )
+
+
+def _address_moved(before: str, after: str) -> bool | None:
+    """Did the browser move at all? None when an address has no host to compare.
+
+    Deliberately NOT the page-identity rule: identity answers "is this the page I
+    expected" (query and fragment ignored, so dynamic ids are fine). This answers
+    "did the address change", where a query-only or fragment-only change is a
+    move and must not stop a journey (t-1098).
+    """
+    if not urlparse(before).netloc or not urlparse(after).netloc:
+        return None
+    return _normalised_address(before) != _normalised_address(after)
+
+
+def _test_time_limit_s() -> float:
+    """The per-test backstop, in seconds. ``AITEST_TEST_TIME_LIMIT=0`` disables it."""
+    raw = os.environ.get("AITEST_TEST_TIME_LIMIT", "")
+    if not raw:
+        return DEFAULT_TEST_TIME_LIMIT_S
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_TEST_TIME_LIMIT_S
+
+
+def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMethod:
+    """Let a failed step fail the TEST at its end, not the journey at that step.
+
+    The owner's decision, 2026-10-29: "carry on as well... some links might not
+    be static so they might change every single time... in that situation we
+    want the test to be able to carry on."
+
+    The method has already recorded the failed step when it raises. This wrapper
+    keeps that record, drops the exception, and lets the next step run. The test
+    is then failed ONCE, at its end, from ``journey_summary()`` (the generated
+    conftest reads it and fails the report) - one failure, complete evidence.
+
+    The single condition that still stops a journey is ``_cannot_continue()``:
+    the page or its browser context is closed, so no later step could run at all.
+
+    A HAND-SHAKE, not just a version marker (t-1066). Swallowing a failure is only
+    safe when something will fail the test at its end. The generated conftest sets
+    ``journey_hooked = True`` when its fixture creates the tracker; with no hook
+    registered - a conftest written before the carry-on feature, which carries no
+    marker and no report hook - the exception is RE-RAISED, so the test fails the
+    old way instead of passing silently. What each guard catches:
+
+    - the ``JOURNEY_PROTOCOL`` marker (checked in the conftest fixture): drift
+      between two versions that both carry the check, and a NEW conftest with an
+      OLD tracker (which fails even earlier, at import).
+    - this hand-shake: a NEW tracker with a conftest that never registered.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self: EvidenceTracker, *args: Any, **kwargs: Any) -> Any:
+        before = len(self.steps)
+        self._stop_when_over_the_time_limit()
+        try:
+            return method(self, *args, **kwargs)
+        except JourneyStopped:
+            raise
+        except Exception as exc:  # noqa: BLE001 - see the docstring: recorded, then carried
+            if not self.journey_hooked:
+                # No hook means nothing would fail the test at its end, so a
+                # swallowed failure would be a silent pass. Fail here instead.
+                raise
+            if self._page_gone(exc):
+                # Reason 1: nothing further can run, whatever the step wanted.
+                self._stop_journey("page_gone", str(exc)[:300])
+            self._record_unrecorded_failure(method.__name__, args, exc, before)
+            if not self._liveness_ok():
+                # Reason 2: one trivial call against the page raised.
+                self._stop_journey("unresponsive", str(exc)[:300])
+            return None
+
+    return cast(StepMethod, wrapper)
 
 
 class EvidenceTracker:
@@ -107,12 +308,22 @@ class EvidenceTracker:
         self.story_ref = story_ref
 
         self.steps: list[dict[str, Any]] = []
+        # t-0929: page arrivals the test EXPECTS, recorded immediately before
+        # the assertion. Separate from ``steps`` because an expectation is not
+        # a test step (it must not add to the pass/skip counts).
+        self.page_expectations: list[dict[str, Any]] = []
         self.start_time = time.time()
         # AI-067: the page a step actually RAN on — captured before the action,
         # because a click legitimately navigates away from the page its locator
         # was resolved against. Compared with ``expected_page`` in
         # ``_record_step``.
         self._step_entry_url: str = ""
+        # t-1066: set by the generated conftest fixture. Until something promises
+        # to fail the test at its end, a failed step raises as it always did.
+        self.journey_hooked: bool = False
+        # t-1095: why the journey stopped, when it did ({"reason", "detail"}).
+        self.stop: dict[str, str] | None = None
+        self._time_limit_s: float = _test_time_limit_s()
 
         # A5: per-page hint for the adaptive encoder. A page URL lands here when
         # a full-page capture on it found lossless WebP would NOT shrink the
@@ -256,6 +467,11 @@ class EvidenceTracker:
         if not locator:
             return {}
 
+        # The URL this measurement is taken on. A click is measured BEFORE it
+        # runs, so the page it ran on is not the URL the step ends on (B-105).
+        # The overlay needs the measurement page, not the destination page.
+        measured_url = self._safe_page_url()
+
         loc = self.page.locator(locator).first
 
         tag = ""
@@ -284,6 +500,8 @@ class EvidenceTracker:
 
         bbox = None
         viewport_pct = None
+        doc_width: int | None = None
+        doc_height: int | None = None
 
         try:
             # Best effort: bring into view so bbox is meaningful.
@@ -298,6 +516,11 @@ class EvidenceTracker:
             )
             dw = max(doc_size["width"], 1)
             dh = max(doc_size["height"], 1)
+            # The document the percentage is relative to. The same percentage
+            # lands on a different pixel on a page of a different height, so
+            # the overlay may only draw this marker on a frame of this size.
+            doc_width = int(dw)
+            doc_height = int(dh)
 
             raw_bbox = loc.bounding_box()
             if raw_bbox:
@@ -347,6 +570,9 @@ class EvidenceTracker:
             "target": target if target else None,
             "bbox": bbox,
             "viewport_pct": viewport_pct,
+            "doc_width": doc_width,
+            "doc_height": doc_height,
+            "measured_url": measured_url,
         }
 
     def _record_step(
@@ -364,15 +590,25 @@ class EvidenceTracker:
         fast_fail: bool = False,
         element_metadata: dict[str, Any] | None = None,
         expected_page: str = "",
+        navigation: dict[str, Any] | None = None,
+        mismatch_wording: str = "its locator was resolved against",
     ) -> None:
         """Record one evidence step.
 
         Args:
-            expected_page: The page this step's locator was resolved against.
-                When the step actually runs somewhere else the mismatch is
-                recorded on the step result (``page_mismatch``) so a wrong-page
-                resolution is visible instead of silently passing. Empty means
-                "not checked".
+            expected_page: The page this step was supposed to run on - the page
+                its locator was resolved against, or, for a navigation step,
+                the page it was asked to reach. When the step actually runs
+                somewhere else the mismatch is recorded on the step result
+                (``page_mismatch``) so a wrong-page resolution is visible
+                instead of silently passing. Empty means "not checked".
+            navigation: What the browser did for a navigation step
+                (``requested``, ``final``, ``status``, and a ``note`` when a
+                redirect was recorded but not judged). Stored on the step so
+                the evidence names where the browser actually went.
+            mismatch_wording: How the expectation is described in the failure
+                text - "its locator was resolved against" for an element step,
+                "the step was asked for" for a navigation.
             fast_fail: True when the step failed because the locator does not
                 exist on the current page. Skips the expensive element-metadata
                 capture (waits ~5s per Playwright call on a missing element),
@@ -394,6 +630,9 @@ class EvidenceTracker:
                 step_run_count = prev_step.get("result", {}).get("run_count", 0) + 1
 
         screenshot_path = None
+        frame_url = ""
+        frame_doc_width: int | None = None
+        frame_doc_height: int | None = None
         if take_screenshot:
             screenshot_stem = f"{self.test_name}_{step_idx}_{step_type}_{int(time.time())}"
             # Default name; the bytes path may re-point it when the adaptive
@@ -428,6 +667,20 @@ class EvidenceTracker:
                 # duration of the capture, then restore — evidence screenshots
                 # must never contain typed secrets in the clear.
                 with masked_screenshot_page(self.page):
+                    # The frame records the page it shows and the size of the
+                    # document it captured. A marker measured on another
+                    # document cannot be drawn on this frame (B-105).
+                    frame_url = self._safe_page_url()
+                    try:
+                        frame_doc = self.page.evaluate(
+                            "() => ({ width: document.documentElement.scrollWidth,"
+                            " height: document.documentElement.scrollHeight })"
+                        )
+                        if isinstance(frame_doc, dict):
+                            frame_doc_width = int(max(frame_doc.get("width") or 0, 1))
+                            frame_doc_height = int(max(frame_doc.get("height") or 0, 1))
+                    except Exception:
+                        pass
                     screenshot_bytes = self.page.screenshot(full_page=True)
                     if isinstance(screenshot_bytes, bytes):
                         # A5: lossless WebP at method=0 — or the original PNG
@@ -475,7 +728,16 @@ class EvidenceTracker:
         # mismatch must never pass silently.
         page_mismatch: dict[str, str] | None = None
         if expected_page:
-            actual_page = self._step_entry_url or self._safe_page_url()
+            # A navigation runs on the page it LANDS on, so read the live URL.
+            # Every other step runs on the page it was entered on, which the
+            # caller records before acting - reading the live URL there would
+            # compare against a page the step itself may have changed (t-1031:
+            # a goto that trusted the entry URL compared the PREVIOUS step's
+            # page and failed a correct arrival).
+            if step_type == "navigate":
+                actual_page = self._safe_page_url()
+            else:
+                actual_page = self._step_entry_url or self._safe_page_url()
             if not _same_page(expected_page, actual_page):
                 page_mismatch = {"expected": expected_page, "actual": actual_page}
 
@@ -495,8 +757,8 @@ class EvidenceTracker:
             failure_note = str(error)[:300]
         elif page_mismatch is not None:
             failure_note = (
-                f"Step ran on '{page_mismatch['actual']}' but its locator was "
-                f"resolved against '{page_mismatch['expected']}' — the flow "
+                f"Step ran on '{page_mismatch['actual']}' but {mismatch_wording} "
+                f"'{page_mismatch['expected']}' - the flow "
                 "diverged, so this check did not verify its condition."
             )
 
@@ -529,6 +791,9 @@ class EvidenceTracker:
         if page_mismatch is not None:
             result["page_mismatch"] = page_mismatch
 
+        if navigation is not None:
+            result["navigation"] = navigation
+
         self.steps.append(
             {
                 "step": step_idx + 1,
@@ -537,6 +802,9 @@ class EvidenceTracker:
                 "locator": locator,
                 "value": value,
                 "screenshot": screenshot_path,
+                "frame_url": frame_url,
+                "frame_doc_width": frame_doc_width,
+                "frame_doc_height": frame_doc_height,
                 "element": element_data,
                 "url": self._safe_page_url(),  # B-033: per-step URL so flow divergence is traceable
                 "result": result,
@@ -546,19 +814,24 @@ class EvidenceTracker:
         # B-035: persist incrementally so a killed/timed-out process still
         # leaves evidence. Cheap (small JSON) — write on the first step and on
         # any failed/partial step; the final write() overwrites with the real
-        # status.
+        # status. t-1057: a failure also stamps the steps that come after it, so
+        # the incremental sidecar already marks them.
+        self._mark_off_course_steps()
         if step_idx == 0 or status in ("failed", "partial_pass"):
             self._persist_sidecar("running")
 
         # Gate 2 (B-093): a mismatch on a would-be-passing step now fails the
         # test. Evidence is persisted above first, so the sidecar keeps the
-        # mismatch even though execution stops here. A step that already
-        # failed for its own reason keeps its original error — the mismatch
-        # stays recorded, it does not mask the real cause.
+        # mismatch. The exception still marks the step as a failure, and the
+        # journey carries on (t-1057): with the page intact, the later steps run
+        # and the test is failed once at its end from journey_summary(). Only a
+        # closed page stops it. A step that already failed for its own reason
+        # keeps its original error — the mismatch stays recorded, it does not
+        # mask the real cause.
         if page_mismatch is not None and not error:
             raise PageMismatchError(
                 f"{step_type} '{label}' ran on '{page_mismatch['actual']}' but "
-                f"was resolved against '{page_mismatch['expected']}'. The flow "
+                f"{mismatch_wording} '{page_mismatch['expected']}'. The flow "
                 "diverged from the resolved page context; this check did not "
                 "verify its condition."
             )
@@ -568,6 +841,311 @@ class EvidenceTracker:
             return str(self.page.url)
         except Exception:
             return ""
+
+    # --- t-1057: carry on after a failed step, report once at the end ---
+
+    def _cannot_continue(self) -> bool:
+        """True only when the rest of the journey cannot run at all.
+
+        THE single stop condition: the page is closed, or its browser context is
+        closed. A crash that kills the page leaves nothing for the later steps to
+        run on, so the test ends there. Every other failure is recorded and the
+        journey carries on.
+        """
+        try:
+            if self.page.is_closed() is True:
+                return True
+        except Exception:
+            pass
+        try:
+            context = self.page.context
+            if context is not None and context.is_closed() is True:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _click_moved(self, original_url: str, pages_before: tuple[Any, ...]) -> bool:
+        """True when the click changed the page (URL identity) or opened a tab."""
+        try:
+            if len(tuple(self.page.context.pages)) > len(pages_before):
+                return True
+        except Exception:
+            pass
+        # Unknown addresses never stop a journey; a query or fragment change does
+        # count as a move (t-1098).
+        return _address_moved(original_url, self._safe_page_url()) is not False
+
+    def _page_gone(self, exc: Exception) -> bool:
+        """Reason 1: the page, its context or the protocol is gone."""
+        if self._cannot_continue():
+            return True
+        message = str(exc).lower()
+        return any(marker in message for marker in _PAGE_GONE_MARKERS)
+
+    def _liveness_ok(self) -> bool:
+        """One trivial call against the page. False means nothing further can run.
+
+        Reason 2: the step failure may have been a symptom of a page that is no
+        longer answering. A closed page is already reason 1; this catches the page
+        that still claims to be open but raises on the cheapest possible call.
+        """
+        try:
+            self.page.evaluate("() => 1")
+        except Exception:
+            return False
+        return True
+
+    def _stop_when_over_the_time_limit(self) -> None:
+        """Reason 4: the per-test backstop. Not the main rule - a last resort."""
+        if self._time_limit_s <= 0:
+            return
+        if self.stop is not None:
+            return
+        elapsed = time.time() - self.start_time
+        if elapsed > self._time_limit_s:
+            self._stop_journey(
+                "time_limit",
+                f"The test ran {elapsed:.0f}s, over the {self._time_limit_s:.0f}s per-test limit.",
+            )
+
+    def _fail_stopped_step(self, detail: str) -> None:
+        """The step that tripped rule 3 did not do its job: mark it failed.
+
+        Exactly one step is recorded for a stop - the real one - and it is the
+        one that failed, so the count and the summary cannot lie (t-1098).
+        """
+        if not self.steps:
+            return
+        result = self.steps[-1].setdefault("result", {})
+        result["status"] = "failed"
+        result["error"] = result.get("error") or detail
+        result["failure_note"] = detail
+
+    def _stop_journey(self, reason: str, detail: str) -> None:
+        """Record that the journey stopped, persist it, and raise it once.
+
+        ``reason`` is one of the four keys in :data:`STOP_REASONS`; the plain-words
+        text for it goes into the record, the sidecar and the report.
+        """
+        self.stop = {"reason": reason, "detail": detail}
+        self._persist_sidecar("running")
+        raise JourneyStopped(self.journey_summary() or f"Journey stopped: {STOP_REASONS.get(reason, reason)}")
+
+    def _record_unrecorded_failure(
+        self, method_name: str, args: tuple[Any, ...], exc: Exception, steps_before: int
+    ) -> None:
+        """Record a failure that escaped before the method recorded its own step."""
+        if len(self.steps) > steps_before:
+            return  # the method already recorded the failed step
+        value = args[0] if args and isinstance(args[0], str) else None
+        self._record_step(
+            method_name,
+            f"{method_name} step failed",
+            locator=value,
+            take_screenshot=True,
+            error=str(exc)[:300],
+            fast_fail=True,
+        )
+
+    def _off_course_of(self, step: dict[str, Any]) -> dict[str, str] | None:
+        """The page a failed step did not reach, when the failure names one."""
+        result = step.get("result") or {}
+        mismatch = result.get("page_mismatch")
+        if isinstance(mismatch, dict) and mismatch.get("expected") and mismatch.get("actual"):
+            return {"expected": str(mismatch["expected"]), "actual": str(mismatch["actual"])}
+        navigation = result.get("navigation")
+        if isinstance(navigation, dict):
+            requested = str(navigation.get("requested") or "")
+            final = str(navigation.get("final") or "")
+            if requested and final and requested != final:
+                return {"expected": requested, "actual": final}
+        return None
+
+    def _mark_off_course_steps(self) -> dict[str, Any] | None:
+        """Stamp every step AFTER the first failure as off course.
+
+        A pass that happens after the journey left its course is never a clean
+        pass. The stamp names the step that failed first (``failed_step``) and,
+        when the failure names one, the page that was expected and the page the
+        later steps really ran on. A missing element names no page, and the
+        marking does not need to know what failed - the step number is enough
+        (t-1063). Idempotent: safe on every record and on the final write.
+        """
+        first_failed = next((s for s in self.steps if (s.get("result") or {}).get("status") == "failed"), None)
+        if first_failed is None:
+            return None
+        failed_index = self.steps.index(first_failed)
+        info: dict[str, Any] = {"failed_step": failed_index + 1}
+        info.update(self._off_course_of(first_failed) or {})
+        for step in self.steps[failed_index + 1 :]:
+            result = step.setdefault("result", {})
+            result.setdefault("off_course", dict(info))
+        return info
+
+    def journey_failures(self) -> list[dict[str, Any]]:
+        """Return one entry per failed step, in order (empty when none failed)."""
+        failures: list[dict[str, Any]] = []
+        for index, step in enumerate(self.steps):
+            result = step.get("result") or {}
+            if result.get("status") != "failed":
+                continue
+            failures.append(
+                {
+                    "step": index + 1,
+                    "type": step.get("type", ""),
+                    "label": step.get("label", ""),
+                    "error": result.get("error") or result.get("failure_note") or "",
+                    "page": self._off_course_of(step),
+                }
+            )
+        return failures
+
+    def journey_record(self) -> dict[str, Any]:
+        """The journey failure as data, for the evidence sidecar and the report.
+
+        Empty when no step failed, so a clean test carries no journey block. The
+        report renders one line per failed step (step number, expected page,
+        reached page) and the off-course note from these fields - it does not have
+        to re-derive them from the steps (t-1063).
+        """
+        failures = self.journey_failures()
+        if not failures and self.stop is None:
+            return {}
+        first = failures[0] if failures else None
+        if first is None:
+            return {
+                "protocol": JOURNEY_PROTOCOL,
+                "failed_steps": [],
+                "off_course": {},
+                "later_steps": 0,
+                "later_passed_off_course": 0,
+                "stop": dict(self.stop or {}),
+                "stop_text": STOP_REASONS.get(str((self.stop or {}).get("reason", "")), ""),
+                "summary": self.journey_summary(),
+            }
+        failed_index = int(first["step"]) - 1
+        later = self.steps[failed_index + 1 :]
+        later_passed = sum(1 for step in later if (step.get("result") or {}).get("status") == "passed")
+        off_course = self._off_course_of(self.steps[failed_index]) or {}
+        return {
+            "protocol": JOURNEY_PROTOCOL,
+            "failed_steps": failures,
+            "off_course": off_course,
+            "later_steps": len(later),
+            # Every later step ran after a failure, so every later pass is off
+            # course - whether or not the failure named a page (t-1063).
+            "later_passed_off_course": later_passed,
+            "stop": dict(self.stop) if self.stop else {},
+            "stop_text": STOP_REASONS.get(str((self.stop or {}).get("reason", "")), ""),
+            "summary": self.journey_summary(),
+        }
+
+    def journey_summary(self) -> str:
+        """One paragraph for the end of the test: what failed, and what came after.
+
+        Empty when no step failed. The generated conftest fails the test with this
+        text once, at the end, instead of the journey stopping at the failed step.
+        """
+        failures = self.journey_failures()
+        stop_line = self._stop_line()
+        if not failures:
+            return stop_line
+        first = failures[0]
+        failed_index = int(first["step"]) - 1
+        later = self.steps[failed_index + 1 :]
+        later_passed = sum(1 for step in later if (step.get("result") or {}).get("status") == "passed")
+        if self.stop:
+            first_line = (
+                f"{len(failures)} step(s) failed, then the journey stopped ({len(later)} later step(s) had run)."
+            )
+        else:
+            first_line = (
+                f"{len(failures)} step(s) failed; the journey carried on to the end ({len(later)} later step(s) ran)."
+            )
+        lines = [
+            first_line,
+            "",
+            f"Step {first['step']} '{first['label']}' failed:",
+        ]
+        if first["error"]:
+            lines.append(f"  {first['error']}")
+        if first["page"]:
+            lines.append(f"  expected: {first['page']['expected']}")
+            lines.append(f"  reached:  {first['page']['actual']}")
+            lines.append("")
+            lines.append(
+                f"Later steps ran on the page the journey did not expect "
+                f"('{first['page']['actual']}'): {len(later)} ran, {later_passed} passed. "
+                "None of those passes is a clean pass."
+            )
+        for failure in failures[1:]:
+            lines.append(f"Also failed: step {failure['step']} '{failure['label']}' - {failure['error']}")
+        if stop_line:
+            lines.extend(["", stop_line])
+        return "\n".join(lines)
+
+    def _stop_line(self) -> str:
+        """The stop, in plain words, for the record and the report."""
+        if not self.stop:
+            return ""
+        text = STOP_REASONS.get(str(self.stop.get("reason", "")), "")
+        detail = str(self.stop.get("detail") or "")
+        line = f"Journey stopped: {text}."
+        if detail and detail not in text:
+            line += f" {detail}"
+        return line
+
+    def record_page_expectation(
+        self,
+        expected_url: str,
+        *,
+        observed_url: str = "",
+        trail_step: str = "",
+        producer: str = "",
+        description: str = "",
+        reason: str = "",
+        query_rule: str = "",
+        query_reason: str = "",
+    ) -> None:
+        """Record what page the test expects before the arrival assertion runs.
+
+        t-0929 (owner's decision, 2026-10-25): when the run observed the browser
+        on a different page than the assertion's candidate, the emitted test
+        FAILS honestly instead of rewriting the expectation. This record keeps
+        the failure provable and readable:
+
+        - ``timestamp``: when this step was evaluated at run time;
+        - ``trail_step``: the observed step the candidate was checked against
+          (index/action/description/from/to/timestamp) - emit-time knowledge
+          that otherwise existed only in memory;
+        - ``producer``: which source chose the candidate (keyword resolver,
+          post-login override, or flow memory) - previously a log line only;
+        - ``query_rule``: which page-identity rule applied (``identity`` by
+          default, or ``story-pins-query`` when the story named the bit after
+          the ``?`` - see ``src/page_identity.py``);
+        - ``query_reason``: why that rule fired or did not fire;
+        - ``actual_url``: what the browser was on when the expectation ran.
+        """
+        entry: dict[str, Any] = {
+            "timestamp": round(time.time(), 3),
+            "expected_url": expected_url,
+            "observed_url": observed_url,
+            "actual_url": self._safe_page_url(),
+            "trail_step": trail_step,
+            "producer": producer,
+            "description": description,
+        }
+        if reason:
+            entry["reason"] = reason
+        if query_rule:
+            entry["query_rule"] = query_rule
+        if query_reason:
+            entry["query_reason"] = query_reason
+        self.page_expectations.append(entry)
+        # Persist immediately: the assertion fails on the next line, and a
+        # later write() must never be the only place the record exists.
+        self._persist_sidecar("running")
 
     def _persist_sidecar(self, status: str) -> None:
         """Write the current steps + run history to the sidecar JSON.
@@ -584,20 +1162,47 @@ class EvidenceTracker:
                 page_url=self._safe_page_url(),
                 run_history=self.run_history,
                 steps=self.steps,
+                page_expectations=self.page_expectations,
                 duration_s=time.time() - self.start_time,
                 verification=self.verification,
+                journey=self.journey_record(),
             )
             self.sidecar_path.write_text(json_content, encoding="utf-8")
         except Exception as exc:
             logger.warning("incremental evidence persistence failed: %s", exc)
 
-    def navigate(self, url: str, label: str = "") -> None:
+    @_carries_on
+    def navigate(self, url: str, label: str = "", expected_page: str = "") -> None:
         """Navigate to a URL and record the navigation.
 
         Args:
             url: The URL to navigate to.
             label: Optional human-readable label for the step. Defaults to
                    "Navigate to <url>" when empty.
+            expected_page: The page this step is supposed to reach, when the
+                   caller knows it. When it is given and the browser ends up
+                   somewhere else, the step is recorded as failed and names
+                   both pages. Empty means "the caller did not say" - a
+                   redirect is then recorded (``navigation`` on the step) but
+                   not judged; see the note below.
+
+        d-0032: a navigation step used to pass on "no exception raised", and
+        Playwright raises only on network, protocol and timeout failures - so a
+        404, a 500 or a bounce home was recorded as PASSED with a screenshot of
+        the error page. The response is now read:
+
+        - 4xx/5xx -> failed, naming the status, the requested address and the
+          address the browser actually reached (``NavigationStatusError``).
+        - an ``expected_page`` was given and the browser is not on it -> the
+          same failed shape a wrong-page step already uses (``page_mismatch``
+          on the step, ``PageMismatchError`` raised).
+        - otherwise a redirect to a different address is recorded on the step
+          under ``navigation`` with a note naming both addresses, and is not
+          judged: a canonical redirect and an auth bounce look the same from
+          here, so failing both would be a false red. Say it, do not guess.
+
+        The screenshot and the recorded final address stay on the step either
+        way - they are the evidence for what the browser reached.
         """
         if not label:
             label = f"Navigate to {redact_url_credentials(url)}"
@@ -614,8 +1219,69 @@ class EvidenceTracker:
         except Exception:
             pass
         _t0 = time.time()
+        page_before = self._safe_page_url()
         try:
-            self.page.goto(url)
+            response = self.page.goto(url)
+            status = _response_status(response)
+            final_url = self._safe_page_url()
+            # The step now runs on the page it landed on. Keep the tracker's
+            # entry URL truthful too, so no later reader sees the page the
+            # navigation started from (t-1031).
+            self._step_entry_url = final_url
+            navigation: dict[str, Any] = {
+                "requested": safe_url,
+                "final": final_url,
+                "status": status,
+            }
+            if status is not None and status >= 400:
+                # An HTTP error page is not arrival. Record the failure with
+                # the evidence (screenshot, both addresses) and stop.
+                error = f"navigation returned HTTP {status}: asked for '{safe_url}', the browser reached '{final_url}'"
+                self._record_step(
+                    "navigate",
+                    label,
+                    value=safe_url,
+                    take_screenshot=True,
+                    error=error,
+                    elapsed_ms=int((time.time() - _t0) * 1000),
+                    navigation=navigation,
+                    # There is no element to diagnose - the error names the
+                    # status and both addresses, so it is its own diagnosis.
+                    # The screenshot is still taken (it is the evidence of the
+                    # page the browser reached).
+                    fast_fail=True,
+                )
+                raise NavigationStatusError(f"navigate '{label}': {error}")
+            chain = _redirect_chain(response)
+            if not _same_page(final_url, safe_url):
+                # The browser left the address that was asked for. Record both,
+                # so the step is never a silent pass - and judge it only when
+                # the caller said where it should land.
+                navigation["redirected"] = True
+                if chain:
+                    navigation["redirect_chain"] = chain
+                if not expected_page:
+                    landed = "no expected page was supplied, so this redirect is recorded, not judged"
+                elif _same_page(expected_page, final_url):
+                    landed = "that is the expected page"
+                else:
+                    landed = "that is not the expected page"
+                navigation["note"] = f"the browser was redirected from '{safe_url}' to '{final_url}'; {landed}"
+            else:
+                # t-1049: a redirect the user did not choose must be visible even
+                # when it lands on the page that was asked for (a canonical
+                # slash, a locale prefix, a session bounce that returns). The
+                # page identity says it is the same page, so this is not a
+                # failure - but the record says a redirect happened and keeps
+                # both addresses, so the user can decide about it.
+                if chain or _address_changed(safe_url, final_url):
+                    navigation["redirected"] = True
+                    if chain:
+                        navigation["redirect_chain"] = chain
+                    navigation["note"] = (
+                        f"the address redirected from '{safe_url}' to '{final_url}'; "
+                        "both name the same page, so this is not a failure"
+                    )
             self._dismiss_consent_overlays()
             self._dismiss_ad_overlays()
             # Short settle so the evidence shot captures a rendered page, not
@@ -623,8 +1289,43 @@ class EvidenceTracker:
             # ``_record_step``).
             self.page.wait_for_timeout(500)
             self._record_step(
-                "navigate", label, value=safe_url, take_screenshot=True, elapsed_ms=int((time.time() - _t0) * 1000)
+                "navigate",
+                label,
+                value=safe_url,
+                take_screenshot=True,
+                elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
+                navigation=navigation,
+                mismatch_wording="the step was asked for",
             )
+            # Rule 3 (t-1095): a navigation's job is to change the page. If the
+            # browser is still on the page it left, the remaining steps belong to
+            # a page it never reached, so they could only produce noise. A 404 or
+            # a redirect DID move the browser, so those carry on.
+            # A readable status means a real document navigation was reported.
+            # With no status there is nothing to judge (a same-document
+            # navigation, or a test double that reports none).
+            if status is not None and _address_moved(page_before, self._safe_page_url()) is False:
+                if self.stop is None:
+                    detail = (
+                        f"the navigate step '{label}' did not change the page; "
+                        f"the browser stayed on '{self._safe_page_url()}'"
+                    )
+                    self._fail_stopped_step(detail)
+                    self._mark_off_course_steps()
+                    self._stop_journey("no_arrival", detail)
+        except JourneyStopped:
+            # A stop is not a step failure: the step that tripped it is already
+            # recorded. Let it out untouched or the generic handler below would
+            # record a second, invented step and the summary would lie (t-1098).
+            raise
+        except NavigationStatusError:
+            # Already recorded with its own evidence - re-raise, do not record
+            # the same failure twice.
+            raise
+        except PageMismatchError:
+            # Recorded by the success path of _record_step (B-093) - re-raise.
+            raise
         except Exception as e:
             self._record_step(
                 "navigate",
@@ -633,9 +1334,11 @@ class EvidenceTracker:
                 take_screenshot=True,
                 error=str(e),
                 elapsed_ms=int((time.time() - _t0) * 1000),
+                expected_page=expected_page,
             )
             raise
 
+    @_carries_on
     def fill(self, locator: str, value: str, label: str = "", expected_page: str = "") -> None:
         # AI-045 §8.4: classify the field BEFORE filling. Sensitive fields get
         # their value replaced by the redaction marker in BOTH evidence
@@ -738,7 +1441,8 @@ class EvidenceTracker:
         except Exception:
             return ""
 
-    def click(self, locator: str, label: str = "", expected_page: str = "") -> None:
+    @_carries_on
+    def click(self, locator: str, label: str = "", expected_page: str = "", must_move: bool = False) -> None:
         """Click an element, with layered fallback strategies.
 
         Strategy (Tier 2 — Locator Scoring + Controlled Fallback):
@@ -847,7 +1551,26 @@ class EvidenceTracker:
                     expected_page=expected_page,
                 )
                 self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
+                # Rule 3 (t-1095): only a click the emitter KNOWS must move arms
+                # this. A click the story does not expect to navigate (a tab, an
+                # "add to cart") must never stop the journey.
+                if must_move and self.stop is None and not self._click_moved(original_url, pages_before):
+                    detail = (
+                        f"the click step '{label}' (via '{locator}') was expected to move the browser; "
+                        f"it stayed on '{self._safe_page_url()}'"
+                    )
+                    self._fail_stopped_step(detail)
+                    self._mark_off_course_steps()
+                    self._stop_journey("no_arrival", detail)
                 return
+            except JourneyStopped:
+                # A rule-3 stop raised inside this block must leave the method.
+                # The handler below decides on words like "hidden" or "timeout",
+                # and a stop message names the label and the address - a label
+                # such as "hidden tab" would otherwise hand the stop to the
+                # visibility fallback, which records a second click step and
+                # returns (t-1100).
+                raise
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
                 error_str = str(click_error).lower()
@@ -891,6 +1614,10 @@ class EvidenceTracker:
                     self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
                 else:
                     raise
+        except JourneyStopped:
+            # The step that tripped rule 3 is already recorded; a second invented
+            # step here would double-count it (t-1098).
+            raise
         except Exception as e:
             # Fast-failed not-found clicks were already recorded (fast_fail).
             # A page-mismatch failure was already recorded by the success
@@ -1130,6 +1857,7 @@ class EvidenceTracker:
         result["failure_note"] = error
         self._persist_sidecar("running")
 
+    @_carries_on
     def assert_visible(self, locator: str, label: str = "", expected_page: str = "") -> None:
         if not label:
             label = f"Assert visible: {locator}"
@@ -1168,6 +1896,7 @@ class EvidenceTracker:
 
     # --- B-020: Additional assertion methods ---
 
+    @_carries_on
     def assert_hidden(self, locator: str, label: str = "", expected_page: str = "") -> None:
         """Assert the element is hidden or detached — a state-ABSENCE check.
 
@@ -1206,6 +1935,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_text(self, locator: str, expected: str, label: str = "") -> None:
         """Assert the element's text content matches the expected string exactly."""
         if not label:
@@ -1236,6 +1966,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_text_contains(self, locator: str, expected: str, label: str = "") -> None:
         """Assert the element's text content contains the expected substring."""
         if not label:
@@ -1266,6 +1997,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_disabled(self, locator: str, label: str = "") -> None:
         """Assert the element is disabled."""
         if not label:
@@ -1294,6 +2026,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_enabled(self, locator: str, label: str = "") -> None:
         """Assert the element is enabled."""
         if not label:
@@ -1322,6 +2055,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_checked(self, locator: str, label: str = "") -> None:
         """Assert a checkbox or radio button is checked."""
         if not label:
@@ -1350,6 +2084,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_count(self, locator: str, expected: int, label: str = "") -> None:
         """Assert the number of elements matching the locator equals expected."""
         if not label:
@@ -1378,6 +2113,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_count_at_least(self, locator: str, minimum: int, label: str = "") -> None:
         """Assert at least ``minimum`` elements match the locator (B-090).
 
@@ -1412,6 +2148,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_value(self, locator: str, expected: str, label: str = "") -> None:
         """Assert an input/textarea/select has the expected value attribute."""
         if not label:
@@ -1468,6 +2205,7 @@ class EvidenceTracker:
             violations.append(f"does not start with '{required_scheme}'")
         return violations
 
+    @_carries_on
     def assert_attribute(
         self,
         locator: str,
@@ -1523,6 +2261,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_no_forbidden(
         self,
         selector: str,
@@ -1597,6 +2336,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_attribute_all(
         self,
         selector: str,
@@ -1654,6 +2394,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_contains(self, section: str, child: str, label: str = "") -> None:
         """Assert a named section contains a child element (B-088).
 
@@ -1696,6 +2437,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_no_broken_images(self, label: str = "") -> None:
         """Assert every ``<img>`` on the page finished loading (B-090).
 
@@ -1748,6 +2490,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_natural_width(self, locator: str, label: str = "") -> None:
         """Assert the first element matching ``locator`` is a loaded image (B-090).
 
@@ -1784,6 +2527,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_no_horizontal_scroll(self, width: int = 375, label: str = "") -> None:
         """Assert the page does not scroll horizontally at ``width`` px (B-090).
 
@@ -1834,6 +2578,7 @@ class EvidenceTracker:
                 except Exception:
                     pass
 
+    @_carries_on
     def assert_anchor_targets_exist(self, selector: str = 'a[href^="#"]', label: str = "") -> None:
         """Assert every in-page anchor points at an element that exists (B-092).
 
@@ -1879,6 +2624,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_section_has_price(self, section: str, label: str = "") -> None:
         """Assert a named section shows a price (B-092).
 
@@ -1921,6 +2667,7 @@ class EvidenceTracker:
             )
             raise
 
+    @_carries_on
     def assert_empty(self, locator: str, label: str = "") -> None:
         """Assert an element has no text and no child elements."""
         if not label:
@@ -1953,6 +2700,7 @@ class EvidenceTracker:
 
     def write(self, status: str = "passed") -> str:
         """Writes the sidecar and updates history."""
+        self._mark_off_course_steps()
         self.run_history["total_runs"] += 1
         if status == "passed":
             self.run_history["passed_runs"] += 1

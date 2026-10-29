@@ -4,7 +4,7 @@
 
 ---
 
-You are continuing **AI-059 Deliverable 2** in the `AI-Playwright-Test-Generator` repo (working dir `C:/Users/l_a_c/code/AI-Playwright-Test-Generator`). The repo is clean on top of commit **`f2f0b60`** (`feat(ai-059): learning-impact isolation harness — sentinel identity + controlled baseline`), which already shipped Deliverable 1 (lab sentinel identity, cold/warm baseline runner, `AI059_DISABLE_AUTO_LEARN` gate, opt-in `rag_diagnostics.jsonl`). The handoff doc is at `docs/sessions/2026-08-27_ai059_session2_resolver_usage_trace_handoff.md` — read it first.
+You are continuing **AI-059 Deliverable 2** in the `AI-Playwright-Test-Generator` repo (working dir: the project folder). The repo is clean on top of commit **`f2f0b60`** (`feat(ai-059): learning-impact isolation harness — sentinel identity + controlled baseline`), which already shipped Deliverable 1 (lab sentinel identity, cold/warm baseline runner, `AI059_DISABLE_AUTO_LEARN` gate, opt-in `rag_diagnostics.jsonl`). The handoff doc is at `docs/sessions/2026-08-27_ai059_session2_resolver_usage_trace_handoff.md` — read it first.
 
 ## Task (Deliverable 2 — "resolver usage trace")
 Today we can see RAG patterns are **retrieved** (logged to `rag_diagnostics.jsonl` via `AI059_RAG_DIAGNOSTICS_PATH`), but NOT whether a retrieved pattern was actually **applied** as a scoring bonus to the winning element. Make usage observable: for each retrieved pattern, emit `eligible` (site gate passed?), `matched` (selector hit the winning element?), and `bonus` (points contributed).

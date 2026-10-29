@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="5" time="146.286" timestamp="2026-10-13T00:24:34.471215+01:00"><testcase classname="scratch.gate1_out_t0750.test_eval_004" name="test_01_navigate_to_main_page[chromium]" time="32.564"><failure message="playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.&#10;Call log:&#10;  - navigating to &quot;https://the-internet.herokuapp.com/&quot;, waiting until &quot;load&quot;">scratch\gate1_out_t0750\test_eval_004.py:8: in test_01_navigate_to_main_page
+    evidence_tracker.navigate('https://the-internet.herokuapp.com/')
+src\evidence_tracker.py:618: in navigate
+    self.page.goto(url)
+.venv\Lib\site-packages\playwright\sync_api\_generated.py:9903: in goto
+    self._sync(
+.venv\Lib\site-packages\playwright\_impl\_page.py:562: in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\playwright\_impl\_frame.py:157: in goto
+    await self._channel.send(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:76: in send
+    return await self._connection.wrap_api_call(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:632: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
+E   Call log:
+E     - navigating to "https://the-internet.herokuapp.com/", waiting until "load"</failure></testcase><testcase classname="scratch.gate1_out_t0750.test_eval_004" name="test_02_click_javascript_alerts_link[chromium]" time="8.078" /><testcase classname="scratch.gate1_out_t0750.test_eval_004" name="test_03_click_js_alert_button[chromium]" time="30.644"><failure message="playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.&#10;Call log:&#10;  - navigating to &quot;https://the-internet.herokuapp.com/&quot;, waiting until &quot;load&quot;">scratch\gate1_out_t0750\test_eval_004.py:21: in test_03_click_js_alert_button
+    evidence_tracker.navigate('https://the-internet.herokuapp.com/')
+src\evidence_tracker.py:618: in navigate
+    self.page.goto(url)
+.venv\Lib\site-packages\playwright\sync_api\_generated.py:9903: in goto
+    self._sync(
+.venv\Lib\site-packages\playwright\_impl\_page.py:562: in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\playwright\_impl\_frame.py:157: in goto
+    await self._channel.send(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:76: in send
+    return await self._connection.wrap_api_call(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:632: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
+E   Call log:
+E     - navigating to "https://the-internet.herokuapp.com/", waiting until "load"</failure></testcase><testcase classname="scratch.gate1_out_t0750.test_eval_004" name="test_04_accept_javascript_alert[chromium]" time="35.180"><failure message="src.evidence_tracker._LocatorNotFoundError: Locator 'button:has-text(&quot;Click for JS Alert&quot;)' not found on current page (https://the-internet.herokuapp.com/). The element exists on a different page than the one this step runs on.">scratch\gate1_out_t0750\test_eval_004.py:30: in test_04_accept_javascript_alert
+    evidence_tracker.click('button:has-text("Click for JS Alert")', label='Click for JS Alert', expected_page='https://the-internet.herokuapp.com')
+src\evidence_tracker.py:769: in click
+    raise _LocatorNotFoundError(
+E   src.evidence_tracker._LocatorNotFoundError: Locator 'button:has-text("Click for JS Alert")' not found on current page (https://the-internet.herokuapp.com/). The element exists on a different page than the one this step runs on.</failure></testcase><testcase classname="scratch.gate1_out_t0750.test_eval_004" name="test_05_verify_result_message[chromium]" time="30.830"><failure message="playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.&#10;Call log:&#10;  - navigating to &quot;https://the-internet.herokuapp.com/&quot;, waiting until &quot;load&quot;">scratch\gate1_out_t0750\test_eval_004.py:36: in test_05_verify_result_message
+    evidence_tracker.navigate('https://the-internet.herokuapp.com/')
+src\evidence_tracker.py:618: in navigate
+    self.page.goto(url)
+.venv\Lib\site-packages\playwright\sync_api\_generated.py:9903: in goto
+    self._sync(
+.venv\Lib\site-packages\playwright\_impl\_page.py:562: in goto
+    return await self._main_frame.goto(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\playwright\_impl\_frame.py:157: in goto
+    await self._channel.send(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:76: in send
+    return await self._connection.wrap_api_call(
+.venv\Lib\site-packages\playwright\_impl\_connection.py:632: in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+E   playwright._impl._errors.TimeoutError: Page.goto: Timeout 30000ms exceeded.
+E   Call log:
+E     - navigating to "https://the-internet.herokuapp.com/", waiting until "load"</failure></testcase></testsuite></testsuites>

@@ -7,6 +7,7 @@ Entirely independent of the standard report renderers.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
+from src.evidence_image import embed_preview_data_uri
 from src.report_builder import escape_html
 
 _EVIDENCE_STEP_COLORS: dict[str, str] = {
@@ -272,16 +274,256 @@ def _build_step_row_html(step: dict[str, Any], idx: int) -> str:
 </div>"""
 
 
+# ---------------------------------------------------------------------------
+# Frame matching (B-105)
+#
+# A marker's percentage is only meaningful against the document it was
+# measured in. The page height changes between steps (a newsletter bar
+# appears, a cart modal opens), so a percentage drawn on a frame of a
+# different height lands on a different element — in the flagship demo that
+# put a "View Product" marker on another card's "Add to cart" button.
+# ---------------------------------------------------------------------------
+
+
+def _as_int(value: Any) -> int | None:
+    """Return *value* as an int, or None when it is not a usable number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+@dataclass(frozen=True)
+class EvidenceFrame:
+    """One captured page state: the screenshot plus the document it shows."""
+
+    rel_path: str
+    url: str
+    doc_width: int | None
+    doc_height: int | None
+    step_index: int
+
+
+@dataclass(frozen=True)
+class FrameMatch:
+    """Where a marker may be drawn, and whether that placement is confirmed."""
+
+    frame: EvidenceFrame | None
+    verified: bool
+    reason: str
+
+
+def build_evidence_frames(steps: list[dict[str, Any]]) -> list[EvidenceFrame]:
+    """Return one frame per distinct screenshot recorded in *steps*.
+
+    Two steps that share a screenshot share a frame. The frame carries the
+    URL it shows and the size of the document it captured, so a marker can be
+    matched to the frame it was measured in.
+    """
+    frames: list[EvidenceFrame] = []
+    seen: set[str] = set()
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        shot = str(step.get("screenshot") or "")
+        if not shot or shot in seen:
+            continue
+        seen.add(shot)
+        frames.append(
+            EvidenceFrame(
+                rel_path=shot,
+                url=_normalise_url(str(step.get("frame_url") or step.get("url") or "")),
+                doc_width=_as_int(step.get("frame_doc_width")),
+                doc_height=_as_int(step.get("frame_doc_height")),
+                step_index=idx,
+            )
+        )
+    return frames
+
+
+def match_frame(
+    frames: list[EvidenceFrame],
+    *,
+    doc_width: int | None,
+    doc_height: int | None,
+    own_rel_path: str = "",
+    step_index: int = 0,
+) -> FrameMatch:
+    """Return the frame a marker measured in that document may be drawn on.
+
+    When the sidecar records the document size, only a frame of exactly that
+    size is a legal target: the marker's percentage is relative to the
+    document it was measured in, and nothing else. When the sidecar does not
+    record it (written before the frame sizes were captured) the step's own
+    frame is used and the match is reported as unverified, so the caller can
+    say so. A wrong marker is worse than no marker.
+    """
+    if doc_width is None or doc_height is None:
+        own = next((f for f in frames if f.rel_path == own_rel_path), None)
+        if own is None:
+            return FrameMatch(None, False, "this step has no captured frame")
+        return FrameMatch(
+            own,
+            False,
+            "the sidecar does not record the size of the frame, so the frame could not be confirmed",
+        )
+
+    candidates = [f for f in frames if f.doc_width == doc_width and f.doc_height == doc_height]
+    if not candidates:
+        return FrameMatch(
+            None,
+            False,
+            "no captured frame shows the page this step was measured on, so no marker could be placed",
+        )
+    own = next((f for f in candidates if f.rel_path == own_rel_path), None)
+    if own is not None:
+        return FrameMatch(own, True, "")
+    earlier = [f for f in candidates if f.step_index <= step_index]
+    return FrameMatch(earlier[-1] if earlier else candidates[0], True, "")
+
+
+def _resolve_evidence_image(sidecar_path: Path, rel_path: str) -> Path:
+    """Resolve a screenshot path recorded in a sidecar to a file on disk."""
+    if rel_path.startswith("evidence/"):
+        return (sidecar_path.parent.parent / rel_path).resolve()
+    return (sidecar_path.parent / rel_path).resolve()
+
+
+def _build_overlay_model(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    """Work out which captured frame every step's marker belongs on.
+
+    Returns the frames, the markers that may be drawn, the failure ribbons
+    and the per-step note. A failed step that never located its element has
+    no position to mark, so it gets a ribbon on its own frame instead of a
+    marker: the picture must still say the step failed.
+    """
+    frames = build_evidence_frames(steps)
+    frame_ids = {f.rel_path: f"f{i}" for i, f in enumerate(frames)}
+    frame_meta: list[dict[str, Any]] = []
+    for i, frame in enumerate(frames):
+        step_type = ""
+        if 0 <= frame.step_index < len(steps):
+            candidate = steps[frame.step_index]
+            if isinstance(candidate, dict):
+                step_type = _step_type_key(candidate)
+        frame_meta.append(
+            {
+                "id": f"f{i}",
+                "rel_path": frame.rel_path,
+                "step_index": frame.step_index,
+                "label": f"Frame {i + 1} - captured at step {frame.step_index + 1} ({step_type})",
+                "has_failure": False,
+            }
+        )
+    meta_by_id = {f["id"]: f for f in frame_meta}
+
+    markers: list[dict[str, Any]] = []
+    ribbons: dict[str, list[dict[str, Any]]] = {}
+    notes: dict[int, str] = {}
+
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict):
+            continue
+        raw_element = step.get("element")
+        element: dict[str, Any] = raw_element if isinstance(raw_element, dict) else {}
+        pct = element.get("viewport_pct")
+        failed = _is_failed_step(step)
+        own_rel = str(step.get("screenshot") or "")
+        own_frame = frame_ids.get(own_rel, "")
+
+        if not isinstance(pct, dict) or pct.get("x") is None or pct.get("y") is None:
+            if failed:
+                notes[idx] = "this step failed before the element was located, so there is no position to mark"
+                if own_frame:
+                    ribbons.setdefault(own_frame, []).append(
+                        {"step": idx + 1, "label": str(step.get("label") or step.get("type") or "step")}
+                    )
+                    meta_by_id[own_frame]["has_failure"] = True
+            else:
+                notes[idx] = "no element position was recorded for this step"
+            continue
+
+        match = match_frame(
+            frames,
+            doc_width=_as_int(element.get("doc_width")),
+            doc_height=_as_int(element.get("doc_height")),
+            own_rel_path=own_rel,
+            step_index=idx,
+        )
+        if match.frame is None:
+            notes[idx] = match.reason
+            continue
+
+        frame_id = frame_ids[match.frame.rel_path]
+        raw_result = step.get("result")
+        result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {}
+        markers.append(
+            {
+                "step": idx,
+                "frame": frame_id,
+                "x": float(pct.get("x") or 0.0),
+                "y": float(pct.get("y") or 0.0),
+                "type": _step_type_key(step),
+                "status": str(result.get("status") or "passed"),
+                "failed": failed,
+                "verified": match.verified,
+                "run_count": int(result.get("run_count") or 1),
+                "label": _clean_evidence_label(str(step.get("label") or "")),
+                "locator": str(step.get("locator") or ""),
+            }
+        )
+        if failed:
+            meta_by_id[frame_id]["has_failure"] = True
+        if not match.verified:
+            notes[idx] = match.reason
+
+    return {"frames": frame_meta, "markers": markers, "ribbons": ribbons, "notes": notes}
+
+
+def overlay_counts(sidecar_path: Path) -> tuple[int, int]:
+    """Return (frames, markers) the annotated viewer would draw for a sidecar.
+
+    Used by the report to say what is inside the overlay before the reader
+    opens it.
+    """
+    sidecar = _safe_read_json(sidecar_path)
+    if sidecar is None:
+        return (0, 0)
+    steps = sidecar.get("steps", [])
+    if not isinstance(steps, list) or not steps:
+        return (0, 0)
+    model = _build_overlay_model(steps)
+    return (len({marker["frame"] for marker in model["markers"]}), len(model["markers"]))
+
+
 def generate_annotated_screenshot(
     *,
     sidecar_path: Path,
     view_mode: Literal["annotated", "heatmap", "clean"] = "annotated",
     title: str = "",
+    max_width: int = 0,
+    instance: str = "",
 ) -> str:
     """Return interactive HTML for an annotated evidence screenshot.
 
-    This reads a single `.evidence.json` sidecar written by `EvidenceTracker` and renders
-    an SVG overlay on top of the recorded screenshot image.
+    Every marker is drawn on the frame it was measured in. A marker's
+    percentage is only meaningful against the document it was measured in —
+    the page height changes between steps (a newsletter bar appears, a cart
+    modal opens), so drawing every step's marker on one background frame puts
+    markers on the wrong element (B-105). When the frame cannot be confirmed
+    the marker is not drawn and the timeline says why: a wrong marker is
+    worse than no marker.
+
+    Args:
+        sidecar_path: The ``.evidence.json`` sidecar to render.
+        view_mode: ``annotated`` (markers with step numbers), ``heatmap``
+            (rings only) or ``clean`` (no markers).
+        title: Optional heading.
+        max_width: Cap on the embedded image width in pixels. Above 0 the
+            frames are embedded as downscaled previews and the viewer says so;
+            0 embeds the full-resolution capture.
+        instance: Unique id for this viewer inside the page. A report can
+            carry one overlay per test, and each viewer's script must scope
+            itself to its own block. Defaults to a hash of the sidecar path.
     """
 
     sidecar = _safe_read_json(sidecar_path)
@@ -289,41 +531,70 @@ def generate_annotated_screenshot(
         escaped = escape_html(str(sidecar_path))
         return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Missing sidecar: <code>{escaped}</code></div>"
 
+    instance = instance or hashlib.sha1(str(sidecar_path).encode("utf-8")).hexdigest()[:10]
+
     steps = sidecar.get("steps", [])
     if not isinstance(steps, list) or not steps:
         return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No steps recorded in sidecar.</div>"
 
-    screenshot_rel: str | None = None
-    screenshots: list[str] = []
-    assertion_screenshots: list[str] = []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        shot = step.get("screenshot")
-        if not shot:
-            continue
-        shot_str = str(shot)
-        screenshots.append(shot_str)
-        step_type = str(step.get("type", "")).lower()
-        if "assert" in step_type:
-            assertion_screenshots.append(shot_str)
+    model = _build_overlay_model(steps)
 
-    if assertion_screenshots:
-        screenshot_rel = assertion_screenshots[-1]
-    elif screenshots:
-        screenshot_rel = screenshots[-1]
-    if not screenshot_rel:
-        return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No screenshot recorded in sidecar steps.</div>"
+    used_frames = {m["frame"] for m in model["markers"]}
+    used_frames |= set(model["ribbons"])
+    if not used_frames:
+        # Nothing could be marked, but the reader still gets the frames and
+        # the reason in the step list.
+        used_frames = {f["id"] for f in model["frames"]}
 
-    image_path = (
-        (sidecar_path.parent.parent / screenshot_rel).resolve()
-        if screenshot_rel.startswith("evidence/")
-        else (sidecar_path.parent / screenshot_rel).resolve()
-    )
-    image_data_uri = _safe_embed_image_data_uri(image_path)
-    if not image_data_uri:
-        escaped = escape_html(str(image_path))
-        return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Screenshot not found or unsupported: <code>{escaped}</code></div>"
+    frame_blocks: list[str] = []
+    preview_note = ""
+    if max_width > 0:
+        preview_note = (
+            f"<div style='font-size:11px;color:#6b7280;margin-top:4px;'>"
+            f"Frames below are previews scaled to {max_width}px wide. "
+            f"The full-resolution lossless captures are the files named under each frame, in the package's "
+            f"<code>evidence/</code> folder."
+            f"</div>"
+        )
+    for frame in model["frames"]:
+        if frame["id"] not in used_frames:
+            continue
+        image_path = _resolve_evidence_image(sidecar_path, frame["rel_path"])
+        image_data_uri = _safe_embed_image_data_uri(image_path)
+        previewed = False
+        if max_width > 0:
+            preview_uri = embed_preview_data_uri(image_path, max_width=max_width)
+            if preview_uri:
+                image_data_uri = preview_uri
+                previewed = True
+        if not image_data_uri:
+            continue
+        border = "#fca5a5" if frame["has_failure"] else "#eee"
+        ribbon_html = ""
+        for ribbon in model["ribbons"].get(frame["id"], []):
+            ribbon_html += (
+                "<div style='display:inline-block;margin:0 6px 6px 0;padding:4px 10px;background:#fef2f2;"
+                "border:1px solid #fca5a5;border-radius:6px;color:#991b1b;font-size:11px;font-weight:700;'>"
+                f"Step {ribbon['step']} failed - no element position was recorded, so no marker could be placed"
+                "</div>"
+            )
+        source_note = (
+            f"<div style='font-size:10px;color:#9ca3af;margin-top:3px;'>Source: <code>{escape_html(frame['rel_path'])}</code></div>"
+            if previewed
+            else ""
+        )
+        frame_blocks.append(
+            f"""
+  <div class="ev-frame" data-frame-id="{frame["id"]}" style="margin-bottom:16px;">
+    <div style="font-size:11px;color:#6b7280;font-weight:600;margin-bottom:4px;">{escape_html(frame["label"])}</div>
+    <div class="ev-wrap" style="position:relative;width:100%;max-width:{max_width or 1100}px;max-height:640px;overflow:auto;border:1px solid {border};border-radius:8px;background:#fafafa;">
+      <img class="ev-img" data-frame-id="{frame["id"]}" src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;" />
+      <svg class="ev-svg" data-frame-id="{frame["id"]}" style="position:absolute;left:0;top:0;pointer-events:none;"></svg>
+      {ribbon_html}
+    </div>
+    {source_note}
+  </div>"""
+        )
 
     test_block = sidecar.get("test", {}) if isinstance(sidecar.get("test", {}), dict) else {}
     page_block = sidecar.get("page", {}) if isinstance(sidecar.get("page", {}), dict) else {}
@@ -333,28 +604,38 @@ def generate_annotated_screenshot(
 
     mode_json = json.dumps(mode)
     colors_json = json.dumps(_EVIDENCE_STEP_COLORS)
-    steps_json = json.dumps(_prepare_steps_for_display(steps))
+    status_colors_json = json.dumps(_STATUS_COLORS)
+    steps_json = json.dumps(_prepare_steps_for_display(steps, model["notes"]))
+    markers_json = json.dumps(model["markers"])
+    frames_json = json.dumps(model["frames"])
 
     return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
+<div class="ev-viewer" id="ev-viewer-{instance}" style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">{safe_title}</div>
   <div style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;">{safe_url}</div>
-  <div id="ev-wrap" style="position:relative;width:100%;max-width:1100px;">
-    <img id="ev-img" src="{image_data_uri}" alt="evidence screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" />
-    <svg id="ev-svg" style="position:absolute;left:0;top:0;pointer-events:none;"></svg>
+  <div class="ev-frames" id="ev-frames-{instance}">
+{"".join(frame_blocks)}
   </div>
+  {preview_note}
 
-  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;color:#555;font-size:12px;">
+  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;color:#555;font-size:12px;flex-wrap:wrap;">
     <span><strong>Mode</strong>: {escape_html(mode)}</span>
     <span style="margin-left:auto;"><strong>Legend</strong>:
       <span style="color:{_EVIDENCE_STEP_COLORS["navigate"]};font-weight:700;">navigate</span>,
       <span style="color:{_EVIDENCE_STEP_COLORS["fill"]};font-weight:700;">fill</span>,
       <span style="color:{_EVIDENCE_STEP_COLORS["click"]};font-weight:700;">click</span>,
-      <span style="color:{_EVIDENCE_STEP_COLORS["assertion"]};font-weight:700;">assertion</span>
+      <span style="color:{_EVIDENCE_STEP_COLORS["assertion"]};font-weight:700;">assertion</span>,
+      <span style="color:{_STATUS_COLORS["failed"]};font-weight:700;">failed</span>,
+      <span style="color:{_STATUS_COLORS["partial_pass"]};font-weight:700;">partial</span>
     </span>
   </div>
+  <div style="font-size:11px;color:#6b7280;margin-top:4px;">
+    Each marker sits on the frame its step was measured on. A dashed ring means the sidecar
+    does not record the frame size, so the frame could not be confirmed. A step with no marker
+    says why in the list below.
+  </div>
 
-  <div id="ev-timeline" style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px;">
+  <div class="ev-timeline" id="ev-timeline-{instance}" style="margin-top:12px;border-top:1px solid #f0f0f0;padding-top:12px;">
   </div>
 </div>
 
@@ -362,13 +643,23 @@ def generate_annotated_screenshot(
 (() => {{
   const MODE = {mode_json};
   const COLORS = {colors_json};
+  const STATUS_COLORS = {status_colors_json};
   const steps = {steps_json};
+  const markers = {markers_json};
+  const frames = {frames_json};
 
-  const wrap = document.getElementById("ev-wrap");
-  const img = document.getElementById("ev-img");
-  const svg = document.getElementById("ev-svg");
-  const timeline = document.getElementById("ev-timeline");
+  // Every viewer scopes itself: a report can carry one overlay per test, and
+  // the first viewer's script must not draw its markers on the others.
+  const ROOT = document.getElementById("ev-viewer-{instance}");
+  const timeline = ROOT.querySelector(".ev-timeline");
   let hoveredId = null;
+
+  // Step labels and failure notes are free text (site copy, error logs).
+  // They go through innerHTML below, so escape them — an unescaped "<" in a
+  // label broke the timeline row markup (and could inject HTML into the report).
+  function esc(v) {{
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }}
 
   function baseRadius(runCount) {{
     const rc = Number(runCount || 1);
@@ -384,14 +675,11 @@ def generate_annotated_screenshot(
     return "click";
   }}
 
-  function getPct(step) {{
-    const el = step.element || {{}};
-    const pct = el.viewport_pct || null;
-    if (!pct) return null;
-    const x = Number(pct.x);
-    const y = Number(pct.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return {{ x, y }};
+  function markerColor(marker) {{
+    if (marker.failed) return STATUS_COLORS.failed;
+    if (marker.status === "partial_pass") return STATUS_COLORS.partial_pass;
+    if (marker.status === "skipped") return STATUS_COLORS.skipped;
+    return COLORS[marker.type] || "#999";
   }}
 
   function renderTimeline() {{
@@ -404,19 +692,26 @@ def generate_annotated_screenshot(
       const runCount = s.result && s.result.run_count ? s.result.run_count : 1;
       const failureNote = s.failure_note || null;
       const hasError = status === "failed" || s._had_error;
+      const markerNote = String(s.marker_note || "");
 
       let rowContent = `
         <div style="min-width:30px;height:30px;border-radius:999px;background:${{hasError ? "#dc2626" : COLORS[t] || "#999"}};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;">${{idx + 1}}</div>
         <div style="flex:1;">
-          <div style="font-weight:600;color:#222;">${{label}}</div>
-          <div style="font-size:12px;color:#666;">type=${{t}} · status=${{status}} · run_count=${{runCount}}</div>
+          <div style="font-weight:600;color:#222;">${{esc(label)}}</div>
+          <div style="font-size:12px;color:#666;">type=${{esc(t)}} · status=${{esc(status)}} · run_count=${{esc(runCount)}}</div>
       `;
+
+      if (markerNote) {{
+        rowContent += `
+          <div style="margin-top:4px;font-size:11px;color:#b45309;">${{esc(markerNote)}}</div>
+        `;
+      }}
 
       if (failureNote) {{
         rowContent += `
           <div style="margin-top:6px;padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#991b1b;max-height:120px;overflow-y:auto;white-space:pre-wrap;">
             <strong>Failure Diagnosis:</strong><br/>
-            <pre style="white-space:pre-wrap;margin:0;">${{failureNote}}</pre>
+            <pre style="white-space:pre-wrap;margin:0;">${{esc(failureNote)}}</pre>
           </div>
         `;
       }}
@@ -465,55 +760,64 @@ def generate_annotated_screenshot(
   }}
 
   function renderOverlay() {{
-    const rect = img.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-    svg.setAttribute("width", String(w));
-    svg.setAttribute("height", String(h));
-    svg.setAttribute("viewBox", `0 0 ${{w}} ${{h}}`);
-    svg.style.pointerEvents = "none";
+    ROOT.querySelectorAll("svg.ev-svg").forEach((svg) => {{
+      const frameId = svg.getAttribute("data-frame-id");
+      const img = svg.closest(".ev-wrap").querySelector("img.ev-img");
+      if (!img) return;
+      const rect = img.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      if (!w || !h) return;
+      svg.setAttribute("width", String(w));
+      svg.setAttribute("height", String(h));
+      svg.setAttribute("viewBox", `0 0 ${{w}} ${{h}}`);
+      svg.style.pointerEvents = "none";
 
-    const out = [];
-    steps.forEach((s, idx) => {{
-      const pct = getPct(s);
-      if (!pct) return;
-      const t = stepType(s);
-      const color = COLORS[t] || "#999";
-      const runCount = (s.result && s.result.run_count) ? s.result.run_count : 1;
-      const r = baseRadius(runCount);
-      const cx = (pct.x / 100) * w;
-      const cy = (pct.y / 100) * h;
-      const isHover = hoveredId === idx;
-      const status = String((s.result && s.result.status) || "");
-      const label = String(s.label || t);
+      const out = [];
+      markers.forEach((m) => {{
+        if (m.frame !== frameId) return;
+        if (MODE === "clean") return;
+        const color = markerColor(m);
+        const r = baseRadius(m.run_count);
+        const cx = (Number(m.x) / 100) * w;
+        const cy = (Number(m.y) / 100) * h;
+        const isHover = hoveredId === m.step;
 
-      if (MODE === "clean") {{ return; }}
+        if (MODE === "heatmap") {{
+          const opacity = Math.min(0.15 + (Number(m.run_count || 1) * 0.05), 0.6);
+          out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="6" opacity="${{opacity}}" />`);
+          out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{Math.max(6, r - 10)}}" fill="none" stroke="${{color}}" stroke-width="2" opacity="${{opacity}}" />`);
+          return;
+        }}
 
-      if (MODE === "heatmap") {{
-        const opacity = Math.min(0.15 + (Number(runCount || 1) * 0.05), 0.6);
-        out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="6" opacity="${{opacity}}" />`);
-        out.push(`<circle cx="${{cx}}" cy="${{cy}}" r="${{Math.max(6, r - 10)}}" fill="none" stroke="${{color}}" stroke-width="2" opacity="${{opacity}}" />`);
-        return;
-      }}
+        const dash = m.verified ? "" : ` stroke-dasharray="7 5"`;
+        let glyph = "";
+        if (m.failed) {{
+          glyph = `<path d="M ${{cx - 7}} ${{cy - 7}} L ${{cx + 7}} ${{cy + 7}} M ${{cx + 7}} ${{cy - 7}} L ${{cx - 7}} ${{cy + 7}}" stroke="#7F1D1D" stroke-width="3" fill="none" />`;
+        }} else {{
+          glyph = `<text x="${{cx}}" y="${{cy + 6}}" font-size="16" font-weight="900" fill="white" text-anchor="middle" style="pointer-events:none; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.8));">${{m.step + 1}}</text>`;
+        }}
 
-      const stroke = isHover ? "#111827" : "rgba(0,0,0,0.35)";
-      out.push(`
+        out.push(`
         <g class="point-group" style="cursor:help;">
           <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="${{color}}" opacity="0.4" />
           <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="white" stroke-width="3" opacity="0.9" />
-          <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="1.5" opacity="0.9" />
-          <text x="${{cx}}" y="${{cy + 6}}" font-size="16" font-weight="900" fill="white" text-anchor="middle" style="pointer-events:none; filter: drop-shadow(0px 0px 2px rgba(0,0,0,0.8));">${{idx + 1}}</text>
-          <title>${{label}} (status: ${{status}})</title>
+          <circle cx="${{cx}}" cy="${{cy}}" r="${{r}}" fill="none" stroke="${{color}}" stroke-width="1.5" opacity="0.9"${{dash}} />
+          ${{glyph}}
+          <title>${{esc(m.label)}}${{m.failed ? " (FAILED)" : ""}} (status: ${{esc(m.status)}})</title>
         </g>
       `);
-    }});
+      }});
 
-    svg.innerHTML = out.join("");
+      svg.innerHTML = out.join("");
+    }});
   }}
 
   const ro = new ResizeObserver(() => renderOverlay());
-  ro.observe(wrap);
-  img.addEventListener("load", () => renderOverlay());
+  ro.observe(ROOT);
+  ROOT.querySelectorAll("img.ev-img").forEach((img) => {{
+    img.addEventListener("load", () => renderOverlay());
+  }});
 
   renderTimeline();
   renderOverlay();
@@ -655,10 +959,14 @@ def _empty_result(msg: str, bug_report_mode: bool) -> str:
     return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>{escaped}</div>"
 
 
-def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _prepare_steps_for_display(
+    steps: list[dict[str, Any]],
+    notes: dict[int, str] | None = None,
+) -> list[dict[str, Any]]:
     """Return steps with labels normalized for UI rendering.
 
-    Also extracts failure_note and diagnosis from the result dict when present.
+    Also extracts failure_note and diagnosis from the result dict when present,
+    and the per-step marker note (why a marker is missing or unconfirmed).
     """
     prepared: list[dict[str, Any]] = []
     for step in steps:
@@ -672,6 +980,7 @@ def _prepare_steps_for_display(steps: list[dict[str, Any]]) -> list[dict[str, An
             cloned["diagnosis"] = result.get("diagnosis")
             if result.get("error") and not result.get("status"):
                 cloned["_had_error"] = True
+        cloned["marker_note"] = (notes or {}).get(len(prepared), "")
         prepared.append(cloned)
     return prepared
 
@@ -718,15 +1027,17 @@ def _build_bug_report_text(
         if not isinstance(result, dict):
             result = {}
         step_status = str(result.get("status", ""))
-        error = str(result.get("error", "")) if result.get("error") else ""
+        # Mismatch failures carry error=None; str(None) would print "None".
+        error = str(result.get("error") or "")
 
         lines.append(f"  Step {i}: [{step_type}] {label}")
         if locator:
             lines.append(f"    Locator:     {locator}")
         lines.append(f"    Status:      {step_status}")
         if _is_failed_step(step):
-            lines.append(f"    Error:       {error}")
-            failure_note = str(result.get("failure_note", ""))
+            if error:
+                lines.append(f"    Error:       {error}")
+            failure_note = str(result.get("failure_note") or "")
             if failure_note:
                 for note_line in failure_note.splitlines():
                     lines.append(f"    {note_line}")

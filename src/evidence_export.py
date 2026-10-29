@@ -113,13 +113,19 @@ def export_csv(
                 "|".join(s.get("label", "") for s in steps),
                 sidecar.get("test", {}).get("duration_s", 0.0) if sidecar else 0.0,
                 r.test_package,
-                r.sidecar_path,
+                # POSIX separators: the index stores OS-native paths (backslashes
+                # on Windows), but consumers (pandas/Splunk/Excel on any OS) get
+                # one portable form.
+                str(r.sidecar_path).replace("\\", "/"),
             ]
         )
 
     csv_text = buf.getvalue()
     if output is not None:
-        Path(output).write_text(csv_text, encoding="utf-8-sig")
+        # csv_text already carries the BOM written above, so encode as plain
+        # utf-8 — utf-8-sig would emit a SECOND BOM (double-BOM files confuse
+        # Excel: the first cell shows a BOM glyph before the header).
+        Path(output).write_text(csv_text, encoding="utf-8")
         _meter_record("csv", output)
         return str(output)
 

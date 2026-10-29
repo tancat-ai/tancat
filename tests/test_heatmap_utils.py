@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from src.evidence_report import _normalise_url
@@ -212,8 +213,15 @@ def test_generate_suite_heatmap_element_aggregation(tmp_path: Path) -> None:
     (evidence_dir / "test_2.evidence.json").write_text(json.dumps(sidecar2))
 
     html = generate_suite_heatmap(evidence_dir=evidence_dir, page_url="https://example.com/page1")
-    # Should show run_count of 2 (both tests hit same element)
-    assert "2" in html  # run count appears in circle
+    # Both tests hit the same element: one element, two hits. The old
+    # assertion ("2" appears somewhere in the payload) could not fail - the
+    # aggregation overwrote the element it matched, so the count was 1.
+    aggregated_match = re.search(r"const aggregated = (.*?);\n", html, re.DOTALL)
+    assert aggregated_match is not None, "the heatmap carries no aggregated payload"
+    aggregated = json.loads(aggregated_match.group(1))
+    assert len(aggregated) == 1
+    assert aggregated[0]["total"] == 2
+    assert aggregated[0]["passed"] == 2
     assert "Suite Heatmap" in html
 
 

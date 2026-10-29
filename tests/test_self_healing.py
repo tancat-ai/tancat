@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -284,6 +285,60 @@ class TestApplyPatch:
         )
         result = SelfHealingRunner._apply_patch(tmp_test_file, source, patch)
         assert result is False
+
+    def test_applies_patch_preserving_indentation(self, tmp_path: Path) -> None:
+        """B-042 class: a patch on an indented line must keep its column.
+
+        The reviewer's replacement is stored stripped; writing it back at
+        column 0 dedents the line out of the function body, so the module no
+        longer collects. The patched line must stay inside the function.
+        """
+        test_file = tmp_path / "test_indent.py"
+        test_file.write_text(
+            "def test_indented():\n    assert 1 + 1 == 2\n",
+            encoding="utf-8",
+        )
+        source = test_file.read_text(encoding="utf-8")
+        patch = AppliedPatch(
+            test_name="test_indented",
+            line_number=2,
+            old_text="assert 1 + 1 == 2",
+            new_text="assert 2 + 2 == 4",
+            diagnosis="Wrong expected value",
+            strategy="replace_locator",
+        )
+        assert SelfHealingRunner._apply_patch(test_file, source, patch) is True
+
+        patched = test_file.read_text(encoding="utf-8")
+        assert "\n    assert 2 + 2 == 4" in patched, f"line was dedented: {patched!r}"
+        ast.parse(patched)  # must still be valid Python
+
+    def test_patched_indented_line_reruns_and_collects(self, tmp_path: Path) -> None:
+        """A patch on an indented line re-runs and the file still collects.
+
+        Without the indent fix the patched line lands at module scope, the
+        re-run raises IndentationError, and pytest reports 0 items collected.
+        """
+        test_file = tmp_path / "test_collect.py"
+        test_file.write_text(
+            "def test_indented():\n    assert 1 + 1 == 2\n",
+            encoding="utf-8",
+        )
+        source = test_file.read_text(encoding="utf-8")
+        patch = AppliedPatch(
+            test_name="test_indented",
+            line_number=2,
+            old_text="assert 1 + 1 == 2",
+            new_text="assert 2 + 2 == 4",
+            diagnosis="Wrong expected value",
+            strategy="replace_locator",
+        )
+        assert SelfHealingRunner._apply_patch(test_file, source, patch) is True
+
+        result = SelfHealingRunner._run_pytest(test_file)
+        assert result.total == 1, f"expected 1 collected test, got {result.total}"
+        assert result.passed == 1
+        assert result.failed == 0
 
 
 class TestRunPytest:
@@ -711,6 +766,42 @@ class TestHealPreScreenIntegration:
         assert report.unfixable >= 1
         # Assertion failures are NOT interactive candidates
         assert len(report.interactive_repair_candidates) == 0
+
+    def test_assertion_failure_never_changes_the_expectation(self, tmp_path: Path) -> None:
+        """t-0929: a healing pass may not rewrite an expectation.
+
+        The failing assertion names the candidate page and the observed page.
+        An LLM patch that would change the expectation is offered, but the
+        pre-screen must stop it before the LLM call, and the file must stay
+        byte-for-byte unchanged.
+        """
+        test_file = tmp_path / "test_arrival_mismatch.py"
+        source = (
+            "def test_arrival_mismatch():\n"
+            "    assert 'shop' == 'checkout', "
+            '\'expected "https://shop.example.com/checkout.html" but observed "https://shop.example.com/"\'\n'
+        )
+        test_file.write_text(source, encoding="utf-8")
+        before = test_file.read_text(encoding="utf-8")
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Change the expected URL to the observed page",
+                "strategy": "replace_locator",
+                "old_line": "    assert 'shop' == 'checkout'",
+                "new_line": "    assert 'shop' == 'shop'",
+                "confidence": 0.99,
+            }
+        )
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        assert not mock_llm.generate_test.called, "an expectation failure must never reach the LLM"
+        assert report.unfixable >= 1
+        assert test_file.read_text(encoding="utf-8") == before, "the healing pass changed the expectation"
 
     def test_locator_timeout_calls_llm(self, tmp_path: Path) -> None:
         """Locator timeout failures should still go to the LLM."""
@@ -1711,3 +1802,90 @@ class TestHealNoOpRerun:
         assert report.remaining == 1
         assert report.iterations == 2
         assert "#a-fixed" in test_file.read_text(encoding="utf-8")
+
+
+class TestHealHonestFixedCount:
+    """A patch counts as fixed only when a collecting re-run verifies it.
+
+    The dedent bug (B-042 class) made the patched file fail to import, so the
+    re-run produced 0 results (1 IndentationError, 0 items) while the report
+    still said fixed 1 / remaining 0 - indistinguishable from a real fix.
+    """
+
+    @staticmethod
+    def _failed(name: str) -> TestResult:
+        return TestResult(
+            name=name,
+            status="failed",
+            duration=1.0,
+            error_message="TimeoutError: waiting for locator('#a')",
+            file_path="test_break.py",
+        )
+
+    @staticmethod
+    def _patch_response() -> str:
+        return json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Wrong selector",
+                "strategy": "replace_locator",
+                "old_line": "raise TimeoutError(\"waiting for locator('#a')\")",
+                "new_line": "raise TimeoutError(\"waiting for locator('#a-fixed')\")",
+                "confidence": 0.9,
+            }
+        )
+
+    def test_uncollected_rerun_not_counted_as_fixed(self, tmp_path: Path) -> None:
+        """Iteration 2 cannot collect -> fixed must be 0, not 1."""
+        test_file = tmp_path / "test_break.py"
+        test_file.write_text(
+            "def test_a():\n    raise TimeoutError(\"waiting for locator('#a')\")\n",
+            encoding="utf-8",
+        )
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self._patch_response()
+        run_calls: list[list[str] | None] = []
+
+        def fake(test_path: Path, test_names: list[str] | None = None) -> RunResult:
+            run_calls.append(test_names)
+            if len(run_calls) == 1:
+                return RunResult(results=[self._failed("test_a")], total=1, passed=0, failed=1)
+            # The patched file no longer imports: pytest reports 1 error, 0 items.
+            return RunResult(results=[], raw_output="ERROR test_break.py - IndentationError")
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=3)
+        runner._run_pytest = fake  # type: ignore[method-assign]
+        report = runner.heal(test_file)
+
+        assert run_calls == [None, ["test_a"]], "second run is the verification of the patch"
+        assert report.fixed == 0, "an unverified patch must not be counted as fixed"
+        assert report.remaining == 1, "the failure is still outstanding"
+        assert report.all_fixed is False
+        assert "no results" in report.run_error
+
+    def test_final_uncollected_rerun_not_counted_as_fixed(self, tmp_path: Path) -> None:
+        """Loop exhausts, then the final verification re-run cannot collect."""
+        test_file = tmp_path / "test_break2.py"
+        test_file.write_text(
+            "def test_a():\n    raise TimeoutError(\"waiting for locator('#a')\")\n",
+            encoding="utf-8",
+        )
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = self._patch_response()
+        run_calls: list[list[str] | None] = []
+
+        def fake(test_path: Path, test_names: list[str] | None = None) -> RunResult:
+            run_calls.append(test_names)
+            if len(run_calls) == 1:
+                return RunResult(results=[self._failed("test_a")], total=1, passed=0, failed=1)
+            return RunResult(results=[], raw_output="ERROR test_break2.py - IndentationError")
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=1)
+        runner._run_pytest = fake  # type: ignore[method-assign]
+        report = runner.heal(test_file)
+
+        assert run_calls == [None, ["test_a"]]
+        assert report.fixed == 0
+        assert report.remaining == 1
+        assert report.all_fixed is False
+        assert "no results" in report.run_error

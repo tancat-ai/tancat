@@ -40,7 +40,7 @@ def _saved_index(options: tuple[str, ...], stored_value: str, default: str) -> i
 _OCR_LABELS: dict[str, str] = {
     "auto": "Automatic - text, plus CPU OCR for scanned pages",
     "cpu": "CPU OCR - local CPU engine for scanned pages",
-    "power": "GPU - Unlimited-OCR (needs a CUDA/ROCm GPU)",
+    "power": "GPU OCR (needs a CUDA/ROCm GPU)",
 }
 _OCR_LEGACY_NAMES: dict[str, str] = {
     "pymupdf": "auto",
@@ -119,7 +119,7 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     if not has_cpu_engine:
         notes.append(
             "Scanned (image-only) pages cannot be read: the CPU OCR engine is not installed. "
-            "Install it with `uv sync --extra ocr` (or `pip install rapidocr_onnxruntime`)."
+            "Install it with `uv sync --extra ocr` (or `pip install rapidocr`)."
         )
     if not has_gpu_engine:
         notes.append(_gpu_unavailable_reason() or "The GPU OCR option is hidden.")
@@ -276,7 +276,7 @@ class SidebarConfig:
                     help=(
                         "How PDFs in document mode are read. Automatic reads the text directly and "
                         "uses CPU OCR for scanned pages; CPU OCR forces the local CPU engine; the GPU "
-                        "tier runs Unlimited-OCR (CUDA/ROCm)."
+                        "tier runs a GPU OCR model (CUDA/ROCm)."
                     ),
                     key="ocr_backend_setting",
                 )

@@ -34,12 +34,63 @@ is the single place to update.
 
 from __future__ import annotations
 
+import base64
 import io
 from pathlib import Path
 
 from PIL import Image
 
 from src.config import evidence_image_format
+
+#: Embedded previews are capped at this width. Evidence frames are full-page
+#: captures (~8,000-9,000 px tall, ~2.5 MB each); embedding them whole
+#: multiplies the size of a report the customer keeps and shares.
+EMBED_PREVIEW_MAX_WIDTH = 640
+
+#: WebP quality for an embedded preview. The preview is a presentation copy —
+#: the lossless capture in ``evidence/`` is the artifact, and the report says
+#: so next to every preview.
+EMBED_PREVIEW_QUALITY = 85
+
+
+def embed_preview_data_uri(
+    image_path: Path | str,
+    *,
+    max_width: int = EMBED_PREVIEW_MAX_WIDTH,
+    quality: int = EMBED_PREVIEW_QUALITY,
+) -> str | None:
+    """Return a downscaled preview of an evidence image as a data URI.
+
+    A preview is a scaled copy, never a re-encode of the same pixels at full
+    size: the evidence frame on disk stays lossless and is what an audit
+    reads. Returns ``None`` when the image cannot be read or scaled, so the
+    caller can fall back to the full-size embed.
+
+    Args:
+        image_path: The evidence image on disk.
+        max_width: Cap on the preview width in pixels (0 = no cap).
+        quality: WebP quality for the preview.
+    """
+    path = Path(image_path)
+    if not path.exists():
+        return None
+    try:
+        with Image.open(path) as opened:
+            image: Image.Image = opened
+            if max_width > 0 and image.width > max_width:
+                ratio = max_width / float(image.width)
+                image = image.resize(
+                    (max_width, max(1, int(image.height * ratio))),
+                    Image.Resampling.LANCZOS,
+                )
+            if image.mode not in ("RGB", "RGBA"):
+                image = image.convert("RGB")
+            buffer = io.BytesIO()
+            image.save(buffer, format="WEBP", lossless=False, quality=quality)
+        encoded = buffer.getvalue()
+    except Exception:
+        return None
+    return "data:image/webp;base64," + base64.b64encode(encoded).decode("utf-8")
 
 
 def encode_evidence_image(png_bytes: bytes, image_format: str | None = None) -> tuple[bytes, str]:

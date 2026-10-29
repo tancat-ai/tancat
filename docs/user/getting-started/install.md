@@ -105,6 +105,15 @@ instead.
 
 ## Update
 
+A licence is perpetual for the version you buy and includes 12 months of updates
+from purchase. After those 12 months, further updates are paid; security fixes
+and bug fixes in the version line you bought stay free. Updates arrive as files
+on Lemon Squeezy and on the
+[releases page](https://github.com/tancat-ai/tancat/releases), and there is no
+runtime update check - you choose when to update.
+
+From a source checkout:
+
 ```bash
 git pull
 uv sync

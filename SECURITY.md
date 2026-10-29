@@ -106,6 +106,10 @@ GitHub Actions. Major version bumps arrive as their own pull request, because th
 some dependencies on purpose (see the RAG notes in `pyproject.toml`).
 - **Security alerts are on.** A known vulnerability in a pinned dependency raises a Dependabot
 alert in the repository's Security tab, independent of the weekly update pull requests.
+- **Deliberate pins are excluded.** The `uv` ecosystem has an `ignore` list for `pymilvus`
+(pinned to 3.0.0: 3.0.2 caused the RAG "Too many pings" GOAWAYs) and `grpcio` (held at
+1.83.0 by the `[tool.uv]` constraint until the Python 3.15 move). Dependabot opens no
+update pull request for either - see the RAG notes in `pyproject.toml`.
 - **There is no npm ecosystem** - the repo has no `package.json` or JS lockfile.
 
 Every Dependabot pull request is a normal pull request: it is reviewed and merged like any

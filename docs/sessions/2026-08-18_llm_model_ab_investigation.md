@@ -32,8 +32,8 @@ Sub-goals that emerged:
 
 - Eval: `python scripts/eval/eval_harness.py run --mode full --regenerate` (persist ON → writes `evidence/run_results.sqlite` / `eval_runs`).
 - LLM endpoint: `http://localhost:8080` (llama.cpp server). Current model file paths:
-  - `C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.6-27B-MTP-GGUF\Qwen3.6-27B-UD-Q4_K_XL.gguf` (17,909,097,600 bytes)
-  - `C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q4_K_XL.gguf` (17,923,394,624 bytes)
+  - `<home>/.lmstudio/models/unsloth/Qwen3.6-27B-MTP-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf` (17,909,097,600 bytes)
+  - `<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL.gguf` (17,923,394,624 bytes)
 - **Proven server config is `launch_windows.ps1`**, which equals `llm-benchmarks/configs/qwen{36,38}-27b-eval.yaml`:
   ctx 156072, `--flash-attn on`, `--spec-type draft-mtp`, `--spec-draft-n-max 4`, `--spec-draft-p-min 0.0`, `--ctx-checkpoints 0`, batch 1024/1024, `--jinja`, `--reasoning-preserve`, cache k/v f16.
 - Server build (this session's 3.8 launch): `build_info b10483-27e345b57`.

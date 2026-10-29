@@ -24,6 +24,17 @@ The PNG → WebP figures are a live A/B: the same generated suite executed again
 
 ## Functions
 
+### `embed_preview_data_uri(image_path, *, max_width=EMBED_PREVIEW_MAX_WIDTH, quality=EMBED_PREVIEW_QUALITY) -> str | None`
+Returns a **downscaled preview** of an evidence image as a data URI, for the report and the app.
+
+An evidence frame is a full-page capture (~8,000-9,000 px tall, ~2.5 MB each); embedding
+them whole made the report the customer keeps unsendable. The preview is scaled to
+`EMBED_PREVIEW_MAX_WIDTH` (640 px) and encoded as lossy WebP. The lossless capture on
+disk stays the artifact an audit reads, and every preview names its source file. Returns
+`None` when the image cannot be read or scaled, so the caller can fall back.
+
+Constants: `EMBED_PREVIEW_MAX_WIDTH = 640`, `EMBED_PREVIEW_QUALITY = 85`.
+
 ### `encode_evidence_image(png_bytes, image_format=None) -> bytes`
 Re-encodes a PNG screenshot for evidence storage.
 - `"png"` (or an explicit `image_format="png"`) returns `png_bytes` untouched.

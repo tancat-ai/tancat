@@ -11,11 +11,15 @@ gitignored. That covers:
 - `DECISIONS_commercial_surface.md` - pricing tiers, licensing stance, sales motion, comparables, open questions.
 - `ROADMAP_ROADTO_PRODUCTION.md` - the prioritised multi-session production roadmap.
 - `2026-08-17_commercial_research_readiness_audit.md` - competitive research, commercialisation decisions, and readiness gap audit.
+- `RESEARCH_COMPETITIVE_LANDSCAPE.md` - competitive landscape, positioning and pricing research.
+- `RESEARCH_SAAS_AND_LAUNCH.md` - SaaS launch research and decision record.
+- `RESEARCH_FEATURE_COMPARISON_2026-09.md` - first-party feature and price comparison (2026-09).
+- `NEXT_SESSIONS_IMPROVEMENTS.md` - the improvement backlog.
 
-They were moved out of this public tree on 2026-10-01. Nothing was deleted: the
-content is still on disk, just untracked. Note that earlier public commits still
-carry these files in the repository history; removing them from history is a
-separate step.
+They were moved out of this public tree on 2026-10-01 and 2026-10-12. Nothing
+was deleted: the content is still on disk, just untracked. Note that earlier
+public commits still carry these files in the repository history; removing them
+from history is a separate step.
 
 ## Repository visibility
 

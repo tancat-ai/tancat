@@ -19,6 +19,18 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # Deliberate pins - never propose updates for these (the durable note is in
+    # SECURITY.md, section "Dependency Management"; the reasons are the RAG
+    # keepalive notes in pyproject.toml).
+    #   pymilvus  pinned to 3.0.0: 3.0.2 reworks the channel/reconnect lifecycle
+    #             and stops the client recovering from the gRPC ping throttle,
+    #             which degraded RAG to "Too many pings" GOAWAYs (t-0685).
+    #   grpcio    held by the [tool.uv] constraint at 1.83.0 until the Python
+    #             3.15 move: 1.83.0 has no cp315 wheel, so 3.15 needs a newer one.
+    # Omitting `versions` ignores every version, i.e. all updates.
+    ignore:
+      - dependency-name: "pymilvus"
+      - dependency-name: "grpcio"
     groups:
       # Routine minor and patch bumps arrive as one pull request per week.
       # Major bumps stay ungrouped so each is reviewed on its own - this repo

@@ -48,6 +48,93 @@ TEXT_BEARING_ROLES = {
 
 TEXT_BEARING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "label", "li", "td", "th"}
 
+# t-0790: ASSERT candidate-pool filters. The scorer ranks candidates, but the
+# semantic pass (B-020) chooses from a small pool; a wrong element that shares
+# only generic words, or an interactive control that merely sits beside the
+# message, still wins the pool. These filters run on the pool before the LLM
+# sees it.
+_ASSERT_INTERACTIVE_ROLES = {
+    "button",
+    "submit",
+    "link",
+    "a",
+    "menuitem",
+    "tab",
+    "option",
+    "checkbox",
+    "radio",
+}
+_ASSERT_INTERACTIVE_TAGS = {"a", "button", "input", "select", "textarea"}
+# A control whose own visible text names the outcome is a legitimate target
+# (a "Confirm order" button), so it is exempt from the message-control drop.
+_ASSERT_CONTROL_EXEMPT_TEXT: tuple[str, ...] = (
+    "confirm",
+    "close",
+    "continue",
+    "dismiss",
+) + tuple(PlaceholderScorer._POSITIVE_OUTCOME_TERMS)
+
+
+def _candidate_identity_words(element: dict[str, Any]) -> set[str]:
+    """Return the tokens in an element's identity (text, id, class, selector)."""
+    parts = [PlaceholderScorer._build_haystack(element)]
+    for key in ("classes", "data_test", "selector"):
+        parts.append(str(element.get(key, "")))
+    return SemanticMatcher.get_words(" ".join(parts).lower(), expand_aliases=False)
+
+
+def _is_message_control_mismatch(description: str, element: dict[str, Any]) -> bool:
+    """True when a message-like ASSERT candidate is an interactive control.
+
+    A "confirmation message" criterion must not resolve to the Add-to-cart /
+    Place-order control that sits beside the message (t-0790: eval-002 c3,
+    eval-006 c4/c7). The control is exempt when its own visible text names the
+    outcome, so a "Confirm order" button can still prove its criterion.
+    """
+    if not PlaceholderScorer._is_message_like_assertion(description):
+        return False
+    role = str(element.get("role") or element.get("computed_role") or "").strip().lower()
+    tag = str(element.get("tag", "")).strip().lower()
+    if role not in _ASSERT_INTERACTIVE_ROLES and tag not in _ASSERT_INTERACTIVE_TAGS:
+        return False
+    text = str(element.get("text", "")).lower()
+    return not any(term in text for term in _ASSERT_CONTROL_EXEMPT_TEXT)
+
+
+def filter_assert_candidates(description: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop ASSERT candidates that cannot be the criterion's own element.
+
+    Three stages, each falling back to its input so an over-eager filter can
+    never empty the pool:
+
+    1. the t-0754 polarity / generic-message floor on every candidate;
+    2. the t-0790 message-control rule (a control is not a message);
+    3. an identity floor - when any candidate shares a distinctive token with
+       the criterion, candidates that share none are dropped (t-0749 Class C).
+
+    Returns the original list when nothing is dropped.
+    """
+    result = list(candidates)
+    if not result:
+        return result
+
+    floored = [c for c in result if not PlaceholderScorer._assert_message_floor_rejects(description, c)]
+    if floored:
+        result = floored
+
+    non_controls = [c for c in result if not _is_message_control_mismatch(description, c)]
+    if non_controls:
+        result = non_controls
+
+    identity = PlaceholderScorer._identity_tokens(description)
+    if identity:
+        bearing = [c for c in result if identity & _candidate_identity_words(c)]
+        if bearing:
+            result = bearing
+
+    return result
+
+
 # B-045: Descriptions that name a clickable role must not fast-match a
 # different role's element. Maps description role words → scraped roles.
 # Only strong role words gate ("button", "link") — "icon" is used loosely
@@ -112,6 +199,24 @@ _CLICK_FILLABLE_ARIA_ROLES = {
     "password",
     "textarea",
 }
+
+
+def _is_heading_element(element: dict[str, str]) -> bool:
+    """Return True when the element IS a heading, not merely named like one.
+
+    Pass 1 skips headings as CLICK targets (B-025: a heading is display text
+    inside a click container). But the accessible role of a *container* is
+    computed from its content, so a product card whose text lives in its ``h4``
+    reports ``computed_role="heading"`` and was skipped as if it were the
+    heading itself. The tag says what the element is: a ``div`` is never a
+    heading. A scrape that omits the tag keeps the old role-only behaviour.
+    """
+    tag = str(element.get("tag", "")).strip().lower()
+    if tag:
+        return tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
+    role = str(element.get("role", "")).strip().lower()
+    computed = str(element.get("computed_role", "")).strip().lower()
+    return role in {"h1", "h2", "h3", "h4", "h5", "h6", "heading"} or computed == "heading"
 
 
 def _named_role_in_description(norm_description: str) -> str | None:
@@ -417,10 +522,7 @@ class ElementMatcher:
                 norm_text = normalise_element_text(element)
                 if not norm_text or norm_text != norm_description:
                     continue
-                _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
-                role = str(element.get("role", "")).strip().lower()
-                computed = str(element.get("computed_role", "")).strip().lower()
-                if action == "CLICK" and (role in _heading_roles or computed in _heading_roles):
+                if action == "CLICK" and _is_heading_element(element):
                     continue
                 # No role gate here: exact text equality is the strongest
                 # intent signal and already disambiguates "Pay Bills" (nav)
@@ -581,12 +683,12 @@ class ElementMatcher:
                     # (h1-h6). Headings are display elements inside click
                     # containers — they should not be selected as click
                     # targets. Pass 3 scoring handles the container bonus.
-                    _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
-                    if action == "CLICK":
-                        role = str(element.get("role", "")).strip().lower()
-                        computed = str(element.get("computed_role", "")).strip().lower()
-                        if role in _heading_roles or computed in _heading_roles:
-                            continue  # Skip this heading, try next element
+                    # t-0998: the TAG decides. A card whose only text is its
+                    # own ``h4`` computes an accessible role of "heading" and
+                    # was skipped as if it were the heading, so the card never
+                    # reached the scorer that would have picked it.
+                    if action == "CLICK" and _is_heading_element(element):
+                        continue  # Skip this heading, try next element
                     # B-045: When the description names a role ("button",
                     # "link", "icon"), Pass 1 must respect it — a header nav
                     # link ("Pay Bills") text-matches "pay bill button" and
@@ -599,6 +701,8 @@ class ElementMatcher:
                     if action == "CLICK":
                         desc_role = _named_role_in_description(norm_description)
                         if desc_role is not None:
+                            role = str(element.get("role", "")).strip().lower()
+                            computed = str(element.get("computed_role", "")).strip().lower()
                             el_role = role or computed
                             if el_role != desc_role:
                                 continue
@@ -1371,6 +1475,12 @@ class ElementMatcher:
 
             if action == "ASSERT":
                 shortlisted = [e for _s, e in ranked[:8]]
+                # t-0790: the pool the LLM sees must not contain a bare
+                # control / zero-identity lookalike when the criterion names a
+                # message or a specific element.
+                filtered_shortlist = filter_assert_candidates(description, shortlisted)
+                if filtered_shortlist:
+                    shortlisted = filtered_shortlist
             else:
                 threshold = max(1, top_score - 2)
                 shortlisted = [e for _s, e in ranked if _s >= threshold][:4]
@@ -1484,6 +1594,14 @@ class ElementMatcher:
                     candidate_pool.append(element)
 
         logger.debug("[B-020] ASSERT semantic pass for '%s': %d candidates in pool", description, len(candidate_pool))
+
+        # t-0790: drop pool candidates that cannot be the criterion's own
+        # element (message controls, polarity conflicts, zero-identity
+        # lookalikes) before the LLM chooses among them.
+        if candidate_pool:
+            filtered_pool = filter_assert_candidates(description, candidate_pool)
+            if filtered_pool:
+                candidate_pool = filtered_pool
 
         if not candidate_pool:
             return None

@@ -31,12 +31,37 @@ It is now removed and must not come back.
 
 | Package | Version | Licence | Role |
 |---|---|---|---|
-| rapidocr-onnxruntime | 1.4.4 | Apache-2.0 | tier-1 CPU OCR engine |
-| onnxruntime | 1.29.0 | MIT | ONNX inference runtime (transitive) |
+| rapidocr | 3.10.0 | Apache-2.0 | tier-1 CPU OCR engine (PP-OCRv6, **PyTorch** engine) |
+| omegaconf | 2.4.0 | BSD-3-Clause | rapidocr configuration (transitive) |
+| colorlog | 6.12.0 | MIT | rapidocr logging (transitive) |
 | opencv-python-headless | 5.0.0.93 | Apache-2.0 | image ops, server/headless build (no GUI libraries). **Note:** the PyPI wheel can bundle FFmpeg; the OpenCV project is Apache-2.0, the bundled FFmpeg build is the thing to re-check if OpenCV is ever used beyond OCR | 
 | numpy | 2.5.3 | BSD-3-Clause | arrays (transitive) |
 | pyclipper | 1.4.0 | MIT | polygon clipping (transitive) |
 | shapely | 2.1.2 | BSD-3-Clause | geometry (transitive) |
+
+The PyTorch engine uses `torch` (2.14.1, Apache-2.0), which is already a base
+dependency; `onnxruntime` left with the retired `rapidocr-onnxruntime` engine.
+
+### Vendored OCR models (2026-10-13)
+
+The CPU OCR tier (RapidOCR/PP-OCRv6 on the **PyTorch** engine) ships its models
+in the repo at `src/data/ocr/` - they are not downloaded at runtime. rapidocr
+would otherwise fetch them from ModelScope, which breaks the zero-egress rule.
+
+| File | Role | Size | Licence |
+|---|---|---|---|
+| `PP-OCRv6_det_small.pth` | text detection | 9.8 MB | Apache-2.0 (Baidu / PaddleOCR) |
+| `PP-OCRv6_rec_small.pth` | text recognition | 20.3 MB | Apache-2.0 (Baidu / PaddleOCR) |
+| `ch_ppocr_mobile_v2.0_cls_mobile.pth` | text-line angle classifier | 0.6 MB | Apache-2.0 (Baidu / PaddleOCR) |
+| `ppocrv6_dict.txt` | recognition character dictionary | 75 KB | Apache-2.0 (Baidu / PaddleOCR) |
+
+Provenance: ModelScope, repository `RapidAI/RapidOCR`, tag `v3.10.0` (the same
+tag the pinned rapidocr package ships). Each file's SHA256 is in
+`src/data/ocr/manifest.json`; `src/ocr_backends.py` passes explicit local paths
+so rapidocr never builds a model URL. Refresh or verify with
+`python scripts/maintenance/vendor_ocr_models.py` (`--check` is offline).
+The rapidocr wheel carries the same upstream notice in its own
+`MODEL_LICENSES.md`.
 
 Both extras are installed in the product image (`Dockerfile`, `uv sync --extra
 pdf --extra ocr`).
@@ -60,6 +85,27 @@ adds `opencv-python-headless`. Measured cost:
 That is **~14 MB smaller compressed**, and the image saving is larger again
 because the GUI runtime libraries are no longer needed.
 
+## Runtime-downloaded model - the optional GPU OCR backend
+
+The tier-3 GPU OCR backend is a Hugging Face model fetched at runtime on first
+use, not a build dependency, so `uv.lock` and the generated
+`docs/licenses/DEPENDENCIES.md` cannot see it. It is recorded here instead. The
+in-product label is generic ("GPU OCR"), but a licence record must name what it
+licences.
+
+| Model | Fetched by | Licence | Attribution |
+|---|---|---|---|
+| `baidu/Unlimited-OCR` | the optional GPU OCR backend, only when `OCR_BACKEND=power` is set (needs CUDA/ROCm) | MIT | Copyright (c) 2026 Baidu. Base models are Apache-2.0. |
+
+**Why MIT, not Apache-2.0.** The upstream GitHub `LICENSE` reads "Copyright (c)
+2026 Baidu" under the MIT licence, and the Hugging Face model card declares
+`license: mit`. Its base models are Apache-2.0. MIT is permissive and compatible
+with this product's Apache-2.0 licence.
+
+**Do not** replace the tier-3 model with one from the "Blocked" list below
+(non-commercial or AGPL) without re-checking this file. Re-check when tier 3 is
+re-picked (see `docs/specs/FEATURE_SPEC_ingestion_local.md`).
+
 ## Optional, proposed only (not shipped)
 
 Named here per the research (t-0185) recommendation; neither is added.
@@ -79,7 +125,7 @@ PyMuPDF (AGPL-3.0 / Artifex commercial).
 ## How to re-check
 
 ```bash
-uv pip show pypdfium2 pdfplumber rapidocr-onnxruntime   # installed metadata
+uv pip show pypdfium2 pdfplumber rapidocr   # installed metadata
 ```
 
 The authoritative source is each package's PyPI page (license field /

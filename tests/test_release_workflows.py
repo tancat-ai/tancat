@@ -36,9 +36,10 @@ def test_release_workflow_is_tag_driven_and_gated() -> None:
     assert "!v1" in tags
     jobs = doc["jobs"]
     assert jobs["gates"]["uses"] == "./.github/workflows/ci.yml"
+    assert jobs["full-self-test"]["uses"] == "./.github/workflows/action-self-test-full.yml"
     for job in ("build", "release", "move-v1"):
         assert job in jobs, f"release.yml is missing the {job} job"
-    assert jobs["build"]["needs"] == "gates"
+    assert jobs["build"]["needs"] == ["gates", "full-self-test"]
     assert jobs["release"]["needs"] == "build"
     assert jobs["move-v1"]["needs"] == "release"
 
@@ -65,7 +66,37 @@ def test_action_selftest_runs_on_prs_with_per_job_permissions() -> None:
     assert "pull_request" in core["if"]
     assert core["permissions"] == {"contents": "read"}
     full = doc["jobs"]["action-self-test-full"]
-    assert full["permissions"] == {"contents": "read", "issues": "write"}
+    # t-0768: the six modes are a reusable workflow now; the caller job has no
+    # permissions of its own, and the nightly issue step moved to its own job.
+    assert full["uses"] == "./.github/workflows/action-self-test-full.yml"
+    issue = doc["jobs"]["nightly-issue-on-failure"]
+    assert issue["permissions"] == {"contents": "read", "issues": "write"}
+    assert issue["needs"] == ["action-self-test-full"]
+    assert issue["if"] == "failure()"
+
+
+def test_release_requires_the_full_six_mode_self_test() -> None:
+    """t-0768: a release must run the full six-mode self-test on the tag and
+    depend on it, and the nightly path must keep working."""
+    release = _load("release.yml")
+    jobs = release["jobs"]
+    assert jobs["full-self-test"]["uses"] == "./.github/workflows/action-self-test-full.yml"
+    assert "full-self-test" in jobs["build"]["needs"]
+    assert "gates" in jobs["build"]["needs"]
+
+    reusable = _load("action-self-test-full.yml")
+    assert "workflow_call" in _triggers(reusable)
+    assert "action-self-test-full" in reusable["jobs"]
+
+    # Nightly + manual unchanged: ci-cd-action.yml keeps both triggers and
+    # calls the same reusable workflow.
+    action = _load("ci-cd-action.yml")
+    triggers = _triggers(action)
+    assert "schedule" in triggers
+    assert "workflow_dispatch" in triggers
+    caller = action["jobs"]["action-self-test-full"]
+    assert caller["uses"] == "./.github/workflows/action-self-test-full.yml"
+    assert "schedule" in caller["if"]
 
 
 def test_mypy_parity_uses_the_pr_base_and_full_history() -> None:

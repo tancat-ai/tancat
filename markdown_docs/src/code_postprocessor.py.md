@@ -41,7 +41,7 @@ Key behavior:
 - Injects `pytest` and `playwright.sync_api` imports when needed.
 - Renames hallucinated `evidence_launcher` fixture references to `evidence_tracker`.
 - Ensures test functions include required `page: Page` and `evidence_tracker` fixtures.
-- Rewrites direct `page.goto()` calls to `evidence_tracker.navigate()`.
+- Rewrites direct `page.goto()` calls to `evidence_tracker.navigate()`, naming the expected page (`expected_page=`) when the first argument is a plain address or name, so a redirect elsewhere fails honestly (t-1049).
 - Repairs hallucinated marker syntax, constructor names, page-object constructor arguments, and invalid decorator assignment lines.
 - Normalizes several hallucinated type annotations to `Page`.
 - Optionally injects consent-overlay dismissal support.
@@ -74,7 +74,7 @@ Key behavior:
 - Converts `CLICK` placeholders to `evidence_tracker.click(...)`.
 - Converts `ASSERT` placeholders and matching `expect(page.locator(...))` assertions to `evidence_tracker.assert_visible(...)`.
 - Converts `FILL` placeholders to `evidence_tracker.fill(...)`, including repair of evidence-tracker calls missing the fill value.
-- Converts `GOTO` and `URL` placeholders to `evidence_tracker.navigate(...)` or replaces quoted token references.
+- Converts `GOTO` and `URL` placeholders to `evidence_tracker.navigate(...)`, naming the page the pipeline expects (`expected_page=`, the address it just chose), or replaces quoted token references.
 - Preserves `pytest.skip(...)` replacements as whole-line returns.
 
 ### `inject_import(code: str, import_line: str) -> str`
@@ -112,7 +112,7 @@ Key behavior:
 - Rewrites evidence-tracker actions to Playwright equivalents:
   - `click()` -> `page.locator(...).click()`
   - `fill()` -> `page.locator(...).fill(...)`
-  - `navigate()` -> `page.goto(...)`
+  - `navigate()` -> `page.goto(...)` (every keyword is dropped, including `expected_page=`)
   - `assert_visible()` -> `expect(page.locator(...)).to_be_visible()`
   - `select()` -> `page.locator(...).select_option(...)`
   - `get_text()` -> `page.locator(...).text_content()`

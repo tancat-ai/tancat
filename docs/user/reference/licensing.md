@@ -20,9 +20,12 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
-| Support and onboarding bundle | - | Yes |
+| Support | - | Email support and setup help - direct from the developer |
+| Updates | - | 12 months included; later updates paid |
 | Runs | 25 per 30 days | Unlimited |
 | Evidence exports | 10 per 30 days | Unlimited |
+
+**Support.** Support is provided by email at hello@tancat.dev, by the developer who builds TanCat. You get help with installation, licensing, and defects in TanCat. We aim to reply within two working days, Monday to Friday, UK business hours. Support does not include custom development, third-party systems, or on-site work, and we do not offer telephone or out-of-hours support. A contractual service level is available on request.
 
 The two counters are shown live in the UI sidebar.
 
@@ -30,6 +33,19 @@ The two counters are shown live in the UI sidebar.
 the evidence-export counter and storage used.](../assets/streamlit-license-usage.png)
 
 *The License & Usage panel. The counters reset every 30 days.*
+
+## Updates
+
+A licence is **perpetual for the version you buy**: it does not expire, and the
+version you hold keeps working. It includes **12 months of updates** from the
+date of purchase. After those 12 months, further updates are paid. Security
+fixes and bug fixes in the version line you bought stay free for the life of the
+licence.
+
+Updates are files, not a service. They arrive on Lemon Squeezy and on the
+[releases page](https://github.com/tancat-ai/tancat/releases), and you choose
+when to install them. TanCat makes **no runtime update check** and calls no
+vendor server to ask for one.
 
 ## Install a licence key
 

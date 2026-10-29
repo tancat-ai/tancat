@@ -26,7 +26,14 @@ def resolve_placeholders(
     placeholders: list[tuple[str, str]],
     pages_data: dict[str, list[dict[str, Any]]],
 ) -> list[str]:
-    """Resolve placeholders the same way the live pipeline builds selectors."""
+    """Resolve placeholders the same way the live pipeline builds selectors.
+
+    t-0877: ``resolve_url`` has no non-strict mode left. This helper used to
+    call it without ``strict``, so every GOTO it wrote went through the
+    "whichever page is first" guess - the helper measured a path production had
+    already dropped (t-0847) and that is now deleted outright. A GOTO that
+    matches nothing is an honest skip here, exactly as in production.
+    """
     resolutions: list[str] = []
     skip_msg = "pytest.skip(\"Locator for '{desc}' not found on scraped pages.\")"
 

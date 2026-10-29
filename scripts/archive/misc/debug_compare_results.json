@@ -264,7 +264,7 @@
       "summary": "11/12 (92%)",
       "results": [
         {
-          "name": "LLMClient configured: openai-local / C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.6-27B-MTP-GGUF\\Qwen3.6-27B-UD-Q4_K_XL.gguf",
+          "name": "LLMClient configured: openai-local / <home>/.lmstudio/models/unsloth/Qwen3.6-27B-MTP-GGUF/Qwen3.6-27B-UD-Q4_K_XL.gguf",
           "passed": true,
           "details": "base_url=http://localhost:8080/v1",
           "duration": 0.0
