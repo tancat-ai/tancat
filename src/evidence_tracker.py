@@ -88,6 +88,44 @@ def _response_status(response: Any) -> int | None:
     return status
 
 
+def _redirect_chain(response: Any) -> list[str]:
+    """Return the addresses a navigation was redirected through, oldest first.
+
+    Playwright keeps the hops on ``response.request.redirected_from``. This
+    catches a redirect that ends where it started (a session bounce that
+    returns to the same address), which the final URL alone cannot show. A
+    response that does not expose the chain - a test double, a same-document
+    navigation - yields ``[]``, never a guess.
+    """
+    urls: list[str] = []
+    node = getattr(response, "request", None)
+    for _ in range(10):
+        node = getattr(node, "redirected_from", None)
+        if node is None:
+            break
+        address = getattr(node, "url", None)
+        if not isinstance(address, str):
+            break
+        urls.append(address)
+    return list(reversed(urls))
+
+
+def _address_changed(requested: str, final: str) -> bool:
+    """True when the browser ended on a different address than it was asked for.
+
+    A plain string comparison, used only to REPORT a redirect when the page
+    identity already matches - so it must not treat a relative address (which
+    the browser resolves to an absolute one) as a redirect, and it must not
+    hide a trailing-slash or query change, which is a redirect the user may
+    want to know about.
+    """
+    if not requested or not final:
+        return False
+    if urlparse(requested).scheme not in ("http", "https"):
+        return False
+    return requested != final
+
+
 class EvidenceTracker:
     def __init__(
         self,
@@ -771,7 +809,7 @@ class EvidenceTracker:
             # entry URL truthful too, so no later reader sees the page the
             # navigation started from (t-1031).
             self._step_entry_url = final_url
-            navigation = {
+            navigation: dict[str, Any] = {
                 "requested": safe_url,
                 "final": final_url,
                 "status": status,
@@ -795,16 +833,36 @@ class EvidenceTracker:
                     fast_fail=True,
                 )
                 raise NavigationStatusError(f"navigate '{label}': {error}")
+            chain = _redirect_chain(response)
             if not _same_page(final_url, safe_url):
                 # The browser left the address that was asked for. Record both,
                 # so the step is never a silent pass - and judge it only when
                 # the caller said where it should land.
                 navigation["redirected"] = True
-                navigation["note"] = f"the browser was redirected from '{safe_url}' to '{final_url}'; " + (
-                    "that is not the expected page"
-                    if expected_page
-                    else "no expected page was supplied, so this redirect is recorded, not judged"
-                )
+                if chain:
+                    navigation["redirect_chain"] = chain
+                if not expected_page:
+                    landed = "no expected page was supplied, so this redirect is recorded, not judged"
+                elif _same_page(expected_page, final_url):
+                    landed = "that is the expected page"
+                else:
+                    landed = "that is not the expected page"
+                navigation["note"] = f"the browser was redirected from '{safe_url}' to '{final_url}'; {landed}"
+            else:
+                # t-1049: a redirect the user did not choose must be visible even
+                # when it lands on the page that was asked for (a canonical
+                # slash, a locale prefix, a session bounce that returns). The
+                # page identity says it is the same page, so this is not a
+                # failure - but the record says a redirect happened and keeps
+                # both addresses, so the user can decide about it.
+                if chain or _address_changed(safe_url, final_url):
+                    navigation["redirected"] = True
+                    if chain:
+                        navigation["redirect_chain"] = chain
+                    navigation["note"] = (
+                        f"the address redirected from '{safe_url}' to '{final_url}'; "
+                        "both name the same page, so this is not a failure"
+                    )
             self._dismiss_consent_overlays()
             self._dismiss_ad_overlays()
             # Short settle so the evidence shot captures a rendered page, not

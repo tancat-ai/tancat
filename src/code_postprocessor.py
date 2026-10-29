@@ -29,6 +29,29 @@ from .llm_reasoning_filter import strip_llm_reasoning
 
 logger = logging.getLogger(__name__)
 
+# A raw ``page.goto(...)`` / ``self.page.goto(...)`` call. The argument list may
+# contain one level of nested calls, so a computed address is still routed to the
+# tracker (it just cannot name the expected page - see below).
+_GOTO_CALL_RE = re.compile(r"(?<![\w.])(?:self\.)?page\.goto\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+
+
+def _goto_to_tracker_navigate(match: re.Match[str]) -> str:
+    """Rewrite a raw ``page.goto(...)`` to the tracker, naming the expected page.
+
+    t-1049: the expected page is the address the skeleton asked for, so the
+    tracker can fail honestly when the browser is redirected somewhere else and
+    record the redirect when it lands on the same page. The keyword is skipped
+    when the first argument is a call with its own commas or parentheses -
+    splitting that would guess.
+    """
+    args = match.group(1).strip()
+    if not args or "expected_page" in args:
+        return f"evidence_tracker.navigate({args})"
+    first = args.split(",", 1)[0].strip()
+    if not first or re.search(r"[()]", first):
+        return f"evidence_tracker.navigate({args})"
+    return f"evidence_tracker.navigate({args}, expected_page={first})"
+
 
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
     """Apply small deterministic fixes to common skeleton-generation mistakes."""
@@ -80,9 +103,12 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     fixed_code = re.sub(r"\bevidence_launcher\b", "evidence_tracker", fixed_code)
     fixed_code = _ensure_evidence_tracker_fixture(fixed_code)
 
-    # Ensure evidence_tracker is used for common methods even if LLM forgot
-    fixed_code = re.sub(r"page\.goto\(", "evidence_tracker.navigate(", fixed_code)
-    fixed_code = re.sub(r"self\.page\.goto\(", "evidence_tracker.navigate(", fixed_code)
+    # Ensure evidence_tracker is used for common methods even if LLM forgot.
+    # t-1049: the goto states the page it expects, so a redirect elsewhere fails
+    # honestly instead of passing quietly. The keyword is only added when the
+    # first argument is a plain address or name - never when it is a call with
+    # its own commas/parentheses, where guessing the split would be wrong.
+    fixed_code = _GOTO_CALL_RE.sub(_goto_to_tracker_navigate, fixed_code)
 
     # Some models hallucinate a slash between `pytest.mark` and the marker name.
     fixed_code = re.sub(r"(?m)^\s*@pytest\.mark\s*/\s*([A-Za-z_][A-Za-z0-9_]*)", r"@pytest.mark.\1", fixed_code)
@@ -1101,8 +1127,15 @@ def _replace_token_in_line_impl(
         return line.replace(token, resolved_value)
 
     if action in {"GOTO", "URL"}:
+        # t-1049: a goto states the page it expects. Without it, a redirect to
+        # somewhere else (a login wall, a bounce home) was recorded and still
+        # passed. The expected page is the address the pipeline just chose -
+        # the same value the step navigates to, so the check is "did the
+        # browser end up on the page we asked for". The tracker compares page
+        # identity (scheme + host + path), not the whole string.
+        expected_kw = f", expected_page={resolved_value}"
         if stripped == token:
-            return f"{indent}evidence_tracker.navigate({resolved_value})"
+            return f"{indent}evidence_tracker.navigate({resolved_value}{expected_kw})"
         goto_patterns = {
             f"page.goto({token})",
             f"self.page.goto({token})",
@@ -1115,7 +1148,7 @@ def _replace_token_in_line_impl(
             f"evidence_tracker.navigate('{token}')",
         }
         if stripped in goto_patterns:
-            return f"{indent}evidence_tracker.navigate({resolved_value})"
+            return f"{indent}evidence_tracker.navigate({resolved_value}{expected_kw})"
         if f'"{token}"' in line:
             return line.replace(f'"{token}"', resolved_value)
         if f"'{token}'" in line:
@@ -1411,9 +1444,12 @@ def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False
         result,
     )
 
-    # evidence_tracker.navigate(url) or evidence_tracker.navigate(url, label=...) -> page.goto(url)
+    # evidence_tracker.navigate(url) / (url, label=...) / (url, expected_page=...)
+    # -> page.goto(url). t-1049 added the expected_page keyword; the strip must
+    # drop every keyword, or the flat export keeps a tracker call whose fixture
+    # is gone from the signature.
     result = re.sub(
-        r"evidence_tracker\.navigate\(([^,]+)(?:,\s*label=[^\)]*)?\)",
+        r"evidence_tracker\.navigate\(([^,)]+)(?:,[^)]*)?\)",
         r"page.goto(\1)",
         result,
     )

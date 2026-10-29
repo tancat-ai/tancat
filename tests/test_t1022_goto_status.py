@@ -106,14 +106,22 @@ def test_200_goto_on_the_right_page_passes(tmp_path: Path) -> None:
 
 
 def test_redirect_to_the_right_page_passes(tmp_path: Path) -> None:
-    """A 302 to the same page (trailing slash) is arrival, not a failure."""
+    """A 302 to the same page (trailing slash) is arrival, not a failure.
+
+    t-1049: it is still *recorded* as a redirect, so a user can see an address
+    that redirects and decide about it. Same page identity, so it passes.
+    """
     tracker = _tracker(_page("https://shop.example.com/cart/", 200), tmp_path)
 
     tracker.navigate("https://shop.example.com/cart")
 
     step = tracker.steps[-1]
     assert step["result"]["status"] == "passed"
-    assert "redirected" not in step["result"]["navigation"]
+    nav = step["result"]["navigation"]
+    assert nav["redirected"] is True
+    assert nav["requested"] == "https://shop.example.com/cart"
+    assert nav["final"] == "https://shop.example.com/cart/"
+    assert "both name the same page" in nav["note"]
 
 
 def test_redirect_to_a_named_expected_page_passes_and_is_recorded(tmp_path: Path) -> None:
@@ -128,6 +136,7 @@ def test_redirect_to_a_named_expected_page_passes_and_is_recorded(tmp_path: Path
     assert nav["redirected"] is True
     assert nav["requested"] == "https://shop.example.com/old-cart"
     assert nav["final"] == "https://shop.example.com/cart.html"
+    assert "that is the expected page" in nav["note"]
 
 
 def test_bounce_home_is_recorded_not_silent(tmp_path: Path) -> None:
