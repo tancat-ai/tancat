@@ -221,6 +221,7 @@ def test_mask_and_restore_js_share_stash_key() -> None:
 def test_tracker_fill_sensitive_value_redacted(tmp_path: Path) -> None:
     """Sidecar JSON channel: '#password' fill records REDACTED, not the secret."""
     tracker = EvidenceTracker(MagicMock(), "test_redact", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.fill("#password", "secret_sauce")
 
     step = tracker.steps[-1]
@@ -232,6 +233,7 @@ def test_tracker_fill_sensitive_value_redacted(tmp_path: Path) -> None:
 
 def test_tracker_fill_explicit_label_quoting_secret_scrubbed(tmp_path: Path) -> None:
     tracker = EvidenceTracker(MagicMock(), "test_redact2", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.fill("#password", "hunter2", label="Type hunter2 into password box")
 
     step = tracker.steps[-1]
@@ -242,6 +244,7 @@ def test_tracker_fill_explicit_label_quoting_secret_scrubbed(tmp_path: Path) -> 
 def test_tracker_fill_non_sensitive_keeps_value(tmp_path: Path) -> None:
     """Benign fields keep their real value — evidence stays useful."""
     tracker = EvidenceTracker(MagicMock(), "test_keep", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.fill("#first-name", "John")
 
     step = tracker.steps[-1]
@@ -253,6 +256,7 @@ def test_tracker_fill_sensitive_failure_path_redacted(tmp_path: Path) -> None:
     """The failure path must redact too — that's exactly when screenshots fire."""
     page = MagicMock()
     tracker = EvidenceTracker(page, "test_fail_fill", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     # Make the actual fill blow up after detection succeeded.
     page.locator.return_value.fill.side_effect = Exception("not fillable")
@@ -267,6 +271,7 @@ def test_tracker_fill_sensitive_failure_path_redacted(tmp_path: Path) -> None:
 def test_tracker_navigate_redacts_url_userinfo(tmp_path: Path) -> None:
     page = MagicMock()
     tracker = EvidenceTracker(page, "test_nav", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.navigate("https://admin:s3cret@example.com/")
 
     step = tracker.steps[-1]
@@ -283,6 +288,7 @@ def test_tracker_screenshot_wrapped_in_masking(tmp_path: Path) -> None:
         1 if "__evidenceRedactionStash" in js and "el.value = ''" in js else 0
     )
     tracker = EvidenceTracker(page, "test_shot", evidence_root=tmp_path)
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.navigate("https://example.com")
 
     calls = page.method_calls

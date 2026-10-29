@@ -149,6 +149,18 @@ def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMetho
 
     The single condition that still stops a journey is ``_cannot_continue()``:
     the page or its browser context is closed, so no later step could run at all.
+
+    A HAND-SHAKE, not just a version marker (t-1066). Swallowing a failure is only
+    safe when something will fail the test at its end. The generated conftest sets
+    ``journey_hooked = True`` when its fixture creates the tracker; with no hook
+    registered - a conftest written before the carry-on feature, which carries no
+    marker and no report hook - the exception is RE-RAISED, so the test fails the
+    old way instead of passing silently. What each guard catches:
+
+    - the ``JOURNEY_PROTOCOL`` marker (checked in the conftest fixture): drift
+      between two versions that both carry the check, and a NEW conftest with an
+      OLD tracker (which fails even earlier, at import).
+    - this hand-shake: a NEW tracker with a conftest that never registered.
     """
 
     @functools.wraps(method)
@@ -157,7 +169,9 @@ def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMetho
         try:
             return method(self, *args, **kwargs)
         except Exception as exc:  # noqa: BLE001 - see the docstring: recorded, then carried
-            if self._cannot_continue():
+            if self._cannot_continue() or not self.journey_hooked:
+                # No hook means nothing would fail the test at its end, so a
+                # swallowed failure would be a silent pass. Fail here instead.
                 raise
             self._record_unrecorded_failure(method.__name__, args, exc, before)
             return None
@@ -206,6 +220,9 @@ class EvidenceTracker:
         # was resolved against. Compared with ``expected_page`` in
         # ``_record_step``.
         self._step_entry_url: str = ""
+        # t-1066: set by the generated conftest fixture. Until something promises
+        # to fail the test at its end, a failed step raises as it always did.
+        self.journey_hooked: bool = False
 
         # A5: per-page hint for the adaptive encoder. A page URL lands here when
         # a full-page capture on it found lossless WebP would NOT shrink the

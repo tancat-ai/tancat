@@ -104,6 +104,7 @@ def test_replace_token_in_line_default_still_assert_visible() -> None:
 def test_assert_hidden_waits_for_hidden_state(tmp_path: Any) -> None:
     page_mock = MagicMock()
     tracker = EvidenceTracker(page_mock, "test_foo", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_hidden(".thing")
 
@@ -120,6 +121,7 @@ def test_assert_hidden_records_failure_when_still_visible(tmp_path: Any) -> None
     loc.first.wait_for.side_effect = TimeoutError("element still visible")
     page_mock.locator.return_value = loc
     tracker = EvidenceTracker(page_mock, "test_foo", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_hidden(".thing")  # t-1057: recorded, not raised
     assert tracker.steps[-1]["result"]["status"] == "failed"

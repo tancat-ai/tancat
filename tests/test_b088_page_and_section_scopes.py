@@ -143,7 +143,9 @@ def _tracker(tmp_path: Any, elements: list[MagicMock]) -> EvidenceTracker:
     loc.first = elements[0] if elements else MagicMock()
     page.locator.return_value = loc
     page.url = "https://example.com"
-    return EvidenceTracker(page, "test_b088", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_b088", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def test_multi_token_scan_finds_any_offender(tmp_path: Any) -> None:
@@ -403,7 +405,9 @@ def _contains_tracker(tmp_path: Any, container_count: int) -> EvidenceTracker:
     chain.filter.return_value = chain
     chain.last = container
     page.locator.side_effect = lambda sel: heading if ":has-text(" in sel else chain
-    return EvidenceTracker(page, "test_b088_contains", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_b088_contains", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def test_assert_contains_passes_when_child_is_inside(tmp_path: Any) -> None:

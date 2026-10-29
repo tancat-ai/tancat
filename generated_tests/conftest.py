@@ -22,7 +22,12 @@ from src.evidence_tracker import JOURNEY_PROTOCOL, EvidenceTracker
 # t-1063: the tracker carries on after a failed step and the conftest fails the
 # test once, at its end. Both halves are needed, so both declare the same marker.
 # A package with a new tracker and an old conftest would carry on and NEVER fail
-# the test - a silent success. The fixture refuses to run when they disagree.
+# the test - a silent success. The fixture refuses to run when they disagree, and
+# it registers ``tracker.journey_hooked`` - the hand-shake that lets the tracker
+# carry on at all. A new tracker under a conftest that never registers therefore
+# raises at the failed step instead of passing silently (t-1066). What the marker
+# catches: drift between two versions that both carry the check, and a new
+# conftest with an old tracker (which fails even earlier, at import).
 CONFTEST_JOURNEY_PROTOCOL = "carry-on-1"
 
 
@@ -106,6 +111,9 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
     # t-1057: the report hook needs the tracker to fail the test once, at the end,
     # with what failed and what the later steps did.
     setattr(request.node, "_evidence_tracker", tracker)  # noqa: B010 - a pytest Item has no declared slot
+    # t-1066: the hand-shake. The tracker only swallows a failed step when
+    # something promises to fail the test afterwards; this hook is that promise.
+    tracker.journey_hooked = True
     yield tracker
 
     rep_call = getattr(request.node, "rep_call", None)

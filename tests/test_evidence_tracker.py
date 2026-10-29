@@ -11,6 +11,7 @@ from src.evidence_tracker import EvidenceTracker, _same_page
 def test_evidence_tracker_records_navigation(tmp_path: Any) -> None:
     page_mock = MagicMock()
     tracker = EvidenceTracker(page_mock, "test_foo", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.navigate("https://example.com")
 
@@ -29,6 +30,7 @@ def test_evidence_tracker_records_failure(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.goto.side_effect = Exception("Network Error")
     tracker = EvidenceTracker(page_mock, "test_foo", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     try:
         tracker.navigate("https://fail.com")
@@ -45,6 +47,7 @@ def test_evidence_tracker_click_failure_takes_screenshot(tmp_path: Any) -> None:
     # Make click throw
     page_mock.locator.return_value.first.click.side_effect = Exception("Click Error")
     tracker = EvidenceTracker(page_mock, "test_click", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     # t-1057: a failed step no longer ends the test - it is recorded and the
     # journey carries on. The failure reaches the report at the end.
@@ -85,6 +88,7 @@ def test_a5_probe_skipped_when_webp_already_lost_on_page(tmp_path: Any, monkeypa
     page_mock.screenshot.return_value = _tiny_png()
     page_mock.url = "https://example.com/flat-page"
     tracker = EvidenceTracker(page_mock, "test_a5", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker._record_step("assert_visible", "step one", locator="h1", take_screenshot=True)
     tracker._record_step("assert_visible", "step two", locator="h2", take_screenshot=True)
@@ -110,6 +114,7 @@ def test_a5_webp_win_is_not_cached(tmp_path: Any, monkeypatch: pytest.MonkeyPatc
     page_mock.screenshot.return_value = _tiny_png()
     page_mock.url = "https://example.com/photographic-page"
     tracker = EvidenceTracker(page_mock, "test_a5w", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker._record_step("assert_visible", "step one", locator="h1", take_screenshot=True)
     tracker._record_step("assert_visible", "step two", locator="h2", take_screenshot=True)
@@ -130,6 +135,7 @@ def test_failed_step_skips_metadata_capture(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element not visible")
     tracker = EvidenceTracker(page_mock, "test_assert_fail", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_visible("h2.heading")  # t-1057: recorded, not raised
 
@@ -149,6 +155,7 @@ def test_evidence_tracker_click_attempts_scroll_into_view_before_click(tmp_path:
     # proactive modal-dismissal probes (no visible modals -> no-op).
     page_mock.locator.return_value.first.count.side_effect = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     tracker = EvidenceTracker(page_mock, "test_click_scroll", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.click("div#thing")
 
@@ -162,6 +169,7 @@ def test_evidence_tracker_increment_history(tmp_path: Any, monkeypatch: Any) -> 
     page_mock = MagicMock()
     page_mock.url = "http://localhost"
     tracker = EvidenceTracker(page_mock, "test_write", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker.write("passed")
 
     # A passed write should increment totals
@@ -173,6 +181,7 @@ def test_evidence_tracker_increment_history(tmp_path: Any, monkeypatch: Any) -> 
 def test_evidence_tracker_assert_visible_uses_first_locator(tmp_path: Any) -> None:
     page_mock = MagicMock()
     tracker = EvidenceTracker(page_mock, "test_assert", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_visible(".thing")
 
@@ -183,6 +192,7 @@ def test_evidence_tracker_assert_visible_uses_first_locator(tmp_path: Any) -> No
 def test_evidence_tracker_cleans_placeholder_labels(tmp_path: Any) -> None:
     page_mock = MagicMock()
     tracker = EvidenceTracker(page_mock, "test_label", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.click("#thing", label="{{CLICK:view cart link}}")
 
@@ -201,6 +211,7 @@ class TestLocatorFallback:
         """_record_step should set status='partial_pass' when fallback_used=True."""
         page_mock = MagicMock()
         tracker = EvidenceTracker(page_mock, "test_partial", evidence_root=Path(tmp_path))
+        tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
         # Directly call _record_step with fallback_used=True
         tracker._record_step(
@@ -235,6 +246,7 @@ class TestLocatorFallback:
         """_record_step should set status='passed' when no error and no fallback."""
         page_mock = MagicMock()
         tracker = EvidenceTracker(page_mock, "test_passed", evidence_root=Path(tmp_path))
+        tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
         tracker._record_step("click", "Click button", locator="#btn")
 
@@ -245,6 +257,7 @@ class TestLocatorFallback:
         """_record_step should set status='failed' when there's an error."""
         page_mock = MagicMock()
         tracker = EvidenceTracker(page_mock, "test_failed", evidence_root=Path(tmp_path))
+        tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
         tracker._record_step("click", "Click button", locator="#btn", error="timeout")
 
@@ -255,6 +268,7 @@ class TestLocatorFallback:
         """Fallback chain entries should contain locator, type, score, confidence, result."""
         page_mock = MagicMock()
         tracker = EvidenceTracker(page_mock, "test_chain", evidence_root=Path(tmp_path))
+        tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
         fallback_chain = [
             {"locator": ".btn", "type": "css-class", "score": 35, "confidence": "medium-low", "result": "failed"},
@@ -291,6 +305,7 @@ def test_click_fast_fails_when_locator_missing_on_page(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.count.return_value = 0
     page_mock.url = "https://example.com/products"
     tracker = EvidenceTracker(page_mock, "test_fastfail", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.click("button.btn.cart")  # t-1057: recorded, not raised
 
@@ -317,6 +332,7 @@ def test_click_missing_locator_does_not_run_fallback(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.count.return_value = 0
     page_mock.url = "https://example.com"
     tracker = EvidenceTracker(page_mock, "test_fallback", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     with (
         patch("src.evidence_tracker.try_hover_and_click") as mock_hover,
@@ -405,6 +421,7 @@ def test_fill_select_uses_select_option_when_tag_is_select(tmp_path: Any) -> Non
     locator_mock.evaluate.return_value = "SELECT"
     page_mock.locator.return_value = locator_mock
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.fill("#payee", "Electric Company")
 
@@ -426,6 +443,7 @@ def test_fill_select_falls_back_to_substring_option_label(tmp_path: Any) -> None
     locator_mock.select_option.side_effect = [Exception("no exact value"), Exception("no exact label"), None]
     page_mock.locator.return_value = locator_mock
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.fill("#payee", "Electric Company")
 
@@ -441,6 +459,7 @@ def test_fill_plain_input_uses_fill_not_select_option(tmp_path: Any) -> None:
     locator_mock.evaluate.return_value = "INPUT"
     page_mock.locator.return_value = locator_mock
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.fill("#amount", "100")
 
@@ -456,6 +475,7 @@ def test_fill_select_evaluate_failure_falls_back_to_fill(tmp_path: Any) -> None:
     locator_mock.evaluate.side_effect = Exception("no element")
     page_mock.locator.return_value = locator_mock
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.fill("#maybe-late", "x")
 
@@ -493,6 +513,7 @@ def test_metadata_viewport_pct_is_document_relative(tmp_path: Any) -> None:
         bbox={"x": 100.0, "y": 200.0, "width": 50.0, "height": 30.0},
     )
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     meta = tracker._get_element_metadata("#btn")
 
     pct = meta["viewport_pct"]
@@ -510,6 +531,7 @@ def test_metadata_clamps_negative_y_to_zero(tmp_path: Any) -> None:
         bbox={"x": 100.0, "y": -100.0, "width": 50.0, "height": 30.0},
     )
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     meta = tracker._get_element_metadata("#btn")
 
     pct = meta["viewport_pct"]
@@ -532,6 +554,7 @@ def test_metadata_scroll_probe_failure_falls_back_to_bbox(tmp_path: Any) -> None
 
     page_mock.evaluate.side_effect = fake_evaluate
     tracker = EvidenceTracker(page_mock, "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     meta = tracker._get_element_metadata("#btn")
     assert 0.0 <= meta["viewport_pct"]["x"] <= 100.0
     assert 0.0 <= meta["viewport_pct"]["y"] <= 100.0
@@ -567,6 +590,7 @@ def test_step_on_expected_page_records_no_mismatch(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.url = "https://example.com/dashboard.html"
     tracker = EvidenceTracker(page_mock, "t_ok", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_visible("#acct", label="dashboard loaded", expected_page="https://example.com/dashboard.html")
 
@@ -583,6 +607,7 @@ def test_step_on_other_page_fails(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.url = "https://example.com/success.html"
     tracker = EvidenceTracker(page_mock, "t_bad", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     # t-1057: the mismatch fails the step and the test at its end; the journey
     # carries on. It no longer interrupts the test here.
@@ -608,6 +633,7 @@ def test_mismatch_does_not_mask_an_earlier_error(tmp_path: Any) -> None:
     page_mock.url = "https://example.com/success.html"
     page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element timed out")
     tracker = EvidenceTracker(page_mock, "t_err", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_visible("#missing", label="x", expected_page="https://example.com/index.html")
 
@@ -624,6 +650,7 @@ def test_no_expected_page_records_no_mismatch(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.url = "https://example.com/anything.html"
     tracker = EvidenceTracker(page_mock, "t_skip", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.assert_visible("#x", label="whatever")
 
@@ -637,6 +664,7 @@ def test_click_on_other_page_fails(tmp_path: Any) -> None:
     # proactive modal-dismissal probes (no visible modals -> no-op).
     page_mock.locator.return_value.first.count.side_effect = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     tracker = EvidenceTracker(page_mock, "t_click", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
 
@@ -654,6 +682,7 @@ def test_page_is_compared_before_the_action(tmp_path: Any) -> None:
     page_mock = MagicMock()
     page_mock.url = "https://example.com/index.html"
     tracker = EvidenceTracker(page_mock, "t_before", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     def _redirect(*_args: Any, **_kwargs: Any) -> None:
         page_mock.url = "https://example.com/dashboard.html"
@@ -724,6 +753,7 @@ def test_b072_new_tab_click_is_verified_not_failed(tmp_path: Any) -> None:
     page = _NewTabPage()
     page.new_tab = _NewTabStub("https://github.com/tancat-ai/tancat")
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "GitHub",
@@ -751,6 +781,7 @@ def test_b072_new_tab_url_mismatch_recorded_not_raised(tmp_path: Any) -> None:
     page = _NewTabPage()
     page.new_tab = _NewTabStub("https://github.com/other/repo")
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "GitHub",
@@ -774,6 +805,7 @@ def test_b072_new_tab_relative_href_matched_against_original_url(tmp_path: Any) 
     page = _NewTabPage()
     page.new_tab = _NewTabStub("https://example.com/about")
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "About",
@@ -797,6 +829,7 @@ def test_b072_no_new_tab_still_fails(tmp_path: Any) -> None:
 
     page = _NewTabPage()  # no new tab created
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "Cart",
@@ -822,6 +855,7 @@ def test_b072_blank_target_failure_is_actionable(tmp_path: Any) -> None:
 
     page = _NewTabPage()  # no new tab created
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "GitHub",
@@ -847,6 +881,7 @@ def test_b072_window_open_link_new_tab_recorded(tmp_path: Any) -> None:
     page = _NewTabPage()
     page.new_tab = _NewTabStub("https://example.com/")
     tracker = EvidenceTracker(cast(Page, page), "t", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
     tracker._record_step(
         "click",
         "Popup",

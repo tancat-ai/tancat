@@ -58,7 +58,11 @@ def _page(url: str, *, closed: bool = False) -> MagicMock:
 
 
 def _tracker(page: Any, tmp_path: Path) -> EvidenceTracker:
-    return EvidenceTracker(page, "test_journey", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_journey", "C01", "S01", evidence_root=Path(tmp_path))
+    # The hand-shake the generated conftest performs: from here, a failed step is
+    # recorded and the journey carries on, and the test is failed at its end.
+    tracker.journey_hooked = True
+    return tracker
 
 
 def _journey_that_fails_at_step_three(tmp_path: Path) -> EvidenceTracker:

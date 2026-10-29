@@ -231,7 +231,9 @@ def test_emitted_page_fact_lines_compile() -> None:
 def _page_tracker(tmp_path: Any) -> tuple[EvidenceTracker, MagicMock]:
     page = MagicMock()
     page.url = "https://example.com"
-    return EvidenceTracker(page, "test_b090", evidence_root=Path(tmp_path)), page
+    tracker = EvidenceTracker(page, "test_b090", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker, page
 
 
 def test_no_broken_images_passes_when_all_loaded(tmp_path: Any) -> None:
@@ -323,7 +325,9 @@ def _price_tracker(tmp_path: Any, container_count: int, text: str) -> EvidenceTr
     chain.filter.return_value = chain
     chain.last = container
     page.locator.side_effect = lambda sel: heading if ":has-text(" in sel else chain
-    return EvidenceTracker(page, "test_b092_price", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_b092_price", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def test_section_has_price_passes_when_amount_present(tmp_path: Any) -> None:

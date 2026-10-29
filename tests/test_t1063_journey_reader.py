@@ -116,7 +116,11 @@ def _page(url: str) -> MagicMock:
 
 
 def _tracker(page: Any, tmp_path: Path) -> EvidenceTracker:
-    return EvidenceTracker(page, "test_journey", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_journey", "C01", "S01", evidence_root=Path(tmp_path))
+    # The hand-shake the generated conftest performs: from here, a failed step is
+    # recorded and the journey carries on, and the test is failed at its end.
+    tracker.journey_hooked = True
+    return tracker
 
 
 def _journey_with_a_missing_element(tmp_path: Path) -> EvidenceTracker:
@@ -312,3 +316,66 @@ def test_a_mismatched_tracker_marker_also_fails(monkeypatch: pytest.MonkeyPatch)
 
 def test_the_tracker_still_carries_the_marker() -> None:
     assert tracker_module.JOURNEY_PROTOCOL == JOURNEY_PROTOCOL
+
+
+# ---------------------------------------------------------------------------
+# t-1066: the hand-shake. A conftest written before the carry-on feature has no
+# marker and no report hook, so nothing could fail the test at its end - the
+# tracker must then re-raise instead of passing silently.
+# ---------------------------------------------------------------------------
+
+
+def test_a_tracker_with_no_hook_re_raises_instead_of_swallowing(tmp_path: Path) -> None:
+    page = _FakePage("https://shop.example.com/catalog.html", failing_locator="#promo-banner")
+    tracker = _tracker(page, tmp_path)
+    tracker.journey_hooked = False  # a conftest that never registered
+
+    with pytest.raises(TimeoutError, match="element not visible"):
+        tracker.assert_visible("#promo-banner")
+
+    # The failed step is still recorded before the raise, as it was before t-1057.
+    assert tracker.steps[-1]["result"]["status"] == "failed"
+    assert tracker.journey_summary() != ""
+
+
+def test_the_conftest_fixture_registers_the_hook(tmp_path: Path) -> None:
+    """The promise the tracker waits for is made by the generated fixture."""
+    conftest = _conftest_module()
+    page = _FakePage("https://shop.example.com/catalog.html", failing_locator="#promo-banner")
+
+    class _Node:
+        name = "test_journey"
+        _evidence_tracker: Any = None
+
+        def get_closest_marker(self, _name: str) -> None:
+            return None
+
+    class _Request:
+        node = _Node()
+        fspath = str(tmp_path / "test_journey.py")
+
+    # The undecorated generator: pytest 9 refuses a direct fixture call.
+    fixture = conftest.evidence_tracker.__wrapped__(page, _Request())
+    tracker = next(fixture)
+    try:
+        assert tracker.journey_hooked is True
+        # And with the hook in place the journey carries on.
+        tracker.assert_visible("#promo-banner")
+        assert tracker.steps[-1]["result"]["status"] == "failed"
+    finally:
+        for _ in fixture:  # run the teardown (writes the sidecar)
+            pass
+
+
+def test_the_clean_export_conftest_has_no_tracker_at_all(tmp_path: Path) -> None:
+    """An exported package strips the tracker, so the hand-shake never runs."""
+    from src.export_service import ExportMode, _write_clean_conftest
+
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    _write_clean_conftest(export_dir, ExportMode.FLAT)
+
+    content = (export_dir / "conftest.py").read_text(encoding="utf-8")
+    assert "EvidenceTracker" not in content
+    assert "JOURNEY_PROTOCOL" not in content
+    assert "journey_hooked" not in content

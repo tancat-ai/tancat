@@ -242,7 +242,9 @@ def _tracker(tmp_path: Any, elements: list[MagicMock]) -> EvidenceTracker:
     loc.first = elements[0] if elements else MagicMock()
     page.locator.return_value = loc
     page.url = "https://example.com"
-    return EvidenceTracker(page, "test_attr", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_attr", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def test_assert_attribute_forbidden_fails_on_tbd_href(tmp_path: Any) -> None:

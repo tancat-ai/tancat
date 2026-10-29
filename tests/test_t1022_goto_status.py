@@ -50,7 +50,9 @@ def _page(url: str, status: int | None) -> MagicMock:
 
 
 def _tracker(page: Any, tmp_path: Path) -> EvidenceTracker:
-    return EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def test_404_goto_is_failed_and_names_both_urls(tmp_path: Path) -> None:

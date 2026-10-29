@@ -143,7 +143,9 @@ def _page(url: str, status: int = 200) -> MagicMock:
 
 
 def _tracker(page: Any, tmp_path: Path) -> EvidenceTracker:
-    return EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker = EvidenceTracker(page, "test_goto", "C01", "S01", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
+    return tracker
 
 
 def _emitted_goto(url: str) -> str:

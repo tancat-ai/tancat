@@ -121,6 +121,7 @@ def test_broken_locator_fails_fast_with_diagnostic(tmp_path: Path) -> None:
     page_mock.locator.return_value.first.count.return_value = 0
     page_mock.url = "https://example.com/products"
     tracker = EvidenceTracker(page_mock, "test_fastfail", evidence_root=Path(tmp_path))
+    tracker.journey_hooked = True  # the conftest's hand-shake (t-1066)
 
     tracker.click("button.btn.cart")  # t-1057: recorded, not raised
     assert "not found on current page" in tracker.journey_summary()
