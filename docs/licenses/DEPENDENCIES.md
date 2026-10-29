@@ -253,7 +253,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | jupyter-lsp | 2.3.1 | BSD License | https://jupyterlab-lsp.readthedocs.io/ |
 | jupyter-server | 2.20.0 | BSD License | https://jupyter-server.readthedocs.io |
 | jupyter-server-terminals | 0.5.4 | BSD License | https://jupyter.org |
-| jupyterlab | 4.6.2 | BSD License | https://jupyter.org |
+| jupyterlab | 4.6.4 | BSD License | https://jupyter.org |
 | jupyterlab-pygments | 0.3.0 | BSD License | https://github.com/jupyterlab/jupyterlab_pygments |
 | jupyterlab-server | 2.28.0 | BSD License | https://jupyterlab-server.readthedocs.io |
 | jupyterlab-widgets | 3.0.16 | BSD License | https://github.com/jupyter-widgets/ipywidgets |
@@ -289,7 +289,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | nest-asyncio2 | 1.7.2 | BSD License | https://github.com/Chaoses-Ib/nest-asyncio2 |
 | networkx | 3.6.1 | BSD-3-Clause | https://networkx.org/ |
 | nodeenv | 1.10.0 | BSD License | https://github.com/ekalinin/nodeenv |
-| notebook | 7.6.1 | BSD License | https://github.com/jupyter/notebook |
+| notebook | 7.6.3 | BSD License | https://github.com/jupyter/notebook |
 | notebook-shim | 0.2.4 | BSD License | UNKNOWN |
 | numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://numpy.org |
 | omegaconf | 2.4.0 | BSD License | https://github.com/hydra-ecosystem/omegaconf |
