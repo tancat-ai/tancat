@@ -292,14 +292,22 @@ class TestEvidenceGuard:
 
         This is the durability guard: the record depends on a committed re-score input,
         not on a worktree's gitignored scratch directory.
+
+        A key correction changes what the same evidence scores without changing the
+        number recorded at the time (t-1014): ``key_revision_2026_10_28`` holds the
+        re-score under the corrected keys, and that is the number this guard checks
+        when it is present.
         """
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         run_dir = _REPO_ROOT / payload["evidence_dir"]
+        revision = payload.get("key_revision_2026_10_28") or {}
+        expected_correct = int(revision.get("gate1_correct", payload["gate1_correct"]))
+        expected_total = int(revision.get("gate1_total", payload["gate1_total"]))
 
         report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
 
-        assert report.correct_resolutions == payload["gate1_correct"]
-        assert report.total_placeholders == payload["gate1_total"]
+        assert report.correct_resolutions == expected_correct
+        assert report.total_placeholders == expected_total
         assert report.total_false_positives == payload["gate2_false_greens"]
 
 

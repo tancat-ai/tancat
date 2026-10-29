@@ -35,6 +35,7 @@ def _make_sidecar(
     status: str = "passed",
     page_url: str = "https://automationexercise.com/view_cart",
     steps: list[dict] | None = None,
+    page_expectations: list[dict] | None = None,
     duration_s: float = 0.0,
     test_package_dir: str | None = None,
 ) -> Path:
@@ -62,6 +63,7 @@ def _make_sidecar(
         },
         "page": {"url": page_url},
         "steps": steps,
+        "page_expectations": page_expectations or [],
     }
 
     path = pkg / filename
@@ -89,6 +91,16 @@ def index(tmp_path: Path) -> EvidenceIndex:
         condition_ref="TC01.05",
         status="passed",
         test_package_dir="test_pkg_1",
+        page_expectations=[
+            {
+                "timestamp": 1_760_000_000.0,
+                "expected_url": "https://automationexercise.com/checkout",
+                "observed_url": "https://automationexercise.com/view_cart",
+                "trail_step": "index=1; action=scrape",
+                "producer": "keyword",
+                "reason": "the browser was not seen leaving the cart page",
+            }
+        ],
     )
     _make_sidecar(
         base,
@@ -245,6 +257,20 @@ class TestExportNdjson:
             assert "test" in obj
             assert "page" in obj
             assert "steps" in obj
+
+    def test_ndjson_preserves_page_expectations(self, index: EvidenceIndex) -> None:
+        """t-0929: an explicit export keeps the page-expectation record.
+
+        The runtime sidecar lives under gitignored ``evidence/``; the NDJSON
+        exporter dumps the full sidecar, so an export written to a tracked path
+        is the provable bundle.
+        """
+        ndjson_text = export_ndjson(index, query="test_view_cart")
+        obj = json.loads(ndjson_text.strip())
+        record = obj["page_expectations"][0]
+        assert record["expected_url"] == "https://automationexercise.com/checkout"
+        assert record["observed_url"] == "https://automationexercise.com/view_cart"
+        assert record["producer"] == "keyword"
 
     def test_filtered_export(self, index: EvidenceIndex) -> None:
         ndjson_text = export_ndjson(index, status="passed")

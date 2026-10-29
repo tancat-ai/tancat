@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 
@@ -506,9 +507,21 @@ def _render_skip_repair_capture() -> None:
         "close the browser window after clicking the element you want to use..."
     )
     with st.spinner(spinner_text):
-        replacement = run_codegen_session(codegen_url, timeout_seconds=180, state_file=state_file)
+        outcome = run_codegen_session(codegen_url, timeout_seconds=180, state_file=state_file)
 
-    if replacement:
+    if outcome.status == "cannot_replay":
+        st.session_state.skip_repair_status = "error"
+        st.session_state.skip_repair_message = f"❌ This step cannot be replayed: {outcome.reason}"
+    elif outcome.status == "failed":
+        st.session_state.skip_repair_status = "error"
+        st.session_state.skip_repair_message = f"❌ Codegen failed: {outcome.reason}"
+    elif not outcome.captured or not outcome.locator:
+        st.session_state.skip_repair_status = "error"
+        st.session_state.skip_repair_message = (
+            "❌ No locator captured. The browser may have been closed without a click."
+        )
+    else:
+        replacement = outcome.locator
         try:
             # Read the current source
             path = Path(test_file)
@@ -547,9 +560,6 @@ def _render_skip_repair_capture() -> None:
         except Exception as exc:
             st.session_state.skip_repair_status = "error"
             st.session_state.skip_repair_message = f"❌ Could not apply fix: {exc}"
-    else:
-        st.session_state.skip_repair_status = "error"
-        st.session_state.skip_repair_message = "❌ No locator captured. The browser may have timed out or been closed."
 
     st.rerun()
 
@@ -1028,6 +1038,32 @@ def _render_self_healing_results(report: HealingReport) -> None:
                 st.rerun()
 
 
+_ASSERTION_STEP_TYPES = frozenset({"assertion", "assert", "page_expectation", "url_assertion"})
+
+
+def _pick_repair_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return the step a human can act on, not the assertion after it.
+
+    The repair browser must open on the state BEFORE the failed assertion, so
+    the human can repeat the click that should have reached the right page.
+    When the newest step is an assertion, walk back to the interaction that
+    preceded it (click, fill, navigate). An assertion with no interaction
+    before it returns ``None`` - there is nothing to replay.
+    """
+    if not steps:
+        return None
+
+    failed = [index for index, step in enumerate(steps) if (step.get("result") or {}).get("status") == "failed"]
+    index = failed[-1] if failed else len(steps) - 1
+
+    while index >= 0 and str(steps[index].get("type") or "").lower() in _ASSERTION_STEP_TYPES:
+        index -= 1
+
+    if index < 0:
+        return None
+    return steps[index]
+
+
 def _failure_context(
     saved_path: str,
     test_name: str,
@@ -1059,8 +1095,7 @@ def _failure_context(
                     data = safe_read_sidecar(sidecar)
                     if isinstance(data, dict):
                         steps = data.get("steps") or []
-                        failed = [s for s in steps if (s.get("result") or {}).get("status") == "failed"]
-                        step = failed[-1] if failed else (steps[-1] if steps else None)
+                        step = _pick_repair_step(steps)
                         if step:
                             step_label = str(step.get("label") or step.get("type") or "")
                             page_url = str(step.get("url") or "")
@@ -1277,9 +1312,19 @@ def _render_repair_browser_session() -> None:
         st.rerun()
 
     with st.spinner(f"⏳ Browser is opening at `{failure_url}` — click the element you want to use..."):
-        replacement = run_codegen_session(failure_url, timeout_seconds=120)
+        outcome = run_codegen_session(failure_url, timeout_seconds=120)
 
-    if replacement:
+    if outcome.status == "cannot_replay":
+        st.session_state.repair_status = "error"
+        st.session_state.repair_message = f"❌ This step cannot be replayed: {outcome.reason}"
+    elif outcome.status == "failed":
+        st.session_state.repair_status = "error"
+        st.session_state.repair_message = f"❌ Codegen failed: {outcome.reason}"
+    elif not outcome.captured or not outcome.locator:
+        st.session_state.repair_status = "error"
+        st.session_state.repair_message = "❌ No locator captured. The browser may have been closed without a click."
+    else:
+        replacement = outcome.locator
         # B-041: use the real failing line when known so apply_patch's search
         # window (line_number ± ~10) actually contains the failing locator.
         # Previously line_number was always 1 (classifier never set it), so the
@@ -1309,9 +1354,6 @@ def _render_repair_browser_session() -> None:
         except Exception as exc:
             st.session_state.repair_status = "error"
             st.session_state.repair_message = f"❌ Could not patch: {exc}"
-    else:
-        st.session_state.repair_status = "error"
-        st.session_state.repair_message = "❌ No locator captured. The browser may have timed out or been closed."
 
     st.rerun()
 

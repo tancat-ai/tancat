@@ -72,9 +72,16 @@ def test_guard_ignores_content_shared_with_public_inputs(tmp_path: Path) -> None
     assert kanban.private_content_bleed(artifact, private_dir=private, public_text=shared) == []
 
 
-def test_private_content_check_passes_on_the_committed_board() -> None:
+def test_private_content_check_board_only_passes_on_the_committed_board() -> None:
     kanban = _load_kanban()
-    assert kanban.private_content_check() == 0
+    # --check keeps the board-only form; the machine scan is the CI gate.
+    assert kanban.private_content_check(include_machine=False) == 0
+
+
+def test_private_content_check_includes_the_machine_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    kanban = _load_kanban()
+    monkeypatch.setattr(kanban, "developer_machine_check", lambda: 1)
+    assert kanban.private_content_check() == 1
 
 
 def test_private_content_check_fails_on_a_poisoned_board(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

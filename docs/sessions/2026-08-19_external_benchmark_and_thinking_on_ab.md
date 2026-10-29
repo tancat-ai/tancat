@@ -32,7 +32,7 @@ box is NOT memory-starved; the 48 GB VRAM allocation is what llama.cpp uses.
 **Decision:** lm-eval pointed **at the live llama-server** via the OpenAI-compatible chat-completions backend. (Loading a second GGUF copy was possible given 64 GB, but pointing at the live server was simpler and avoided holding two copies resident.)
 
 ### Installed + validated
-- Separate venv at `C:\Users\l_a_c\code\lm-eval-bench\.venv` (Python 3.13.14).
+- Separate venv at `../lm-eval-bench/.venv` (Python 3.13.14).
 - `lm-eval 0.4.12` + `lm-eval[api]` (tenacity).
 - Backend: `--model local-chat-completions
   --model_args base_url=http://localhost:8080/v1/chat/completions`.
@@ -121,7 +121,8 @@ Thinking-ON is threaded and green; the model verdict is still pending valid runs
 > FILES tested, but the two GGUFs are **not equivalent-precision quantizations**
 > (3.6 = 6.71 bpw, 3.8 = 3.30 bpw) - so this is NOT a clean architecture
 > comparison and does NOT support a "3.6 wins" or "3.8 is worse" verdict.
-> See §7 CORRECTION. Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/`.
+> See §7 CORRECTION. Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/`
+> (llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).
 
 ## 6 (original). Thinking-ON A/B results (files as-tested, per-condition)
 
@@ -153,7 +154,7 @@ Both thinking-ON legs ran to completion (H=3.6, I=3.8). Full verified table:
 - `AITEST_RESOLUTION_TIMEOUT` (default 120) and `AITEST_GENERATION_TIMEOUT`
   (default 600) env-driven so thinking legs can raise budgets fairly (constant-
   in-code defaults, no silent drift).
-- lm-eval 0.4.12 in separate py3.13 venv (`C:\Users\l_a_c\code\lm-eval-bench`),
+- lm-eval 0.4.12 in separate py3.13 venv (`../lm-eval-bench`),
   local-chat-completions backend → live server.
 - Results + logs: scratch/eval_{H,I}_thinkingon*.log, scratch/lmeval_ext_*.log,
   scratch/model_ab_all_conditions.md, manifests manifest_thinkingon_{36,38}.json.
@@ -209,4 +210,4 @@ not "which model". No matched-precision Qwen3.8 is available to test.
 
 **Corrected bottom line:** AI-046 has NO defensible architecture verdict from
 current data. A valid re-test requires a Qwen3.8 at ~6.7 bpw (matching 3.6).
-Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/`.
+Evidence: `llm-benchmarks/evidence/model-ab-2026-08-20/` (llm-benchmarks/ is a separate checkout - no clone of this repo opens it; the figures quoted here are the evidence).

@@ -29,6 +29,7 @@ import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin
 
 from playwright.sync_api import sync_playwright
 
@@ -344,6 +345,7 @@ class JourneyScraper:
                         action=step.action,
                         description=step.description or "",
                         from_url=current_url or "",
+                        timestamp=time.time(),
                     )
                     trail_steps.append(observed)
 
@@ -618,14 +620,6 @@ class JourneyScraper:
 
     # ─── Diagnostic methods (spec: journey_scraper_silent_failure) ───
 
-    def get_skipped_steps(self) -> list[dict]:
-        """Return steps that were skipped during the journey."""
-        return [e for e in self._context_log if e.get("event") == "step_skipped"]
-
-    def get_locator_warnings(self) -> list[dict]:
-        """Return locator-not-found events from the context log."""
-        return [e for e in self._context_log if e.get("event") == "locator_not_found"]
-
     @staticmethod
     def _list_available_elements(page: Any, limit: int = 10) -> list[dict]:
         """List clickable elements on the page for diagnostic purposes."""
@@ -641,6 +635,72 @@ class JourneyScraper:
             )
         return elements
 
+    def _a11y_link_candidates(self, page: Any) -> list[dict[str, Any]]:
+        """Return the page's links as the BROWSER names them (t-0855, D1c).
+
+        Playwright's aria snapshot gives each link the accessible name the
+        browser computes from the web standard (aria-labelledby, a child
+        <img alt>, an SVG <title>, visible text) plus its real ``/url``. The
+        HTML scrape can only see what the markup literally says, so a link
+        whose visible text is missing or ambiguous - two "Shop" links, an
+        icon-only anchor - is named correctly only here.
+
+        Returns an empty list when the snapshot is unavailable; the caller
+        then behaves exactly as before.
+        """
+        try:
+            from src.aria_parser import parse_aria_snapshot
+
+            yaml_text = page.aria_snapshot(boxes=True)
+            aria_elements = parse_aria_snapshot(yaml_text)
+        except Exception:
+            self._debug("ARIA snapshot unavailable - link discovery sees markup only")
+            return []
+
+        links: list[dict[str, Any]] = []
+        for element in aria_elements:
+            if str(element.get("role", "")).strip().lower() not in {"link", "a"}:
+                continue
+            name = str(element.get("accessible_name") or element.get("text") or "").strip()
+            if name or element.get("href"):
+                links.append(element)
+        return links
+
+    @staticmethod
+    def _match_link_by_href(
+        elements: list[dict[str, Any]],
+        href: str,
+        current_url: str | None,
+    ) -> dict[str, Any] | None:
+        """Return the scraped anchor whose real href is *href*.
+
+        The a11y node supplies the identity (its accessible name) and the href;
+        the DOM element supplies the selector the journey actually clicks, so
+        the emitted locator stays the same shape as every other one.
+        """
+        if not href:
+            return None
+        try:
+            target = urljoin(current_url or "", href) if not href.startswith(("http://", "https://")) else href
+        except ValueError:
+            target = href
+        target = target.rstrip("/")
+        for element in elements:
+            element_href = str(element.get("raw_href") or element.get("href") or "").strip()
+            if not element_href:
+                continue
+            try:
+                absolute = (
+                    element_href
+                    if element_href.startswith(("http://", "https://"))
+                    else urljoin(current_url or "", element_href)
+                )
+            except ValueError:
+                continue
+            if absolute.rstrip("/") == target:
+                return element
+        return None
+
     def _discover_link_selector(self, page: Any, description: str) -> str | None:
         """Find the HYPERLINK that names the destination of a navigation step.
 
@@ -649,6 +709,11 @@ class JourneyScraper:
         are on, so the journey does the same and the browser observes where
         the click really lands. Only an anchor counts - a button with the
         same words ("Add to cart") is a different action.
+
+        t-0855 (D1c): the markup is tried first, unchanged. When it names no
+        link - the visible text is absent or ambiguous - the browser's own
+        accessible names are tried next, and the DOM anchor carrying that
+        href supplies the clickable selector.
         """
         from src.navigation_target import find_navigation_anchor
 
@@ -666,6 +731,26 @@ class JourneyScraper:
             pass
 
         anchor = find_navigation_anchor(description, elements)
+        if anchor is None:
+            # D1c: the browser-computed accessible name, as a back-up for a
+            # page whose own labels do not name the link.
+            aria_link = find_navigation_anchor(description, self._a11y_link_candidates(page))
+            if aria_link is not None:
+                named_by_a11y = str(aria_link.get("accessible_name") or aria_link.get("text") or "").strip()
+                dom_anchor = self._match_link_by_href(elements, str(aria_link.get("href") or ""), page.url)
+                if dom_anchor is not None:
+                    anchor = dom_anchor
+                    self._debug(
+                        f"Link for '{description}' named by the browser's accessible name "
+                        f"'{named_by_a11y}' -> {anchor.get('selector')}"
+                    )
+                else:
+                    anchor = aria_link
+                    self._debug(
+                        f"Link for '{description}' named by the browser's accessible name "
+                        f"'{named_by_a11y}' (no DOM anchor matched its href {aria_link.get('href')!r})"
+                    )
+
         if anchor is None:
             self._debug(f"No hyperlink names the destination '{description}'")
             return None
@@ -1149,9 +1234,20 @@ class JourneyScraper:
         try:
             locator.click(timeout=min(5000, timeout_ms))
             self._debug(f"Clicked successfully: {selector}")
-        except Exception as e:
-            self._debug(f"Click exception: {e}")
-            raise
+        except Exception:
+            # t-0881: an open overlay (the "Added to cart" modal) intercepts the
+            # pointer, so the click never lands and the page after it is never
+            # captured. Dismiss the overlay and retry the SAME click once; the
+            # retry keeps full actionability checks (no force click) and a click
+            # that still does not land raises as before.
+            from src.browser_utils import click_with_overlay_retry
+
+            try:
+                click_with_overlay_retry(page, locator, min(5000, timeout_ms), log=self._debug)
+                self._debug(f"Clicked successfully: {selector}")
+            except Exception as e:
+                self._debug(f"Click exception: {e}")
+                raise
         page.wait_for_timeout(500)
         self._dismiss_consent_overlays(page)
         self._dismiss_modals(page)
@@ -1254,32 +1350,46 @@ class JourneyScraper:
         placeholder resolution can click/fill elements in any section.
         Best-effort — non-destructive if no section pattern is detected.
         """
+        # Local import keeps the playwright-typed module out of the scraper's
+        # import graph for callers that never touch a browser.
+        from src.browser_utils import OVERLAY_CONTAINER_SELECTOR
+
         try:
             page.evaluate(
                 """
-                () => {
+                (overlaySelector) => {
+                    // t-0881: never reveal an overlay. A modal the journey just
+                    // dismissed is inline ``display:none``, and pattern 2 below
+                    // would set it back to ``block`` - resurrecting the very
+                    // overlay that intercepts the next click.
+                    const isOverlay = (el) => el.matches(overlaySelector) || el.closest(overlaySelector) !== null;
+
                     // Pattern 1: .page { display:none } / .page.active { display:block }
                     const pages = document.querySelectorAll('.page');
                     pages.forEach(el => {
+                        if (isOverlay(el)) { return; }
                         el.style.display = 'block';
                         el.classList.add('active');
                     });
 
                     // Pattern 2: sections hidden via display:none in inline styles
                     document.querySelectorAll('[style*="display: none"], [style*="display:none"]').forEach(el => {
+                        if (isOverlay(el)) { return; }
                         el.style.display = 'block';
                     });
 
                     // Pattern 3: Any section/div that is a direct child of the form
                     // and is not visible, but has interactive elements
                     document.querySelectorAll('section, .section, [class*="Section"]').forEach(el => {
+                        if (isOverlay(el)) { return; }
                         const style = window.getComputedStyle(el);
                         if (style.display === 'none') {
                             el.style.display = 'block';
                         }
                     });
                 }
-                """
+                """,
+                OVERLAY_CONTAINER_SELECTOR,
             )
             page.wait_for_timeout(200)
         except Exception:
@@ -1296,38 +1406,15 @@ class JourneyScraper:
     def _dismiss_modals(page: Any) -> None:
         """Dismiss confirmation modals/popups that block pointer events.
 
-        B-023: On sites like automationexercise.com, the "Added to cart"
-        confirmation modal (#cartModal) intercepts clicks on navigation links.
-        This dismisses common modal patterns before click steps so the journey
-        scraper doesn't waste time retrying blocked clicks.
-
-        Non-destructive: if no modal is visible, these selectors won't match
-        and the dismissal is a no-op.
+        Delegates to :func:`src.browser_utils.dismiss_blocking_modals`, which
+        scopes every dismiss control inside a modal container. The previous
+        local version built a comma-joined CSS selector list, so ``.first``
+        resolved to the modal ``div`` itself and the dismissal never happened
+        (t-0881: the cart link stayed intercepted by ``#cartModal``).
         """
-        # B-015 lesson: never match generic button text globally — saucedemo's
-        # cart page has a visible "Continue Shopping" button that would get
-        # clicked and navigate the journey back to inventory. Text-based
-        # dismissal is scoped to modal/dialog containers only.
-        modal_containers = "#cartModal, .modal, [role='dialog'], .modal-dialog, .modal-content"
-        dismiss_selectors = [
-            f"{modal_containers} button:has-text('Continue Shopping')",
-            f"{modal_containers} .continue-shopping",
-            f"{modal_containers} .close",
-            f"{modal_containers} .modal-close",
-            f"{modal_containers} .close-btn",
-            f"{modal_containers} [data-dismiss='modal']",
-            f"{modal_containers} .modal-footer .btn",
-            "button.btn-success.close-modal",
-        ]
-        for selector in dismiss_selectors:
-            try:
-                locator = page.locator(selector).first
-                if locator.is_visible(timeout=200):
-                    locator.click(timeout=1000)
-                    page.wait_for_timeout(300)  # Allow modal animation to complete
-                    return  # Only dismiss one modal
-            except Exception:
-                continue
+        from src.browser_utils import dismiss_blocking_modals
+
+        dismiss_blocking_modals(page)
 
 
 # ─── Subprocess entry (delegates to journey_subprocess.py) ───

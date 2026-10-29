@@ -10,10 +10,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 from eval_metrics import ResolutionResult, StoryResult
+
+# The product owns the page-identity rule (src/page_identity.py). Eval must use
+# the same comparator, not a second copy: two comparators that disagree is how a
+# gate number drifts from the product. sys.path[0] is scripts/eval when this
+# module is run from there, so add the project root explicitly.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from src.page_identity import same_page as _same_page  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Code parsing
@@ -334,14 +345,40 @@ def _to_have_url_arg(expr: str) -> str | None:
     return None
 
 
-def _same_url_without_slash(a: str, b: str) -> bool:
-    """Trailing-slash-insensitive URL comparison for ``to_have_url`` assertions.
+def accepts_page_arrival(placeholder: dict[str, Any]) -> bool:
+    """True when this golden placeholder is satisfied by arriving at its page.
 
-    Production ``normalize_url`` canonicalizes root URLs to ``https://host/``
-    (the site redirects), while goldens may hold the no-slash form — the two
-    must count as the same assertion target.
+    A criterion that says only "go to the page" (``criterion_kind: "page"``)
+    is proved by the browser being on that page. The key says so when its
+    expected locator - or one of its tolerances - is a ``to_have_url``
+    expression: the matcher then compares page identity, not an element, so an
+    arrival at the right page passes and an arrival at any other page does not
+    (``_locators_match``).
+
+    A page criterion keyed only to an element cannot accept arrival at all.
+    ``eval_harness.py dataset --validate`` names those keys instead of leaving
+    them silent, so the defect this function answers (t-1014) cannot return.
     """
-    return a.rstrip("/") == b.rstrip("/")
+    locators = [str(placeholder.get("expected_locator") or "")]
+    locators.extend(str(item) for item in placeholder.get("tolerance_selectors") or [])
+    return any(_to_have_url_arg(locator) for locator in locators)
+
+
+def _same_url_identity(a: str, b: str) -> bool:
+    """True when two URLs name the same page: scheme + host + path.
+
+    Delegates to the product's rule in ``src/page_identity.py``. Query and
+    fragment are ignored, trailing slashes are ignored, and a URL with no host
+    fails open exactly as the product does. Product ``normalize_url``
+    canonicalizes root URLs to ``https://host/`` while goldens may hold the
+    no-slash form; identity treats those as equal too.
+    """
+    return _same_page(a, b)
+
+
+def _same_url_without_slash(a: str, b: str) -> bool:
+    """Backward-compatible name; now compares page identity (t-0934)."""
+    return _same_url_identity(a, b)
 
 
 # B-100 part 3: verification strength comes from the pipeline's own emit-time
@@ -413,11 +450,11 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
     # may hold the bare form).
     resolved_url = _to_have_url_arg(resolved)
     expected_url = _to_have_url_arg(expected)
-    if resolved_url and expected_url and _same_url_without_slash(resolved_url, expected_url):
+    if resolved_url and expected_url and _same_url_identity(resolved_url, expected_url):
         return True
     for t in tolerances:
         t_url = _to_have_url_arg(t)
-        if resolved_url and t_url and _same_url_without_slash(resolved_url, t_url):
+        if resolved_url and t_url and _same_url_identity(resolved_url, t_url):
             return True
     # AI-037 Phase 3: has-text substring equivalence (Playwright semantics).
     # Both locators must use :has-text() and the tag must match; then the

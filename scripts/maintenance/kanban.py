@@ -5,8 +5,9 @@ The roadmap now lives under the ignored ``docs/private/``. A default run is
 public-only: it reads BACKLOG.md and never reads anything under ``docs/private/``,
 so the committed board carries no private content. ``--with-private`` includes
 the private roadmap for a local view - that output must not be committed.
-``--check-private`` fails when a committed board carries private content (the
-blocking CI guard); ``--check`` runs that guard, then checks freshness.
+``--check-private`` fails when a committed board carries private content OR a
+tracked fixture/evidence path carries developer-machine content (the blocking
+CI guard); ``--check`` runs the board guard, then checks freshness.
 
 BACKLOG.md  -> bugs, issues found, unplanned changes
 ROADMAP.md  -> planned features and milestones (private; local view only)
@@ -17,8 +18,14 @@ wins for column assignment.
 
 from __future__ import annotations
 
+import getpass
+import os
+import platform
 import re
+import socket
+import subprocess
 import sys
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from html import escape as html_escape
 from pathlib import Path
@@ -29,6 +36,88 @@ PRIVATE_DIR = ROOT / "docs" / "private"
 ROADMAP_PUBLIC_PATH = ROOT / "docs" / "plans" / "ROADMAP_ROADTO_PRODUCTION.md"
 ROADMAP_PRIVATE_PATH = PRIVATE_DIR / "ROADMAP_ROADTO_PRODUCTION.md"
 KANBAN_PATH = ROOT / "kanban.html"
+
+# -- Developer-machine guard ---------------------------------------------------
+
+#: Tracked roots that hold fixtures, evidence, or committed run output. Source,
+#: tests, and agent notes are outside this list: a home path in a code comment
+#: is a different guard's problem, and historical docs are prose (see the
+#: CONTRIBUTING note for what this deliberately cannot see).
+MACHINE_SCAN_ROOTS: tuple[str, ...] = (
+    "fixtures",
+    "docs",
+    "exported_tests",
+    "generated_tests",
+    "screenshots",
+    "evidence",
+    "training_data",
+    "scripts/archive",
+)
+
+_DOCS_ROOT = "docs"
+_MIN_IDENTITY_LEN = 3
+
+#: An ABSOLUTE citation to an ignored directory must name a file (with an
+#: extension) or a file:line. The t-0912 scrub publishes the safe relative form
+#: (``scratch/gate1_out/...``) and the README says so; only a machine-absolute
+#: form is a leak.
+_IGNORED_CITATION_RE = re.compile(
+    r"(?<![\w.-])(?:[a-z]:/|/)[^\s`'\"<>]*(?:scratch|docs/private|graphify-out"
+    r"|\.zvec-grep|evidence)/[^\s`'\"<>]*\.[A-Za-z0-9]{1,8}(?::\d+)?"
+)
+
+#: Any absolute Windows / macOS / Linux home path, matched after backslashes
+#: are normalised to forward slashes (JSON-escaped paths included).
+_HOME_PATH_RE = re.compile(
+    r"(?i)(?:[a-z]:/+(?:Users|Documents and Settings)/+|/c/Users/+|/(?:home|Users)/+)"
+    r"([^/\s\"'<>]+)"
+)
+
+#: An XML/HTML attribute, not the word ``hostname`` in prose.
+_HOSTNAME_ATTRIBUTE_RE = re.compile(
+    r"<\w+[^>]*\bhostname\s*=\s*['\"][^'\"]+['\"]",
+    re.IGNORECASE,
+)
+
+_BINARY_SUFFIXES = frozenset(
+    {
+        ".7z",
+        ".bin",
+        ".bmp",
+        ".db",
+        ".gif",
+        ".gz",
+        ".ico",
+        ".jpeg",
+        ".jpg",
+        ".mp4",
+        ".otf",
+        ".pdf",
+        ".png",
+        ".sqlite",
+        ".ttf",
+        ".webm",
+        ".webp",
+        ".woff",
+        ".woff2",
+        ".zip",
+    }
+)
+
+
+class DeveloperMachineFinding:
+    """One developer-machine shape found in a tracked file."""
+
+    def __init__(self, path: str, line: int, kind: str, matched: str) -> None:
+        self.path = path
+        self.line = line
+        self.kind = kind
+        self.matched = matched
+
+    def format(self) -> str:
+        """Render as ``file:line: kind: match`` for the CI log."""
+        return f"{self.path}:{self.line}: {self.kind}: {self.matched!r}"
+
 
 # ── Column mapping ──────────────────────────────────────────────────────────
 
@@ -603,12 +692,172 @@ def private_content_bleed(
 # ── Check mode ───────────────────────────────────────────────────────────────
 
 
-def private_content_check() -> int:
-    """Exit 0 if kanban.html carries no private content, 1 if it does.
+_GENERIC_IDENTITIES = frozenset({"admin", "appuser", "actionuser", "root", "runner", "user"})
+_GENERIC_MACHINE_NAMES = frozenset({"build", "docker", "localhost", "runner"})
+
+
+def _developer_identities() -> tuple[set[str], set[str]]:
+    """Return the current user and machine names, derived at check time."""
+    user_candidates: list[str | None] = [
+        os.environ.get("USERNAME"),
+        os.environ.get("USER"),
+        os.environ.get("LOGNAME"),
+    ]
+    try:
+        user_candidates.append(getpass.getuser())
+    except Exception:
+        pass
+    machine_candidates: list[str | None] = [
+        os.environ.get("COMPUTERNAME"),
+        os.environ.get("HOSTNAME"),
+        socket.gethostname(),
+        platform.node(),
+    ]
+    users = {
+        value
+        for value in user_candidates
+        if value and len(value) >= _MIN_IDENTITY_LEN and value.lower() not in _GENERIC_IDENTITIES
+    }
+    machines = {
+        value
+        for value in machine_candidates
+        if value and len(value) >= _MIN_IDENTITY_LEN and value.lower() not in _GENERIC_MACHINE_NAMES
+    }
+    return users, machines
+
+
+def _is_docs_path(path: Path, root: Path) -> bool:
+    """True when *path* is under the docs/ root (prose, not run output)."""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    return bool(relative.parts) and relative.parts[0] == _DOCS_ROOT
+
+
+def _read_text(path: Path) -> str | None:
+    """Read a text file; return None for binary or unreadable files."""
+    if path.suffix.lower() in _BINARY_SUFFIXES:
+        return None
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return None
+    if b"\0" in data[:4096]:
+        return None
+    return data.decode("utf-8", errors="replace")
+
+
+def _tracked_machine_paths(root: Path = ROOT) -> list[Path]:
+    """Return tracked files under the fixture/evidence/run-output roots."""
+    command = ["git", "ls-files", "-z", "--", *MACHINE_SCAN_ROOTS]
+    try:
+        completed = subprocess.run(command, cwd=str(root), capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(f"git ls-files failed: {exc}") from exc
+    names = completed.stdout.decode("utf-8", errors="replace").split("\0")
+    return [root / name for name in names if name]
+
+
+def developer_machine_findings(
+    paths: Iterable[Path],
+    *,
+    root: Path = ROOT,
+) -> list[DeveloperMachineFinding]:
+    """Return developer-machine shapes found in *paths*.
+
+    Covers an absolute Windows/macOS/Linux home path, an XML/HTML hostname
+    attribute, the current user's name, the current machine name (run output
+    only), and an absolute citation to a gitignored path that names a file.
+    Docs are scanned for home paths and hostname attributes, but not for plain
+    user or machine names: the hostname is also the public handle, and flagging
+    it in prose would be a false positive.
+    """
+    users, machines = _developer_identities()
+    user_patterns = [re.compile(rf"(?i)\b{re.escape(value)}\b") for value in users]
+    machine_patterns = [re.compile(rf"\b{re.escape(value)}\b") for value in machines]
+
+    findings: list[DeveloperMachineFinding] = []
+    seen: set[tuple[str, int, str, str]] = set()
+    for path in paths:
+        text = _read_text(path)
+        if text is None:
+            continue
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            relative = path
+        is_docs = _is_docs_path(path, root)
+        for line_number, raw_line in enumerate(text.splitlines(), start=1):
+            line = raw_line.replace("\\", "/")
+            checks: list[tuple[str, str]] = []
+            match = _HOME_PATH_RE.search(line)
+            if match:
+                checks.append(("home path", match.group(0)))
+            match = _HOSTNAME_ATTRIBUTE_RE.search(raw_line)
+            if match:
+                checks.append(("hostname attribute", match.group(0)))
+            if not is_docs:
+                for pattern in user_patterns:
+                    match = pattern.search(raw_line)
+                    if match:
+                        checks.append(("current username", match.group(0)))
+                        break
+                for pattern in machine_patterns:
+                    match = pattern.search(raw_line)
+                    if match:
+                        checks.append(("machine name", match.group(0)))
+                        break
+                match = _IGNORED_CITATION_RE.search(line)
+                if match:
+                    checks.append(("ignored-path citation", match.group(0)))
+            for kind, matched in checks:
+                key = (str(relative), line_number, kind, matched)
+                if key in seen:
+                    continue
+                seen.add(key)
+                findings.append(
+                    DeveloperMachineFinding(
+                        path=str(relative),
+                        line=line_number,
+                        kind=kind,
+                        matched=matched,
+                    )
+                )
+    return findings
+
+
+def developer_machine_check(
+    paths: Iterable[Path] | None = None,
+    *,
+    root: Path = ROOT,
+) -> int:
+    """Exit 0 if tracked fixture/evidence paths are clean, 1 otherwise."""
+    try:
+        files = list(paths) if paths is not None else _tracked_machine_paths(root)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+    findings = developer_machine_findings(files, root=root)
+    if not findings:
+        print("OK: tracked fixtures/evidence carry no developer-machine content")
+        return 0
+    print("ERROR: tracked fixtures/evidence carry developer-machine content:")
+    for finding in findings[:50]:
+        print(f"  - {finding.format()}")
+    if len(findings) > 50:
+        print(f"  ... and {len(findings) - 50} more")
+    print("Remove the machine-specific text, or cite a committed relative path instead.")
+    return 1
+
+
+def private_content_check(include_machine: bool = True) -> int:
+    """Exit 0 if public artefacts carry no private content, 1 if they do.
 
     This is its own blocking CI gate (``--check-private``): a committed artefact
-    with private material fails the build. The general freshness check stays
-    warning-only, so the two concerns are split.
+    with private or developer-machine material fails the build. ``--check``
+    keeps ``include_machine=False`` so the local pre-commit freshness hook is
+    not blocked by the historical findings this guard exists to surface.
     """
     if not KANBAN_PATH.exists():
         print("ERROR: kanban.html does not exist. Run scripts/maintenance/kanban.py")
@@ -616,15 +865,17 @@ def private_content_check() -> int:
 
     existing = KANBAN_PATH.read_text(encoding="utf-8")
     bleed = private_content_bleed(existing)
-    if not bleed:
-        print("OK: kanban.html carries no content from docs/private/")
-        return 0
+    if bleed:
+        print("ERROR: kanban.html carries content from docs/private/:")
+        for marker in bleed[:5]:
+            print(f"  - {marker[:100]!r}")
+        print("Regenerate the public board: python scripts/maintenance/kanban.py")
+        return 1
 
-    print("ERROR: kanban.html carries content from docs/private/:")
-    for marker in bleed[:5]:
-        print(f"  - {marker[:100]!r}")
-    print("Regenerate the public board: python scripts/maintenance/kanban.py")
-    return 1
+    print("OK: kanban.html carries no content from docs/private/")
+    if not include_machine:
+        return 0
+    return developer_machine_check()
 
 
 def check_mode() -> int:
@@ -633,9 +884,11 @@ def check_mode() -> int:
         print("ERROR: kanban.html does not exist. Run kanban.py without --check to generate it.")
         return 1
 
-    # The private-content guard runs first and fails exactly as `--check-private`
-    # does. The freshness comparison below is the separate concern.
-    if private_content_check() != 0:
+    # The board guard runs first. The machine-content scan is the CI gate
+    # (``--check-private``); it is deliberately not part of this local
+    # freshness check, because that scan reports historical findings until the
+    # owner decides how to clear them.
+    if private_content_check(include_machine=False) != 0:
         return 1
 
     existing = KANBAN_PATH.read_text(encoding="utf-8")

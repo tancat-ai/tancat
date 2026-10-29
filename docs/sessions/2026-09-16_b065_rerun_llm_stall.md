@@ -35,7 +35,7 @@ nonexistent classes; `a[href]` selectors losing the host). The plan
 re-run the **35-criterion landing-page story** end-to-end (regenerate the test
 suite with the LLM, then execute it against the locally served `landing/` page)
 and see the red count drop from **23 failed / 25 passed** (baseline,
-`scratch/rerun48.log`, 673s) to **≈8 failed**. The re-run needs the local LLM
+`scratch/rerun48.log` [disposable], 673s) to **≈8 failed**. The re-run needs the local LLM
 server (LM Studio → Qwen3.8-27B-GGUF) to handle ~35 skeleton-fragment calls
 (~2K-token prompts, ~17s each) plus a dozen more resolution calls, without a
 600s stall.
@@ -93,7 +93,7 @@ but a different config, "thinking turned off"**.
 - Machine: AMD Strix Halo / Radeon 8060S, 64GB unified memory, ~48GB GPU commit.
   Qwen3.8-27B Q4_K_XL + KV ≈ 36GB → ~12GB headroom. Windows 11.
 - Server: LM Studio (llama.cpp Vulkan build, rolling builds in
-  `C:\Users\l_a_c\llama.ccp config\` — outside this repo), OpenAI-compatible
+  `<home>/llama.ccp config/` — outside this repo), OpenAI-compatible
   `:8080`. `.env`: `LLM_PROVIDER=openai-local`, `OPENAI_BASE_URL=http://localhost:8080`.
 - Client: `src/llm_client.py` → `src/llm_providers/__init__.py`
   (`LMStudioProvider`/`OpenAIProvider`): one long-lived `httpx.Client`
@@ -101,7 +101,7 @@ but a different config, "thinking turned off"**.
   `timeout=600` for generation). Exact payload for the failing call type:
   ```json
   {
-    "model": "C:\\Users\\l_a_c\\.lmstudio\\models\\unsloth\\Qwen3.8-27B-GGUF\\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+    "model": "<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
     "messages": [
       {"role": "system", "content": "<617-char instruction>"},
       {"role": "user", "content": "<~7.1K-char per-condition skeleton prompt, ~2040 prompt_tokens>"}
@@ -144,7 +144,7 @@ but a different config, "thinking turned off"**.
 
 **Pipeline attempts:** all 6 failed per §3 table.
 
-**Workarounds tried in the re-run script (`scratch/rerun_b065.py`):**
+**Workarounds tried in the re-run script (`scratch/rerun_b065.py` [disposable]):**
 - Switching from `orchestrator.run_pipeline` to the CLI-grade
   `src.ui_pipeline.run_pipeline` (writes the artifact package; needed anyway —
   the former path loses generated code).
@@ -171,7 +171,7 @@ it stalls specific requests.
    `chat_template_kwargs`, so the new server-side config governs; probe3
    (identical payload) produced valid 57–85-token skeletons, not reasoning burn.
 3. **Prompt size/content** — the exact failing prompts (captured verbatim,
-   `scratch/b065_prompt_dump.jsonl`) complete fine when sent from standalone
+   `scratch/b065_prompt_dump.jsonl` [disposable]) complete fine when sent from standalone
    processes, including the one that timed out inside the pipeline (prompt 6 /
    TC01.06).
 4. **Payload differences** — replicated exactly (system message, temp, max_tokens,
@@ -199,14 +199,14 @@ it stalls specific requests.
    excluded (the patch only touched httpx pooling).
 4. **Windows/network-stack interaction** with the specific llama.cpp build —
    test by serving the same GGUF via a plain `llama-server` (the user's
-   llama.cpp builds live in `C:\Users\l_a_c\llama.ccp config\`) instead of
+   llama.cpp builds live in `<home>/llama.ccp config/`) instead of
    LM Studio.
 
 **Suggested first experiments (cheap → expensive):**
-- a) Re-run `uv run python scratch/stall_probe3.py` **from inside a process that
+- a) Re-run `uv run python scratch/stall_probe3.py` [disposable] **from inside a process that
   first seeds the RAG store** (e.g. after instantiating the pipeline), to see if
   co-residency with milvus-lite/gRPC reproduces the stall.
-- b) Run `scratch/rerun_b065.py` while tailing LM Studio's own server log and
+- b) Run `scratch/rerun_b065.py` [disposable] while tailing LM Studio's own server log and
   `rocm-smi`/GPU memory; correlate the stall with server-side state.
 - c) Revert LM Studio to yesterday's working config and re-run.
 - d) Serve the GGUF with bare `llama-server` on :8080 and re-run.
@@ -214,22 +214,22 @@ it stalls specific requests.
 ## 8. Artifacts & commands
 
 **Files**
-- `scratch/rerun_b065.py` — the re-run script (uses `src.ui_pipeline.run_pipeline`,
+- `scratch/rerun_b065.py` [disposable] — the re-run script (uses `src.ui_pipeline.run_pipeline`,
   pom_mode=True, writes the package, then runs the 48-test suite; logs to
-  `scratch/rerun_b065_gen.log` + `scratch/rerun_b065_suite.log`). The story and
+  `scratch/rerun_b065_gen.log` [disposable] + `scratch/rerun_b065_suite.log` [disposable]). The story and
   35 criteria are embedded; the landing page must be served on :8079 first:
   `cd landing && python -m http.server 8079`.
-- `scratch/b065_prompt_dump.jsonl` — 6 real captured skeleton-fragment prompts
+- `scratch/b065_prompt_dump.jsonl` [disposable] — 6 real captured skeleton-fragment prompts
   (verbatim, incl. the one that timed out in-pipeline).
-- `scratch/capture_prompt.py` — prompt-capture harness (monkeypatches
+- `scratch/capture_prompt.py` [disposable] — prompt-capture harness (monkeypatches
   `LLMClient.generate`).
-- `scratch/stall_probe.py` / `stall_probe2.py` / `stall_probe3.py` — the probes
+- `scratch/stall_probe.py` [disposable] / `stall_probe2.py` / `stall_probe3.py` — the probes
   from §5 (probe3 = exact pipeline payload replica).
-- `scratch/rerun_b065_gen.log` — latest generation log (run 6, failed).
-- `scratch/rerun48.log` — BASELINE suite result: `23 failed, 25 passed in 673.02s`.
+- `scratch/rerun_b065_gen.log` [disposable] — latest generation log (run 6, failed).
+- `scratch/rerun48.log` [disposable] — BASELINE suite result: `23 failed, 25 passed in 673.02s`.
 - `generated_tests/test_20260915_194227_as_a_prospective_customer_i_want_to_review_the_ta/`
   — baseline 48-test package (pre-fix selectors; do not use for acceptance).
-- `scratch/landing_page_story.md` — the 35-criterion story (source of truth).
+- `scratch/landing_page_story.md` [disposable] — the 35-criterion story (source of truth).
 - Health probe (run before any re-attempt):
   ```
   uv run python -c "import httpx,time; t=time.time(); r=httpx.post('http://localhost:8080/chat/completions', json={'model':'local','messages':[{'role':'user','content':'What is 2+2? Answer with just the number.'}],'max_tokens':50,'temperature':0}, timeout=120); print(round(time.time()-t,1), r.json()['choices'][0]['message']['content'])"

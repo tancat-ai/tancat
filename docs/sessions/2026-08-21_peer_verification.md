@@ -33,12 +33,12 @@ add `--checksum` verification to file operations.
 ### 1.1 Git status misinspection — REPRODUCED and CORRECTED
 The repo `AI-Playwright-Test-Generator` is a valid git repo, branch `main`,
 HEAD `b22b086a83ec0b5092d407701b0261da4957e02a`. The prior misinspection ran
-`git status` from `/c/Users/l_a_c/code` (a parent directory). Verified: 8 files
+`git status` from `..` (the project folder's parent). Verified: 8 files
 modified, 7 untracked `test_*.py` in `generated_tests/`, none deleted or staged.
 
 ### 1.2 False "vanishing" claim for `compare/` / `configs/` — not true
 `llm-benchmarks/` is NOT inside this repo; it is the sibling directory
-`/c/Users/l_a_c/code/llm-benchmarks/`. Both folders exist there:
+`../llm-benchmarks/`. Both folders exist there:
 - `configs/` → `gemma-4-31b.yaml`, `qwen36-27b-eval.yaml`,
   `qwen38-27b-eval.yaml`, `qwen38-27b-pi.yaml`, `qwen38-27b-q6.yaml`
 - `compare/` → `compare.html`
@@ -75,7 +75,7 @@ in git history and are not recoverable.**
 
 ## 2 — `llm-benchmarks/` now has its own git repo
 
-Per user decision, `/c/Users/l_a_c/code/llm-benchmarks/` was initialized as a
+Per user decision, `../llm-benchmarks/` was initialized as a
 standalone git repository (`git init -b main`), replacing its prior "completely
 unversioned" state (confirmed: `fatal: not a git repository`).
 

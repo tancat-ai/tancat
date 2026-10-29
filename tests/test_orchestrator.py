@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from src.journey_models import ObservedStep, ObservedTrail
 from src.journey_scraper import CredentialProfile
 from src.orchestrator import TestOrchestrator
 from src.spec_analyzer import TestCondition
@@ -246,13 +247,12 @@ def test_02_go_to_cart(page: Page):
         conditions="1. Go to cart\n2. Check out",
     )
 
-    # Concept-driven candidates ARE generated (re-enabled 2026-08-03), but
-    # strictly same-domain: SPA sites (saucedemo) expose no hrefs for journey
-    # discovery, so candidates from the shared route vocabulary fill the gap
-    # without cross-site hallucination.
-    assert discovered[0] == "https://example.com/"
-    assert all(url.startswith("https://example.com/") for url in discovered)
-    assert "https://example.com/cart" in discovered  # cart concept → /cart candidate
+    # t-0877 (owner's rule, 2026-10-23): the scrape list is the human's URLs and
+    # nothing else. This used to assert that a "cart" concept produced a
+    # /cart candidate from the shared route vocabulary - a page nobody named and
+    # the browser never reached. Inverted: the story's concepts must NOT create
+    # an address. Real pages are found by following real links (t-0847).
+    assert discovered == ["https://example.com/"], f"a page was invented: {discovered}"
 
 
 def test_run_pipeline_preserves_page_requirements_metadata() -> None:
@@ -689,10 +689,14 @@ def test_02_verify_cart(page: Page):
         )
     )
 
-    assert "evidence_tracker.navigate('https://example.com/')" in final_code
+    # t-1049: the emitted goto names the page it expects.
+    assert "evidence_tracker.navigate('https://example.com/', expected_page='https://example.com/')" in final_code
     # NOTE: :visible suffix removed — Playwright auto-waits for elements before clicking
     assert "evidence_tracker.click('a[href=\"/view_cart\"]'" in final_code
-    assert "evidence_tracker.navigate('https://example.com/view_cart')" in final_code
+    assert (
+        "evidence_tracker.navigate('https://example.com/view_cart', "
+        "expected_page='https://example.com/view_cart')" in final_code
+    )
     # B-020: ASSERT can resolve to assert_visible or assert_text depending on LLM assertion_type
     assert (
         "evidence_tracker.assert_visible('#cart-summary'" in final_code
@@ -825,7 +829,8 @@ def test_checkout(page: Page):
     # page.goto is normalised to evidence_tracker.navigate
     # evidence_tracker.navigate() calls dismiss_consent_overlays internally,
     # so no explicit injection is needed in auto-dismiss mode
-    assert 'evidence_tracker.navigate("https://example.com/")' in final_code
+    # t-1049: the emitted goto names the page it expects.
+    assert 'evidence_tracker.navigate("https://example.com/", expected_page="https://example.com/")' in final_code
     assert "page.goto(" not in final_code
 
 
@@ -924,7 +929,25 @@ def test_02_add_item(page):
                 "https://www.saucedemo.com/inventory.html",
                 "https://www.saucedemo.com/cart.html",
             ],
-            {},  # observed_trails (AI-052)
+            {
+                # t-0978: the login redirect is the landing for "products
+                # page loaded". The scraper records the click; the ASSERT has
+                # no separate scrape step, so the trail completion fills it.
+                "test_01_login": ObservedTrail(
+                    steps=[
+                        ObservedStep(
+                            0,
+                            "click",
+                            description="login button",
+                            from_url="https://www.saucedemo.com",
+                            to_url="https://www.saucedemo.com/inventory.html",
+                            navigated=True,
+                            scraped=True,
+                            selector_used="#login-button",
+                        )
+                    ]
+                )
+            },
         )
     )
     # Prevent CartSeedingScraper from making real HTTP calls and overwriting mock data
