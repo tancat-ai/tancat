@@ -262,6 +262,22 @@ def test_a_dead_must_move_click_stops_with_reason_three(tmp_path: Path) -> None:
     assert tracker.steps[0]["result"]["status"] == "failed"
 
 
+def test_a_stop_naming_a_hidden_label_is_not_caught_by_the_fallback(tmp_path: Path) -> None:
+    """t-1100: the mention of "hidden" in a stop message must not hand the stop to
+    the hover/scoring fallback, which would record a second, passing click step."""
+    page = _Page("https://shop.example.com/catalog.html")
+    tracker = _tracker(page, tmp_path)
+
+    with pytest.raises(JourneyStopped):
+        tracker.click("#hidden-tab", label="hidden tab", must_move=True)
+
+    assert len(tracker.steps) == 1
+    assert tracker.steps[0]["result"]["status"] == "failed"
+    assert [f["step"] for f in tracker.journey_failures()] == [1]
+    assert tracker.stop is not None
+    assert tracker.stop["reason"] == "no_arrival"
+
+
 def test_a_click_the_story_does_not_expect_to_move_never_arms_rule_three(tmp_path: Path) -> None:
     page = _Page("https://shop.example.com/catalog.html")
     tracker = _tracker(page, tmp_path)
@@ -316,6 +332,7 @@ def test_the_time_limit_stops_with_reason_four(tmp_path: Path) -> None:
     assert tracker.stop is not None
     assert tracker.stop["reason"] == "time_limit"
     assert "per-test limit" in tracker.stop["detail"]
+    assert tracker.stop["detail"][0].isupper()  # t-1100: "... reached. The test ran 10s ..."
 
 
 def test_the_time_limit_can_be_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

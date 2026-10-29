@@ -906,7 +906,7 @@ class EvidenceTracker:
         if elapsed > self._time_limit_s:
             self._stop_journey(
                 "time_limit",
-                f"the test ran {elapsed:.0f}s, over the {self._time_limit_s:.0f}s per-test limit",
+                f"The test ran {elapsed:.0f}s, over the {self._time_limit_s:.0f}s per-test limit.",
             )
 
     def _fail_stopped_step(self, detail: str) -> None:
@@ -1563,6 +1563,14 @@ class EvidenceTracker:
                     self._mark_off_course_steps()
                     self._stop_journey("no_arrival", detail)
                 return
+            except JourneyStopped:
+                # A rule-3 stop raised inside this block must leave the method.
+                # The handler below decides on words like "hidden" or "timeout",
+                # and a stop message names the label and the address - a label
+                # such as "hidden tab" would otherwise hand the stop to the
+                # visibility fallback, which records a second click step and
+                # returns (t-1100).
+                raise
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
                 error_str = str(click_error).lower()
