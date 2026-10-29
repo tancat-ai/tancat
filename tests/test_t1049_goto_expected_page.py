@@ -282,3 +282,106 @@ def test_the_flat_export_drops_the_expected_page_keyword(tmp_path: Path) -> None
 
     assert "page.goto('https://example.com/cart')" in stripped
     assert "expected_page" not in stripped
+
+
+# ---------------------------------------------------------------------------
+# t-1051 (j-0226 review, t-1050): four shapes the first cut got wrong.
+# All four FAIL on a663aab: the keyword-form goto and the two-level nested call
+# are asserted below, the strip case is asserted below, and the foreign keyword
+# case is asserted below (it was a TypeError at run time, not a compile error).
+# ---------------------------------------------------------------------------
+
+
+def _generated_goto(goto_line: str) -> str:
+    """The test body the normaliser writes for one raw goto line."""
+    return _normalised_body(goto_line)
+
+
+def _goto_line(code: str) -> str:
+    lines = [
+        line.strip()
+        for line in code.splitlines()
+        if ("navigate(" in line or "goto(" in line) and not line.lstrip().startswith("def ")
+    ]
+    assert len(lines) == 1, lines
+    return lines[0]
+
+
+def test_a_keyword_form_goto_compiles_and_keeps_the_expected_page() -> None:
+    """BLOCKER on a663aab: ``page.goto(url=\"...\")`` became
+    ``navigate(url=..., expected_page=url=...)`` - an invalid-syntax file."""
+    generated = _generated_goto('page.goto(url="https://x/cart")')
+
+    compile(generated, "<generated>", "exec")
+    line = _goto_line(generated)
+    assert line.startswith('evidence_tracker.navigate(url="https://x/cart"')
+    assert line.count("expected_page") == 1
+    assert 'expected_page="https://x/cart"' in line
+
+
+def test_a_two_level_nested_goto_still_keeps_its_navigation_evidence() -> None:
+    """BEHAVIOUR LOSS on a663aab: it stayed a raw ``page.goto``, so the step
+    recorded no navigation evidence at all."""
+    generated = _generated_goto("page.goto(os.path.join(base, urlparse(u).path))")
+
+    compile(generated, "<generated>", "exec")
+    line = _goto_line(generated)
+    assert line == "evidence_tracker.navigate(os.path.join(base, urlparse(u).path))"
+    assert "expected_page" not in line  # recorded, not judged
+
+
+def test_the_flat_export_leaves_a_nested_call_intact() -> None:
+    """BEHAVIOUR LOSS on a663aab: the strip truncated it to
+    ``page.goto(get_url(a)`` and dropped an argument."""
+    code = "\n".join(
+        [
+            "def test_goto(page, evidence_tracker) -> None:",
+            "    evidence_tracker.navigate(get_url(a, b))",
+            "",
+        ]
+    )
+
+    stripped = strip_evidence_from_test_code(code)
+
+    compile(stripped, "<stripped>", "exec")
+    assert "evidence_tracker.navigate(get_url(a, b))" in stripped
+
+
+def test_a_foreign_keyword_is_dropped_not_forwarded() -> None:
+    """PRE-EXISTING on a663aab: ``timeout=5000`` was forwarded to a navigate()
+    that does not take it - a TypeError at run time, not a compile error."""
+    generated = _generated_goto('page.goto("https://x/cart", timeout=5000)')
+
+    compile(generated, "<generated>", "exec")
+    line = _goto_line(generated)
+    assert line == 'evidence_tracker.navigate("https://x/cart", expected_page="https://x/cart")'
+    assert "timeout" not in line
+
+
+def test_the_tracker_call_the_emitter_writes_is_callable() -> None:
+    """The emitted keyword set must be one navigate() actually accepts."""
+    import inspect
+
+    from src.evidence_tracker import EvidenceTracker
+
+    signature = inspect.signature(EvidenceTracker.navigate)
+    for keyword in ("url", "label", "expected_page"):
+        assert keyword in signature.parameters, keyword
+
+
+def test_an_unusable_goto_does_not_stop_the_next_one_being_rewritten() -> None:
+    """One odd line must not leave the rest of the file unconverted."""
+    code = "\n".join(
+        [
+            "def test_goto(page, evidence_tracker) -> None:",
+            "    page.goto(timeout=5000)",
+            "    page.goto('https://x/cart')",
+            "",
+        ]
+    )
+
+    generated = normalise_generated_code(code)
+
+    compile(generated, "<generated>", "exec")
+    assert "page.goto(timeout=5000)" in generated  # kept verbatim
+    assert "evidence_tracker.navigate('https://x/cart', expected_page='https://x/cart')" in generated

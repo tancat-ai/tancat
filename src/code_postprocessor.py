@@ -29,28 +29,146 @@ from .llm_reasoning_filter import strip_llm_reasoning
 
 logger = logging.getLogger(__name__)
 
-# A raw ``page.goto(...)`` / ``self.page.goto(...)`` call. The argument list may
-# contain one level of nested calls, so a computed address is still routed to the
-# tracker (it just cannot name the expected page - see below).
-_GOTO_CALL_RE = re.compile(r"(?<![\w.])(?:self\.)?page\.goto\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+# A raw ``page.goto(...)`` / ``self.page.goto(...)`` call. The argument list is
+# read with a paren scanner, not a regex: a nested call of any depth is still
+# routed to the tracker (it just cannot name the expected page - see below).
+_GOTO_START_RE = re.compile(r"(?<![\w.])(?:self\.)?page\.goto\(")
+
+# The keywords the tracker's navigate() accepts. Anything else a model passes to
+# page.goto (...) -> timeout=5000, wait_until="load") would be a TypeError at run
+# time, so it is dropped rather than forwarded.
+_TRACKER_NAVIGATE_KEYWORDS = frozenset({"url", "label", "expected_page"})
 
 
-def _goto_to_tracker_navigate(match: re.Match[str]) -> str:
-    """Rewrite a raw ``page.goto(...)`` to the tracker, naming the expected page.
+def _split_top_level_arguments(args: str) -> list[str]:
+    """Split a call's argument text at top-level commas (quote and bracket aware)."""
+    parts: list[str] = []
+    depth = 0
+    quote = ""
+    current: list[str] = []
+    for char in args:
+        if quote:
+            current.append(char)
+            if char == quote:
+                quote = ""
+            continue
+        if char in "'\"":
+            quote = char
+        elif char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
 
-    t-1049: the expected page is the address the skeleton asked for, so the
-    tracker can fail honestly when the browser is redirected somewhere else and
-    record the redirect when it lands on the same page. The keyword is skipped
-    when the first argument is a call with its own commas or parentheses -
-    splitting that would guess.
+
+def _keyword_name(argument: str) -> str:
+    """Return the keyword name of ``name=value``, or "" for a positional argument."""
+    head, sep, _ = argument.partition("=")
+    if not sep or not head.strip().isidentifier():
+        return ""
+    return head.strip()
+
+
+def _goto_arguments_for_tracker(args: str) -> str:
+    """Return the argument list a raw ``page.goto(...)`` becomes for the tracker.
+
+    - keywords the tracker cannot accept are dropped (``timeout=``,
+      ``wait_until=``, ...): forwarding them is a TypeError at run time.
+    - the expected page is named when the address is simple - a literal, a name,
+      or ``url=<literal/name>`` - so a redirect elsewhere fails honestly.
+    - a computed address (a call of any depth) is kept and NOT judged: splitting
+      it to find the address would guess, and a wrong check is worse than none.
+    - an argument list the tracker cannot express is still routed, so the step
+      keeps its navigation evidence.
     """
-    args = match.group(1).strip()
-    if not args or "expected_page" in args:
-        return f"evidence_tracker.navigate({args})"
-    first = args.split(",", 1)[0].strip()
-    if not first or re.search(r"[()]", first):
-        return f"evidence_tracker.navigate({args})"
-    return f"evidence_tracker.navigate({args}, expected_page={first})"
+    arguments = _split_top_level_arguments(args)
+    kept: list[str] = []
+    expected = ""
+    for index, argument in enumerate(arguments):
+        keyword = _keyword_name(argument)
+        if keyword and keyword not in _TRACKER_NAVIGATE_KEYWORDS:
+            continue
+        kept.append(argument)
+        if index != 0:
+            continue
+        value = argument.partition("=")[2].strip() if keyword else argument
+        if not value:
+            continue
+        if keyword == "expected_page":
+            expected = value  # already named by the caller
+        elif keyword in ("", "url") and not re.search(r"[()]", value):
+            expected = value
+    if not kept:
+        return ""
+    if expected and not any(_keyword_name(item) == "expected_page" for item in kept):
+        kept.append(f"expected_page={expected}")
+    return ", ".join(kept)
+
+
+def _matching_paren(code: str, open_index: int) -> int | None:
+    """Return the index of the ``)`` matching the ``(`` at *open_index*."""
+    depth = 0
+    quote = ""
+    index = open_index
+    while index < len(code):
+        char = code[index]
+        if quote:
+            if char == "\\":
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+        elif char in "'\"":
+            quote = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index
+        index += 1
+    return None
+
+
+def _rewrite_raw_gotos(code: str) -> str:
+    """Rewrite every raw ``page.goto(...)`` call to the tracker.
+
+    A paren scanner, not a regex: a nested call of any depth keeps its evidence
+    (t-1049 review, item 2). An argument list the tracker cannot express is
+    rewritten only if it has one, so nothing is ever left half-replaced.
+    """
+    pieces: list[str] = []
+    position = 0
+    while True:
+        match = _GOTO_START_RE.search(code, position)
+        if match is None:
+            pieces.append(code[position:])
+            break
+        open_index = match.end() - 1
+        close_index = _matching_paren(code, open_index)
+        if close_index is None:
+            pieces.append(code[position:])
+            break
+        arguments = _goto_arguments_for_tracker(code[open_index + 1 : close_index])
+        if not arguments:
+            # Nothing the tracker can express (every argument was a keyword it
+            # does not take). Keep the call verbatim and keep scanning, so one
+            # odd line cannot stop the rest of the file being rewritten.
+            pieces.append(code[position : close_index + 1])
+            position = close_index + 1
+            continue
+        pieces.append(code[position : match.start()])
+        pieces.append(f"evidence_tracker.navigate({arguments})")
+        position = close_index + 1
+    return "".join(pieces)
 
 
 def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", target_url: str = "") -> str:
@@ -106,9 +224,8 @@ def normalise_generated_code(code: str, consent_mode: str = "auto-dismiss", targ
     # Ensure evidence_tracker is used for common methods even if LLM forgot.
     # t-1049: the goto states the page it expects, so a redirect elsewhere fails
     # honestly instead of passing quietly. The keyword is only added when the
-    # first argument is a plain address or name - never when it is a call with
-    # its own commas/parentheses, where guessing the split would be wrong.
-    fixed_code = _GOTO_CALL_RE.sub(_goto_to_tracker_navigate, fixed_code)
+    # address is simple; a computed address is still routed, just not judged.
+    fixed_code = _rewrite_raw_gotos(fixed_code)
 
     # Some models hallucinate a slash between `pytest.mark` and the marker name.
     fixed_code = re.sub(r"(?m)^\s*@pytest\.mark\s*/\s*([A-Za-z_][A-Za-z0-9_]*)", r"@pytest.mark.\1", fixed_code)
@@ -1408,6 +1525,19 @@ def _strip_unused_evidence_tracker_param(code: str) -> str:
     return "".join(lines) if changed else code
 
 
+def _strip_navigate_to_goto(match: re.Match[str]) -> str:
+    """Turn ``evidence_tracker.navigate(<simple args>)`` into ``page.goto(<url>)``.
+
+    Keeps the first argument (the address) and drops every keyword: the flat
+    export removes the tracker fixture from the signature, so a leftover keyword
+    would be a TypeError - and a leftover tracker call a NameError (d-0042).
+    Only a simple argument list reaches this function; a nested call is not
+    matched at all, so its text is never truncated (t-1049 review, item 3).
+    """
+    arguments = _split_top_level_arguments(match.group(1))
+    return f"page.goto({arguments[0]})" if arguments else "page.goto()"
+
+
 def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False) -> str:
     """Convert evidence-aware test code to clean Playwright test code.
 
@@ -1445,12 +1575,15 @@ def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False
     )
 
     # evidence_tracker.navigate(url) / (url, label=...) / (url, expected_page=...)
-    # -> page.goto(url). t-1049 added the expected_page keyword; the strip must
-    # drop every keyword, or the flat export keeps a tracker call whose fixture
-    # is gone from the signature.
+    # -> page.goto(url). t-1049 added the expected_page keyword; the strip drops
+    # every keyword, or the flat export keeps a tracker call whose fixture is gone
+    # from the signature. Only a SIMPLE argument list is stripped: a nested call
+    # (navigate(get_url(a, b))) is left intact, because a regex that split it would
+    # truncate the arguments - a broken call at import instead of one failed test
+    # at run time (t-1049 review, item 3).
     result = re.sub(
-        r"evidence_tracker\.navigate\(([^,)]+)(?:,[^)]*)?\)",
-        r"page.goto(\1)",
+        r"evidence_tracker\.navigate\(([^()]*)\)",
+        _strip_navigate_to_goto,
         result,
     )
 
