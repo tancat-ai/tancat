@@ -56,6 +56,10 @@ class StoryResult:
     tests_executed: int = 0
     tests_passed: int = 0
     tests_false_positive: int = 0
+    # d-0050: which source produced the counts above - "junit" (the XML the
+    # runner receives), "log" (pytest's final summary line only), or "none".
+    # A zero without this cannot be told apart from a parse miss.
+    tests_count_source: str = ""
     generation_duration_s: float = 0.0
     # B-061: True when the pytest subprocess was killed by its timeout. A
     # timed-out run must never render as "Tests: 0" — that is indistinguishable
