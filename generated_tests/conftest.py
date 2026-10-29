@@ -37,10 +37,28 @@ def _get_evidence_refs(request: pytest.FixtureRequest) -> _EvidenceRefs:
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item: Any, call: Any) -> Any:
-    """Attach per-phase reports on the node so fixtures can read pass/fail."""
+    """Attach per-phase reports on the node so fixtures can read pass/fail.
+
+    t-1057: a failed step no longer ends its test. The tracker records the failed
+    step and the journey carries on; this hook fails the test ONCE, at the end,
+    with ``journey_summary()`` - the failed step, what it expected, what the
+    browser reached, and what the later steps did. A raise in fixture teardown
+    would be reported as an ERROR instead of a FAILED test, so the report is what
+    carries it.
+    """
     outcome = yield
     rep = outcome.get_result()
     setattr(item, f"rep_{rep.when}", rep)
+
+    if rep.when != "call":
+        return
+    tracker = getattr(item, "_evidence_tracker", None)
+    if tracker is None or not rep.passed:
+        return
+    summary = tracker.journey_summary()
+    if summary:
+        rep.outcome = "failed"
+        rep.longrepr = summary
 
 
 @pytest.fixture
@@ -67,6 +85,9 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
         story_ref=refs.story_ref,
         test_package_dir=test_package_dir,
     )
+    # t-1057: the report hook needs the tracker to fail the test once, at the end,
+    # with what failed and what the later steps did.
+    setattr(request.node, "_evidence_tracker", tracker)  # noqa: B010 - a pytest Item has no declared slot
     yield tracker
 
     rep_call = getattr(request.node, "rep_call", None)

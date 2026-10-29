@@ -244,8 +244,8 @@ def test_no_broken_images_passes_when_all_loaded(tmp_path: Any) -> None:
 def test_no_broken_images_fails_and_names_the_offender(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
     page.evaluate.side_effect = [None, ["broken.png"]]
-    with pytest.raises(AssertionError, match="broken.png"):
-        tracker.assert_no_broken_images(label="no broken images")
+    tracker.assert_no_broken_images(label="no broken images")  # t-1057: recorded, not raised
+    assert "broken.png" in tracker.journey_summary()
 
 
 def test_natural_width_passes_for_loaded_image(tmp_path: Any) -> None:
@@ -262,8 +262,8 @@ def test_natural_width_fails_for_broken_image(tmp_path: Any) -> None:
     loc = MagicMock()
     loc.evaluate.return_value = 0
     page.locator.return_value.first = loc
-    with pytest.raises(AssertionError, match="not loaded"):
-        tracker.assert_natural_width("#view-product-ui img", label="hero screenshot")
+    tracker.assert_natural_width("#view-product-ui img", label="hero screenshot")  # t-1057: recorded, not raised
+    assert "not loaded" in tracker.journey_summary()
 
 
 def test_no_horizontal_scroll_passes_and_restores_viewport(tmp_path: Any) -> None:
@@ -280,8 +280,8 @@ def test_no_horizontal_scroll_fails_when_page_overflows(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
     page.viewport_size = {"width": 1280, "height": 800}
     page.evaluate.return_value = {"scrollWidth": 600, "clientWidth": 375}
-    with pytest.raises(AssertionError, match="scrolls horizontally"):
-        tracker.assert_no_horizontal_scroll(width=375, label="no horizontal scroll")
+    tracker.assert_no_horizontal_scroll(width=375, label="no horizontal scroll")  # t-1057: recorded, not raised
+    assert "scrolls horizontally" in tracker.journey_summary()
 
 
 def test_count_at_least_passes_at_the_boundary(tmp_path: Any) -> None:
@@ -294,8 +294,8 @@ def test_count_at_least_passes_at_the_boundary(tmp_path: Any) -> None:
 def test_count_at_least_fails_below_the_boundary(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
     page.locator.return_value.count.return_value = 3
-    with pytest.raises(AssertionError, match="at least 4"):
-        tracker.assert_count_at_least('[class*="card"]', 4, label="four cards")
+    tracker.assert_count_at_least('[class*="card"]', 4, label="four cards")  # t-1057: recorded, not raised
+    assert "at least 4" in tracker.journey_summary()
 
 
 def test_anchor_targets_exist_passes_when_none_missing(tmp_path: Any) -> None:
@@ -308,8 +308,8 @@ def test_anchor_targets_exist_passes_when_none_missing(tmp_path: Any) -> None:
 def test_anchor_targets_exist_fails_and_names_the_fragment(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
     page.evaluate.side_effect = [["#nowhere"], 6]
-    with pytest.raises(AssertionError, match="#nowhere"):
-        tracker.assert_anchor_targets_exist(label="every anchor")
+    tracker.assert_anchor_targets_exist(label="every anchor")  # t-1057: recorded, not raised
+    assert "#nowhere" in tracker.journey_summary()
 
 
 def _price_tracker(tmp_path: Any, container_count: int, text: str) -> EvidenceTracker:
@@ -334,8 +334,8 @@ def test_section_has_price_passes_when_amount_present(tmp_path: Any) -> None:
 
 def test_section_has_price_fails_without_an_amount(tmp_path: Any) -> None:
     tracker = _price_tracker(tmp_path, 1, "Pro Deployment unlimited runs")
-    with pytest.raises(AssertionError, match="shows no price"):
-        tracker.assert_section_has_price("Pro Deployment", label="Pro price")
+    tracker.assert_section_has_price("Pro Deployment", label="Pro price")  # t-1057: recorded, not raised
+    assert "shows no price" in tracker.journey_summary()
 
 
 # ---------------------------------------------------------------------------

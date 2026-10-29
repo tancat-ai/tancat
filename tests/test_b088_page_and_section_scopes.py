@@ -148,8 +148,10 @@ def _tracker(tmp_path: Any, elements: list[MagicMock]) -> EvidenceTracker:
 
 def test_multi_token_scan_finds_any_offender(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("https://x.com"), _element("https://x.com/l/YOUR_VIDEO_ID_HERE")])
-    with pytest.raises(AssertionError, match="one of"):
-        tracker.assert_no_forbidden("[href]", ("tbd", "your_video_id_here"), label="no placeholders", attribute="href")
+    tracker.assert_no_forbidden(
+        "[href]", ("tbd", "your_video_id_here"), label="no placeholders", attribute="href"
+    )  # t-1057: recorded, not raised
+    assert "one of" in tracker.journey_summary()
 
 
 def test_multi_token_scan_passes_when_clean(tmp_path: Any) -> None:
@@ -161,8 +163,10 @@ def test_multi_token_scan_passes_when_clean(tmp_path: Any) -> None:
 def test_also_text_scans_visible_copy_too(tmp_path: Any) -> None:
     """A link whose href is clean but whose text says TBD is still an offender."""
     tracker = _tracker(tmp_path, [_element("https://x.com", "Buy now (TBD)")])
-    with pytest.raises(AssertionError, match="tbd"):
-        tracker.assert_no_forbidden("a", ("tbd",), label="no placeholder text", attribute="href", also_text=True)
+    tracker.assert_no_forbidden(
+        "a", ("tbd",), label="no placeholder text", attribute="href", also_text=True
+    )  # t-1057: recorded, not raised
+    assert "tbd" in tracker.journey_summary()
 
 
 # ---------------------------------------------------------------------------
@@ -205,8 +209,10 @@ def test_assert_attribute_required_scheme_passes_for_mailto(tmp_path: Any) -> No
 
 def test_assert_attribute_required_scheme_fails_for_http(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("https://github.com/tancat-ai/tancat")])
-    with pytest.raises(AssertionError, match="does not start with 'mailto:'"):
-        tracker.assert_attribute('a[href^="mailto:"]', "href", label="mailto link", required_scheme="mailto:")
+    tracker.assert_attribute(
+        'a[href^="mailto:"]', "href", label="mailto link", required_scheme="mailto:"
+    )  # t-1057: recorded, not raised
+    assert "does not start with 'mailto:'" in tracker.journey_summary()
 
 
 # ---------------------------------------------------------------------------
@@ -408,8 +414,10 @@ def test_assert_contains_passes_when_child_is_inside(tmp_path: Any) -> None:
 
 def test_assert_contains_fails_when_child_is_elsewhere(tmp_path: Any) -> None:
     tracker = _contains_tracker(tmp_path, container_count=0)
-    with pytest.raises(AssertionError, match="also contains"):
-        tracker.assert_contains("air-gap", 'a[href^="mailto:"]', label="contact inside tier")
+    tracker.assert_contains(
+        "air-gap", 'a[href^="mailto:"]', label="contact inside tier"
+    )  # t-1057: recorded, not raised
+    assert "also contains" in tracker.journey_summary()
 
 
 def test_page_level_asserts_never_trigger_the_journey_skip() -> None:

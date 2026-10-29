@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from playwright.sync_api import Page
 
-from src.evidence_tracker import EvidenceTracker, PageMismatchError, _same_page
+from src.evidence_tracker import EvidenceTracker, _same_page
 
 
 def test_evidence_tracker_records_navigation(tmp_path: Any) -> None:
@@ -46,8 +46,9 @@ def test_evidence_tracker_click_failure_takes_screenshot(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.click.side_effect = Exception("Click Error")
     tracker = EvidenceTracker(page_mock, "test_click", evidence_root=Path(tmp_path))
 
-    with pytest.raises(Exception, match="Click Error"):
-        tracker.click("#does-not-exist")
+    # t-1057: a failed step no longer ends the test - it is recorded and the
+    # journey carries on. The failure reaches the report at the end.
+    tracker.click("#does-not-exist")
 
     assert tracker.steps[-1]["type"] == "click"
     assert tracker.steps[-1]["result"]["status"] == "failed"
@@ -130,8 +131,7 @@ def test_failed_step_skips_metadata_capture(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element not visible")
     tracker = EvidenceTracker(page_mock, "test_assert_fail", evidence_root=Path(tmp_path))
 
-    with pytest.raises(TimeoutError):
-        tracker.assert_visible("h2.heading")
+    tracker.assert_visible("h2.heading")  # t-1057: recorded, not raised
 
     step = tracker.steps[-1]
     assert step["result"]["status"] == "failed"
@@ -292,8 +292,7 @@ def test_click_fast_fails_when_locator_missing_on_page(tmp_path: Any) -> None:
     page_mock.url = "https://example.com/products"
     tracker = EvidenceTracker(page_mock, "test_fastfail", evidence_root=Path(tmp_path))
 
-    with pytest.raises(Exception, match="not found on current page"):
-        tracker.click("button.btn.cart")
+    tracker.click("button.btn.cart")  # t-1057: recorded, not raised
 
     assert len(tracker.steps) == 1
     step = tracker.steps[0]
@@ -323,8 +322,7 @@ def test_click_missing_locator_does_not_run_fallback(tmp_path: Any) -> None:
         patch("src.evidence_tracker.try_hover_and_click") as mock_hover,
         patch("src.evidence_tracker.LocatorFallback") as mock_fallback,
     ):
-        with pytest.raises(Exception, match="not found"):
-            tracker.click("button.btn.cart")
+        tracker.click("button.btn.cart")  # t-1057: recorded, not raised
 
     mock_hover.assert_not_called()
     mock_fallback.try_fallback.assert_not_called()
@@ -586,8 +584,9 @@ def test_step_on_other_page_fails(tmp_path: Any) -> None:
     page_mock.url = "https://example.com/success.html"
     tracker = EvidenceTracker(page_mock, "t_bad", evidence_root=Path(tmp_path))
 
-    with pytest.raises(PageMismatchError):
-        tracker.assert_visible("#acct", label="order page", expected_page="https://example.com/index.html")
+    # t-1057: the mismatch fails the step and the test at its end; the journey
+    # carries on. It no longer interrupts the test here.
+    tracker.assert_visible("#acct", label="order page", expected_page="https://example.com/index.html")
 
     result = tracker.steps[-1]["result"]
     assert result["status"] == "failed"
@@ -610,8 +609,7 @@ def test_mismatch_does_not_mask_an_earlier_error(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.wait_for.side_effect = TimeoutError("element timed out")
     tracker = EvidenceTracker(page_mock, "t_err", evidence_root=Path(tmp_path))
 
-    with pytest.raises(TimeoutError):
-        tracker.assert_visible("#missing", label="x", expected_page="https://example.com/index.html")
+    tracker.assert_visible("#missing", label="x", expected_page="https://example.com/index.html")
 
     result = tracker.steps[-1]["result"]
     assert result["status"] == "failed"
@@ -640,8 +638,7 @@ def test_click_on_other_page_fails(tmp_path: Any) -> None:
     page_mock.locator.return_value.first.count.side_effect = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     tracker = EvidenceTracker(page_mock, "t_click", evidence_root=Path(tmp_path))
 
-    with pytest.raises(PageMismatchError):
-        tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
+    tracker.click("#pay", label="pay", expected_page="https://example.com/cart.html")
 
     assert tracker.steps[-1]["result"]["status"] == "failed"
     assert tracker.steps[-1]["result"]["page_mismatch"]["actual"].endswith("checkout.html")

@@ -256,9 +256,8 @@ def test_tracker_fill_sensitive_failure_path_redacted(tmp_path: Path) -> None:
 
     # Make the actual fill blow up after detection succeeded.
     page.locator.return_value.fill.side_effect = Exception("not fillable")
-    with pytest.raises(Exception, match="not fillable"):
-        tracker.fill("#password", "secret_sauce")
-
+    tracker.fill("#password", "secret_sauce")  # t-1057: recorded, not raised
+    assert "not fillable" in tracker.journey_summary()
     step = tracker.steps[-1]
     assert step["result"]["status"] == "failed"
     assert step["value"] == REDACTED

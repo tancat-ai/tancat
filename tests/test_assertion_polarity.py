@@ -121,9 +121,7 @@ def test_assert_hidden_records_failure_when_still_visible(tmp_path: Any) -> None
     page_mock.locator.return_value = loc
     tracker = EvidenceTracker(page_mock, "test_foo", evidence_root=Path(tmp_path))
 
-    with pytest.raises(TimeoutError):
-        tracker.assert_hidden(".thing")
-
+    tracker.assert_hidden(".thing")  # t-1057: recorded, not raised
     assert tracker.steps[-1]["result"]["status"] == "failed"
     assert "still visible" in tracker.steps[-1]["result"]["error"]
 

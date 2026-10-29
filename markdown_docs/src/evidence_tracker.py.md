@@ -43,6 +43,7 @@ Core recording method. Builds step dict with:
 - Element metadata (bbox, tag, attributes)
 - Failure diagnosis via `FailureReporter.diagnose_failure()` on error
 - Status: `"passed"`, `"partial_pass"` (when fallback used), `"failed"`
+- **A failed step does not end its test (t-1057).** Every step method records the failure and returns; the journey carries on. Steps after the first failure are stamped `result.off_course = {expected, actual}` — the page the journey did not reach — so a pass after a redirect is never a clean pass. `journey_failures()` and `journey_summary()` give the end-of-test report (failed step, what it expected, what the browser reached, how many later steps ran and passed). The generated `conftest.py` turns that summary into ONE failed test report at the end. The only condition that still stops a journey is a closed page or browser context (`_cannot_continue()`), because no later step could run at all.
 - On a `navigate` step: a `navigation` block — `requested`, `final`, `status` (the HTTP status, when one exists), and a `note` when the browser was redirected somewhere else. Recorded, not judged, unless the caller named an expected page (d-0032)
 
 ### `navigate(url, label="", expected_page="")` — Navigate + dismiss overlays + screenshot

@@ -247,15 +247,17 @@ def _tracker(tmp_path: Any, elements: list[MagicMock]) -> EvidenceTracker:
 
 def test_assert_attribute_forbidden_fails_on_tbd_href(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("https://lemonsqueezy.com/l/TANCAT-PRO-TBD")])
-    with pytest.raises(AssertionError, match="forbidden 'tbd'"):
-        tracker.assert_attribute('a[href="x"]', "href", label="Buy Pro link", forbidden=("tbd",))
+    tracker.assert_attribute(
+        'a[href="x"]', "href", label="Buy Pro link", forbidden=("tbd",)
+    )  # t-1057: recorded, not raised
+    assert "forbidden 'tbd'" in tracker.journey_summary()
     assert tracker.steps[-1]["result"]["status"] == "failed"
 
 
 def test_assert_attribute_must_be_url_fails_on_placeholder(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("YOUR_VIDEO_ID_HERE")])
-    with pytest.raises(AssertionError, match="not an http"):
-        tracker.assert_attribute("a.btn", "href", label="live video", must_be_url=True)
+    tracker.assert_attribute("a.btn", "href", label="live video", must_be_url=True)  # t-1057: recorded, not raised
+    assert "not an http" in tracker.journey_summary()
 
 
 def test_assert_attribute_live_url_passes(tmp_path: Any) -> None:
@@ -266,14 +268,14 @@ def test_assert_attribute_live_url_passes(tmp_path: Any) -> None:
 
 def test_assert_attribute_empty_still_fails(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element(None)])
-    with pytest.raises(AssertionError, match="non-empty"):
-        tracker.assert_attribute("meta", "content", label="meta description")
+    tracker.assert_attribute("meta", "content", label="meta description")  # t-1057: recorded, not raised
+    assert "non-empty" in tracker.journey_summary()
 
 
 def test_assert_no_forbidden_finds_offender(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("https://x.com"), _element("https://x.com/l/TBD")])
-    with pytest.raises(AssertionError, match="1 element"):
-        tracker.assert_no_forbidden("a", "tbd", label="no TBD in links", attribute="href")
+    tracker.assert_no_forbidden("a", "tbd", label="no TBD in links", attribute="href")  # t-1057: recorded, not raised
+    assert "1 element" in tracker.journey_summary()
     assert tracker.steps[-1]["result"]["status"] == "failed"
 
 
@@ -287,8 +289,8 @@ def test_assert_no_forbidden_passes_and_records_count(tmp_path: Any) -> None:
 
 def test_assert_no_forbidden_text_mode(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element(None, "Buy Now (TBD)")])
-    with pytest.raises(AssertionError, match="tbd"):
-        tracker.assert_no_forbidden("button", "tbd", label="no TBD in buttons")
+    tracker.assert_no_forbidden("button", "tbd", label="no TBD in buttons")  # t-1057: recorded, not raised
+    assert "tbd" in tracker.journey_summary()
 
 
 def test_assert_no_forbidden_zero_elements_passes_vacuously(tmp_path: Any) -> None:
@@ -300,20 +302,22 @@ def test_assert_no_forbidden_zero_elements_passes_vacuously(tmp_path: Any) -> No
 
 def test_assert_attribute_all_fails_on_empty(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element(None), _element("alt text")])
-    with pytest.raises(AssertionError, match="1/2"):
-        tracker.assert_attribute_all("img", "alt", label="all images have alt")
+    tracker.assert_attribute_all("img", "alt", label="all images have alt")  # t-1057: recorded, not raised
+    assert "1/2" in tracker.journey_summary()
 
 
 def test_assert_attribute_all_fails_on_zero_elements(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [])
-    with pytest.raises(AssertionError, match="found none"):
-        tracker.assert_attribute_all("img", "alt", label="all images have alt")
+    tracker.assert_attribute_all("img", "alt", label="all images have alt")  # t-1057: recorded, not raised
+    assert "found none" in tracker.journey_summary()
 
 
 def test_assert_attribute_all_forbidden_fails(tmp_path: Any) -> None:
     tracker = _tracker(tmp_path, [_element("https://x.com/TBD")])
-    with pytest.raises(AssertionError, match="forbidden"):
-        tracker.assert_attribute_all("a", "href", label="all anchor links valid", forbidden=("tbd",))
+    tracker.assert_attribute_all(
+        "a", "href", label="all anchor links valid", forbidden=("tbd",)
+    )  # t-1057: recorded, not raised
+    assert "forbidden" in tracker.journey_summary()
 
 
 def test_assert_attribute_all_passes(tmp_path: Any) -> None:

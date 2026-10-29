@@ -32,8 +32,6 @@ import pytest
 
 from src.evidence_tracker import (
     EvidenceTracker,
-    NavigationStatusError,
-    PageMismatchError,
     _response_status,
 )
 
@@ -60,13 +58,14 @@ def test_404_goto_is_failed_and_names_both_urls(tmp_path: Path) -> None:
     landed = "https://shop.example.com/not-found"
     tracker = _tracker(_page(landed, 404), tmp_path)
 
-    with pytest.raises(NavigationStatusError) as raised:
-        tracker.navigate(requested)
+    # t-1057: the failure is recorded and the journey carries on; the test is
+    # failed once at its end from journey_summary().
+    tracker.navigate(requested)
 
-    message = str(raised.value)
-    assert "HTTP 404" in message
-    assert requested in message
-    assert landed in message
+    summary = tracker.journey_summary()
+    assert "HTTP 404" in summary
+    assert requested in summary
+    assert landed in summary
 
     step = tracker.steps[-1]
     assert step["type"] == "navigate"
@@ -85,8 +84,7 @@ def test_404_goto_is_failed_and_names_both_urls(tmp_path: Path) -> None:
 def test_500_goto_is_failed(tmp_path: Path) -> None:
     tracker = _tracker(_page("https://shop.example.com/error", 500), tmp_path)
 
-    with pytest.raises(NavigationStatusError):
-        tracker.navigate("https://shop.example.com/server")
+    tracker.navigate("https://shop.example.com/server")
 
     assert tracker.steps[-1]["result"]["status"] == "failed"
     assert "HTTP 500" in tracker.steps[-1]["result"]["error"]
@@ -161,12 +159,11 @@ def test_bounce_home_is_recorded_not_silent(tmp_path: Path) -> None:
 def test_explicit_expected_page_mismatch_is_a_failed_step(tmp_path: Path) -> None:
     tracker = _tracker(_page("https://shop.example.com/", 200), tmp_path)
 
-    with pytest.raises(PageMismatchError) as raised:
-        tracker.navigate("https://shop.example.com/inventory.html", expected_page="https://shop.example.com/cart.html")
+    tracker.navigate("https://shop.example.com/inventory.html", expected_page="https://shop.example.com/cart.html")
 
-    message = str(raised.value)
-    assert "https://shop.example.com/" in message
-    assert "https://shop.example.com/cart.html" in message
+    summary = tracker.journey_summary()
+    assert "https://shop.example.com/" in summary
+    assert "https://shop.example.com/cart.html" in summary
 
     step = tracker.steps[-1]
     assert step["result"]["status"] == "failed"
@@ -183,8 +180,7 @@ def test_network_failure_still_records_one_failed_step(tmp_path: Path) -> None:
     page.goto.side_effect = Exception("Network Error")
     tracker = _tracker(page, tmp_path)
 
-    with pytest.raises(Exception, match="Network Error"):
-        tracker.navigate("https://fail.com")
+    tracker.navigate("https://fail.com")
 
     assert len(tracker.steps) == 1
     assert tracker.steps[0]["result"]["status"] == "failed"
@@ -256,11 +252,10 @@ def test_navigate_with_a_wrong_expected_page_after_an_element_step_still_fails(t
     page.url = "https://shop.example.com/inventory.html"
     page.goto.return_value.status = 200
 
-    with pytest.raises(PageMismatchError):
-        tracker.navigate(
-            "https://shop.example.com/inventory.html",
-            expected_page="https://shop.example.com/cart.html",
-        )
+    tracker.navigate(
+        "https://shop.example.com/inventory.html",
+        expected_page="https://shop.example.com/cart.html",
+    )
 
     assert tracker.steps[-1]["result"]["page_mismatch"] == {
         "expected": "https://shop.example.com/cart.html",
@@ -273,8 +268,7 @@ def test_an_element_step_still_compares_the_page_it_entered_on(tmp_path: Path) -
     page = _page("https://shop.example.com/cart.html", 200)
     tracker = _tracker(page, tmp_path)
 
-    with pytest.raises(PageMismatchError):
-        tracker.fill("#coupon", "SAVE10", expected_page="https://shop.example.com/login")
+    tracker.fill("#coupon", "SAVE10", expected_page="https://shop.example.com/login")
 
     assert tracker.steps[-1]["result"]["page_mismatch"] == {
         "expected": "https://shop.example.com/login",
