@@ -88,7 +88,7 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 | pytest-xdist | 3.8.0 | MIT |  |
 | pre-commit | 4.6.2 | MIT |  |
 | pandas-stubs | 3.0.5.260914 | BSD-3-Clause |  |
-| types-PyYAML | 6.0.12.20260724 | Apache-2.0 |  |
+| types-PyYAML | 6.0.12.20260906 | Apache-2.0 |  |
 | jupyter | 1.1.1 | BSD License |  |
 | ipykernel | 7.4.0 | BSD-3-Clause |  |
 | nest-asyncio | 1.6.0 | BSD License |  |
@@ -385,7 +385,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | traitlets | 5.15.1 | BSD License | https://github.com/ipython/traitlets |
 | transformers | 5.17.0 | Apache 2.0 License | https://github.com/huggingface/transformers |
 | typer | 0.27.2 | MIT | https://github.com/fastapi/typer |
-| types-pyyaml | 6.0.12.20260724 | Apache-2.0 | https://github.com/python/typeshed |
+| types-pyyaml | 6.0.12.20260906 | Apache-2.0 | https://github.com/python/typeshed |
 | typing-extensions | 4.16.0 | PSF-2.0 | https://github.com/python/typing_extensions |
 | typing-inspection | 0.4.2 | MIT | https://github.com/pydantic/typing-inspection |
 | tzdata | 2026.3 | Apache-2.0 | https://github.com/python/tzdata |
