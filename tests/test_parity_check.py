@@ -143,3 +143,26 @@ def test_html_summary_numbers_are_read_not_searched() -> None:
     html = "<div class='stat passed'><div class='stat-value'>3</div><div class='stat-label'>Passed</div></div>"
     assert mod._html_stat(html, "passed") == 3
     assert mod._html_stat("<p>passed passed passed</p>", "passed") is None
+
+
+def test_gate_exits_non_zero_when_one_renderer_drops_its_rows(monkeypatch: Any, capsys: Any) -> None:
+    """End to end: a renderer that only emits its header must fail the gate.
+
+    The reviewer's case - the CSV writer losing every data row - is a
+    one-sided break, so the report leg must catch it and name the row.
+    """
+    import src.evidence_export as evidence_export
+
+    real_csv = evidence_export.export_csv
+    monkeypatch.setattr(
+        evidence_export,
+        "export_csv",
+        lambda index, **kwargs: real_csv(index, **kwargs).splitlines()[0] + "\n",
+    )
+
+    mod = _load()
+    assert mod.main([]) == 1
+
+    out = capsys.readouterr().out
+    assert "DIFF  reports/CSV test count" in out
+    assert "CSV passed" in out and "DIFF" in out

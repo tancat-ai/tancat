@@ -111,6 +111,12 @@ is step 1b, not this job; the reason is stated so nobody reads a green table as 
 
 Axis 2 is measured on one recorded evidence set, so all five formats read the same source facts.
 
+**What this gate does NOT do.** The fixture is the truth both sides are compared against. Flip a
+value inside it - a status, a step, a count - and the gate still passes, because both sides moved
+with it. This gate catches the two sides **drifting apart**, not a wrong input: whether a recorded
+run is *right* is the eval gate's job (resolution accuracy, false positives, the held-out set), and
+this one never re-measures it.
+
 ## Running the check
 
 ```bash
