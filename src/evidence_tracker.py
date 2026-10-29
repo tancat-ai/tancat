@@ -128,6 +128,13 @@ def _address_changed(requested: str, final: str) -> bool:
     return requested != final
 
 
+# t-1063: the tracker and the generated conftest must agree on what "a failed
+# step carries on" means. A package shipping a new tracker with an old conftest
+# would carry on and never fail the test - a silent success. Both sides declare
+# this marker; the fixture refuses to run when they differ.
+JOURNEY_PROTOCOL = "carry-on-1"
+
+
 def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMethod:
     """Let a failed step fail the TEST at its end, not the journey at that step.
 
@@ -770,21 +777,22 @@ class EvidenceTracker:
                 return {"expected": requested, "actual": final}
         return None
 
-    def _mark_off_course_steps(self) -> dict[str, str] | None:
-        """Stamp every step AFTER the first failure with the page it should have run on.
+    def _mark_off_course_steps(self) -> dict[str, Any] | None:
+        """Stamp every step AFTER the first failure as off course.
 
         A pass that happens after the journey left its course is never a clean
-        pass: the record says which page was expected, which one the steps really
-        ran on, and which step failed first. Idempotent - safe to call on every
-        record and on the final write.
+        pass. The stamp names the step that failed first (``failed_step``) and,
+        when the failure names one, the page that was expected and the page the
+        later steps really ran on. A missing element names no page, and the
+        marking does not need to know what failed - the step number is enough
+        (t-1063). Idempotent: safe on every record and on the final write.
         """
         first_failed = next((s for s in self.steps if (s.get("result") or {}).get("status") == "failed"), None)
         if first_failed is None:
             return None
-        info = self._off_course_of(first_failed)
-        if info is None:
-            return None
         failed_index = self.steps.index(first_failed)
+        info: dict[str, Any] = {"failed_step": failed_index + 1}
+        info.update(self._off_course_of(first_failed) or {})
         for step in self.steps[failed_index + 1 :]:
             result = step.setdefault("result", {})
             result.setdefault("off_course", dict(info))
@@ -807,6 +815,33 @@ class EvidenceTracker:
                 }
             )
         return failures
+
+    def journey_record(self) -> dict[str, Any]:
+        """The journey failure as data, for the evidence sidecar and the report.
+
+        Empty when no step failed, so a clean test carries no journey block. The
+        report renders one line per failed step (step number, expected page,
+        reached page) and the off-course note from these fields - it does not have
+        to re-derive them from the steps (t-1063).
+        """
+        failures = self.journey_failures()
+        if not failures:
+            return {}
+        first = failures[0]
+        failed_index = int(first["step"]) - 1
+        later = self.steps[failed_index + 1 :]
+        later_passed = sum(1 for step in later if (step.get("result") or {}).get("status") == "passed")
+        off_course = self._off_course_of(self.steps[failed_index]) or {}
+        return {
+            "protocol": JOURNEY_PROTOCOL,
+            "failed_steps": failures,
+            "off_course": off_course,
+            "later_steps": len(later),
+            # Every later step ran after a failure, so every later pass is off
+            # course - whether or not the failure named a page (t-1063).
+            "later_passed_off_course": later_passed,
+            "summary": self.journey_summary(),
+        }
 
     def journey_summary(self) -> str:
         """One paragraph for the end of the test: what failed, and what came after.
@@ -910,6 +945,7 @@ class EvidenceTracker:
                 page_expectations=self.page_expectations,
                 duration_s=time.time() - self.start_time,
                 verification=self.verification,
+                journey=self.journey_record(),
             )
             self.sidecar_path.write_text(json_content, encoding="utf-8")
         except Exception as exc:

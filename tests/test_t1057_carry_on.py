@@ -107,6 +107,7 @@ def test_later_steps_are_marked_as_off_course(tmp_path: Path) -> None:
     assert "off_course" not in failed["result"]  # the failing step is the failure itself
     for step in (fourth, fifth):
         assert step["result"]["off_course"] == {
+            "failed_step": 3,
             "expected": "https://shop.example.com/cart.html",
             "actual": "https://shop.example.com/login",
         }

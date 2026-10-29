@@ -17,7 +17,24 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page
 
-from src.evidence_tracker import EvidenceTracker
+from src.evidence_tracker import JOURNEY_PROTOCOL, EvidenceTracker
+
+# t-1063: the tracker carries on after a failed step and the conftest fails the
+# test once, at its end. Both halves are needed, so both declare the same marker.
+# A package with a new tracker and an old conftest would carry on and NEVER fail
+# the test - a silent success. The fixture refuses to run when they disagree.
+CONFTEST_JOURNEY_PROTOCOL = "carry-on-1"
+
+
+def _check_journey_protocol() -> None:
+    """Fail loudly when the tracker and this conftest do not belong together."""
+    if JOURNEY_PROTOCOL != CONFTEST_JOURNEY_PROTOCOL:
+        raise RuntimeError(
+            "evidence_tracker and conftest.py disagree about the journey protocol: "
+            f"tracker={JOURNEY_PROTOCOL!r}, conftest={CONFTEST_JOURNEY_PROTOCOL!r}. "
+            "A failed step would carry on and the test would never fail. "
+            "Re-copy generated_tests/conftest.py from the same version as the tracker."
+        )
 
 
 @dataclass(frozen=True)
@@ -72,6 +89,7 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
     conftest's location) so that each subdirectory under generated_tests/ that
     contains a test file gets its own isolated evidence folder.
     """
+    _check_journey_protocol()
     refs = _get_evidence_refs(request)
 
     # Determine the test file's directory (not this conftest's directory).
