@@ -8487,29 +8487,18 @@ Returns:
 
 - `list[str]` - insertion-ordered unique URLs from `self._captured_pages`.
 
-### `get_skipped_steps(self) -> list[dict]`
+### `get_skipped_steps(self) -> list[dict]` - REMOVED 2026-10-24 (t-0907, B-112)
 
-Returns logged skipped journey steps.
+This method no longer exists. It only
+read `_context_log`, and no production code read that log. The replacement
+mechanism: a skipped step reaches the caller as `ObservedStep.error` on the
+observed trail (`get_observed_trail()`), which the orchestrator reads into
+`scraped_errors`.
 
-Parameters:
+### `get_locator_warnings(self) -> list[dict]` - REMOVED 2026-10-24 (t-0907, B-112)
 
-- None.
-
-Returns:
-
-- `list[dict]` - context log entries where `event == "step_skipped"`.
-
-### `get_locator_warnings(self) -> list[dict]`
-
-Returns locator-not-found warnings.
-
-Parameters:
-
-- None.
-
-Returns:
-
-- `list[dict]` - context log entries where `event == "locator_not_found"`.
+Same reason and same replacement as the method above: the observed trail carries
+the failure, and nothing read the context log.
 
 ### `@staticmethod _list_available_elements(page: Any, limit: int = 10) -> list[dict]`
 
@@ -13543,7 +13532,11 @@ Resolves page keywords to actually discovered URLs from journey scraping. Bridge
 | `UrlResolver.get_seed_url()` | Return seed URL as fallback |
 | `UrlResolver.get_all_mappings()` | Return copy of all keyword→URL mappings |
 | `UrlResolver._match_keyword_to_url(kw_lower, scraped_urls)` | Static: match single keyword using multi-tier strategy |
-| `resolve_keywords_to_urls(keywords, scraped_urls, seed_url, concepts)` | Convenience: creates and populates UrlResolver |
+
+**Removed 2026-10-24 (t-0907, B-112):** this module used to also export
+`resolve_keywords_to_urls(keywords, scraped_urls, seed_url, concepts)`. It had no
+production caller. Replacement: construct `UrlResolver()` and call
+`build_mapping(keywords, scraped_urls, seed_url, concepts)` directly.
 
 ## Matching Strategy (priority order)
 1. Exact path match: "cart" → `/cart`

@@ -297,6 +297,12 @@ class TestSummaryOutput:
         assert "saucedemo" in summary
         assert "Resolution accuracy:" in summary
         assert "PER-STORY BREAKDOWN" in summary
+        # t-0929 / t-0931: a pass-rate drop from honest page-arrival failures
+        # must not print an unmeasured gate as fact. Gate 1 is an expectation
+        # here; gate 2's rationale is stated.
+        assert "page-arrival mismatches now fail honestly" in summary
+        assert "expected: gate 1 unchanged (not measured in this run)" in summary
+        assert "gate 2 stays clean because a failing test cannot be a hollow pass" in summary
 
     def test_summary_prints_unverified_reasons(self) -> None:
         """B-100: the reason must reach the human summary, not only the JSON."""

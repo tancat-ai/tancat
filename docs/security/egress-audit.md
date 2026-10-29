@@ -9,7 +9,9 @@ No telemetry, no update checks, no PyPI/uv calls, no third-party beacons.
 weights from Hugging Face on first use: the RAG embedder, and the optional GPU
 OCR backend (`OCR_BACKEND=power`). They are library-level downloads, not `src/`
 call sites, so the scan in section 3 does not see them. Both can be pre-seeded;
-the default OCR path (RapidOCR, CPU) is offline.
+the default OCR path (RapidOCR/PP-OCRv6 on the PyTorch engine) is offline - its
+models are vendored in `src/data/ocr/` and pinned by SHA256, so it never
+downloads anything.
 
 **Verified:** 2026-08-17 · **Gate:** `python scripts/audit_egress.py` — wired into
 `scripts/smoke.py` (Gate 0) and CI; **fails** if an unrecognised outbound call
@@ -94,13 +96,15 @@ cannot land silently.
 
 The gate in section 3 scans the product's *own* outbound-HTTP call sites. Two
 components fetch model weights through their libraries, so they do not appear in
-that table and the gate cannot see them. Both are disclosed here; both are
-pre-seedable; neither runs unless its feature is used.
+that table and the gate cannot see them. They are disclosed here; both are
+pre-seedable; neither runs unless its feature is used. The default CPU OCR tier
+is **not** in this list - its models ship in the repo (next row).
 
 | Component | When | Source | Notes |
 |-----------|------|--------|-------|
+| CPU OCR (`RapidOCRBackend`, `src/ocr_backends.py`) | default OCR tier, image-only PDF pages | **none - vendored** in `src/data/ocr/` | PP-OCRv6 det/rec + text-line cls + dictionary, Apache-2.0 (Baidu/PaddleOCR), each pinned by SHA256. `src/ocr_backends.py` passes explicit local paths to rapidocr, so no model URL is ever built. Refresh with `python scripts/maintenance/vendor_ocr_models.py`. |
 | RAG embedder (`SentenceTransformerEmbedder`, `src/rag_store.py`) | first embed, when RAG is enabled | Hugging Face (`sentence-transformers` model), one time | the default RAG store ships a bundled pattern pack; warming the model cache before going offline pre-seeds it |
-| Optional GPU OCR backend (`src/ocr_backends.py`) | first PDF parse, only when `OCR_BACKEND=power` is set | Hugging Face (vision-language OCR model, ~6 GB), one time | opt-in; needs CUDA/ROCm and its live path is untested. The default OCR path (`RapidOCRBackend`, CPU) is offline. |
+| Optional GPU OCR backend (`src/ocr_backends.py`) | first PDF parse, only when `OCR_BACKEND=power` is set | Hugging Face (vision-language OCR model, ~6 GB), one time | opt-in; needs CUDA/ROCm and its live path is untested. |
 
 No other runtime downloads. For a fully offline deployment: leave `OCR_BACKEND`
 at its default, and warm the RAG embedder's model cache (and, only if you use

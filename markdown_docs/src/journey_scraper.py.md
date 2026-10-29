@@ -246,30 +246,6 @@ Returns:
 
 - `list[str]` - insertion-ordered unique URLs from `self._captured_pages`.
 
-### `get_skipped_steps(self) -> list[dict]`
-
-Returns logged skipped journey steps.
-
-Parameters:
-
-- None.
-
-Returns:
-
-- `list[dict]` - context log entries where `event == "step_skipped"`.
-
-### `get_locator_warnings(self) -> list[dict]`
-
-Returns locator-not-found warnings.
-
-Parameters:
-
-- None.
-
-Returns:
-
-- `list[dict]` - context log entries where `event == "locator_not_found"`.
-
 ### `@staticmethod _list_available_elements(page: Any, limit: int = 10) -> list[dict]`
 
 Collects a small diagnostic sample of clickable/link-like elements.

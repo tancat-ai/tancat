@@ -22,8 +22,10 @@ class EvidenceSerializer:
         page_url: str,
         run_history: dict[str, int],
         steps: list[dict[str, Any]],
+        page_expectations: list[dict[str, Any]] | None = None,
         duration_s: float = 0.0,
         verification: dict[str, Any] | None = None,
+        journey: dict[str, Any] | None = None,
     ) -> str:
         """Return JSON payload for an evidence sidecar.
 
@@ -46,6 +48,14 @@ class EvidenceSerializer:
                 "page": {"url": page_url},
                 "run_history": run_history,
                 "steps": steps,
+                # t-0929: the page the assertion expected, the observed step it
+                # was checked against, its timestamp, and which producer chose
+                # the candidate. Empty for older packages.
+                "page_expectations": page_expectations or [],
+                # t-1063: what failed and what the journey did afterwards, so the
+                # report can name it. Empty for a clean test and for older
+                # packages.
+                "journey": journey or {},
             },
             indent=2,
             ensure_ascii=False,

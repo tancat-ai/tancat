@@ -80,3 +80,27 @@ def test_url_assertions_are_not_annotated() -> None:
     emitted = _emit("ASSERT", 'expect(page).to_have_url("http://a/x")', expected_page="http://a/index.html")
     assert emitted.strip().startswith("expect(")
     assert "expected_page" not in emitted
+
+
+def test_page_expectation_block_keeps_literal_assertion_and_indent() -> None:
+    """t-0929: the evidence record and literal assertion are one indented block."""
+    token = "{{ASSERT:x}}"
+    resolved = (
+        "# HONEST FAILURE: expected 'http://a/checkout', observed 'http://a/shop'\n"
+        "evidence_tracker.record_page_expectation(expected_url='http://a/checkout', "
+        "trail_step='index=1', producer='keyword')\n"
+        'expect(page).to_have_url("http://a/checkout")'
+    )
+    emitted = replace_token_in_line(
+        f"    act('{token}')",
+        "ASSERT",
+        token,
+        resolved,
+        set(),
+        "x",
+    )
+    lines = emitted.splitlines()
+    assert len(lines) == 3, emitted
+    assert all(line.startswith("    ") for line in lines), emitted
+    assert "record_page_expectation(" in lines[1]
+    assert lines[2].strip() == 'expect(page).to_have_url("http://a/checkout")'

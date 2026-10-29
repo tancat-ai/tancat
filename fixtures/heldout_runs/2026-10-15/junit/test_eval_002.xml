@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="6" time="176.961" timestamp="2026-10-15T22:45:29.851122+01:00"><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_01_navigate_home[chromium]" time="9.589" /><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_02_click_products_link[chromium]" time="20.084"><failure message="AssertionError: Page URL expected to be 'https://automationexercise.com/inventory.html'&#10;Actual value: https://automationexercise.com/products &#10;Call log:&#10;  - Expect &quot;to_have_url&quot; with timeout 5000ms&#10;    13 × locator resolved to &lt;html lang=&quot;en&quot;&gt;…&lt;/html&gt;&#10;       - unexpected value &quot;https://automationexercise.com/products&quot;&#10;&#10;Aria snapshot:&#10;- banner:&#10;  - link &quot;Website for automation practice&quot;:&#10;    - /url: /&#10;    - img &quot;Website for automation practice&quot;&#10;  - list:&#10;    - listitem:&#10;      - link &quot; Home&quot;:&#10;        - /url: /&#10;    - listitem:&#10;      - link &quot; Products&quot;:&#10;        - /url: /products&#10;    - listitem:&#10;      - link &quot; Cart&quot;:&#10;        - /url: /view_cart&#10;    - listitem:&#10;      - link &quot; Signup / Login&quot;:&#10;        - /url: /login&#10;    - listitem:&#10;      - link &quot; Test Cases&quot;:&#10;        - /url: /test_cases&#10;    - listitem:&#10;      - link &quot; API Testing&quot;:&#10;        - /url: /api_list&#10;    - listitem:&#10;      - link &quot; Video Tutorials&quot;:&#10;        - /url: https://www.youtube.com/c/AutomationExercise&#10;    - listitem:&#10;      - link &quot; Contact us&quot;:&#10;        - /url: /contact_us&#10;- img &quot;Website for practice&quot;&#10;- textbox &quot;Search Product&quot;&#10;- button &quot;&quot;&#10;- heading &quot;Category&quot; [level=2]&#10;- heading &quot; Women&quot; [level=4]:&#10;  - link &quot; Women&quot;:&#10;    - /url: &quot;#Women&quot;&#10;- heading &quot; Men&quot; [level=4]:&#10;  - link &quot; Men&quot;:&#10;    - /url: &quot;#Men&quot;&#10;- heading &quot; Kids&quot; [level=4]:&#10;  - link &quot; Kids&quot;:&#10;    - /url: &quot;#Kids&quot;&#10;- insertion:&#10;  - heading &quot;These are topics related to the article that might interest you&quot; [level=2]: Discover more&#10;  - link &quot;Designer shoes&quot;&#10;  - link &quot;Website design services&quot;&#10;  - link &quot;Digital marketing services&quot;&#10;  - link &quot;Men's Jeans&quot;&#10;  - link &quot;Kids Clothing&quot;&#10;  - link &quot;Polo Shirts&quot;&#10;  - link &quot;H&amp;M Fashion&quot;&#10;  - link &quot;Madame Tops&quot;&#10;- heading &quot;Brands&quot; [level=2]&#10;- list:&#10;  - listitem:&#10;    - link &quot;(6) Polo&quot;:&#10;      - /url: /brand_products/Polo&#10;  - listitem:&#10;    - link &quot;(5) H&amp;M&quot;:&#10;      - /url: /brand_products/H&amp;M&#10;  - listitem:&#10;    - link &quot;(5) Madame&quot;:&#10;      - /url: /brand_products/Madame&#10;  - listitem:&#10;    - link &quot;(3) Mast &amp; Harbour&quot;:&#10;      - /url: /brand_products/Mast &amp; Harbour&#10;  - listitem:&#10;    - link &quot;(4) Babyhug&quot;:&#10;      - /url: /brand_products/Babyhug&#10;  - listitem:&#10;    - link &quot;(3) Allen Solly Junior&quot;:&#10;      - /url: /brand_products/Allen Solly Junior&#10;  - listitem:&#10;    - link &quot;(3) Kookie Kids&quot;:&#10;      - /url: /brand_products/Kookie Kids&#10;  - listitem:&#10;    - link &quot;(5) Biba&quot;:&#10;      - /url: /brand_products/Biba&#10;- heading &quot;All Products&quot; [level=2]&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 500&quot; [level=2]&#10;- paragraph: Blue Top&#10;- text:  Add to cart&#10;- heading &quot;Rs. 500&quot; [level=2]&#10;- paragraph: Blue Top&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/1&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 400&quot; [level=2]&#10;- paragraph:&#10;  - text: Men&#10;  - link &quot;Tshirt&quot;:&#10;    - /url: &quot;#&quot;&#10;    - img&#10;    - text: Tshirt&#10;- text:  Add to cart&#10;- heading &quot;Rs. 400&quot; [level=2]&#10;- paragraph: Men Tshirt&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/2&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph:&#10;  - text: Sleeveless&#10;  - link &quot;Dress&quot;:&#10;    - /url: &quot;#&quot;&#10;    - img&#10;    - text: Dress&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph: Sleeveless Dress&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/3&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1500&quot; [level=2]&#10;- paragraph: Stylish Dress&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1500&quot; [level=2]&#10;- paragraph: Stylish Dress&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/4&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 600&quot; [level=2]&#10;- paragraph: Winter Top&#10;- text:  Add to cart&#10;- heading &quot;Rs. 600&quot; [level=2]&#10;- paragraph: Winter Top&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/5&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 400&quot; [level=2]&#10;- paragraph: Summer White Top&#10;- text:  Add to cart&#10;- heading &quot;Rs. 400&quot; [level=2]&#10;- paragraph: Summer White Top&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/6&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph: Madame Top For Women&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph: Madame Top For Women&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/7&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 700&quot; [level=2]&#10;- paragraph: Fancy Green Top&#10;- text:  Add to cart&#10;- heading &quot;Rs. 700&quot; [level=2]&#10;- paragraph: Fancy Green Top&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/8&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 499&quot; [level=2]&#10;- paragraph:&#10;  - text: Sleeves Printed Top - White&#10;  - link &quot;Read Economics&quot;:&#10;    - img&#10;    - text: Read Economics&#10;- text:  Add to cart&#10;- heading &quot;Rs. 499&quot; [level=2]&#10;- paragraph: Sleeves Printed Top - White&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/11&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 359&quot; [level=2]&#10;- paragraph: Half Sleeves Top Schiffli Detailing - Pink&#10;- text:  Add to cart&#10;- heading &quot;Rs. 359&quot; [level=2]&#10;- paragraph: Half Sleeves Top Schiffli Detailing - Pink&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/12&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 278&quot; [level=2]&#10;- paragraph: Frozen Tops For Kids&#10;- text:  Add to cart&#10;- heading &quot;Rs. 278&quot; [level=2]&#10;- paragraph: Frozen Tops For Kids&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/13&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 679&quot; [level=2]&#10;- paragraph:&#10;  - text: Full Sleeves Top Cherry - Pink&#10;  - link &quot;Shop T-Shirts&quot;:&#10;    - img&#10;    - text: Shop T-Shirts&#10;- text:  Add to cart&#10;- heading &quot;Rs. 679&quot; [level=2]&#10;- paragraph: Full Sleeves Top Cherry - Pink&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/14&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 315&quot; [level=2]&#10;- paragraph: Printed Off Shoulder Top - White&#10;- text:  Add to cart&#10;- heading &quot;Rs. 315&quot; [level=2]&#10;- paragraph: Printed Off Shoulder Top - White&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/15&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 478&quot; [level=2]&#10;- paragraph: Sleeves Top and Short - Blue &amp; Pink&#10;- text:  Add to cart&#10;- heading &quot;Rs. 478&quot; [level=2]&#10;- paragraph: Sleeves Top and Short - Blue &amp; Pink&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/16&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1200&quot; [level=2]&#10;- paragraph: Little Girls Mr. Panda Shirt&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1200&quot; [level=2]&#10;- paragraph: Little Girls Mr. Panda Shirt&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/18&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1050&quot; [level=2]&#10;- paragraph:&#10;  - text: Sleeveless Unicorn Patch Gown - Pink&#10;  - link &quot;Women's Dresses&quot;:&#10;    - img&#10;    - text: Women's Dresses&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1050&quot; [level=2]&#10;- paragraph: Sleeveless Unicorn Patch Gown - Pink&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/19&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1190&quot; [level=2]&#10;- paragraph: Cotton Mull Embroidered Dress&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1190&quot; [level=2]&#10;- paragraph: Cotton Mull Embroidered Dress&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/20&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1530&quot; [level=2]&#10;- paragraph: Blue Cotton Indie Mickey Dress&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1530&quot; [level=2]&#10;- paragraph: Blue Cotton Indie Mickey Dress&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/21&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1600&quot; [level=2]&#10;- paragraph:&#10;  - text: Long Maxi Tulle Fancy Dress Up Outfits -Pink&#10;  - link &quot;Browse Clothing&quot;:&#10;    - img&#10;    - text: Browse Clothing&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1600&quot; [level=2]&#10;- paragraph: Long Maxi Tulle Fancy Dress Up Outfits -Pink&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/22&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1100&quot; [level=2]&#10;- paragraph: Sleeveless Unicorn Print Fit &amp; Flare Net Dress - Multi&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1100&quot; [level=2]&#10;- paragraph: Sleeveless Unicorn Print Fit &amp; Flare Net Dress - Multi&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/23&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 849&quot; [level=2]&#10;- paragraph: Colour Blocked Shirt – Sky Blue&#10;- text:  Add to cart&#10;- heading &quot;Rs. 849&quot; [level=2]&#10;- paragraph: Colour Blocked Shirt – Sky Blue&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/24&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1299&quot; [level=2]&#10;- paragraph:&#10;  - text: Pure Cotton V-Neck&#10;  - link &quot;T-Shirt&quot;:&#10;    - /url: &quot;#&quot;&#10;    - img&#10;    - text: T-Shirt&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1299&quot; [level=2]&#10;- paragraph: Pure Cotton V-Neck T-Shirt&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/28&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph: Green Side Placket Detail T-Shirt&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1000&quot; [level=2]&#10;- paragraph: Green Side Placket Detail T-Shirt&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/29&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1500&quot; [level=2]&#10;- paragraph: Premium Polo T-Shirts&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1500&quot; [level=2]&#10;- paragraph: Premium Polo T-Shirts&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/30&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 850&quot; [level=2]&#10;- paragraph: Pure Cotton Neon Green Tshirt&#10;- text:  Add to cart&#10;- heading &quot;Rs. 850&quot; [level=2]&#10;- paragraph: Pure Cotton Neon Green Tshirt&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/31&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 799&quot; [level=2]&#10;- paragraph: Soft Stretch Jeans&#10;- text:  Add to cart&#10;- heading &quot;Rs. 799&quot; [level=2]&#10;- paragraph: Soft Stretch Jeans&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/33&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1200&quot; [level=2]&#10;- paragraph: Regular Fit Straight Jeans&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1200&quot; [level=2]&#10;- paragraph: Regular Fit Straight Jeans&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/35&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1400&quot; [level=2]&#10;- paragraph: Grunt Blue Slim Fit Jeans&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1400&quot; [level=2]&#10;- paragraph: Grunt Blue Slim Fit Jeans&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/37&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 2300&quot; [level=2]&#10;- paragraph: Rose Pink Embroidered Maxi Dress&#10;- text:  Add to cart&#10;- heading &quot;Rs. 2300&quot; [level=2]&#10;- paragraph: Rose Pink Embroidered Maxi Dress&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/38&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 3000&quot; [level=2]&#10;- paragraph: Cotton Silk Hand Block Print Saree&#10;- text:  Add to cart&#10;- heading &quot;Rs. 3000&quot; [level=2]&#10;- paragraph: Cotton Silk Hand Block Print Saree&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/39&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 3500&quot; [level=2]&#10;- paragraph: Rust Red Linen Saree&#10;- text:  Add to cart&#10;- heading &quot;Rs. 3500&quot; [level=2]&#10;- paragraph: Rust Red Linen Saree&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/40&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 5000&quot; [level=2]&#10;- paragraph: Beautiful Peacock Blue Cotton Linen Saree&#10;- text:  Add to cart&#10;- heading &quot;Rs. 5000&quot; [level=2]&#10;- paragraph: Beautiful Peacock Blue Cotton Linen Saree&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/41&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1400&quot; [level=2]&#10;- paragraph: Lace Top For Women&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1400&quot; [level=2]&#10;- paragraph: Lace Top For Women&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/42&#10;- img &quot;ecommerce website products&quot;&#10;- heading &quot;Rs. 1389&quot; [level=2]&#10;- paragraph:&#10;  - text: GRAPHIC DESIGN MEN T SHIRT - BLUE&#10;  - link &quot;Women's Dresses&quot;:&#10;    - img&#10;    - text: Women's Dresses&#10;- text:  Add to cart&#10;- heading &quot;Rs. 1389&quot; [level=2]&#10;- paragraph: GRAPHIC DESIGN MEN T SHIRT - BLUE&#10;- text:  Add to cart&#10;- list:&#10;  - listitem:&#10;    - link &quot; View Product&quot;:&#10;      - /url: /product_details/43&#10;- insertion&#10;- contentinfo:&#10;  - heading &quot;Subscription&quot; [level=2]&#10;  - textbox &quot;Your email address&quot;&#10;  - button &quot;&quot;&#10;  - paragraph: Get the most recent updates from our site and be updated your self...&#10;  - paragraph: Copyright © 2021 All rights reserved&#10;- button &quot;Privacy and cookie settings&quot;&#10;- text: &quot;Managed by Google. Complies with IAB TCF. CMP ID: 300&quot;">scratch\gate1_out_t0826\test_eval_002.py:16: in test_02_click_products_link
+    expect(page).to_have_url("https://automationexercise.com/inventory.html")
+E   AssertionError: Page URL expected to be 'https://automationexercise.com/inventory.html'
+E   Actual value: https://automationexercise.com/products 
+E   Call log:
+E     - Expect "to_have_url" with timeout 5000ms
+E       13 × locator resolved to &lt;html lang="en"&gt;…&lt;/html&gt;
+E          - unexpected value "https://automationexercise.com/products"
+E   
+E   Aria snapshot:
+E   - banner:
+E     - link "Website for automation practice":
+E       - /url: /
+E       - img "Website for automation practice"
+E     - list:
+E       - listitem:
+E         - link " Home":
+E           - /url: /
+E       - listitem:
+E         - link " Products":
+E           - /url: /products
+E       - listitem:
+E         - link " Cart":
+E           - /url: /view_cart
+E       - listitem:
+E         - link " Signup / Login":
+E           - /url: /login
+E       - listitem:
+E         - link " Test Cases":
+E           - /url: /test_cases
+E       - listitem:
+E         - link " API Testing":
+E           - /url: /api_list
+E       - listitem:
+E         - link " Video Tutorials":
+E           - /url: https://www.youtube.com/c/AutomationExercise
+E       - listitem:
+E         - link " Contact us":
+E           - /url: /contact_us
+E   - img "Website for practice"
+E   - textbox "Search Product"
+E   - button ""
+E   - heading "Category" [level=2]
+E   - heading " Women" [level=4]:
+E     - link " Women":
+E       - /url: "#Women"
+E   - heading " Men" [level=4]:
+E     - link " Men":
+E       - /url: "#Men"
+E   - heading " Kids" [level=4]:
+E     - link " Kids":
+E       - /url: "#Kids"
+E   - insertion:
+E     - heading "These are topics related to the article that might interest you" [level=2]: Discover more
+E     - link "Designer shoes"
+E     - link "Website design services"
+E     - link "Digital marketing services"
+E     - link "Men's Jeans"
+E     - link "Kids Clothing"
+E     - link "Polo Shirts"
+E     - link "H&amp;M Fashion"
+E     - link "Madame Tops"
+E   - heading "Brands" [level=2]
+E   - list:
+E     - listitem:
+E       - link "(6) Polo":
+E         - /url: /brand_products/Polo
+E     - listitem:
+E       - link "(5) H&amp;M":
+E         - /url: /brand_products/H&amp;M
+E     - listitem:
+E       - link "(5) Madame":
+E         - /url: /brand_products/Madame
+E     - listitem:
+E       - link "(3) Mast &amp; Harbour":
+E         - /url: /brand_products/Mast &amp; Harbour
+E     - listitem:
+E       - link "(4) Babyhug":
+E         - /url: /brand_products/Babyhug
+E     - listitem:
+E       - link "(3) Allen Solly Junior":
+E         - /url: /brand_products/Allen Solly Junior
+E     - listitem:
+E       - link "(3) Kookie Kids":
+E         - /url: /brand_products/Kookie Kids
+E     - listitem:
+E       - link "(5) Biba":
+E         - /url: /brand_products/Biba
+E   - heading "All Products" [level=2]
+E   - img "ecommerce website products"
+E   - heading "Rs. 500" [level=2]
+E   - paragraph: Blue Top
+E   - text:  Add to cart
+E   - heading "Rs. 500" [level=2]
+E   - paragraph: Blue Top
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/1
+E   - img "ecommerce website products"
+E   - heading "Rs. 400" [level=2]
+E   - paragraph:
+E     - text: Men
+E     - link "Tshirt":
+E       - /url: "#"
+E       - img
+E       - text: Tshirt
+E   - text:  Add to cart
+E   - heading "Rs. 400" [level=2]
+E   - paragraph: Men Tshirt
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/2
+E   - img "ecommerce website products"
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph:
+E     - text: Sleeveless
+E     - link "Dress":
+E       - /url: "#"
+E       - img
+E       - text: Dress
+E   - text:  Add to cart
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph: Sleeveless Dress
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/3
+E   - img "ecommerce website products"
+E   - heading "Rs. 1500" [level=2]
+E   - paragraph: Stylish Dress
+E   - text:  Add to cart
+E   - heading "Rs. 1500" [level=2]
+E   - paragraph: Stylish Dress
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/4
+E   - img "ecommerce website products"
+E   - heading "Rs. 600" [level=2]
+E   - paragraph: Winter Top
+E   - text:  Add to cart
+E   - heading "Rs. 600" [level=2]
+E   - paragraph: Winter Top
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/5
+E   - img "ecommerce website products"
+E   - heading "Rs. 400" [level=2]
+E   - paragraph: Summer White Top
+E   - text:  Add to cart
+E   - heading "Rs. 400" [level=2]
+E   - paragraph: Summer White Top
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/6
+E   - img "ecommerce website products"
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph: Madame Top For Women
+E   - text:  Add to cart
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph: Madame Top For Women
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/7
+E   - img "ecommerce website products"
+E   - heading "Rs. 700" [level=2]
+E   - paragraph: Fancy Green Top
+E   - text:  Add to cart
+E   - heading "Rs. 700" [level=2]
+E   - paragraph: Fancy Green Top
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/8
+E   - img "ecommerce website products"
+E   - heading "Rs. 499" [level=2]
+E   - paragraph:
+E     - text: Sleeves Printed Top - White
+E     - link "Read Economics":
+E       - img
+E       - text: Read Economics
+E   - text:  Add to cart
+E   - heading "Rs. 499" [level=2]
+E   - paragraph: Sleeves Printed Top - White
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/11
+E   - img "ecommerce website products"
+E   - heading "Rs. 359" [level=2]
+E   - paragraph: Half Sleeves Top Schiffli Detailing - Pink
+E   - text:  Add to cart
+E   - heading "Rs. 359" [level=2]
+E   - paragraph: Half Sleeves Top Schiffli Detailing - Pink
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/12
+E   - img "ecommerce website products"
+E   - heading "Rs. 278" [level=2]
+E   - paragraph: Frozen Tops For Kids
+E   - text:  Add to cart
+E   - heading "Rs. 278" [level=2]
+E   - paragraph: Frozen Tops For Kids
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/13
+E   - img "ecommerce website products"
+E   - heading "Rs. 679" [level=2]
+E   - paragraph:
+E     - text: Full Sleeves Top Cherry - Pink
+E     - link "Shop T-Shirts":
+E       - img
+E       - text: Shop T-Shirts
+E   - text:  Add to cart
+E   - heading "Rs. 679" [level=2]
+E   - paragraph: Full Sleeves Top Cherry - Pink
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/14
+E   - img "ecommerce website products"
+E   - heading "Rs. 315" [level=2]
+E   - paragraph: Printed Off Shoulder Top - White
+E   - text:  Add to cart
+E   - heading "Rs. 315" [level=2]
+E   - paragraph: Printed Off Shoulder Top - White
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/15
+E   - img "ecommerce website products"
+E   - heading "Rs. 478" [level=2]
+E   - paragraph: Sleeves Top and Short - Blue &amp; Pink
+E   - text:  Add to cart
+E   - heading "Rs. 478" [level=2]
+E   - paragraph: Sleeves Top and Short - Blue &amp; Pink
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/16
+E   - img "ecommerce website products"
+E   - heading "Rs. 1200" [level=2]
+E   - paragraph: Little Girls Mr. Panda Shirt
+E   - text:  Add to cart
+E   - heading "Rs. 1200" [level=2]
+E   - paragraph: Little Girls Mr. Panda Shirt
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/18
+E   - img "ecommerce website products"
+E   - heading "Rs. 1050" [level=2]
+E   - paragraph:
+E     - text: Sleeveless Unicorn Patch Gown - Pink
+E     - link "Women's Dresses":
+E       - img
+E       - text: Women's Dresses
+E   - text:  Add to cart
+E   - heading "Rs. 1050" [level=2]
+E   - paragraph: Sleeveless Unicorn Patch Gown - Pink
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/19
+E   - img "ecommerce website products"
+E   - heading "Rs. 1190" [level=2]
+E   - paragraph: Cotton Mull Embroidered Dress
+E   - text:  Add to cart
+E   - heading "Rs. 1190" [level=2]
+E   - paragraph: Cotton Mull Embroidered Dress
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/20
+E   - img "ecommerce website products"
+E   - heading "Rs. 1530" [level=2]
+E   - paragraph: Blue Cotton Indie Mickey Dress
+E   - text:  Add to cart
+E   - heading "Rs. 1530" [level=2]
+E   - paragraph: Blue Cotton Indie Mickey Dress
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/21
+E   - img "ecommerce website products"
+E   - heading "Rs. 1600" [level=2]
+E   - paragraph:
+E     - text: Long Maxi Tulle Fancy Dress Up Outfits -Pink
+E     - link "Browse Clothing":
+E       - img
+E       - text: Browse Clothing
+E   - text:  Add to cart
+E   - heading "Rs. 1600" [level=2]
+E   - paragraph: Long Maxi Tulle Fancy Dress Up Outfits -Pink
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/22
+E   - img "ecommerce website products"
+E   - heading "Rs. 1100" [level=2]
+E   - paragraph: Sleeveless Unicorn Print Fit &amp; Flare Net Dress - Multi
+E   - text:  Add to cart
+E   - heading "Rs. 1100" [level=2]
+E   - paragraph: Sleeveless Unicorn Print Fit &amp; Flare Net Dress - Multi
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/23
+E   - img "ecommerce website products"
+E   - heading "Rs. 849" [level=2]
+E   - paragraph: Colour Blocked Shirt – Sky Blue
+E   - text:  Add to cart
+E   - heading "Rs. 849" [level=2]
+E   - paragraph: Colour Blocked Shirt – Sky Blue
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/24
+E   - img "ecommerce website products"
+E   - heading "Rs. 1299" [level=2]
+E   - paragraph:
+E     - text: Pure Cotton V-Neck
+E     - link "T-Shirt":
+E       - /url: "#"
+E       - img
+E       - text: T-Shirt
+E   - text:  Add to cart
+E   - heading "Rs. 1299" [level=2]
+E   - paragraph: Pure Cotton V-Neck T-Shirt
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/28
+E   - img "ecommerce website products"
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph: Green Side Placket Detail T-Shirt
+E   - text:  Add to cart
+E   - heading "Rs. 1000" [level=2]
+E   - paragraph: Green Side Placket Detail T-Shirt
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/29
+E   - img "ecommerce website products"
+E   - heading "Rs. 1500" [level=2]
+E   - paragraph: Premium Polo T-Shirts
+E   - text:  Add to cart
+E   - heading "Rs. 1500" [level=2]
+E   - paragraph: Premium Polo T-Shirts
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/30
+E   - img "ecommerce website products"
+E   - heading "Rs. 850" [level=2]
+E   - paragraph: Pure Cotton Neon Green Tshirt
+E   - text:  Add to cart
+E   - heading "Rs. 850" [level=2]
+E   - paragraph: Pure Cotton Neon Green Tshirt
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/31
+E   - img "ecommerce website products"
+E   - heading "Rs. 799" [level=2]
+E   - paragraph: Soft Stretch Jeans
+E   - text:  Add to cart
+E   - heading "Rs. 799" [level=2]
+E   - paragraph: Soft Stretch Jeans
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/33
+E   - img "ecommerce website products"
+E   - heading "Rs. 1200" [level=2]
+E   - paragraph: Regular Fit Straight Jeans
+E   - text:  Add to cart
+E   - heading "Rs. 1200" [level=2]
+E   - paragraph: Regular Fit Straight Jeans
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/35
+E   - img "ecommerce website products"
+E   - heading "Rs. 1400" [level=2]
+E   - paragraph: Grunt Blue Slim Fit Jeans
+E   - text:  Add to cart
+E   - heading "Rs. 1400" [level=2]
+E   - paragraph: Grunt Blue Slim Fit Jeans
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/37
+E   - img "ecommerce website products"
+E   - heading "Rs. 2300" [level=2]
+E   - paragraph: Rose Pink Embroidered Maxi Dress
+E   - text:  Add to cart
+E   - heading "Rs. 2300" [level=2]
+E   - paragraph: Rose Pink Embroidered Maxi Dress
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/38
+E   - img "ecommerce website products"
+E   - heading "Rs. 3000" [level=2]
+E   - paragraph: Cotton Silk Hand Block Print Saree
+E   - text:  Add to cart
+E   - heading "Rs. 3000" [level=2]
+E   - paragraph: Cotton Silk Hand Block Print Saree
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/39
+E   - img "ecommerce website products"
+E   - heading "Rs. 3500" [level=2]
+E   - paragraph: Rust Red Linen Saree
+E   - text:  Add to cart
+E   - heading "Rs. 3500" [level=2]
+E   - paragraph: Rust Red Linen Saree
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/40
+E   - img "ecommerce website products"
+E   - heading "Rs. 5000" [level=2]
+E   - paragraph: Beautiful Peacock Blue Cotton Linen Saree
+E   - text:  Add to cart
+E   - heading "Rs. 5000" [level=2]
+E   - paragraph: Beautiful Peacock Blue Cotton Linen Saree
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/41
+E   - img "ecommerce website products"
+E   - heading "Rs. 1400" [level=2]
+E   - paragraph: Lace Top For Women
+E   - text:  Add to cart
+E   - heading "Rs. 1400" [level=2]
+E   - paragraph: Lace Top For Women
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/42
+E   - img "ecommerce website products"
+E   - heading "Rs. 1389" [level=2]
+E   - paragraph:
+E     - text: GRAPHIC DESIGN MEN T SHIRT - BLUE
+E     - link "Women's Dresses":
+E       - img
+E       - text: Women's Dresses
+E   - text:  Add to cart
+E   - heading "Rs. 1389" [level=2]
+E   - paragraph: GRAPHIC DESIGN MEN T SHIRT - BLUE
+E   - text:  Add to cart
+E   - list:
+E     - listitem:
+E       - link " View Product":
+E         - /url: /product_details/43
+E   - insertion
+E   - contentinfo:
+E     - heading "Subscription" [level=2]
+E     - textbox "Your email address"
+E     - button ""
+E     - paragraph: Get the most recent updates from our site and be updated your self...
+E     - paragraph: Copyright © 2021 All rights reserved
+E   - button "Privacy and cookie settings"
+E   - text: "Managed by Google. Complies with IAB TCF. CMP ID: 300"</failure></testcase><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_03_add_blue_top_to_cart[chromium]" time="21.828" /><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_04_verify_confirmation_message[chromium]" time="13.907"><failure message="src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.">scratch\gate1_out_t0826\test_eval_002.py:31: in test_04_verify_confirmation_message
+    evidence_tracker.click('.add-to-cart.btn[data-product-id="1"]', label='Add to cart', expected_page='https://automationexercise.com/products')
+src\evidence_tracker.py:840: in click
+    self._record_step(
+src\evidence_tracker.py:559: in _record_step
+    raise PageMismatchError(
+E   src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.</failure></testcase><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_05_click_cart_link[chromium]" time="50.079" /><testcase classname="scratch.gate1_out_t0826.test_eval_002" name="test_06_verify_cart_contents[chromium]" time="57.643" /></testsuite></testsuites>

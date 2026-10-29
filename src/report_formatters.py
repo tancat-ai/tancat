@@ -6,12 +6,148 @@ a string in the corresponding format (local markdown, Jira markdown, or HTML).
 
 from __future__ import annotations
 
-import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.evidence_image import EMBED_PREVIEW_MAX_WIDTH, embed_preview_data_uri
+from src.evidence_report import generate_annotated_screenshot, overlay_counts
+from src.heatmap_utils import generate_suite_heatmap, list_evidence_urls
 from src.report_builder import _status_icon, _status_summary, escape_html
+
+
+def _index_sidecars(evidence_dir: Path | None) -> dict[str, Path]:
+    """Map every evidence sidecar of a package to its path, keyed by test name."""
+    if evidence_dir is None or not evidence_dir.is_dir():
+        return {}
+    return {path.stem.replace(".evidence", ""): path for path in sorted(evidence_dir.glob("*.evidence.json"))}
+
+
+def _match_sidecar(row: dict[str, Any], sidecar_index: dict[str, Path]) -> Path | None:
+    """Return the evidence sidecar that belongs to one report row.
+
+    A row names its tests in ``expected_locators``; the sidecars are keyed by
+    the test name, with the pytest parameterisation suffix (``[chromium]``)
+    on one side or the other.
+    """
+    names = row.get("expected_locators") or []
+    if isinstance(names, str):
+        names = [names]
+    for raw in names:
+        name = str(raw)
+        base = name.split("[", 1)[0]
+        if name in sidecar_index:
+            return sidecar_index[name]
+        if base in sidecar_index:
+            return sidecar_index[base]
+        for key, path in sidecar_index.items():
+            if key.split("[", 1)[0] == base or key.startswith(base):
+                return path
+    return None
+
+
+def _overlay_block(row: dict[str, Any], sidecar_index: dict[str, Path]) -> str:
+    """Return the annotated evidence overlay for one report row.
+
+    Empty when the row has no evidence sidecar. The block is a disclosure:
+    open for a failed test (that is where the reader needs the picture) and
+    closed otherwise, so the report stays a document rather than a gallery.
+    """
+    sidecar_path = _match_sidecar(row, sidecar_index)
+    if sidecar_path is None:
+        return ""
+    try:
+        html = generate_annotated_screenshot(
+            sidecar_path=sidecar_path,
+            title=str(row.get("test_name", "")),
+            max_width=EMBED_PREVIEW_MAX_WIDTH,
+        )
+        frames, markers = overlay_counts(sidecar_path)
+    except Exception:
+        return ""
+    if markers:
+        summary = f"Annotated overlay - {markers} step(s) marked on {frames} frame(s)"
+    else:
+        summary = "Annotated overlay - no element positions were recorded for this test"
+    open_attr = " open" if str(row.get("status", "")) == "failed" else ""
+    return (
+        f"                <details{open_attr} style='margin:15px 0;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;background:#fff;'>"
+        f"                    <summary style='cursor:pointer;font-weight:600;color:#333;'>{escape_html(summary)}</summary>"
+        f"                    <div style='margin-top:10px;'>{html}</div>"
+        "                </details>"
+    )
+
+
+def _suite_heatmap_lines(evidence_dir: Path | None, urls: list[str]) -> list[str]:
+    """Return the HTML lines for the per-URL suite heatmap section."""
+    if evidence_dir is None or not evidence_dir.is_dir() or not urls:
+        return []
+    lines = [
+        "        <h2>Suite Heatmap - Per-URL Element Coverage</h2>",
+        "        <p class='timestamp'>Which elements each page of the product was exercised on, across the whole suite. "
+        "A circle's number is how many times that element was hit; its colour is the outcome. "
+        "Every marker sits on the frame the step was measured on.</p>",
+    ]
+    for idx, url in enumerate(urls):
+        try:
+            html = generate_suite_heatmap(
+                evidence_dir=evidence_dir,
+                page_url=url,
+                max_width=EMBED_PREVIEW_MAX_WIDTH,
+            )
+        except Exception:
+            continue
+        open_attr = " open" if idx == 0 else ""
+        lines.extend(
+            [
+                f"        <details{open_attr} style='margin:10px 0;border:1px solid #e0e0e0;border-radius:8px;padding:8px 12px;background:#fff;'>",
+                f"            <summary style='cursor:pointer;font-weight:600;'>{escape_html(url)}</summary>",
+                "            <div style='margin-top:10px;'>",
+                html,
+                "            </div>",
+                "        </details>",
+            ]
+        )
+    return lines
+
+
+def journey_lines(test: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Return the t-1063 journey summary as (step, expected, reached) rows.
+
+    One row per failed step, plus the off-course note as a final row whose
+    ``step`` is "Later steps". Empty for a clean test and for an older package
+    that carries no journey block, so nothing is invented.
+    """
+    journey = test.get("journey") or {}
+    if not isinstance(journey, dict) or not journey:
+        return []
+    rows: list[tuple[str, str, str]] = []
+    for failure in journey.get("failed_steps") or []:
+        if not isinstance(failure, dict):
+            continue
+        page = failure.get("page") or {}
+        expected = str(page.get("expected") or "") if isinstance(page, dict) else ""
+        reached = str(page.get("actual") or "") if isinstance(page, dict) else ""
+        detail = str(failure.get("error") or "")
+        if not expected and detail:
+            expected = detail
+        rows.append((f"Step {failure.get('step')}", expected, reached))
+    stop_text = str(journey.get("stop_text") or "")
+    if stop_text:
+        detail = str((journey.get("stop") or {}).get("detail") or "") if isinstance(journey.get("stop"), dict) else ""
+        rows.append(("Stopped", stop_text, detail))
+    later = int(journey.get("later_steps") or 0)
+    passed = int(journey.get("later_passed_off_course") or 0)
+    off_course = journey.get("off_course") or {}
+    if later:
+        reached = str(off_course.get("actual") or "") if isinstance(off_course, dict) else ""
+        note = f"{later} ran, {passed} passed"
+        if reached:
+            note += f" on '{reached}'; none of those passes is clean"
+        else:
+            note += " after the failure; none of those passes is clean"
+        rows.append(("Later steps", "", note))
+    return rows
 
 
 def verification_line(test: dict[str, Any]) -> str:
@@ -98,7 +234,7 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
             lines.append(f"- **Error:** {error_message[:200]}")
 
         # Failure diagnostics section (only for failed tests with diagnostic data)
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             lines.append("")
             lines.append("#### Failure Diagnostics")
             if page_url:
@@ -111,6 +247,17 @@ def generate_local_report(coverage: list[dict[str, Any]]) -> str:
                 lines.append(f"- **Failure Note:** {fn}")
             if suggested_locators:
                 lines.append("- **Suggested Alternatives:** " + ", ".join(f"`{s}`" for s in suggested_locators[:5]))
+            journey_rows = journey_lines(test)
+            if journey_rows:
+                lines.append("")
+                lines.append("#### Journey")
+                for step, expected, reached in journey_rows:
+                    parts = [f"**{step}**"]
+                    if expected:
+                        parts.append(f"expected {expected}")
+                    if reached:
+                        parts.append(f"reached {reached}")
+                    lines.append("- " + " - ".join(parts))
             if available_elements:
                 # Summarize by role/tag
                 roles: dict[str, int] = {}
@@ -226,7 +373,7 @@ def generate_jira_report(
             lines.append(f"*Error:* {error_message[:200]}")
 
         # Failure diagnostics section
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             lines.append("")
             lines.append("*-- Failure Diagnostics --*")
             if page_url:
@@ -267,20 +414,49 @@ def generate_jira_report(
     return "\n".join(lines)
 
 
-def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path | None = None) -> str:
+def generate_html_report(
+    coverage: list[dict[str, Any]],
+    screenshots_dir: Path | None = None,
+    title: str = "",
+) -> str:
     """Generate self-contained HTML report with base64 embedded screenshots.
+
+    The report carries the evidence overlay (B-105): the annotated per-test
+    viewer, whose markers sit on the frame each step was measured in, and the
+    per-URL suite heatmap. Both are the artifacts this product sells, so they
+    belong in the file the customer keeps.
+
+    Every embedded image is a **preview** scaled to
+    ``EMBED_PREVIEW_MAX_WIDTH`` pixels wide. Evidence frames are full-page
+    captures (~8,000-9,000 px tall, ~2.5 MB each); embedding them whole made
+    the report unsendable. The full-resolution lossless captures stay in the
+    package's ``evidence/`` folder and every preview names its source file.
 
     Args:
         coverage: List of test coverage dictionaries with test_name, status, screenshots, duration
         screenshots_dir: Directory containing screenshot files (optional, used for embedding)
+        title: Optional package/story name shown under the heading so a report
+            saved on its own says which run it belongs to.
 
     Returns:
         HTML formatted report string as a complete standalone document
     """
     passed_count, failed_count, pending_count, unknown_count = _status_summary(coverage)
 
+    evidence_dir = (Path(screenshots_dir) / "evidence") if screenshots_dir else None
+    sidecar_index = _index_sidecars(evidence_dir)
+    evidence_urls = list_evidence_urls(evidence_dir) if evidence_dir is not None else []
+
     def embed_screenshot(screenshot_path: str) -> tuple[str, str]:
         """Embed screenshot as base64 data URI or return placeholder.
+
+        Evidence screenshots are full-page captures (~8,000-9,000 px tall).
+        Inlined at full width they made the report page ~17,000 px tall and
+        impossible to scan, so each image sits in a fixed-height scroll box:
+        full reading width, scroll inside, report layout stays compact.
+
+        The embed is a downscaled preview (the embed-size policy): the
+        lossless capture stays in ``evidence/``.
 
         Returns:
             Tuple of (image_html, alt_text)
@@ -300,22 +476,16 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
             )
 
         try:
-            with open(full_path, "rb") as f:
-                content = f.read()
-                base64_data = base64.b64encode(content).decode("utf-8")
-                ext = full_path.suffix.lower()
-                mime_type = {
-                    ".png": "image/png",
-                    ".jpg": "image/jpeg",
-                    ".jpeg": "image/jpeg",
-                    ".gif": "image/gif",
-                    ".webp": "image/webp",
-                }.get(ext, "application/octet-stream")
+            data_uri = embed_preview_data_uri(full_path)
+            if not data_uri:
+                raise OSError("preview failed")
 
-                return (
-                    f'<img src="data:{mime_type};base64,{base64_data}" style="max-width:100%;border:1px solid #ddd;border-radius:4px;padding:4px;" alt="screenshot">',
-                    screenshot_path,
-                )
+            return (
+                '<div style="max-height:640px;overflow:auto;border:1px solid #ddd;border-radius:4px;padding:4px;background:#fafafa;">'
+                f'<img src="{data_uri}" style="display:block;width:100%;max-width:{EMBED_PREVIEW_MAX_WIDTH}px;height:auto;" alt="screenshot">'
+                "</div>",
+                screenshot_path,
+            )
         except Exception:
             return (
                 '<div style="background:#f0f0f0;padding:20px;text-align:center;color:#666;">⚠️ Error loading image</div>',
@@ -350,20 +520,29 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         "        .status-passed { background: #4caf50; color: white; }",
         "        .status-failed { background: #f44336; color: white; }",
         "        .status-pending { background: #f9a825; color: white; }",
+        "        .status-partial_pass { background: #fb8c00; color: white; }",
         "        .status-unknown { background: #9e9e9e; color: white; }",
+        "        .test-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; }",
+        "        .test-nav a { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: 1px solid #ddd; border-radius: 16px; font-size: 12px; color: #333; text-decoration: none; background: #f9f9f9; }",
+        "        .test-nav a:hover { background: #e3f2fd; border-color: #90caf9; }",
+        "        .test-nav a.nav-failed { border-color: #f44336; color: #c62828; }",
+        "        .test-nav a.nav-partial_pass { border-color: #fb8c00; color: #e65100; }",
         "        .test-body { padding: 20px; }",
         "        .detail-row { display: flex; margin: 10px 0; }",
         "        .detail-label { font-weight: bold; width: 120px; color: #555; }",
         "        .screenshot-container { margin-top: 15px; padding: 10px; background: #fafafa; border-radius: 4px; }",
         "        .timestamp { color: #888; font-size: 12px; margin-top: 30px; padding-top: 15px; border-top: 1px solid #eee; }",
+        "        @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }",
         "        @media (max-width: 600px) { .summary { grid-template-columns: 1fr; } }",
         "    </style>",
         "</head>",
         "<body>",
         "    <div class='container'>",
         "        <h1>🧪 Test Coverage Report</h1>",
-        f"        <p class='timestamp'>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
-        "",
+        f"        <p class='timestamp'>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        + (f" &middot; Package: <code>{escape_html(title)}</code>" if title else "")
+        + "</p>",
+        "",  # test-nav inserted below (needs the rows first)
         "        <div class='summary'>",
         f"            <div class='stat total'><div class='stat-value'>{len(coverage)}</div><div class='stat-label'>Total Tests</div></div>",
         f"            <div class='stat passed'><div class='stat-value'>{passed_count}</div><div class='stat-label'>Passed</div></div>",
@@ -372,8 +551,32 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         f"            <div class='stat unknown'><div class='stat-value'>{unknown_count}</div><div class='stat-label'>Unknown</div></div>",
         "        </div>",
         "",
-        "        <h2>Test Details</h2>",
+        "        <p class='timestamp'>Every image in this report is a preview scaled to "
+        f"{EMBED_PREVIEW_MAX_WIDTH}px wide, so the file stays small enough to send. The full-resolution "
+        "lossless captures are the files in the package's <code>evidence/</code> folder, named under each image. "
+        "Each test below carries an annotated overlay: every step's marker sits on the frame that step was "
+        "measured in.</p>",
+        "",
     ]
+
+    lines.extend(_suite_heatmap_lines(evidence_dir, evidence_urls))
+    if evidence_urls:
+        lines.append("")
+
+    if coverage:
+        nav_links = []
+        for idx, test in enumerate(coverage, 1):
+            status = test.get("status", "unknown")
+            short = escape_html(str(test.get("test_name", ""))[:40])
+            cls = (
+                " class='nav-failed'"
+                if status == "failed"
+                else (" class='nav-partial_pass'" if status == "partial_pass" else "")
+            )
+            nav_links.append(f"<a href='#test-{idx}'{cls} title='{short}'>{_status_icon(status)} {idx}</a>")
+        lines.append("        <div class='test-nav'>" + "".join(nav_links) + "</div>")
+
+    lines.append("        <h2>Test Details</h2>")
 
     for idx, test in enumerate(coverage, 1):
         test_name = test.get("test_name", "Unknown Test")
@@ -382,12 +585,14 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         screenshots = test.get("screenshots", [])
         error_message = test.get("error_message", "")
 
-        status_class = f"status-{status}" if status in ["passed", "failed", "pending"] else "status-unknown"
+        status_class = (
+            f"status-{status}" if status in ["passed", "failed", "pending", "partial_pass"] else "status-unknown"
+        )
         status_icon = _status_icon(status)
 
         lines.extend(
             [
-                "        <div class='test-item'>",
+                f"        <div class='test-item' id='test-{idx}'>",
                 "            <div class='test-header'>",
                 f"                <span class='test-name'>{idx}. {escape_html(test_name)} {status_icon}</span>",
                 f"                <span class='status-badge {status_class}'>{status.upper()}</span>",
@@ -399,8 +604,12 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
 
         verification = verification_line(test)
         if verification:
+            # On a failed test the emit-time verdict reads like a pass
+            # ("verified by element"). Frame it as what the test was meant to
+            # check, so a red row cannot be skimmed as a green one.
+            label = "Intended check:" if status == "failed" else "Verification:"
             lines.append(
-                "                <div class='detail-row'><span class='detail-label'>Verification:</span>"
+                f"                <div class='detail-row'><span class='detail-label'>{label}</span>"
                 f"<span>{escape_html(verification)}</span></div>"
             )
 
@@ -419,7 +628,7 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
         page_url = test.get("page_url", "")
         page_title = test.get("page_title", "")
 
-        if status == "failed" and (failure_note or suggested_locators or page_url):
+        if status == "failed" and (failure_note or suggested_locators or page_url or test.get("journey")):
             diag_border = "border-left:4px solid #f44336;padding-left:15px;margin:15px 0;background:#fff5f5;padding:10px;border-radius:4px;"
             lines.append(f"                <div style='{diag_border}'>")
             lines.append("                    <strong style='color:#c62828;'>Failure Diagnostics</strong>")
@@ -436,6 +645,11 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                 fn = failure_note if len(failure_note) < 600 else failure_note[:597] + "..."
                 lines.append(
                     f"                    <div class='detail-row'><span class='detail-label'>Failure Note:</span><span style='white-space:pre-wrap;'>{escape_html(fn)}</span></div>"
+                )
+            for step, expected, reached in journey_lines(test):
+                detail = " - ".join(part for part in (expected, reached) if part)
+                lines.append(
+                    f"                    <div class='detail-row'><span class='detail-label'>{escape_html(step)}:</span><span>{escape_html(detail)}</span></div>"
                 )
             if suggested_locators:
                 loc_html = ", ".join(f"<code>{escape_html(s)}</code>" for s in suggested_locators[:5])
@@ -478,6 +692,10 @@ def generate_html_report(coverage: list[dict[str, Any]], screenshots_dir: Path |
                     + screenshot_html_parts
                     + ["                </div>"]
                 )
+
+        overlay_block = _overlay_block(test, sidecar_index)
+        if overlay_block:
+            lines.append(overlay_block)
 
         lines.extend(
             [

@@ -141,7 +141,7 @@ class TestFullValidation:
         test_file.write_text("def test_always_pass():\n    assert True\n")
 
         def fake_run(
-            test_file: Path, pytest_timeout: float = 120.0
+            test_file: Path, pytest_timeout: float = 120.0, **kwargs: object
         ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
             return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER, {})
 
@@ -214,7 +214,7 @@ class TestFullValidation:
         }
 
         def fake_run(
-            test_file: Path, pytest_timeout: float = 120.0
+            test_file: Path, pytest_timeout: float = 120.0, **kwargs: object
         ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
             return (3, 2, 0, 1, 1.0, fake_output, fake_per_test)
 
@@ -370,7 +370,7 @@ class TestMissingPerTestOutcomesFallBackLoudly:
         code = "def test_01_a(page):\n    evidence_tracker.assert_visible('#wrong', label='a')\n"
 
         def fake_run(
-            test_file: Path, pytest_timeout: float = 120.0
+            test_file: Path, pytest_timeout: float = 120.0, **kwargs: object
         ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
             # 1 passed in the summary, but NO per-test outcomes parsed.
             return (1, 1, 0, 0, 1.0, "=== 1 passed in 1.0s ===\n", {})

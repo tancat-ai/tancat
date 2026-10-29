@@ -1,0 +1,88 @@
+======================================================================
+EVALUATION HARNESS REPORT
+======================================================================
+
+  Stories evaluated:        9
+  Total placeholders:       113
+  Correct resolutions:      87
+  Resolution accuracy:      77.0%
+
+  ASSERT verification (B-093 gate 2):
+    by element (golden)              21
+    by element (pipeline verdict)    10
+    by page arrival (URL assertion)  6
+    unverified                       0
+
+  Tests executed:           62
+  Tests passed:             41
+
+  Step/expected-result alignment (report only):
+    22 of 55 ASSERT steps are specificity-misaligned
+      (OPEN+DIRECT 1, FIXED+PROPERTY 21, 40.0%)
+  Test pass rate:           66.1%
+  False positives:          0
+  False positive rate:      0.0%
+
+  Skeleton completeness:    100.0%
+  Mean gen. duration:       220.1s
+
+----------------------------------------------------------------------
+PER-STORY BREAKDOWN
+----------------------------------------------------------------------
+  eval-001 (saucedemo):
+    Placeholders: 20 correct=8/20 (40%)
+    Tests:        6 passed=2 false_pos=0
+    Skeletons:    6/6
+    Duration:     230.5s
+
+  eval-002 (automationexercise):
+    Placeholders: 8 correct=6/8 (75%)
+    Tests:        6 passed=4 false_pos=0
+    Partial:      test_03_add_blue_top_to_cart 3/4 resolved
+    Skeletons:    6/6
+    Duration:     508.5s
+
+  eval-003 (demoqa):
+    Placeholders: 8 correct=7/8 (88%)
+    Tests:        6 passed=6 false_pos=0
+    Skeletons:    6/6
+    Duration:     84.9s
+
+  eval-004 (theinternet):
+    Placeholders: 7 correct=5/7 (71%)
+    Tests:        5 passed=5 false_pos=0
+    Skeletons:    5/5
+    Duration:     70.7s
+
+  eval-005 (lv_insurance):
+    Placeholders: 24 correct=20/24 (83%)
+    Tests:        10 passed=0 false_pos=0
+    Skeletons:    10/10
+    Duration:     236.8s
+
+  eval-006 (ecommerce_mock):
+    Placeholders: 16 correct=14/16 (88%)
+    Tests:        8 passed=5 false_pos=0
+    Partial:      test_02_add_blue_top 2/3 resolved; test_03_verify_confirmation 2/3 resolved
+    Skeletons:    8/8
+    Duration:     466.9s
+
+  eval-007 (banking_mock):
+    Placeholders: 13 correct=13/13 (100%)
+    Tests:        8 passed=8 false_pos=0
+    Skeletons:    8/8
+    Duration:     144.9s
+
+  eval-008 (banking_mock):
+    Placeholders: 13 correct=10/13 (77%)
+    Tests:        9 passed=7 false_pos=0
+    Skeletons:    9/9
+    Duration:     133.4s
+
+  eval-010 (ambiguous_mock):
+    Placeholders: 4 correct=4/4 (100%)
+    Tests:        4 passed=4 false_pos=0
+    Skeletons:    4/4
+    Duration:     104.1s
+
+======================================================================

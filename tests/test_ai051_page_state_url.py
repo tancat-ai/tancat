@@ -1,16 +1,12 @@
-"""AI-051: B-021 page-state URL assertions must assert the OBSERVED landing page.
+"""AI-051: page-state URL assertions and the observed landing page.
 
-Root cause: a page-state ASSERT ("page loaded", "home page title", "logged in")
-was resolved by keyword-matching the description against scraped pages
-(``resolve_url``). When the preceding action navigated to a page that was NEVER
-scraped (e.g. saucedemo Login: home -> ``/inventory.html``), the keyword match
-fell back to the base/starting URL, producing
-``expect(page).to_have_url("https://www.saucedemo.com/")`` after a login click —
-which always fails because saucedemo redirects to ``/inventory.html``.
+AI-051 originally rewrote a page-state assertion to the trail's observed landing
+when the keyword-resolved candidate disagreed. t-0929 (owner's decision,
+2026-10-25) reverses that: the candidate stays, and a disagreement is an honest
+failure naming both pages. The no-trail and candidate==observed shapes are
+unchanged.
 
-Fix: when the observed trail evidences the step's landing page differs from the
-keyword-inferred one, assert the trail's ``to_url`` (a browser fact). See
-``docs/sessions/`` AI-051 record.
+These tests pin the four original AI-051 shapes under the new rule.
 """
 
 from __future__ import annotations
@@ -102,34 +98,45 @@ def _login_trail() -> ObservedTrail:
                 2, "click", description="login button", from_url=SEED, to_url=INVENTORY, navigated=True, scraped=True
             ),
             # The page-state ASSERT is a "scrape" step observed ON /inventory.html.
+            # Its description resolves to the base page, so t-0929 exposes the
+            # disagreement as an honest failure.
             ObservedStep(
-                3, "scrape", description="inventory page loaded", from_url=INVENTORY, to_url=INVENTORY, scraped=True
+                3, "scrape", description="home page loaded", from_url=INVENTORY, to_url=INVENTORY, scraped=True
             ),
         ]
     )
 
 
-def test_login_assert_uses_observed_landing_url() -> None:
-    """The AI-051 repro: after Login, assert /inventory.html, not the base URL."""
+def test_login_assert_uses_the_trail_landing_not_a_full_list_guess() -> None:
+    """The old AI-051 repro through the scoped page picker (t-0966).
+
+    The landing page was not in the scrape inventory, so the old full-list
+    resolver fell back to the base URL and then failed honestly. The scoped
+    picker uses the trail's observed landing instead: /inventory.html is where
+    the browser really was, so that is the page the assertion names.
+    """
     skeleton, journey = _build(
         "test_01_login",
         [
             ("FILL", "username:standard_user"),
             ("FILL", "password:secret_sauce"),
             ("CLICK", "login button"),
-            ("ASSERT", "inventory page loaded"),
+            ("ASSERT", "home page loaded"),
         ],
     )
-    result = _resolve(skeleton, [journey], _login_data(), {"test_01_login": _login_trail()})
+    # The original repro: the landing page was NOT in the scrape inventory.
+    data = _login_data()
+    data.pop(INVENTORY)
+    result = _resolve(skeleton, [journey], data, {"test_01_login": _login_trail()})
 
-    # The assertion must target the observed post-login landing page…
+    # The trail landing is the page the step names.
     assert f'expect(page).to_have_url("{INVENTORY}")' in result
-    # …and must NOT be the base/starting URL (the AI-051 bug).
-    assert f'expect(page).to_have_url("{SEED}")' not in result
+    assert f'expect(page).to_have_url("{SEED}/")' not in result
+    assert "pytest.skip" not in result
 
 
-def test_no_trail_keeps_legacy_keyword_resolution() -> None:
-    """Back-compat: without a trail, behaviour is exactly as before AI-051."""
+def test_no_trail_and_no_current_page_link_skips_honestly() -> None:
+    """No link on the current page and no trail: unresolved, not a full-list guess."""
     skeleton, journey = _build(
         "test_01_login",
         [
@@ -137,10 +144,15 @@ def test_no_trail_keeps_legacy_keyword_resolution() -> None:
             ("ASSERT", "home page loaded"),
         ],
     )
-    # "home page loaded" resolves to the base URL via the root-path guard
-    # (home is a root-style term). No trail → no override → base URL stays.
-    result = _resolve(skeleton, [journey], _login_data(), None)
-    assert f'expect(page).to_have_url("{SEED}/")' in result
+    # The base page has no link to the home page and there is no trail, so the
+    # step is unresolved. A matching element on the other page must not be
+    # reached by the old full-list element resolver either.
+    data = _login_data()
+    data[INVENTORY].append(_el("#home-title", "Home page loaded", tag="h1"))
+    result = _resolve(skeleton, [journey], data, None)
+    assert "pytest.skip" in result
+    assert "to_have_url" not in result
+    assert "#home-title" not in result
 
 
 def test_assert_on_scraped_landing_stays_on_landing() -> None:

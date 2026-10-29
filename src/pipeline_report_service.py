@@ -76,8 +76,11 @@ class PipelineReportService:
         # diagnostic images without depending on the evidence folder. Passing
         # tests' full screenshot galleries stay on the Evidence & Reports page
         # — embedding everything would bloat the HTML (full-page PNGs ~3.4MB).
+        # The package directory name names the run (story slug + timestamp),
+        # so a saved report.html says which run it belongs to.
         screenshots_dir = Path(package_dir) if package_dir else None
-        html_report = generate_html_report(coverage_rows, screenshots_dir=screenshots_dir)
+        package_title = Path(package_dir).name if package_dir else ""
+        html_report = generate_html_report(coverage_rows, screenshots_dir=screenshots_dir, title=package_title)
 
         local_report_path = ""
         jira_report_path = ""

@@ -34,24 +34,30 @@ def test_normalize_url_path_still_works() -> None:
     assert normalize_url_path("") == ""
 
 
-def test_build_common_path_candidates_concept_driven_and_same_domain() -> None:
-    """Candidates come from the shared route vocabulary, scoped to the seed domain."""
-    from src.url_utils import build_common_path_candidates
+def test_no_fixed_route_table_survives_in_url_utils() -> None:
+    """t-0877: the invented-address helpers are gone, not just unused.
 
-    candidates = build_common_path_candidates(["https://www.saucedemo.com/"], {"cart", "checkout", "products"})
-    assert "https://www.saucedemo.com/cart.html" in candidates
-    assert "https://www.saucedemo.com/checkout-step-one.html" in candidates
-    assert "https://www.saucedemo.com/inventory.html" in candidates
-    # Same-domain only — never other hosts
-    assert all("saucedemo.com" in c for c in candidates)
+    These two tests used to pin ``build_common_path_candidates`` (a fixed route
+    table that turned story concepts into /cart.html, /view_cart, /basket,
+    /inventory.html ... on the seed domain) and its empty-input edges. The
+    owner's rule (2026-10-23) deleted the whole path: "if its not something a
+    real user would have then its not accurate testing behaviour". Inverted
+    rather than dropped, so a future re-introduction fails here.
+    """
+    import src.url_utils as url_utils
+
+    assert not hasattr(url_utils, "build_common_path_candidates")
+    assert not hasattr(url_utils, "heuristic_url_from_description")
 
 
-def test_build_common_path_candidates_empty_inputs() -> None:
-    from src.url_utils import build_common_path_candidates
+def test_concept_extraction_remains_but_creates_no_urls() -> None:
+    """Concepts still name routes discovery looks for; they never build one."""
+    from src.url_utils import extract_route_concepts
 
-    assert build_common_path_candidates([], {"cart"}) == []
-    assert build_common_path_candidates(["https://example.com/"], set()) == []
-    assert build_common_path_candidates(["https://example.com/"], {"home"}) == []
+    concepts = extract_route_concepts(["add a product to the cart and check out"])
+    assert {"products", "cart", "checkout"} <= concepts
+    # A concept is a word, never an address.
+    assert all("/" not in concept and "." not in concept for concept in concepts)
 
 
 def test_alias_match_products_to_inventory() -> None:

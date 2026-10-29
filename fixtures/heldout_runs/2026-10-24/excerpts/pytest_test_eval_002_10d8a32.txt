@@ -1,0 +1,23 @@
+Source: pytest log of eval-002 in the 2026-10-24 rag_on_bundled leg on commit 10d8a32
+(full file: scratch/eval_runs/2026-10-24_t0891_rag_on_bundled_10d8a32/pytest/test_eval_002.log,
+not committed - see fixtures/heldout_runs/README.md).
+Extracted with: sed -n '30,35p;52,54p;56,58p' <that log>
+The temp-file path and one traceback frame that named it are omitted; no cited
+line is omitted.
+
+CITATION CONVENTION: the left gutter is the ORIGINAL line number in the source
+log; this file's own line numbers are 1..N over the whole file (header included).
+LF-only file: one file line is one line for wc, sed, awk and a Python split on LF. The entries give both numbers: the original log line, and this file's line.
+
+  30      evidence_tracker.click('.add-to-cart.btn[data-product-id="1"]', label='Add to cart', expected_page='https://automationexercise.com/products')
+  31  src\evidence_tracker.py:875: in click
+  32      self._record_step(
+  33  src\evidence_tracker.py:594: in _record_step
+  34      raise PageMismatchError(
+  35  E   src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.
+  52  E   playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.
+  53  E   Call log:
+  54  E     - waiting for locator("h4:has-text(\"Blue Top\")").first to be visible
+  56  =========================== short test summary info ===========================
+  57  FAILED scratch/gate1_out_t0891_rag_on_bundled/test_eval_002.py::test_05_click_cart_link[chromium] - src.evidence_tracker.PageMismatchError: click 'Add to cart' ran on 'https://automationexercise.com/#google_vignette' but was resolved against 'https://automationexercise.com/products'. The flow diverged from the resolved page context; this check did not verify its condition.
+  58  FAILED scratch/gate1_out_t0891_rag_on_bundled/test_eval_002.py::test_06_verify_cart_contents[chromium] - playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 5000ms exceeded.

@@ -3,7 +3,7 @@
 ## Why This Session Exists
 
 The current intelligent pipeline is only partially aligned with the intended design in
-[docs/specs/FEATURE_SPEC_intelligent_scraping_pipeline.md](c:/Users/l_a_c/code/AI-Playwright-Test-Generator/docs/specs/FEATURE_SPEC_intelligent_scraping_pipeline.md).
+[docs/specs/FEATURE_SPEC_intelligent_scraping_pipeline.md](../specs/completed/FEATURE_SPEC_intelligent_scraping_pipeline.md).
 
 What was intended:
 - Generate a placeholder-first skeleton from the story.

@@ -23,6 +23,10 @@ class JourneyStep:
         text: Text to fill into an input (for "fill" action).
         description: Human-readable description of this step.
         timeout_ms: Custom timeout for this step (default: 30000).
+        prefer_link: When True the step clicks the HYPERLINK that names the
+            destination instead of any element that matches the words
+            (t-0847). A navigation whose URL is not in the human's input is
+            performed the way a human performs it: by clicking the link.
     """
 
     action: str
@@ -31,6 +35,7 @@ class JourneyStep:
     text: str | None = None
     description: str = ""
     timeout_ms: int = 30_000
+    prefer_link: bool = False
 
 
 @dataclass
@@ -86,6 +91,8 @@ class ObservedStep:
         scraped: True when the step caused the destination page to be scraped
             (``output`` gained a key for ``to_url``).
         error: Exception message when the step failed after all retries.
+        timestamp: When the step was observed (epoch seconds). 0.0 means the
+            producer did not stamp it (older saved trails).
     """
 
     index: int
@@ -97,6 +104,7 @@ class ObservedStep:
     navigated: bool = False
     scraped: bool = False
     error: str | None = None
+    timestamp: float = 0.0
 
 
 @dataclass

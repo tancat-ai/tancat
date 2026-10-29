@@ -17,7 +17,29 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page
 
-from src.evidence_tracker import EvidenceTracker
+from src.evidence_tracker import JOURNEY_PROTOCOL, EvidenceTracker
+
+# t-1063: the tracker carries on after a failed step and the conftest fails the
+# test once, at its end. Both halves are needed, so both declare the same marker.
+# A package with a new tracker and an old conftest would carry on and NEVER fail
+# the test - a silent success. The fixture refuses to run when they disagree, and
+# it registers ``tracker.journey_hooked`` - the hand-shake that lets the tracker
+# carry on at all. A new tracker under a conftest that never registers therefore
+# raises at the failed step instead of passing silently (t-1066). What the marker
+# catches: drift between two versions that both carry the check, and a new
+# conftest with an old tracker (which fails even earlier, at import).
+CONFTEST_JOURNEY_PROTOCOL = "carry-on-2"
+
+
+def _check_journey_protocol() -> None:
+    """Fail loudly when the tracker and this conftest do not belong together."""
+    if JOURNEY_PROTOCOL != CONFTEST_JOURNEY_PROTOCOL:
+        raise RuntimeError(
+            "evidence_tracker and conftest.py disagree about the journey protocol: "
+            f"tracker={JOURNEY_PROTOCOL!r}, conftest={CONFTEST_JOURNEY_PROTOCOL!r}. "
+            "A failed step would carry on and the test would never fail. "
+            "Re-copy generated_tests/conftest.py from the same version as the tracker."
+        )
 
 
 @dataclass(frozen=True)
@@ -37,10 +59,28 @@ def _get_evidence_refs(request: pytest.FixtureRequest) -> _EvidenceRefs:
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item: Any, call: Any) -> Any:
-    """Attach per-phase reports on the node so fixtures can read pass/fail."""
+    """Attach per-phase reports on the node so fixtures can read pass/fail.
+
+    t-1057: a failed step no longer ends its test. The tracker records the failed
+    step and the journey carries on; this hook fails the test ONCE, at the end,
+    with ``journey_summary()`` - the failed step, what it expected, what the
+    browser reached, and what the later steps did. A raise in fixture teardown
+    would be reported as an ERROR instead of a FAILED test, so the report is what
+    carries it.
+    """
     outcome = yield
     rep = outcome.get_result()
     setattr(item, f"rep_{rep.when}", rep)
+
+    if rep.when != "call":
+        return
+    tracker = getattr(item, "_evidence_tracker", None)
+    if tracker is None or not rep.passed:
+        return
+    summary = tracker.journey_summary()
+    if summary:
+        rep.outcome = "failed"
+        rep.longrepr = summary
 
 
 @pytest.fixture
@@ -54,6 +94,7 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
     conftest's location) so that each subdirectory under generated_tests/ that
     contains a test file gets its own isolated evidence folder.
     """
+    _check_journey_protocol()
     refs = _get_evidence_refs(request)
 
     # Determine the test file's directory (not this conftest's directory).
@@ -67,6 +108,12 @@ def evidence_tracker(page: Page, request: pytest.FixtureRequest) -> EvidenceTrac
         story_ref=refs.story_ref,
         test_package_dir=test_package_dir,
     )
+    # t-1057: the report hook needs the tracker to fail the test once, at the end,
+    # with what failed and what the later steps did.
+    setattr(request.node, "_evidence_tracker", tracker)  # noqa: B010 - a pytest Item has no declared slot
+    # t-1066: the hand-shake. The tracker only swallows a failed step when
+    # something promises to fail the test afterwards; this hook is that promise.
+    tracker.journey_hooked = True
     yield tracker
 
     rep_call = getattr(request.node, "rep_call", None)

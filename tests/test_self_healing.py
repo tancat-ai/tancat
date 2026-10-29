@@ -767,6 +767,42 @@ class TestHealPreScreenIntegration:
         # Assertion failures are NOT interactive candidates
         assert len(report.interactive_repair_candidates) == 0
 
+    def test_assertion_failure_never_changes_the_expectation(self, tmp_path: Path) -> None:
+        """t-0929: a healing pass may not rewrite an expectation.
+
+        The failing assertion names the candidate page and the observed page.
+        An LLM patch that would change the expectation is offered, but the
+        pre-screen must stop it before the LLM call, and the file must stay
+        byte-for-byte unchanged.
+        """
+        test_file = tmp_path / "test_arrival_mismatch.py"
+        source = (
+            "def test_arrival_mismatch():\n"
+            "    assert 'shop' == 'checkout', "
+            '\'expected "https://shop.example.com/checkout.html" but observed "https://shop.example.com/"\'\n'
+        )
+        test_file.write_text(source, encoding="utf-8")
+        before = test_file.read_text(encoding="utf-8")
+
+        mock_llm = MagicMock()
+        mock_llm.generate_test.return_value = json.dumps(
+            {
+                "fixable": True,
+                "diagnosis": "Change the expected URL to the observed page",
+                "strategy": "replace_locator",
+                "old_line": "    assert 'shop' == 'checkout'",
+                "new_line": "    assert 'shop' == 'shop'",
+                "confidence": 0.99,
+            }
+        )
+
+        runner = SelfHealingRunner(llm_client=mock_llm, max_iterations=2)
+        report = runner.heal(test_file)
+
+        assert not mock_llm.generate_test.called, "an expectation failure must never reach the LLM"
+        assert report.unfixable >= 1
+        assert test_file.read_text(encoding="utf-8") == before, "the healing pass changed the expectation"
+
     def test_locator_timeout_calls_llm(self, tmp_path: Path) -> None:
         """Locator timeout failures should still go to the LLM."""
         import json

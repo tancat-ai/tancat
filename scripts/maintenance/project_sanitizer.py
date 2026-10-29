@@ -84,6 +84,36 @@ TXT_WHITELIST: set[str] = {
 # Whitelisted .log files to keep (none by default)
 LOG_WHITELIST: set[str] = set()
 
+# Whitelisted directories whose .txt/.log files are legitimate shipped assets,
+# not junk. "temporary .txt" is a filename convention, and a vendored OCR
+# dictionary happens to be a .txt: t-0810 vendored the PP-OCRv6 rapidocr models
+# (SHA256-pinned) under this path so the [ocr] extra installs offline. Deleting
+# the dictionary would break CPU OCR for every offline customer, so the junk
+# purge never looks inside it. Matched on the path relative to PROJECT_ROOT, so
+# anything new in here is covered without per-file names.
+WHITELISTED_DIRS: tuple[str, ...] = ("src/data/ocr",)
+
+
+def is_whitelisted_path(path: Path) -> bool:
+    """Whether *path* lives inside a directory whose files are kept, not junk.
+
+    Compares path parts, not substrings: on Windows ``relative_to`` yields
+    backslash-separated parts while the allowlist is written with forward
+    slashes, so a plain ``startswith`` silently matches nothing and the junk
+    check fails on Windows only.  Parts are separator-agnostic.
+    """
+    try:
+        rel = path.resolve().relative_to(PROJECT_ROOT)
+    except ValueError:
+        return False
+    parts = rel.parts
+    for prefix in WHITELISTED_DIRS:
+        prefix_parts = Path(prefix).parts
+        if parts[: len(prefix_parts)] == prefix_parts:
+            return True
+    return False
+
+
 # Test file patterns to look for
 TEST_PATTERNS = ("test_*.py",)
 
@@ -218,7 +248,7 @@ def purge_junk() -> list[Path]:
     # Find .log files
     for log_file in find_all_files_matching_pattern("*.log", PROJECT_ROOT, SKIP_DIRS):
         rel = log_file.relative_to(PROJECT_ROOT)
-        if log_file.name in LOG_WHITELIST:
+        if log_file.name in LOG_WHITELIST or is_whitelisted_path(log_file):
             continue
         try:
             log_file.unlink()
@@ -233,7 +263,7 @@ def purge_junk() -> list[Path]:
         if txt_file.name in TXT_WHITELIST or txt_file.name == "requirements.txt":
             continue
         # Exclude UAT output files that might be useful for debugging
-        if txt_file.name.startswith("uat_output"):
+        if txt_file.name.startswith("uat_output") or is_whitelisted_path(txt_file):
             continue
         try:
             txt_file.unlink()
@@ -415,13 +445,13 @@ def purge_junk_check() -> list[Path]:
 
     for log_file in find_all_files_matching_pattern("*.log", PROJECT_ROOT, SKIP_DIRS):
         rel = log_file.relative_to(PROJECT_ROOT)
-        if log_file.name in LOG_WHITELIST:
+        if log_file.name in LOG_WHITELIST or is_whitelisted_path(log_file):
             continue
         purged.append(rel)
 
     for txt_file in find_all_files_matching_pattern("*.txt", PROJECT_ROOT, SKIP_DIRS):
         rel = txt_file.relative_to(PROJECT_ROOT)
-        if txt_file.name in TXT_WHITELIST or txt_file.name == "requirements.txt":
+        if txt_file.name in TXT_WHITELIST or is_whitelisted_path(txt_file):
             continue
         if txt_file.name.startswith("uat_output"):
             continue

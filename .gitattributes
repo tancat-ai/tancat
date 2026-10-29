@@ -3,3 +3,16 @@
 # `env: 'bash\r': No such file or directory`, which is how the local
 # scripts/ci_action_selftest.py run broke on a Windows checkout.
 *.sh text eol=lf
+
+# Vendored OCR models and their dictionary must check out byte-for-byte, even
+# with core.autocrlf=true: manifest.json pins each file's SHA256, and the
+# dictionary reader expects the exact upstream bytes. ``-text`` disables EOL
+# conversion for the whole directory.
+src/data/ocr/* -text
+
+# Held-out evidence excerpts must check out LF-only on every platform. A blob
+# stored with CRLF and checked out under core.autocrlf=true doubles the CR
+# (\r\r\n), so wc/sed/awk count 30 lines where a reader splitting on LF counts
+# 60 - and the excerpt headers, and the citations into them, promise one line
+# per line. eol=lf pins the blob and the checkout to the same bytes.
+fixtures/heldout_runs/**/excerpts/* text eol=lf

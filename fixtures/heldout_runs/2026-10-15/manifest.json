@@ -1,0 +1,25 @@
+{
+ "created_at": "2026-10-15T21:59:16.728981+00:00",
+ "stories": [
+  "eval-001",
+  "eval-002",
+  "eval-003",
+  "eval-004",
+  "eval-005",
+  "eval-006",
+  "eval-007",
+  "eval-008",
+  "eval-010"
+ ],
+ "gate1_accuracy_pct": 75.2,
+ "gate1_placeholders_total": 113,
+ "gate1_placeholders_correct": 85,
+ "gate2_false_greens": 0,
+ "tests_executed": 62,
+ "tests_passed": 37,
+ "mode": "full",
+ "dataset": "scripts\\eval\\dataset",
+ "pipeline": "linear",
+ "generation_mode": "regenerated",
+ "git_commit": "42cf9dd0dc4cb3faccc0c1cfe0b919b6ad42e0ee"
+}

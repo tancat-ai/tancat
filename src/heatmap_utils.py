@@ -7,6 +7,7 @@ This module also houses the Tier 3 per-URL suite heatmap rendering logic
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from src.evidence_image import embed_preview_data_uri
 from src.report_builder import escape_html
 
 
@@ -284,130 +286,180 @@ def build_confidence_heatmap(stories: list[StoryConfidence]) -> go.Figure:
 # ---------------------------------------------------------------------------
 
 
-def _extract_step_points_by_url(sidecar: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]:
-    """Return (points_by_url, background_screenshot_by_url) from one sidecar.
+def _extract_step_points_by_url(
+    sidecar: dict[str, Any],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    """Return (points_by_url, frames_by_url) from one sidecar.
 
-    Points are derived by tracking the current URL as `navigate` steps occur.
-    Background screenshot chooses the last assertion screenshot within a URL segment,
-    otherwise the last screenshot for that segment.
+    Every step is attributed to the page it RAN on, not to the page it ended
+    on: a click is measured before it runs, so a link that navigates would
+    otherwise move its own marker to the destination page (B-105). The page a
+    step ran on is the page the previous step left us on; a step that records
+    its own measurement URL (``element.measured_url``) states it outright.
+
+    ``frames_by_url`` lists the screenshots captured on each page, with the
+    size of the document each captured, so a marker can be matched to the
+    frame it was measured in.
     """
     steps = sidecar.get("steps", [])
     if not isinstance(steps, list):
         return {}, {}
 
     points_by_url: dict[str, list[dict[str, Any]]] = {}
-    bg_by_url: dict[str, str] = {}
+    frames_by_url: dict[str, list[dict[str, Any]]] = {}
 
-    current_url = ""
-    current_url_norm = ""
-    segment_screenshots: list[tuple[int, str]] = []  # (priority, rel_path)
+    page_block = sidecar.get("page", {})
+    fallback_url = _normalise_url(str(page_block.get("url", ""))) if isinstance(page_block, dict) else ""
 
-    def is_meaningful_screenshot(step: dict[str, Any]) -> bool:
-        """Check if a screenshot is likely to be meaningful (not a consent overlay)."""
-        label = str(step.get("label", "")).lower()
-        # Deprioritize screenshots of consent overlays or common pre-action states
-        deprioritize = ["consent", "overlay", "cookie", "accept", "dismiss", "initial", "pre-action"]
-        return not any(word in label for word in deprioritize)
-
-    def flush_segment(url_norm: str) -> None:
-        if not url_norm or not segment_screenshots:
-            return
-        # Choose the highest priority screenshot (assertions are priority 3/2, others 1)
-        # If priorities are equal, prefer the one that is "meaningful"
-        # Finally prefer the last one in the segment
-        sorted_shots = sorted(segment_screenshots, key=lambda x: (x[0], x[1]))
-        bg_by_url[url_norm] = sorted_shots[-1][1]
+    current_segment_url = ""  # the last navigate's destination (legacy sidecars)
+    prev_url = ""  # the page the previous step left us on
 
     for step in steps:
         if not isinstance(step, dict):
             continue
         step_type = str(step.get("type", "")).lower()
-        if "navigate" in step_type:
-            flush_segment(current_url_norm)
-            current_url = str(step.get("value", "") or "")
-            current_url_norm = _normalise_url(current_url)
-            segment_screenshots = []
-            shot = step.get("screenshot")
-            if shot:
-                # Navigate screenshots are priority 0 (fallback only)
-                segment_screenshots.append((0, str(shot)))
+        raw_element = step.get("element")
+        element: dict[str, Any] = raw_element if isinstance(raw_element, dict) else {}
+        step_url = str(step.get("url") or "")
+        shot = str(step.get("screenshot") or "")
 
-            if current_url_norm:
-                result = step.get("result", {})
-                run_count = 1
-                if isinstance(result, dict):
-                    rc = result.get("run_count")
-                    if isinstance(rc, int | float):
-                        run_count = int(rc)
-                points_by_url.setdefault(current_url_norm, []).append(
+        # The page this step RAN on.
+        if "navigate" in step_type:
+            page_url = _normalise_url(str(step.get("value") or step_url or current_segment_url))
+            if page_url:
+                current_segment_url = page_url
+        else:
+            measured_url = str(element.get("measured_url") or "")
+            if measured_url:
+                page_url = _normalise_url(measured_url)
+            elif step_url:
+                page_url = prev_url or _normalise_url(step_url)
+            else:
+                page_url = current_segment_url or fallback_url
+
+        # The frame the step captured shows the page the step ENDED on.
+        frame_url = _normalise_url(str(step.get("frame_url") or step_url or current_segment_url))
+        if shot and frame_url:
+            frames_by_url.setdefault(frame_url, []).append(
+                {
+                    "rel": shot,
+                    "doc_width": step.get("frame_doc_width"),
+                    "doc_height": step.get("frame_doc_height"),
+                }
+            )
+
+        raw_result = step.get("result")
+        result: dict[str, Any] = raw_result if isinstance(raw_result, dict) else {}
+        raw_run_count = result.get("run_count")
+        run_count = int(raw_run_count) if isinstance(raw_run_count, (int, float)) else 1
+        status = str(result.get("status") or "passed")
+        if status not in ("passed", "partial_pass", "failed", "skipped"):
+            status = "passed"
+
+        if "navigate" in step_type:
+            if page_url:
+                points_by_url.setdefault(page_url, []).append(
                     {
                         "type": "navigate",
                         "x": 50.0,
                         "y": 50.0,
                         "run_count": run_count,
+                        "status": status,
+                        "locator": "",
+                        "label": str(step.get("label") or ""),
+                        "element_id": "",
+                        "tag": "",
+                        "arrival": True,
+                        "doc_width": None,
+                        "doc_height": None,
                     }
                 )
+            prev_url = frame_url or prev_url
             continue
 
-        if not current_url_norm:
+        viewport_pct = element.get("viewport_pct")
+        if isinstance(viewport_pct, dict) and page_url:
+            x = viewport_pct.get("x")
+            y = viewport_pct.get("y")
+            if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+                points_by_url.setdefault(page_url, []).append(
+                    {
+                        "type": step_type,
+                        "x": float(x),
+                        "y": float(y),
+                        "run_count": run_count,
+                        "status": status,
+                        "locator": str(step.get("locator") or ""),
+                        "label": str(step.get("label") or ""),
+                        "element_id": str(element.get("element_id") or ""),
+                        "tag": str(element.get("tag") or ""),
+                        "arrival": False,
+                        "doc_width": element.get("doc_width"),
+                        "doc_height": element.get("doc_height"),
+                    }
+                )
+
+        prev_url = frame_url or prev_url
+
+    return points_by_url, frames_by_url
+
+
+def _point_matches_frame(point: dict[str, Any], frame: dict[str, Any]) -> bool:
+    """Return True when *point* may be drawn on *frame*.
+
+    A marker's percentage is only meaningful against the document it was
+    measured in, so the document sizes must match. A sidecar or a frame that
+    does not record its size cannot be checked — the match is accepted and
+    reported as unverified, which is the legacy behaviour.
+    """
+    point_w = point.get("doc_width")
+    point_h = point.get("doc_height")
+    if not isinstance(point_w, (int, float)) or not isinstance(point_h, (int, float)):
+        return True
+    frame_w = frame.get("doc_width")
+    frame_h = frame.get("doc_height")
+    if not isinstance(frame_w, (int, float)) or not isinstance(frame_h, (int, float)):
+        return True
+    return int(point_w) == int(frame_w) and int(point_h) == int(frame_h)
+
+
+def _dominant_status(status_counts: dict[str, int]) -> str:
+    """Return the status that best describes an element.
+
+    The most common status wins. On a tie the worse status wins: an element
+    that failed once out of two attempts did fail.
+    """
+    if not status_counts:
+        return "passed"
+    severity = {"failed": 3, "partial_pass": 2, "skipped": 1, "passed": 0}
+    return max(status_counts.items(), key=lambda kv: (kv[1], severity.get(kv[0], 0)))[0]
+
+
+def list_evidence_urls(evidence_dir: Path) -> list[str]:
+    """Return the page URLs that have evidence points, most-covered first.
+
+    Each URL is one page of the product under test; the suite heatmap is
+    rendered per URL, so this is the list of pages a report can show.
+    """
+    if not evidence_dir.exists():
+        return []
+    counts: dict[str, int] = {}
+    for sidecar_path in evidence_dir.glob("*.evidence.json"):
+        sidecar = _safe_read_json(sidecar_path)
+        if not sidecar:
             continue
-
-        shot = step.get("screenshot")
-        if shot:
-            priority = 1
-            if "assert" in step_type:
-                priority = 3 if is_meaningful_screenshot(step) else 2
-            elif is_meaningful_screenshot(step):
-                priority = 1
-            else:
-                priority = 0
-            segment_screenshots.append((priority, str(shot)))
-
-        element = step.get("element", {})
-        viewport_pct = element.get("viewport_pct") if isinstance(element, dict) else None
-        if not isinstance(viewport_pct, dict):
-            continue
-        x = viewport_pct.get("x")
-        y = viewport_pct.get("y")
-        if not isinstance(x, int | float) or not isinstance(y, int | float):
-            continue
-
-        result = step.get("result", {})
-        run_count = 1
-        if isinstance(result, dict):
-            rc = result.get("run_count")
-            if isinstance(rc, int | float):
-                run_count = int(rc)
-
-        # Extract step status for Tier 3 heatmap
-        step_status = "passed"
-        if isinstance(result, dict):
-            status = result.get("status", "passed")
-            if status in ("failed", "partial_pass", "skipped"):
-                step_status = status
-
-        points_by_url.setdefault(current_url_norm, []).append(
-            {
-                "type": step_type,
-                "x": float(x),
-                "y": float(y),
-                "run_count": run_count,
-                "status": step_status,
-                "locator": step.get("locator", ""),
-                "label": step.get("label", ""),
-                "element_id": element.get("element_id", "") if isinstance(element, dict) else "",
-                "tag": element.get("tag", "") if isinstance(element, dict) else "",
-            }
-        )
-
-    flush_segment(current_url_norm)
-    return points_by_url, bg_by_url
+        points_by_url, _frames = _extract_step_points_by_url(sidecar)
+        for url, points in points_by_url.items():
+            counts[url] = counts.get(url, 0) + len(points)
+    return [url for url, _count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
 
 
 def generate_suite_heatmap(
     *,
     evidence_dir: Path,
     page_url: str,
+    max_width: int = 0,
+    instance: str = "",
 ) -> str:
     """Render a suite-level heatmap for one page URL across all sidecars.
 
@@ -416,59 +468,86 @@ def generate_suite_heatmap(
     - Circle size proportional to test count
     - Tooltips show locator, element info, and test results
     - Filterable by test status
+
+    Args:
+        evidence_dir: The package's ``evidence/`` directory.
+        page_url: The page to render.
+        max_width: Cap on the embedded background width in pixels. Above 0 the
+            background is embedded as a downscaled preview; 0 embeds the
+            full-resolution capture.
+        instance: Unique id for this heatmap inside the page. A report can
+            carry one heatmap per page, and each heatmap's script must scope
+            itself to its own block. Defaults to a hash of the page URL.
     """
     if not evidence_dir.exists():
         return "<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>Evidence directory not found.</div>"
 
     target_norm = _normalise_url(page_url)
     all_points: list[dict[str, Any]] = []
-    best_background: tuple[tuple[int, int], str] | None = None  # ((priority, point_count), rel_path)
+    frames: list[dict[str, Any]] = []
 
     for sidecar_path in evidence_dir.glob("*.evidence.json"):
         sidecar = _safe_read_json(sidecar_path)
         if not sidecar:
             continue
-        points_by_url, bg_by_url = _extract_step_points_by_url(sidecar)
+        points_by_url, frames_by_url = _extract_step_points_by_url(sidecar)
         current_points = points_by_url.get(target_norm, [])
         if not current_points:
             continue
 
         all_points.extend(current_points)
-        if target_norm in bg_by_url:
-            rel = bg_by_url[target_norm]
-            # Priority: assertion (priority 3/2) > meaningful interaction (priority 1) > navigate (priority 0)
-            priority = 0
-            if "assert" in rel:
-                priority = 3
-            elif any(p["type"] != "navigate" for p in current_points):
-                priority = 2
-            else:
-                priority = 1
-
-            score = (priority, len(current_points))
-            if best_background is None or score > best_background[0]:
-                best_background = (score, rel)
+        frames.extend(frames_by_url.get(target_norm, []))
 
     if not all_points:
         escaped = escape_html(page_url)
         return f"<div style='padding:12px;border:1px solid #eee;border-radius:8px;'>No evidence points found for <code>{escaped}</code>.</div>"
 
-    # Pick any background screenshot we found; if none, render points-only.
+    # A page arrival is evidence that the page was reached, not an element
+    # hit: it carries no locator and must not merge into an element.
+    element_points = [p for p in all_points if not p.get("arrival")]
+    arrival_count = len(all_points) - len(element_points)
+
+    # Draw the points on the frame of this page that most of them were
+    # measured in. A percentage is only meaningful against the document it
+    # came from, so a point measured on a different page layout is reported
+    # rather than drawn on the wrong frame (B-105).
+    chosen_frame: dict[str, Any] | None = None
+    best_score = -1
+    for frame in frames:
+        score = sum(1 for point in element_points if _point_matches_frame(point, frame))
+        if score > best_score:
+            best_score = score
+            chosen_frame = frame
+
+    if chosen_frame is None:
+        plotted = list(element_points)
+    else:
+        plotted = [point for point in element_points if _point_matches_frame(point, chosen_frame)]
+    not_plotted = len(element_points) - len(plotted)
+
+    # Pick the background image: the frame the points are drawn on.
     image_data_uri = None
-    if best_background:
-        background_rel = best_background[1]
+    if chosen_frame is not None:
+        background_rel = str(chosen_frame.get("rel") or "")
         image_path = (
             (evidence_dir.parent / background_rel).resolve()
             if background_rel.startswith("evidence/")
             else (evidence_dir / background_rel).resolve()
         )
         image_data_uri = _safe_embed_image_data_uri(image_path)
+        if max_width > 0:
+            preview_uri = embed_preview_data_uri(image_path, max_width=max_width)
+            if preview_uri:
+                image_data_uri = preview_uri
 
     # Aggregate per-element: group by (x, y) position and collect statuses
-    # Elements within 2% of each other are considered the same element
+    # Elements within 2% of each other are considered the same element.
+    # B-105: a point inside the tolerance MERGES into the element it matched.
+    # The old code overwrote the matched element instead, so an element hit
+    # by eight tests showed one hit and the status of the last hit only.
     ELEMENT_TOLERANCE = 2.0
     aggregated: dict[str, dict[str, Any]] = {}
-    for point in all_points:
+    for point in plotted:
         key = f"{point['x']:.1f}_{point['y']:.1f}"
         # Check if this point is close to an existing element
         merged = False
@@ -478,6 +557,7 @@ def generate_suite_heatmap(
             if abs(ax - px) < ELEMENT_TOLERANCE and abs(ay - py) < ELEMENT_TOLERANCE:
                 # Merge into existing element
                 key = agg_key
+                merged = True
                 break
         if not merged:
             aggregated[key] = {
@@ -489,6 +569,7 @@ def generate_suite_heatmap(
                 "element_ids": set(),
                 "tags": set(),
                 "run_count": 0,
+                "runs": 0,
             }
         aggregated[key]["statuses"].append(point.get("status", "passed"))
         if point.get("locator"):
@@ -500,6 +581,7 @@ def generate_suite_heatmap(
         if point.get("tag"):
             aggregated[key]["tags"].add(point["tag"])
         aggregated[key]["run_count"] += 1
+        aggregated[key]["runs"] += int(point.get("run_count") or 1)
 
     # Compute summary stats per element
     for _key, elem in aggregated.items():
@@ -510,8 +592,9 @@ def generate_suite_heatmap(
         elem["passed"] = status_counts.get("passed", 0)
         elem["failed"] = status_counts.get("failed", 0)
         elem["partial_pass"] = status_counts.get("partial_pass", 0)
-        # Dominant status (most common)
-        elem["dominant_status"] = max(status_counts, key=lambda s: status_counts[s]) if status_counts else "passed"
+        elem["skipped"] = status_counts.get("skipped", 0)
+        # Dominant status (most common; the worse one wins a tie)
+        elem["dominant_status"] = _dominant_status(status_counts)
         # Convert sets to lists for JSON serialization
         elem["locators"] = list(elem["locators"])[:3]  # Limit to 3
         elem["labels"] = list(elem["labels"])[:3]
@@ -521,32 +604,43 @@ def generate_suite_heatmap(
     # Build aggregated data for JS
     aggregated_json = json.dumps(list(aggregated.values()))
     status_counts_overall: dict[str, int] = {}
-    for point in all_points:
+    for point in plotted:
         s = point.get("status", "passed")
         status_counts_overall[s] = status_counts_overall.get(s, 0) + 1
 
     points_json = json.dumps(all_points)
+    plotted_json = json.dumps(plotted)
     colors_json = json.dumps(_EVIDENCE_STEP_COLORS)
     status_colors_json = json.dumps(_STATUS_COLORS)
     safe_url = escape_html(page_url)
+    instance = instance or hashlib.sha1(page_url.encode("utf-8")).hexdigest()[:10]
     bg_html = (
-        f'<img id="suite-img" src="{image_data_uri}" alt="suite screenshot" style="display:block;width:100%;height:auto;border-radius:8px;border:1px solid #eee;" />'
+        f'<img class="suite-img" id="suite-img-{instance}" src="{image_data_uri}" alt="suite screenshot" style="display:block;width:100%;max-width:{max_width or 1100}px;height:auto;" />'
         if image_data_uri
-        else '<div id="suite-img" style="width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;color:#666;">No screenshot available for this page. Rendering points only.</div>'
+        else '<div class="suite-img" id="suite-img-{instance}" style="width:100%;aspect-ratio:16/9;border-radius:8px;border:1px dashed #ddd;display:flex;align-items:center;justify-content:center;color:#666;">No screenshot available for this page. Rendering points only.</div>'
     )
+    unplotted_html = (
+        f"<span style='color:#b45309;font-weight:700;'>Not drawn: {not_plotted}</span>"
+        f"<span style='color:#6b7280;'>(measured on a different page layout)</span>"
+        if not_plotted
+        else ""
+    )
+    arrival_html = f"<span style='color:#6b7280;'>Page arrivals: {arrival_count}</span>" if arrival_count else ""
 
     return f"""
-<div style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
+<div class="suite-heatmap" id="suite-heat-{instance}" style="border:1px solid #e6e6e6;border-radius:10px;padding:14px;background:#fff;">
   <div style="font-weight:600;margin-bottom:10px;">Suite Heatmap — Per-URL Element Coverage</div>
   <div style="color:#6b7280;font-size:12px;margin:-6px 0 10px 0;">{safe_url}</div>
 
   <!-- Summary stats -->
-  <div style="display:flex;gap:15px;margin-bottom:12px;font-size:13px;">
-    <span><strong>Total:</strong> {len(all_points)} evidence points</span>
+  <div style="display:flex;gap:15px;margin-bottom:12px;font-size:13px;flex-wrap:wrap;align-items:center;">
+    <span><strong>Total:</strong> {len(all_points)} evidence points ({len(plotted)} drawn on this frame)</span>
     <span style="color:{_STATUS_COLORS["passed"]};font-weight:700;">Passed: {status_counts_overall.get("passed", 0)}</span>
     <span style="color:{_STATUS_COLORS["partial_pass"]};font-weight:700;">Partial: {status_counts_overall.get("partial_pass", 0)}</span>
     <span style="color:{_STATUS_COLORS["failed"]};font-weight:700;">Failed: {status_counts_overall.get("failed", 0)}</span>
     <span style="color:{_STATUS_COLORS["skipped"]};font-weight:700;">Skipped: {status_counts_overall.get("skipped", 0)}</span>
+    {arrival_html}
+    {unplotted_html}
   </div>
 
   <!-- Filter buttons -->
@@ -557,9 +651,9 @@ def generate_suite_heatmap(
     <button class="heatmap-filter-btn" data-filter="failed" style="padding:4px 12px;border:1px solid #F09595;border-radius:16px;background:#F09595;color:#333;cursor:pointer;font-size:12px;">Failed</button>
   </div>
 
-  <div id="suite-wrap" style="position:relative;width:100%;max-width:1100px;">
+  <div class="suite-wrap" id="suite-wrap-{instance}" style="position:relative;width:100%;max-width:{max_width or 1100}px;max-height:640px;overflow:auto;border:1px solid #eee;border-radius:8px;background:#fafafa;">
     {bg_html}
-    <svg id="suite-svg" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
+    <svg class="suite-svg" id="suite-svg-{instance}" style="position:absolute;left:0;top:0;pointer-events:none;z-index:5;"></svg>
   </div>
 
   <!-- Element details table -->
@@ -577,7 +671,7 @@ def generate_suite_heatmap(
           <th style="padding:6px;">Failed</th>
         </tr>
       </thead>
-      <tbody id="element-table-body">
+      <tbody class="element-table-body" id="element-table-body-{instance}">
       </tbody>
     </table>
   </div>
@@ -591,7 +685,7 @@ def generate_suite_heatmap(
     <span style="color:{_EVIDENCE_STEP_COLORS["fill"]};font-weight:700;">● Fill</span>
     <span style="color:{_EVIDENCE_STEP_COLORS["click"]};font-weight:700;">● Click</span>
     <span style="color:{_EVIDENCE_STEP_COLORS["assertion"]};font-weight:700;">● Assertion</span>
-    <span style="margin-left:auto;"><strong>Circle size</strong> = number of test hits</span>
+    <span style="margin-left:auto;"><strong>Circle size</strong> = number of hits on that element</span>
   </div>
 </div>
 
@@ -600,13 +694,24 @@ def generate_suite_heatmap(
   const COLORS = {colors_json};
   const STATUS_COLORS = {status_colors_json};
   const allPoints = {points_json};
+  const plottedPoints = {plotted_json};
   const aggregated = {aggregated_json};
-  const wrap = document.getElementById("suite-wrap");
-  const svg = document.getElementById("suite-svg");
-  const img = document.getElementById("suite-img");
-  const tableBody = document.getElementById("element-table-body");
+  // Every heatmap scopes itself: a report can carry one heatmap per page,
+  // and the first heatmap's script must not drive the others.
+  const ROOT = document.getElementById("suite-heat-{instance}");
+  const wrap = ROOT.querySelector(".suite-wrap");
+  const svg = ROOT.querySelector("svg.suite-svg");
+  const img = ROOT.querySelector(".suite-img");
+  const tableBody = ROOT.querySelector(".element-table-body");
 
   let currentFilter = "all";
+
+  // Locators and labels are free text (site copy). They go into innerHTML
+  // below, so they must be escaped — without this the element table threw
+  // and never rendered at all.
+  function escapeHtml(v) {{
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }}
 
   function baseRadius(runCount) {{
     const rc = Number(runCount || 1);
@@ -680,7 +785,7 @@ def generate_suite_heatmap(
 
       const locator = elem.locators[0] || "N/A";
       const labels = elem.labels.join(", ") || "N/A";
-      const tooltip = `Locator: ${{locator}}\\nLabels: ${{labels}}\\nTotal: ${{elem.total}}\\nPassed: ${{elem.passed}}\\nFailed: ${{elem.failed}}\\nPartial: ${{elem.partial_pass}}`;
+      const tooltip = `Locator: ${{escapeHtml(locator)}}\\nLabels: ${{escapeHtml(labels)}}\\nHits: ${{elem.total}}\\nRuns: ${{elem.runs}}\\nPassed: ${{elem.passed}}\\nFailed: ${{elem.failed}}\\nPartial: ${{elem.partial_pass}}`;
 
       out.push(`
         <g class="point-group" style="cursor:help;" data-element-idx="${{idx}}">
@@ -713,7 +818,7 @@ def generate_suite_heatmap(
   }}
 
   // Filter button handlers
-  document.querySelectorAll(".heatmap-filter-btn").forEach(btn => {{
+  ROOT.querySelectorAll(".heatmap-filter-btn").forEach(btn => {{
     btn.addEventListener("click", () => {{
       currentFilter = btn.dataset.filter;
       render();

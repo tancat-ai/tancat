@@ -119,7 +119,7 @@ def _ocr_backend_choices() -> tuple[list[str], list[str]]:
     if not has_cpu_engine:
         notes.append(
             "Scanned (image-only) pages cannot be read: the CPU OCR engine is not installed. "
-            "Install it with `uv sync --extra ocr` (or `pip install rapidocr_onnxruntime`)."
+            "Install it with `uv sync --extra ocr` (or `pip install rapidocr`)."
         )
     if not has_gpu_engine:
         notes.append(_gpu_unavailable_reason() or "The GPU OCR option is hidden.")
