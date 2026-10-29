@@ -253,7 +253,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | jupyter-lsp | 2.3.1 | BSD License | https://jupyterlab-lsp.readthedocs.io/ |
 | jupyter-server | 2.20.0 | BSD License | https://jupyter-server.readthedocs.io |
 | jupyter-server-terminals | 0.5.4 | BSD License | https://jupyter.org |
-| jupyterlab | 4.6.2 | BSD License | https://jupyter.org |
+| jupyterlab | 4.6.4 | BSD License | https://jupyter.org |
 | jupyterlab-pygments | 0.3.0 | BSD License | https://github.com/jupyterlab/jupyterlab_pygments |
 | jupyterlab-server | 2.28.0 | BSD License | https://jupyterlab-server.readthedocs.io |
 | jupyterlab-widgets | 3.0.16 | BSD License | https://github.com/jupyter-widgets/ipywidgets |
