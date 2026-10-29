@@ -11,6 +11,7 @@ import ast
 import logging
 import re
 from dataclasses import dataclass
+from functools import partial
 
 from .assertion_alignment import alignment_decision
 from .code_normalizer import (
@@ -1525,17 +1526,20 @@ def _strip_unused_evidence_tracker_param(code: str) -> str:
     return "".join(lines) if changed else code
 
 
-def _strip_navigate_to_goto(match: re.Match[str]) -> str:
-    """Turn ``evidence_tracker.navigate(<simple args>)`` into ``page.goto(<url>)``.
+def _strip_navigate_to_goto(match: re.Match[str], page_expr: str = "page") -> str:
+    """Turn ``evidence_tracker.navigate(<simple args>)`` into ``<page_expr>.goto(<url>)``.
 
-    Keeps the first argument (the address) and drops every keyword: the flat
-    export removes the tracker fixture from the signature, so a leftover keyword
-    would be a TypeError - and a leftover tracker call a NameError (d-0042).
-    Only a simple argument list reaches this function; a nested call is not
-    matched at all, so its text is never truncated (t-1049 review, item 3).
+    Keeps the first argument (the address) and drops every keyword: the export
+    removes the tracker, so a leftover keyword would be a TypeError - and a
+    leftover tracker call a NameError (d-0042) or an AttributeError on None
+    (d-0043). Only a simple argument list reaches this function; a nested call is
+    not matched at all, so its text is never truncated (t-1049 review, item 3).
+
+    ``page_expr`` is ``page`` for a flat test and ``self.page`` for a page object,
+    so both strips drop keywords by the same rule rather than by two regexes.
     """
     arguments = _split_top_level_arguments(match.group(1))
-    return f"page.goto({arguments[0]})" if arguments else "page.goto()"
+    return f"{page_expr}.goto({arguments[0]})" if arguments else f"{page_expr}.goto()"
 
 
 def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False) -> str:
@@ -1815,10 +1819,13 @@ def strip_evidence_from_pom(code: str) -> str:
         result,
     )
 
-    # self.tracker.navigate(url) -> self.page.goto(url)
+    # self.tracker.navigate(url[, label=...][, expected_page=...]) -> self.page.goto(url)
+    # Same rule as the flat strip (d-0043): keep the address, drop every keyword.
+    # The POM export also removes the tracker, so a surviving keyword or tracker
+    # call is an AttributeError/TypeError in the exported page object.
     result = re.sub(
-        r"self\.tracker\.navigate\(([^,)]+)(?:,\s*label=[^\)]*)?\)",
-        r"self.page.goto(\1)",
+        r"self\.tracker\.navigate\(([^()]*)\)",
+        partial(_strip_navigate_to_goto, page_expr="self.page"),
         result,
     )
 
