@@ -36,16 +36,21 @@ from src.evidence_tracker import (
 )
 
 
-def _page(url: str, status: int | None) -> MagicMock:
-    """A page double whose goto returns a response with *status*."""
+def _page(url: str, status: int | None, *, at: str = "about:blank", follow: bool = False) -> MagicMock:
+    """A page double that starts at *at* and lands on *url* (or on *follow*) at goto."""
     page = MagicMock()
-    page.url = url
+    page.url = at
     response = MagicMock()
     if status is None:
         response.status = None
     else:
         response.status = status
-    page.goto.return_value = response
+
+    def _goto(target: str) -> Any:
+        page.url = target if follow else url
+        return response
+
+    page.goto.side_effect = _goto
     return page
 
 
@@ -227,14 +232,13 @@ def test_navigate_with_expected_page_after_an_element_step_still_passes(tmp_path
     navigate never did, so the goto compared its expected page against the
     PREVIOUS step's page and failed a correct arrival.
     """
-    page = _page("https://shop.example.com/login", 200)
+    page = _page("https://shop.example.com/login", 200, at="https://shop.example.com/login", follow=True)
     tracker = _tracker(page, tmp_path)
     tracker.fill("#user-name", "standard_user")  # an element step on /login
     assert tracker._step_entry_url == "https://shop.example.com/login"
 
     landed = "https://shop.example.com/cart.html"
-    page.url = landed
-    page.goto.return_value.status = 200
+    # the double lands on `landed` when its goto runs (t-1095 rule 3)
 
     tracker.navigate(landed, expected_page=landed)
 
@@ -247,12 +251,9 @@ def test_navigate_with_expected_page_after_an_element_step_still_passes(tmp_path
 
 def test_navigate_with_a_wrong_expected_page_after_an_element_step_still_fails(tmp_path: Path) -> None:
     """The fix must not weaken the check: the landed page is still compared."""
-    page = _page("https://shop.example.com/login", 200)
+    page = _page("https://shop.example.com/login", 200, at="https://shop.example.com/login", follow=True)
     tracker = _tracker(page, tmp_path)
     tracker.fill("#user-name", "standard_user")
-
-    page.url = "https://shop.example.com/inventory.html"
-    page.goto.return_value.status = 200
 
     tracker.navigate(
         "https://shop.example.com/inventory.html",
@@ -267,7 +268,7 @@ def test_navigate_with_a_wrong_expected_page_after_an_element_step_still_fails(t
 
 def test_an_element_step_still_compares_the_page_it_entered_on(tmp_path: Path) -> None:
     """AI-067 is unchanged: an element step is judged against its entry page."""
-    page = _page("https://shop.example.com/cart.html", 200)
+    page = _page("https://shop.example.com/cart.html", 200, at="https://shop.example.com/cart.html")
     tracker = _tracker(page, tmp_path)
 
     tracker.fill("#coupon", "SAVE10", expected_page="https://shop.example.com/login")

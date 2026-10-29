@@ -308,7 +308,7 @@ def test_a_mismatched_conftest_marker_fails_loudly(monkeypatch: pytest.MonkeyPat
 
 def test_a_mismatched_tracker_marker_also_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     conftest = _conftest_module()
-    monkeypatch.setattr(conftest, "JOURNEY_PROTOCOL", "carry-on-2")
+    monkeypatch.setattr(conftest, "JOURNEY_PROTOCOL", "carry-on-9")
 
     with pytest.raises(RuntimeError):
         conftest._check_journey_protocol()

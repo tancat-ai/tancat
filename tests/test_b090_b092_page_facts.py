@@ -245,7 +245,7 @@ def test_no_broken_images_passes_when_all_loaded(tmp_path: Any) -> None:
 
 def test_no_broken_images_fails_and_names_the_offender(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
-    page.evaluate.side_effect = [None, ["broken.png"]]
+    page.evaluate.side_effect = [None, ["broken.png"]] + [None] * 10  # extras answer the liveness probe
     tracker.assert_no_broken_images(label="no broken images")  # t-1057: recorded, not raised
     assert "broken.png" in tracker.journey_summary()
 
@@ -302,14 +302,14 @@ def test_count_at_least_fails_below_the_boundary(tmp_path: Any) -> None:
 
 def test_anchor_targets_exist_passes_when_none_missing(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
-    page.evaluate.side_effect = [[], 6]
+    page.evaluate.side_effect = [[], 6] + [None] * 10  # extras answer the liveness probe
     tracker.assert_anchor_targets_exist(label="every anchor")
     assert tracker.steps[-1]["result"]["status"] == "passed"
 
 
 def test_anchor_targets_exist_fails_and_names_the_fragment(tmp_path: Any) -> None:
     tracker, page = _page_tracker(tmp_path)
-    page.evaluate.side_effect = [["#nowhere"], 6]
+    page.evaluate.side_effect = [["#nowhere"], 6] + [None] * 10  # extras answer the liveness probe
     tracker.assert_anchor_targets_exist(label="every anchor")  # t-1057: recorded, not raised
     assert "#nowhere" in tracker.journey_summary()
 

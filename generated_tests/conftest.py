@@ -28,7 +28,7 @@ from src.evidence_tracker import JOURNEY_PROTOCOL, EvidenceTracker
 # raises at the failed step instead of passing silently (t-1066). What the marker
 # catches: drift between two versions that both carry the check, and a new
 # conftest with an old tracker (which fails even earlier, at import).
-CONFTEST_JOURNEY_PROTOCOL = "carry-on-1"
+CONFTEST_JOURNEY_PROTOCOL = "carry-on-2"
 
 
 def _check_journey_protocol() -> None:
