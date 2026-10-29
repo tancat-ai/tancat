@@ -240,7 +240,12 @@ def test_a_dead_navigate_stops_with_reason_three(tmp_path: Path) -> None:
     assert tracker.stop["reason"] == "no_arrival"
     assert "did not change the page" in tracker.journey_summary()
     assert "stayed on" in tracker.journey_summary()
-    assert tracker.steps[-1]["label"].startswith("Navigate to")
+    # t-1098: exactly one step - the failing one - and no invented second step.
+    assert len(tracker.steps) == 1
+    assert tracker.steps[0]["result"]["status"] == "failed"
+    assert [f["step"] for f in tracker.journey_failures()] == [1]
+    assert "then the journey stopped" in tracker.journey_summary().splitlines()[0]
+    assert "carried on" not in tracker.journey_summary().splitlines()[0]
 
 
 def test_a_dead_must_move_click_stops_with_reason_three(tmp_path: Path) -> None:
@@ -253,6 +258,8 @@ def test_a_dead_must_move_click_stops_with_reason_three(tmp_path: Path) -> None:
     assert tracker.stop is not None
     assert tracker.stop["reason"] == "no_arrival"
     assert "was expected to move the browser" in tracker.stop["detail"]
+    assert len(tracker.steps) == 1  # t-1098: one step, the failing one
+    assert tracker.steps[0]["result"]["status"] == "failed"
 
 
 def test_a_click_the_story_does_not_expect_to_move_never_arms_rule_three(tmp_path: Path) -> None:
@@ -334,6 +341,42 @@ def test_the_other_tests_in_the_story_still_report(tmp_path: Path) -> None:
     assert _statuses(sibling) == ["passed"]
 
 
+def test_a_query_only_move_continues(tmp_path: Path) -> None:
+    """The page identity rule ignores the query by design; a MOVE does not (t-1098)."""
+    page = _Page("https://shop.example.com/products")  # starts BEFORE the query
+    tracker = _tracker(page, tmp_path)
+
+    tracker.navigate("https://shop.example.com/products?page=2")
+    tracker.assert_visible("#grid")
+
+    assert _statuses(tracker) == ["passed", "passed"]
+    assert tracker.stop is None
+
+
+def test_a_fragment_only_move_continues(tmp_path: Path) -> None:
+    page = _Page("https://shop.example.com/")  # starts BEFORE the fragment
+    tracker = _tracker(page, tmp_path)
+
+    tracker.navigate("https://shop.example.com/#pricing")
+    tracker.assert_visible("#plans")
+
+    assert _statuses(tracker) == ["passed", "passed"]
+    assert tracker.stop is None
+
+
+def test_a_trailing_slash_only_change_is_not_a_move(tmp_path: Path) -> None:
+    """The other side of t-1098: "/cart" and "/cart/" are the same address."""
+    page = _Page("https://shop.example.com/cart/")
+    tracker = _tracker(page, tmp_path)
+    page.url = "https://shop.example.com/cart/"  # the goto will not move it
+
+    with pytest.raises(JourneyStopped):
+        tracker.navigate("https://shop.example.com/cart/")
+
+    assert tracker.stop is not None
+    assert tracker.stop["reason"] == "no_arrival"
+
+
 # ---------------------------------------------------------------------------
 # The record and the report name the stop
 # ---------------------------------------------------------------------------
@@ -350,7 +393,8 @@ def test_every_stop_reason_appears_in_the_report_text(tmp_path: Path) -> None:
         tracker.stop = {"reason": reason, "detail": "because"}
         summary = tracker.journey_summary()
         assert text in summary, reason
-        assert summary.startswith("Journey stopped:")
+        assert "Journey stopped:" in summary
+        assert "carried on" not in summary.splitlines()[0]
 
         record = tracker.journey_record()
         assert record["stop_text"] == text

@@ -182,15 +182,35 @@ class JourneyStopped(RuntimeError):
     """
 
 
-def _same_known_page(first: str, second: str) -> bool:
-    """True when both addresses name a page and it is the same page.
+def _normalised_address(url: str) -> tuple[str, str, str, str, str]:
+    """The full address as a comparable tuple: scheme, host, path, query, fragment.
 
-    Both must carry a host: "about:blank" and an unparseable address are not a
-    page a reader can be told the browser stayed on, so they never arm rule 3.
+    The path's trailing slash is dropped - "/cart" and "/cart/" are the same
+    address for this question (t-1098). Query and fragment are KEPT: "/products"
+    -> "/products?page=2" and "/" -> "/#pricing" are moves, even though the page
+    identity rule ignores them by design.
     """
-    if not urlparse(first).netloc or not urlparse(second).netloc:
-        return False
-    return _same_page(first, second)
+    parsed = urlparse(str(url))
+    return (
+        parsed.scheme.lower(),
+        parsed.netloc.lower(),
+        parsed.path.rstrip("/") or "/",
+        parsed.query,
+        parsed.fragment,
+    )
+
+
+def _address_moved(before: str, after: str) -> bool | None:
+    """Did the browser move at all? None when an address has no host to compare.
+
+    Deliberately NOT the page-identity rule: identity answers "is this the page I
+    expected" (query and fragment ignored, so dynamic ids are fine). This answers
+    "did the address change", where a query-only or fragment-only change is a
+    move and must not stop a journey (t-1098).
+    """
+    if not urlparse(before).netloc or not urlparse(after).netloc:
+        return None
+    return _normalised_address(before) != _normalised_address(after)
 
 
 def _test_time_limit_s() -> float:
@@ -852,7 +872,9 @@ class EvidenceTracker:
                 return True
         except Exception:
             pass
-        return not _same_page(original_url, self._safe_page_url())
+        # Unknown addresses never stop a journey; a query or fragment change does
+        # count as a move (t-1098).
+        return _address_moved(original_url, self._safe_page_url()) is not False
 
     def _page_gone(self, exc: Exception) -> bool:
         """Reason 1: the page, its context or the protocol is gone."""
@@ -886,6 +908,19 @@ class EvidenceTracker:
                 "time_limit",
                 f"the test ran {elapsed:.0f}s, over the {self._time_limit_s:.0f}s per-test limit",
             )
+
+    def _fail_stopped_step(self, detail: str) -> None:
+        """The step that tripped rule 3 did not do its job: mark it failed.
+
+        Exactly one step is recorded for a stop - the real one - and it is the
+        one that failed, so the count and the summary cannot lie (t-1098).
+        """
+        if not self.steps:
+            return
+        result = self.steps[-1].setdefault("result", {})
+        result["status"] = "failed"
+        result["error"] = result.get("error") or detail
+        result["failure_note"] = detail
 
     def _stop_journey(self, reason: str, detail: str) -> None:
         """Record that the journey stopped, persist it, and raise it once.
@@ -1020,8 +1055,16 @@ class EvidenceTracker:
         failed_index = int(first["step"]) - 1
         later = self.steps[failed_index + 1 :]
         later_passed = sum(1 for step in later if (step.get("result") or {}).get("status") == "passed")
+        if self.stop:
+            first_line = (
+                f"{len(failures)} step(s) failed, then the journey stopped ({len(later)} later step(s) had run)."
+            )
+        else:
+            first_line = (
+                f"{len(failures)} step(s) failed; the journey carried on to the end ({len(later)} later step(s) ran)."
+            )
         lines = [
-            f"{len(failures)} step(s) failed; the journey carried on to the end ({len(later)} later step(s) ran).",
+            first_line,
             "",
             f"Step {first['step']} '{first['label']}' failed:",
         ]
@@ -1262,14 +1305,20 @@ class EvidenceTracker:
             # A readable status means a real document navigation was reported.
             # With no status there is nothing to judge (a same-document
             # navigation, or a test double that reports none).
-            if page_before and status is not None and _same_known_page(page_before, self._safe_page_url()):
+            if status is not None and _address_moved(page_before, self._safe_page_url()) is False:
                 if self.stop is None:
-                    self._mark_off_course_steps()
-                    self._stop_journey(
-                        "no_arrival",
+                    detail = (
                         f"the navigate step '{label}' did not change the page; "
-                        f"the browser stayed on '{self._safe_page_url()}'",
+                        f"the browser stayed on '{self._safe_page_url()}'"
                     )
+                    self._fail_stopped_step(detail)
+                    self._mark_off_course_steps()
+                    self._stop_journey("no_arrival", detail)
+        except JourneyStopped:
+            # A stop is not a step failure: the step that tripped it is already
+            # recorded. Let it out untouched or the generic handler below would
+            # record a second, invented step and the summary would lie (t-1098).
+            raise
         except NavigationStatusError:
             # Already recorded with its own evidence - re-raise, do not record
             # the same failure twice.
@@ -1506,12 +1555,13 @@ class EvidenceTracker:
                 # this. A click the story does not expect to navigate (a tab, an
                 # "add to cart") must never stop the journey.
                 if must_move and self.stop is None and not self._click_moved(original_url, pages_before):
-                    self._mark_off_course_steps()
-                    self._stop_journey(
-                        "no_arrival",
+                    detail = (
                         f"the click step '{label}' (via '{locator}') was expected to move the browser; "
-                        f"it stayed on '{self._safe_page_url()}'",
+                        f"it stayed on '{self._safe_page_url()}'"
                     )
+                    self._fail_stopped_step(detail)
+                    self._mark_off_course_steps()
+                    self._stop_journey("no_arrival", detail)
                 return
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
@@ -1556,6 +1606,10 @@ class EvidenceTracker:
                     self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
                 else:
                     raise
+        except JourneyStopped:
+            # The step that tripped rule 3 is already recorded; a second invented
+            # step here would double-count it (t-1098).
+            raise
         except Exception as e:
             # Fast-failed not-found clicks were already recorded (fast_fail).
             # A page-mismatch failure was already recorded by the success
