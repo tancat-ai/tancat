@@ -91,6 +91,25 @@ class TestStripEvidenceFromPomNavigate:
         result = strip_evidence_from_pom(code)
         assert 'self.page.goto("https://example.com")' in result
 
+    def test_converts_navigate_with_expected_page(self) -> None:
+        """d-0043: the emitted page object now names its expected page.
+
+        The export removes the tracker, so the keyword must be dropped with the
+        call - left in place it is an AttributeError on None at run time.
+        """
+        code = "        self.tracker.navigate(self.URL, expected_page=self.URL)"
+        result = strip_evidence_from_pom(code)
+        assert "self.page.goto(self.URL)" in result
+        assert "expected_page" not in result
+        assert "self.tracker" not in result
+
+    def test_converts_navigate_with_label_and_expected_page(self) -> None:
+        code = '        self.tracker.navigate("https://example.com", label="home", expected_page="https://example.com")'
+        result = strip_evidence_from_pom(code)
+        assert 'self.page.goto("https://example.com")' in result
+        assert "expected_page" not in result
+        assert "label" not in result
+
 
 class TestStripEvidenceFromPomAssert:
     """Tests for assert_visible method transformation."""
@@ -145,7 +164,7 @@ class TestStripEvidenceFromPomFullModule:
             "        self.page = page\n"
             "        self.tracker = tracker\n\n"
             "    def navigate(self) -> None:\n"
-            "        self.tracker.navigate(self.URL)\n\n"
+            "        self.tracker.navigate(self.URL, expected_page=self.URL)\n\n"
             "    def __getattr__(self, name):\n"
             "        def fallback(*args, **kwargs):\n"
             "            import pytest\n"
@@ -171,6 +190,11 @@ class TestStripEvidenceFromPomFullModule:
         assert 'self.page.locator("#password").fill(value)' in result
         assert 'self.page.locator("#login-button").click()' in result
         assert "self.page.goto(self.URL)" in result
+        assert "expected_page" not in result
+
+        # The exported module must import cleanly - d-0042/d-0043 were both
+        # run-time errors that only a compile (or worse) would have caught.
+        compile(result, "<exported pom>", "exec")
 
         # Preserved structure
         assert "class LoginPage:" in result
@@ -283,6 +307,34 @@ class TestStripEvidenceFromTestCodePomConversion:
         result = strip_evidence_from_test_code(code)
         assert "expect(page.locator('.modal-body')).to_be_visible()" in result
         assert "to_have_url" in result
+
+    def test_pom_mode_export_keeps_page_objects_and_drops_expected_page(self) -> None:
+        """d-0043: a POM-mode export keeps the page object but clean the tracker.
+
+        The page object's own navigate() stays; the test's own navigate becomes
+        page.goto, with every keyword (expected_page included) dropped, because
+        the export removes the tracker fixture from the signature.
+        """
+        code = (
+            "from playwright.sync_api import Page, expect\n"
+            "from pages.home_page import HomePage\n"
+            "\n"
+            '@pytest.mark.evidence(condition_ref="T01", story_ref="S01")\n'
+            "def test_01(page, evidence_tracker):\n"
+            "    home_page = HomePage(page, evidence_tracker)\n"
+            "    evidence_tracker.navigate('https://example.com/', "
+            "expected_page='https://example.com/')\n"
+            "    home_page.navigate()\n"
+            "    home_page.click('Products', selector='a[href=\"/products\"]')\n"
+        )
+        result = strip_evidence_from_test_code(code, preserve_pom_calls=True)
+
+        assert "home_page = HomePage(page)" in result
+        assert "home_page.navigate()" in result
+        assert "page.goto('https://example.com/')" in result
+        assert "expected_page" not in result
+        assert "evidence_tracker" not in result
+        compile(result, "<pom-mode export>", "exec")
 
 
 class TestStripEvidenceDecoratorForms:
