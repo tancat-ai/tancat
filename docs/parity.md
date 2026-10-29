@@ -19,7 +19,10 @@ With a live model every run differs, so parity is never measured on a fresh gene
   (`scripts/archive/debug_scripts/compare_pom_vs_standard.py`): parse the story once, generate ONE
   skeleton, hand that exact skeleton to both modes. Promoted here rather than re-invented.
 - **a recorded set** - a package and an evidence set checked in under `fixtures/`, which is what
-  `scripts/parity_check.py` uses today.
+  `scripts/parity_check.py` uses today: `fixtures/golden_package/` and `fixtures/parity/sidecars/`.
+  The sidecars deliberately do NOT sit in a directory named `evidence/` - that name is gitignored
+  everywhere in this repo because it is the runtime output path, and a tracked fixture under it
+  would need a negation exception that silently rots. A neutral name needs no exception.
 
 Anything compared across two live model calls is noise, not parity.
 
@@ -34,6 +37,11 @@ MUST agree:
 - evidence step count and per-step status;
 - gate 1 and gate 2 numbers;
 - bundle shape: the files a shopper of the export gets, minus the layout difference below.
+
+Gate 1 and gate 2 are properties of a RUN, not of emitted source, so the offline check can only
+compare them when a pair has been recorded. Until step 1b records `fixtures/parity/gates/pom.json`
+and `flat.json` (each `{"gate1": ..., "gate2": ...}`), the row is printed as **pending** - not
+skipped silently, and not guessed, because a guessed number would pass and prove nothing.
 
 MAY differ (documented, checked as such, never failed):
 
@@ -112,7 +120,9 @@ python scripts/parity_check.py --keep        # keep the temporary export dirs
 ```
 
 It prints a table of `axis / artefact / expected / actual / verdict`, exits 1 on any unexpected
-difference, and lists the documented allowed differences separately so a reviewer can see that the
+difference, and its last line carries the counts (total, per axis, differences, allowed, pending).
+Quote that line rather than a number copied into prose. It lists the documented allowed differences
+separately so a reviewer can see that the
 difference was considered, not missed. CI runs it as the `parity-check` job beside `verify-baseline`.
 
 No model, no browser, no network: both axes read a fixed package and a fixed evidence set.

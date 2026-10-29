@@ -115,3 +115,31 @@ def test_gate_fails_when_one_mode_drops_a_step(tmp_path: Path, monkeypatch: Any)
     report = mod.Report()
     mod.check_mode(package, report, tmp_path)
     assert any(r.artefact == "step sequence (action + target)" for r in report.failures)
+
+
+def test_gate_rows_are_pending_without_a_recorded_pair(tmp_path: Path) -> None:
+    """Gate 1/2 need a run; the row says so instead of inventing a number."""
+    mod = _load()
+    report = mod.Report()
+    mod._check_gates(report, tmp_path / "gates")
+    assert [r.verdict for r in report.rows] == ["pending"]
+    assert not report.failures
+
+
+def test_gate_rows_compare_a_recorded_pair(tmp_path: Path) -> None:
+    mod = _load()
+    gates = tmp_path / "gates"
+    gates.mkdir()
+    (gates / "pom.json").write_text('{"gate1": 94.8, "gate2": 0}', encoding="utf-8")
+    (gates / "flat.json").write_text('{"gate1": 94.8, "gate2": 0}', encoding="utf-8")
+    report = mod.Report()
+    mod._check_gates(report, gates)
+    assert [r.verdict for r in report.rows] == ["ok", "ok"]
+
+
+def test_html_summary_numbers_are_read_not_searched() -> None:
+    """The HTML row must read the rendered count, not look for the word."""
+    mod = _load()
+    html = "<div class='stat passed'><div class='stat-value'>3</div><div class='stat-label'>Passed</div></div>"
+    assert mod._html_stat(html, "passed") == 3
+    assert mod._html_stat("<p>passed passed passed</p>", "passed") is None

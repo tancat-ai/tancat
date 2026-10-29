@@ -39,11 +39,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PACKAGE = REPO_ROOT / "fixtures" / "golden_package"
-DEFAULT_EVIDENCE = REPO_ROOT / "fixtures" / "parity" / "evidence"
+DEFAULT_EVIDENCE = REPO_ROOT / "fixtures" / "parity" / "sidecars"
 
 OK = "ok"
 DIFF = "DIFF"
 ALLOWED = "allowed"
+PENDING = "pending"
 
 
 @dataclass
@@ -76,6 +77,10 @@ class Report:
 
     def allowed(self, axis: str, artefact: str, expected: str, actual: str) -> None:
         self.rows.append(Row(axis, artefact, expected, actual, ALLOWED))
+
+    def pending(self, axis: str, artefact: str, expected: str, actual: str) -> None:
+        """A comparison the recorded input cannot answer yet, stated not skipped."""
+        self.rows.append(Row(axis, artefact, expected, actual, PENDING))
 
     @property
     def failures(self) -> list[Row]:
@@ -138,6 +143,35 @@ def test_names(source: str) -> list[str]:
     return re.findall(r"^def (test_\w+)\(", source, flags=re.MULTILINE)
 
 
+def _html_stat(html: str, label: str) -> int | None:
+    """Read one number out of the rendered summary (``stat <label>``)."""
+    match = re.search(rf"<div class='stat {label}'><div class='stat-value'>(\d+)</div>", html)
+    return int(match.group(1)) if match else None
+
+
+def _check_gates(report: Report, gate_dir: Path | None) -> None:
+    """Gate 1 and gate 2 are properties of a RUN, not of emitted source.
+
+    They are compared only when a recorded pair exists (``--gate-dir`` with
+    ``pom.json`` and ``flat.json``, each ``{"gate1": <float>, "gate2": <int>}``).
+    Until step 1b records that pair the row says so instead of guessing: an
+    invented number would pass and prove nothing.
+    """
+    recorded = [gate_dir / "pom.json", gate_dir / "flat.json"] if gate_dir else []
+    if recorded and all(path.exists() for path in recorded):
+        pom = json.loads(recorded[0].read_text(encoding="utf-8"))
+        flat = json.loads(recorded[1].read_text(encoding="utf-8"))
+        report.add("mode", "gate 1 (resolution)", pom.get("gate1"), flat.get("gate1"))
+        report.add("mode", "gate 2 (false positives)", pom.get("gate2"), flat.get("gate2"))
+        return
+    report.pending(
+        "mode",
+        "gate 1 / gate 2 numbers",
+        "recorded pair of runs",
+        "not recorded yet - needs the executable leg (step 1b)",
+    )
+
+
 def _load_export_service() -> Any:
     sys.path.insert(0, str(REPO_ROOT))
     from src.export_service import ExportMode, export_clean_suite
@@ -145,7 +179,7 @@ def _load_export_service() -> Any:
     return ExportMode, export_clean_suite
 
 
-def check_mode(package: Path, report: Report, workdir: Path) -> None:
+def check_mode(package: Path, report: Report, workdir: Path, gate_dir: Path | None = None) -> None:
     """Export one package both ways and compare what the product must agree on."""
     export_mode, export_clean_suite = _load_export_service()
 
@@ -185,6 +219,8 @@ def check_mode(package: Path, report: Report, workdir: Path) -> None:
         any(f.endswith("run_results.sqlite") for f in pom_files),
         any(f.endswith("run_results.sqlite") for f in flat_files),
     )
+
+    _check_gates(report, gate_dir)
 
     report.allowed(
         "mode",
@@ -325,12 +361,15 @@ def check_reports(evidence_dir: Path, report: Report, workdir: Path) -> None:
     report.add(
         "reports", "HTML names every test", truth["tests"], sum(1 for s in sidecars if s["test"]["name"] in html_text)
     )
-    report.add(
-        "reports",
-        "HTML shows every status",
-        True,
-        all(f">{s['test']['status']}<" in html_text or s["test"]["status"] in html_text for s in sidecars),
-    )
+    # The rendered summary carries the counts; a word-search would pass on any
+    # page that merely mentions the word "passed".
+    for label, key in (("total", "tests"), ("passed", "passed"), ("failed", "failed")):
+        report.add(
+            "reports",
+            f"HTML summary {label}",
+            truth[key],
+            _html_stat(html_text, label),
+        )
 
     # Fields the owner named: page-mismatch and navigation survive into the
     # machine formats that carry the full sidecar.
@@ -370,6 +409,11 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Offline POM/flat and report parity check.")
     parser.add_argument("--package", default=str(DEFAULT_PACKAGE), help="package exported in both modes")
     parser.add_argument("--evidence", default=str(DEFAULT_EVIDENCE), help="evidence dir rendered five ways")
+    parser.add_argument(
+        "--gate-dir",
+        default=str(REPO_ROOT / "fixtures" / "parity" / "gates"),
+        help="recorded {pom,flat}.json gate numbers; absent means the row is pending",
+    )
     parser.add_argument("--json", action="store_true", help="print rows as JSON")
     parser.add_argument("--keep", action="store_true", help="keep the temporary export dirs")
     args = parser.parse_args(argv)
@@ -386,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
     report = Report()
     workdir = Path(tempfile.mkdtemp(prefix="parity_"))
     try:
-        check_mode(package, report, workdir)
+        check_mode(package, report, workdir, Path(args.gate_dir))
         check_reports(evidence, report, workdir)
     finally:
         if not args.keep:
@@ -401,9 +445,13 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = report.failures
     allowed = sum(1 for r in report.rows if r.verdict == ALLOWED)
+    pending = sum(1 for r in report.rows if r.verdict == PENDING)
+    per_axis = ", ".join(
+        f"{axis} {sum(1 for r in report.rows if r.axis == axis)}" for axis in dict.fromkeys(r.axis for r in report.rows)
+    )
     print(
-        f"\n{len(report.rows)} comparisons, {len(failures)} unexpected difference(s), "
-        f"{allowed} documented allowed difference(s)"
+        f"\n{len(report.rows)} comparisons ({per_axis}), {len(failures)} unexpected difference(s), "
+        f"{allowed} documented allowed difference(s), {pending} pending"
     )
     if failures:
         for r in failures:
