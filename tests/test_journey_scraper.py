@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from src.cart_seeding_scraper import CartSeedingScraper
@@ -390,10 +392,15 @@ class TestCartSeedingScraper:
     """Tests for CartSeedingScraper class."""
 
     def test_init_basic(self) -> None:
-        """Test CartSeedingScraper basic initialization."""
+        """Test CartSeedingScraper basic initialization.
+
+        t-0877: no products page is invented. The scraper used to derive
+        "/products" from the home URL; it now holds whatever it was given, and
+        None means there is nothing to seed from.
+        """
         scraper = CartSeedingScraper(starting_url="https://example.com")
         assert scraper.starting_url == "https://example.com"
-        assert scraper.products_url == "https://example.com/products"
+        assert scraper.products_url is None
 
     def test_init_with_explicit_products_url(self) -> None:
         """Test CartSeedingScraper with explicit products URL."""
@@ -403,11 +410,17 @@ class TestCartSeedingScraper:
         )
         assert scraper.products_url == "https://example.com/shop"
 
-    def test_derive_products_url(self) -> None:
-        """Test _derive_products_url static method."""
-        assert CartSeedingScraper._derive_products_url("https://example.com/") == "https://example.com/products"
-        assert CartSeedingScraper._derive_products_url("https://example.com") == "https://example.com/products"
-        assert CartSeedingScraper._derive_products_url("https://example.com/home") == "https://example.com/products"
+    def test_no_products_url_invents_nothing_and_skips_seeding(self) -> None:
+        """Without an observed products page, the seeder invents no address.
+
+        t-0877 (owner's rule, 2026-10-23): the old ``_derive_products_url``
+        helper appended "/products" to the home URL - a page nobody named and
+        the browser never reached. It is deleted; the only behaviour left is an
+        honest "cannot seed" (empty result), not a guessed navigation.
+        """
+        assert not hasattr(CartSeedingScraper, "_derive_products_url")
+        scraper = CartSeedingScraper(starting_url="https://example.com")
+        assert asyncio.run(scraper.scrape_cart_pages(["https://example.com/cart"])) == {}
 
     def test_ensure_full_url_absolute(self) -> None:
         """Test _ensure_full_url with absolute URL."""

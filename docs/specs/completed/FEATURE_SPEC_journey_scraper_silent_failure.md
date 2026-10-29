@@ -11,6 +11,15 @@
 **Completed:** 2026-05-20  
 **Verified:** 2026-05-22
 
+> **Superseded 2026-10-24 (t-0907, B-112): two helpers below are REMOVED.**
+> `get_skipped_steps()` and `get_locator_warnings()` no longer exist. They only
+> read `_context_log`, and no production code read that log, so each was a closed
+> loop, not coverage. The replacement mechanism was already in place: a skipped
+> step reaches the caller as `ObservedStep.error` on the observed trail
+> (`get_observed_trail()`), which the orchestrator reads into `scraped_errors`
+> (`src/orchestrator.py:501-502`). The rest of this spec is the historical record
+> and is left as written, with a dated removal mark at each mention.
+
 ---
 
 ## Problem Statement
@@ -88,13 +97,18 @@ if selector is None:
     continue  # Don't silently fall through — explicit skip
 ```
 
-After the journey completes, expose a summary:
+After the journey completes, expose a summary. That accessor was **removed 2026-10-24 (t-0907, B-112)** - the code below is the historical record only:
 
 ```python
 def get_skipped_steps(self) -> list[dict]:
     """Return steps that were skipped during the journey."""
     return [e for e in self._context_log if e.get("event") == "step_skipped"]
 ```
+
+**Why it went:** nothing read `_context_log`, in production or in tests. A
+skipped step reaches the caller as `ObservedStep.error` on the observed trail
+(`get_observed_trail()`), which the orchestrator reads into `scraped_errors`
+(`src/orchestrator.py:501-502`).
 
 #### 3. Retry with relaxed criteria
 
@@ -145,7 +159,7 @@ if selector is None:
 
 | Component | Before | After |
 |-----------|--------|-------|
-| `src/journey_scraper.py` | No diagnostic helpers | Added `_list_available_elements()`, `get_skipped_steps()`, `get_locator_warnings()` |
+| `src/journey_scraper.py` | No diagnostic helpers | Added `_list_available_elements()`, `get_skipped_steps()`, `get_locator_warnings()` - the last two were **removed 2026-10-24 (t-0907, B-112)**; see the note at the top |
 | `src/locator_builder.py` | Strict matching only | Added `build_selector_relaxed()` with partial text match and lower threshold (0.2) |
 | Context log | No skip tracking | Full skip tracking with `step_skipped`, `locator_not_found`, `locator_relaxed_fallback` events |
 | `tests/test_journey_scraper_silent_failure_fix.py` | Did not exist | 10 tests covering all new functionality |
@@ -182,8 +196,8 @@ Retry logic pattern implemented:
 
 **File:** `src/journey_scraper.py`
 
-- `get_skipped_steps()` — Returns list of skipped steps from context log
-- `get_locator_warnings()` — Returns list of locator-not-found events
+- `get_skipped_steps()` - Returns list of skipped steps from context log. **Removed 2026-10-24 (t-0907, B-112)** - see the note at the top.
+- `get_locator_warnings()` - Returns list of locator-not-found events. **Removed 2026-10-24 (t-0907, B-112)** - see the note at the top.
 - Context log populated with all new event types during execution
 
 ### Step 5: Created tests ✅
@@ -201,7 +215,7 @@ Retry logic pattern implemented:
 - [x] `_discover_selector()` logs a warning event when it returns `None`
 - [x] Skipped steps are tracked in context log with full context
 - [x] Relaxed selector fallback succeeds for at least some previously-failing cases
-- [x] `get_skipped_steps()` exposes all skipped steps after journey
+- [x] `get_skipped_steps()` exposes all skipped steps after journey (true when verified 2026-05-22; the helper was **removed 2026-10-24 (t-0907, B-112)** - see the note at the top)
 - [x] All existing tests pass (45 original journey scraper tests + 10 new tests = 55 total)
 - [x] New tests cover relaxed fallback and skip tracking
 

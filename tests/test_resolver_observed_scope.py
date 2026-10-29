@@ -316,13 +316,14 @@ def test_goto_resolves_to_observed_landing_url() -> None:
     assert repr(CART) in code
 
 
-def test_goto_with_empty_trail_still_resolves_via_resolver() -> None:
-    """Back-compat inside a trail journey: an empty trail disables strict scope
-    and the normal URL resolution path still works."""
+def test_goto_with_empty_trail_and_no_link_does_not_fall_back_to_the_full_list() -> None:
+    """An empty trail leaves no landing; with no link on the current page the
+    GOTO is unresolved instead of reaching across the full scraped list."""
     data: dict[str, list[dict[str, Any]]] = {INVENTORY: []}
     skeleton, journey = _build("test_goto_nomatch", [("GOTO", "inventory")])
     code = _resolve(skeleton, [journey], data, {"test_goto_nomatch": ObservedTrail(steps=[])})
-    assert INVENTORY in code
+    assert "pytest.skip" in code
+    assert repr(INVENTORY) not in code
 
 
 # ── Back-compat: no trails at all → pre-S3 behaviour ──────────────────────

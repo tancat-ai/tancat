@@ -91,6 +91,8 @@ class ObservedStep:
         scraped: True when the step caused the destination page to be scraped
             (``output`` gained a key for ``to_url``).
         error: Exception message when the step failed after all retries.
+        timestamp: When the step was observed (epoch seconds). 0.0 means the
+            producer did not stamp it (older saved trails).
     """
 
     index: int
@@ -102,6 +104,7 @@ class ObservedStep:
     navigated: bool = False
     scraped: bool = False
     error: str | None = None
+    timestamp: float = 0.0
 
 
 @dataclass

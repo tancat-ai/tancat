@@ -201,6 +201,24 @@ _CLICK_FILLABLE_ARIA_ROLES = {
 }
 
 
+def _is_heading_element(element: dict[str, str]) -> bool:
+    """Return True when the element IS a heading, not merely named like one.
+
+    Pass 1 skips headings as CLICK targets (B-025: a heading is display text
+    inside a click container). But the accessible role of a *container* is
+    computed from its content, so a product card whose text lives in its ``h4``
+    reports ``computed_role="heading"`` and was skipped as if it were the
+    heading itself. The tag says what the element is: a ``div`` is never a
+    heading. A scrape that omits the tag keeps the old role-only behaviour.
+    """
+    tag = str(element.get("tag", "")).strip().lower()
+    if tag:
+        return tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
+    role = str(element.get("role", "")).strip().lower()
+    computed = str(element.get("computed_role", "")).strip().lower()
+    return role in {"h1", "h2", "h3", "h4", "h5", "h6", "heading"} or computed == "heading"
+
+
 def _named_role_in_description(norm_description: str) -> str | None:
     """Return the single named clickable role in a description, if any.
 
@@ -504,10 +522,7 @@ class ElementMatcher:
                 norm_text = normalise_element_text(element)
                 if not norm_text or norm_text != norm_description:
                     continue
-                _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
-                role = str(element.get("role", "")).strip().lower()
-                computed = str(element.get("computed_role", "")).strip().lower()
-                if action == "CLICK" and (role in _heading_roles or computed in _heading_roles):
+                if action == "CLICK" and _is_heading_element(element):
                     continue
                 # No role gate here: exact text equality is the strongest
                 # intent signal and already disambiguates "Pay Bills" (nav)
@@ -668,12 +683,12 @@ class ElementMatcher:
                     # (h1-h6). Headings are display elements inside click
                     # containers — they should not be selected as click
                     # targets. Pass 3 scoring handles the container bonus.
-                    _heading_roles = {"h1", "h2", "h3", "h4", "h5", "h6", "heading"}
-                    if action == "CLICK":
-                        role = str(element.get("role", "")).strip().lower()
-                        computed = str(element.get("computed_role", "")).strip().lower()
-                        if role in _heading_roles or computed in _heading_roles:
-                            continue  # Skip this heading, try next element
+                    # t-0998: the TAG decides. A card whose only text is its
+                    # own ``h4`` computes an accessible role of "heading" and
+                    # was skipped as if it were the heading, so the card never
+                    # reached the scorer that would have picked it.
+                    if action == "CLICK" and _is_heading_element(element):
+                        continue  # Skip this heading, try next element
                     # B-045: When the description names a role ("button",
                     # "link", "icon"), Pass 1 must respect it — a header nav
                     # link ("Pay Bills") text-matches "pay bill button" and
@@ -686,6 +701,8 @@ class ElementMatcher:
                     if action == "CLICK":
                         desc_role = _named_role_in_description(norm_description)
                         if desc_role is not None:
+                            role = str(element.get("role", "")).strip().lower()
+                            computed = str(element.get("computed_role", "")).strip().lower()
                             el_role = role or computed
                             if el_role != desc_role:
                                 continue

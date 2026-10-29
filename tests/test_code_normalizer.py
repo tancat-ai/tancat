@@ -78,7 +78,8 @@ class TestEnsureTestNavigation:
     evidence_tracker.click("#btn", label="click")
 """
         result = ensure_test_navigation(code, target_url="https://example.com")
-        assert 'evidence_tracker.navigate("https://example.com")' in result
+        # t-1049: the injected entry navigation names the page it expects.
+        assert 'evidence_tracker.navigate("https://example.com", expected_page="https://example.com")' in result
 
     def test_does_not_inject_when_navigation_exists(self) -> None:
         code = """def test_foo(page: Page, evidence_tracker) -> None:
@@ -95,7 +96,8 @@ class TestEnsureTestNavigation:
     evidence_tracker.click("#btn", label="click")
 """
         result = ensure_test_navigation(code, target_url="https://example.com")
-        assert 'evidence_tracker.navigate("https://example.com")' in result
+        # t-1049: the injected entry navigation names the page it expects.
+        assert 'evidence_tracker.navigate("https://example.com", expected_page="https://example.com")' in result
 
     def test_detects_body_indent_and_matches_it(self) -> None:
         """Injected lines should use the same indentation as the existing body."""
@@ -181,4 +183,7 @@ class TestEndToEndIndentationFix:
             code, consent_mode="auto-dismiss", target_url="https://automationexercise.com/"
         )
         ast.parse(result)
-        assert 'evidence_tracker.navigate("https://automationexercise.com/")' in result
+        assert (
+            'evidence_tracker.navigate("https://automationexercise.com/", '
+            'expected_page="https://automationexercise.com/")' in result
+        )

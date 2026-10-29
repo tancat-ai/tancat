@@ -5,7 +5,7 @@
 | Component | Setting |
 |-----------|---------|
 | **Model** | `Qwen3.8-27B-UD-Q4_K_XL_v2.gguf` (5.21 bpw, attn_qkv 6.12 bpw) |
-| **Location** | `C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf` |
+| **Location** | `<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf` |
 | **Server** | llama.cpp b10483 (vulkan, MTP ON) |
 | **MTP (Speculative Decoding)** | **ON** — `--spec-type draft-mtp --spec-draft-n-max 3 --spec-draft-p-min 0.0` |
 | **Thinking** | **ON** (`AITEST_ENABLE_THINKING=1`) |
@@ -22,7 +22,7 @@
 ### Launch Command (llama-server)
 ```bash
 llama-server.exe \
-  --model "C:\Users\l_a_c\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q4_K_XL_v2.gguf" \
+  --model "<home>/.lmstudio/models/unsloth/Qwen3.8-27B-GGUF/Qwen3.8-27B-UD-Q4_K_XL_v2.gguf" \
   --port 8080 --host 0.0.0.0 \
   --ctx-size 156072 --n-gpu-layers 999 \
   --flash-attn on --jinja \

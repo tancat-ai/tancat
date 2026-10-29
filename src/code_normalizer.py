@@ -394,7 +394,10 @@ def ensure_test_navigation(code: str, target_url: str | None = None) -> str:
             return match.group(0)
 
         indent = _detect_body_indent(body)
-        nav_line = f'\n{indent}evidence_tracker.navigate("{url}")'
+        # t-1049: the entry navigation states the page it expects, so a site
+        # that redirects the browser elsewhere is recorded and judged, not
+        # passed silently.
+        nav_line = f'\n{indent}evidence_tracker.navigate("{url}", expected_page="{url}")'
         return f"{match.group(1)}{nav_line}{body}"
 
     # Match any test function that has evidence_tracker in its signature.

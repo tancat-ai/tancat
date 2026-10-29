@@ -399,20 +399,42 @@ class _NullResolver:
     def resolve_url(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
         return None
 
+    def resolve_url_from_links(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
+        return None
+
 
 def test_goto_resolves_via_flow_memory_when_site_resolution_fails(tmp_path: Path) -> None:
     """The orchestrator's GOTO chain: after UrlResolver and resolve_url both
-    fail, a cross-site flow (login → dashboard verified on 2 sites) rescues
-    'dashboard' on an unseen site."""
+    fail, a cross-site flow (login → dashboard verified on 2 sites) USED to
+    rescue 'dashboard' on an unseen site.
+
+    t-0855 (D1a) cut that source from the GOTO branch. A learned transition is
+    not a known destination: it types a URL from an earlier run's experience,
+    which the owner's 2026-10-21 rule forbids. The store still answers the
+    question (the assertion at the top proves it), and the GOTO is now an
+    honest skip.
+    """
     import asyncio
 
-    from src.flow_memory import FlowMemoryStore, FlowTransition
+    from src.flow_memory import FlowMemoryStore, FlowTransition, flow_resolved_url
     from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
     from src.placeholder_orchestrator import PlaceholderOrchestrator
 
     store = FlowMemoryStore(tmp_path / "flow_memory.json")
     store.upsert_flow(FlowTransition("login", "CLICK", "sign in", "dashboard"), "site-a.com")
     store.upsert_flow(FlowTransition("login", "CLICK", "sign in", "dashboard"), "site-b.com")
+
+    # Control: the learned store really does support this destination, so the
+    # skip below is caused by the cut and not by an empty store.
+    assert (
+        flow_resolved_url(
+            store,
+            description="dashboard",
+            from_url="https://unseen.com/login",
+            scraped_urls=["https://unseen.com/login", "https://unseen.com/dashboard.html"],
+        )
+        == "https://unseen.com/dashboard.html"
+    )
 
     skeleton = "page.goto('{{GOTO:dashboard}}')\n"
     scraped_data = {
@@ -455,8 +477,11 @@ def test_goto_resolves_via_flow_memory_when_site_resolution_fails(tmp_path: Path
         )
 
     result = asyncio.run(run())
-    assert "https://unseen.com/dashboard.html" in result
-    assert "pytest.skip" not in result
+    # t-0855 (D1a): the learned URL is no longer typed. As in the store-less
+    # sibling test below, an unresolved GOTO on this synthetic one-line
+    # skeleton stays literal rather than becoming a skip line.
+    assert "https://unseen.com/dashboard.html" not in result, "a learned URL was still typed"
+    assert "{{GOTO:dashboard}}" in result
 
 
 def test_goto_skips_when_flow_memory_disabled_or_empty(tmp_path: Path) -> None:
