@@ -186,6 +186,7 @@ def validate_suite_heatmap(evidence_dir: Path, page_url: str) -> list[ArtifactIs
         return issues
 
     points = _extract_js_payload(html, "allPoints")
+    plotted = _extract_js_payload(html, "plottedPoints")
     aggregated = _extract_js_payload(html, "aggregated")
     if not isinstance(points, list):
         return [
@@ -208,6 +209,37 @@ def validate_suite_heatmap(evidence_dir: Path, page_url: str) -> list[ArtifactIs
 
     issues.extend(validate_step_points({"<html payload>": points}))
 
+    if plotted is None:
+        issues.append(
+            ArtifactIssue(
+                artifact="heatmap",
+                severity="error",
+                message=f"plottedPoints payload unparseable for {page_url!r}",
+                context={"url": page_url},
+            )
+        )
+        plotted = []
+    elif not isinstance(plotted, list):
+        issues.append(
+            ArtifactIssue(
+                artifact="heatmap",
+                severity="error",
+                message=f"plottedPoints payload is not a list for {page_url!r}",
+                context={"url": page_url},
+            )
+        )
+        plotted = []
+
+    if len(plotted) > len(points):
+        issues.append(
+            ArtifactIssue(
+                artifact="heatmap",
+                severity="error",
+                message=f"{len(plotted)} plotted points exceed the {len(points)} recorded points for {page_url!r}",
+                context={"url": page_url},
+            )
+        )
+
     # I5: payload numbers must be finite (json.dumps emits NaN literals → broken JS).
     if any(not _finite(v) for p in points for v in (p.get("x"), p.get("y"), p.get("run_count", 1))):
         issues.append(
@@ -220,12 +252,14 @@ def validate_suite_heatmap(evidence_dir: Path, page_url: str) -> list[ArtifactIs
         )
 
     # Aggregated-element internal consistency.
+    aggregated_total = 0
     for elem in aggregated:
         if not isinstance(elem, dict):
             continue
         statuses: list[Any] = elem.get("statuses", [])
         total = elem.get("total")
         counts = _count_statuses(statuses)
+        aggregated_total += len(statuses)
         if total != len(statuses):
             issues.append(
                 ArtifactIssue(
@@ -250,6 +284,41 @@ def validate_suite_heatmap(evidence_dir: Path, page_url: str) -> list[ArtifactIs
                     artifact="heatmap",
                     severity="error",
                     message=f"aggregated element position out of range: x={elem.get('x')!r} y={elem.get('y')!r}",
+                )
+            )
+
+    # I7 (B-105): every drawn point must be counted exactly once. The
+    # aggregation used to OVERWRITE the element it matched instead of merging
+    # into it, so the hits were lost and every element showed one hit — the
+    # shipped validator said "no issues" while the heatmap lied.
+    if aggregated_total != len(plotted):
+        issues.append(
+            ArtifactIssue(
+                artifact="heatmap",
+                severity="error",
+                message=(
+                    f"aggregated elements count {aggregated_total} points but {len(plotted)} points are drawn "
+                    f"for {page_url!r} - the element aggregation dropped points"
+                ),
+                context={"url": page_url, "aggregated": aggregated_total, "plotted": len(plotted)},
+            )
+        )
+
+    # The rendered status counts must match the drawn points.
+    drawn_counts = _count_statuses([p.get("status", "passed") for p in plotted if isinstance(p, dict)])
+    status_labels = {"passed": "Passed", "partial_pass": "Partial", "failed": "Failed", "skipped": "Skipped"}
+    for status, expected in drawn_counts.items():
+        label = status_labels.get(status)
+        if not label:
+            continue
+        match = re.search(rf"{re.escape(label)}: (\d+)", html)
+        if match and int(match.group(1)) != expected:
+            issues.append(
+                ArtifactIssue(
+                    artifact="heatmap",
+                    severity="error",
+                    message=(f"rendered {status} count {match.group(1)} != {expected} drawn points for {page_url!r}"),
+                    context={"url": page_url, "status": status},
                 )
             )
 

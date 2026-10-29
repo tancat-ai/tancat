@@ -35,10 +35,17 @@ How it works:
    against the live mock. The conftest learns within-test flows per test;
    the post-run hook chains suite flows. A second run must dedup (no new
    patterns) and bump hit counts.
-4. A follow-up resolution drives the orchestrator's GOTO/URL step 2.5
-   (``flow_resolved_url``) with the learned store and asserts it resolves
-   "view cart" from the products page to the cart URL — proving the loop
-   closes: learned flows feed future generation.
+4. A follow-up page-state ASSERT drives the orchestrator's flow-memory
+   branch (``flow_resolved_url``) with the learned store and asserts it
+   resolves "cart page visible" from the products page to the cart URL —
+   proving the loop closes: learned flows feed future generation.
+
+   t-0907: this step used to assert a GOTO instead ("orchestrator step 2.5").
+   That source was cut in t-0855 (D1a) — a GOTO may only name a URL the human
+   gave us or a page the browser really visited — so the assertion targeted
+   behaviour the product no longer has and failed whenever the module was
+   run. The surviving consumer is the page-state ASSERT branch, which is what
+   the test now exercises.
 
 Hermeticity:
 
@@ -63,8 +70,24 @@ Hermeticity:
 - Marked ``slow`` + ``integration`` + ``subprocess`` — excluded from the
   default suite (pytest.ini addopts) exactly like the other live-mock tests.
 
-Run explicitly:
-    pytest tests/integration/test_learning_loop_e2e.py -v
+Why it is NOT in the default gate (t-0907), and where it runs instead:
+
+- Cost: ~80 s. It spawns four real Playwright subprocess pytest runs against a
+  real mock site, so it cannot sit in the fast unit gate.
+- Shared artifact: it takes exclusive use of the machine-local
+  ``evidence/flow_memory.json`` (snapshot -> wipe -> restore). A crash between
+  the wipe and the restore loses the developer's learned flows, so it must not
+  run on every save.
+- Fixed port 8784 (per-file convention), so it cannot share a gate that runs
+  two mock sites concurrently.
+
+The default addopts exclude it, and no CI job runs ``-m integration`` today —
+so this module only runs when asked. Ask explicitly (77 s, Chromium required):
+
+    pytest tests/integration/test_learning_loop_e2e.py -v -o addopts=""
+
+Tracked in BACKLOG B-113 (run it in CI; it is the only end-to-end
+learn-then-resolve proof).
 """
 
 from __future__ import annotations
@@ -389,23 +412,31 @@ def test_second_run_dedups_and_bumps_hits() -> None:
 @pytest.mark.slow
 @pytest.mark.integration
 def test_followup_resolution_uses_learned_flows() -> None:
-    """The loop closes: a follow-up GOTO resolution (orchestrator step 2.5)
-    resolves 'view cart' from the products page via the flows learned by the
-    REAL conftest + run service — no hand-inserted patterns, no site-specific
-    UrlResolver knowledge."""
+    """The loop closes: a follow-up page-state ASSERT resolves via the flows
+    learned by the REAL conftest + run service - no hand-inserted patterns,
+    no site-specific UrlResolver knowledge.
+
+    t-0907: this assertion used to be a GOTO ("orchestrator step 2.5"). That
+    source was cut in t-0855 (D1a): a GOTO may only name a URL the human gave
+    us or a page the browser really visited, so a learned transition must not
+    fill the gap. The surviving flow-memory consumer is the page-state ASSERT
+    branch (``flow_resolved_url`` from the ASSERT path), so that is what this
+    end-to-end proof exercises. Asserting the removed GOTO path left this file
+    red whenever anyone ran it.
+    """
     from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
     from src.placeholder_orchestrator import PlaceholderOrchestrator
 
     store = _real_flow_store()
     products_url = f"{BASE_URL}/products.html"
     cart_url = f"{BASE_URL}/cart.html"
-    skeleton = "page.goto('{{GOTO:view cart}}')\n"
+    skeleton = "expect(page).to_have_url({{ASSERT:cart page visible}})\n"
     scraped_data = {
         products_url: [{"selector": "h1", "tag": "h1", "text": "All Products"}],
         cart_url: [{"selector": "h1", "tag": "h1", "text": "Shopping Cart"}],
     }
     journey = TestJourney(
-        test_name="test_followup_goto",
+        test_name="test_followup_assert",
         start_line=1,
         end_line=2,
         steps=[
@@ -414,9 +445,9 @@ def test_followup_resolution_uses_learned_flows() -> None:
                 raw_line=skeleton.strip(),
                 placeholders=[
                     PlaceholderUse(
-                        action="GOTO",
-                        description="view cart",
-                        token="{{GOTO:view cart}}",
+                        action="ASSERT",
+                        description="cart page visible",
+                        token="{{ASSERT:cart page visible}}",
                         line_number=1,
                         raw_line=skeleton.strip(),
                     )
@@ -440,7 +471,7 @@ def test_followup_resolution_uses_learned_flows() -> None:
         )
 
     result = asyncio.run(resolve())
-    assert cart_url in result, f"flow memory did not resolve 'view cart':\n{result}"
+    assert cart_url in result, f"flow memory did not resolve the cart page: {result}"
     assert "pytest.skip" not in result
 
 
@@ -463,6 +494,9 @@ class _NullResolver:
     """Stub: no DOM/text resolution (forces flow fallback)."""
 
     def resolve_url(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
+        return None
+
+    def resolve_url_from_links(self, *args: Any, **kwargs: Any) -> str | None:  # noqa: ARG002
         return None
 
 

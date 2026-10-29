@@ -4,13 +4,18 @@ A run keeps its evidence in one known place (`eval_evidence.py`), a re-score
 recomputes the gate numbers from that evidence with no model call and no live
 site, and a run whose evidence is gone is caught instead of read as a zero.
 
-The current recorded re-score (2026-10-13: 94/113 gate 1, 0 hollow passes) kept
-its evidence, so it can be re-scored with no model. The 2026-10-12 baseline is
-preserved under ``previous`` (also committed and re-scorable); the older
-2026-09-25 record (82/113 gate 1, 3 hollow passes) has **no surviving artifacts**
-- `scratch/gate1_full.log` and the emitted dirs were deleted - so these tests
-prove the mechanism on a synthetic run that reproduces a known number.
-`scripts/eval/known_gate_scores.json` holds all three.
+The current recorded re-score (2026-10-16: 89/113 gate 1, 0 hollow passes -
+post-B-103 re-measure, eval-010 flipped 2/4 -> 4/4) kept its evidence, so it can
+be re-scored with no model. Numbers are post t-0831 validator revision: the
+pre-fix golden validator could not credit GOTO goldens, so the eval-008 GOTO
+pair (worth +2) is now countable in every re-score; the numbers recorded at
+each run's time are preserved in the chain's `validator_revision` notes. The
+2026-10-15 record (87/113) is preserved under ``previous`` and the
+2026-10-13/2026-10-12 records further down the chain (all committed and
+re-scorable); the older 2026-09-25 record (82/113 gate 1, 3 hollow passes) has
+**no surviving artifacts** - `scratch/gate1_full.log` and the emitted dirs were
+deleted - so these tests prove the mechanism on a synthetic run that reproduces
+a known number. `scripts/eval/known_gate_scores.json` holds the chain.
 """
 
 from __future__ import annotations
@@ -205,35 +210,104 @@ class TestEvidenceGuard:
     def test_recorded_score_file_is_present_and_honest(self) -> None:
         """The current gate record is on disk and its evidence is committed, so it re-scores."""
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (94, 113)
+        # 2026-10-16 (t-0829): post-B-103 re-measure - eval-010 flipped 2/4 -> 4/4.
+        # Numbers are post t-0831 validator revision (the pre-fix harness could
+        # not credit GOTO goldens; the eval-008 GOTO pair is worth +2 here).
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (89, 113)
         assert payload["gate2_false_greens"] == 0
         # The evidence is in the tracked tree, not the worktree's gitignored scratch.
         evidence_dir = _REPO_ROOT / payload["evidence_dir"]
         assert evidence_dir.is_dir(), payload["evidence_dir"]
         assert verify_run_evidence(evidence_dir) == []
-        # The superseded 2026-10-12 baseline is preserved, with its own committed evidence.
-        assert payload["previous"]["recorded_at"] == "2026-10-12"
-        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (94, 113)
-        assert payload["previous"]["gate2_false_greens"] == 0
-        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
+        # The superseded 2026-10-15 record is preserved, with its own committed evidence.
+        assert payload["previous"]["recorded_at"] == "2026-10-15"
+        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (87, 113)
+        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-15"
+        # The ASSERT-pool filter re-measure (j-0171) is preserved one level further down the chain.
+        assert payload["previous"]["previous"]["recorded_at"] == "2026-10-13"
+        assert (payload["previous"]["previous"]["gate1_correct"], payload["previous"]["previous"]["gate1_total"]) == (
+            95,
+            113,
+        )
+        assert payload["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13_gate1_filter"
+        # The 2026-10-13 baseline is preserved one level further down (95, not 96:
+        # that draw's transfer GOTO had no arrival evidence - an honest miss).
+        assert payload["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-13"
+        assert (
+            payload["previous"]["previous"]["previous"]["gate1_correct"],
+            payload["previous"]["previous"]["previous"]["gate1_total"],
+        ) == (95, 113)
+        assert payload["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
+        # And the 2026-10-12 baseline is preserved one level further down still.
+        assert payload["previous"]["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-12"
+        assert (
+            payload["previous"]["previous"]["previous"]["previous"]["gate1_correct"],
+            payload["previous"]["previous"]["previous"]["previous"]["gate1_total"],
+        ) == (96, 113)
+        assert (
+            payload["previous"]["previous"]["previous"]["previous"]["evidence_dir"]
+            == "fixtures/heldout_runs/2026-10-12"
+        )
         # The older deleted-evidence record is kept as history.
         history = payload["comparison"]["history"]
         assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
         assert "deleted" in history[0]["note"]
 
+    def test_record_is_internally_consistent(self) -> None:
+        """A half-updated record must not pass (t-0831 send-back: the 2026-10-16
+        record carried 89/113 in the headline while per_story, the verdict and the
+        miss-class block still held the pre-fix numbers).
+
+        Walks the whole chain: per-story counts must sum to the headline, miss-class
+        counts (where present) must sum to the missed placeholders, and the verdict
+        percentage (where present) must match the headline.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        entry = payload
+        checked = 0
+        while entry is not None:
+            correct, total = entry["gate1_correct"], entry["gate1_total"]
+            per_story = entry.get("per_story")
+            if per_story:
+                got = sum(int(v.split("/")[0]) for v in per_story.values())
+                over = sum(int(v.split("/")[1]) for v in per_story.values())
+                assert over == total, (entry["recorded_at"], per_story)
+                assert got == correct, (entry["recorded_at"], per_story)
+            miss_block = entry.get("gate1_misses_by_class")
+            counts = miss_block.get("counts") if isinstance(miss_block, dict) else None
+            if counts is not None:
+                assert sum(counts.values()) == total - correct, (entry["recorded_at"], counts)
+            if "verdict" in entry:
+                assert entry["gate1_accuracy_pct"] == round(100 * correct / total, 1), (
+                    entry["recorded_at"],
+                    entry["gate1_accuracy_pct"],
+                )
+                assert f"{entry['gate1_accuracy_pct']}%" in entry["verdict"], (entry["recorded_at"], entry["verdict"])
+            checked += 1
+            entry = entry.get("previous")
+        assert checked >= 5, checked
+
     def test_committed_heldout_evidence_rescores_to_the_record(self) -> None:
-        """The tracked evidence re-scores to the recorded 94/113 and 0 with no model.
+        """The tracked evidence re-scores to the recorded gate numbers with no model.
 
         This is the durability guard: the record depends on a committed re-score input,
         not on a worktree's gitignored scratch directory.
+
+        A key correction changes what the same evidence scores without changing the
+        number recorded at the time (t-1014): ``key_revision_2026_10_28`` holds the
+        re-score under the corrected keys, and that is the number this guard checks
+        when it is present.
         """
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         run_dir = _REPO_ROOT / payload["evidence_dir"]
+        revision = payload.get("key_revision_2026_10_28") or {}
+        expected_correct = int(revision.get("gate1_correct", payload["gate1_correct"]))
+        expected_total = int(revision.get("gate1_total", payload["gate1_total"]))
 
         report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
 
-        assert report.correct_resolutions == payload["gate1_correct"]
-        assert report.total_placeholders == payload["gate1_total"]
+        assert report.correct_resolutions == expected_correct
+        assert report.total_placeholders == expected_total
         assert report.total_false_positives == payload["gate2_false_greens"]
 
 

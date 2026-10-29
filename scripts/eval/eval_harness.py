@@ -307,7 +307,7 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
     for golden_file in sorted(_DATASET_DIR.glob("*.json")):
         count += 1
         try:
-            from golden_validator import load_golden_key
+            from golden_validator import accepts_page_arrival, load_golden_key
 
             golden = load_golden_key(golden_file)
 
@@ -320,6 +320,19 @@ def _cmd_dataset(args: argparse.Namespace) -> int:
                         if ph.get("action") not in ("GOTO", "FILL", "CLICK", "ASSERT"):
                             errors.append(
                                 f"{golden_file.name}: placeholder [{i}][{j}] invalid action '{ph.get('action')}'"
+                            )
+                        # t-1014: a page criterion is proved by arriving at the
+                        # page. A key that names only an element cannot accept
+                        # that proof - say so, instead of leaving the key quiet.
+                        if (
+                            crit.get("criterion_kind") == "page"
+                            and ph.get("action") == "ASSERT"
+                            and not accepts_page_arrival(ph)
+                        ):
+                            warnings.append(
+                                f"{golden_file.name}: criterion {crit.get('criterion_index')} "
+                                f"'{ph.get('description')}' is a page criterion keyed only to an "
+                                f"element ({ph.get('expected_locator')}); a page arrival cannot satisfy it"
                             )
 
         except Exception as exc:

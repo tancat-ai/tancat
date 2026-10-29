@@ -27,7 +27,7 @@ The existing `scripts/uat/uat_automationexercise.py` validates two stories again
 | Frozen dataset | Version-controlled JSON stories with hand-validated golden resolutions |
 | Golden answer keys | Each placeholder maps to an expected locator, with tolerance selectors |
 | Metric tracking | Resolution accuracy, test pass rate, false positive rate, skeleton completeness |
-| Regression comparison | Current run vs. saved baseline in SQLite (`evidence/runs.sqlite`) |
+| Regression comparison | Current run vs. saved baseline in SQLite (`evidence/run_results.sqlite` - the spec first said `evidence/runs.sqlite`; the code in `src/sqlite_persistence.py:29` writes `run_results.sqlite`) |
 | Human-readable output | Summary report with pass/fail per placeholder, regression alerts |
 | CI-friendly | Optional `workflow_dispatch` job — gate, not break |
 | Two-track architecture | Track A (sequential pipeline) now; Track B (LangGraph multi-agent) later |
@@ -225,7 +225,7 @@ Wall-clock time for the full pipeline (skeleton → scrape → resolve → codeg
 - [ ] `scripts/eval/eval_runner.py` — loads dataset, runs `TestOrchestrator` per story
 - [ ] Captures generated code, resolution metadata, and timing
 - [ ] Calls `eval_metrics.py` to compute scores
-- [ ] Persists results to `evidence/runs.sqlite` via existing `src/sqlite_persistence.py`
+- [ ] Persists results to `evidence/run_results.sqlite` via existing `src/sqlite_persistence.py` (spec first said `runs.sqlite`; the code's name is `run_results.sqlite`)
 
 ### Phase 4 — CLI Harness
 - [ ] `scripts/eval/eval_harness.py` — argparse CLI with subcommands:
@@ -295,7 +295,7 @@ Wall-clock time for the full pipeline (skeleton → scrape → resolve → codeg
 2. `ruff → mypy → pytest` before marking any phase complete
 3. Golden keys validated by human before commit
 4. No protected files modified — all new code in `scripts/eval/`
-5. Results persisted to `evidence/runs.sqlite` — never to `generated_tests/`
+5. Results persisted to `evidence/run_results.sqlite` - never to `generated_tests/`
 
 ---
 

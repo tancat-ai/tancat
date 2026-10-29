@@ -10,10 +10,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 from eval_metrics import ResolutionResult, StoryResult
+
+# The product owns the page-identity rule (src/page_identity.py). Eval must use
+# the same comparator, not a second copy: two comparators that disagree is how a
+# gate number drifts from the product. sys.path[0] is scripts/eval when this
+# module is run from there, so add the project root explicitly.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from src.page_identity import same_page as _same_page  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Code parsing
@@ -84,12 +95,27 @@ def _extract_locators_from_chunk(chunk: str) -> list[dict[str, str]]:
 
     Shared by the whole-file and per-test extractors so the two never
     drift apart in what counts as a locator.
+
+    GOTO handling (eval-008 GOTO pair, t-0831): a resolved GOTO placeholder
+    is emitted as a navigation the test actually performs — a
+    ``navigate(url)`` call, or (when the journey replays navigation via
+    clicks) the ``to_have_url(url)`` arrival assertion. Both forms are
+    extracted with action GOTO so a bare-URL GOTO golden can match them;
+    URL assertions are additionally kept as ASSERT for page-arrival
+    goldens.
     """
     results: list[dict[str, str]] = []
     for match in _EVIDENCE_CALL_RE.finditer(chunk):
         method = match.group(1)
         locator = match.group(3)
         if method == "navigate":
+            results.append(
+                {
+                    "method": "navigate",
+                    "action": "GOTO",
+                    "locator": locator,
+                }
+            )
             continue
         results.append(
             {
@@ -98,22 +124,33 @@ def _extract_locators_from_chunk(chunk: str) -> list[dict[str, str]]:
                 "locator": locator,
             }
         )
-    # B-021: Also extract URL assertions (expect(page).to_have_url(...))
+    # B-021: Also extract URL assertions (expect(page).to_have_url(...)).
+    # One entry per action they prove: ASSERT (page-arrival goldens) and
+    # GOTO (the emitted form of a resolved GOTO placeholder — the journey
+    # reaches the page via clicks and asserts arrival).
     for match in _TO_HAVE_URL_RE.finditer(chunk):
         url = match.group(1)
         full_expr = f'expect(page).to_have_url("{url}")'
-        results.append(
-            {
-                "method": "to_have_url",
-                "action": "ASSERT",
-                "locator": full_expr,
-            }
-        )
+        for action in ("ASSERT", "GOTO"):
+            results.append(
+                {
+                    "method": "to_have_url",
+                    "action": action,
+                    "locator": full_expr,
+                }
+            )
     # POM calls: inventory_page.click('Add to cart')
     for match in _POM_CALL_RE.finditer(chunk):
         method = match.group(2)
         desc = match.group(3)
         if method == "navigate":
+            results.append(
+                {
+                    "method": "navigate",
+                    "action": "GOTO",
+                    "locator": desc,
+                }
+            )
             continue
         results.append(
             {
@@ -290,22 +327,58 @@ def _has_text_content(locator: str) -> str | None:
 
 
 def _to_have_url_arg(expr: str) -> str | None:
-    """Return the URL argument from an ``expect(page).to_have_url(...)`` expr.
+    """Return the URL a locator targets.
+
+    Parses the URL argument of an ``expect(page).to_have_url(...)`` expr, and
+    also accepts a bare http(s) URL — GOTO goldens hold the bare form while
+    the generated code holds the assertion (or navigate) form, so the URL
+    comparison branch needs both sides reduced to their URL.
 
     Returns None for element locators or partial tolerance strings.
     """
     m = _TO_HAVE_URL_RE.match(expr)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+    stripped = expr.strip()
+    if stripped.lower().startswith(("http://", "https://")):
+        return stripped
+    return None
+
+
+def accepts_page_arrival(placeholder: dict[str, Any]) -> bool:
+    """True when this golden placeholder is satisfied by arriving at its page.
+
+    A criterion that says only "go to the page" (``criterion_kind: "page"``)
+    is proved by the browser being on that page. The key says so when its
+    expected locator - or one of its tolerances - is a ``to_have_url``
+    expression: the matcher then compares page identity, not an element, so an
+    arrival at the right page passes and an arrival at any other page does not
+    (``_locators_match``).
+
+    A page criterion keyed only to an element cannot accept arrival at all.
+    ``eval_harness.py dataset --validate`` names those keys instead of leaving
+    them silent, so the defect this function answers (t-1014) cannot return.
+    """
+    locators = [str(placeholder.get("expected_locator") or "")]
+    locators.extend(str(item) for item in placeholder.get("tolerance_selectors") or [])
+    return any(_to_have_url_arg(locator) for locator in locators)
+
+
+def _same_url_identity(a: str, b: str) -> bool:
+    """True when two URLs name the same page: scheme + host + path.
+
+    Delegates to the product's rule in ``src/page_identity.py``. Query and
+    fragment are ignored, trailing slashes are ignored, and a URL with no host
+    fails open exactly as the product does. Product ``normalize_url``
+    canonicalizes root URLs to ``https://host/`` while goldens may hold the
+    no-slash form; identity treats those as equal too.
+    """
+    return _same_page(a, b)
 
 
 def _same_url_without_slash(a: str, b: str) -> bool:
-    """Trailing-slash-insensitive URL comparison for ``to_have_url`` assertions.
-
-    Production ``normalize_url`` canonicalizes root URLs to ``https://host/``
-    (the site redirects), while goldens may hold the no-slash form — the two
-    must count as the same assertion target.
-    """
-    return a.rstrip("/") == b.rstrip("/")
+    """Backward-compatible name; now compares page identity (t-0934)."""
+    return _same_url_identity(a, b)
 
 
 # B-100 part 3: verification strength comes from the pipeline's own emit-time
@@ -371,15 +444,17 @@ def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool
     for t in tolerances:
         if _normalize_locator(resolved) == _normalize_locator(t):
             return True
-    # to_have_url assertions: trailing-slash-insensitive comparison
-    # (normalize_url emits the "/" form; goldens may hold the bare form).
+    # URL targets: to_have_url assertions (page-arrival ASSERT goldens, and
+    # the emitted form of a resolved GOTO) vs bare-URL GOTO goldens.
+    # Trailing-slash-insensitive (normalize_url emits the "/" form; goldens
+    # may hold the bare form).
     resolved_url = _to_have_url_arg(resolved)
     expected_url = _to_have_url_arg(expected)
-    if resolved_url and expected_url and _same_url_without_slash(resolved_url, expected_url):
+    if resolved_url and expected_url and _same_url_identity(resolved_url, expected_url):
         return True
     for t in tolerances:
         t_url = _to_have_url_arg(t)
-        if resolved_url and t_url and _same_url_without_slash(resolved_url, t_url):
+        if resolved_url and t_url and _same_url_identity(resolved_url, t_url):
             return True
     # AI-037 Phase 3: has-text substring equivalence (Playwright semantics).
     # Both locators must use :has-text() and the tag must match; then the

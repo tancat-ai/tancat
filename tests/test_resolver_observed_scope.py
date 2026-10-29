@@ -316,13 +316,14 @@ def test_goto_resolves_to_observed_landing_url() -> None:
     assert repr(CART) in code
 
 
-def test_goto_with_empty_trail_still_resolves_via_resolver() -> None:
-    """Back-compat inside a trail journey: an empty trail disables strict scope
-    and the normal URL resolution path still works."""
+def test_goto_with_empty_trail_and_no_link_does_not_fall_back_to_the_full_list() -> None:
+    """An empty trail leaves no landing; with no link on the current page the
+    GOTO is unresolved instead of reaching across the full scraped list."""
     data: dict[str, list[dict[str, Any]]] = {INVENTORY: []}
     skeleton, journey = _build("test_goto_nomatch", [("GOTO", "inventory")])
     code = _resolve(skeleton, [journey], data, {"test_goto_nomatch": ObservedTrail(steps=[])})
-    assert INVENTORY in code
+    assert "pytest.skip" in code
+    assert repr(INVENTORY) not in code
 
 
 # ── Back-compat: no trails at all → pre-S3 behaviour ──────────────────────
@@ -740,6 +741,11 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
     absence as divergence and pinned every later step to the start page — so a
     dashboard assert resolved against the login page and the rest of the
     journey skipped. Only a note that DISAGREES may latch.
+
+    The assert description is an ELEMENT one ("account balances visible").
+    t-0847 made "<noun> loaded" a page-state shape (it resolves to a URL
+    assertion), which would hide the element this test is about; the
+    page-state routing is covered by tests/test_t0847_page_cursor.py.
     """
     data: dict[str, list[dict[str, Any]]] = {
         SEED: [_el("#login-button", "login button")],
@@ -754,7 +760,7 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
             ObservedStep(
                 1,
                 "scrape",
-                description="accounts dashboard loaded",
+                description="account balances visible",
                 from_url=INVENTORY,
                 to_url=INVENTORY,
                 scraped=True,
@@ -763,7 +769,7 @@ def test_missing_trail_note_does_not_latch_divergence() -> None:
     )
     skeleton, journey = _build(
         "test_missing_note",
-        [("GOTO", "home"), ("CLICK", "login button"), ("ASSERT", "accounts dashboard loaded")],
+        [("GOTO", "home"), ("CLICK", "login button"), ("ASSERT", "account balances visible")],
     )
     code = _resolve(skeleton, [journey], data, {"test_missing_note": trail})
     # The discriminator: with the old latch the assert is declared UNRESOLVED

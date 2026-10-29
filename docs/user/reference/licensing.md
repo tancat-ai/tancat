@@ -20,10 +20,12 @@ tells the app what the deployment is allowed to do.
 | Page Object Model mode | - | Yes |
 | Multi-site suites | - | Yes |
 | CI / headless runs | - | Yes |
-| Support and onboarding bundle | - | Yes |
+| Support | - | Email support and setup help - direct from the developer |
 | Updates | - | 12 months included; later updates paid |
 | Runs | 25 per 30 days | Unlimited |
 | Evidence exports | 10 per 30 days | Unlimited |
+
+**Support.** Support is provided by email at hello@tancat.dev, by the developer who builds TanCat. You get help with installation, licensing, and defects in TanCat. We aim to reply within two working days, Monday to Friday, UK business hours. Support does not include custom development, third-party systems, or on-site work, and we do not offer telephone or out-of-hours support. A contractual service level is available on request.
 
 The two counters are shown live in the UI sidebar.
 

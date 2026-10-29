@@ -28,6 +28,17 @@ from src.pytest_output_parser import RunResult, TestResult, parse_pytest_output
 
 logger = logging.getLogger(__name__)
 
+# t-0929 (owner's decision, 2026-10-25): no healing pass may change an
+# expectation. A failed expectation is a capture defect to expose, not a code
+# defect to rewrite. This is enforced at the pre-screen, before any LLM call.
+_EXPECTATION_FAILURE_CATEGORIES: frozenset[FailureCategory] = frozenset({FailureCategory.ASSERTION_FAILURE})
+
+
+def _is_expectation_failure(detail: FailureDetail) -> bool:
+    """True when the failure is a failed expectation the healer must not touch."""
+    return detail.category in _EXPECTATION_FAILURE_CATEGORIES
+
+
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
@@ -476,17 +487,19 @@ class SelfHealingRunner:
         """Pre-screen: return True if failure is worth sending to the LLM.
 
         Skips the LLM call for failures that cannot be fixed by code changes:
-        - ASSERTION_FAILURE: logic/test error, not a locator issue
+        - ASSERTION_FAILURE: a failed expectation. No healing pass may change
+          an expectation (t-0929) - the capture is wrong, not the assertion.
         - NAVIGATION_ERROR: site down, connection refused — nothing to fix
         - OTHER: unknown error with no actionable locator signal
 
         LOCATOR_TIMEOUT and STRICT_VIOLATION are worth LLM review — the LLM
         can suggest better selectors or disambiguation strategies.
         """
-        if detail.category in (
-            FailureCategory.ASSERTION_FAILURE,
-            FailureCategory.NAVIGATION_ERROR,
-        ):
+        # Enforced by name, before any other classification: an expectation is
+        # never healed, so a failed one never reaches the reviewer prompt.
+        if _is_expectation_failure(detail):
+            return False
+        if detail.category == FailureCategory.NAVIGATION_ERROR:
             return False
         if detail.category == FailureCategory.OTHER:
             return False

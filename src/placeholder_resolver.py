@@ -11,13 +11,21 @@ import logging
 import os
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from src.intent_matcher import IntentMatcher
+from src.page_identity import same_page
 from src.placeholder_scorers import PlaceholderScorer
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
+
+# A result/status page is reached by an action, not usually by a nav link.
+# When the description names one, a link must name it too before the link can
+# win; otherwise the parent page's "Transfer" link would beat the success page.
+_RESULT_WORDS = frozenset(
+    {"success", "successful", "confirmation", "confirmed", "error", "failure", "failed", "receipt", "message", "thank"}
+)
 
 
 def _css_escape_id(value: str) -> str:
@@ -90,6 +98,36 @@ class PlaceholderResolver:
         ]
         raw_haystack = " ".join(part for part in parts if part).lower()
         return re.sub(r"[_-]+", " ", raw_haystack)
+
+    @staticmethod
+    def _identity_kind(element: dict[str, Any]) -> int:
+        """Return how strongly an element names itself (0 = a bare tag).
+
+        Used by the CLICK tie-break in ``rank_candidates`` (t-0998): a wrapper
+        and its own heading can tie the real target on score, and only the
+        element with an id / data-test / class / name is the control.
+        """
+        if str(element.get("id", "")).strip() or str(element.get("data_test", "")).strip():
+            return 2
+        if str(element.get("classes", "")).strip() or str(element.get("name", "")).strip():
+            return 1
+        return 0
+
+    @staticmethod
+    def _is_embedded_text(text: str, container: str) -> bool:
+        """True when *text* sits inside *container* as whole words (t-1011).
+
+        The CLICK tie-break reads one candidate's text inside another's as DOM
+        nesting: a wrapper's text is the merged text of its children, so it
+        holds a child's text verbatim. Whole words matter, because a word form
+        is not nesting - the banking nav link "Pay Bills" contains the string
+        "Pay Bill", but it does not contain the submit control of that name,
+        and demoting the nav link there silently replaced the pre-t-0572 tie
+        that ``tests/test_submit_preference.py`` pins.
+        """
+        if not text or not container or text == container:
+            return False
+        return re.search(rf"(?<!\w){re.escape(text)}(?!\w)", container) is not None
 
     @staticmethod
     def _is_assertion_candidate(element: dict[str, Any]) -> bool:
@@ -460,10 +498,82 @@ class PlaceholderResolver:
             if score is not None:
                 ranked.append((score, element))
 
-        # Sort globally: 1) score desc, 2) text length desc, 3) selector specificity desc.
+        # t-1004: text evidence outranks every bonus. A candidate that shares
+        # no word with the step can only have scored on the bonuses a kind or a
+        # role earns - a button earns +10 role and +15 commit on a description
+        # that merely names a submit verb - so it must never sit above a
+        # candidate whose own haystack names the step. eval-005 lost CLICK
+        # "Pay in Full" to a visible "Back" button (31) while the hidden,
+        # exactly-named #paymentFull scored 30 (100 for the text, -30 hidden,
+        # -40 container).
+        #
+        # The tier uses the words the scorer already scored, so it adds no third
+        # vocabulary: 1 when the description is a literal part of the element's
+        # haystack (the scorer's fast path) or shares a word with it (its slow
+        # path), else 0. It only orders the candidates that are already in this
+        # page's list: it never adds one back and never compares across pages.
+        def _text_tier(element: dict[str, Any]) -> int:
+            haystack = self._build_element_haystack(element).lower()
+            if normalized_description and normalized_description in haystack:
+                return 1
+            return int(bool(desc_words & SemanticMatcher.get_words(haystack, expand_aliases=False)))
+
+        textual = {id(element): _text_tier(element) for _score, element in ranked}
+
+        # Sort globally: 1) text evidence, 2) score desc, 3) the CLICK tie-break
+        # below, 4) text length desc, 5) selector specificity desc.
+        #
+        # t-0998: a CLICK target is the element that names itself, not its wrapper
+        # and not its label. A page-section wrapper's haystack is the merged text
+        # of its children, so it ties a real target inside it and then wins on
+        # text length (eval-005: the product card ``#productCar`` lost a 3-way tie
+        # to the ``#page-product`` section wrapper). A bare ``h4``/``span`` label
+        # inside an identified control ties for the same reason and must not win
+        # either - clicking a bare tag selector is not clicking the control.
+        # Only CLICK is reordered: an ASSERT legitimately targets a section
+        # container (``#cart_contents_container``), so the same demotion there
+        # would drop correct answers.
+        click_text = (
+            {id(element): " ".join(str(element.get("text", "")).lower().split()) for _score, element in ranked}
+            if action == "CLICK"
+            else {}
+        )
+
+        def _loses_to_tied_neighbour(score: int, element: dict[str, Any]) -> bool:
+            """True when a tied candidate with a stronger identity owns this text."""
+            own = click_text.get(id(element), "")
+            if not own:
+                return False
+            kind = PlaceholderResolver._identity_kind(element)
+            for other_score, other in ranked:
+                if other is element or other_score != score:
+                    continue
+                other_text = click_text.get(id(other), "")
+                if not other_text or other_text == own:
+                    continue
+                other_kind = PlaceholderResolver._identity_kind(other)
+                if PlaceholderResolver._is_embedded_text(other_text, own):
+                    # Another tied candidate's whole text sits inside mine: I am
+                    # the wrapper that matched on aggregate text.
+                    if other_kind >= kind:
+                        return True
+                elif PlaceholderResolver._is_embedded_text(own, other_text) and kind == 0 and other_kind >= 1:
+                    # A bare label inside an identified target: not the target.
+                    return True
+            return False
+
+        # Compute the demotion BEFORE sorting: ``list.sort`` empties the list
+        # while it runs, so a key function that reads ``ranked`` would see no
+        # neighbours and never demote anything.
+        demoted = {
+            id(element): _loses_to_tied_neighbour(score, element) for score, element in ranked if action == "CLICK"
+        }
+
         ranked.sort(
             key=lambda item: (
+                textual.get(id(item[1]), 0),
                 item[0],
+                not demoted.get(id(item[1]), False),
                 len(str(item[1].get("text", "")).strip()),
                 len(str(item[1].get("selector", "")).strip()),
             ),
@@ -504,13 +614,147 @@ class PlaceholderResolver:
                 discovered.add(absolute)
         return discovered
 
-    def resolve_url(
-        self, description: str, pages_data: dict[str, list[dict[str, Any]]], known_urls: list[str] | None = None
+    @staticmethod
+    def _link_text(element: dict[str, Any]) -> str:
+        """Return the words a human sees on a link."""
+        return " ".join(
+            str(element.get(key, "")) for key in ("text", "aria_label", "accessible_name", "name", "title")
+        ).strip()
+
+    def _links_on_page(
+        self,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, Any]]],
+    ) -> list[tuple[str, str]]:
+        """Return (absolute URL, link text) for the links on the current page.
+
+        Only links the browser could click from ``current_url`` are returned:
+        anchors with an href, same origin, fragment removed. A page's other
+        elements are not page addresses.
+        """
+        if not current_url:
+            return []
+        elements = pages_data.get(current_url)
+        if elements is None:
+            for url, candidate_elements in pages_data.items():
+                if same_page(current_url, url):
+                    elements = candidate_elements
+                    break
+        if not elements:
+            return []
+
+        origin = urlparse(current_url).netloc
+        by_url: dict[str, list[str]] = {}
+        for element in elements:
+            href = str(element.get("href") or element.get("raw_href") or "").strip()
+            if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+                continue
+            try:
+                absolute = urljoin(current_url, href)
+            except ValueError:
+                continue
+            parsed = urlparse(absolute)
+            if not parsed.netloc or parsed.netloc != origin:
+                continue
+            clean = urlunparse(parsed._replace(fragment=""))
+            by_url.setdefault(clean, []).append(self._link_text(element))
+        return [(url, " ".join(texts).strip()) for url, texts in by_url.items()]
+
+    def resolve_url_from_links(
+        self,
+        description: str,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, Any]]],
+        trail_url: str | None = None,
     ) -> str | None:
-        """Resolve navigation placeholders to the best matching scraped URL.
+        """Pick a page address from the current page's links, then the trail.
+
+        This is the only page picker used by the production GOTO and page-state
+        ASSERT paths. The order is deliberate (owner's design, 2026-10-26):
+
+        1. a link on the page the browser is on before the step;
+        2. the trail's recorded landing for the step;
+        3. None, which the caller turns into an honest skip.
+
+        There is NO fallback to the full scraped page list. The old full-list
+        scoring is what named the dashboard for a transfer step. Path words rank
+        link candidates only: they break a tie when visible text matches, and
+        they can name an icon link whose target path is the only signal. They
+        never reach across pages.
+        """
+        from src.url_resolver import normalize_url
+
+        desc_words = set(SemanticMatcher.get_words(description))
+        root_words = desc_words & {"home", "start", "landing", "store"}
+        desc_result_words = desc_words & _RESULT_WORDS
+
+        text_best_url: str | None = None
+        text_best_key: tuple[int, int, int, int, str] | None = None
+        path_best_url: str | None = None
+        path_best_key: tuple[int, int, int, str] | None = None
+        for url, text in self._links_on_page(current_url, pages_data):
+            parsed = urlparse(url)
+            path = (parsed.path or "/").strip("/")
+            # Known limit (t-0982): rsplit('.') treats a dotted directory with
+            # no extension as a file. /api.v1.2/transfer loses "transfer".
+            clean_path = path.rsplit(".", 1)[0]
+            path_words = set(SemanticMatcher.get_words(clean_path.replace("/", " "), expand_aliases=False))
+            text_words = set(SemanticMatcher.get_words(text, expand_aliases=False))
+
+            # A result/status step is not the parent page's nav link.
+            if desc_result_words and not (desc_result_words & text_words):
+                continue
+
+            text_matches = len(desc_words & text_words)
+            if not text_matches and root_words and not clean_path:
+                text_matches = 1
+            path_matches = len(desc_words & path_words)
+
+            if text_matches:
+                # Visible text wins; path words only rank links that match.
+                key = (-text_matches, -path_matches, len(path_words), len(clean_path), url)
+                if text_best_key is None or key < text_best_key:
+                    text_best_key = key
+                    text_best_url = url
+            elif path_matches:
+                # An icon link with no accessible text still carries its target
+                # path (the cart icon's /cart.html). Path words rank only these
+                # link candidates; they never reach across pages.
+                path_key = (-path_matches, len(path_words), len(clean_path), url)
+                if path_best_key is None or path_key < path_best_key:
+                    path_best_key = path_key
+                    path_best_url = url
+
+        if text_best_url is not None:
+            return normalize_url(text_best_url)
+        if path_best_url is not None:
+            return normalize_url(path_best_url)
+        if trail_url:
+            return normalize_url(trail_url)
+        return None
+
+    def resolve_url(
+        self,
+        description: str,
+        pages_data: dict[str, list[dict[str, Any]]],
+        known_urls: list[str] | None = None,
+    ) -> str | None:
+        """Resolve against an explicit URL list or page map.
+
+        This is the legacy resolver, kept for callers that pass only the
+        human's URLs (``pages_data={}`` plus ``known_urls``). The production
+        GOTO and page-state ASSERT paths use :meth:`resolve_url_from_links` so
+        they cannot reach across the full scraped page list.
 
         First checks if description is a URL, then checks known_urls,
         then matches against already scraped pages.
+
+        t-0877 (owner's rule, 2026-10-23): there is NO last-resort fallback.
+        When nothing matches, this returns ``None`` — an honest unresolved. The
+        old "return whichever page is first" branch (and the ``strict`` flag
+        that switched it off) is gone: a page nobody named and the browser
+        never reached is not a destination a real user would have, so choosing
+        one is a guess dressed as a resolution.
         """
         # 1. Direct URL match - but validate it exists in scraped data
         if description.startswith("http") or (description.startswith("/") and len(description) > 1):
@@ -534,17 +778,37 @@ class PlaceholderResolver:
         def _matches_root() -> bool:
             return bool(desc_tokens & {"home", "start", "landing", "store"})
 
-        # 2. Match against known URLs (provided by orchestrator)
+        # 2. Match against known URLs by PATH WORD, before element text.
+        # A page's own URL is stronger evidence than a word on another page:
+        # the banking dashboard links to "Transfer" and "Bill Payments", and
+        # the sign-in page says "transfer money, and pay bills". Scoring those
+        # page bodies first named the dashboard/index for a transfer or
+        # payments arrival. Prefer the most path words, then the shorter path,
+        # so ``transfer`` beats ``transfer_success`` on a bare transfer step.
+        desc_words = set(SemanticMatcher.get_words(description))
         if known_urls:
+            path_best_url: str | None = None
+            path_best_key: tuple[int, int, int, str] | None = None
             for url in known_urls:
                 parsed = urlparse(url)
-                path_norm = (parsed.path or "/").lower().replace("/", " ")
-                if not path_norm.strip():
+                path = (parsed.path or "/").strip("/")
+                clean_path = path.rsplit(".", 1)[0]
+                if not clean_path:
                     if _matches_root():
                         return url
                     continue
-                if desc_norm in path_norm or path_norm in desc_norm:
-                    return url
+                path_words = set(SemanticMatcher.get_words(clean_path.replace("/", " "), expand_aliases=False))
+                if not path_words:
+                    continue
+                matched = len(path_words & desc_words)
+                if matched == 0:
+                    continue
+                key = (-matched, len(path_words), len(clean_path), url)
+                if path_best_key is None or key < path_best_key:
+                    path_best_key = key
+                    path_best_url = url
+            if path_best_url is not None:
+                return path_best_url
 
         # 3. Discover URLs from anchor hrefs in already-scraped pages.
         #    Links like <a href="./cart.html"> on inventory.html are
@@ -566,9 +830,8 @@ class PlaceholderResolver:
         if not pages_data:
             return None
 
-        desc_words = SemanticMatcher.get_words(description)
         if not desc_words:
-            return next(iter(pages_data), None)
+            return None
 
         best_score = -1
         best_url: str | None = None
@@ -599,4 +862,4 @@ class PlaceholderResolver:
         if best_score > 0:
             return best_url
 
-        return next(iter(pages_data), None)
+        return None

@@ -3,7 +3,7 @@
 ## Changes Made
 
 ### B-007 — Duplicate Error Panels ✅
-Removed error detail rendering from [display_coverage()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py#125-187) — errors now appear **only** in [display_run_button()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py#61-123).
+Removed error detail rendering from [display_coverage()](../streamlit_app.py#125-187) — errors now appear **only** in [display_run_button()](../streamlit_app.py#61-123).
 
 ```diff:streamlit_app.py
 #!/usr/bin/env python3
@@ -1414,9 +1414,9 @@ if __name__ == "__main__":
 ---
 
 ### B-006 — Parser Banner Regression Tests ✅  
-Added 2 new tests in [TestB006BannerRegression](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#245-304):
-- [test_b006_mixed_pass_fail_banner_correct](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#252-288) — 1 passed / 3 failed scenario
-- [test_b006_all_fail_banner](file:///c:/Users/l_a_c/code/tancat-ai/tancat/tests/test_pytest_output_parser.py#289-304) — 0 passed / 2 failed scenario
+Added 2 new tests in [TestB006BannerRegression](../tests/test_pytest_output_parser.py#245-304):
+- [test_b006_mixed_pass_fail_banner_correct](../tests/test_pytest_output_parser.py#252-288) — 1 passed / 3 failed scenario
+- [test_b006_all_fail_banner](../tests/test_pytest_output_parser.py#289-304) — 0 passed / 2 failed scenario
 
 ```diff:test_pytest_output_parser.py
 """
@@ -1970,7 +1970,7 @@ t.py::test_b FAILED [100%]
 
 ---
 
-### AI-003 — [.env.example](file:///c:/Users/l_a_c/code/tancat-ai/tancat/.env.example) Updated ✅
+### AI-003 — [.env.example](../.env.example) Updated ✅
 Added `OLLAMA_TIMEOUT=300` with explanatory comment.
 
 ```diff:.env.example
@@ -2015,7 +2015,7 @@ PLAYWRIGHT_HEADLESS=true
 ---
 
 ### AI-009 — Multi-Page Scraper UI ✅
-Wired [scrape_multiple_pages()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/src/page_context_scraper.py#382-461) into [streamlit_app.py](file:///c:/Users/l_a_c/code/tancat-ai/tancat/streamlit_app.py):
+Wired `scrape_multiple_pages()` (historical `src/page_context_scraper.py`) into [streamlit_app.py](../streamlit_app.py):
 - Added expander "➕ Add more pages to scrape (optional)" with URL text area
 - Conditional scraping: multi-page when additional URLs provided, single-page otherwise
 - Per-page sidebar feedback showing element counts per URL
@@ -2033,8 +2033,8 @@ Wired [scrape_multiple_pages()](file:///c:/Users/l_a_c/code/tancat-ai/tancat/src
 
 ### E2E Browser Recording
 
-![E2E UI verification recording](C:/Users/l_a_c/.gemini/antigravity/brain/dbb8a1f9-7971-4f32-bfcf-bdaafb145ffd/e2e_ui_verification_1774092014392.webp)
+![E2E UI verification recording](<local-evidence>/e2e_ui_verification.webp)
 
 ### Final UI State
 
-![Final UI with multi-page scraper and user story](C:/Users/l_a_c/.gemini/antigravity/brain/dbb8a1f9-7971-4f32-bfcf-bdaafb145ffd/final_ui_verification_1774092075472.png)
+![Final UI with multi-page scraper and user story](<local-evidence>/final_ui_verification.png)

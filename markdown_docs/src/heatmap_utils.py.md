@@ -33,8 +33,9 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 | `_extract_confirmed_ids(test_plan_state, story_ref)` | Extracts confirmed condition IDs from test plan state |
 | `build_story_confidence(evidence_dir, test_plan_state)` | Aggregates .evidence.json into StoryConfidence list per story |
 | `build_confidence_heatmap(stories)` | Builds Plotly treemap for story confidence levels |
-| `_extract_step_points_by_url(sidecar)` | Extracts (points_by_url, bg_screenshot_by_url) from one sidecar |
-| `generate_suite_heatmap(evidence_dir, page_url)` | Renders per-URL heatmap as HTML with SVG circle overlays |
+| `_extract_step_points_by_url(sidecar)` | Extracts (points_by_url, frames_by_url) from one sidecar; every step is attributed to the page it RAN on |
+| `list_evidence_urls(evidence_dir)` | The page URLs that have evidence points, most-covered first (drives the heatmap picker and the report's heatmap section) |
+| `generate_suite_heatmap(evidence_dir, page_url, max_width=0, instance="")` | Renders per-URL heatmap as HTML with SVG circle overlays |
 
 ## Key Logic
 
@@ -50,16 +51,29 @@ Coverage confidence heatmap aggregation from EvidenceTracker sidecars. Includes 
 
 ### Tier 3 Per-URL Suite Heatmap
 - Aggregates all evidence points across sidecars for one normalized URL
-- Tracks current URL as navigate steps occur, groups screenshots into URL segments
-- Background screenshot selection: assertion screenshots (priority 3) > meaningful interaction (2) > navigate (0)
-- Deprioritizes consent/overlay/cookie screenshots
-- Aggregates elements within 2% tolerance at same (x, y) position
+- Each step is attributed to the page it RAN on (B-105): a click is measured before it
+  runs, so a link that navigates keeps its marker on the page it was measured on. The
+  page a step ran on is the page the previous step left us on, or the step's own
+  recorded measurement URL (`element.measured_url`).
+- Background screenshot: the frame of that page that most of the points were measured
+  in. A percentage is only meaningful against the document it came from, so a point
+  measured on a different page layout is reported ("Not drawn: N"), never drawn on the
+  wrong frame.
+- Aggregates elements within 2% tolerance at same (x, y) position. A point inside the
+  tolerance MERGES into the element it matched — the old code overwrote it, so an
+  element hit by eight tests showed one hit and the status of the last hit only.
+- The dominant status is the most common one; on a tie the worse status wins (an
+  element that failed once out of two attempts did fail).
+- A page arrival (a navigate step) is evidence that the page was reached, not an
+  element hit: it is counted, never merged into an element.
 - Status per point: passed, failed, partial_pass, skipped from step result
 - Returns HTML with inline SVG overlay showing colored circles on screenshot
-- Circle size proportional to run_count, colored by dominant status
+- Circle size proportional to the number of hits, colored by dominant status
 - Filter buttons for all/passed/partial/failed views
 - Element details table with hover highlighting
 - Uses ResizeObserver for responsive SVG resizing
+- Each heatmap scopes its script to its own root (`suite-heat-<id>`), so a report can carry one heatmap per page without the instances drawing on each other
+- `max_width` embeds the background as a downscaled preview (the embed-size policy)
 
 ## How It Works (Internals)
 
@@ -69,7 +83,9 @@ Private `_`-helpers - the module's real logic (5 items). Grouped under the publi
 
 - `_normalise_url(url: str) -> str` (function): Normalise URLs for matching across redirects and trailing slashes.
 - `_safe_embed_image_data_uri(image_path: Path) -> str | None` (function): Safe embed image data uri; calls `b64encode`, `decode`, `read_bytes`; returns str | None.
-- `_extract_step_points_by_url(sidecar: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], dict[str, str]]` (function): Return (points_by_url, background_screenshot_by_url) from one sidecar. Points are derived by tracking the current URL as 'navigate' steps occur. Background screenshot chooses the last assertion screenshot within a URL...
+- `_extract_step_points_by_url(sidecar: dict[str, Any]) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]` (function): Return (points_by_url, frames_by_url) from one sidecar. Every step is attributed to the page it RAN on, not the page it ended on: a click is measured before it runs, so a link that navigates would otherwise move its own marker to the destination page (B-105).
+- `_point_matches_frame(point: dict[str, Any], frame: dict[str, Any]) -> bool` (function): Whether a point may be drawn on a frame — the document sizes must match; a sidecar or frame that does not record its size is accepted and reported as unverified.
+- `_dominant_status(status_counts: dict[str, int]) -> str` (function): The status that best describes an element — the most common one; on a tie the worse status wins.
 
 ### `build_story_confidence(evidence_dir: Path, *, test_plan_state: dict[str, Any] | None = None) -> list[StoryConfidence]` - function
 

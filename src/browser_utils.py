@@ -1,6 +1,109 @@
 """Browser interaction utilities for Playwright tests."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
 from playwright.sync_api import Page
+
+#: Containers that can cover the page and intercept pointer events.
+#: Kept as a TUPLE on purpose. The t-0881 cart-link hang came from joining
+#: these with a dismiss control into one string: ``f"{CONTAINERS} button:..."``
+#: is a CSS selector LIST, so ``.first`` resolved to the container itself, the
+#: "dismiss" clicked the modal box, returned, and the modal kept intercepting
+#: every later click. Every control below is scoped to ONE container.
+MODAL_CONTAINERS: tuple[str, ...] = (
+    "#cartModal",
+    ".modal",
+    "[role='dialog']",
+    "[aria-modal='true']",
+    ".modal-dialog",
+    ".modal-content",
+)
+
+#: Dismiss controls, always scoped inside a modal container (B-015: a page's own
+#: "Continue Shopping" button must never be clicked, only a modal's).
+MODAL_DISMISS_CONTROLS: tuple[str, ...] = (
+    "button:has-text('Continue Shopping')",
+    "a:has-text('Continue Shopping')",
+    ".continue-shopping",
+    ".close-modal",
+    ".modal-close",
+    ".close-btn",
+    ".close",
+    "[data-dismiss='modal']",
+)
+
+#: Elements that are overlays, not page sections. Used to stop the scrape's
+#: hidden-section reveal from making a dismissed overlay visible again (t-0881).
+OVERLAY_CONTAINER_SELECTOR = ", ".join(
+    (
+        "#cartModal",
+        ".modal",
+        "[role='dialog']",
+        "[aria-modal='true']",
+        ".overlay",
+        "[class*='consent']",
+        "[id*='consent']",
+        "[class*='cookie']",
+        "[id*='cookie']",
+    )
+)
+
+
+def dismiss_blocking_modals(page: Page) -> bool:
+    """Click the dismiss control of an open confirmation/dialog overlay.
+
+    Returns ``True`` when a control was clicked. Only controls INSIDE a modal
+    container are considered (B-015), and at most one modal is dismissed per
+    call (B-023).
+
+    Fixes t-0881: the previous selector built ``"#cartModal, .modal, ...
+    button:has-text('Continue Shopping')"``, which CSS parses as a selector
+    list - ``.first`` was the modal ``div`` itself, so the "dismiss" clicked
+    the modal box, returned, and the modal went on intercepting the cart link.
+    """
+    for container in MODAL_CONTAINERS:
+        for control in MODAL_DISMISS_CONTROLS:
+            try:
+                locator = page.locator(f"{container} {control}").first
+                if locator.count() == 0 or not locator.is_visible():
+                    continue
+                locator.click(timeout=1000)
+                page.wait_for_timeout(300)  # let the close animation finish
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def click_with_overlay_retry(
+    page: Page,
+    locator: Any,
+    timeout_ms: int,
+    *,
+    log: Callable[[str], None] | None = None,
+) -> None:
+    """Click ``locator``, dismissing a blocking overlay once if intercepted.
+
+    The retry is narrow: it fires only when Playwright's actionability log says
+    another element intercepts the pointer, and the second click runs under the
+    same actionability rules as the first (no ``force=True``). A click that
+    still does not land re-raises, so a genuine failure always stays loud
+    (t-0881: never turn an unlanded click into a pass).
+    """
+    try:
+        locator.click(timeout=timeout_ms)
+        return
+    except Exception as exc:
+        if "intercepts pointer events" not in str(exc):
+            raise
+        if log:
+            log("Click intercepted by an overlay - dismissing it and retrying once")
+        dismiss_consent_overlays(page)
+        dismiss_blocking_modals(page)
+        locator.click(timeout=timeout_ms)
 
 
 def dismiss_consent_overlays(page: Page) -> None:
@@ -27,6 +130,14 @@ def dismiss_consent_overlays(page: Page) -> None:
 
     # --- 4. Remove ad overlays via JavaScript (specific selectors only) ---
     _remove_ad_overlays_js(page)
+
+    # --- 5. Dismiss confirmation/dialog modals (t-0881) ---
+    # The "Added to cart" modal (#cartModal) covers the page until dismissed,
+    # so a link click after it is intercepted and never lands. This runs here
+    # (rather than only in the journey scraper) because this function is what
+    # the generator injects into the emitted tests: the customer's test gets
+    # the same dismissal the journey does, with no extra emitted step.
+    dismiss_blocking_modals(page)
 
 
 def _dismiss_google_consent_tvm(page: Page) -> None:

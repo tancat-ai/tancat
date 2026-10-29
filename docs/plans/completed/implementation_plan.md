@@ -43,7 +43,7 @@ The current layout is ordered for a developer, not a manual tester. A first-time
 
 ## Proposed Changes
 
-### [MODIFY] [streamlit_app.py](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/streamlit_app.py)
+### [MODIFY] [streamlit_app.py](../../../streamlit_app.py)
 
 **1. Reorder main() layout** — story input first, URL second, Generate button third, advanced settings below
 
@@ -84,7 +84,7 @@ Move the `if st.button("Generate Tests")` block outside the `if not content: ret
 
 ## Files Changed
 
-Only [streamlit_app.py](file:///c:/Users/l_a_c/code/AI-Playwright-Test-Generator/streamlit_app.py) is modified. No backend, test, or protected file changes.
+Only [streamlit_app.py](../../../streamlit_app.py) is modified. No backend, test, or protected file changes.
 
 ## Verification Plan
 

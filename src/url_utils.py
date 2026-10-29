@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -89,57 +89,3 @@ def extract_route_concepts(texts: list[str]) -> set[str]:
         concepts.add("checkout")
 
     return concepts
-
-
-def build_common_path_candidates(seed_urls: list[str], concepts: set[str]) -> list[str]:
-    """Return same-domain candidate URLs for story concepts.
-
-    Re-enabled 2026-08-03: journey discovery alone cannot traverse SPA sites
-    (e.g. saucedemo) whose navigation uses JS click handlers with no hrefs, so
-    cart/checkout URLs are never discovered and placeholders go unresolved.
-    Concept-driven candidates from the shared route vocabulary (the same one
-    journey discovery uses in ``src/journey_scraper.py``) fill the gap.
-    Candidates are filtered to the seed domain to prevent cross-site
-    hallucination — the original reason URL guessing was removed.
-    """
-    # Shared route vocabulary — mirrors src/journey_scraper.py keyword_routes
-    concept_paths: dict[str, list[str]] = {
-        "cart": ["/cart.html", "/cart", "/view_cart", "/basket"],
-        "checkout": [
-            "/checkout-step-one.html",
-            "/checkout_step_one",
-            "/checkout.html",
-            "/checkout",
-        ],
-        "products": ["/products", "/inventory.html"],
-    }
-    if not seed_urls or not concepts:
-        return []
-    candidates: list[str] = []
-    for concept in concepts:
-        for path in concept_paths.get(concept.lower(), []):
-            for seed in seed_urls:
-                candidates.append(urljoin(seed, path))
-    allowed = extract_seed_domain(seed_urls)
-    return sorted(set(filter_urls_to_allowed_domain(candidates, allowed)))
-
-
-def heuristic_url_from_description(current_url: str, description: str) -> str | None:
-    """Best-effort URL guess when we haven't scraped links yet.
-
-    Returns multiple candidates as a list to allow fallback attempts.
-    """
-    base_url = f"{urlparse(current_url).scheme}://{urlparse(current_url).netloc}/"
-    lowered = description.lower().strip()
-
-    if any(term in lowered for term in ("product", "products", "shop", "store", "catalog")):
-        # Return multiple common product page URL patterns
-        return urljoin(base_url, "products")  # primary fallback; caller should try others
-
-    if "cart" in lowered or "basket" in lowered:
-        return urljoin(base_url, "view_cart")  # primary fallback
-
-    if "checkout" in lowered or "check out" in lowered:
-        return urljoin(base_url, "checkout")  # primary fallback
-
-    return None

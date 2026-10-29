@@ -148,7 +148,7 @@ def test_generate_html_report_with_coverage(sample_coverage: list[dict[str, Any]
     """HTML report renders properly."""
     result = generate_html_report(sample_coverage)
 
-    assert "<div class='test-item'>" in result
+    assert "<div class='test-item' id='test-1'>" in result
     assert "test_login_success ✅" in result
     # HTML uses single quotes for class attributes
     assert "class='status-badge status-passed'" in result or 'class="status-badge status-passed"' in result
@@ -206,8 +206,9 @@ def test_generate_html_report_with_screenshots_in_dir() -> None:
         result = generate_html_report(sample_data, screenshots_dir=screenshot_dir)
 
         assert "Test Coverage Report" in result
-        # Should have embedded image with base64 data URI
-        assert "data:image/png;base64" in result
+        # Should have embedded image with base64 data URI. The embed is a
+        # downscaled preview (the embed-size policy), so it is a WebP.
+        assert "data:image/webp;base64" in result
 
 
 def test_coverage_with_unknown_status() -> None:
@@ -371,6 +372,44 @@ def test_generate_annotated_journey_cleans_placeholder_labels(tmp_path: Path) ->
     assert "{{CLICK:view cart link}}" not in text_report
 
 
+def test_generate_annotated_screenshot_escapes_step_text(tmp_path: Path) -> None:
+    """Step labels and failure notes are free text (site copy, Playwright logs)
+    that the viewer injects via innerHTML. They must go through the esc() guard
+    — an unescaped "<" in a label broke the timeline row markup and could have
+    injected HTML into the report."""
+    from src.evidence_report import generate_annotated_screenshot
+
+    evidence_dir = tmp_path / "evidence"
+    evidence_dir.mkdir()
+    screenshot = evidence_dir / "shot.png"
+    screenshot.write_bytes(
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x1dIEND\xaeB`\x82"
+    )
+    sidecar = evidence_dir / "test.evidence.json"
+    sidecar.write_text(
+        """{
+  "schema_version": "1.0",
+  "test": {"name": "test_example", "condition_ref": "TC01.01", "story_ref": "S1", "status": "failed", "duration_s": 1.0},
+  "page": {"url": "https://example.com/"},
+  "steps": [
+    {"step": 1, "type": "assertion", "label": "Click the <select> box", "locator": ".text", "screenshot": "evidence/shot.png", "element": {}, "result": {"status": "failed", "run_count": 1, "error": null, "failure_note": "waiting for locator('.text') <hidden>"}}
+  ]
+}""",
+        encoding="utf-8",
+    )
+
+    html = generate_annotated_screenshot(sidecar_path=sidecar, view_mode="annotated", title="demo")
+
+    assert "function esc(v)" in html
+    assert "${esc(label)}" in html
+    assert "${esc(status)}" in html
+    assert "${esc(failureNote)}" in html
+    # the raw label reaches the page only inside the JSON payload, never as markup
+    assert "<select> box" in html  # inside the JSON steps payload
+    assert "Click the <select> box</div>" not in html
+
+
 def test_generate_suite_heatmap_counts_navigation_arrivals_as_page_evidence(tmp_path: Path) -> None:
     evidence_dir = tmp_path / "evidence"
     evidence_dir.mkdir()
@@ -431,6 +470,111 @@ def test_html_report_escapes_dynamic_text() -> None:
     # The raw page title must not survive as markup anywhere.
     assert "T <title>" not in html
     assert "test_&lt;b&gt;checkout&lt;/b&gt;" in html
+
+
+def test_html_report_has_jump_nav_with_anchors(sample_coverage: list[dict[str, Any]]) -> None:
+    """Long reports (8+ tests, tall screenshots) need a way to jump to a test."""
+    result = generate_html_report(sample_coverage)
+
+    assert "test-nav" in result
+    assert "href='#test-1'" in result
+    assert "href='#test-2'" in result
+    assert "id='test-1'" in result
+    assert "id='test-2'" in result
+    # the failed row's nav link is highlighted
+    assert "nav-failed" in result
+
+
+def test_html_report_empty_coverage_has_no_nav() -> None:
+    result = generate_html_report([])
+
+    assert "<div class='test-nav'>" not in result
+
+
+def test_html_report_caps_full_page_screenshot_height() -> None:
+    """Evidence screenshots are full-page captures (~8,000-9,000 px tall).
+
+    Inlined at full width they stretched the report page to ~17,000 px and
+    made it unscannable; each image must sit in a fixed-height scroll box.
+    """
+    sample_data = [
+        {
+            "test_name": "test_with_image",
+            "status": "passed",
+            "duration": 1.0,
+            "screenshots": [{"path": "tall.png", "description": "Full page"}],
+            "error_message": "",
+        }
+    ]
+
+    with TemporaryDirectory() as tmpdir:
+        screenshot_dir = Path(tmpdir)
+        (screenshot_dir / "tall.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\x0cIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x1dIEND\xaeB`\x82"
+        )
+        result = generate_html_report(sample_data, screenshots_dir=screenshot_dir)
+
+    assert "data:image/webp;base64" in result
+    assert "max-height:640px" in result
+    assert "overflow:auto" in result
+
+
+def test_html_report_failed_row_frames_verification_as_intended_check() -> None:
+    """On a red row, 'verified by element' reads like a pass. Frame it as the
+    check the test was meant to run, so a failure cannot be skimmed as green."""
+    failed_row: dict[str, Any] = {
+        "test_name": "cart count updates",
+        "status": "failed",
+        "duration": 1.0,
+        "screenshots": [],
+        "error_message": "",
+        "verification": {
+            "status": "verified_by_element",
+            "label": "verified by element",
+            "checked": "'#cartModal'",
+            "reason": "",
+        },
+    }
+    passed_row = dict(failed_row, status="passed")
+    html = generate_html_report([failed_row, passed_row])
+
+    assert "Intended check:" in html
+    assert html.count("Intended check:") == 1
+    assert "Verification:" in html
+
+
+def test_html_report_shows_package_title() -> None:
+    """A saved report.html must say which run it belongs to."""
+    rows: list[dict[str, Any]] = [
+        {
+            "test_name": "t",
+            "status": "passed",
+            "duration": 1.0,
+            "screenshots": [],
+            "error_message": "",
+        }
+    ]
+    pkg = "test_20261012_190216_as_a_customer_i_want_to_browse_products_on_automa"
+    html = generate_html_report(rows, title=pkg)
+
+    assert f"Package: <code>{pkg}</code>" in html
+
+
+def test_html_report_partial_pass_badge() -> None:
+    rows: list[dict[str, Any]] = [
+        {
+            "test_name": "t",
+            "status": "partial_pass",
+            "duration": 1.0,
+            "screenshots": [],
+            "error_message": "",
+        }
+    ]
+    html = generate_html_report(rows)
+
+    assert "status-partial_pass" in html
+    assert "PARTIAL_PASS" in html
 
 
 if __name__ == "__main__":

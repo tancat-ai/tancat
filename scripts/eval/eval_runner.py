@@ -216,12 +216,86 @@ def _parse_junit_xml(xml_path: Path) -> dict[str, str]:
     return results
 
 
+# pytest's own final summary line, e.g.
+#   "======= 4 passed, 2 failed in 131.00s (0:02:11) ======="
+# Anchored on purpose (d-0050): a test that prints its own journey summary
+# ("...: 1 ran, 0 passed.") must never satisfy this, and the LAST match wins
+# because pytest's summary is the last line of the run.
+_PYTEST_SUMMARY_RE = re.compile(r"^=+\s*(?P<body>\S.*?)\s+in\s+[\d.]+s[^=]*=+\s*$")
+_COUNT_RE = {
+    "passed": re.compile(r"(\d+)\s+passed"),
+    "failed": re.compile(r"(\d+)\s+failed"),
+    "skipped": re.compile(r"(\d+)\s+skipped"),
+}
+
+
+def _counts_from_junit(xml_path: Path) -> tuple[int, int, int, int] | None:
+    """(total, passed, failed, skipped) from the JUnit XML, or None if unusable.
+
+    The primary source (d-0050): one <testcase> per executed test, and the
+    outcome is an element, so no console text can confuse it.
+    """
+    import xml.etree.ElementTree as ET
+
+    try:
+        cases = list(ET.parse(xml_path).iter("testcase"))
+    except OSError, ET.ParseError:
+        return None
+    if not cases:
+        return None
+    failed = sum(1 for c in cases if c.find("failure") is not None or c.find("error") is not None)
+    skipped = sum(1 for c in cases if c.find("skipped") is not None)
+    total = len(cases)
+    return (total, total - failed - skipped, failed, skipped)
+
+
+def _counts_from_log(output: str) -> tuple[int, int, int, int, float]:
+    """Counts from pytest's FINAL summary line only; (0, 0, 0, 0, 0.0) if absent.
+
+    The fallback (d-0050). It reads the last anchored summary line, not the
+    first line containing "N passed": a generated test can print its own
+    journey summary, and one did - eval-002 reported 0 tests while its JUnit
+    held 6.
+    """
+    for line in reversed(output.splitlines()):
+        match = _PYTEST_SUMMARY_RE.match(line.strip())
+        if match is None:
+            continue
+        body = match.group("body")
+        passed = int(m.group(1)) if (m := _COUNT_RE["passed"].search(body)) else 0
+        failed = int(m.group(1)) if (m := _COUNT_RE["failed"].search(body)) else 0
+        skipped = int(m.group(1)) if (m := _COUNT_RE["skipped"].search(body)) else 0
+        duration_m = re.search(r"in\s+([\d.]+)s", line)
+        duration = float(duration_m.group(1)) if duration_m else 0.0
+        return (passed + failed + skipped, passed, failed, skipped, duration)
+    return (0, 0, 0, 0, 0.0)
+
+
+def _test_counts(xml_path: Path, output: str) -> tuple[int, int, int, int, float, str]:
+    """(total, passed, failed, skipped, duration, source) for one pytest run.
+
+    Source is "junit" when the XML answered, "log" when only the console did,
+    and "none" when neither did - the run record says which, so a zero can be
+    told apart from a parse miss (B-093 / d-0050).
+    """
+    log_counts = _counts_from_log(output)
+    duration = log_counts[4]
+    junit_counts = _counts_from_junit(xml_path)
+    if junit_counts is not None:
+        total, passed, failed, skipped = junit_counts
+        return (total, passed, failed, skipped, duration, "junit")
+    if log_counts[0]:
+        return (*log_counts, "log")
+    return (0, 0, 0, 0, duration, "none")
+
+
 def run_generated_tests(
     test_file: Path,
     pytest_timeout: float = 120.0,
     *,
     junit_dir: Path | None = None,
     log_dir: Path | None = None,
+    count_source_out: dict[str, str] | None = None,
 ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
     """Execute a single test file via pytest and parse results.
 
@@ -271,33 +345,9 @@ def run_generated_tests(
         log_dir.mkdir(parents=True, exist_ok=True)
         (log_dir / f"{test_file.stem}.log").write_text(output, encoding="utf-8")
 
-    # Parse summary line: "=== 5 passed, 1 failed, 0 skipped in 12.34s ==="
-    total = passed = failed = skipped = 0
-    duration = 0.0
-    import re as _re
-
-    passed_re = _re.compile(r"(\d+)\s+passed")
-    failed_re = _re.compile(r"(\d+)\s+failed")
-    skipped_re = _re.compile(r"(\d+)\s+skipped")
-    duration_re = _re.compile(r"in\s+([\d.]+)s")
-    for line in output.splitlines():
-        pm = passed_re.search(line)
-        fm = failed_re.search(line)
-        sm = skipped_re.search(line)
-        if pm:
-            passed = int(pm.group(1))
-            total += passed
-        if fm:
-            failed = int(fm.group(1))
-            total += failed
-        if sm:
-            skipped = int(sm.group(1))
-            total += skipped
-        dur_m = duration_re.search(line)
-        if dur_m:
-            duration = float(dur_m.group(1))
-        if pm or fm or sm or dur_m:
-            break
+    total, passed, failed, skipped, duration, count_source = _test_counts(xml_path, output)
+    if count_source_out is not None:
+        count_source_out["source"] = count_source
 
     if not per_test:
         per_test = _parse_per_test_results(output)
@@ -359,9 +409,11 @@ def run_full_validation(
         keep: dict[str, Path] = {}
         if evidence_dir is not None:
             keep = {"junit_dir": evidence_dir / "junit", "log_dir": evidence_dir / "pytest"}
+        count_source: dict[str, str] = {}
         total, passed, failed, skipped, duration, raw_output, per_test = run_generated_tests(
             test_file,
             pytest_timeout=pytest_timeout,
+            count_source_out=count_source,
             **keep,
         )
 
@@ -370,6 +422,7 @@ def run_full_validation(
         story.tests_timed_out = raw_output.strip() == PYTEST_TIMEOUT_MARKER
         story.tests_executed = total
         story.tests_passed = passed
+        story.tests_count_source = count_source.get("source", "")
         if outcomes_out is not None:
             outcomes_out[story.story_id] = per_test
 
