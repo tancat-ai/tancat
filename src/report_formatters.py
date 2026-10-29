@@ -132,6 +132,10 @@ def journey_lines(test: dict[str, Any]) -> list[tuple[str, str, str]]:
         if not expected and detail:
             expected = detail
         rows.append((f"Step {failure.get('step')}", expected, reached))
+    stop_text = str(journey.get("stop_text") or "")
+    if stop_text:
+        detail = str((journey.get("stop") or {}).get("detail") or "") if isinstance(journey.get("stop"), dict) else ""
+        rows.append(("Stopped", stop_text, detail))
     later = int(journey.get("later_steps") or 0)
     passed = int(journey.get("later_passed_off_course") or 0)
     off_course = journey.get("off_course") or {}

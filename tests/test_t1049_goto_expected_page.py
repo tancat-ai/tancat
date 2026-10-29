@@ -133,12 +133,23 @@ def test_an_existing_single_argument_navigate_is_not_rewritten() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _page(url: str, status: int = 200) -> MagicMock:
+def _page(url: str, status: int = 200, *, redirect_from: str = "") -> MagicMock:
+    """A page double whose goto returns *status* and moves it to *url*."""
     page = MagicMock()
-    page.url = url
+    page.url = "about:blank"
     response = MagicMock()
     response.status = status
-    page.goto.return_value = response
+    if redirect_from:
+        hop = MagicMock()
+        hop.url = redirect_from
+        hop.redirected_from = None
+        response.request.redirected_from = hop
+
+    def _goto(target: str) -> Any:
+        page.url = url  # WHERE this double lands (its configured final address)
+        return response
+
+    page.goto.side_effect = _goto
     return page
 
 
@@ -233,12 +244,7 @@ def test_a_redirect_back_to_the_same_address_is_still_recorded(tmp_path: Path) -
     identity matches, so the step still passes.
     """
     url = "https://shop.example.com/checkout"
-    page = _page(url)
-    hop = MagicMock()
-    hop.url = "https://shop.example.com/login"
-    hop.redirected_from = None
-    request = page.goto.return_value.request
-    request.redirected_from = hop
+    page = _page(url, redirect_from="https://shop.example.com/login")
     tracker = _tracker(page, tmp_path)
 
     eval(_emitted_goto(url), {"evidence_tracker": tracker})  # noqa: S307

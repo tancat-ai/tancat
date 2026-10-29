@@ -1,5 +1,6 @@
 import functools
 import logging
+import os
 import re
 import sys
 import time
@@ -132,7 +133,75 @@ def _address_changed(requested: str, final: str) -> bool:
 # step carries on" means. A package shipping a new tracker with an old conftest
 # would carry on and never fail the test - a silent success. Both sides declare
 # this marker; the fixture refuses to run when they differ.
-JOURNEY_PROTOCOL = "carry-on-1"
+JOURNEY_PROTOCOL = "carry-on-2"
+
+# t-1095: the owner's rules for when a generated test stops. A journey carries on
+# after what the STEP wanted went wrong (a missing element, a dead click, an
+# assertion, a 404 page with a document); it stops only for a reason that has
+# nothing to do with the step's intent. Each reason is named in plain words in the
+# record and the report.
+STOP_PAGE_GONE = (
+    "the page or browser was closed, the target crashed, or a protocol error came back - nothing further can run"
+)
+STOP_UNRESPONSIVE = (
+    "the page stopped responding - a liveness check after the failure raised, so nothing further can run"
+)
+STOP_NO_ARRIVAL = "the journey never reached its next page"
+STOP_TIME_LIMIT = "the per-test time limit was reached"
+
+STOP_REASONS = {
+    "page_gone": STOP_PAGE_GONE,
+    "unresponsive": STOP_UNRESPONSIVE,
+    "no_arrival": STOP_NO_ARRIVAL,
+    "time_limit": STOP_TIME_LIMIT,
+}
+
+#: Default per-test time limit in seconds. A backstop, not the rule: a journey
+#: that runs this long is stopped and marked timed out, and the rest of the story
+#: still reports. ``AITEST_TEST_TIME_LIMIT`` overrides it; ``0`` disables it.
+DEFAULT_TEST_TIME_LIMIT_S = 300.0
+
+#: Messages that mean the page itself is gone, whatever the step wanted.
+_PAGE_GONE_MARKERS = (
+    "has been closed",
+    "target closed",
+    "target crashed",
+    "browser closed",
+    "protocol error",
+    "session closed",
+    "page crashed",
+)
+
+
+class JourneyStopped(RuntimeError):
+    """Raised when the journey stops for a reason that is not the step's intent.
+
+    The tracker has already recorded the stop (``stop`` on the journey record, in
+    the sidecar) and the failed steps before it. The message carries the whole
+    journey summary, so the test fails once with everything a reader needs.
+    """
+
+
+def _same_known_page(first: str, second: str) -> bool:
+    """True when both addresses name a page and it is the same page.
+
+    Both must carry a host: "about:blank" and an unparseable address are not a
+    page a reader can be told the browser stayed on, so they never arm rule 3.
+    """
+    if not urlparse(first).netloc or not urlparse(second).netloc:
+        return False
+    return _same_page(first, second)
+
+
+def _test_time_limit_s() -> float:
+    """The per-test backstop, in seconds. ``AITEST_TEST_TIME_LIMIT=0`` disables it."""
+    raw = os.environ.get("AITEST_TEST_TIME_LIMIT", "")
+    if not raw:
+        return DEFAULT_TEST_TIME_LIMIT_S
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_TEST_TIME_LIMIT_S
 
 
 def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMethod:
@@ -166,14 +235,23 @@ def _carries_on[StepMethod: Callable[..., Any]](method: StepMethod) -> StepMetho
     @functools.wraps(method)
     def wrapper(self: EvidenceTracker, *args: Any, **kwargs: Any) -> Any:
         before = len(self.steps)
+        self._stop_when_over_the_time_limit()
         try:
             return method(self, *args, **kwargs)
+        except JourneyStopped:
+            raise
         except Exception as exc:  # noqa: BLE001 - see the docstring: recorded, then carried
-            if self._cannot_continue() or not self.journey_hooked:
+            if not self.journey_hooked:
                 # No hook means nothing would fail the test at its end, so a
                 # swallowed failure would be a silent pass. Fail here instead.
                 raise
+            if self._page_gone(exc):
+                # Reason 1: nothing further can run, whatever the step wanted.
+                self._stop_journey("page_gone", str(exc)[:300])
             self._record_unrecorded_failure(method.__name__, args, exc, before)
+            if not self._liveness_ok():
+                # Reason 2: one trivial call against the page raised.
+                self._stop_journey("unresponsive", str(exc)[:300])
             return None
 
     return cast(StepMethod, wrapper)
@@ -223,6 +301,9 @@ class EvidenceTracker:
         # t-1066: set by the generated conftest fixture. Until something promises
         # to fail the test at its end, a failed step raises as it always did.
         self.journey_hooked: bool = False
+        # t-1095: why the journey stopped, when it did ({"reason", "detail"}).
+        self.stop: dict[str, str] | None = None
+        self._time_limit_s: float = _test_time_limit_s()
 
         # A5: per-page hint for the adaptive encoder. A page URL lands here when
         # a full-page capture on it found lossless WebP would NOT shrink the
@@ -764,6 +845,58 @@ class EvidenceTracker:
             pass
         return False
 
+    def _click_moved(self, original_url: str, pages_before: tuple[Any, ...]) -> bool:
+        """True when the click changed the page (URL identity) or opened a tab."""
+        try:
+            if len(tuple(self.page.context.pages)) > len(pages_before):
+                return True
+        except Exception:
+            pass
+        return not _same_page(original_url, self._safe_page_url())
+
+    def _page_gone(self, exc: Exception) -> bool:
+        """Reason 1: the page, its context or the protocol is gone."""
+        if self._cannot_continue():
+            return True
+        message = str(exc).lower()
+        return any(marker in message for marker in _PAGE_GONE_MARKERS)
+
+    def _liveness_ok(self) -> bool:
+        """One trivial call against the page. False means nothing further can run.
+
+        Reason 2: the step failure may have been a symptom of a page that is no
+        longer answering. A closed page is already reason 1; this catches the page
+        that still claims to be open but raises on the cheapest possible call.
+        """
+        try:
+            self.page.evaluate("() => 1")
+        except Exception:
+            return False
+        return True
+
+    def _stop_when_over_the_time_limit(self) -> None:
+        """Reason 4: the per-test backstop. Not the main rule - a last resort."""
+        if self._time_limit_s <= 0:
+            return
+        if self.stop is not None:
+            return
+        elapsed = time.time() - self.start_time
+        if elapsed > self._time_limit_s:
+            self._stop_journey(
+                "time_limit",
+                f"the test ran {elapsed:.0f}s, over the {self._time_limit_s:.0f}s per-test limit",
+            )
+
+    def _stop_journey(self, reason: str, detail: str) -> None:
+        """Record that the journey stopped, persist it, and raise it once.
+
+        ``reason`` is one of the four keys in :data:`STOP_REASONS`; the plain-words
+        text for it goes into the record, the sidecar and the report.
+        """
+        self.stop = {"reason": reason, "detail": detail}
+        self._persist_sidecar("running")
+        raise JourneyStopped(self.journey_summary() or f"Journey stopped: {STOP_REASONS.get(reason, reason)}")
+
     def _record_unrecorded_failure(
         self, method_name: str, args: tuple[Any, ...], exc: Exception, steps_before: int
     ) -> None:
@@ -842,9 +975,20 @@ class EvidenceTracker:
         to re-derive them from the steps (t-1063).
         """
         failures = self.journey_failures()
-        if not failures:
+        if not failures and self.stop is None:
             return {}
-        first = failures[0]
+        first = failures[0] if failures else None
+        if first is None:
+            return {
+                "protocol": JOURNEY_PROTOCOL,
+                "failed_steps": [],
+                "off_course": {},
+                "later_steps": 0,
+                "later_passed_off_course": 0,
+                "stop": dict(self.stop or {}),
+                "stop_text": STOP_REASONS.get(str((self.stop or {}).get("reason", "")), ""),
+                "summary": self.journey_summary(),
+            }
         failed_index = int(first["step"]) - 1
         later = self.steps[failed_index + 1 :]
         later_passed = sum(1 for step in later if (step.get("result") or {}).get("status") == "passed")
@@ -857,6 +1001,8 @@ class EvidenceTracker:
             # Every later step ran after a failure, so every later pass is off
             # course - whether or not the failure named a page (t-1063).
             "later_passed_off_course": later_passed,
+            "stop": dict(self.stop) if self.stop else {},
+            "stop_text": STOP_REASONS.get(str((self.stop or {}).get("reason", "")), ""),
             "summary": self.journey_summary(),
         }
 
@@ -867,8 +1013,9 @@ class EvidenceTracker:
         text once, at the end, instead of the journey stopping at the failed step.
         """
         failures = self.journey_failures()
+        stop_line = self._stop_line()
         if not failures:
-            return ""
+            return stop_line
         first = failures[0]
         failed_index = int(first["step"]) - 1
         later = self.steps[failed_index + 1 :]
@@ -891,7 +1038,20 @@ class EvidenceTracker:
             )
         for failure in failures[1:]:
             lines.append(f"Also failed: step {failure['step']} '{failure['label']}' - {failure['error']}")
+        if stop_line:
+            lines.extend(["", stop_line])
         return "\n".join(lines)
+
+    def _stop_line(self) -> str:
+        """The stop, in plain words, for the record and the report."""
+        if not self.stop:
+            return ""
+        text = STOP_REASONS.get(str(self.stop.get("reason", "")), "")
+        detail = str(self.stop.get("detail") or "")
+        line = f"Journey stopped: {text}."
+        if detail and detail not in text:
+            line += f" {detail}"
+        return line
 
     def record_page_expectation(
         self,
@@ -1016,6 +1176,7 @@ class EvidenceTracker:
         except Exception:
             pass
         _t0 = time.time()
+        page_before = self._safe_page_url()
         try:
             response = self.page.goto(url)
             status = _response_status(response)
@@ -1094,6 +1255,21 @@ class EvidenceTracker:
                 navigation=navigation,
                 mismatch_wording="the step was asked for",
             )
+            # Rule 3 (t-1095): a navigation's job is to change the page. If the
+            # browser is still on the page it left, the remaining steps belong to
+            # a page it never reached, so they could only produce noise. A 404 or
+            # a redirect DID move the browser, so those carry on.
+            # A readable status means a real document navigation was reported.
+            # With no status there is nothing to judge (a same-document
+            # navigation, or a test double that reports none).
+            if page_before and status is not None and _same_known_page(page_before, self._safe_page_url()):
+                if self.stop is None:
+                    self._mark_off_course_steps()
+                    self._stop_journey(
+                        "no_arrival",
+                        f"the navigate step '{label}' did not change the page; "
+                        f"the browser stayed on '{self._safe_page_url()}'",
+                    )
         except NavigationStatusError:
             # Already recorded with its own evidence - re-raise, do not record
             # the same failure twice.
@@ -1217,7 +1393,7 @@ class EvidenceTracker:
             return ""
 
     @_carries_on
-    def click(self, locator: str, label: str = "", expected_page: str = "") -> None:
+    def click(self, locator: str, label: str = "", expected_page: str = "", must_move: bool = False) -> None:
         """Click an element, with layered fallback strategies.
 
         Strategy (Tier 2 — Locator Scoring + Controlled Fallback):
@@ -1326,6 +1502,16 @@ class EvidenceTracker:
                     expected_page=expected_page,
                 )
                 self._verify_click_navigation(locator, label, el_metadata, original_url, pages_before)
+                # Rule 3 (t-1095): only a click the emitter KNOWS must move arms
+                # this. A click the story does not expect to navigate (a tab, an
+                # "add to cart") must never stop the journey.
+                if must_move and self.stop is None and not self._click_moved(original_url, pages_before):
+                    self._mark_off_course_steps()
+                    self._stop_journey(
+                        "no_arrival",
+                        f"the click step '{label}' (via '{locator}') was expected to move the browser; "
+                        f"it stayed on '{self._safe_page_url()}'",
+                    )
                 return
             except Exception as click_error:
                 # Check if this looks like a visibility/overlay issue
