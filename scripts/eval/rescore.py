@@ -150,12 +150,21 @@ def main(argv: list[str] | None = None) -> int:
     known = _known_scores()
     if known and not args.json:
         recorded_at = known.get("recorded_at")
-        label = "Recorded last re-score" + (f" (as of {recorded_at})" if recorded_at else "")
-        print(
-            f"\n{label}: "
-            f"gate 1 {known.get('gate1_correct')}/{known.get('gate1_total')} "
-            f"({known.get('gate1_accuracy_pct')}%), gate 2 {known.get('gate2_false_greens')}."
-        )
+        prefix = "Recorded last re-score" + (f" (as of {recorded_at})" if recorded_at else "")
+        gate2 = known.get("gate2_false_greens")
+        gate2_text = "not measured in this mode" if gate2 is None else str(gate2)
+        # j-0244: a recorded figure carries its mode and its seed. When the
+        # record has them, print them - a bare percentage is what let the
+        # with-pack headline read as a pure resolution score (d-0060).
+        figure_label = str(known.get("label") or "").strip()
+        if figure_label:
+            print(f"\n{prefix}: {figure_label}; gate 2 {gate2_text}.")
+        else:
+            print(
+                f"\n{prefix}: "
+                f"gate 1 {known.get('gate1_correct')}/{known.get('gate1_total')} "
+                f"({known.get('gate1_accuracy_pct')}%), gate 2 {gate2_text}."
+            )
 
     exit_code = 0
     if args.expect_gate1 is not None and correct != args.expect_gate1:

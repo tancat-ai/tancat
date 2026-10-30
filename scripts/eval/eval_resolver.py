@@ -32,7 +32,9 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,12 @@ _SCRAPED_DIR = _PROJECT_ROOT / "scripts" / "eval" / "scraped_pages"
 #: Root the eval's own store lives under. ``scratch/`` is gitignored, so an
 #: eval run never leaves tracked artefacts behind.
 EVAL_STORE_ROOT = _PROJECT_ROOT / "scratch" / "eval_store"
+
+#: The held-out split's store (j-0244). A held-out measurement needs a store
+#: that never held the full pack: an exclusion cannot remove patterns a
+#: previous full seed already wrote, and the marker would then make the next
+#: run skip seeding entirely. Kept separate, and wiped before the seed.
+HELDOUT_STORE_ROOT = EVAL_STORE_ROOT / "heldout"
 
 logger = logging.getLogger(__name__)
 
@@ -80,11 +88,43 @@ def isolate_eval_store(root: Path | None = None) -> Path:
 
 
 # ---------------------------------------------------------------------------
+# Held-out split (j-0244, d-0060)
+# ---------------------------------------------------------------------------
+
+
+def heldout_story_ids() -> tuple[str, ...]:
+    """Story ids of the held-out split, from ``src.rag_bundled.HELDOUT_STORY_FILES``.
+
+    One source for both halves: the seed excludes these files, and a held-out
+    run scores only these story ids.
+    """
+    from src.rag_bundled import HELDOUT_STORY_FILES
+
+    return tuple(Path(name).stem.split("_", 1)[0] for name in HELDOUT_STORY_FILES)
+
+
+def select_story_placeholders(
+    placeholders: list[dict[str, Any]],
+    stories: Sequence[str] | None,
+) -> list[dict[str, Any]]:
+    """Keep only the placeholders that belong to *stories*.
+
+    ``None`` or an empty sequence keeps everything (the whole-dataset run).
+    This is what makes a held-out figure computable from the held-out stories
+    only: no count from another story can reach the total.
+    """
+    wanted = {str(s).strip() for s in (stories or ()) if str(s).strip()}
+    if not wanted:
+        return list(placeholders)
+    return [ph for ph in placeholders if ph.get("story_id") in wanted]
+
+
+# ---------------------------------------------------------------------------
 # Golden key loading
 # ---------------------------------------------------------------------------
 
 
-def _load_golden_placeholders() -> list[dict[str, Any]]:
+def _load_golden_placeholders(stories: Sequence[str] | None = None) -> list[dict[str, Any]]:
     """Load all golden placeholders from dataset files.
 
     Returns flat list with keys: action, description, expected_locator,
@@ -94,6 +134,9 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
     patterns under, so the scorer's golden-pattern bonus can match them. Without
     it (the pre-t-0490 state) every pattern carried a non-empty site_hash and
     the bonus was skipped, which is why the RAG A/B measured no difference.
+
+    ``stories`` limits the list to those story ids (``eval-007``); ``None``
+    keeps the whole dataset.
     """
     from src.rag_bundled import golden_site_hash
 
@@ -120,7 +163,7 @@ def _load_golden_placeholders() -> list[dict[str, Any]]:
                         "story_id": data.get("id", ""),
                     }
                 )
-    return placeholders
+    return select_story_placeholders(placeholders, stories)
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +371,13 @@ def _element_to_locator(element: dict[str, str]) -> str:
 async def run_resolver_eval(
     pages: dict[str, list[dict[str, str]]],
     rag_retriever: Any | None = None,
+    *,
+    stories: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Run resolver-only evaluation against all golden placeholders.
+    """Run resolver-only evaluation against the golden placeholders.
+
+    ``stories`` scores only those story ids - the held-out split - so the
+    figure cannot be lifted by a story the RAG seed was given.
 
     Returns dict with summary stats suitable for HarnessReport.
     """
@@ -346,13 +394,14 @@ async def run_resolver_eval(
     except Exception:
         pass
 
-    placeholders = _load_golden_placeholders()
+    placeholders = _load_golden_placeholders(stories=stories)
     resolver = PlaceholderResolver()
     element_matcher = ElementMatcher(resolver, generator=None)
 
     correct = 0
     total = 0
     per_site: dict[str, dict[str, int]] = {}
+    per_story: dict[str, dict[str, int]] = {}
 
     for ph in placeholders:
         total += 1
@@ -360,6 +409,10 @@ async def run_resolver_eval(
         if site not in per_site:
             per_site[site] = {"total": 0, "correct": 0}
         per_site[site]["total"] += 1
+        story = ph.get("story_id") or "unknown"
+        if story not in per_story:
+            per_story[story] = {"total": 0, "correct": 0}
+        per_story[story]["total"] += 1
 
         resolved = _resolve_placeholder(
             action=ph["action"],
@@ -380,6 +433,7 @@ async def run_resolver_eval(
         if matched:
             correct += 1
             per_site[site]["correct"] += 1
+            per_story[story]["correct"] += 1
 
         logger.debug(
             "  %s '%s' → %s (expected: %s) %s",
@@ -403,6 +457,14 @@ async def run_resolver_eval(
                 "accuracy_pct": round(stats["correct"] / stats["total"] * 100, 1) if stats["total"] > 0 else 0.0,
             }
             for site, stats in sorted(per_site.items())
+        },
+        "per_story": {
+            story: {
+                "correct": stats["correct"],
+                "total": stats["total"],
+                "accuracy_pct": round(stats["correct"] / stats["total"] * 100, 1) if stats["total"] > 0 else 0.0,
+            }
+            for story, stats in sorted(per_story.items())
         },
     }
 
@@ -428,6 +490,15 @@ def _format_summary(summary: dict[str, Any]) -> str:
     for site, stats in summary["per_site"].items():
         lines.append(f"  {site}: {stats['correct']}/{stats['total']} ({stats['accuracy_pct']}%)")
 
+    per_story = summary.get("per_story") or {}
+    if per_story:
+        lines.append("")
+        lines.append("-" * 70)
+        lines.append("PER-STORY BREAKDOWN")
+        lines.append("-" * 70)
+        for story, stats in per_story.items():
+            lines.append(f"  {story}: {stats['correct']}/{stats['total']} ({stats['accuracy_pct']}%)")
+
     lines.append("")
     lines.append("=" * 70)
 
@@ -452,8 +523,14 @@ def rag_enabled_for_eval() -> bool:
     return rag_enabled_by_config()
 
 
-async def _cmd_static() -> int:
-    """Run resolver eval against pre-saved scraped data."""
+async def _cmd_static(heldout: bool = False) -> int:
+    """Run resolver eval against pre-saved scraped data.
+
+    ``heldout`` (j-0244) scores only the held-out stories and seeds the pack
+    with those story files excluded, in a store of its own. Both halves follow
+    from the one flag, so a held-out figure cannot be produced with the full
+    pack by accident.
+    """
     pages = load_scraped_pages()
     if not pages:
         print("ERROR: No scraped pages found.", file=sys.stderr)
@@ -462,13 +539,20 @@ async def _cmd_static() -> int:
 
     # t-0515: every eval read/write stays in the eval's own store, never the
     # production one. Set before any store (RAG or flow memory) is built.
-    isolate_eval_store()
+    # j-0244: a held-out run gets a store of its own, wiped first - the
+    # exclusion cannot remove patterns a previous full seed wrote.
+    if heldout:
+        shutil.rmtree(HELDOUT_STORE_ROOT, ignore_errors=True)
+        isolate_eval_store(root=HELDOUT_STORE_ROOT)
+    else:
+        isolate_eval_store()
 
+    stories = heldout_story_ids() if heldout else None
     rag_enabled = rag_enabled_for_eval()
     rag_retriever = None
     if rag_enabled:
         try:
-            from src.rag_bundled import ensure_bundled_seeded
+            from src.rag_bundled import HELDOUT_STORY_FILES, ensure_bundled_seeded
             from src.rag_retriever import RAGRetriever
             from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
             from src.storage import get_storage
@@ -482,20 +566,25 @@ async def _cmd_static() -> int:
             store = RAGStore(backend, embedder)
             # Seed the deterministic bundled golden pack into the eval store so
             # RAG-on still measures the goldens (production's learned patterns
-            # no longer leak in).
-            ensure_bundled_seeded(store=store)
+            # no longer leak in). A held-out run leaves the held-out files out.
+            ensure_bundled_seeded(store=store, exclude=HELDOUT_STORY_FILES if heldout else None)
             rag_retriever = RAGRetriever(store)
             logger.info("RAG retriever initialised (isolated store: %s)", get_storage().rag_path())
         except Exception:
             logger.warning("RAG enabled but failed to init — disabling", exc_info=True)
 
-    summary = await run_resolver_eval(pages, rag_retriever)
+    summary = await run_resolver_eval(pages, rag_retriever, stories=stories)
     print(_format_summary(summary))
 
-    if rag_enabled:
-        print("\n[RAG: ENABLED]  (product default; set RAG_ENABLED=0 to compare)")
+    if heldout:
+        print(f"\n[SPLIT: HELD-OUT {', '.join(stories or ())}]  (these story files are excluded from the seed)")
     else:
-        print("\n[RAG: DISABLED]  (RAG_ENABLED=0)")
+        print("\n[SPLIT: FULL dataset]  (every story, including any the seed holds)")
+
+    if rag_enabled:
+        print("[RAG: ENABLED]  (product default; set RAG_ENABLED=0 to compare)")
+    else:
+        print("[RAG: DISABLED]  (RAG_ENABLED=0)")
 
     return 0
 
@@ -622,6 +711,14 @@ def main() -> int:
         help="static: frozen scraped data | live: static scrape | pipeline: stateful scrape (matches real pipeline)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
+    parser.add_argument(
+        "--heldout",
+        action="store_true",
+        help=(
+            "score only the held-out stories (eval-007/008/010) and seed the RAG pack with those "
+            "files excluded, in a store of its own - the figure comes from stories the seed never saw"
+        ),
+    )
 
     args = parser.parse_args()
     logging.basicConfig(
@@ -634,7 +731,7 @@ def main() -> int:
         return asyncio.run(_cmd_pipeline())
     if args.mode == "live":
         return asyncio.run(_cmd_live())
-    return asyncio.run(_cmd_static())
+    return asyncio.run(_cmd_static(heldout=args.heldout))
 
 
 if __name__ == "__main__":

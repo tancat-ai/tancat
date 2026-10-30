@@ -174,14 +174,30 @@ re-applies gate 2 to the kept per-test outcomes, using the same
 The harness exits `4` when a run with `--evidence-dir` fails to keep its
 evidence, distinct from `2` (accuracy below threshold) and `3` (partial run).
 
-The last recorded re-score (as of 2026-10-13, t-0759, current main with the
-accuracy A/C fixes) is `scripts/eval/known_gate_scores.json`: **94/113 gate 1
-(83.2%)** and **0 hollow passes** - gate 2 passes, gate 1 still fails the 90%
-target, and the number is unchanged from the 2026-10-12 baseline. The run kept
-its evidence (`fixtures/heldout_runs/2026-10-13`) and re-scores to the same
-numbers with no model; the 2026-10-12 baseline is preserved under `previous` and
-the older 82/113 + 3 record under `comparison.history`. The gates are unchanged:
-`>=90%` gate 1, zero hollow passes gate 2.
+The last recorded gate figure (2026-10-30, t-1111 / j-0244) is
+`scripts/eval/known_gate_scores.json`, and it is labelled because the label is
+the difference between two very different claims:
+
+- **The headline is the held-out split: 12/30 (40.0%)**, mode `static
+  resolver-only leg` (frozen scraped pages, no model, no generated tests), seed
+  `bundled pack minus the 3 held-out story files` - stories (eval-007, eval-008,
+  eval-010) whose golden keys the RAG seed never contained, so this number
+  cannot be recall.
+- **The with-pack number over all 113 stories is 48/113 (42.5%)**, seed `full
+  bundled pack` - that is the same measurement in the same mode but on stories
+  the seed holds the answers for, so part of it is recall; it is the cell to
+  compare against the 89/113 full-mode record (same stories, same seed, a
+  different mode), never the headline.
+
+`--heldout` on `eval_resolver.py` produces the held-out figure: it excludes
+`src/rag_bundled.HELDOUT_STORY_FILES` from the seed and scores only those
+stories, in a store of its own. The shipped product pack is unchanged - all 113
+patterns ship.
+
+The full-mode 89/113 (78.8%) gate-1 record is kept one level down under
+`previous`, with its committed evidence and the older 82/113 + 3 record under
+`comparison.history`. The gates are unchanged: `>=90%` gate 1, zero hollow
+passes gate 2.
 A per-story caveat lives in the same file: see `flaky_story` - eval-004's number is not repeatable, so prefer the overall figure.
 
 ---

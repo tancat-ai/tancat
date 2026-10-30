@@ -120,11 +120,43 @@ def golden_site_hash(site_name: str, base_url: str) -> str:
     return site_hash(identity) if identity else ""
 
 
-def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
+#: Story files held out of the bundled seed for the eval split (j-0244, d-0060).
+#:
+#: The seed is built from the same ``eval-*.json`` ``expected_locator`` fields
+#: the gate scores, so a with-pack score can be recall: the tool was handed the
+#: answers for 9 of the 113 scored placeholders. These three whole files are
+#: excluded when the eval asks for the held-out split; the shipped pack keeps
+#: them (the product is unchanged), and the three are only ever excluded on the
+#: eval side. Chosen because all three carry scored placeholders and they are
+#: not the stories the pack was tuned against.
+HELDOUT_STORY_FILES: tuple[str, ...] = (
+    "eval-007_banking_mock.json",
+    "eval-008_goto_navigation.json",
+    "eval-010_ambiguous_mock.json",
+)
+
+
+def _is_excluded(path: Path, exclude: Sequence[str]) -> bool:
+    """Whether *path* is named by *exclude* (a file name or a stem)."""
+
+    def key(name: str) -> str:
+        return re.sub(r"[-_.]", "", Path(name).stem).lower()
+
+    return key(path.name) in {key(item) for item in exclude if item.strip()}
+
+
+def load_golden_patterns(dataset_dir: Path, *, exclude: Sequence[str] | None = None) -> list[GoldenPattern]:
     """Parse golden eval dataset JSON files into GoldenPattern entries.
 
     Each dataset file contains ``golden_resolutions`` — a list of
     criterion-level objects, each with a ``placeholders`` array.
+
+    Args:
+        dataset_dir: Directory holding the ``eval-*.json`` stories.
+        exclude: Story files to leave out, named by file name (``eval-007_
+            banking_mock.json``) or by stem (``eval-007_banking_mock``).
+            ``None`` (the default, and the shipped product path) excludes
+            nothing. ``HELDOUT_STORY_FILES`` is the eval's held-out split.
     """
 
     patterns: list[GoldenPattern] = []
@@ -132,6 +164,9 @@ def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
     if not json_files:
         logger.warning("No eval-*.json files found in %s", dataset_dir)
         return patterns
+
+    if exclude:
+        json_files = [f for f in json_files if not _is_excluded(f, exclude)]
 
     for fpath in json_files:
         data = json.loads(fpath.read_text(encoding="utf-8"))
@@ -153,9 +188,17 @@ def load_golden_patterns(dataset_dir: Path) -> list[GoldenPattern]:
     return patterns
 
 
-def build_bundled_patterns(repo_root: Path | None = None) -> list[GoldenPattern]:
-    """Load the bundled golden patterns (eval-001..006)."""
-    return load_golden_patterns(bundled_dataset_dir(repo_root))
+def build_bundled_patterns(
+    repo_root: Path | None = None,
+    *,
+    exclude: Sequence[str] | None = None,
+) -> list[GoldenPattern]:
+    """Load the bundled golden patterns (eval-001..006, plus the mocks).
+
+    ``exclude`` (eval side only) leaves the named story files out; the shipped
+    product path passes nothing and gets the full pack.
+    """
+    return load_golden_patterns(bundled_dataset_dir(repo_root), exclude=exclude)
 
 
 # ---------------------------------------------------------------------------
@@ -297,6 +340,7 @@ def ensure_bundled_seeded(
     *,
     marker_path: Path | None = None,
     force: bool = False,
+    exclude: Sequence[str] | None = None,
 ) -> dict[str, object]:
     """Seed the RAG store from the bundled pack — idempotent, self-healing.
 
@@ -328,6 +372,11 @@ def ensure_bundled_seeded(
         store: Injectable store (tests); defaults to the production store.
         marker_path: Injectable marker path (tests); defaults to evidence dir.
         force: Re-seed even when the marker exists and the store is populated.
+        exclude: Story files to leave out of the seed (the eval's held-out
+            split). ``None`` — the product path — seeds the whole pack. An
+            exclusion does not remove patterns a previous full seed already
+            put in the store, so a held-out measurement needs a store of its
+            own (``eval_resolver`` uses one).
     """
     marker = marker_path or bundled_marker_path()
     if store is None:
@@ -345,7 +394,7 @@ def ensure_bundled_seeded(
     stale_marker = marker.exists() and not force and golden_count == 0
 
     if store.is_empty or force or golden_count == 0:
-        patterns = build_bundled_patterns()
+        patterns = build_bundled_patterns(exclude=exclude)
         doc_chunks = build_bundled_docs()
         golden = store.add_patterns(patterns)
         docs, _docs_skipped = store.add_docs(doc_chunks)
