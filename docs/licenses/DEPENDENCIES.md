@@ -215,7 +215,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | executing | 2.2.1 | MIT License | https://github.com/alexmojaki/executing |
 | faiss-cpu | 1.14.3 | MIT | https://github.com/facebookresearch/faiss |
 | fastjsonschema | 2.22.1 | BSD License | https://github.com/horejsek/python-fastjsonschema |
-| filelock | 3.32.0 | MIT | https://github.com/tox-dev/py-filelock |
+| filelock | 4.2.1 | MIT | https://github.com/tox-dev/py-filelock |
 | fqdn | 1.5.1 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/ypcrts/fqdn |
 | fsspec | 2026.7.0 | BSD-3-Clause | https://github.com/fsspec/filesystem_spec |
 | ghp-import | 2.1.0 | Apache Software License | https://github.com/c-w/ghp-import |
@@ -336,7 +336,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | pytest-timeout | 2.4.0 | DFSG approved; MIT License | https://github.com/pytest-dev/pytest-timeout |
 | pytest-xdist | 3.8.0 | MIT | https://github.com/pytest-dev/pytest-xdist |
 | python-dateutil | 2.9.0.post0 | Apache Software License; BSD License | https://github.com/dateutil/dateutil |
-| python-discovery | 1.5.0 | MIT License | https://github.com/tox-dev/python-discovery |
+| python-discovery | 1.6.4 | MIT License | https://github.com/tox-dev/python-discovery |
 | python-dotenv | 1.2.4 | BSD-3-Clause | https://github.com/theskumar/python-dotenv |
 | python-json-logger | 4.1.0 | BSD-2-Clause | https://nhairs.github.io/python-json-logger |
 | python-multipart | 0.0.32 | Apache-2.0 | https://github.com/Kludex/python-multipart |
@@ -393,7 +393,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | urllib3 | 2.7.0 | MIT | https://github.com/urllib3/urllib3/blob/main/CHANGES.rst |
 | uuid-utils | 0.17.0 | BSD-3-Clause | https://github.com/aminalaee/uuid-utils |
 | uvicorn | 0.52.0 | BSD-3-Clause | https://uvicorn.dev/ |
-| virtualenv | 21.7.0 | MIT | https://github.com/pypa/virtualenv |
+| virtualenv | 21.14.13 | MIT | https://github.com/pypa/virtualenv |
 | watchdog | 6.0.0 | Apache Software License | https://github.com/gorakhargosh/watchdog |
 | wcwidth | 0.8.2 | MIT License | https://github.com/jquast/wcwidth |
 | webcolors | 25.10.0 | BSD License | https://webcolors.readthedocs.io |
