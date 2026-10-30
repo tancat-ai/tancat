@@ -119,7 +119,7 @@ Refreshed 2026-10-02: public symbols present in the source and not listed above.
 - `build_summary` (function): `build_summary(page_report: list[tuple[str, int, str, str]], chunks_new: int, chunks_present: int, unreadable_docs: list[str] | None = None, skipped_formats: list[str] | None = None) -> IngestionSummary` - Build an :class:'IngestionSummary' from in-memory ingestion data.
 - `CHARS_PER_TOKEN` (constant): `CHARS_PER_TOKEN = 4`
 - `SUPPORTED_FORMATS` (constant): `SUPPORTED_FORMATS = ('.pdf', '.md')`
-- `HELDOUT_STORY_FILES` (constant, 2026-10-30, j-0244): `HELDOUT_STORY_FILES = ('eval-007_banking_mock.json', 'eval-008_goto_navigation.json', 'eval-010_ambiguous_mock.json')` - the three whole story files the eval's held-out split leaves out of the seed (30 of the 113 scored placeholders). One list, read by both halves: `load_golden_patterns(exclude=...)` and `eval_resolver.py --heldout`. The shipped pack keeps them.
+- (t-1120) The held-out split list is **not** in this module. Its one copy is `DEFAULT_SPLIT` in `scripts/eval/heldout_split.py`; the seed only receives it through `exclude=` (see the note beside `load_golden_patterns`). A second copy here was removed because a stale copy would seed a story the gate scores.
 
 
 ### Additional helpers (docs refresh 2026-10-02)

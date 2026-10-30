@@ -44,6 +44,11 @@
         "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
         "split_key": "eval-007|eval-008|eval-010",
         "split_kind": "heldout",
+        "split_files": [
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
         "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
         "per_file": {
           "eval-007": "7/13",
@@ -65,6 +70,11 @@
         "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
         "split_key": "eval-007|eval-008|eval-010",
         "split_kind": "heldout",
+        "split_files": [
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
         "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
         "per_file": {
           "eval-007": "7/13",
@@ -86,6 +96,17 @@
         "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
         "split_key": "all-113",
         "split_kind": "full",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
         "label": "48/113 (42.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: full bundled pack (113 patterns - it contains the 3 scored files); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
         "note": "All 113 scored placeholders with the full pack - the configuration the 89/113 record used, in a different mode.",
         "comparability": "Same 113 stories and the same seed configuration as the 89/113 record, but a DIFFERENT mode (no model, no generated tests): read it directionally against 89/113, never as a replacement. NOT comparable with either held-out cell - different split (113 placeholders vs 30) and therefore a different sample.",
@@ -102,6 +123,17 @@
         "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
         "split_key": "all-113",
         "split_kind": "full",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
         "label": "39/113 (34.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
         "note": "All 113, RAG off: the leak measurement's other half (t-1110 measured 37 and 46 on an earlier tree).",
         "comparability": "Same 113 stories, RAG off: the other half of the leak measurement, not a product configuration. NOT comparable with either held-out cell - different split.",
@@ -614,5 +646,33 @@
     "eval-007": "7/13",
     "eval-008": "4/13",
     "eval-010": "1/4"
+  },
+  "split_site_rule": "A split holds out whole sites (t-1119): files are grouped by the site_hash their dataset gives them, and the seed's +20 golden bonus answers on site_hash, so holding one file of a site out while seeding its sibling would hand the answer back. eval-007_banking_mock and eval-008_goto_navigation share site_hash bebd95a0fea633c3 and are therefore always held out together.",
+  "split_site_groups": {
+    "2b1035cdb2e72461": [
+      "eval-006_ecommerce_mock.json"
+    ],
+    "5951c8c026be4bf5": [
+      "eval-004_theinternet_alerts.json"
+    ],
+    "92121f32c8f2cfa4": [
+      "eval-001_saucedemo_login_checkout.json"
+    ],
+    "b256fa13d76b7814": [
+      "eval-010_ambiguous_mock.json"
+    ],
+    "bebd95a0fea633c3": [
+      "eval-007_banking_mock.json",
+      "eval-008_goto_navigation.json"
+    ],
+    "cf4c8b39e650e9e1": [
+      "eval-002_automationexercise_browse_cart.json"
+    ],
+    "d2e36b87c3a4ff1e": [
+      "eval-005_lv_insurance_quote.json"
+    ],
+    "e65c38d064ba929d": [
+      "eval-003_demoqa_forms.json"
+    ]
   }
 }

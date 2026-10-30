@@ -100,14 +100,15 @@ def isolate_eval_store(root: Path | None = None) -> Path:
 
 
 def heldout_story_ids(files: Sequence[str] | None = None) -> tuple[str, ...]:
-    """Story ids of a held-out split (default: ``src.rag_bundled.HELDOUT_STORY_FILES``).
+    """Story ids of a held-out split (default: ``heldout_split.DEFAULT_SPLIT``).
 
     One list feeds both halves: the seed excludes *files*, and a held-out run
-    scores only the story ids derived from the same files.
+    scores only the story ids derived from the same files. The list lives in
+    ``scripts/eval/heldout_split.py`` and nowhere else (t-1120).
     """
-    from src.rag_bundled import HELDOUT_STORY_FILES
+    from heldout_split import DEFAULT_SPLIT
 
-    names = tuple(files) if files else HELDOUT_STORY_FILES
+    names = tuple(files) if files else DEFAULT_SPLIT
     return tuple(Path(name).stem.split("_", 1)[0] for name in names)
 
 
@@ -750,7 +751,8 @@ def main() -> int:
         help=(
             "which story files to hold back (implies --heldout): 'default' (eval-007/008/010), 'date' "
             "(stable all day, moves tomorrow), 'date:YYYY-MM-DD', 'seed:<value>' (same split every time), "
-            "or three file names separated by commas"
+            "or file names separated by commas. Files are grouped by site and a group is held out whole, "
+            "so a rotated split is three groups (three or four files)"
         ),
     )
 

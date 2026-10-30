@@ -39,15 +39,16 @@ import eval_resolver  # noqa: E402
 import gate_record  # noqa: E402
 from eval_resolver import (  # noqa: E402
     _load_golden_placeholders,
+    heldout_story_ids,
     run_resolver_eval,
     select_story_placeholders,
 )
-from heldout_split import describe_split, split_files  # noqa: E402
+from heldout_split import DEFAULT_SPLIT, describe_split, site_groups, split_files  # noqa: E402
 
 from src.rag_bundled import (  # noqa: E402
-    HELDOUT_STORY_FILES,
     build_bundled_patterns,
     ensure_bundled_seeded,
+    golden_site_hash,
     load_golden_patterns,
 )
 from src.rag_store import GoldenPattern  # noqa: E402
@@ -80,37 +81,37 @@ class TestSeedHonoursTheExclusion:
 
     def test_the_split_is_three_whole_files_that_carry_scored_placeholders(self) -> None:
         """The held-out list names whole dataset files, each with scored keys."""
-        assert HELDOUT_STORY_FILES == (
+        assert DEFAULT_SPLIT == (
             "eval-007_banking_mock.json",
             "eval-008_goto_navigation.json",
             "eval-010_ambiguous_mock.json",
         )
-        for name in HELDOUT_STORY_FILES:
+        for name in DEFAULT_SPLIT:
             assert (_DATASET_DIR / name).is_file(), name
             assert _keys_from_files((name,)), f"{name} carries no scored placeholders - substitute the next file"
 
     def test_excluded_files_contribute_no_patterns(self) -> None:
         all_patterns = load_golden_patterns(_DATASET_DIR)
-        kept = load_golden_patterns(_DATASET_DIR, exclude=HELDOUT_STORY_FILES)
+        kept = load_golden_patterns(_DATASET_DIR, exclude=DEFAULT_SPLIT)
 
         assert len(all_patterns) == 113
         assert len(kept) == 83
         # The exact multiset that left the seed is the three held-out files' own
         # keys - no more, no less. Nothing else was removed, nothing stayed.
         dropped = Counter(_keys(all_patterns)) - Counter(_keys(kept))
-        assert dropped == Counter(_keys_from_files(HELDOUT_STORY_FILES)), (
+        assert dropped == Counter(_keys_from_files(DEFAULT_SPLIT)), (
             "the seed did not drop exactly the held-out files' goldens - the gate can see its own answers"
         )
 
     def test_exclusion_accepts_a_stem_or_a_file_name(self) -> None:
-        by_name = load_golden_patterns(_DATASET_DIR, exclude=HELDOUT_STORY_FILES)
-        by_stem = load_golden_patterns(_DATASET_DIR, exclude=tuple(Path(n).stem for n in HELDOUT_STORY_FILES))
+        by_name = load_golden_patterns(_DATASET_DIR, exclude=DEFAULT_SPLIT)
+        by_stem = load_golden_patterns(_DATASET_DIR, exclude=tuple(Path(n).stem for n in DEFAULT_SPLIT))
         assert _keys(by_name) == _keys(by_stem)
 
     def test_no_exclusion_is_the_shipped_pack(self) -> None:
         """The product path is unchanged: the default seed is the full 113."""
         assert len(build_bundled_patterns()) == 113
-        assert len(build_bundled_patterns(exclude=HELDOUT_STORY_FILES)) == 83
+        assert len(build_bundled_patterns(exclude=DEFAULT_SPLIT)) == 83
 
     def test_seeding_threads_the_exclusion_to_the_store(self, tmp_path: Path) -> None:
         store = MagicMock()
@@ -121,14 +122,14 @@ class TestSeedHonoursTheExclusion:
         result = ensure_bundled_seeded(
             store=store,
             marker_path=tmp_path / ".rag_bundled_seeded.json",
-            exclude=HELDOUT_STORY_FILES,
+            exclude=DEFAULT_SPLIT,
         )
 
         assert result["status"] == "seeded"
         seeded = store.add_patterns.call_args.args[0]
         assert len(seeded) == 83
         dropped = Counter(_keys(load_golden_patterns(_DATASET_DIR))) - Counter(_keys(seeded))
-        assert dropped == Counter(_keys_from_files(HELDOUT_STORY_FILES))
+        assert dropped == Counter(_keys_from_files(DEFAULT_SPLIT))
 
 
 class TestHeldoutScoreIsComputedFromHeldoutStoriesOnly:
@@ -153,7 +154,7 @@ class TestHeldoutScoreIsComputedFromHeldoutStoriesOnly:
         heldout = select_story_placeholders(everything, _EXPECTED_HELDOUT_IDS)
         heldout_keys = {(ph["action"], ph["description"], ph["expected_locator"]) for ph in heldout}
         dropped = Counter(_keys(load_golden_patterns(_DATASET_DIR))) - Counter(
-            _keys(load_golden_patterns(_DATASET_DIR, exclude=HELDOUT_STORY_FILES))
+            _keys(load_golden_patterns(_DATASET_DIR, exclude=DEFAULT_SPLIT))
         )
 
         assert len(heldout) == 30
@@ -227,9 +228,9 @@ class TestRotation:
 
     def test_the_default_split_is_still_the_three_fixed_files(self) -> None:
         """No selector: eval-007/008/010, exactly as the recorded figure used."""
-        assert split_files(_DATASET_DIR) == HELDOUT_STORY_FILES
-        assert split_files(_DATASET_DIR, "default") == HELDOUT_STORY_FILES
-        default = describe_split(_DATASET_DIR, HELDOUT_STORY_FILES)
+        assert split_files(_DATASET_DIR) == DEFAULT_SPLIT
+        assert split_files(_DATASET_DIR, "default") == DEFAULT_SPLIT
+        default = describe_split(_DATASET_DIR, DEFAULT_SPLIT)
         assert default["stories"] == ["eval-007", "eval-008", "eval-010"]
         assert default["placeholders"] == 30
 
@@ -238,8 +239,9 @@ class TestRotation:
         first = split_files(_DATASET_DIR, "seed:42")
         second = split_files(_DATASET_DIR, "seed:42")
         assert first == second
-        assert len(first) == 3
-        assert len(set(first)) == 3
+        # Three whole site groups: three files, or four when the banking pair lands.
+        assert len(first) in (3, 4)
+        assert len(set(first)) == len(first)
 
     def test_rotation_differs_for_another_seed(self) -> None:
         assert split_files(_DATASET_DIR, "seed:42") != split_files(_DATASET_DIR, "seed:7")
@@ -249,10 +251,11 @@ class TestRotation:
         assert split_files(_DATASET_DIR, "date") == split_files(_DATASET_DIR, "date")
         assert split_files(_DATASET_DIR, "date:2026-10-30") != split_files(_DATASET_DIR, "date:2026-10-31")
 
-    def test_a_rotated_split_is_three_whole_files_that_carry_scored_keys(self) -> None:
+    def test_a_rotated_split_is_three_whole_groups_that_carry_scored_keys(self) -> None:
         for selector in ("seed:1", "seed:2", "seed:3", "date:2026-11-01"):
             files = split_files(_DATASET_DIR, selector)
-            assert len(files) == 3, selector
+            assert len(files) in (3, 4), selector
+            assert len({_site_hash_of(_DATASET_DIR, n) for n in files}) == 3, selector
             for name in files:
                 assert (_DATASET_DIR / name).is_file(), (selector, name)
                 assert _keys_from_files((name,)), (selector, name)
@@ -272,10 +275,14 @@ class TestRotation:
     def test_a_bad_explicit_list_is_refused_not_silently_trimmed(self) -> None:
         with pytest.raises(ValueError, match="not a dataset file"):
             split_files(_DATASET_DIR, "eval-999_nope.json")
-        with pytest.raises(ValueError, match="whole story files"):
-            split_files(_DATASET_DIR, "eval-001_saucedemo_login_checkout.json,eval-005_lv_insurance_quote.json")
+        with pytest.raises(ValueError, match="share"):
+            # eval-007 held out, its banking sibling left seeded.
+            split_files(_DATASET_DIR, "eval-007_banking_mock.json,eval-005_lv_insurance_quote.json")
         with pytest.raises(ValueError, match="seed:|date:"):
             split_files(_DATASET_DIR, "42")
+        # Any set of WHOLE groups is a legal explicit split, whatever its size.
+        two = split_files(_DATASET_DIR, "eval-001_saucedemo_login_checkout.json,eval-005_lv_insurance_quote.json")
+        assert two == ("eval-001_saucedemo_login_checkout.json", "eval-005_lv_insurance_quote.json")
 
     def test_the_flag_reaches_the_scorer_and_the_printed_label(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
@@ -308,7 +315,7 @@ class TestRotation:
         assert f"[SPLIT: {expected['label']}]" in capsys.readouterr().out
 
     def test_the_split_names_itself_in_one_line(self) -> None:
-        described = describe_split(_DATASET_DIR, HELDOUT_STORY_FILES)
+        described = describe_split(_DATASET_DIR, DEFAULT_SPLIT)
         assert described["label"] == "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"
         assert described["key"] == "eval-007|eval-008|eval-010"
 
@@ -400,3 +407,125 @@ class TestSplitIsRecordedOnEveryFigure:
 
         assert problems, "a cross-split comparability claim was accepted"
         assert any("different split" in p for p in problems), problems
+
+
+def _site_hash_of(dataset_dir: Path, name: str) -> str:
+    """The site identity the bundled seed scopes a dataset file's goldens under."""
+    data = json.loads((dataset_dir / name).read_text(encoding="utf-8"))
+    return golden_site_hash(str(data.get("site", "")), str(data.get("base_url", "")))
+
+
+def _files_by_site(dataset_dir: Path) -> dict[str, set[str]]:
+    groups: dict[str, set[str]] = {}
+    for path in sorted(dataset_dir.glob("eval-*.json")):
+        groups.setdefault(_site_hash_of(dataset_dir, path.name), set()).add(path.name)
+    return groups
+
+
+class TestAGroupIsHeldOutWhole:
+    """A rotation may never separate two story files that share a site (t-1119).
+
+    The +20 golden bonus gates on the pattern's ``site_hash``, not on the file:
+    eval-007_banking_mock and eval-008_goto_navigation both hash to
+    ``bebd95a0fea633c3``, so a split that holds one out and leaves the other
+    seeded hands the answer back - the defect this whole job exists to close,
+    half the rotation space wide.
+    """
+
+    def test_every_known_sibling_pair_is_one_group(self) -> None:
+        groups = site_groups(_DATASET_DIR)
+        banking = [h for h, files in groups.items() if "eval-007_banking_mock.json" in files]
+        assert len(banking) == 1
+        assert set(groups[banking[0]]) == {"eval-007_banking_mock.json", "eval-008_goto_navigation.json"}
+        # A split holds a group whole or not at all: every group is a tuple of files.
+        assert all(len(files) >= 1 for files in groups.values())
+
+    def test_no_rotation_separates_two_files_that_share_a_site(self) -> None:
+        """The review's sweep: 200 seeds plus 84 dates, no same-site pair split."""
+        groups = _files_by_site(_DATASET_DIR)
+        selectors = [f"seed:{i}" for i in range(1, 201)]
+        selectors += [
+            f"date:2026-{month:02d}-{day:02d}"
+            for month, day in ((m, d) for m in (1, 2, 3, 4, 5, 6) for d in range(1, 15))
+        ]
+
+        seen: set[tuple[str, ...]] = set()
+        for selector in selectors:
+            held_out = set(split_files(_DATASET_DIR, selector))
+            seen.add(tuple(sorted(held_out)))
+            for site_hash, group in groups.items():
+                inside = group & held_out
+                assert not (inside and inside != group), (
+                    f"{selector} split site {site_hash}: held out {sorted(inside)} of {sorted(group)} - "
+                    "the seed keeps the sibling's goldens"
+                )
+        assert len(seen) > 20, f"the sweep rotated over only {len(seen)} distinct splits"
+
+    def test_a_rotated_split_can_carry_four_files(self) -> None:
+        """Holding a group whole is why a split is three GROUPS, not three files."""
+        sizes = {len(split_files(_DATASET_DIR, f"seed:{i}")) for i in range(1, 201)}
+        assert sizes <= {3, 4}
+        assert 4 in sizes, "the two-file banking group was never selected across 200 seeds"
+
+    def test_an_explicit_list_that_separates_a_site_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="share"):
+            split_files(
+                _DATASET_DIR,
+                "eval-007_banking_mock.json,eval-010_ambiguous_mock.json,eval-005_lv_insurance_quote.json",
+            )
+
+    def test_the_default_split_is_unchanged_at_30_placeholders(self) -> None:
+        """Today's 12/30 must stay reproducible: the default is still 007/008/010."""
+        assert split_files(_DATASET_DIR) == DEFAULT_SPLIT
+        assert DEFAULT_SPLIT == (
+            "eval-007_banking_mock.json",
+            "eval-008_goto_navigation.json",
+            "eval-010_ambiguous_mock.json",
+        )
+        described = describe_split(_DATASET_DIR, DEFAULT_SPLIT)
+        assert described["placeholders"] == 30
+        assert described["stories"] == ["eval-007", "eval-008", "eval-010"]
+
+
+class TestTheRecordRefusesASeparatingSplit:
+    """The splitter is the fix; the validator is what stops it coming back."""
+
+    def test_a_figure_whose_split_separates_same_site_files_is_refused(self) -> None:
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        cell = payload["static_leg_2026_10_30"]["cells"]["heldout_with_pack"]
+        # Drop eval-008 from the split: eval-007 stays scored, its sibling stays seeded.
+        cell["split_files"] = ["eval-007_banking_mock.json", "eval-010_ambiguous_mock.json"]
+
+        problems = gate_record.validate_record(payload)
+
+        assert problems, "a split that separates same-site files was accepted"
+        assert any("share" in p and "site_hash" in p for p in problems), problems
+
+    def test_the_committed_record_passes_the_guard(self) -> None:
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+
+        assert gate_record.validate_record(payload) == []
+        for name, cell in payload["static_leg_2026_10_30"]["cells"].items():
+            if cell["split_kind"] == "heldout":
+                assert cell["split_files"], name
+
+
+class TestOneListNotTwo:
+    """The seed exclusion and the scored list cannot drift apart."""
+
+    def test_the_seed_exclusion_and_the_scored_list_come_from_one_source(self) -> None:
+        import src.rag_bundled as rag_bundled
+
+        # The copy in the product module is gone; the eval module owns the list.
+        assert not hasattr(rag_bundled, "HELDOUT_STORY_FILES"), (
+            "HELDOUT_STORY_FILES is back in src/ - that is the second copy of the split"
+        )
+        assert split_files(_DATASET_DIR) == DEFAULT_SPLIT
+        assert heldout_story_ids() == ("eval-007", "eval-008", "eval-010")
+
+        # What is excluded from the seed is the split's own file list, not a literal.
+        described = describe_split(_DATASET_DIR, DEFAULT_SPLIT)
+        assert described["files"] == list(DEFAULT_SPLIT)
+        held_out = int(str(described["placeholders"]))
+        patterns = build_bundled_patterns(exclude=[str(name) for name in described["files"]])
+        assert len(patterns) == 113 - held_out

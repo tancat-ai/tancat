@@ -30,6 +30,7 @@ No config system: three functions over plain dicts.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 __all__ = ["compare_figures", "make_figure", "validate_record"]
@@ -55,6 +56,7 @@ def make_figure(
     split: str,
     split_key: str = "",
     split_kind: str = "heldout",
+    split_files: list[str] | None = None,
     per_file: dict[str, str] | None = None,
     note: str = "",
     **extra: Any,
@@ -71,6 +73,8 @@ def make_figure(
         split_key: Equality form of the split (e.g. ``"eval-007|eval-008|eval-010"``);
             defaults to the label. Two figures are comparable only when this matches.
         split_kind: ``"heldout"`` (a held-out subset) or ``"full"`` (every story).
+        split_files: The files the split holds out. Required in a committed record
+            for a held-out cell: the site-separation guard reads it.
         per_file: Per-story counts beside the number (``{"eval-007": "7/13"}``).
             Required in a committed record for a held-out cell.
         note: Optional free text recorded beside the figure.
@@ -109,6 +113,8 @@ def make_figure(
             f"{correct}/{total} ({accuracy}%) - mode: {mode.strip()}; seed: {seed.strip()}; split: {split.strip()}"
         ),
     }
+    if split_files is not None:
+        figure["split_files"] = list(split_files)
     if per_file is not None:
         figure["per_file"] = dict(per_file)
     if note:
@@ -182,7 +188,7 @@ def _figure_problems(figure: dict[str, Any], where: str) -> list[str]:
     return problems
 
 
-def _cell_problems(cell: dict[str, Any], where: str) -> list[str]:
+def _cell_problems(cell: dict[str, Any], where: str, dataset_dir: Path | None) -> list[str]:
     problems = _figure_problems(cell, where)
     if _blank(cell.get("comparability")):
         problems.append(
@@ -190,14 +196,46 @@ def _cell_problems(cell: dict[str, Any], where: str) -> list[str]:
         )
     if not isinstance(cell.get("comparable_with"), list):
         problems.append(f"{where}: 'comparable_with' must be a list (empty when nothing compares)")
-    elif cell.get("split_kind") == "heldout" and not cell.get("per_file"):
+    if cell.get("split_kind") != "heldout":
+        return problems
+
+    if not cell.get("per_file"):
         problems.append(
             f"{where}: no per-file breakdown - a rotation that keeps landing on an easy file would be invisible"
+        )
+    if not cell.get("split_files"):
+        problems.append(f"{where}: no 'split_files' - the site-separation guard cannot check the split")
+        return problems
+
+    # t-1119: the seed's +20 golden bonus answers on site_hash, not on the file.
+    # A split that holds one file of a site out and leaves its sibling seeded
+    # hands the answer back, so the record is refused rather than merely avoided.
+    from heldout_split import separating_pairs
+
+    resolved = dataset_dir or _default_dataset_dir()
+    missing = [name for name in cell["split_files"] if not (resolved / str(name)).is_file()]
+    if missing:
+        problems.append(f"{where}: split_files names {missing[0]!r}, which is not in {resolved}")
+        return problems
+    for held, seeded, site_hash in separating_pairs(resolved, cell["split_files"]):
+        problems.append(
+            f"{where}: split holds out {held} while {seeded} stays seeded, and both share site_hash "
+            f"{site_hash} - the seed would hand its answers back (t-1119)"
         )
     return problems
 
 
-def validate_record(payload: dict[str, Any], *, cells_key: str = "static_leg_2026_10_30") -> list[str]:
+def _default_dataset_dir() -> Path:
+    """The committed eval dataset (``scripts/eval/dataset``), for the site guard."""
+    return Path(__file__).resolve().parent / "dataset"
+
+
+def validate_record(
+    payload: dict[str, Any],
+    *,
+    cells_key: str = "static_leg_2026_10_30",
+    dataset_dir: Path | None = None,
+) -> list[str]:
     """Return the label problems in a committed gate record; ``[]`` means clean.
 
     Checks the record itself, the four measured cells it holds, and whether any
@@ -215,6 +253,7 @@ def validate_record(payload: dict[str, Any], *, cells_key: str = "static_leg_202
         )
 
     raw_cells = (payload.get(cells_key, {}) or {}).get("cells") or {}
+    site_dataset_dir = dataset_dir or _default_dataset_dir()
     cells: dict[str, dict[str, Any]] = {}
     for name, cell in raw_cells.items():
         where = f"{cells_key}.cells.{name}"
@@ -222,7 +261,7 @@ def validate_record(payload: dict[str, Any], *, cells_key: str = "static_leg_202
             problems.append(f"{where}: not a figure")
             continue
         cells[name] = cell
-        problems.extend(_cell_problems(cell, where))
+        problems.extend(_cell_problems(cell, where, site_dataset_dir))
 
     # A cell may not claim comparability with another split (j-0244 step 2).
     for name, cell in cells.items():

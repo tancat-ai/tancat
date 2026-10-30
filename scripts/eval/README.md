@@ -201,14 +201,27 @@ passes gate 2).
 split's story files from the seed and scores only those stories, in a store of
 its own. The shipped product pack is unchanged - all 113 patterns ship.
 
-**The split rotates** (owner's decision, 2026-10-30): the default stays
+**The split rotates over whole sites, not single files** (owner's decision,
+2026-10-30; corrected 2026-10-30 by t-1119). The default stays
 `eval-007`/`eval-008`/`eval-010` so the recorded figure keeps reproducing
 itself, and `--heldout-split` picks another split - `date` (stable all day,
 moves tomorrow), `date:YYYY-MM-DD`, `seed:<value>` (the same split every time),
-or three file names. Selection is a SHA-256 of the selector and the file name,
-never process-randomised `hash()`, so two runs on the same day or seed pick the
-same split. Two figures from **different splits are not comparable** - they are
-scores on different samples - and the record carries a comparability note and a
+or an explicit list of whole groups. Selection is a SHA-256 of the selector and
+the **group key**, never process-randomised `hash()`, so two runs on the same
+day or seed pick the same split.
+
+The unit is the `site_hash` a story file's dataset gives it, because the seed's
++20 golden bonus answers on that hash and not on the file: `eval-007_banking_mock`
+and `eval-008_goto_navigation` both hash to `bebd95a0fea633c3`, so a split that
+held one out and left the other seeded handed the answer back - half of the
+first rotation's space did exactly that. A group is now held out whole or not at
+all, which is why a rotated split carries **three or four files** (four when the
+two-file banking group is chosen). `validate_record` refuses such a figure
+outright: a held-out cell whose scored file has a seeded sibling on the same
+site hash is a record error, not a matter of the splitter being careful.
+
+Two figures from **different splits are not comparable** - they are scores on
+different samples - and the record carries a comparability note and a
 comparable-with list beside every cell rather than leaving a reader to assume
 it.
 

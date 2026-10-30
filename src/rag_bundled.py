@@ -120,20 +120,11 @@ def golden_site_hash(site_name: str, base_url: str) -> str:
     return site_hash(identity) if identity else ""
 
 
-#: Story files held out of the bundled seed for the eval split (j-0244, d-0060).
-#:
-#: The seed is built from the same ``eval-*.json`` ``expected_locator`` fields
-#: the gate scores, so a with-pack score can be recall: the tool was handed the
-#: answers for 9 of the 113 scored placeholders. These three whole files are
-#: excluded when the eval asks for the held-out split; the shipped pack keeps
-#: them (the product is unchanged), and the three are only ever excluded on the
-#: eval side. Chosen because all three carry scored placeholders and they are
-#: not the stories the pack was tuned against.
-HELDOUT_STORY_FILES: tuple[str, ...] = (
-    "eval-007_banking_mock.json",
-    "eval-008_goto_navigation.json",
-    "eval-010_ambiguous_mock.json",
-)
+#: NOTE (t-1120, j-0244 step 3): this module does **not** own the held-out split
+#: list. There is exactly one copy - ``DEFAULT_SPLIT`` in
+#: ``scripts/eval/heldout_split.py`` - because two copies drift, and a stale
+#: copy would seed a story the gate scores. The seed only ever receives the list
+#: through ``exclude=``; the shipped pack keeps every story file.
 
 
 def _is_excluded(path: Path, exclude: Sequence[str]) -> bool:
@@ -156,7 +147,8 @@ def load_golden_patterns(dataset_dir: Path, *, exclude: Sequence[str] | None = N
         exclude: Story files to leave out, named by file name (``eval-007_
             banking_mock.json``) or by stem (``eval-007_banking_mock``).
             ``None`` (the default, and the shipped product path) excludes
-            nothing. ``HELDOUT_STORY_FILES`` is the eval's held-out split.
+            nothing. The eval passes its held-out split from
+            ``scripts/eval/heldout_split.py`` (the only copy of that list).
     """
 
     patterns: list[GoldenPattern] = []
