@@ -11,6 +11,7 @@ guard that catches each kind of drift.
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 from typing import Any
 
@@ -81,9 +82,13 @@ def test_wrong_appendix_count_is_detected() -> None:
     """A stale package count in the appendix title fails the guard."""
     guard = _load_guard()
     text = _record_text()
-    stale = text.replace("## Appendix: full locked set (224 entries)", "## Appendix: full locked set (230 entries)", 1)
+    match = re.search(r"## Appendix: full locked set \((\d+) entries\)", text)
+    assert match is not None, "the appendix title is missing from the record"
+    actual = match.group(1)
+    wrong = str(int(actual) + 6)
+    stale = text.replace(f"({actual} entries)", f"({wrong} entries)", 1)
     assert stale != text
 
     problems = guard.check(stale)
 
-    assert any("230" in p and "224" in p for p in problems), problems
+    assert any(wrong in p and actual in p for p in problems), problems
