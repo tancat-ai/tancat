@@ -103,8 +103,8 @@ def test_static_eval_isolates_the_store_before_reading_it(monkeypatch: pytest.Mo
         calls.append("isolated")
         return Path("unused")
 
-    async def _fake_run(_pages: Any, _rag_retriever: Any = None) -> dict[str, Any]:
-        return {"total_placeholders": 0, "correct": 0, "accuracy_pct": 0.0, "per_site": {}}
+    async def _fake_run(_pages: Any, _rag_retriever: Any = None, **_kwargs: Any) -> dict[str, Any]:
+        return {"total_placeholders": 0, "correct": 0, "accuracy_pct": 0.0, "per_site": {}, "per_story": {}}
 
     monkeypatch.setattr(eval_resolver, "load_scraped_pages", lambda: {"u": [{"selector": "#x"}]})
     monkeypatch.setattr(eval_resolver, "rag_enabled_for_eval", lambda: False)

@@ -174,14 +174,67 @@ re-applies gate 2 to the kept per-test outcomes, using the same
 The harness exits `4` when a run with `--evidence-dir` fails to keep its
 evidence, distinct from `2` (accuracy below threshold) and `3` (partial run).
 
-The last recorded re-score (as of 2026-10-13, t-0759, current main with the
-accuracy A/C fixes) is `scripts/eval/known_gate_scores.json`: **94/113 gate 1
-(83.2%)** and **0 hollow passes** - gate 2 passes, gate 1 still fails the 90%
-target, and the number is unchanged from the 2026-10-12 baseline. The run kept
-its evidence (`fixtures/heldout_runs/2026-10-13`) and re-scores to the same
-numbers with no model; the 2026-10-12 baseline is preserved under `previous` and
-the older 82/113 + 3 record under `comparison.history`. The gates are unchanged:
-`>=90%` gate 1, zero hollow passes gate 2.
+The last recorded gate figure (2026-10-30, t-1111 / t-1113 / j-0244) is
+`scripts/eval/known_gate_scores.json`, and it is labelled because the label is
+the difference between two very different claims. Every figure carries three
+labels: **mode** (what produced it), **seed** (what the RAG store held) and
+**split** (which story files were held out, and how many placeholders that is).
+
+- **The headline is the held-out split: 12/30 (40.0%)**, split
+  `held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)`, mode
+  `static resolver-only leg` (frozen scraped pages, no model, no generated
+  tests), seed `bundled pack minus the 3 held-out story files` - stories whose
+  golden keys the RAG seed never contained, so this number cannot be recall.
+- **The with-pack number over all 113 stories is 48/113 (42.5%)**, split
+  `full dataset: all 9 story files`, seed `full bundled pack` - the same
+  measurement in the same mode but on stories the seed holds the answers for, so
+  part of it is recall; it is the cell to compare against the 89/113 full-mode
+  record (same stories, same seed, a different mode), never the headline.
+
+**The 90% gate-1 target is read against the held-out split** - the stories the
+RAG seed never sees. The full-113 figure is a different thing: it includes
+stories whose answers are in the pack, so it is not the number the target is
+read against. The target itself is unchanged (`>=90%` gate 1, zero hollow
+passes gate 2).
+
+`--heldout` on `eval_resolver.py` produces the held-out figure: it excludes the
+split's story files from the seed and scores only those stories, in a store of
+its own. The shipped product pack is unchanged - all 113 patterns ship.
+
+**The split rotates over whole sites, not single files** (owner's decision,
+2026-10-30; corrected 2026-10-30 by t-1119). The default stays
+`eval-007`/`eval-008`/`eval-010` so the recorded figure keeps reproducing
+itself, and `--heldout-split` picks another split - `date` (stable all day,
+moves tomorrow), `date:YYYY-MM-DD`, `seed:<value>` (the same split every time),
+or an explicit list of whole groups. Selection is a SHA-256 of the selector and
+the **group key**, never process-randomised `hash()`, so two runs on the same
+day or seed pick the same split.
+
+The unit is the `site_hash` a story file's dataset gives it, because the seed's
++20 golden bonus answers on that hash and not on the file: `eval-007_banking_mock`
+and `eval-008_goto_navigation` both hash to `bebd95a0fea633c3`, so a split that
+held one out and left the other seeded handed the answer back - half of the
+first rotation's space did exactly that. A group is now held out whole or not at
+all, which is why a rotated split carries **three or four files** (four when the
+two-file banking group is chosen). `validate_record` refuses such a figure
+outright: a held-out cell whose scored file has a seeded sibling on the same
+site hash is a record error, not a matter of the splitter being careful.
+
+Two figures from **different splits are not comparable** - they are scores on
+different samples - and the record carries a comparability note and a
+comparable-with list beside every cell rather than leaving a reader to assume
+it.
+
+**A rotation cannot weaken the sample quietly, and here is how that is caught:**
+every held-out cell carries its **per-file breakdown** beside the number
+(`eval-007 7/13, eval-008 4/13, eval-010 1/4`), and the split label names the
+files. A split that keeps landing on one easy file shows it next to the figure
+it is flattering, and it can be read against the default split's per-file
+numbers. Nothing about the rotation is hidden behind the headline.
+
+The full-mode 89/113 (78.8%) gate-1 record is kept one level down under
+`previous`, with its committed evidence and the older 82/113 + 3 record under
+`comparison.history`.
 A per-story caveat lives in the same file: see `flaky_story` - eval-004's number is not repeatable, so prefer the overall figure.
 
 ---
