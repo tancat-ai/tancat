@@ -25,6 +25,7 @@ import pytest
 import src.locator_repair as locator_repair
 import src.ui.ui_run_results as ui_run_results
 from src.locator_repair import CodegenOutcome, _extract_locator, extract_locator_from_line, run_codegen_session
+from src.pytest_output_parser import RunResult, TestResult
 
 
 class _FakeProc:
@@ -53,8 +54,10 @@ class _FakePopen:
         self.timeouts = timeouts
         self.output_path: Path | None = None
         self.proc: _FakeProc | None = None
+        self.cmd: list[str] | None = None
 
     def __call__(self, cmd: list[str], **kwargs: Any) -> _FakeProc:
+        self.cmd = list(cmd)
         output_index = cmd.index("--output") + 1
         self.output_path = Path(cmd[output_index])
         if self.script is not None:
@@ -205,6 +208,42 @@ def test_launch_failure_is_failed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert outcome.status == "failed"
     assert "could not start" in outcome.reason
+
+
+# -- the launch command line ----------------------------------------------
+
+
+def test_codegen_launches_with_the_journey_state_and_a_private_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A logged-out launch, or an output path the code does not read back, fails here."""
+    state = tmp_path / "journey_state.json"
+    state.write_text("{}", encoding="utf-8")
+    fake = _FakePopen('page.locator("#cart").click()\n')
+    _patch_popen(monkeypatch, fake)
+
+    outcome = run_codegen_session("https://shop.example.com/cart", state_file=str(state))
+
+    assert outcome.status == "captured", "the recording was written somewhere the reader did not look"
+    assert fake.cmd is not None
+    assert fake.cmd[0] == "playwright" and fake.cmd[1] == "codegen", fake.cmd
+    assert "--load-storage" in fake.cmd, "codegen would open logged out and lose the journey state"
+    assert fake.cmd[fake.cmd.index("--load-storage") + 1] == str(state)
+    assert fake.cmd[-1] == "https://shop.example.com/cart", "the target URL must be codegen's last argument"
+    output = Path(fake.cmd[fake.cmd.index("--output") + 1])
+    assert output.parent.name.startswith("tancat_codegen_"), f"recording written outside the private dir: {output}"
+    assert output == fake.output_path, "codegen was told to write a different file than the one read back"
+
+
+def test_codegen_without_a_state_file_loads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = _FakePopen('page.locator("#cart").click()\n')
+    _patch_popen(monkeypatch, fake)
+
+    run_codegen_session("https://shop.example.com/cart")
+
+    assert fake.cmd is not None
+    assert "--load-storage" not in fake.cmd, "a state flag with no state file would break the launch"
+    assert fake.cmd[-1] == "https://shop.example.com/cart"
 
 
 # -- the two parsers, one failure shape each -------------------------------
@@ -358,20 +397,71 @@ class _FakeState(dict[str, Any]):
         self[name] = value
 
 
+class _FakeBlock:
+    """Stands in for whatever ``with st.expander(...)`` / ``with st.columns(...)[0]`` yields."""
+
+    def __init__(self, kind: str = "") -> None:
+        self.kind = kind
+
+    def __enter__(self) -> _FakeBlock:
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        return None
+
+
 class _FakeST:
     def __init__(self) -> None:
         self.session_state = _FakeState()
         self.messages: list[tuple[str, str]] = []
+        self.buttons: list[str] = []
+        self.clicked: set[str] = set()
+        self.blocks: list[str] = []
 
     @contextlib.contextmanager
     def spinner(self, *args: Any, **kwargs: Any) -> Any:
         yield
 
-    def warning(self, message: str) -> None:
+    def divider(self) -> None:
+        pass
+
+    def subheader(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def caption(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def write(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def code(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def toast(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def empty(self) -> _FakeBlock:
+        return _FakeBlock("empty")
+
+    def button(self, label: str, *args: Any, **kwargs: Any) -> bool:
+        self.buttons.append(label)
+        return label in self.clicked
+
+    def expander(self, label: str, *args: Any, **kwargs: Any) -> _FakeBlock:
+        self.blocks.append(str(label))
+        return _FakeBlock("expander")
+
+    def columns(self, spec: Any, *args: Any, **kwargs: Any) -> list[_FakeBlock]:
+        return [_FakeBlock("column") for _ in range(len(spec))]
+
+    def warning(self, message: str, **kwargs: Any) -> None:
         self.messages.append(("warning", message))
 
-    def error(self, message: str) -> None:
+    def error(self, message: str, **kwargs: Any) -> None:
         self.messages.append(("error", message))
+
+    def info(self, message: str, **kwargs: Any) -> None:
+        self.messages.append(("info", message))
 
     def rerun(self) -> None:
         raise _Rerun()
@@ -500,3 +590,104 @@ def test_extract_locator_from_line_unescapes_an_apostrophe() -> None:
 def test_extract_locator_from_line_keeps_a_plain_locator() -> None:
     line = '    page.locator("#submit-order").click()'
     assert extract_locator_from_line(line) == "#submit-order"
+
+
+# -- the Fix Locator button: failing test -> repair session -------------
+
+
+def _write_failure_fixture(tmp_path: Path) -> tuple[Path, str, TestResult, RunResult]:
+    """A failing test on disk, its evidence sidecar, and the pytest result."""
+    test_file = tmp_path / "test_checkout.py"
+    test_file.write_text(
+        'def test_checkout(page):\n    page.locator("#old").click()\n',
+        encoding="utf-8",
+    )
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    (evidence / "test_checkout.evidence.json").write_text(
+        json.dumps(
+            {
+                "steps": [
+                    {
+                        "type": "click",
+                        "label": "Submit order",
+                        "url": "https://shop.example.com/checkout.html",
+                        "result": {"status": "passed"},
+                    },
+                    {
+                        "type": "assertion",
+                        "label": "checkout page loaded",
+                        "url": "https://shop.example.com/checkout.html",
+                        "result": {"status": "failed"},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = TestResult(
+        name="test_checkout",
+        status="failed",
+        duration=1.0,
+        error_message="TimeoutError: waiting for locator('#old')",
+        file_path="generated_tests/test_checkout.py",
+    )
+    run_result = RunResult(
+        results=[result],
+        raw_output="generated_tests/test_checkout.py:42: in test_checkout\nE   TimeoutError: waiting...\n",
+    )
+    return test_file, "https://shop.example.com/", result, run_result
+
+
+def test_fix_locator_carries_the_sidecar_url_and_line_into_the_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The classifier leaves both fields None; only this join fills them (B-041)."""
+    test_file, _start_url, result, run_result = _write_failure_fixture(tmp_path)
+    fake_st = _FakeST()
+    _install_fake_st(monkeypatch, fake_st)
+    fake_st.session_state["pipeline_saved_path"] = str(test_file)
+    fake_st.clicked.add("🔧 Fix Locator")
+
+    with pytest.raises(_Rerun):
+        ui_run_results._render_failed_tests_repair([result], run_result)
+
+    assert "🔧 Fix Locator" in fake_st.buttons, "the failure row offered no repair button"
+    target = fake_st.session_state["repair_target"]
+    assert target is not None
+    assert target.raw_locator == "#old"
+    assert fake_st.session_state["repair_step_label"] == "Submit order"
+    assert fake_st.session_state["repair_failure_url"] == "https://shop.example.com/checkout.html"
+    assert fake_st.session_state["repair_line_number"] == 42
+    assert target.failure_url == "https://shop.example.com/checkout.html"
+    assert target.line_number == 42
+
+
+def test_fix_locator_opens_the_browser_at_the_failed_step(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The whole join: click Fix Locator, then the browser uses the failed step."""
+    test_file, start_url, result, run_result = _write_failure_fixture(tmp_path)
+    fake_st = _FakeST()
+    _install_fake_st(monkeypatch, fake_st)
+    fake_st.session_state["pipeline_saved_path"] = str(test_file)
+    fake_st.session_state["starting_url"] = start_url
+    fake_st.clicked.add("🔧 Fix Locator")
+
+    with pytest.raises(_Rerun):
+        ui_run_results._render_failed_tests_repair([result], run_result)
+
+    urls: list[str] = []
+    applied: list[Any] = []
+
+    def _capture(url: str, **kwargs: Any) -> CodegenOutcome:
+        urls.append(url)
+        return CodegenOutcome("captured", locator="#new")
+
+    monkeypatch.setattr(ui_run_results, "run_codegen_session", _capture)
+    monkeypatch.setattr(locator_repair, "apply_patch_to_file", lambda patch: applied.append(patch))
+
+    with pytest.raises(_Rerun):
+        ui_run_results._render_repair_browser_session()
+
+    assert urls == ["https://shop.example.com/checkout.html"], f"the browser opened at {urls}, not the failed step"
+    assert applied and applied[0].line_number == 42, "the patch search window would miss the failing line"
+    assert fake_st.session_state["repair_status"] == "patched"
