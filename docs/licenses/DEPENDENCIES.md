@@ -196,7 +196,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | beautifulsoup4 | 4.15.0 | MIT License | https://www.crummy.com/software/BeautifulSoup/bs4/ |
 | bleach | 6.4.0 | Apache Software License | https://github.com/mozilla/bleach |
 | cachetools | 7.1.6 | MIT | https://github.com/tkem/cachetools/ |
-| certifi | 2026.7.22 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/certifi/python-certifi |
+| certifi | 2026.10.18 | Mozilla Public License 2.0 (MPL 2.0) | https://github.com/certifi/python-certifi |
 | cffi | 2.1.0 | MIT-0 | https://cffi.readthedocs.io/en/latest/whatsnew.html |
 | cfgv | 3.5.0 | MIT | https://github.com/asottile/cfgv |
 | charset-normalizer | 3.4.9 | MIT | https://github.com/jawah/charset_normalizer/blob/master/CHANGELOG.md |
