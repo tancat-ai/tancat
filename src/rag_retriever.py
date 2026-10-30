@@ -30,6 +30,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.rag_store import EmbeddingMismatchError, RetrievedPattern
+from src.rag_switches import PART_GOLDEN, PART_LEARNED, part_enabled
 
 if TYPE_CHECKING:
     from src.rag_store import RAGStore
@@ -140,6 +141,13 @@ class RAGRetriever:
         records: list[dict[str, Any]] = []
 
         for pattern in patterns:
+            # j-0247: a part switched off earns nothing, even if a caller hands
+            # its patterns in (the store already refuses to return them).
+            source_name = str(getattr(pattern, "source", ""))
+            if source_name == "golden" and not part_enabled(PART_GOLDEN):
+                continue
+            if source_name == "learned" and not part_enabled(PART_LEARNED):
+                continue
             if not pattern.selector:
                 records.append(
                     {

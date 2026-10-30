@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from src.content_scoping import is_heading_criterion, is_heading_element, is_image_criterion, is_image_element
+from src.rag_switches import PART_GOLDEN, PART_LEARNED, PART_NEGATIVES, part_enabled
 from src.semantic_matcher import SemanticMatcher
 
 logger = logging.getLogger(__name__)
@@ -1124,8 +1125,13 @@ class PlaceholderScorer:
         nothing (mirrors the learned-pattern gate). Legacy entries with an
         empty ``site_hash`` stay site-agnostic so existing stores keep working
         until rebuilt.
+
+        j-0247: inert (0) when the golden part is switched off
+        (``RAG_GOLDEN=0``), even if a caller hands patterns in.
         """
         if not golden_patterns:
+            return 0
+        if not part_enabled(PART_GOLDEN):
             return 0
         element_selector = str(element.get("selector", "")).strip()
         if not element_selector:
@@ -1160,8 +1166,13 @@ class PlaceholderScorer:
 
         AI-062 experimental: when AI062_LEARNED_BONUS env var is set, it
         overrides the base bonus magnitude for measurement sweeps.
+
+        j-0247: inert (0) when the learned part is switched off
+        (``RAG_LEARNED=0``).
         """
         if not site_hash or not learned_patterns:
+            return 0
+        if not part_enabled(PART_LEARNED):
             return 0
         element_selector = str(element.get("selector", "")).strip()
         if not element_selector:
@@ -1258,6 +1269,8 @@ class PlaceholderScorer:
         """
         if not site_hash or not patterns:
             return 0
+        if not part_enabled(PART_NEGATIVES):
+            return 0
         element_selector = str(element.get("selector", "")).strip()
         if not element_selector:
             return 0
@@ -1296,8 +1309,21 @@ class PlaceholderScorer:
             recoverable via self-heal).
         Returns 0 when no same-site learned / learned_negative pattern matches
         the current step (``action`` + ``description``).
+
+        j-0247: each half obeys its own switch — with ``RAG_LEARNED=0`` the
+        learned positives are dropped before the net is taken and with
+        ``RAG_NEGATIVES=0`` the negatives are, so an off part cannot shift the
+        net either way.
         """
         if not site_hash or not patterns:
+            return 0
+        patterns = [
+            pattern
+            for pattern in patterns
+            if (part_enabled(PART_LEARNED) or getattr(pattern, "source", "") != "learned")
+            and (part_enabled(PART_NEGATIVES) or getattr(pattern, "source", "") != "learned_negative")
+        ]
+        if not patterns:
             return 0
         element_selector = str(element.get("selector", "")).strip()
         if not element_selector:
