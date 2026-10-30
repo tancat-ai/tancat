@@ -1,7 +1,7 @@
 {
   "recorded_at": "2026-10-30",
   "record_kind": "static leg (no model) - the headline is now the held-out split",
-  "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns)",
+  "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
   "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
   "seed": "bundled pack minus the 3 held-out story files (83 of 113 patterns)",
   "gate1_correct": 12,
@@ -11,7 +11,9 @@
   "gate2_note": "Not measured here: gate 2 (hollow passes) needs generated tests executed against a live site. This record is a static resolver leg and says nothing about gate 2. The last gate-2 reading is the 89/113 full-mode run under 'previous' (0 hollow passes).",
   "targets": {
     "gate1_min_accuracy_pct": 90,
-    "gate2_max_false_greens": 0
+    "gate2_max_false_greens": 0,
+    "gate1_read_against": "the held-out split",
+    "gate1_target_note": "The 90% gate-1 target is read against the held-out split - the stories the RAG seed never sees. The full-113 figure is a DIFFERENT thing: it includes stories whose golden keys are in the pack, so part of it is recall, and it is not the number the target is read against. The target itself is unchanged."
   },
   "verdict": "gate 1 FAIL (40.0% < 90%) on the held-out split; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous')",
   "source": "scripts/eval/eval_resolver.py --mode static (held-out) with and without RAG_ENABLED=0, four runs, 2026-10-30, no model and no browser",
@@ -39,8 +41,20 @@
         "gate1_accuracy_pct": 40.0,
         "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
         "seed": "bundled pack minus the 3 held-out story files (83 of 113 patterns)",
-        "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns)",
-        "note": "The headline cell: held-out stories, product RAG configuration."
+        "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+        "split_key": "eval-007|eval-008|eval-010",
+        "split_kind": "heldout",
+        "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: bundled pack minus the 3 held-out story files (83 of 113 patterns); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+        "per_file": {
+          "eval-007": "7/13",
+          "eval-008": "4/13",
+          "eval-010": "1/4"
+        },
+        "note": "The headline cell: held-out stories, product RAG configuration.",
+        "comparability": "The headline. 30 placeholders from the three held-out files: numerically NOT comparable to 89/113 at all (30 vs 113 placeholders, and a different mode), and never should be quoted against it. Comparable with heldout_without_pack only - same split, same mode, only the seed differs. A different split (a rotated run) is a different sample, so it is not comparable with this figure either; read the per_file breakdown beside both numbers before comparing two splits at all.",
+        "comparable_with": [
+          "heldout_without_pack"
+        ]
       },
       "heldout_without_pack": {
         "gate1_correct": 12,
@@ -48,8 +62,20 @@
         "gate1_accuracy_pct": 40.0,
         "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
         "seed": "none (RAG_ENABLED=0: no seed, no RAG)",
-        "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG)",
-        "note": "Diagnostic pair for the headline: same stories, RAG off."
+        "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+        "split_key": "eval-007|eval-008|eval-010",
+        "split_kind": "heldout",
+        "label": "12/30 (40.0%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG); split: held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+        "per_file": {
+          "eval-007": "7/13",
+          "eval-008": "4/13",
+          "eval-010": "1/4"
+        },
+        "note": "Diagnostic pair for the headline: same stories, RAG off.",
+        "comparability": "The headline's diagnostic pair: same 30 placeholders, same mode, RAG off. Not comparable to 89/113. Per-file counts are identical to heldout_with_pack, which is what makes the pack's worth on held-out stories visible rather than asserted.",
+        "comparable_with": [
+          "heldout_with_pack"
+        ]
       },
       "full_113_with_pack": {
         "gate1_correct": 48,
@@ -57,8 +83,15 @@
         "gate1_accuracy_pct": 42.5,
         "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
         "seed": "full bundled pack (113 patterns - it contains the 3 scored files)",
-        "label": "48/113 (42.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: full bundled pack (113 patterns - it contains the 3 scored files)",
-        "note": "All 113 scored placeholders with the full pack - the configuration the 89/113 record used, in a different mode."
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "48/113 (42.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: full bundled pack (113 patterns - it contains the 3 scored files); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "note": "All 113 scored placeholders with the full pack - the configuration the 89/113 record used, in a different mode.",
+        "comparability": "Same 113 stories and the same seed configuration as the 89/113 record, but a DIFFERENT mode (no model, no generated tests): read it directionally against 89/113, never as a replacement. NOT comparable with either held-out cell - different split (113 placeholders vs 30) and therefore a different sample.",
+        "comparable_with": [
+          "full_113_without_pack"
+        ]
       },
       "full_113_without_pack": {
         "gate1_correct": 39,
@@ -66,8 +99,15 @@
         "gate1_accuracy_pct": 34.5,
         "mode": "static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser",
         "seed": "none (RAG_ENABLED=0: no seed, no RAG)",
-        "label": "39/113 (34.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG)",
-        "note": "All 113, RAG off: the leak measurement's other half (t-1110 measured 37 and 46 on an earlier tree)."
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "39/113 (34.5%) - mode: static resolver-only leg: frozen scraped pages, no model, no generated tests, no browser; seed: none (RAG_ENABLED=0: no seed, no RAG); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "note": "All 113, RAG off: the leak measurement's other half (t-1110 measured 37 and 46 on an earlier tree).",
+        "comparability": "Same 113 stories, RAG off: the other half of the leak measurement, not a product configuration. NOT comparable with either held-out cell - different split.",
+        "comparable_with": [
+          "full_113_with_pack"
+        ]
       }
     },
     "commands": {
@@ -81,14 +121,20 @@
       "eval-008": "4/13",
       "eval-010": "1/4"
     },
-    "comparability": {
+    "what_the_pair_shows": "With the full pack 48/113 resolve, without it 39/113: +9 placeholders, all inside the 83 stories whose answers the pack holds. On the 30 held-out placeholders the pack is worth exactly 0 (12 with, 12 without). The recorded d-0060 estimate - at most 9 of 113, about 8 points - is what the measurement shows, and every point of it sits on a seeded story.",
+    "comparability_basis": "The recorded 89/113 (78.8%) is a different measurement: mode `full --regenerate` with the local model (Qwen3.8-27B, thinking off, temp 0.0), split: all 113 placeholders, seed: full pack. It is kept under `previous`.",
+    "comparability_history": {
       "recorded_89_113": "89/113 = 78.8%, mode: full --regenerate with the local model (Qwen3.8-27B-UD-Q4_K_XL_v2, thinking off, temp 0.0), seed: full bundled pack. Kept below under 'previous'.",
       "full_113_with_pack": "Same 113 stories and the same seed configuration as the 89/113 record, but a DIFFERENT mode: no model, no generated tests, resolver-only against frozen scraped pages. Compare the two only as a directional read of the same flag - it is not a like-for-like replacement for 89/113.",
       "full_113_without_pack": "Same story set, RAG off. Not a product configuration; it exists only as the other half of the leak measurement.",
       "heldout_with_pack": "The new headline. 30 placeholders, not 113: numerically NOT comparable to 89/113 at all, and never should be quoted against it. It is comparable to heldout_without_pack - same stories, same mode, only the seed differs.",
       "heldout_without_pack": "The headline's diagnostic pair. Also not comparable to 89/113."
     },
-    "what_the_pair_shows": "With the full pack 48/113 resolve, without it 39/113: +9 placeholders, all inside the 83 stories whose answers the pack holds. On the 30 held-out placeholders the pack is worth exactly 0 (12 with, 12 without). The recorded d-0060 estimate - at most 9 of 113, about 8 points - is what the measurement shows, and every point of it sits on a seeded story."
+    "per_file_heldout": {
+      "eval-007": "7/13",
+      "eval-008": "4/13",
+      "eval-010": "1/4"
+    }
   },
   "previous": {
     "recorded_at": "2026-10-16",
@@ -548,5 +594,25 @@
       "recovered": "eval-004 c0 on this run. On the other two committed held-out runs the same keys recover eval-001 c2, eval-001 c4 and eval-004 c0 (2026-10-13: 95 -> 98; 2026-10-24: 97 -> 100), and no criterion regresses. Arrivals that name the wrong page still fail, which is why eval-001 c2/c4 stay misses on this draw: the journey never left the inventory page."
     }
   },
-  "open_decision": "Whether to re-measure the headline in full --regenerate mode (needs a model run, which the owner has not approved), and whether the 90% gate-1 target should be read against the 30-placeholder held-out split, the 113-placeholder full split, or both."
+  "open_decision": "Whether to re-measure the headline in full --regenerate mode (needs a model run, which the owner has not approved), and whether the 90% gate-1 target should be read against the 30-placeholder held-out split, the 113-placeholder full split, or both.",
+  "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+  "split_key": "eval-007|eval-008|eval-010",
+  "split_kind": "heldout",
+  "split_files": [
+    "eval-007_banking_mock.json",
+    "eval-008_goto_navigation.json",
+    "eval-010_ambiguous_mock.json"
+  ],
+  "split_stories": [
+    "eval-007",
+    "eval-008",
+    "eval-010"
+  ],
+  "split_placeholders": 30,
+  "split_rotation": "Fixed default split (eval-007/008/010). `eval_resolver.py --heldout-split <default|date|date:YYYY-MM-DD|seed:X|file1,file2,file3>` chooses another split deterministically (SHA-256 of selector + file name), so the sample grows instead of the same 30 being scored forever.",
+  "per_file": {
+    "eval-007": "7/13",
+    "eval-008": "4/13",
+    "eval-010": "1/4"
+  }
 }

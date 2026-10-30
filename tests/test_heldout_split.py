@@ -21,6 +21,7 @@ import sys
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -41,6 +42,7 @@ from eval_resolver import (  # noqa: E402
     run_resolver_eval,
     select_story_placeholders,
 )
+from heldout_split import describe_split, split_files  # noqa: E402
 
 from src.rag_bundled import (  # noqa: E402
     HELDOUT_STORY_FILES,
@@ -173,27 +175,30 @@ class TestHeldoutScoreIsComputedFromHeldoutStoriesOnly:
 
 
 class TestRecordedFigureNeedsItsLabels:
-    """A number without its mode and seed configuration cannot be written."""
+    """A number without its mode, seed and split cannot be written."""
+
+    _SPLIT = "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"
 
     def test_a_figure_without_a_mode_is_refused(self) -> None:
         with pytest.raises(ValueError, match="mode"):
-            gate_record.make_figure(correct=28, total=30, mode="", seed="full pack")
+            gate_record.make_figure(correct=28, total=30, mode="", seed="full pack", split=self._SPLIT)
 
     def test_a_figure_without_a_seed_configuration_is_refused(self) -> None:
         with pytest.raises(ValueError, match="seed"):
-            gate_record.make_figure(correct=28, total=30, mode="static resolver-only", seed="  ")
+            gate_record.make_figure(correct=28, total=30, mode="static resolver-only", seed="  ", split=self._SPLIT)
 
-    def test_a_labeled_figure_carries_both_labels_and_the_number(self) -> None:
+    def test_a_labeled_figure_carries_all_three_labels_and_the_number(self) -> None:
         figure = gate_record.make_figure(
             correct=28,
             total=30,
             mode="static resolver-only (no model)",
             seed="bundled pack minus the 3 held-out story files (83 patterns)",
+            split=self._SPLIT,
         )
         assert figure["gate1_correct"] == 28
         assert figure["gate1_total"] == 30
         assert figure["gate1_accuracy_pct"] == 93.3
-        assert "mode:" in figure["label"] and "seed:" in figure["label"]
+        assert "mode:" in figure["label"] and "seed:" in figure["label"] and "split:" in figure["label"]
 
     def test_the_committed_record_is_fully_labelled(self) -> None:
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
@@ -209,3 +214,189 @@ class TestRecordedFigureNeedsItsLabels:
         # The 89/113 full-mode record is kept, one level down, not deleted.
         assert payload["previous"]["gate1_correct"] == 89
         assert payload["previous"]["gate1_total"] == 113
+
+
+class TestRotation:
+    """Which story files are held back can rotate, deterministically (j-0244 step 2).
+
+    The owner's decision (2026-10-30): read the 90% gate-1 target against the
+    held-out split, and rotate the split so the sample grows instead of the same
+    30 placeholders being scored forever. The default stays the fixed three so
+    the recorded 2026-10-30 figure keeps reproducing itself.
+    """
+
+    def test_the_default_split_is_still_the_three_fixed_files(self) -> None:
+        """No selector: eval-007/008/010, exactly as the recorded figure used."""
+        assert split_files(_DATASET_DIR) == HELDOUT_STORY_FILES
+        assert split_files(_DATASET_DIR, "default") == HELDOUT_STORY_FILES
+        default = describe_split(_DATASET_DIR, HELDOUT_STORY_FILES)
+        assert default["stories"] == ["eval-007", "eval-008", "eval-010"]
+        assert default["placeholders"] == 30
+
+    def test_rotation_is_stable_for_one_seed(self) -> None:
+        """Two runs with the same seed pick the same split - same day or not."""
+        first = split_files(_DATASET_DIR, "seed:42")
+        second = split_files(_DATASET_DIR, "seed:42")
+        assert first == second
+        assert len(first) == 3
+        assert len(set(first)) == 3
+
+    def test_rotation_differs_for_another_seed(self) -> None:
+        assert split_files(_DATASET_DIR, "seed:42") != split_files(_DATASET_DIR, "seed:7")
+
+    def test_rotation_by_date_is_stable_within_a_day_and_moves_between_days(self) -> None:
+        assert split_files(_DATASET_DIR, "date:2026-10-30") == split_files(_DATASET_DIR, "date:2026-10-30")
+        assert split_files(_DATASET_DIR, "date") == split_files(_DATASET_DIR, "date")
+        assert split_files(_DATASET_DIR, "date:2026-10-30") != split_files(_DATASET_DIR, "date:2026-10-31")
+
+    def test_a_rotated_split_is_three_whole_files_that_carry_scored_keys(self) -> None:
+        for selector in ("seed:1", "seed:2", "seed:3", "date:2026-11-01"):
+            files = split_files(_DATASET_DIR, selector)
+            assert len(files) == 3, selector
+            for name in files:
+                assert (_DATASET_DIR / name).is_file(), (selector, name)
+                assert _keys_from_files((name,)), (selector, name)
+
+    def test_an_explicit_list_is_allowed(self) -> None:
+        wanted = (
+            "eval-001_saucedemo_login_checkout.json",
+            "eval-005_lv_insurance_quote.json",
+            "eval-006_ecommerce_mock.json",
+        )
+        assert split_files(_DATASET_DIR, ",".join(wanted)) == wanted
+        assert split_files(_DATASET_DIR, ", ".join(wanted)) == wanted
+        described = describe_split(_DATASET_DIR, wanted)
+        assert described["stories"] == ["eval-001", "eval-005", "eval-006"]
+        assert described["placeholders"] == 20 + 24 + 16
+
+    def test_a_bad_explicit_list_is_refused_not_silently_trimmed(self) -> None:
+        with pytest.raises(ValueError, match="not a dataset file"):
+            split_files(_DATASET_DIR, "eval-999_nope.json")
+        with pytest.raises(ValueError, match="whole story files"):
+            split_files(_DATASET_DIR, "eval-001_saucedemo_login_checkout.json,eval-005_lv_insurance_quote.json")
+        with pytest.raises(ValueError, match="seed:|date:"):
+            split_files(_DATASET_DIR, "42")
+
+    def test_the_flag_reaches_the_scorer_and_the_printed_label(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+    ) -> None:
+        """--heldout-split scores the same split it prints (plumbing, no model, no RAG)."""
+        import asyncio
+
+        from eval_resolver import heldout_story_ids
+
+        seen: dict[str, tuple[str, ...]] = {}
+
+        monkeypatch.setattr(eval_resolver, "load_scraped_pages", lambda: {"u": [{"selector": "#x"}]})
+        monkeypatch.setattr(eval_resolver, "isolate_eval_store", lambda *a, **k: None)
+        monkeypatch.setattr(eval_resolver, "rag_enabled_for_eval", lambda: False)
+        monkeypatch.setattr(eval_resolver, "HELDOUT_STORE_ROOT", tmp_path / "heldout_store")
+
+        async def _fake_run(
+            _pages: object, _rag: object = None, *, stories: Sequence[str] | None = None
+        ) -> dict[str, object]:
+            seen["stories"] = tuple(stories or ())
+            return {"total_placeholders": 0, "correct": 0, "accuracy_pct": 0.0, "per_site": {}, "per_story": {}}
+
+        monkeypatch.setattr(eval_resolver, "run_resolver_eval", _fake_run)
+
+        assert asyncio.run(eval_resolver._cmd_static(split_selector="seed:42")) == 0
+
+        chosen = split_files(_DATASET_DIR, "seed:42")
+        expected = describe_split(_DATASET_DIR, chosen)
+        assert seen["stories"] == heldout_story_ids(list(chosen))
+        assert f"[SPLIT: {expected['label']}]" in capsys.readouterr().out
+
+    def test_the_split_names_itself_in_one_line(self) -> None:
+        described = describe_split(_DATASET_DIR, HELDOUT_STORY_FILES)
+        assert described["label"] == "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"
+        assert described["key"] == "eval-007|eval-008|eval-010"
+
+
+class TestSplitIsRecordedOnEveryFigure:
+    """No figure without its split, and two splits are never read as comparable."""
+
+    def test_a_figure_without_a_split_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="split"):
+            gate_record.make_figure(correct=12, total=30, mode="static resolver-only", seed="full pack", split="")
+
+    def test_a_figure_carries_its_split_in_the_label(self) -> None:
+        figure = gate_record.make_figure(
+            correct=12,
+            total=30,
+            mode="static resolver-only",
+            seed="pack minus the 3 held-out files",
+            split="held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            split_key="eval-007|eval-008|eval-010",
+            split_kind="heldout",
+        )
+        assert "split:" in figure["label"]
+        assert figure["split_kind"] == "heldout"
+
+    def test_two_different_splits_are_marked_not_comparable(self) -> None:
+        a = gate_record.make_figure(
+            correct=12,
+            total=30,
+            mode="static resolver-only",
+            seed="pack minus the held-out files",
+            split="held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            split_key="eval-007|eval-008|eval-010",
+            split_kind="heldout",
+        )
+        b = gate_record.make_figure(
+            correct=20,
+            total=50,
+            mode="static resolver-only",
+            seed="pack minus the held-out files",
+            split="held-out: eval-001, eval-005, eval-006 (60 of 113 placeholders)",
+            split_key="eval-001|eval-005|eval-006",
+            split_kind="heldout",
+        )
+
+        verdict = gate_record.compare_figures(a, b)
+
+        assert verdict["comparable"] is False
+        assert "not comparable" in verdict["why"]
+        assert "eval-007" in verdict["why"] and "eval-001" in verdict["why"]
+
+    def test_the_same_split_in_the_same_mode_is_comparable(self) -> None:
+        shared: dict[str, Any] = {
+            "total": 30,
+            "mode": "static resolver-only",
+            "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            "split_key": "eval-007|eval-008|eval-010",
+            "split_kind": "heldout",
+        }
+        with_pack = gate_record.make_figure(correct=12, seed="pack minus the held-out files", **shared)
+        without_pack = gate_record.make_figure(correct=12, seed="none (RAG_ENABLED=0)", **shared)
+
+        verdict = gate_record.compare_figures(with_pack, without_pack)
+
+        assert verdict["comparable"] is True
+
+    def test_every_committed_figure_names_its_split(self) -> None:
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+
+        assert gate_record.validate_record(payload) == []
+        assert payload["split"] and "eval-007" in payload["split"]
+        assert payload["split_placeholders"] == 30
+        for name, cell in payload["static_leg_2026_10_30"]["cells"].items():
+            assert cell["split"], name
+            assert cell["split_key"], name
+            assert cell["comparability"], name
+            assert isinstance(cell["comparable_with"], list), name
+            if cell["split_kind"] == "heldout":
+                # Rotation cannot weaken the sample quietly: the per-file
+                # breakdown sits beside the number.
+                assert cell["per_file"], name
+
+    def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
+        """The validator, not the reader, is what refuses a cross-split claim."""
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        cells = payload["static_leg_2026_10_30"]["cells"]
+        cells["heldout_with_pack"]["comparable_with"] = ["full_113_with_pack"]
+
+        problems = gate_record.validate_record(payload)
+
+        assert problems, "a cross-split comparability claim was accepted"
+        assert any("different split" in p for p in problems), problems

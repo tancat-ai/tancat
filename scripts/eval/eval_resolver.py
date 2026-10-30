@@ -13,6 +13,13 @@ product gate: a missing ``RAG_ENABLED`` means ENABLED; ``RAG_ENABLED=0`` opts ou
     python scripts/eval/eval_resolver.py   # RAG on (the product default)
     RAG_ENABLED=0 python scripts/eval/eval_resolver.py  # RAG off
 
+``--heldout`` scores only stories the RAG seed never saw; ``--heldout-split``
+chooses which (see ``scripts/eval/heldout_split.py``)::
+
+    python scripts/eval/eval_resolver.py --mode static --heldout              # eval-007/008/010
+    python scripts/eval/eval_resolver.py --mode static --heldout-split date    # rotates daily
+    python scripts/eval/eval_resolver.py --mode static --heldout-split seed:42 # a fixed rotated split
+
 Usage:
     # Fast — requires saved_scraped_data/ populated
     python scripts/eval/eval_resolver.py --mode static
@@ -92,15 +99,16 @@ def isolate_eval_store(root: Path | None = None) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def heldout_story_ids() -> tuple[str, ...]:
-    """Story ids of the held-out split, from ``src.rag_bundled.HELDOUT_STORY_FILES``.
+def heldout_story_ids(files: Sequence[str] | None = None) -> tuple[str, ...]:
+    """Story ids of a held-out split (default: ``src.rag_bundled.HELDOUT_STORY_FILES``).
 
-    One source for both halves: the seed excludes these files, and a held-out
-    run scores only these story ids.
+    One list feeds both halves: the seed excludes *files*, and a held-out run
+    scores only the story ids derived from the same files.
     """
     from src.rag_bundled import HELDOUT_STORY_FILES
 
-    return tuple(Path(name).stem.split("_", 1)[0] for name in HELDOUT_STORY_FILES)
+    names = tuple(files) if files else HELDOUT_STORY_FILES
+    return tuple(Path(name).stem.split("_", 1)[0] for name in names)
 
 
 def select_story_placeholders(
@@ -523,19 +531,31 @@ def rag_enabled_for_eval() -> bool:
     return rag_enabled_by_config()
 
 
-async def _cmd_static(heldout: bool = False) -> int:
+async def _cmd_static(heldout: bool = False, split_selector: str | None = None) -> int:
     """Run resolver eval against pre-saved scraped data.
 
     ``heldout`` (j-0244) scores only the held-out stories and seeds the pack
     with those story files excluded, in a store of its own. Both halves follow
-    from the one flag, so a held-out figure cannot be produced with the full
-    pack by accident.
+    from the same file list, so a held-out figure cannot be produced with the
+    full pack by accident.
+
+    ``split_selector`` chooses which files are held back (``--heldout-split``):
+    ``default`` keeps eval-007/008/010, ``date``/``date:YYYY-MM-DD``/``seed:X``
+    rotate deterministically, and a comma-separated list is taken verbatim. It
+    implies ``heldout``.
     """
     pages = load_scraped_pages()
     if not pages:
         print("ERROR: No scraped pages found.", file=sys.stderr)
         print("  Run first: python scripts/eval/eval_resolver.py --mode live", file=sys.stderr)
         return 1
+
+    heldout = heldout or split_selector is not None
+    split: dict[str, Any] | None = None
+    if heldout:
+        from heldout_split import describe_split, split_files
+
+        split = describe_split(_DATASET_DIR, split_files(_DATASET_DIR, split_selector))
 
     # t-0515: every eval read/write stays in the eval's own store, never the
     # production one. Set before any store (RAG or flow memory) is built.
@@ -547,12 +567,12 @@ async def _cmd_static(heldout: bool = False) -> int:
     else:
         isolate_eval_store()
 
-    stories = heldout_story_ids() if heldout else None
+    stories = heldout_story_ids([str(f) for f in split["files"]]) if split else None
     rag_enabled = rag_enabled_for_eval()
     rag_retriever = None
     if rag_enabled:
         try:
-            from src.rag_bundled import HELDOUT_STORY_FILES, ensure_bundled_seeded
+            from src.rag_bundled import ensure_bundled_seeded
             from src.rag_retriever import RAGRetriever
             from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
             from src.storage import get_storage
@@ -567,7 +587,10 @@ async def _cmd_static(heldout: bool = False) -> int:
             # Seed the deterministic bundled golden pack into the eval store so
             # RAG-on still measures the goldens (production's learned patterns
             # no longer leak in). A held-out run leaves the held-out files out.
-            ensure_bundled_seeded(store=store, exclude=HELDOUT_STORY_FILES if heldout else None)
+            ensure_bundled_seeded(
+                store=store,
+                exclude=tuple(str(f) for f in split["files"]) if split else None,
+            )
             rag_retriever = RAGRetriever(store)
             logger.info("RAG retriever initialised (isolated store: %s)", get_storage().rag_path())
         except Exception:
@@ -577,7 +600,8 @@ async def _cmd_static(heldout: bool = False) -> int:
     print(_format_summary(summary))
 
     if heldout:
-        print(f"\n[SPLIT: HELD-OUT {', '.join(stories or ())}]  (these story files are excluded from the seed)")
+        label = str((split or {}).get("label") or ", ".join(stories or ()))
+        print(f"\n[SPLIT: {label}]  (these story files are excluded from the seed)")
     else:
         print("\n[SPLIT: FULL dataset]  (every story, including any the seed holds)")
 
@@ -715,8 +739,18 @@ def main() -> int:
         "--heldout",
         action="store_true",
         help=(
-            "score only the held-out stories (eval-007/008/010) and seed the RAG pack with those "
-            "files excluded, in a store of its own - the figure comes from stories the seed never saw"
+            "score only the held-out stories (default: eval-007/008/010) and seed the RAG pack with "
+            "those files excluded, in a store of its own - the figure comes from stories the seed never saw"
+        ),
+    )
+    parser.add_argument(
+        "--heldout-split",
+        metavar="SELECTOR",
+        default=None,
+        help=(
+            "which story files to hold back (implies --heldout): 'default' (eval-007/008/010), 'date' "
+            "(stable all day, moves tomorrow), 'date:YYYY-MM-DD', 'seed:<value>' (same split every time), "
+            "or three file names separated by commas"
         ),
     )
 
@@ -731,7 +765,7 @@ def main() -> int:
         return asyncio.run(_cmd_pipeline())
     if args.mode == "live":
         return asyncio.run(_cmd_live())
-    return asyncio.run(_cmd_static(heldout=args.heldout))
+    return asyncio.run(_cmd_static(heldout=args.heldout, split_selector=args.heldout_split))
 
 
 if __name__ == "__main__":
