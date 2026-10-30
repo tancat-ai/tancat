@@ -289,7 +289,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | nest-asyncio2 | 1.7.2 | BSD License | https://github.com/Chaoses-Ib/nest-asyncio2 |
 | networkx | 3.6.1 | BSD-3-Clause | https://networkx.org/ |
 | nodeenv | 1.10.0 | BSD License | https://github.com/ekalinin/nodeenv |
-| notebook | 7.6.1 | BSD License | https://github.com/jupyter/notebook |
+| notebook | 7.6.3 | BSD License | https://github.com/jupyter/notebook |
 | notebook-shim | 0.2.4 | BSD License | UNKNOWN |
 | numpy | 2.5.3 | BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0 | https://numpy.org |
 | omegaconf | 2.4.0 | BSD License | https://github.com/hydra-ecosystem/omegaconf |
