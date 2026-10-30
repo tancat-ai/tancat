@@ -60,7 +60,35 @@ cart link`) reduces to the placeholder description.
 
 ### `learn_from_patch(*, old_text, new_text, base_url, description=None, evidence_steps=None, store=None) -> dict[str, int]`
 Guarded single-patch write (never raises — self-healing must not break if
-learning fails). Returns `{"inserted": 0|1, "exists": 0|1}`.
+learning fails). Returns `{"inserted": 0|1, "exists": 0|1}`. It now writes
+through `record_learned_locator` (j-0248), the same route the manual Fix
+Locator path uses; the two-key return is unchanged for its callers.
+
+### `record_learned_locator(*, action_type, description, locator, site_digest, source, confidence=1.0, store=None) -> dict[str, Any]` (j-0248)
+The **one write route** for a verified locator — automatic self-healing and
+manual Fix Locator both come through it, so there is one write, one set of
+guards and one record type (`LearnedPattern`, `entry_type="learned"`).
+Refusals never raise and never write; each returns
+`{"inserted": 0, "exists": 0, "reason": ...}`: learning switched off
+(`RAG_LEARNED=0`), no action, **no description** (a lesson without one would
+match every placeholder), no locator, or **an empty site hash** — a
+site-agnostic lesson is forbidden on this path.
+
+### `learn_from_manual_fix(*, step_type, description, locator, base_url, site_name="", store=None) -> dict[str, Any]` (j-0248)
+Learn one APPLIED manual Fix Locator choice, at that site only. The owner's
+word (2026-10-30): "manual fix should write, i think it should be specific to
+the site rather than general across multiple sites." The step type maps to
+the resolver action through the same table the evidence path uses
+(`click`→`CLICK`, `fill`→`FILL`, `assertion`→`ASSERT`, `select`→`SELECT`),
+the step label is the description, and the site hash comes from
+`golden_site_hash(site_name, base_url)` — the function the bundled seed and
+the scorer gate on. `source` is `manual_fix`. Never raises.
+
+### `learned_part_enabled() -> bool` (j-0248)
+Whether the learned part is on (`RAG_LEARNED`). Reads j-0247's
+`src/rag_switches.part_enabled` when that module is present (it is not merged
+yet at the time of writing) and otherwise applies the same rule locally:
+unset or `1` is on, `0` is off, anything else is refused as off.
 
 ## Evidence Step → Pattern Mapping
 

@@ -331,11 +331,14 @@ def test_failure_context_reads_the_interaction_from_the_sidecar(tmp_path: Path) 
         encoding="utf-8",
     )
 
-    label, url, line_no = ui_run_results._failure_context(str(saved_path), "test_go_to_cart", None)
+    label, url, line_no, step_type = ui_run_results._failure_context(str(saved_path), "test_go_to_cart", None)
 
     assert label == "Submit order"
     assert url == "https://shop.example.com/checkout.html"
     assert line_no is None
+    # j-0248: the step's own type travels too - a hand fix is learned with the
+    # action the step really used (the picked step is the click before the assertion).
+    assert step_type == "click"
 
 
 # -- the two repair panels -------------------------------------------------

@@ -41,6 +41,31 @@ Apply a locator patch and write the result back to disk.
 
 Extract the locator string from a single line of test code. Looks for `.locator("...")` pattern.
 
+### `apply_fix_from_codegen(outcome, *, original_locator, line_number, test_file, step_label="", step_type="", page_url="", site_name="", store=None) -> ManualFixOutcome` (j-0248)
+
+The manual Fix Locator path end to end: apply the human's captured locator to
+the test file and, **only if that write really happened**, record it as a
+learned pattern for that site through `src.rag_learn.learn_from_manual_fix`
+(the same write route the automatic repair uses). An abandoned session, a
+failed session, a recording with no locator, or a patch that fails to apply
+returns `applied=False` and writes nothing. The fix is still applied when
+learning is switched off or has no usable description/site — the outcome's
+`learned` dict says why it was not learned. Used by both the Streamlit repair
+panel and the CLI's `repair_locator_cli`.
+
+### `ManualFixOutcome` (dataclass) — `applied`, `reason`, `patch`, `learned`
+
+What an attempt actually did. `applied` is the only thing that permits
+learning.
+
+### `pick_repair_step(steps)` / `repair_step_context(test_file, test_name)` (j-0248)
+
+The one sidecar reader for the repair surfaces: `pick_repair_step` walks back
+from a failed assertion to the interaction a human can replay, and
+`repair_step_context` returns that step's `(label, url, type)` from the
+evidence sidecar. Shared by the UI and the CLI so the two cannot drift; the UI
+re-exports `pick_repair_step` under its old private name.
+
 ## Dependencies
 
 None (stdlib only).
