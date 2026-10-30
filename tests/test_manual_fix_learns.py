@@ -29,10 +29,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src import rag_learn
 from src.locator_repair import CodegenOutcome, apply_fix_from_codegen
 from src.rag_bundled import golden_site_hash
+from src.rag_learn import learn_from_manual_fix
 from src.rag_retriever import RAGRetriever
-from src.rag_store import LearnedPattern, RetrievedPattern
+from src.rag_store import LearnedPattern, RAGStore, RetrievedPattern
+from src.ui import ui_run_results
+from tests.test_locator_repair_codegen import _FakeST, _install_fake_st, _Rerun
+from tests.test_rag_retriever import _FakeEmbedder, _InMemoryBackend
 
 _URL_A = "https://www.saucedemo.com/"
 _URL_B = "https://www.automationexercise.com/"
@@ -245,3 +250,110 @@ class TestTheSiteHashIsNeverEmpty:
         pattern: LearnedPattern = store.upsert_pattern.call_args.args[0]
         assert pattern.site_hash
         assert pattern.site_hash == golden_site_hash("", _URL_A)
+
+
+# ---------------------------------------------------------------------------
+# The seams the review found untested (t-1128, j-0248 step 2)
+# ---------------------------------------------------------------------------
+
+
+def _open_repair_panel(monkeypatch: pytest.MonkeyPatch, test_file: Path, *, locator: str, url: str = _URL_A) -> _FakeST:
+    """Drive the real Streamlit repair-session function with a fake UI.
+
+    Only the codegen browser is stubbed: everything downstream - the patch, the
+    learning call, the session-state message the customer reads - is the real
+    code path.
+    """
+    from types import SimpleNamespace
+
+    fake_st = _FakeST()
+    _install_fake_st(monkeypatch, fake_st)
+    fake_st.session_state.update(
+        {
+            "repair_target": SimpleNamespace(failure_url=url, raw_locator="#wrong-user", line_number=5),
+            "repair_failure_url": url,
+            "repair_test_file": str(test_file),
+            "repair_line_number": 5,
+            "repair_step_label": "username",
+            "repair_step_type": "fill",
+        }
+    )
+    monkeypatch.setattr(
+        ui_run_results, "run_codegen_session", lambda *a, **k: CodegenOutcome("captured", locator=locator)
+    )
+    return fake_st
+
+
+class TestTheUiSeamActuallyLearns:
+    """The panel must call the learn route with the patch it really applied."""
+
+    def test_the_ui_learns_the_chosen_locator_for_this_site(
+        self, monkeypatch: pytest.MonkeyPatch, test_file: Path
+    ) -> None:
+        fake_st = _open_repair_panel(monkeypatch, test_file, locator="#user-name")
+        calls: list[dict[str, object]] = []
+
+        def _record(**kw: object) -> dict[str, object]:
+            calls.append(kw)
+            return {"inserted": 1, "exists": 0, "reason": ""}
+
+        monkeypatch.setattr(rag_learn, "record_learned_locator", _record)
+
+        with pytest.raises(_Rerun):
+            ui_run_results._render_repair_browser_session()  # noqa: SLF001
+
+        # The row is keyed on the human's click, not on a default or a fallback.
+        assert len(calls) == 1
+        assert calls[0]["locator"] == "#user-name"
+        assert calls[0]["action_type"] == "FILL"
+        assert calls[0]["description"] == "username"
+        assert calls[0]["site_digest"] == golden_site_hash("", _URL_A)
+        # And it is the same selector that went into the file.
+        assert "#user-name" in test_file.read_text(encoding="utf-8")
+        assert fake_st.session_state["repair_status"] == "patched"
+        assert "Learned for this site only" in fake_st.session_state["repair_message"]
+
+    def test_a_learning_failure_does_not_break_the_repair(
+        self, monkeypatch: pytest.MonkeyPatch, test_file: Path
+    ) -> None:
+        fake_st = _open_repair_panel(monkeypatch, test_file, locator="#user-name")
+
+        def _boom(**_kwargs: object) -> dict[str, object]:
+            raise RuntimeError("store on fire")
+
+        monkeypatch.setattr(rag_learn, "record_learned_locator", _boom)
+
+        with pytest.raises(_Rerun):
+            ui_run_results._render_repair_browser_session()  # noqa: SLF001
+
+        # The human's fix stands, and the learning failure is reported, not raised.
+        assert fake_st.session_state["repair_status"] == "patched"
+        assert "#user-name" in test_file.read_text(encoding="utf-8")
+        message = fake_st.session_state["repair_message"]
+        assert "Learning skipped" in message
+        assert "store on fire" in message
+
+
+class TestTheRetrievalPathKeepsTheLessonOnItsSite:
+    """Site scoping, proved through a real store and the real retriever."""
+
+    def test_a_fix_on_site_a_is_not_retrieved_for_site_b(self) -> None:
+        store = RAGStore(_InMemoryBackend(dimension=16), _FakeEmbedder(dimension=16))
+        learned = learn_from_manual_fix(
+            step_type="fill",
+            description="username",
+            locator="#user-name",
+            base_url=_URL_A,
+            store=store,
+        )
+        assert learned["inserted"] == 1
+
+        retriever = RAGRetriever(store)
+        patterns = retriever.retrieve("username", action_type="FILL")
+        assert patterns, "the real retrieval path did not return the learned row"
+        assert any(p.source == "learned" for p in patterns)
+
+        site_a = golden_site_hash("", _URL_A)
+        site_b = golden_site_hash("", _URL_B)
+        assert retriever.scoring_bonus_for({"selector": "#user-name"}, patterns, site_hash=site_a) > 0
+        assert retriever.scoring_bonus_for({"selector": "#user-name"}, patterns, site_hash=site_b) == 0
