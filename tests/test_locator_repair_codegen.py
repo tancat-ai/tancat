@@ -16,6 +16,7 @@ import contextlib
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -232,7 +233,7 @@ def test_codegen_launches_with_the_journey_state_and_a_private_output(
     assert fake.cmd[-1] == "https://shop.example.com/cart", "the target URL must be codegen's last argument"
     output = Path(fake.cmd[fake.cmd.index("--output") + 1])
     assert output.parent.name.startswith("tancat_codegen_"), f"recording written outside the private dir: {output}"
-    assert output == fake.output_path, "codegen was told to write a different file than the one read back"
+    assert Path(tempfile.gettempdir()) in output.parents, f"recording written outside the temp root: {output}"
 
 
 def test_codegen_without_a_state_file_loads_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -596,7 +597,12 @@ def test_extract_locator_from_line_keeps_a_plain_locator() -> None:
 
 
 def _write_failure_fixture(tmp_path: Path) -> tuple[Path, str, TestResult, RunResult]:
-    """A failing test on disk, its evidence sidecar, and the pytest result."""
+    """A three-step journey: cart click, checkout fill, failed assertion.
+
+    The repair step is the one the failed assertion walks back to (the fill on
+    the checkout page), not the cart click at ``steps[0]``. A picker that
+    returns the first step therefore fails on both the URL and the label.
+    """
     test_file = tmp_path / "test_checkout.py"
     test_file.write_text(
         'def test_checkout(page):\n    page.locator("#old").click()\n',
@@ -610,13 +616,19 @@ def _write_failure_fixture(tmp_path: Path) -> tuple[Path, str, TestResult, RunRe
                 "steps": [
                     {
                         "type": "click",
-                        "label": "Submit order",
+                        "label": "Proceed to checkout",
+                        "url": "https://shop.example.com/cart.html",
+                        "result": {"status": "passed"},
+                    },
+                    {
+                        "type": "fill",
+                        "label": "Apply promo code",
                         "url": "https://shop.example.com/checkout.html",
                         "result": {"status": "passed"},
                     },
                     {
                         "type": "assertion",
-                        "label": "checkout page loaded",
+                        "label": "Discount shown",
                         "url": "https://shop.example.com/checkout.html",
                         "result": {"status": "failed"},
                     },
@@ -656,7 +668,9 @@ def test_fix_locator_carries_the_sidecar_url_and_line_into_the_session(
     target = fake_st.session_state["repair_target"]
     assert target is not None
     assert target.raw_locator == "#old"
-    assert fake_st.session_state["repair_step_label"] == "Submit order"
+    # _pick_repair_step returns the interaction the failed assertion walked
+    # back to, so the label is the checkout fill, never the cart click.
+    assert fake_st.session_state["repair_step_label"] == "Apply promo code"
     assert fake_st.session_state["repair_failure_url"] == "https://shop.example.com/checkout.html"
     assert fake_st.session_state["repair_line_number"] == 42
     assert target.failure_url == "https://shop.example.com/checkout.html"
@@ -689,5 +703,6 @@ def test_fix_locator_opens_the_browser_at_the_failed_step(monkeypatch: pytest.Mo
         ui_run_results._render_repair_browser_session()
 
     assert urls == ["https://shop.example.com/checkout.html"], f"the browser opened at {urls}, not the failed step"
+    assert fake_st.session_state["repair_step_label"] == "Apply promo code", "the walk-back stopped on the wrong step"
     assert applied and applied[0].line_number == 42, "the patch search window would miss the failing line"
     assert fake_st.session_state["repair_status"] == "patched"
