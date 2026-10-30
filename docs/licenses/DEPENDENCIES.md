@@ -42,12 +42,12 @@ Every package declared in `pyproject.toml`, with the licence it resolved to.
 | playwright | 1.63.0 | Apache-2.0 |  |
 | pytest-playwright | 0.10.0 | Apache Software License |  |
 | python-dotenv | 1.2.4 | BSD-3-Clause |  |
-| streamlit | 1.65.0 | Apache-2.0 |  |
+| streamlit | 1.66.1 | Apache-2.0 |  |
 | httpx | 0.28.1 | BSD License |  |
 | beautifulsoup4 | 4.15.0 | MIT License |  |
 | plotly | 7.1.0 | MIT |  |
 | pandas | 3.0.6 | BSD License |  |
-| pillow | 12.3.0 | MIT-CMU | Note |
+| pillow | 13.0.0 | MIT-CMU | Note |
 | pyyaml | 6.0.3 | MIT License |  |
 | pytest-timeout | 2.4.0 | DFSG approved; MIT License |  |
 | cryptography | 50.0.2 | Apache-2.0 OR BSD-3-Clause |  |
@@ -172,7 +172,7 @@ against the build machine.
 therefore cannot carry a hand-written note), so this originality record lives
 here instead.
 
-## Appendix: full locked set (224 entries)
+## Appendix: full locked set (222 entries)
 
 The complete resolved environment, including transitive dependencies, for
 completeness. TanCat itself is described at the top of this file. Sorted by name.
@@ -224,7 +224,6 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | h11 | 0.16.0 | MIT License | https://github.com/python-hyper/h11 |
 | hf-xet | 1.5.2 | Apache-2.0 | https://github.com/huggingface/xet-core |
 | httpcore | 1.0.9 | BSD-3-Clause | https://www.encode.io/httpcore/ |
-| httptools | 0.8.0 | MIT | https://github.com/MagicStack/httptools |
 | httpx | 0.28.1 | BSD License | https://github.com/encode/httpx |
 | huggingface-hub | 1.25.1 | Apache Software License | https://github.com/huggingface/huggingface_hub |
 | identify | 2.6.19 | MIT | https://github.com/pre-commit/identify |
@@ -306,7 +305,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | pdfminer-six | 20260107 | MIT | https://github.com/pdfminer/pdfminer.six |
 | pdfplumber | 0.11.10 | MIT License | https://github.com/jsvine/pdfplumber |
 | pexpect | 4.9.0 | ISC License (ISCL) | https://pexpect.readthedocs.io/ |
-| pillow | 12.3.0 | MIT-CMU | https://python-pillow.github.io |
+| pillow | 13.0.0 | MIT-CMU | https://python-pillow.org |
 | platformdirs | 4.11.0 | MIT | https://github.com/tox-dev/platformdirs |
 | playwright | 1.63.0 | Apache-2.0 | https://github.com/Microsoft/playwright-python |
 | plotly | 7.1.0 | MIT | https://plotly.com/python/ |
@@ -369,7 +368,7 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | soupsieve | 2.9.1 | MIT | https://github.com/facelessuser/soupsieve |
 | stack-data | 0.6.3 | MIT License | http://github.com/alexmojaki/stack_data |
 | starlette | 1.3.1 | BSD-3-Clause | https://github.com/Kludex/starlette |
-| streamlit | 1.65.0 | Apache-2.0 | https://streamlit.io |
+| streamlit | 1.66.1 | Apache-2.0 | https://streamlit.io |
 | sympy | 1.14.0 | BSD License | https://sympy.org |
 | tenacity | 9.1.4 | Apache Software License | https://github.com/jd/tenacity |
 | terminado | 0.18.1 | BSD License | https://github.com/jupyter/terminado |
@@ -377,7 +376,6 @@ completeness. TanCat itself is described at the top of this file. Sorted by name
 | threadpoolctl | 3.6.0 | BSD License | https://github.com/joblib/threadpoolctl |
 | tinycss2 | 1.5.1 | BSD License | https://www.courtbouillon.org/tinycss2 |
 | tokenizers | 0.23.2 | Apache Software License | https://github.com/huggingface/tokenizers |
-| toml | 0.10.2 | MIT License | https://github.com/uiri/toml |
 | torch | 2.14.1 | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
 | torch | 2.14.1+cpu | Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND BSD-2-Clause AND BSD-3-Clause AND BSL-1.0 AND MIT | https://pytorch.org |
 | tornado | 6.6 | Apache Software License | http://www.tornadoweb.org/ |
