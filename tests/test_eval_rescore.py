@@ -197,8 +197,13 @@ class TestEvidenceGuard:
         assert "GATE 2 (hollow passes):       1" in out
         # Pin the dated label against the file's own recorded_at, so the test
         # follows a date change but still fails if recorded_at is stripped.
-        recorded_at = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8")).get("recorded_at")
+        known = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        recorded_at = known.get("recorded_at")
         assert f"Recorded last re-score (as of {recorded_at}):" in out
+        # j-0244: the printed figure carries its mode and its seed, not just a
+        # percentage - a bare number is the bug the label rule exists to stop.
+        assert f"mode: {known['mode']}" in out
+        assert f"seed: {known['seed']}" in out
 
     def test_rescore_cli_fails_on_an_unexpected_number(self, tmp_path: Path) -> None:
         dataset_dir, run_dir = _build_run(tmp_path)
@@ -208,48 +213,59 @@ class TestEvidenceGuard:
         assert code == 2
 
     def test_recorded_score_file_is_present_and_honest(self) -> None:
-        """The current gate record is on disk and its evidence is committed, so it re-scores."""
+        """The current gate record is on disk and carries its labels.
+
+        Since j-0244 the headline is the held-out split (j-0244/d-0060), and the
+        full-mode 89/113 record it supersedes is kept one level down with its
+        committed evidence. The chain below that is unchanged.
+        """
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        # The headline is the held-out static leg, and it states its mode and seed.
+        assert (payload["gate1_correct"], payload["gate1_total"]) == (12, 30)
+        assert payload["mode"].strip() and payload["seed"].strip()
+        assert payload["gate2_false_greens"] is None  # a static leg cannot measure gate 2
+        assert payload["heldout_split"]["stories"] == ["eval-007", "eval-008", "eval-010"]
+
         # 2026-10-16 (t-0829): post-B-103 re-measure - eval-010 flipped 2/4 -> 4/4.
         # Numbers are post t-0831 validator revision (the pre-fix harness could
         # not credit GOTO goldens; the eval-008 GOTO pair is worth +2 here).
-        assert (payload["gate1_correct"], payload["gate1_total"]) == (89, 113)
-        assert payload["gate2_false_greens"] == 0
+        full = payload["previous"]
+        assert (full["gate1_correct"], full["gate1_total"]) == (89, 113)
+        assert full["gate2_false_greens"] == 0
         # The evidence is in the tracked tree, not the worktree's gitignored scratch.
-        evidence_dir = _REPO_ROOT / payload["evidence_dir"]
-        assert evidence_dir.is_dir(), payload["evidence_dir"]
+        evidence_dir = _REPO_ROOT / full["evidence_dir"]
+        assert evidence_dir.is_dir(), full["evidence_dir"]
         assert verify_run_evidence(evidence_dir) == []
         # The superseded 2026-10-15 record is preserved, with its own committed evidence.
-        assert payload["previous"]["recorded_at"] == "2026-10-15"
-        assert (payload["previous"]["gate1_correct"], payload["previous"]["gate1_total"]) == (87, 113)
-        assert payload["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-15"
+        assert full["previous"]["recorded_at"] == "2026-10-15"
+        assert (full["previous"]["gate1_correct"], full["previous"]["gate1_total"]) == (87, 113)
+        assert full["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-15"
         # The ASSERT-pool filter re-measure (j-0171) is preserved one level further down the chain.
-        assert payload["previous"]["previous"]["recorded_at"] == "2026-10-13"
-        assert (payload["previous"]["previous"]["gate1_correct"], payload["previous"]["previous"]["gate1_total"]) == (
+        assert full["previous"]["previous"]["recorded_at"] == "2026-10-13"
+        assert (full["previous"]["previous"]["gate1_correct"], full["previous"]["previous"]["gate1_total"]) == (
             95,
             113,
         )
-        assert payload["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13_gate1_filter"
+        assert full["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13_gate1_filter"
         # The 2026-10-13 baseline is preserved one level further down (95, not 96:
         # that draw's transfer GOTO had no arrival evidence - an honest miss).
-        assert payload["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-13"
+        assert full["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-13"
         assert (
-            payload["previous"]["previous"]["previous"]["gate1_correct"],
-            payload["previous"]["previous"]["previous"]["gate1_total"],
+            full["previous"]["previous"]["previous"]["gate1_correct"],
+            full["previous"]["previous"]["previous"]["gate1_total"],
         ) == (95, 113)
-        assert payload["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
+        assert full["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-13"
         # And the 2026-10-12 baseline is preserved one level further down still.
-        assert payload["previous"]["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-12"
+        assert full["previous"]["previous"]["previous"]["previous"]["recorded_at"] == "2026-10-12"
         assert (
-            payload["previous"]["previous"]["previous"]["previous"]["gate1_correct"],
-            payload["previous"]["previous"]["previous"]["previous"]["gate1_total"],
+            full["previous"]["previous"]["previous"]["previous"]["gate1_correct"],
+            full["previous"]["previous"]["previous"]["previous"]["gate1_total"],
         ) == (96, 113)
         assert (
-            payload["previous"]["previous"]["previous"]["previous"]["evidence_dir"]
-            == "fixtures/heldout_runs/2026-10-12"
+            full["previous"]["previous"]["previous"]["previous"]["evidence_dir"] == "fixtures/heldout_runs/2026-10-12"
         )
         # The older deleted-evidence record is kept as history.
-        history = payload["comparison"]["history"]
+        history = payload["previous"]["comparison"]["history"]
         assert (history[0]["gate1"], history[0]["gate2_false_greens"]) == ("82/113 (72.6%)", 3)
         assert "deleted" in history[0]["note"]
 
@@ -299,16 +315,19 @@ class TestEvidenceGuard:
         when it is present.
         """
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
-        run_dir = _REPO_ROOT / payload["evidence_dir"]
-        revision = payload.get("key_revision_2026_10_28") or {}
-        expected_correct = int(revision.get("gate1_correct", payload["gate1_correct"]))
-        expected_total = int(revision.get("gate1_total", payload["gate1_total"]))
+        # The 89/113 full-mode record now sits under 'previous' (j-0244); its
+        # evidence and its key revision travel with it.
+        full = payload["previous"]
+        run_dir = _REPO_ROOT / full["evidence_dir"]
+        revision = full.get("key_revision_2026_10_28") or {}
+        expected_correct = int(revision.get("gate1_correct", full["gate1_correct"]))
+        expected_total = int(revision.get("gate1_total", full["gate1_total"]))
 
         report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
 
         assert report.correct_resolutions == expected_correct
         assert report.total_placeholders == expected_total
-        assert report.total_false_positives == payload["gate2_false_greens"]
+        assert report.total_false_positives == full["gate2_false_greens"]
 
 
 class TestHarnessEvidenceHook:

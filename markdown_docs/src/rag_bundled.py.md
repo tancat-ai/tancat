@@ -45,8 +45,8 @@ never silently run against a pattern-less store again. Guarded lab wipe:
 
 | Function | Signature | Returns | Purpose |
 |----------|-----------|---------|---------|
-| `load_golden_patterns` | `(dataset_dir: Path)` | `list[GoldenPattern]` | Parse eval dataset JSONs → golden patterns |
-| `build_bundled_patterns` | `(repo_root: Path \| None = None)` | `list[GoldenPattern]` | Load the shipped eval-001..006 pack |
+| `load_golden_patterns` | `(dataset_dir: Path, *, exclude: Sequence[str] \| None = None)` | `list[GoldenPattern]` | Parse eval dataset JSONs → golden patterns; `exclude` drops the named story files (eval-side held-out split, j-0244) |
+| `build_bundled_patterns` | `(repo_root: Path \| None = None, *, exclude: Sequence[str] \| None = None)` | `list[GoldenPattern]` | Load the shipped pack; the product path passes no `exclude` and gets all 113 patterns |
 | `chunk_markdown_file` | `(filepath: Path)` | `list[DocChunk]` | Split markdown at `##` headings (~500 tokens, 50 overlap) |
 | `load_docs` | `(docs_dir: Path)` | `list[DocChunk]` | Load + chunk all `*.md` in a dir |
 | `build_bundled_docs` | `(repo_root: Path \| None = None)` | `list[DocChunk]` | Load the shipped Playwright corpus |
@@ -58,7 +58,7 @@ never silently run against a pattern-less store again. Guarded lab wipe:
 |----------|-----------|---------|---------|
 | `bundled_marker_path` | `(storage=None)` | `Path` | Marker path in the evidence dir |
 | `build_default_store` | `()` | `RAGStore` | Production store (lazy embedder + lazy Milvus client) |
-| `ensure_bundled_seeded` | `(store=None, *, marker_path=None, force=False)` | `dict[str, object]` | Idempotent, self-healing seed → `{"status": "skipped"\|"seeded"\|"reseeded"\|"marked", "golden": N, "docs": M}` (`reseeded` = stale marker on a pattern-less store, B-048) |
+| `ensure_bundled_seeded` | `(store=None, *, marker_path=None, force=False, exclude=None)` | `dict[str, object]` | Idempotent, self-healing seed → `{"status": "skipped"\|"seeded"\|"reseeded"\|"marked", "golden": N, "docs": M}` (`reseeded` = stale marker on a pattern-less store, B-048). `exclude` keeps the named story files out of the seed (the eval's held-out split); it cannot remove patterns an earlier full seed already wrote, so a held-out run needs its own store |
 | `store_stats` | `(store=None)` | `dict[str, int]` | Per-`entry_type` counts + `total` |
 | `prune_learned` | `(store=None)` | `int` | Delete learned patterns, keep golden/docs |
 
@@ -119,6 +119,7 @@ Refreshed 2026-10-02: public symbols present in the source and not listed above.
 - `build_summary` (function): `build_summary(page_report: list[tuple[str, int, str, str]], chunks_new: int, chunks_present: int, unreadable_docs: list[str] | None = None, skipped_formats: list[str] | None = None) -> IngestionSummary` - Build an :class:'IngestionSummary' from in-memory ingestion data.
 - `CHARS_PER_TOKEN` (constant): `CHARS_PER_TOKEN = 4`
 - `SUPPORTED_FORMATS` (constant): `SUPPORTED_FORMATS = ('.pdf', '.md')`
+- (t-1120) The held-out split list is **not** in this module. Its one copy is `DEFAULT_SPLIT` in `scripts/eval/heldout_split.py`; the seed only receives it through `exclude=` (see the note beside `load_golden_patterns`). A second copy here was removed because a stale copy would seed a story the gate scores.
 
 
 ### Additional helpers (docs refresh 2026-10-02)
