@@ -36,7 +36,7 @@ Whether a store row of that entry type belongs to a part that is on. Rows no par
 The entry types whose part is off right now — what `RAGStore.retrieve()` filters out.
 
 ### `validate_rag_switches(environ=None) -> dict[str, bool]`
-Reads every switch once and raises on a bad value. Called from `TestOrchestrator._build_rag_retriever()`, so a typo is refused at startup rather than half-way through a run.
+Reads every switch once and raises on a bad value. Called from `TestOrchestrator._build_rag_retriever()` and from the top of `eval_resolver._cmd_static()`, so a typo is refused at startup rather than half-way through a run. The eval call is the one that protects a measurement: that path's retriever build catches every exception and logs "RAG enabled but failed to init - disabling", which would turn a typo into a no-RAG number that looks real.
 
 ## Key Design Decisions
 

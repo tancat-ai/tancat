@@ -545,6 +545,18 @@ async def _cmd_static(heldout: bool = False, split_selector: str | None = None) 
     rotate deterministically, and a comma-separated list is taken verbatim. It
     implies ``heldout``.
     """
+    # j-0247 (t-1136): a mistyped RAG part switch must STOP the run, not be
+    # degraded by the retriever's handler below into "RAG enabled but failed to
+    # init - disabling" - that would print a no-RAG number that looks real, on
+    # the one path the switches exist for. Validated before any page is loaded
+    # or the eval store is touched, so nothing is measured.
+    # Imported here, not at module scope: this file must run from a checkout
+    # whose `src/` is on sys.path (see the B-095 note at the top).
+    from src.rag_switches import RAGSwitchError, validate_rag_switches
+
+    if rag_enabled_for_eval():
+        validate_rag_switches()
+
     pages = load_scraped_pages()
     if not pages:
         print("ERROR: No scraped pages found.", file=sys.stderr)
@@ -594,6 +606,10 @@ async def _cmd_static(heldout: bool = False, split_selector: str | None = None) 
             )
             rag_retriever = RAGRetriever(store)
             logger.info("RAG retriever initialised (isolated store: %s)", get_storage().rag_path())
+        except RAGSwitchError:
+            # A bad switch value is a configuration error, never a RAG failure:
+            # re-raise so it cannot be read as "RAG off" (j-0247/t-1136).
+            raise
         except Exception:
             logger.warning("RAG enabled but failed to init — disabling", exc_info=True)
 

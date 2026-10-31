@@ -25,6 +25,14 @@ typo must not quietly measure the wrong thing.
 
 An off part is inert at both ends: the writer writes nothing, retrieval does
 not return its rows, and the scorer neither counts its evidence nor reads it.
+
+A value that is neither ``1`` nor ``0`` is refused at three points: the write
+end, the score end, and by :func:`validate_rag_switches`, which is called when
+the product builds its retriever (``TestOrchestrator._build_rag_retriever``) and
+at the top of the resolver eval's static run. The eval call matters most: its
+retriever build catches every exception and logs "RAG enabled but failed to
+init - disabling", so without the check a typo would produce a no-RAG number
+that looks real.
 """
 
 from __future__ import annotations
