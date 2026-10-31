@@ -33,9 +33,21 @@ Usage::
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+from src.rag_switches import (
+    PART_DOC_CHUNKS,
+    PART_GOLDEN,
+    PART_LEARNED,
+    PART_NEGATIVES,
+    disabled_entry_types,
+    part_enabled,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingMismatchError(RuntimeError):
@@ -735,8 +747,16 @@ class RAGStore:
     # -- ingestion -----------------------------------------------------------
 
     def add_patterns(self, patterns: list[GoldenPattern]) -> int:
-        """Embed and store golden locator patterns. Returns count inserted."""
+        """Embed and store golden locator patterns. Returns count inserted.
+
+        Inert when the golden part is switched off (``RAG_GOLDEN=0``): nothing
+        is embedded and nothing is written, so the part cannot leak into a
+        measurement through a later retrieval.
+        """
         if not patterns:
+            return 0
+        if not part_enabled(PART_GOLDEN):
+            logger.debug("RAG_GOLDEN=0 - %d golden pattern(s) not written", len(patterns))
             return 0
         self._ensure_embedder_match()
         texts = [p.query_text for p in patterns]
@@ -766,8 +786,14 @@ class RAGStore:
         non-empty ``dedup_key`` already exists in the store (re-ingestion is
         idempotent).  Chunks with an empty ``dedup_key`` are always inserted
         (back-compat for callers that don't compute the key).
+
+        Inert when the doc-chunk part is switched off (``RAG_DOC_CHUNKS=0``):
+        returns ``(0, 0)`` and writes nothing.
         """
         if not chunks:
+            return (0, 0)
+        if not part_enabled(PART_DOC_CHUNKS):
+            logger.debug("RAG_DOC_CHUNKS=0 - %d doc chunk(s) not written", len(chunks))
             return (0, 0)
         self._ensure_embedder_match()
 
@@ -824,11 +850,17 @@ class RAGStore:
         query_vector = self._embedder.embed(query)
         hits = self._backend.search(query_vector, k=k)
 
+        # j-0247: a part switched off is not read either. Drop its rows before
+        # anything downstream can score them.
+        off_types = disabled_entry_types()
+
         results: list[RetrievedPattern] = []
         for hit in hits:
             if hit.confidence < min_confidence:
                 continue
             md = hit.metadata
+            if off_types and str(md.get("entry_type", "")) in off_types:
+                continue
             results.append(
                 RetrievedPattern(
                     description=md.get("text", query),
@@ -880,6 +912,10 @@ class RAGStore:
         is returned. Otherwise the pattern is embedded and inserted with
         ``hit_count=1`` and ``("inserted", 1)`` is returned.
         """
+        if not part_enabled(PART_LEARNED):
+            logger.debug("RAG_LEARNED=0 - learned pattern not written")
+            return ("disabled", 0)
+
         existing = self._backend.find_learned(
             pattern.action_type,
             pattern.description,
@@ -921,6 +957,10 @@ class RAGStore:
         single-row-per-key invariant mirrors the positive store, so a
         ``(description, selector, site)`` pair resolves to one net signal.
         """
+        if not part_enabled(PART_NEGATIVES):
+            logger.debug("RAG_NEGATIVES=0 - learned negative not written")
+            return ("disabled", 0)
+
         existing = self._backend.find_negative(
             pattern.action_type,
             pattern.description,

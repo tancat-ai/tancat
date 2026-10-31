@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 from src.failure_classifier import FailureCategory, classify_failure
 from src.rag_bundled import build_default_store
 from src.rag_store import LearnedPattern, RAGStore
+from src.rag_switches import PART_LEARNED, PART_NEGATIVES, part_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +224,13 @@ def learn_from_evidence(
     Batched: one call per test file teardown, not per step. Failures are the
     caller's concern — the conftest hook wraps this so learning never breaks
     a test run.
+
+    j-0247: does nothing when the learned part is switched off
+    (``RAG_LEARNED=0``) — no walk over the steps, no write.
     """
+    if not part_enabled(PART_LEARNED):
+        logger.debug("RAG_LEARNED=0 - evidence learning is off, nothing to do")
+        return {"inserted": 0, "exists": 0}
     store = store or build_default_store()
     inserted = 0
     exists = 0
@@ -274,7 +281,13 @@ def learn_negatives_from_evidence(
     on the step it was recorded on.
 
     Best-effort — a bad step can never break a run.
+
+    j-0247: does nothing when the negative part is switched off
+    (``RAG_NEGATIVES=0``) — no walk over the steps, no write.
     """
+    if not part_enabled(PART_NEGATIVES):
+        logger.debug("RAG_NEGATIVES=0 - negative learning is off, nothing to do")
+        return {"inserted": 0, "exists": 0}
     store = store or build_default_store()
     inserted = 0
     exists = 0

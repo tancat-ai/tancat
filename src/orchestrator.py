@@ -233,6 +233,11 @@ class TestOrchestrator:
         """
         if not rag_enabled_by_config():
             return None
+        # j-0247: refuse a bad per-part switch here, at startup, rather than
+        # half-way through a run. Unknown values never read as "on".
+        from src.rag_switches import validate_rag_switches
+
+        validate_rag_switches()
         try:
             from src.rag_retriever import RAGRetriever
             from src.rag_store import MilvusLiteBackend, RAGStore, SentenceTransformerEmbedder
