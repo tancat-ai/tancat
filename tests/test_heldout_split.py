@@ -17,6 +17,7 @@ figure without both labels, and the committed record is validated against it.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from collections.abc import Sequence
@@ -425,6 +426,70 @@ class TestSplitIsRecordedOnEveryFigure:
         assert "113" in note
         assert "--regenerate" in note
         assert "48/113" in note, "the static full-113 cell must be named as the other mode, not the target"
+
+    def test_a_recorded_met_verdict_must_name_a_cell_that_exists(self) -> None:
+        """A MET verdict has to rest on a cell in the record, and on that cell's numbers.
+
+        t-1148/d-0083: 58a2581 published "102/113 (90.3%) ... target MET" while
+        nothing in the tracked tree carried 102/113 - a real number with no cell,
+        which is the exact bug the day was about. A verdict may say MET only when
+        it names the cell it rests on, that cell exists, and the score it quotes is
+        the cell's own score. A number with no evidence is a claim, not a reading.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        verdict = str(payload.get("verdict") or "")
+
+        if "target MET" not in verdict:
+            pytest.skip("no MET verdict recorded - nothing to pin")
+
+        named = re.findall(r"\b([A-Za-z0-9_]+\.cells\.[A-Za-z0-9_]+)\b", verdict)
+        assert named, (
+            "a MET verdict must name the cell it rests on (e.g. "
+            "'full_mode_2026_10_31.cells.rag_on_bundled') - a number with no cell is not a reading"
+        )
+
+        quoted = re.search(r"(\d+)/(\d+)\s*\((\d+(?:\.\d+)?)%\)", verdict)
+        assert quoted, "a MET verdict must quote the score it rests on"
+        want_correct, want_total = int(quoted.group(1)), int(quoted.group(2))
+
+        for dotted in named:
+            node: Any = payload
+            for part in dotted.split("."):
+                assert isinstance(node, dict) and part in node, (
+                    f"the MET verdict names {dotted!r}, which is not in the record"
+                )
+                node = node[part]
+            assert isinstance(node, dict), f"{dotted!r} is not a cell"
+            assert node.get("gate1_correct") == want_correct and node.get("gate1_total") == want_total, (
+                f"the MET verdict quotes {want_correct}/{want_total} but "
+                f"{dotted!r} records {node.get('gate1_correct')}/{node.get('gate1_total')}"
+            )
+            assert node.get("split_kind") == "full", f"{dotted!r} must be the full-113 cell, not a held-out one"
+
+    def test_the_full_mode_cell_block_obeys_the_record_rule(self) -> None:
+        """The 2026-10-31 full-mode block validates like the static one (t-1149)."""
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+
+        block = payload.get("full_mode_2026_10_31")
+        if block is None:
+            pytest.skip("no full-mode block recorded yet")
+
+        assert gate_record.validate_record(payload, cells_key="full_mode_2026_10_31") == []
+        # Four legs, and the two that are the same configuration agree exactly.
+        cells = block["cells"]
+        assert set(cells) == {"rag_on_bundled", "rag_off_bundled", "rag_on_empty", "rag_off_empty"}
+        assert (cells["rag_off_bundled"]["gate1_correct"], cells["rag_off_bundled"]["gate2_false_greens"]) == (
+            cells["rag_off_empty"]["gate1_correct"],
+            cells["rag_off_empty"]["gate2_false_greens"],
+        )
+        for name, cell in cells.items():
+            assert cell["split_kind"] == "full", name
+            assert cell["commit"] == "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd", name
+            assert cell["server"]["ctx_size"] == 262144, name
+            assert cell["server"]["flash_attn"] == "on", name
+            assert cell["server"]["thinking"] == "off", name
+            assert cell["server"]["temp"] == 0.0, name
+            assert "eval-005" in str(cell["note"]), f"{name}: the eval-005 caveat must be stated"
 
     def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
         """The validator, not the reader, is what refuses a cross-split claim."""

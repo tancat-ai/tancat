@@ -15,7 +15,7 @@
     "gate1_read_against": "the full 113 placeholders (all 9 story files), in full --regenerate (model) mode - never the static leg's 48/113, which is a different mode",
     "gate1_target_note": "The 90% gate-1 target is read against the full 113 placeholders in full --regenerate (model) mode - the cell that records 102/113 on 2026-10-31. Owner's decision, 2026-10-31, his words: 'i think it should stay on the harder gate which is the 113'. The static full-113 cell is 48/113: a DIFFERENT mode (no model, no generated tests), so it is not the figure the target is read against and neither mode may be read as the other. The held-out split stays as a measurement and as a recall diagnostic, not as the target's home; its cells are unchanged. The target itself is unchanged."
   },
-  "verdict": "gate 1: the target is read against the full 113 in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, target MET. This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous')",
+  "verdict": "gate 1: target MET on the full 113 in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, cell full_mode_2026_10_31.cells.rag_on_bundled (evidence fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled; re-scores from the tracked tree with no model). This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous').",
   "source": "scripts/eval/eval_resolver.py --mode static (held-out) with and without RAG_ENABLED=0, four runs, 2026-10-30, no model and no browser",
   "heldout_split": {
     "files": [
@@ -167,6 +167,261 @@
       "eval-008": "4/13",
       "eval-010": "1/4"
     }
+  },
+  "full_mode_2026_10_31": {
+    "cells": {
+      "rag_on_bundled": {
+        "gate1_correct": 102,
+        "gate1_total": 113,
+        "gate1_accuracy_pct": 90.3,
+        "mode": "full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites)",
+        "seed": "bundled pack seeded into an isolated store (113 golden + 35 docs)",
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "102/113 (90.3%) - mode: full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites); seed: bundled pack seeded into an isolated store (113 golden + 35 docs); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
+        "note": "RAG on with the bundled pack in an isolated store - the product configuration. This is the cell the gate-1 target rests on. eval-005 caveat: its 6 tests timed out at 300 s in every leg (tests_executed=0), so gate 2 is blind on that story; its 24 placeholders still score 20/24 in all four legs.",
+        "rag_switches": {
+          "RAG_ENABLED": 1,
+          "RAG_GOLDEN": 1,
+          "RAG_LEARNED": 1,
+          "RAG_NEGATIVES": 1,
+          "RAG_DOC_CHUNKS": 1,
+          "AI059_DISABLE_AUTO_LEARN": 1
+        },
+        "server": {
+          "model_file": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+          "ctx_size": 262144,
+          "cache_type_k": "q8_0",
+          "cache_type_v": "q8_0",
+          "flash_attn": "on",
+          "temp": 0.0,
+          "thinking": "off",
+          "build": "b11871-b3fa69955",
+          "backend": "Vulkan",
+          "base_url": "http://127.0.0.1:8080/v1"
+        },
+        "commit": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+        "gate2_false_greens": 0,
+        "tests_executed": 52,
+        "tests_passed": 49,
+        "evidence_dir": "fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled",
+        "comparability": "Same mode, same split and (for rag_on_bundled) the same seed configuration as the 89/113 full-mode record of 2026-10-16, now 90/113 under the 2026-10-28 page-arrival key revision - so rag_on_bundled may be read against that chain. It is NOT comparable with any held-out cell (different split, a different sample) and NOT with the static full-113 cell (48/113: same split, different mode, no model). The four legs here are comparable with each other.",
+        "comparable_with": [
+          "rag_off_bundled",
+          "rag_on_empty",
+          "rag_off_empty"
+        ]
+      },
+      "rag_off_bundled": {
+        "gate1_correct": 101,
+        "gate1_total": 113,
+        "gate1_accuracy_pct": 89.4,
+        "mode": "full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites)",
+        "seed": "bundled pack seeded into an isolated store (113 golden + 35 docs), never built - RAG_ENABLED=0",
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "101/113 (89.4%) - mode: full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites); seed: bundled pack seeded into an isolated store (113 golden + 35 docs), never built - RAG_ENABLED=0; split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
+        "note": "RAG off with the pack present in the store: under RAG_ENABLED=0 the store is never built or read, so legs 2 and 4 are THE SAME configuration - they are the repetition, not an independent variable, and they agree exactly (101/113 both). eval-005 caveat: its 6 tests timed out at 300 s in every leg (tests_executed=0), so gate 2 is blind on that story; its 24 placeholders still score 20/24 in all four legs.",
+        "rag_switches": {
+          "RAG_ENABLED": 0,
+          "RAG_GOLDEN": 1,
+          "RAG_LEARNED": 1,
+          "RAG_NEGATIVES": 1,
+          "RAG_DOC_CHUNKS": 1,
+          "AI059_DISABLE_AUTO_LEARN": 1
+        },
+        "server": {
+          "model_file": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+          "ctx_size": 262144,
+          "cache_type_k": "q8_0",
+          "cache_type_v": "q8_0",
+          "flash_attn": "on",
+          "temp": 0.0,
+          "thinking": "off",
+          "build": "b11871-b3fa69955",
+          "backend": "Vulkan",
+          "base_url": "http://127.0.0.1:8080/v1"
+        },
+        "commit": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+        "gate2_false_greens": 0,
+        "tests_executed": 52,
+        "tests_passed": 48,
+        "evidence_dir": "fixtures/heldout_runs/2026-10-31/leg2_rag_off_bundled",
+        "comparability": "Same mode, same split and (for rag_on_bundled) the same seed configuration as the 89/113 full-mode record of 2026-10-16, now 90/113 under the 2026-10-28 page-arrival key revision - so rag_on_bundled may be read against that chain. It is NOT comparable with any held-out cell (different split, a different sample) and NOT with the static full-113 cell (48/113: same split, different mode, no model). The four legs here are comparable with each other.",
+        "comparable_with": [
+          "rag_on_bundled",
+          "rag_on_empty",
+          "rag_off_empty"
+        ]
+      },
+      "rag_on_empty": {
+        "gate1_correct": 101,
+        "gate1_total": 113,
+        "gate1_accuracy_pct": 89.4,
+        "mode": "full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites)",
+        "seed": "empty store (0 entries verified; auto-seed off)",
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "101/113 (89.4%) - mode: full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites); seed: empty store (0 entries verified; auto-seed off); split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
+        "note": "RAG on against an empty store (0 entries verified before the run, auto-seed and learning writes frozen): no rows to retrieve means no bonus, which is the expected null against rag_on_bundled. eval-005 caveat: its 6 tests timed out at 300 s in every leg (tests_executed=0), so gate 2 is blind on that story; its 24 placeholders still score 20/24 in all four legs.",
+        "rag_switches": {
+          "RAG_ENABLED": 1,
+          "RAG_GOLDEN": 1,
+          "RAG_LEARNED": 1,
+          "RAG_NEGATIVES": 1,
+          "RAG_DOC_CHUNKS": 1,
+          "AI059_DISABLE_AUTO_LEARN": 1
+        },
+        "server": {
+          "model_file": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+          "ctx_size": 262144,
+          "cache_type_k": "q8_0",
+          "cache_type_v": "q8_0",
+          "flash_attn": "on",
+          "temp": 0.0,
+          "thinking": "off",
+          "build": "b11871-b3fa69955",
+          "backend": "Vulkan",
+          "base_url": "http://127.0.0.1:8080/v1"
+        },
+        "commit": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+        "gate2_false_greens": 0,
+        "tests_executed": 52,
+        "tests_passed": 48,
+        "evidence_dir": "fixtures/heldout_runs/2026-10-31/leg3_rag_on_empty",
+        "comparability": "Same mode, same split and (for rag_on_bundled) the same seed configuration as the 89/113 full-mode record of 2026-10-16, now 90/113 under the 2026-10-28 page-arrival key revision - so rag_on_bundled may be read against that chain. It is NOT comparable with any held-out cell (different split, a different sample) and NOT with the static full-113 cell (48/113: same split, different mode, no model). The four legs here are comparable with each other.",
+        "comparable_with": [
+          "rag_on_bundled",
+          "rag_off_bundled",
+          "rag_off_empty"
+        ]
+      },
+      "rag_off_empty": {
+        "gate1_correct": 101,
+        "gate1_total": 113,
+        "gate1_accuracy_pct": 89.4,
+        "mode": "full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites)",
+        "seed": "empty store (0 entries verified), never built - RAG_ENABLED=0",
+        "split": "full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_key": "all-113",
+        "split_kind": "full",
+        "label": "101/113 (89.4%) - mode: full --regenerate leg: the local model writes and runs the tests (model + generated tests + live sites); seed: empty store (0 entries verified), never built - RAG_ENABLED=0; split: full dataset: all 9 story files, 113 placeholders (nothing held out)",
+        "split_files": [
+          "eval-001_saucedemo_login_checkout.json",
+          "eval-002_automationexercise_browse_cart.json",
+          "eval-003_demoqa_forms.json",
+          "eval-004_theinternet_alerts.json",
+          "eval-005_lv_insurance_quote.json",
+          "eval-006_ecommerce_mock.json",
+          "eval-007_banking_mock.json",
+          "eval-008_goto_navigation.json",
+          "eval-010_ambiguous_mock.json"
+        ],
+        "note": "RAG off with an empty store - the same configuration as rag_off_bundled, and therefore the repetition of it (a store that is never built cannot differ from an empty one). Agrees exactly. eval-005 caveat: its 6 tests timed out at 300 s in every leg (tests_executed=0), so gate 2 is blind on that story; its 24 placeholders still score 20/24 in all four legs.",
+        "rag_switches": {
+          "RAG_ENABLED": 0,
+          "RAG_GOLDEN": 0,
+          "RAG_LEARNED": 0,
+          "RAG_NEGATIVES": 0,
+          "RAG_DOC_CHUNKS": 0,
+          "AI059_DISABLE_AUTO_LEARN": 1
+        },
+        "server": {
+          "model_file": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+          "ctx_size": 262144,
+          "cache_type_k": "q8_0",
+          "cache_type_v": "q8_0",
+          "flash_attn": "on",
+          "temp": 0.0,
+          "thinking": "off",
+          "build": "b11871-b3fa69955",
+          "backend": "Vulkan",
+          "base_url": "http://127.0.0.1:8080/v1"
+        },
+        "commit": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+        "gate2_false_greens": 0,
+        "tests_executed": 52,
+        "tests_passed": 48,
+        "evidence_dir": "fixtures/heldout_runs/2026-10-31/leg4_rag_off_empty",
+        "comparability": "Same mode, same split and (for rag_on_bundled) the same seed configuration as the 89/113 full-mode record of 2026-10-16, now 90/113 under the 2026-10-28 page-arrival key revision - so rag_on_bundled may be read against that chain. It is NOT comparable with any held-out cell (different split, a different sample) and NOT with the static full-113 cell (48/113: same split, different mode, no model). The four legs here are comparable with each other.",
+        "comparable_with": [
+          "rag_on_bundled",
+          "rag_off_bundled",
+          "rag_on_empty"
+        ]
+      }
+    },
+    "server": {
+      "model_file": "Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+      "ctx_size": 262144,
+      "cache_type_k": "q8_0",
+      "cache_type_v": "q8_0",
+      "flash_attn": "on",
+      "temp": 0.0,
+      "thinking": "off",
+      "build": "b11871-b3fa69955",
+      "backend": "Vulkan",
+      "base_url": "http://127.0.0.1:8080/v1"
+    },
+    "commit": "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+    "rag_switch_mapping": "RAG on = RAG_ENABLED=1 with all four parts on (RAG_GOLDEN, RAG_LEARNED, RAG_NEGATIVES, RAG_DOC_CHUNKS = 1), which is also the default when a switch is unset. RAG off = RAG_ENABLED=0; leg 4 additionally writes all four parts to 0, but under the master switch they are inert either way (leg 2 carries them at 1 and behaves identically). AI059_DISABLE_AUTO_LEARN=1 in all four legs freezes auto-seed and learning writes, so the store's contents at start are the only store variable. Under RAG_ENABLED=0 the store is never built or read, so legs 2 and 4 are the same configuration - the repetition the rule asks for, not an independent variable.",
+    "what_the_legs_show": "RAG (the bundled golden pack) is worth +1 placeholder in full mode: 102/113 with the pack against 101/113 without, the single difference being eval-003 (7/8 with the pack, 6/8 without). RAG on against an empty store equals RAG off (101/113), the expected null - with no rows to retrieve there is no bonus.",
+    "caveat_eval_005": "eval-005 caveat: its 6 tests timed out at 300 s in every leg (tests_executed=0), so gate 2 is blind on that story; its 24 placeholders still score 20/24 in all four legs.",
+    "commands": {
+      "rag_on_bundled": "RAG_ENABLED=1 RAG_GOLDEN=1 RAG_LEARNED=1 RAG_NEGATIVES=1 RAG_DOC_CHUNKS=1 AI059_DISABLE_AUTO_LEARN=1 python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --evidence-dir fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled --no-persist",
+      "rag_off_bundled": "RAG_ENABLED=0 RAG_GOLDEN=1 RAG_LEARNED=1 RAG_NEGATIVES=1 RAG_DOC_CHUNKS=1 AI059_DISABLE_AUTO_LEARN=1 python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --evidence-dir fixtures/heldout_runs/2026-10-31/leg2_rag_off_bundled --no-persist",
+      "rag_on_empty": "RAG_ENABLED=1 RAG_GOLDEN=1 RAG_LEARNED=1 RAG_NEGATIVES=1 RAG_DOC_CHUNKS=1 AI059_DISABLE_AUTO_LEARN=1 python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --evidence-dir fixtures/heldout_runs/2026-10-31/leg3_rag_on_empty --no-persist",
+      "rag_off_empty": "RAG_ENABLED=0 RAG_GOLDEN=0 RAG_LEARNED=0 RAG_NEGATIVES=0 RAG_DOC_CHUNKS=0 AI059_DISABLE_AUTO_LEARN=1 python scripts/eval/eval_harness.py run --regenerate --mode full --dataset scripts/eval/dataset --evidence-dir fixtures/heldout_runs/2026-10-31/leg4_rag_off_empty --no-persist"
+    },
+    "re_scored": "python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled -> 102/113, 0 (from the tracked tree, no model, no browser). The other three legs re-score to 101/113 and 0 the same way.",
+    "per_story": {
+      "eval-001": "18/20",
+      "eval-002": "7/8",
+      "eval-003": "7/8",
+      "eval-004": "6/7",
+      "eval-005": "20/24",
+      "eval-006": "14/16",
+      "eval-007": "13/13",
+      "eval-008": "13/13",
+      "eval-010": "4/4"
+    },
+    "source": "t-1146, the fresh four-leg run the owner ordered on 2026-10-31: main at f538d4b, one leg at a time, temp 0.0, thinking off, ~42 min per leg."
   },
   "previous": {
     "recorded_at": "2026-10-16",

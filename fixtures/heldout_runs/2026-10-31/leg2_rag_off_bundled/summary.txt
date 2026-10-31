@@ -1,0 +1,88 @@
+======================================================================
+EVALUATION HARNESS REPORT
+======================================================================
+
+  Stories evaluated:        9
+  Total placeholders:       113
+  Correct resolutions:      101
+  Resolution accuracy:      89.4%
+
+  ASSERT verification (B-093 gate 2):
+    by element (golden)              27
+    by element (pipeline verdict)    8
+    by page arrival (URL assertion)  2
+    unverified                       0
+
+  Tests executed:           52
+  Tests passed:             48
+  Tests timed out:          1 story run(s) killed by the pytest timeout: eval-005 (not counted in the totals above)
+
+  Step/expected-result alignment (report only):
+    20 of 55 ASSERT steps are specificity-misaligned
+      (OPEN+DIRECT 1, FIXED+PROPERTY 19, 36.4%)
+  Test pass rate:           92.3%
+  Pass-rate note:           page-arrival mismatches now fail honestly; expected: gate 1 unchanged (not measured in this run); gate 2 stays clean because a failing test cannot be a hollow pass (a false green requires the test to pass).
+  False positives:          0
+  False positive rate:      0.0%
+
+  Skeleton completeness:    100.0%
+  Mean gen. duration:       103.1s
+
+----------------------------------------------------------------------
+PER-STORY BREAKDOWN
+----------------------------------------------------------------------
+  eval-001 (saucedemo):
+    Placeholders: 20 correct=18/20 (90%)
+    Tests:        6 passed=5 false_pos=0
+    Skeletons:    6/6
+    Duration:     175.9s
+
+  eval-002 (automationexercise):
+    Placeholders: 8 correct=7/8 (88%)
+    Tests:        6 passed=4 false_pos=0
+    Skeletons:    6/6
+    Duration:     118.0s
+
+  eval-003 (demoqa):
+    Placeholders: 8 correct=6/8 (75%)
+    Tests:        6 passed=6 false_pos=0
+    Skeletons:    6/6
+    Duration:     73.1s
+
+  eval-004 (theinternet):
+    Placeholders: 7 correct=6/7 (86%)
+    Tests:        5 passed=5 false_pos=0
+    Skeletons:    5/5
+    Duration:     64.0s
+
+  eval-005 (lv_insurance):
+    Placeholders: 24 correct=20/24 (83%)
+    Tests:        TIMED OUT (pytest run killed — no result)
+    Skeletons:    10/10
+    Duration:     190.0s
+
+  eval-006 (ecommerce_mock):
+    Placeholders: 16 correct=14/16 (88%)
+    Tests:        8 passed=7 false_pos=0
+    Skeletons:    8/8
+    Duration:     82.4s
+
+  eval-007 (banking_mock):
+    Placeholders: 13 correct=13/13 (100%)
+    Tests:        8 passed=8 false_pos=0
+    Skeletons:    8/8
+    Duration:     88.0s
+
+  eval-008 (banking_mock):
+    Placeholders: 13 correct=13/13 (100%)
+    Tests:        9 passed=9 false_pos=0
+    Skeletons:    9/9
+    Duration:     81.9s
+
+  eval-010 (ambiguous_mock):
+    Placeholders: 4 correct=4/4 (100%)
+    Tests:        4 passed=4 false_pos=0
+    Skeletons:    4/4
+    Duration:     55.0s
+
+======================================================================

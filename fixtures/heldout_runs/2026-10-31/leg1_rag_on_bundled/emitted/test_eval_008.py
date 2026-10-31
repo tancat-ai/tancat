@@ -1,0 +1,100 @@
+from playwright.sync_api import Page, expect
+import pytest
+from playwright.sync_api import Page
+
+
+@pytest.mark.evidence(condition_ref="TC-01", story_ref="S01")
+def test_01_navigate_to_sign_in(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    # Page arrival check: expected 'http://localhost:8781/index.html', browser observed on 'http://localhost:8781/index.html'
+    evidence_tracker.record_page_expectation(expected_url='http://localhost:8781/index.html', observed_url='http://localhost:8781/index.html', trail_step="index=1; action=scrape; description='sign-in page loaded'; from_url='http://localhost:8781/index.html'; to_url='http://localhost:8781/index.html'; navigated=False; timestamp=1793474481.1193209", producer='keyword', description='sign-in page loaded', reason='', query_rule='identity', query_reason='story names no query in an address context; page identity decided')
+    expect(page).to_have_url("http://localhost:8781/index.html")
+
+
+@pytest.mark.evidence(condition_ref="TC-02", story_ref="S01")
+def test_02_sign_in(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+
+
+@pytest.mark.evidence(condition_ref="TC-03", story_ref="S01")
+def test_03_verify_dashboard(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    # Page arrival check: expected 'http://localhost:8781/dashboard.html', browser observed on 'http://localhost:8781/dashboard.html'
+    evidence_tracker.record_page_expectation(expected_url='http://localhost:8781/dashboard.html', observed_url='http://localhost:8781/dashboard.html', trail_step="index=4; action=scrape; description='accounts dashboard loaded'; from_url='http://localhost:8781/dashboard.html'; to_url='http://localhost:8781/dashboard.html'; navigated=False; timestamp=1793474486.0133808", producer='keyword', description='accounts dashboard loaded', reason='', query_rule='identity', query_reason='story names no query in an address context; page identity decided')
+    expect(page).to_have_url("http://localhost:8781/dashboard.html")
+
+
+@pytest.mark.evidence(condition_ref="TC-04", story_ref="S01")
+def test_04_go_to_transfer_page(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('a[href="/transfer.html"]', label='Transfer', expected_page='http://localhost:8781/dashboard.html')
+    # Page arrival check: expected 'http://localhost:8781/transfer.html', browser observed on 'http://localhost:8781/transfer.html'
+    evidence_tracker.record_page_expectation(expected_url='http://localhost:8781/transfer.html', observed_url='http://localhost:8781/transfer.html', trail_step="index=5; action=scrape; description='transfer page loaded'; from_url='http://localhost:8781/transfer.html'; to_url='http://localhost:8781/transfer.html'; navigated=False; timestamp=1793474490.7044954", producer='keyword', description='transfer page loaded', reason='', query_rule='identity', query_reason='story names no query in an address context; page identity decided')
+    expect(page).to_have_url("http://localhost:8781/transfer.html")
+
+
+@pytest.mark.evidence(condition_ref="TC-05", story_ref="S01")
+def test_05_fill_transfer_amount(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('a[href="/transfer.html"]', label='Transfer', expected_page='http://localhost:8781/dashboard.html')
+    evidence_tracker.fill('#amount', '100', label='transfer amount', expected_page='http://localhost:8781/transfer.html')
+    evidence_tracker.click('#transfer-submit', label='Submit', expected_page='http://localhost:8781/transfer.html')
+
+
+@pytest.mark.evidence(condition_ref="TC-06", story_ref="S01")
+def test_06_verify_transfer_success(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('a[href="/transfer.html"]', label='Transfer', expected_page='http://localhost:8781/dashboard.html')
+    evidence_tracker.fill('#amount', '100', label='transfer amount', expected_page='http://localhost:8781/transfer.html')
+    evidence_tracker.click('#transfer-submit', label='Submit', expected_page='http://localhost:8781/transfer.html')
+    evidence_tracker.assert_visible('#transfer-success-title', label='transfer success message', expected_page='http://localhost:8781/transfer_success.html?amount=100.00')
+
+
+@pytest.mark.evidence(condition_ref="TC-07", story_ref="S01")
+def test_07_navigate_to_bill_payments(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#pay-bill-link', label='Bill Payments', expected_page='http://localhost:8781/dashboard.html')
+    # Page arrival check: expected 'http://localhost:8781/payments.html', browser observed on 'http://localhost:8781/payments.html'
+    evidence_tracker.record_page_expectation(expected_url='http://localhost:8781/payments.html', observed_url='http://localhost:8781/payments.html', trail_step="index=5; action=scrape; description='bill payments page loaded'; from_url='http://localhost:8781/payments.html'; to_url='http://localhost:8781/payments.html'; navigated=False; timestamp=1793474490.5546126", producer='keyword', description='bill payments page loaded', reason='', query_rule='identity', query_reason='story names no query in an address context; page identity decided')
+    expect(page).to_have_url("http://localhost:8781/payments.html")
+
+
+@pytest.mark.evidence(condition_ref="TC-08", story_ref="S01")
+def test_08_fill_payment_amount(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#pay-bill-link', label='Bill Payments', expected_page='http://localhost:8781/dashboard.html')
+    evidence_tracker.fill('#payment-amount', '50', label='payment amount', expected_page='http://localhost:8781/payments.html')
+    evidence_tracker.click('#pay-bill', label='Submit', expected_page='http://localhost:8781/payments.html')
+
+
+@pytest.mark.evidence(condition_ref="TC-09", story_ref="S01")
+def test_09_verify_payment_success(page: Page, evidence_tracker):
+    evidence_tracker.navigate('http://localhost:8781/index.html', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#user-name', 'admin', label='username', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.fill('#password', 'secret', label='password', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#login-button', label='Sign in', expected_page='http://localhost:8781/index.html')
+    evidence_tracker.click('#pay-bill-link', label='Bill Payments', expected_page='http://localhost:8781/dashboard.html')
+    evidence_tracker.fill('#payment-amount', '50', label='payment amount', expected_page='http://localhost:8781/payments.html')
+    evidence_tracker.click('#pay-bill', label='Submit', expected_page='http://localhost:8781/payments.html')
+    evidence_tracker.assert_visible('#payment-success-title', label='payment success message', expected_page='http://localhost:8781/payment_success.html?amount=50.00')
