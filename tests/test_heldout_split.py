@@ -220,10 +220,11 @@ class TestRecordedFigureNeedsItsLabels:
 class TestRotation:
     """Which story files are held back can rotate, deterministically (j-0244 step 2).
 
-    The owner's decision (2026-10-30): read the 90% gate-1 target against the
-    held-out split, and rotate the split so the sample grows instead of the same
-    30 placeholders being scored forever. The default stays the fixed three so
-    the recorded 2026-10-30 figure keeps reproducing itself.
+    The owner's decision (2026-10-31): the split is a measurement, not the
+    target's home - the 90% gate-1 target is read against the full 113 in full
+    ``--regenerate`` mode. The split still rotates so the sample grows instead of
+    the same 30 placeholders being scored forever. The default stays the fixed
+    three so the recorded 2026-10-30 figure keeps reproducing itself.
     """
 
     def test_the_default_split_is_still_the_three_fixed_files(self) -> None:
@@ -396,6 +397,34 @@ class TestSplitIsRecordedOnEveryFigure:
                 # Rotation cannot weaken the sample quietly: the per-file
                 # breakdown sits beside the number.
                 assert cell["per_file"], name
+
+    def test_the_target_is_read_against_the_full_113_in_full_mode(self) -> None:
+        """The target's home is the full 113 in model mode, and it says so (t-1147).
+
+        j-0244 pointed the target at the held-out split on a brief's own authority.
+        The owner has said otherwise (2026-10-31, his words: "i think it should
+        stay on the harder gate which is the 113"), so this test pins the home and
+        the mode together - a target line that names only one of them is the bug,
+        because the static full-113 cell is 48/113 and the model full-113 cell is
+        102/113, and reading one as the other is how 90% against 113 became
+        ambiguous in the first place.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        targets = payload["targets"]
+
+        home = str(targets["gate1_read_against"])
+        assert "113" in home, "the target's home must name the full 113"
+        assert "held-out" not in home, "the held-out split is a measurement, not the target's home"
+        # Both facts in one line: the split AND the mode that produces the figure.
+        assert "--regenerate" in home and "model" in home, (
+            "the target line must name its mode too - 48/113 static and 102/113 "
+            "full-mode are different numbers and must not be read as one"
+        )
+
+        note = str(targets["gate1_target_note"])
+        assert "113" in note
+        assert "--regenerate" in note
+        assert "48/113" in note, "the static full-113 cell must be named as the other mode, not the target"
 
     def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
         """The validator, not the reader, is what refuses a cross-split claim."""

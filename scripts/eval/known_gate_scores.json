@@ -12,10 +12,10 @@
   "targets": {
     "gate1_min_accuracy_pct": 90,
     "gate2_max_false_greens": 0,
-    "gate1_read_against": "the held-out split",
-    "gate1_target_note": "The 90% gate-1 target is read against the held-out split - the stories the RAG seed never sees. The full-113 figure is a DIFFERENT thing: it includes stories whose golden keys are in the pack, so part of it is recall, and it is not the number the target is read against. The target itself is unchanged."
+    "gate1_read_against": "the full 113 placeholders (all 9 story files), in full --regenerate (model) mode - never the static leg's 48/113, which is a different mode",
+    "gate1_target_note": "The 90% gate-1 target is read against the full 113 placeholders in full --regenerate (model) mode - the cell that records 102/113 on 2026-10-31. Owner's decision, 2026-10-31, his words: 'i think it should stay on the harder gate which is the 113'. The static full-113 cell is 48/113: a DIFFERENT mode (no model, no generated tests), so it is not the figure the target is read against and neither mode may be read as the other. The held-out split stays as a measurement and as a recall diagnostic, not as the target's home; its cells are unchanged. The target itself is unchanged."
   },
-  "verdict": "gate 1 FAIL (40.0% < 90%) on the held-out split; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous')",
+  "verdict": "gate 1: the target is read against the full 113 in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, target MET. This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous')",
   "source": "scripts/eval/eval_resolver.py --mode static (held-out) with and without RAG_ENABLED=0, four runs, 2026-10-30, no model and no browser",
   "heldout_split": {
     "files": [
@@ -626,7 +626,7 @@
       "recovered": "eval-004 c0 on this run. On the other two committed held-out runs the same keys recover eval-001 c2, eval-001 c4 and eval-004 c0 (2026-10-13: 95 -> 98; 2026-10-24: 97 -> 100), and no criterion regresses. Arrivals that name the wrong page still fail, which is why eval-001 c2/c4 stay misses on this draw: the journey never left the inventory page."
     }
   },
-  "open_decision": "Whether to re-measure the headline in full --regenerate mode (needs a model run, which the owner has not approved), and whether the 90% gate-1 target should be read against the 30-placeholder held-out split, the 113-placeholder full split, or both.",
+  "open_decision": "Whether the headline figure should stay the held-out split's static cell (12/30) now that the gate-1 target is read against the full 113 in full --regenerate mode (102/113), or move to that full-mode cell.",
   "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
   "split_key": "eval-007|eval-008|eval-010",
   "split_kind": "heldout",
