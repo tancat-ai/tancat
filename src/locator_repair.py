@@ -413,6 +413,174 @@ def apply_patch_to_file(patch: LocatorPatch) -> None:
     test_path.write_text(patched_source, encoding="utf-8")
 
 
+#: Step types that assert rather than act. The repair browser must open on the
+#: state BEFORE the failed assertion, so the human can repeat the interaction.
+_ASSERTION_STEP_TYPES = frozenset({"assertion", "assert", "page_expectation", "url_assertion"})
+
+
+def pick_repair_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Return the step a human can act on, not the assertion after it.
+
+    The repair browser must open on the state BEFORE the failed assertion, so
+    the human can repeat the click that should have reached the right page.
+    When the newest step is an assertion, walk back to the interaction that
+    preceded it (click, fill, navigate). An assertion with no interaction
+    before it returns ``None`` - there is nothing to replay.
+    """
+    if not steps:
+        return None
+
+    failed = [index for index, step in enumerate(steps) if (step.get("result") or {}).get("status") == "failed"]
+    index = failed[-1] if failed else len(steps) - 1
+
+    while index >= 0 and str(steps[index].get("type") or "").lower() in _ASSERTION_STEP_TYPES:
+        index -= 1
+
+    if index < 0:
+        return None
+    return steps[index]
+
+
+def repair_step_context(test_file: str | Path, test_name: str) -> tuple[str, str, str]:
+    """``(step_label, page_url, step_type)`` of the step a human should replay.
+
+    j-0248: the manual fix needs the step's own label and type, so the lesson it
+    writes answers the same placeholder next time (``CLICK`` vs ``FILL``
+    matters to the scorer). Read from the evidence sidecar beside the generated
+    test; best-effort - a missing or unreadable sidecar returns empty strings and
+    the learning step then refuses rather than inventing a description.
+    """
+    if not test_file or not test_name:
+        return "", "", ""
+
+    evidence_dir = Path(test_file).parent / "evidence"
+    if not evidence_dir.is_dir():
+        return "", "", ""
+
+    for sidecar in evidence_dir.glob("*.evidence.json"):
+        if sidecar.name[: -len(".evidence.json")].split("[")[0] != test_name:
+            continue
+        try:
+            from src.gantt_utils import safe_read_sidecar
+
+            data = safe_read_sidecar(sidecar)
+        except Exception:
+            return "", "", ""
+        if not isinstance(data, dict):
+            return "", "", ""
+        step = pick_repair_step(data.get("steps") or [])
+        if not step:
+            return "", "", ""
+        label = str(step.get("label") or step.get("type") or "")
+        return label, str(step.get("url") or ""), str(step.get("type") or "")
+    return "", "", ""
+
+
+@dataclass
+class ManualFixOutcome:
+    """What an attempt to apply a human's Fix Locator choice actually did.
+
+    ``applied`` is the only thing that permits learning: a session that
+    captured nothing, a patch that failed, or an empty original locator all
+    leave it False and teach the library nothing (j-0248).
+
+    Attributes:
+        applied: True when the patched source was written to the test file.
+        reason: Why not, when ``applied`` is False; "" otherwise.
+        patch: The patch that was applied, when one was.
+        learned: The learning outcome (``inserted``/``exists``/``reason``) -
+            present even when nothing was learned, so the UI can say why.
+    """
+
+    applied: bool
+    reason: str = ""
+    patch: LocatorPatch | None = None
+    learned: dict[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.learned is None:
+            self.learned = {}
+
+
+def apply_fix_from_codegen(
+    outcome: CodegenOutcome,
+    *,
+    original_locator: str,
+    line_number: int,
+    test_file: str | Path,
+    step_label: str = "",
+    step_type: str = "",
+    page_url: str = "",
+    site_name: str = "",
+    store: Any | None = None,
+) -> ManualFixOutcome:
+    """Apply the human's captured locator, and teach the library only if it lands.
+
+    This is the manual Fix Locator path end to end (j-0248): the browser hands
+    back a captured locator, it is written into the test file, and - only when
+    that write really happened - the choice is recorded as a learned pattern for
+    that site, through the same write route the automatic self-healing path
+    uses. Everything the scorer needs travels with it: the action (from the
+    step type), the description (the step label), the chosen selector and the
+    site hash from ``golden_site_hash(site_name, page_url)``.
+
+    Requirements 4 and 5 of the job live here, in one place a test can drive:
+
+    * an abandoned session, a failed session, a recording with no locator, or a
+      patch that fails to apply all return ``applied=False`` and write nothing;
+    * the fix is applied even when learning is switched off or has no usable
+      description/site - the human's correction is never lost to a learning
+      problem, the outcome just says why it was not learned.
+
+    Args:
+        outcome: What the codegen session produced.
+        original_locator: The broken locator in the test file.
+        line_number: 1-based line to patch (the failing line when known).
+        test_file: The generated test file to patch.
+        step_label: Evidence step label - the description the scorer matches on.
+        step_type: Evidence step type (``click`` / ``fill`` / ...).
+        page_url: The page the fix was made on - the site identity's source.
+        site_name: Dataset site name when known; "" for a customer site.
+        store: Injectable RAG store (tests); defaults to the production store.
+
+    Returns:
+        A :class:`ManualFixOutcome`.
+    """
+    if not outcome.captured or not outcome.locator:
+        return ManualFixOutcome(applied=False, reason=outcome.reason or "no locator captured")
+
+    if not str(original_locator).strip():
+        return ManualFixOutcome(applied=False, reason="no original locator to replace")
+
+    patch = LocatorPatch(
+        original_locator=str(original_locator),
+        repaired_locator=str(outcome.locator),
+        line_number=line_number,
+        test_file=test_file,
+    )
+    try:
+        apply_patch_to_file(patch)
+    except Exception as exc:  # LocatorRepairError and anything I/O-shaped
+        return ManualFixOutcome(applied=False, reason=f"could not patch: {exc}")
+
+    learned: dict[str, Any] = {"inserted": 0, "exists": 0, "reason": "not attempted"}
+    try:
+        from src.rag_learn import learn_from_manual_fix
+
+        learned = learn_from_manual_fix(
+            step_type=step_type,
+            description=step_label,
+            locator=str(outcome.locator),
+            base_url=page_url,
+            site_name=site_name,
+            store=store,
+        )
+    except Exception as exc:  # learning must never cost the human their fix
+        learned = {"inserted": 0, "exists": 0, "reason": f"learning failed: {exc}"}
+
+    return ManualFixOutcome(applied=True, patch=patch, learned=learned)
+
+
 _CODEGEN_CALL = re.compile(
     r"(?m)^[ \t]*page[.](locator|get_by_test_id|get_by_label|get_by_text|get_by_title|get_by_placeholder|get_by_role)[(]",
 )

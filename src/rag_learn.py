@@ -473,6 +473,172 @@ def _description_from_evidence(
     return None
 
 
+# ---------------------------------------------------------------------------
+# The one write route (j-0248)
+# ---------------------------------------------------------------------------
+
+#: Provenance label for a lesson learned from a human's manual Fix Locator click.
+#: Same record type as the other learned positives (``LearnedPattern``,
+#: ``entry_type="learned"``); the label says where the confidence came from.
+SOURCE_MANUAL_FIX = "manual_fix"
+
+
+def learned_part_enabled() -> bool:
+    """Whether the learned part of RAG is on (j-0247's ``RAG_LEARNED`` switch).
+
+    j-0247 adds ``src/rag_switches.py``; it may not be on this branch, so the
+    switch is read through that module when it is importable and, when it is
+    not, ``RAG_LEARNED`` is read here with the same rule: unset or ``1`` is on,
+    ``0`` is off, anything else is **refused** (treated as off) - a typo must
+    never quietly write a lesson. Once j-0247 merges, its module is the
+    authority and this fallback stops being used.
+    """
+    try:
+        import importlib
+
+        switches = importlib.import_module("src.rag_switches")
+    except ImportError:
+        return os.environ.get("RAG_LEARNED", "").strip() in ("", "1")
+    try:
+        return bool(switches.part_enabled(switches.PART_LEARNED))
+    except Exception:
+        # RAGSwitchError (a bad value) is not "on": refuse to write.
+        logger.warning("RAG_LEARNED holds an unreadable value - refusing to learn anything this run")
+        return False
+
+
+def record_learned_locator(
+    *,
+    action_type: str,
+    description: str,
+    locator: str,
+    site_digest: str,
+    source: str,
+    confidence: float = 1.0,
+    store: RAGStore | None = None,
+) -> dict[str, Any]:
+    """Write one verified locator to the store - the single route both paths use.
+
+    The automatic self-healing path (``learn_from_patch``) and the manual Fix
+    Locator path (``learn_from_manual_fix``) both come through here, so there is
+    one write, one set of guards and one record type (j-0248).
+
+    Refusals never raise and never write. A refusal is a first-class outcome so
+    the caller can say why nothing was learned:
+
+    * the learned part is switched off (``RAG_LEARNED=0``);
+    * the action, the description or the chosen selector is missing - a lesson
+      with no description would match every placeholder, which is the general
+      lesson the owner forbade;
+    * ``site_digest`` is empty: an empty or site-agnostic site hash is
+      **forbidden** on this path, because a lesson with no site is a lesson for
+      every site.
+
+    Args:
+        action_type: Resolver action (``CLICK`` / ``FILL`` / ``ASSERT`` / ...).
+        description: The placeholder description the selector answers.
+        locator: The verified selector.
+        site_digest: ``site_hash`` of the site identity (see
+            :func:`src.rag_bundled.golden_site_hash`).
+        source: Provenance label (``self_healing``, ``manual_fix``, ...).
+        confidence: 1.0 for a human- or healer-verified locator.
+        store: Injectable store (tests); defaults to the production store.
+
+    Returns:
+        ``{"inserted": 0|1, "exists": 0|1, "reason": <"" when written>}``.
+    """
+    if not learned_part_enabled():
+        logger.info("RAG_LEARNED=0 - learning is off, nothing written")
+        return {"inserted": 0, "exists": 0, "reason": "learning is off (RAG_LEARNED=0)"}
+    if not str(action_type).strip():
+        return {"inserted": 0, "exists": 0, "reason": "no usable action - nothing to learn against"}
+    if not str(description).strip():
+        return {
+            "inserted": 0,
+            "exists": 0,
+            "reason": "no usable description - a lesson without one would match every placeholder",
+        }
+    if not str(locator).strip():
+        return {"inserted": 0, "exists": 0, "reason": "no usable locator"}
+    if not str(site_digest).strip():
+        return {
+            "inserted": 0,
+            "exists": 0,
+            "reason": "no site hash - a site-agnostic lesson is refused on this path",
+        }
+
+    pattern = LearnedPattern(
+        action_type=str(action_type).strip(),
+        description=str(description).strip(),
+        locator=str(locator).strip(),
+        site_hash=str(site_digest).strip(),
+        confidence=confidence,
+        source=source,
+    )
+    store = store or build_default_store()
+    status, _hit = store.upsert_pattern(pattern)
+    return (
+        {"inserted": 1, "exists": 0, "reason": ""}
+        if status == "inserted"
+        else {"inserted": 0, "exists": 1, "reason": ""}
+    )
+
+
+def learn_from_manual_fix(
+    *,
+    step_type: str,
+    description: str,
+    locator: str,
+    base_url: str,
+    site_name: str = "",
+    store: RAGStore | None = None,
+) -> dict[str, Any]:
+    """Learn one APPLIED manual Fix Locator choice, at that site only (j-0248).
+
+    The owner's word (2026-10-30): "manual fix should write, i think it should
+    be specific to the site rather than general across multiple sites." So the
+    site hash is computed with ``golden_site_hash(site_name, base_url)`` - the
+    same function the bundled seed and the scorer gate on - and an empty result
+    is refused rather than written.
+
+    Args:
+        step_type: Evidence step type of the fixed step (``click`` / ``fill`` /
+            ``assertion`` / ``select``); mapped to the resolver action.
+        description: The step label - the description the scorer matches on.
+        locator: The selector the human chose.
+        base_url: The page the fix was made on (its host[:port] is hashed).
+        site_name: Dataset site name when known (the mock sites hash by name);
+            empty for a customer site, whose identity comes from ``base_url``.
+        store: Injectable store (tests); defaults to the production store.
+
+    Returns:
+        ``{"inserted": 0|1, "exists": 0|1, "reason": ...}`` - never raises, so a
+        learning failure can never cost the human their fix.
+    """
+    try:
+        from src.rag_bundled import golden_site_hash
+
+        action = _STEP_TYPE_TO_ACTION.get(str(step_type).strip().lower(), "")
+        if not action:
+            return {
+                "inserted": 0,
+                "exists": 0,
+                "reason": f"no usable action for step type {step_type!r}",
+            }
+        digest = golden_site_hash(str(site_name), str(base_url))
+        return record_learned_locator(
+            action_type=action,
+            description=description,
+            locator=locator,
+            site_digest=digest,
+            source=SOURCE_MANUAL_FIX,
+            store=store,
+        )
+    except Exception as exc:  # learning must never break the human's fix
+        logger.warning("Manual-fix learn failed (non-fatal): %s", exc)
+        return {"inserted": 0, "exists": 0, "reason": f"learning failed: {exc}"}
+
+
 def pattern_from_patch(
     old_text: str,
     new_text: str,
@@ -547,8 +713,20 @@ def learn_from_patch(
         )
         if pattern is None:
             return {"inserted": 0, "exists": 0}
-        store = store or build_default_store()
-        status, _hit = store.upsert_pattern(pattern)
+        # j-0248: one write route for the automatic path and the manual one.
+        outcome = record_learned_locator(
+            action_type=pattern.action_type,
+            description=pattern.description,
+            locator=pattern.locator,
+            site_digest=pattern.site_hash,
+            source=pattern.source,
+            confidence=pattern.confidence,
+            store=store,
+        )
+        if not (outcome["inserted"] or outcome["exists"]):
+            logger.info("Self-healing pattern not written: %s", outcome["reason"])
+            return {"inserted": 0, "exists": 0}
+        status = "inserted" if outcome["inserted"] else "exists"
         # AI-058: the OLD selector is a CONFIRMED negative. The self-heal
         # replacement pair (old selector failed → new selector verified) is the
         # highest-precision contrastive signal the store can receive.
@@ -563,7 +741,7 @@ def learn_from_patch(
                 source="learned_negative",
             )
             try:
-                store.upsert_negative_pattern(negative)
+                (store or build_default_store()).upsert_negative_pattern(negative)
             except Exception as exc:
                 logger.warning("Self-healing negative write failed (non-fatal): %s", exc)
         logger.info(

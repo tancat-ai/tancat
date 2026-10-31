@@ -825,7 +825,7 @@ def repair_locator_cli(session: Any) -> None:
     Lists failed tests classified as locator failures and lets the user
     pick one to repair via headed Playwright codegen.
     """
-    from src.locator_repair import LocatorPatch, apply_patch_to_file, run_codegen_session
+    from src.locator_repair import apply_fix_from_codegen, repair_step_context, run_codegen_session
 
     run_result = session.pipeline_run_result
     if not is_run_result(run_result) or not run_result.results:
@@ -903,21 +903,35 @@ def repair_locator_cli(session: Any) -> None:
         print(yellow("  No locator captured — the browser was closed or nothing was clicked."))
         return
 
-    # Apply the patch
+    # Apply the patch, and - only if it lands - teach the library at this site
+    # (j-0248). The UI repair button goes through the same call.
     test_file = result.file_path
-    patch = LocatorPatch(
+    step_label, step_url, step_type = repair_step_context(
+        getattr(session, "pipeline_saved_path", "") or test_file,
+        result.name,
+    )
+    outcome = apply_fix_from_codegen(
+        replacement,
         original_locator=detail.raw_locator or "",
-        repaired_locator=replacement.locator,
         line_number=detail.line_number or 1,
         test_file=test_file,
+        step_label=step_label,
+        step_type=step_type,
+        page_url=step_url or failure_url,
     )
 
-    try:
-        apply_patch_to_file(patch)
-        print(green(f"  Patched `{replacement.locator}` into {test_file}"))
-        print(yellow("  Run 'Run Generated Tests' to verify the fix."))
-    except Exception as exc:
-        print(red(f"  Patch failed: {exc}"))
+    if not outcome.applied:
+        print(red(f"  Patch failed: {outcome.reason}"))
+        return
+
+    print(green(f"  Patched `{replacement.locator}` into {test_file}"))
+    learned = outcome.learned or {}
+    if learned.get("inserted") or learned.get("exists"):
+        verb = "Learned" if learned.get("inserted") else "Already known, reinforced"
+        print(green(f"  {verb} for this site only - the next run on {step_url or failure_url} can use it."))
+    else:
+        print(yellow(f"  Learning skipped: {learned.get('reason', 'unknown reason')}"))
+    print(yellow("  Run 'Run Generated Tests' to verify the fix."))
 
 
 def self_heal_cli(session: Any) -> None:

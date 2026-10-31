@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
 
 import streamlit as st
 
 from src.coverage_utils import build_coverage_analysis, build_coverage_display_rows
 from src.failure_classifier import classify_failure
-from src.locator_repair import SetupScriptResult, run_codegen_session, translate_setup_step_to_python
+from src.locator_repair import (
+    SetupScriptResult,
+    pick_repair_step,
+    repair_step_context,
+    run_codegen_session,
+    translate_setup_step_to_python,
+)
 from src.pytest_output_parser import RunResult, TestResult
 from src.self_healing import HealingReport, SelfHealingRunner
 from src.ui.ui_results import _handle_run_tests
@@ -1038,70 +1043,32 @@ def _render_self_healing_results(report: HealingReport) -> None:
                 st.rerun()
 
 
-_ASSERTION_STEP_TYPES = frozenset({"assertion", "assert", "page_expectation", "url_assertion"})
-
-
-def _pick_repair_step(steps: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Return the step a human can act on, not the assertion after it.
-
-    The repair browser must open on the state BEFORE the failed assertion, so
-    the human can repeat the click that should have reached the right page.
-    When the newest step is an assertion, walk back to the interaction that
-    preceded it (click, fill, navigate). An assertion with no interaction
-    before it returns ``None`` - there is nothing to replay.
-    """
-    if not steps:
-        return None
-
-    failed = [index for index, step in enumerate(steps) if (step.get("result") or {}).get("status") == "failed"]
-    index = failed[-1] if failed else len(steps) - 1
-
-    while index >= 0 and str(steps[index].get("type") or "").lower() in _ASSERTION_STEP_TYPES:
-        index -= 1
-
-    if index < 0:
-        return None
-    return steps[index]
+# j-0248: the picker and the sidecar read live in ``src.locator_repair`` so the
+# CLI repair surface and this one cannot drift apart. Re-exported under the name
+# this module (and its tests) already use.
+_pick_repair_step = pick_repair_step
 
 
 def _failure_context(
     saved_path: str,
     test_name: str,
     run_result: RunResult | None,
-) -> tuple[str, str, int | None]:
+) -> tuple[str, str, int | None, str]:
     """Best-effort failure context for the repair flow (B-041).
 
-    Returns (step_label, page_url, line_number):
+    Returns (step_label, page_url, line_number, step_type):
     - step_label: the label of the failed step from the evidence sidecar
     - page_url:   the URL of that step (so the repair browser opens there,
                   not at the starting URL)
     - line_number: the failing source line from the pytest raw output
       (``test_x.py:NN: in test_name``) so the patch lands on the right line
       instead of line 1 (where ``apply_patch``'s search window missed it).
+    - step_type:  the step's own type (``click`` / ``fill`` / ...). j-0248:
+                  a hand fix is learned with the action the step really used,
+                  so the lesson answers the same kind of placeholder next time.
     """
-    step_label = ""
-    page_url = ""
     line_no: int | None = None
-
-    if saved_path:
-        evidence_dir = Path(saved_path).parent / "evidence"
-        if evidence_dir.exists():
-            for sidecar in evidence_dir.glob("*.evidence.json"):
-                if sidecar.name[: -len(".evidence.json")].split("[")[0] != test_name:
-                    continue
-                try:
-                    from src.gantt_utils import safe_read_sidecar
-
-                    data = safe_read_sidecar(sidecar)
-                    if isinstance(data, dict):
-                        steps = data.get("steps") or []
-                        step = _pick_repair_step(steps)
-                        if step:
-                            step_label = str(step.get("label") or step.get("type") or "")
-                            page_url = str(step.get("url") or "")
-                except Exception:
-                    pass
-                break
+    step_label, page_url, step_type = repair_step_context(saved_path, test_name)
 
     if run_result and run_result.raw_output:
         match = re.search(
@@ -1111,7 +1078,7 @@ def _failure_context(
         if match:
             line_no = int(match.group(2))
 
-    return step_label, page_url, line_no
+    return step_label, page_url, line_no, step_type
 
 
 def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult | None = None) -> None:
@@ -1231,8 +1198,9 @@ def _render_failed_tests_repair(results: list[TestResult], run_result: RunResult
                         # used to open at the starting URL and the patch search
                         # window missed the failing line. Capture the context
                         # from the evidence sidecar + pytest output here.
-                        step_label, step_url, line_no = _failure_context(saved_path, result.name, run_result)
+                        step_label, step_url, line_no, step_type = _failure_context(saved_path, result.name, run_result)
                         st.session_state.repair_step_label = step_label
+                        st.session_state.repair_step_type = step_type
                         st.session_state.repair_failure_url = step_url
                         st.session_state.repair_line_number = line_no
                         if step_url:
@@ -1297,7 +1265,7 @@ def _render_repair_waiting_panel() -> None:
 
 def _render_repair_browser_session() -> None:
     """Run the headed browser codegen session and apply the patch."""
-    from src.locator_repair import LocatorPatch, apply_patch_to_file
+    from src.locator_repair import apply_fix_from_codegen
 
     detail = st.session_state.get("repair_target")
     base_url = st.session_state.get("starting_url", "") or st.session_state.get("last_starting_url", "")
@@ -1330,30 +1298,45 @@ def _render_repair_browser_session() -> None:
         # Previously line_number was always 1 (classifier never set it), so the
         # window missed the call and patches silently failed.
         line_number = st.session_state.get("repair_line_number") or (detail.line_number if detail else None) or 1
-        patch = LocatorPatch(
+        # j-0248: apply the human's choice and, only if it really lands, teach
+        # the library at this site. One call, so "applied" and "learned" cannot
+        # disagree.
+        result = apply_fix_from_codegen(
+            outcome,
             original_locator=detail.raw_locator if detail and detail.raw_locator else "",
-            repaired_locator=replacement,
             line_number=line_number,
             test_file=st.session_state.get("repair_test_file", st.session_state.get("pipeline_saved_path", "")),
+            step_label=st.session_state.get("repair_step_label", ""),
+            step_type=st.session_state.get("repair_step_type", ""),
+            page_url=failure_url,
         )
-        try:
-            apply_patch_to_file(patch)
-
+        if result.applied and result.patch is not None:
             if (
                 st.session_state.get("pipeline_results")
                 and not Path(st.session_state.get("pipeline_saved_path", "")).is_dir()
             ):
-                st.session_state.pipeline_results = Path(patch.test_file).read_text(encoding="utf-8")
+                st.session_state.pipeline_results = Path(result.patch.test_file).read_text(encoding="utf-8")
+
+            learned = result.learned or {}
+            if learned.get("inserted") or learned.get("exists"):
+                learned_line = (
+                    f"🧠 Learned for this site only - the next run on `{failure_url}` can use it.\n"
+                    if learned.get("inserted")
+                    else "🧠 Already known for this site - reinforced.\n"
+                )
+            else:
+                learned_line = f"Learning skipped: {learned.get('reason', 'unknown reason')}\n"
 
             st.session_state.repair_status = "patched"
             st.session_state.repair_message = (
                 f"✅ Locator patched: `{replacement}`\n"
-                f"Changed line(s) in `{patch.test_file}`\n"
+                f"Changed line(s) in `{result.patch.test_file}`\n"
+                f"{learned_line}"
                 "Click **▶️ Run Generated Tests** to verify the fix."
             )
-        except Exception as exc:
+        else:
             st.session_state.repair_status = "error"
-            st.session_state.repair_message = f"❌ Could not patch: {exc}"
+            st.session_state.repair_message = f"❌ Could not patch: {result.reason}"
 
     st.rerun()
 
