@@ -490,6 +490,61 @@ class TestSplitIsRecordedOnEveryFigure:
             assert cell["server"]["thinking"] == "off", name
             assert cell["server"]["temp"] == 0.0, name
             assert "eval-005" in str(cell["note"]), f"{name}: the eval-005 caveat must be stated"
+            # d-0087: one run carries one ctx number, pinned to the captured manifests.
+            assert "262144 is settled" in str(cell["note"]), (
+                f"{name}: the ctx value must be pinned to the captured manifests, not left to the handover"
+            )
+
+    def test_the_record_says_what_the_gate_is_and_what_the_30_is_for(self) -> None:
+        """The 113 in full mode is the only gate; the 30 is a regression / pre-launch check.
+
+        Owner's decision, 2026-11-01, his words: "i don't really understand the second gate
+        yes so just regression for now but we should look at it as a pre launch check". A
+        reader who finds only "the target reads on the full 113" can still think the 30 is a
+        gate that fails at 40%, or that the static 48/113 cell is a target. This pins both
+        statements - in the record and in the README - so a later edit cannot quietly drop
+        either one.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        targets = payload["targets"]
+
+        gate = str(targets.get("gate1_gate_cadence") or "").lower()
+        assert gate, (
+            "the record must state that the full 113 in full mode is the only gate "
+            "(targets.gate1_gate_cadence) - without it a reader can still read the 30 as a gate"
+        )
+        assert "113" in gate, "the gate statement must name the 113"
+        assert "--regenerate" in gate, "the gate statement must name its mode"
+        assert "only gate" in gate, "the 113 in full mode is the ONLY gate"
+        assert "milestone" in gate and "release" in gate, "the gate runs at milestones and at release"
+
+        floor = str(targets.get("heldout_split_role") or "").lower()
+        assert floor, (
+            "the record must state what the held-out 30 is for "
+            "(targets.heldout_split_role) - without it a 40% reading looks like a failed threshold"
+        )
+        assert "not a gate" in floor, "the held-out 30 must be stated as NOT a gate"
+        assert "regression" in floor
+        assert "every change" in floor, "the regression check runs on every change"
+        assert "resolver only" in floor, "the regression check is resolver only"
+        assert "no model" in floor and "no gpu" in floor, "the regression check uses no model and no GPU"
+        assert "12/30" in floor, "the regression floor is the recorded 12/30"
+        assert "pre-launch" in floor, "the 30 is reviewed as a pre-launch check"
+
+        # Him, the date and his words travel with the statements.
+        joined = " ".join(str(value) for value in targets.values()).lower()
+        assert "2026-11-01" in joined, "the statements must carry the owner's date"
+        assert "i don't really understand the second gate" in joined, "the owner's words must be quoted"
+        assert "pre launch check" in joined
+
+        # The README says the same two things, so the two copies cannot drift.
+        readme = (_EVAL_DIR / "README.md").read_text(encoding="utf-8").lower()
+        assert "is the only gate" in readme, "README: the 113 in full mode is the only gate"
+        assert "is not a gate" in readme, "README: the held-out 30 is not a gate"
+        assert "regression check" in readme
+        assert "12/30" in readme
+        assert "pre-launch check" in readme
+        assert "2026-11-01" in readme, "README: the statements must carry the owner's date"
 
     def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
         """The validator, not the reader, is what refuses a cross-split claim."""

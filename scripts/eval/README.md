@@ -200,6 +200,14 @@ read against - neither mode may be read as the other. The held-out split stays a
 measurement and as a diagnostic of how much of a score is recall, but it is no longer the
 target's home. The target itself is unchanged (`>=90%` gate 1, zero hollow passes gate 2).
 
+**The full 113 in full `--regenerate` (model) mode is the only gate** - run at milestones and
+at release. **The held-out 30 is not a gate**: it is a static regression check run on every
+change (resolver only, no model, no GPU), held to "no worse than the recorded 12/30", and it
+is reviewed as a **pre-launch check** at launch. Owner's decision, 2026-11-01, his words:
+*"i don't really understand the second gate yes so just regression for now but we should
+look at it as a pre launch check"*. A 40% reading on the 30 is a regression floor, not a
+threshold that failed; and the static full-113 cell (48/113) is not a target either.
+
 `--heldout` on `eval_resolver.py` produces the held-out figure: it excludes the
 split's story files from the seed and scores only those stories, in a store of
 its own. The shipped product pack is unchanged - all 113 patterns ship.
