@@ -538,13 +538,28 @@ class TestSplitIsRecordedOnEveryFigure:
         assert "pre launch check" in joined
 
         # The README says the same two things, so the two copies cannot drift.
-        readme = (_EVAL_DIR / "README.md").read_text(encoding="utf-8").lower()
+        # Whitespace is collapsed first: the prose is re-wrapped by hand, and a guard
+        # that broke on a newline would train the next editor to delete the assertion.
+        readme = " ".join((_EVAL_DIR / "README.md").read_text(encoding="utf-8").lower().split())
         assert "is the only gate" in readme, "README: the 113 in full mode is the only gate"
+        assert "at milestones and" in readme and "at release" in readme, (
+            "README: the gate's cadence (at milestones and at release) must be stated"
+        )
         assert "is not a gate" in readme, "README: the held-out 30 is not a gate"
         assert "regression check" in readme
+        assert "every change" in readme, "README: the regression check runs on every change"
+        assert "resolver only" in readme
+        assert "no model" in readme and "no gpu" in readme, "README: no model and no GPU"
         assert "12/30" in readme
         assert "pre-launch check" in readme
+        assert "regression floor, not a" in readme, (
+            "README: the 40% reading must be called a regression floor, not a failed threshold"
+        )
         assert "2026-11-01" in readme, "README: the statements must carry the owner's date"
+        assert "i don't really understand the second gate" in readme, (
+            "README: the owner's words must be quoted, not paraphrased"
+        )
+        assert "pre launch check" in readme, "README: the owner's own phrase must survive"
 
     def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
         """The validator, not the reader, is what refuses a cross-split claim."""
