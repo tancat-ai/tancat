@@ -15,6 +15,7 @@ import logging
 import re
 import sqlite3
 import subprocess
+import time
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -289,6 +290,85 @@ def _test_counts(xml_path: Path, output: str) -> tuple[int, int, int, int, float
     return (0, 0, 0, 0, duration, "none")
 
 
+def _counts_from_outcomes(per_test: dict[str, str]) -> tuple[int, int, int, int]:
+    """(total, passed, failed, skipped) from per-test outcomes alone.
+
+    Used on the killed path (d-0084), where there is no finished JUnit file to
+    count: the outcomes pytest had already reported are the only truth there is,
+    and they must be counted rather than discarded.
+    """
+    total = len(per_test)
+    failed = sum(1 for outcome in per_test.values() if outcome in ("FAILED", "ERROR"))
+    skipped = sum(1 for outcome in per_test.values() if outcome == "SKIPPED")
+    return total, total - failed - skipped, failed, skipped
+
+
+#: ``def test_...`` - how many tests a file carries, for the "not run" count.
+#: The emitted tests are one function per test (checked against the committed
+#: 2026-10-31 evidence: eval-005 carries 10 functions and 10 skeletons), so this
+#: is exact for them. A parametrised file would undercount: the field is named
+#: ``tests_collected`` and the note says how it was taken.
+_COLLECTED_TEST_RE = re.compile(r"^def (test_\w+)\s*\(", re.MULTILINE)
+
+
+def _collected_tests(test_file: Path) -> int:
+    """How many test functions the file defines; 0 when it cannot be read."""
+    try:
+        return len(_COLLECTED_TEST_RE.findall(test_file.read_text(encoding="utf-8", errors="replace")))
+    except OSError:
+        return 0
+
+
+def _partial_output(exc: subprocess.TimeoutExpired) -> str:
+    """Whatever the killed process had written to stdout/stderr before the kill."""
+    parts: list[str] = []
+    for stream in (exc.stdout, exc.stderr):
+        if stream is None:
+            continue
+        parts.append(stream.decode("utf-8", "replace") if isinstance(stream, bytes) else str(stream))
+    return "".join(parts)
+
+
+def _write_partial_junit(path: Path, per_test: dict[str, str], *, limit_s: float) -> None:
+    """Write a JUnit XML for the tests a killed run managed to report (d-0084).
+
+    pytest writes its XML at the end of the session, so a run killed by the
+    per-file clock leaves none - and the record then said zero tests ran. The
+    console has already said which tests passed or failed before the kill, so
+    this turns that into the same evidence shape a clean run keeps: a re-score
+    on the kept ``junit/`` sees those outcomes instead of nothing.
+
+    Only the tests that reported get an entry. The ones that never ran are
+    absent here and counted as ``tests_not_run`` on the story - never as zero
+    tests executed.
+    """
+    import xml.etree.ElementTree as ET
+
+    root = ET.Element("testsuites")
+    failures = sum(1 for outcome in per_test.values() if outcome in ("FAILED", "ERROR"))
+    suite = ET.SubElement(
+        root,
+        "testsuite",
+        name="pytest",
+        tests=str(len(per_test)),
+        failures=str(failures),
+        errors="0",
+    )
+    for name, outcome in sorted(per_test.items()):
+        case = ET.SubElement(suite, "testcase", classname="pytest", name=name)
+        if outcome in ("FAILED", "ERROR"):
+            failure = ET.SubElement(
+                case,
+                "failure",
+                message=f"killed at the per-file clock ({limit_s:g}s) after this test reported",
+            )
+            failure.text = "the run was killed at the per-file clock; this is the outcome pytest had already reported"
+        elif outcome == "SKIPPED":
+            ET.SubElement(case, "skipped", message="reported before the run was killed")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
+
+
 def run_generated_tests(
     test_file: Path,
     pytest_timeout: float = 120.0,
@@ -296,6 +376,7 @@ def run_generated_tests(
     junit_dir: Path | None = None,
     log_dir: Path | None = None,
     count_source_out: dict[str, str] | None = None,
+    timeout_out: dict[str, Any] | None = None,
 ) -> tuple[int, int, int, int, float, str, dict[str, str]]:
     """Execute a single test file via pytest and parse results.
 
@@ -325,6 +406,7 @@ def run_generated_tests(
             f"--junitxml={xml_path}",
             "--override-ini=log_cli_level=ERROR",
         ]
+        started = time.monotonic()
         try:
             result = subprocess.run(
                 cmd,
@@ -332,9 +414,36 @@ def run_generated_tests(
                 text=True,
                 timeout=pytest_timeout + 30,
             )
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             # B-061: the marker, not a zero count, carries the truth here.
-            return (0, 0, 0, 0, 0.0, PYTEST_TIMEOUT_MARKER, {})
+            # d-0084: but a killed run is evidence, not absence. Keep what the
+            # tests that DID run reported - their console output, their JUnit
+            # entries, their outcomes - and let the caller count the rest as
+            # "not run" rather than as "zero executed".
+            limit_s = pytest_timeout + 30
+            elapsed_s = round(time.monotonic() - started, 1)
+            partial = _partial_output(exc)
+            per_test = _parse_per_test_results(partial)
+            total, passed, failed, skipped = _counts_from_outcomes(per_test)
+            if junit_dir is not None:
+                _write_partial_junit(junit_dir / f"{test_file.stem}.xml", per_test, limit_s=limit_s)
+            if log_dir is not None:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                (log_dir / f"{test_file.stem}.log").write_text(partial, encoding="utf-8")
+            if count_source_out is not None:
+                count_source_out["source"] = "log" if per_test else "none"
+            if timeout_out is not None:
+                timeout_out.update(
+                    {
+                        "killed": True,
+                        "clock": "per-file",
+                        "limit_s": limit_s,
+                        "elapsed_s": elapsed_s,
+                        "tests_collected": _collected_tests(test_file),
+                        "tests_run": total,
+                    }
+                )
+            return (total, passed, failed, skipped, elapsed_s, PYTEST_TIMEOUT_MARKER, per_test)
         output = result.stdout + result.stderr
         # JUnit XML is the primary source; console parsing is the fallback.
         per_test = _parse_junit_xml(xml_path)
@@ -410,19 +519,35 @@ def run_full_validation(
         if evidence_dir is not None:
             keep = {"junit_dir": evidence_dir / "junit", "log_dir": evidence_dir / "pytest"}
         count_source: dict[str, str] = {}
+        timeout_info: dict[str, Any] = {}
         total, passed, failed, skipped, duration, raw_output, per_test = run_generated_tests(
             test_file,
             pytest_timeout=pytest_timeout,
             count_source_out=count_source,
+            timeout_out=timeout_info,
             **keep,
         )
 
         # B-061: a timeout is its own state — the report must say so instead of
         # printing "Tests executed: 0" (identical to the missing-conftest trap).
-        story.tests_timed_out = raw_output.strip() == PYTEST_TIMEOUT_MARKER
+        # d-0084: and it must say what the killed run managed to do. "Killed"
+        # alone still reads as "nothing ran"; the three counts below are what
+        # make "killed after 4 of 10" sayable, with the tests that DID run kept.
+        killed = raw_output.strip() == PYTEST_TIMEOUT_MARKER
+        story.tests_timed_out = killed
         story.tests_executed = total
         story.tests_passed = passed
+        story.tests_failed = failed
         story.tests_count_source = count_source.get("source", "")
+        if killed:
+            collected = int(timeout_info.get("tests_collected") or 0)
+            story.tests_not_run = max(collected - total, 0)
+            story.tests_kill_clock = str(timeout_info.get("clock") or "")
+            story.tests_kill_limit_s = timeout_info.get("limit_s")
+            story.tests_kill_elapsed_s = timeout_info.get("elapsed_s")
+            story.tests_collected = collected
+        else:
+            story.tests_not_run = 0
         if outcomes_out is not None:
             outcomes_out[story.story_id] = per_test
 
