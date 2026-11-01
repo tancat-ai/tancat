@@ -17,6 +17,7 @@ figure without both labels, and the committed record is validated against it.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from collections import Counter
 from collections.abc import Sequence
@@ -220,10 +221,11 @@ class TestRecordedFigureNeedsItsLabels:
 class TestRotation:
     """Which story files are held back can rotate, deterministically (j-0244 step 2).
 
-    The owner's decision (2026-10-30): read the 90% gate-1 target against the
-    held-out split, and rotate the split so the sample grows instead of the same
-    30 placeholders being scored forever. The default stays the fixed three so
-    the recorded 2026-10-30 figure keeps reproducing itself.
+    The owner's decision (2026-10-31): the split is a measurement, not the
+    target's home - the 90% gate-1 target is read against the full 113 in full
+    ``--regenerate`` mode. The split still rotates so the sample grows instead of
+    the same 30 placeholders being scored forever. The default stays the fixed
+    three so the recorded 2026-10-30 figure keeps reproducing itself.
     """
 
     def test_the_default_split_is_still_the_three_fixed_files(self) -> None:
@@ -396,6 +398,168 @@ class TestSplitIsRecordedOnEveryFigure:
                 # Rotation cannot weaken the sample quietly: the per-file
                 # breakdown sits beside the number.
                 assert cell["per_file"], name
+
+    def test_the_target_is_read_against_the_full_113_in_full_mode(self) -> None:
+        """The target's home is the full 113 in model mode, and it says so (t-1147).
+
+        j-0244 pointed the target at the held-out split on a brief's own authority.
+        The owner has said otherwise (2026-10-31, his words: "i think it should
+        stay on the harder gate which is the 113"), so this test pins the home and
+        the mode together - a target line that names only one of them is the bug,
+        because the static full-113 cell is 48/113 and the model full-113 cell is
+        102/113, and reading one as the other is how 90% against 113 became
+        ambiguous in the first place.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        targets = payload["targets"]
+
+        home = str(targets["gate1_read_against"])
+        assert "113" in home, "the target's home must name the full 113"
+        assert "held-out" not in home, "the held-out split is a measurement, not the target's home"
+        # Both facts in one line: the split AND the mode that produces the figure.
+        assert "--regenerate" in home and "model" in home, (
+            "the target line must name its mode too - 48/113 static and 102/113 "
+            "full-mode are different numbers and must not be read as one"
+        )
+
+        note = str(targets["gate1_target_note"])
+        assert "113" in note
+        assert "--regenerate" in note
+        assert "48/113" in note, "the static full-113 cell must be named as the other mode, not the target"
+
+    def test_a_recorded_met_verdict_must_name_a_cell_that_exists(self) -> None:
+        """A MET verdict has to rest on a cell in the record, and on that cell's numbers.
+
+        t-1148/d-0083: 58a2581 published "102/113 (90.3%) ... target MET" while
+        nothing in the tracked tree carried 102/113 - a real number with no cell,
+        which is the exact bug the day was about. A verdict may say MET only when
+        it names the cell it rests on, that cell exists, and the score it quotes is
+        the cell's own score. A number with no evidence is a claim, not a reading.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        verdict = str(payload.get("verdict") or "")
+
+        if "target MET" not in verdict:
+            pytest.skip("no MET verdict recorded - nothing to pin")
+
+        named = re.findall(r"\b([A-Za-z0-9_]+\.cells\.[A-Za-z0-9_]+)\b", verdict)
+        assert named, (
+            "a MET verdict must name the cell it rests on (e.g. "
+            "'full_mode_2026_10_31.cells.rag_on_bundled') - a number with no cell is not a reading"
+        )
+
+        quoted = re.search(r"(\d+)/(\d+)\s*\((\d+(?:\.\d+)?)%\)", verdict)
+        assert quoted, "a MET verdict must quote the score it rests on"
+        want_correct, want_total = int(quoted.group(1)), int(quoted.group(2))
+
+        for dotted in named:
+            node: Any = payload
+            for part in dotted.split("."):
+                assert isinstance(node, dict) and part in node, (
+                    f"the MET verdict names {dotted!r}, which is not in the record"
+                )
+                node = node[part]
+            assert isinstance(node, dict), f"{dotted!r} is not a cell"
+            assert node.get("gate1_correct") == want_correct and node.get("gate1_total") == want_total, (
+                f"the MET verdict quotes {want_correct}/{want_total} but "
+                f"{dotted!r} records {node.get('gate1_correct')}/{node.get('gate1_total')}"
+            )
+            assert node.get("split_kind") == "full", f"{dotted!r} must be the full-113 cell, not a held-out one"
+
+    def test_the_full_mode_cell_block_obeys_the_record_rule(self) -> None:
+        """The 2026-10-31 full-mode block validates like the static one (t-1149)."""
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+
+        block = payload.get("full_mode_2026_10_31")
+        if block is None:
+            pytest.skip("no full-mode block recorded yet")
+
+        assert gate_record.validate_record(payload, cells_key="full_mode_2026_10_31") == []
+        # Four legs, and the two that are the same configuration agree exactly.
+        cells = block["cells"]
+        assert set(cells) == {"rag_on_bundled", "rag_off_bundled", "rag_on_empty", "rag_off_empty"}
+        assert (cells["rag_off_bundled"]["gate1_correct"], cells["rag_off_bundled"]["gate2_false_greens"]) == (
+            cells["rag_off_empty"]["gate1_correct"],
+            cells["rag_off_empty"]["gate2_false_greens"],
+        )
+        for name, cell in cells.items():
+            assert cell["split_kind"] == "full", name
+            assert cell["commit"] == "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd", name
+            assert cell["server"]["ctx_size"] == 262144, name
+            assert cell["server"]["flash_attn"] == "on", name
+            assert cell["server"]["thinking"] == "off", name
+            assert cell["server"]["temp"] == 0.0, name
+            assert "eval-005" in str(cell["note"]), f"{name}: the eval-005 caveat must be stated"
+            # d-0087: one run carries one ctx number, pinned to the captured manifests.
+            assert "262144 is settled" in str(cell["note"]), (
+                f"{name}: the ctx value must be pinned to the captured manifests, not left to the handover"
+            )
+
+    def test_the_record_says_what_the_gate_is_and_what_the_30_is_for(self) -> None:
+        """The 113 in full mode is the only gate; the 30 is a regression / pre-launch check.
+
+        Owner's decision, 2026-11-01, his words: "i don't really understand the second gate
+        yes so just regression for now but we should look at it as a pre launch check". A
+        reader who finds only "the target reads on the full 113" can still think the 30 is a
+        gate that fails at 40%, or that the static 48/113 cell is a target. This pins both
+        statements - in the record and in the README - so a later edit cannot quietly drop
+        either one.
+        """
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        targets = payload["targets"]
+
+        gate = str(targets.get("gate1_gate_cadence") or "").lower()
+        assert gate, (
+            "the record must state that the full 113 in full mode is the only gate "
+            "(targets.gate1_gate_cadence) - without it a reader can still read the 30 as a gate"
+        )
+        assert "113" in gate, "the gate statement must name the 113"
+        assert "--regenerate" in gate, "the gate statement must name its mode"
+        assert "only gate" in gate, "the 113 in full mode is the ONLY gate"
+        assert "milestone" in gate and "release" in gate, "the gate runs at milestones and at release"
+
+        floor = str(targets.get("heldout_split_role") or "").lower()
+        assert floor, (
+            "the record must state what the held-out 30 is for "
+            "(targets.heldout_split_role) - without it a 40% reading looks like a failed threshold"
+        )
+        assert "not a gate" in floor, "the held-out 30 must be stated as NOT a gate"
+        assert "regression" in floor
+        assert "every change" in floor, "the regression check runs on every change"
+        assert "resolver only" in floor, "the regression check is resolver only"
+        assert "no model" in floor and "no gpu" in floor, "the regression check uses no model and no GPU"
+        assert "12/30" in floor, "the regression floor is the recorded 12/30"
+        assert "pre-launch" in floor, "the 30 is reviewed as a pre-launch check"
+
+        # Him, the date and his words travel with the statements.
+        joined = " ".join(str(value) for value in targets.values()).lower()
+        assert "2026-11-01" in joined, "the statements must carry the owner's date"
+        assert "i don't really understand the second gate" in joined, "the owner's words must be quoted"
+        assert "pre launch check" in joined
+
+        # The README says the same two things, so the two copies cannot drift.
+        # Whitespace is collapsed first: the prose is re-wrapped by hand, and a guard
+        # that broke on a newline would train the next editor to delete the assertion.
+        readme = " ".join((_EVAL_DIR / "README.md").read_text(encoding="utf-8").lower().split())
+        assert "is the only gate" in readme, "README: the 113 in full mode is the only gate"
+        assert "at milestones and" in readme and "at release" in readme, (
+            "README: the gate's cadence (at milestones and at release) must be stated"
+        )
+        assert "is not a gate" in readme, "README: the held-out 30 is not a gate"
+        assert "regression check" in readme
+        assert "every change" in readme, "README: the regression check runs on every change"
+        assert "resolver only" in readme
+        assert "no model" in readme and "no gpu" in readme, "README: no model and no GPU"
+        assert "12/30" in readme
+        assert "pre-launch check" in readme
+        assert "regression floor, not a" in readme, (
+            "README: the 40% reading must be called a regression floor, not a failed threshold"
+        )
+        assert "2026-11-01" in readme, "README: the statements must carry the owner's date"
+        assert "i don't really understand the second gate" in readme, (
+            "README: the owner's words must be quoted, not paraphrased"
+        )
+        assert "pre launch check" in readme, "README: the owner's own phrase must survive"
 
     def test_a_cell_may_not_claim_comparability_across_splits(self) -> None:
         """The validator, not the reader, is what refuses a cross-split claim."""

@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         print("\n" + "=" * 70)
         print(
             f"GATE 1 (resolution accuracy): {correct}/{total} = {report.resolution_accuracy():.1f}%  "
-            "(the >= 90% target is read against the held-out split - see scripts/eval/README.md)"
+            "(the >= 90% target is read against the full 113 in full --regenerate mode - see scripts/eval/README.md)"
         )
         print(f"GATE 2 (hollow passes):       {hollow}  (need 0)")
         print("=" * 70)

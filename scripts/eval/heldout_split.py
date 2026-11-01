@@ -6,9 +6,12 @@ tool was handed their answers. The eval therefore scores a **held-out split**:
 whole story files that are excluded from the seed (``exclude=`` on
 ``src.rag_bundled.load_golden_patterns`` / ``ensure_bundled_seeded``).
 
-The owner's decision (2026-10-30): the 90% gate-1 target is read against that
-split, and **which files are held back rotates each run**, so the sample grows
-instead of the same 30 placeholders being scored forever.
+The 90% gate-1 target is **not** read against that split (owner's decision,
+2026-10-31, his words: "i think it should stay on the harder gate which is the
+113"): the target is read against the full 113 placeholders in full
+``--regenerate`` (model) mode. The split stays as a measurement - how much of a
+score is recall - and **which files are held back rotates each run**, so the
+sample grows instead of the same 30 placeholders being scored forever.
 
 **A split holds out whole sites, not single files (t-1119, j-0244 step 3).** The
 seed's +20 golden bonus gates on the pattern's ``site_hash``, not on the file
