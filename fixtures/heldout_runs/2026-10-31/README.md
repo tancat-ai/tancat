@@ -46,10 +46,10 @@ and the parent README says they stay out - and the harness's `out/evidence`
 directory, which is 224 MB of screenshots captured during test execution.
 
 **Machine-neutral**, like every published run: pytest's `hostname` attribute is
-removed from every `junit/*.xml`, and the absolute worktree prefix
-(`C:\Users\...\.worktrees\maker\`) is stripped from skip messages so the paths read
-relative. Test names and outcome counts are unchanged, which is why the numbers
-re-score identically before and after publication.
+removed from every `junit/*.xml`, and the absolute worktree prefix of the machine
+that produced the run is stripped from skip messages so the paths read relative.
+Test names and outcome counts are unchanged, which is why the numbers re-score
+identically before and after publication.
 
 ## Re-score it
 
