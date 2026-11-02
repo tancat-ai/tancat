@@ -402,3 +402,108 @@ class TestFalseGreenRule:
         payload = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
         report = HarnessReport.from_dict(payload)
         assert report.stories[0].resolutions[0].expected_locator == "#backpack"
+
+
+# ---------------------------------------------------------------------------
+# t-1163: a re-score must carry the kill state, not turn it into a clean partial
+# ---------------------------------------------------------------------------
+
+#: A partial run's JUnit: one test passed, two failed, before the clock killed it.
+_PARTIAL_JUNIT = (
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    "<testsuites><testsuite>"
+    '<testcase name="test_01_a[chromium]" />'
+    '<testcase name="test_02_b[chromium]"><failure message="hidden" /></testcase>'
+    '<testcase name="test_03_c[chromium]"><failure message="hidden" /></testcase>'
+    "</testsuite></testsuites>"
+)
+
+
+def _set_killed_state(run_dir: Path, *, with_counts: bool) -> None:
+    """Rewrite results.json so the story records that it was killed mid-run.
+
+    ``with_counts=False`` reproduces the committed 2026-10-31 bundle: written
+    before d-0084, it says ``tests_timed_out`` and nothing else. The counts are
+    then genuinely absent and must be reported as such, never as zero.
+    """
+    payload = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+    story = payload["stories"][0]
+    story["tests_timed_out"] = True
+    if with_counts:
+        story["tests_executed"] = 3
+        story["tests_passed"] = 1
+        story["tests_failed"] = 2
+        story["tests_not_run"] = 4
+        story["tests_collected"] = 7
+        story["tests_kill_clock"] = "per-file"
+        story["tests_kill_limit_s"] = 730.0
+        story["tests_kill_elapsed_s"] = 746.0
+    (run_dir / "results.json").write_text(json.dumps(payload), encoding="utf-8")
+    junit = run_dir / "junit" / f"{emitted_filename('eval-999').replace('.py', '.xml')}"
+    if with_counts:
+        junit.write_text(_PARTIAL_JUNIT, encoding="utf-8")
+    else:
+        # The committed bundle has no junit for the killed story either: pytest
+        # never finished its session, so there was no XML to copy. With no record
+        # and no junit, the failed/not-run counts are genuinely unknowable. The
+        # directory still holds another story's junit, as a real multi-story run
+        # does - only this story's was never written.
+        junit.unlink(missing_ok=True)
+        (run_dir / "junit" / "test_eval_998.xml").write_text(_JUNIT, encoding="utf-8")
+
+
+class TestKilledStoryRescore:
+    """t-1163: rescore.py must carry d-0084's kill state (reviewer gap on j-0253)."""
+
+    def test_a_killed_story_rescores_with_the_marker_and_its_counts(self, tmp_path: Path) -> None:
+        dataset_dir, run_dir = _build_run(tmp_path)
+        _set_killed_state(run_dir, with_counts=True)
+
+        report = rescore.rescore(run_dir, dataset_dir)
+        story = report.stories[0]
+
+        assert story.tests_timed_out is True
+        # Executed/passed come from the kept junit; failed/not-run from the record.
+        assert (story.tests_executed, story.tests_passed) == (3, 1)
+        assert (story.tests_failed, story.tests_not_run) == (2, 4)
+        assert story.tests_collected == 7
+        assert story.tests_kill_clock == "per-file"
+        assert story.tests_kill_limit_s == 730.0
+        assert story.tests_kill_elapsed_s == 746.0
+
+        summary = report.to_summary()
+        assert "KILLED by the per-file clock" in summary, summary
+        assert "746s" in summary and "730s" in summary
+        assert "3 ran, 2 failed, 4 not run" in summary, summary
+        # The old lie - a killed story rendering as a clean partial - is gone.
+        assert "Tests:        3 passed=1" not in summary
+
+    def test_a_killed_story_without_recorded_counts_says_absent_not_zero(self, tmp_path: Path) -> None:
+        """The committed 2026-10-31 shape: killed, counts never written."""
+        dataset_dir, run_dir = _build_run(tmp_path)
+        _set_killed_state(run_dir, with_counts=False)
+
+        report = rescore.rescore(run_dir, dataset_dir)
+        story = report.stories[0]
+
+        assert story.tests_timed_out is True
+        assert story.tests_failed is None, "an absent count must not become a clean 0"
+        assert story.tests_not_run is None
+
+        summary = report.to_summary()
+        assert "KILLED" in summary
+        assert "not recorded" in summary, summary
+        assert "0 failed, 0 not run" not in summary
+
+    def test_a_clean_story_rescores_exactly_as_before(self, tmp_path: Path) -> None:
+        dataset_dir, run_dir = _build_run(tmp_path)
+
+        report = rescore.rescore(run_dir, dataset_dir)
+        story = report.stories[0]
+
+        assert story.tests_timed_out is False
+        assert (story.tests_executed, story.tests_passed) == (1, 1)
+        assert story.tests_failed is None and story.tests_not_run is None
+        summary = report.to_summary()
+        assert "KILLED" not in summary
+        assert "Tests:        1 passed=1 false_pos=1" in summary, summary

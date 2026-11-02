@@ -25,6 +25,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 _EVAL_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _EVAL_DIR.parent.parent
@@ -32,8 +33,8 @@ for _path in (str(_PROJECT_ROOT), str(_EVAL_DIR)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from eval_evidence import MissingEvidenceError, read_run_evidence  # noqa: E402
-from eval_metrics import HarnessReport, count_false_greens  # noqa: E402
+from eval_evidence import MissingEvidenceError, RunEvidence, read_run_evidence  # noqa: E402
+from eval_metrics import HarnessReport, StoryResult, count_false_greens  # noqa: E402
 from golden_validator import validate_dataset  # noqa: E402
 
 # The last re-score that was recorded, before the evidence was deleted. The next
@@ -51,6 +52,56 @@ def _known_scores() -> dict:
         return {}
 
 
+def _kept_story_state(evidence: RunEvidence) -> dict[str, dict[str, Any]]:
+    """The per-story test state the run itself recorded in ``results.json``."""
+    state: dict[str, dict[str, Any]] = {}
+    for entry in evidence.results.get("stories", []) or []:
+        if isinstance(entry, dict) and entry.get("story_id"):
+            state[str(entry["story_id"])] = entry
+    return state
+
+
+def _carry_kill_state(
+    story: StoryResult,
+    recorded: dict[str, Any] | None,
+    per_test: dict[str, str],
+) -> None:
+    """Carry a killed run's state through a re-score (d-0084, t-1163).
+
+    The run already wrote the truth: ``results.json`` says ``tests_timed_out`` and
+    the counts, and the kept ``junit/`` holds the outcomes that got in before the
+    kill. A re-score must copy that rather than recompute it and default it to
+    zero - recomputing turned a killed story into a clean partial and dropped the
+    KILLED marker entirely.
+
+    Absence stays absent (``None``) so the summary can say "not recorded". A value
+    the run did not write is never rendered as a clean 0: a zero failures count on
+    a killed story is a claim, and this function must not invent one.
+    """
+    if not recorded or not recorded.get("tests_timed_out"):
+        return
+
+    story.tests_timed_out = True
+
+    failed = recorded.get("tests_failed")
+    if not isinstance(failed, int):
+        # The kept junit can answer this one when results.json predates d-0084.
+        failed = sum(1 for outcome in per_test.values() if outcome in ("FAILED", "ERROR")) if per_test else None
+    story.tests_failed = failed
+
+    collected = recorded.get("tests_collected")
+    story.tests_collected = collected if isinstance(collected, int) else None
+
+    not_run = recorded.get("tests_not_run")
+    if not isinstance(not_run, int):
+        not_run = max(collected - story.tests_executed, 0) if isinstance(collected, int) else None
+    story.tests_not_run = not_run
+
+    story.tests_kill_clock = str(recorded.get("tests_kill_clock") or "")
+    story.tests_kill_limit_s = recorded.get("tests_kill_limit_s")
+    story.tests_kill_elapsed_s = recorded.get("tests_kill_elapsed_s")
+
+
 def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
     """Recompute the gate score from *run_dir*'s kept evidence.
 
@@ -64,6 +115,7 @@ def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
     results = validate_dataset(dataset_dir, evidence.code_map, verdict_map=evidence.verdict_map)
 
     # Gate 2: re-apply the false-green rule to the kept per-test outcomes.
+    kept = _kept_story_state(evidence)
     for story in results:
         code = evidence.code_map.get(story.story_id, "")
         per_test = evidence.per_test(story.story_id)
@@ -71,6 +123,8 @@ def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
         story.tests_executed = len(per_test)
         story.tests_passed = passed
         story.tests_false_positive = count_false_greens(story, code, per_test, passed)
+        # t-1163: a killed story must not re-score as a clean partial.
+        _carry_kill_state(story, kept.get(story.story_id), per_test)
 
     report = HarnessReport(stories=results)
 
