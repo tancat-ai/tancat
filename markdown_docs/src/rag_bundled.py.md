@@ -46,7 +46,7 @@ never silently run against a pattern-less store again. Guarded lab wipe:
 | Function | Signature | Returns | Purpose |
 |----------|-----------|---------|---------|
 | `load_golden_patterns` | `(dataset_dir: Path, *, exclude: Sequence[str] \| None = None)` | `list[GoldenPattern]` | Parse eval dataset JSONs → golden patterns; `exclude` drops the named story files (eval-side held-out split, j-0244) |
-| `build_bundled_patterns` | `(repo_root: Path \| None = None, *, exclude: Sequence[str] \| None = None)` | `list[GoldenPattern]` | Load the shipped pack; the product path passes no `exclude` and gets all 113 patterns |
+| `build_bundled_patterns` | `(repo_root: Path \| None = None, *, exclude: Sequence[str] \| None = None)` | `list[GoldenPattern]` | Load the shipped pack; the product path passes no `exclude` and gets the whole packaged pattern set |
 | `chunk_markdown_file` | `(filepath: Path)` | `list[DocChunk]` | Split markdown at `##` headings (~500 tokens, 50 overlap) |
 | `load_docs` | `(docs_dir: Path)` | `list[DocChunk]` | Load + chunk all `*.md` in a dir |
 | `build_bundled_docs` | `(repo_root: Path \| None = None)` | `list[DocChunk]` | Load the shipped Playwright corpus |

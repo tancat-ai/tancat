@@ -102,6 +102,25 @@ def _carry_kill_state(
     story.tests_kill_elapsed_s = recorded.get("tests_kill_elapsed_s")
 
 
+def _full_dataset_label() -> str:
+    """Name the dataset the gate is read against, without a number that drifts.
+
+    t-1187: the old wording said "the full 113", which went stale the moment a
+    golden was added. The count is read from the committed dataset at print time;
+    when it cannot be read, the phrase alone says it.
+    """
+    dataset_dir = _EVAL_DIR / "dataset"
+    try:
+        total = 0
+        for golden_file in sorted(dataset_dir.glob("*.json")):
+            data = json.loads(golden_file.read_text(encoding="utf-8"))
+            for criterion in data.get("golden_resolutions", []):
+                total += len(criterion.get("placeholders", []))
+    except OSError, ValueError:
+        return "the full dataset"
+    return f"the full dataset ({total} placeholders)" if total else "the full dataset"
+
+
 def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
     """Recompute the gate score from *run_dir*'s kept evidence.
 
@@ -199,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         print("\n" + "=" * 70)
         print(
             f"GATE 1 (resolution accuracy): {correct}/{total} = {report.resolution_accuracy():.1f}%  "
-            "(the >= 90% target is read against the full 113 in full --regenerate mode - see scripts/eval/README.md)"
+            f"(the >= 90% target is read against {_full_dataset_label()} in full --regenerate mode "
+            "- see scripts/eval/README.md)"
         )
         print(f"GATE 2 (hollow passes):       {hollow}  (need 0)")
         print("=" * 70)

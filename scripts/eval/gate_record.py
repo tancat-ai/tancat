@@ -67,9 +67,9 @@ def make_figure(
         correct: Placeholders resolved correctly.
         total: Placeholders scored.
         mode: What produced the number (e.g. ``"static resolver-only (no model)"``).
-        seed: What the RAG store held (e.g. ``"bundled pack, 113 patterns"``).
+        seed: What the RAG store held (e.g. ``"bundled pack, N patterns"``).
         split: The split the number is scored on (e.g.
-            ``"held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"``).
+            ``"held-out: eval-007, eval-008, eval-010 (30 of the dataset's placeholders)"``).
         split_key: Equality form of the split (e.g. ``"eval-007|eval-008|eval-010"``);
             defaults to the label. Two figures are comparable only when this matches.
         split_kind: ``"heldout"`` (a held-out subset) or ``"full"`` (every story).

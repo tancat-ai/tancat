@@ -179,7 +179,7 @@ class TestHeldoutScoreIsComputedFromHeldoutStoriesOnly:
 class TestRecordedFigureNeedsItsLabels:
     """A number without its mode, seed and split cannot be written."""
 
-    _SPLIT = "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"
+    _SPLIT = "held-out: eval-007, eval-008, eval-010 (30 of the dataset placeholders)"
 
     def test_a_figure_without_a_mode_is_refused(self) -> None:
         with pytest.raises(ValueError, match="mode"):
@@ -335,7 +335,7 @@ class TestSplitIsRecordedOnEveryFigure:
             total=30,
             mode="static resolver-only",
             seed="pack minus the 3 held-out files",
-            split="held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            split="held-out: eval-007, eval-008, eval-010 (30 of the dataset placeholders)",
             split_key="eval-007|eval-008|eval-010",
             split_kind="heldout",
         )
@@ -348,7 +348,7 @@ class TestSplitIsRecordedOnEveryFigure:
             total=30,
             mode="static resolver-only",
             seed="pack minus the held-out files",
-            split="held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            split="held-out: eval-007, eval-008, eval-010 (30 of the dataset placeholders)",
             split_key="eval-007|eval-008|eval-010",
             split_kind="heldout",
         )
@@ -357,7 +357,7 @@ class TestSplitIsRecordedOnEveryFigure:
             total=50,
             mode="static resolver-only",
             seed="pack minus the held-out files",
-            split="held-out: eval-001, eval-005, eval-006 (60 of 113 placeholders)",
+            split="held-out: eval-001, eval-005, eval-006 (60 of the dataset placeholders)",
             split_key="eval-001|eval-005|eval-006",
             split_kind="heldout",
         )
@@ -372,7 +372,7 @@ class TestSplitIsRecordedOnEveryFigure:
         shared: dict[str, Any] = {
             "total": 30,
             "mode": "static resolver-only",
-            "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
+            "split": "held-out: eval-007, eval-008, eval-010 (30 of the dataset placeholders)",
             "split_key": "eval-007|eval-008|eval-010",
             "split_kind": "heldout",
         }
