@@ -399,22 +399,27 @@ class TestSplitIsRecordedOnEveryFigure:
                 # breakdown sits beside the number.
                 assert cell["per_file"], name
 
-    def test_the_target_is_read_against_the_full_113_in_full_mode(self) -> None:
-        """The target's home is the full 113 in model mode, and it says so (t-1147).
+    def test_the_target_is_read_against_the_full_dataset_in_full_mode(self) -> None:
+        """The target's home is the full dataset in model mode, and it says so (t-1147, t-1195).
 
         j-0244 pointed the target at the held-out split on a brief's own authority.
         The owner has said otherwise (2026-10-31, his words: "i think it should
-        stay on the harder gate which is the 113"), so this test pins the home and
-        the mode together - a target line that names only one of them is the bug,
-        because the static full-113 cell is 48/113 and the model full-113 cell is
-        102/113, and reading one as the other is how 90% against 113 became
-        ambiguous in the first place.
+        stay on the harder gate which is the 113"), and on 2026-11-02 he settled
+        the count: "follow the data set". So this test pins the home and the mode
+        together - a target line that names only one of them is the bug, because
+        the static cell (48/113) and the model cell (102/113) are different
+        numbers and must not be read as one - and the count is read from the
+        dataset, never hard-coded.
         """
+        import gate_record
+
         payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
         targets = payload["targets"]
+        count = gate_record.dataset_placeholder_count(_DATASET_DIR)
+        assert count > 0
 
         home = str(targets["gate1_read_against"])
-        assert "113" in home, "the target's home must name the full 113"
+        assert str(count) in home, f"the target's home must name the dataset's {count} placeholders"
         assert "held-out" not in home, "the held-out split is a measurement, not the target's home"
         # Both facts in one line: the split AND the mode that produces the figure.
         assert "--regenerate" in home and "model" in home, (
@@ -423,7 +428,7 @@ class TestSplitIsRecordedOnEveryFigure:
         )
 
         note = str(targets["gate1_target_note"])
-        assert "113" in note
+        assert str(count) in note
         assert "--regenerate" in note
         assert "48/113" in note, "the static full-113 cell must be named as the other mode, not the target"
 
@@ -513,7 +518,8 @@ class TestSplitIsRecordedOnEveryFigure:
             "the record must state that the full 113 in full mode is the only gate "
             "(targets.gate1_gate_cadence) - without it a reader can still read the 30 as a gate"
         )
-        assert "113" in gate, "the gate statement must name the 113"
+        count = __import__("gate_record").dataset_placeholder_count(_DATASET_DIR)
+        assert str(count) in gate, f"the gate statement must name the dataset's {count} placeholders"
         assert "--regenerate" in gate, "the gate statement must name its mode"
         assert "only gate" in gate, "the 113 in full mode is the ONLY gate"
         assert "milestone" in gate and "release" in gate, "the gate runs at milestones and at release"
@@ -693,3 +699,47 @@ class TestOneListNotTwo:
         held_out = int(str(described["placeholders"]))
         patterns = build_bundled_patterns(exclude=[str(name) for name in described["files"]])
         assert len(patterns) == 114 - held_out  # t-1185: dataset total follows the goldens
+
+
+class TestTheTargetFollowsTheDataset:
+    """t-1195: the record's LIVE statements name the dataset's own size.
+
+    Owner's decision, 2026-11-02, his words: "follow the data set". The recorded
+    cells keep what they measured (102/113, 48/113, 12/30, ...); the statements
+    that tell a reader WHERE the gate is read must track the dataset as it grows,
+    or a reader is told 113 while the dataset holds another number.
+    """
+
+    def test_the_live_target_statements_name_the_dataset_size_the_dataset_holds(self) -> None:
+        import gate_record
+
+        payload = json.loads((_EVAL_DIR / "known_gate_scores.json").read_text(encoding="utf-8"))
+        count = gate_record.dataset_placeholder_count(_DATASET_DIR)
+        assert count > 0, "the committed dataset must be readable to state its size"
+
+        targets = payload["targets"]
+        held = payload["heldout_split"]
+        statements = {
+            "targets.gate1_read_against": str(targets["gate1_read_against"]),
+            "targets.gate1_gate_cadence": str(targets["gate1_gate_cadence"]),
+            "targets.gate1_target_note (first sentence)": str(targets["gate1_target_note"]).split(". ")[0],
+            "verdict": str(payload["verdict"]),
+            "open_decision": str(payload["open_decision"]),
+            "heldout_split.why_these": str(held["why_these"]),
+            "heldout_split.shipped_product_unchanged": str(held["shipped_product_unchanged"]),
+        }
+        for name, text in statements.items():
+            assert str(count) in text, (
+                f"{name} does not name the dataset's {count} placeholders - a statement that states a "
+                "size must follow the dataset (owner, 2026-11-02: 'follow the data set')"
+            )
+            # Any "<n> placeholders" / "<n> patterns" in these statements must BE the
+            # dataset's count. A recorded figure like 48/113 is not a size claim and
+            # is deliberately not matched.
+            for found in re.findall(r"(\d+)\s+(?:placeholders|patterns)", text):
+                assert int(found) == count, (
+                    f"{name} states {found} placeholders/patterns while the dataset holds {count}"
+                )
+
+        # One source: the record's own helper and the statements agree.
+        assert gate_record.full_dataset_label(_DATASET_DIR) == f"the full dataset ({count} placeholders)"

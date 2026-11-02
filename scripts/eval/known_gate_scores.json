@@ -12,12 +12,12 @@
   "targets": {
     "gate1_min_accuracy_pct": 90,
     "gate2_max_false_greens": 0,
-    "gate1_read_against": "the full 113 placeholders (all 9 story files), in full --regenerate (model) mode - never the static leg's 48/113, which is a different mode",
-    "gate1_target_note": "The 90% gate-1 target is read against the full 113 placeholders in full --regenerate (model) mode - the cell that records 102/113 on 2026-10-31. Owner's decision, 2026-10-31, his words: 'i think it should stay on the harder gate which is the 113'. The static full-113 cell is 48/113: a DIFFERENT mode (no model, no generated tests), so it is not the figure the target is read against and neither mode may be read as the other. The held-out split stays as a measurement and as a recall diagnostic, not as the target's home; its cells are unchanged. The target itself is unchanged.",
-    "gate1_gate_cadence": "The full 113 placeholders in full --regenerate (model) mode is the ONLY gate - run it at milestones and at release. Owner's decision, 2026-11-01, his words: 'i don't really understand the second gate yes so just regression for now but we should look at it as a pre launch check'.",
+    "gate1_read_against": "the full dataset (114 placeholders, all 9 story files), in full --regenerate (model) mode - never the static leg's 48/113, which is a different mode",
+    "gate1_target_note": "The 90% gate-1 target is read against the full dataset (114 placeholders) in full --regenerate (model) mode - the cell that records 102/113 on 2026-10-31. Owner's decision, 2026-10-31, his words: 'i think it should stay on the harder gate which is the 113'. The static full-113 cell is 48/113: a DIFFERENT mode (no model, no generated tests), so it is not the figure the target is read against and neither mode may be read as the other. The held-out split stays as a measurement and as a recall diagnostic, not as the target's home; its cells are unchanged. The target itself is unchanged.",
+    "gate1_gate_cadence": "The full dataset (114 placeholders) in full --regenerate (model) mode is the ONLY gate - run it at milestones and at release. Owner's decision, 2026-11-01, his words: 'i don't really understand the second gate yes so just regression for now but we should look at it as a pre launch check'.",
     "heldout_split_role": "The held-out 30 is NOT a gate: it is a static regression check run on every change - resolver only, no model, no GPU - held to 'no worse than the recorded 12/30', and it is reviewed as a PRE-LAUNCH check at launch (same owner decision, 2026-11-01). It says nothing about the gate; a 40% reading there is a regression floor, not a threshold that failed."
   },
-  "verdict": "gate 1: target MET on the full 113 in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, cell full_mode_2026_10_31.cells.rag_on_bundled (evidence fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled; re-scores from the tracked tree with no model). This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous').",
+  "verdict": "gate 1: target MET on the full dataset (114 placeholders) in full --regenerate (model) mode - 102/113 (90.3%) on 2026-10-31, cell full_mode_2026_10_31.cells.rag_on_bundled (evidence fixtures/heldout_runs/2026-10-31/leg1_rag_on_bundled; re-scores from the tracked tree with no model). This static leg's headline cell is 12/30 (40.0%) on the held-out split, kept as a measurement, not as the target; gate 2 NOT MEASURED in this mode (last reading: 0, under 'previous').",
   "source": "scripts/eval/eval_resolver.py --mode static (held-out) with and without RAG_ENABLED=0, four runs, 2026-10-30, no model and no browser",
   "heldout_split": {
     "files": [
@@ -32,8 +32,8 @@
     ],
     "placeholders": 30,
     "excluded_from_seed_by": "src.rag_bundled.HELDOUT_STORY_FILES (the one list both halves read)",
-    "why_these": "Three whole files, each carrying scored placeholders (13 + 13 + 4 = 30 of the 113). No substitution was needed. They are excluded from the seed, so the gate cannot be handed their answers.",
-    "shipped_product_unchanged": "The bundled pack a customer gets still holds all 9 story files (113 patterns). The exclusion is eval-side only: an argument to the seed loader, and a flag on the eval resolver."
+    "why_these": "Three whole files, each carrying scored placeholders (13 + 13 + 4 = 30 of the 114). No substitution was needed. They are excluded from the seed, so the gate cannot be handed their answers.",
+    "shipped_product_unchanged": "The bundled pack a customer gets still holds all 9 story files (114 patterns - one per golden placeholder, count read from the dataset). The exclusion is eval-side only: an argument to the seed loader, and a flag on the eval resolver."
   },
   "static_leg_2026_10_30": {
     "cells": {
@@ -883,7 +883,7 @@
       "recovered": "eval-004 c0 on this run. On the other two committed held-out runs the same keys recover eval-001 c2, eval-001 c4 and eval-004 c0 (2026-10-13: 95 -> 98; 2026-10-24: 97 -> 100), and no criterion regresses. Arrivals that name the wrong page still fail, which is why eval-001 c2/c4 stay misses on this draw: the journey never left the inventory page."
     }
   },
-  "open_decision": "Whether the headline figure should stay the held-out split's static cell (12/30) now that the gate-1 target is read against the full 113 in full --regenerate mode (102/113), or move to that full-mode cell.",
+  "open_decision": "Whether the headline figure should stay the held-out split's static cell (12/30) now that the gate-1 target is read against the full dataset (114 placeholders) in full --regenerate mode (102/113), or move to that full-mode cell.",
   "split": "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)",
   "split_key": "eval-007|eval-008|eval-010",
   "split_kind": "heldout",

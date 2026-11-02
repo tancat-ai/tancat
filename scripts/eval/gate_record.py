@@ -30,10 +30,11 @@ No config system: three functions over plain dicts.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
-__all__ = ["compare_figures", "make_figure", "validate_record"]
+__all__ = ["compare_figures", "dataset_placeholder_count", "full_dataset_label", "make_figure", "validate_record"]
 
 #: The three labels every figure carries. A figure missing any is refused.
 REQUIRED_LABELS: tuple[str, ...] = ("mode", "seed", "split")
@@ -228,6 +229,32 @@ def _cell_problems(cell: dict[str, Any], where: str, dataset_dir: Path | None) -
 def _default_dataset_dir() -> Path:
     """The committed eval dataset (``scripts/eval/dataset``), for the site guard."""
     return Path(__file__).resolve().parent / "dataset"
+
+
+def dataset_placeholder_count(dataset_dir: Path | None = None) -> int:
+    """Count the scored placeholders the committed dataset holds right now.
+
+    t-1195: the gate's target follows the dataset (owner's decision, 2026-11-02,
+    his words: "follow the data set"). No statement or printout may hard-code the
+    number - they read it here, so adding a golden cannot leave a stale count
+    behind.
+    """
+    directory = dataset_dir if dataset_dir is not None else _default_dataset_dir()
+    total = 0
+    try:
+        for golden_file in sorted(directory.glob("*.json")):
+            data = json.loads(golden_file.read_text(encoding="utf-8"))
+            for criterion in data.get("golden_resolutions", []):
+                total += len(criterion.get("placeholders", []))
+    except OSError, ValueError:
+        return 0
+    return total
+
+
+def full_dataset_label(dataset_dir: Path | None = None) -> str:
+    """Name the dataset the gate is read against, with its current count."""
+    count = dataset_placeholder_count(dataset_dir)
+    return f"the full dataset ({count} placeholders)" if count else "the full dataset"
 
 
 def validate_record(

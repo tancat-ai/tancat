@@ -35,6 +35,7 @@ for _path in (str(_PROJECT_ROOT), str(_EVAL_DIR)):
 
 from eval_evidence import MissingEvidenceError, RunEvidence, read_run_evidence  # noqa: E402
 from eval_metrics import HarnessReport, StoryResult, count_false_greens  # noqa: E402
+from gate_record import full_dataset_label  # noqa: E402
 from golden_validator import validate_dataset  # noqa: E402
 
 # The last re-score that was recorded, before the evidence was deleted. The next
@@ -106,19 +107,11 @@ def _full_dataset_label() -> str:
     """Name the dataset the gate is read against, without a number that drifts.
 
     t-1187: the old wording said "the full 113", which went stale the moment a
-    golden was added. The count is read from the committed dataset at print time;
-    when it cannot be read, the phrase alone says it.
+    golden was added. t-1195: the count comes from the record's own helper
+    (``gate_record.full_dataset_label``), so the printout, the record's
+    statements and the guard all read one number.
     """
-    dataset_dir = _EVAL_DIR / "dataset"
-    try:
-        total = 0
-        for golden_file in sorted(dataset_dir.glob("*.json")):
-            data = json.loads(golden_file.read_text(encoding="utf-8"))
-            for criterion in data.get("golden_resolutions", []):
-                total += len(criterion.get("placeholders", []))
-    except OSError, ValueError:
-        return "the full dataset"
-    return f"the full dataset ({total} placeholders)" if total else "the full dataset"
+    return full_dataset_label(_EVAL_DIR / "dataset")
 
 
 def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
