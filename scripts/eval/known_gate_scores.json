@@ -226,9 +226,9 @@
           "rag_off_empty"
         ],
         "gate2_narrowed_rule": {
-          "re_scored": 8,
+          "re_scored": 6,
           "date": "2026-11-02",
-          "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+          "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
           "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
         }
       },
@@ -286,9 +286,9 @@
           "rag_off_empty"
         ],
         "gate2_narrowed_rule": {
-          "re_scored": 6,
+          "re_scored": 4,
           "date": "2026-11-02",
-          "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+          "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
           "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
         }
       },
@@ -346,9 +346,9 @@
           "rag_off_empty"
         ],
         "gate2_narrowed_rule": {
-          "re_scored": 8,
+          "re_scored": 6,
           "date": "2026-11-02",
-          "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+          "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
           "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
         }
       },
@@ -406,9 +406,9 @@
           "rag_on_empty"
         ],
         "gate2_narrowed_rule": {
-          "re_scored": 7,
+          "re_scored": 5,
           "date": "2026-11-02",
-          "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+          "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
           "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
         }
       }
@@ -889,9 +889,9 @@
           },
           "validator_revision": "Validator revision 2026-10-16 (t-0831): the golden validator could not credit GOTO placeholders (navigate skipped, to_have_url tagged ASSERT, exact action match) - the eval-008 GOTO pair was structurally unmatchable in every run. After the fix, this run's committed evidence re-scores to 95/113; the number recorded at the time (94) is preserved here for history. Note: only the payments GOTO re-scores in this run (95, not 96) - the transfer GOTO had no arrival evidence in that draw, an honest miss.",
           "gate2_narrowed_rule": {
-            "re_scored": 7,
+            "re_scored": 6,
             "date": "2026-11-02",
-            "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+            "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
             "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
           }
         },
@@ -913,9 +913,9 @@
       "recovered": "eval-004 c0 on this run. On the other two committed held-out runs the same keys recover eval-001 c2, eval-001 c4 and eval-004 c0 (2026-10-13: 95 -> 98; 2026-10-24: 97 -> 100), and no criterion regresses. Arrivals that name the wrong page still fail, which is why eval-001 c2/c4 stay misses on this draw: the journey never left the inventory page."
     },
     "gate2_narrowed_rule": {
-      "re_scored": 6,
+      "re_scored": 4,
       "date": "2026-11-02",
-      "rule": "gate 2 counts a row as verified only when the element the tool says it checked is the golden (or a declared tolerance) AND sits in the criterion's own test, or when a page-kind criterion's arrival compared the key's URL - t-1183, tightened by t-1188",
+      "rule": "gate 2 counts a row as verified only when the tool can show it checked what the key says belongs to that criterion: for an element-kind criterion, the element it checked is the golden (or a declared tolerance) AND sits in the criterion's own test; for a page-kind criterion, the arrival was at the criterion's own expected_page. An arrival never verifies an element-kind criterion - t-1183, tightened by t-1188 and corrected by t-1190",
       "comparability": "Same evidence, same mode, same split, same seed: this is a RE-SCORE of the recorded run under today's stricter gate-2 rule, not a new measurement and not a new draw. gate2_false_greens above is what the rule counted on the day and is unchanged; this is what the rule counts on the same evidence now. A future run is a new draw and is comparable with neither."
     }
   },

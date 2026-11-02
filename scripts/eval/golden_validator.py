@@ -442,20 +442,26 @@ def _normalise_url(url: str) -> str:
     return url.strip().rstrip("/").lower()
 
 
-def _arrival_checked_the_golden_url(checked: str, expected_locator: str) -> bool:
-    """True when the page-arrival verdict compared the URL the key names (t-1188).
+def _arrival_checked_url(checked: str, expected_url: str) -> bool:
+    """True when a page-arrival verdict compared *expected_url* (t-1188, t-1190).
 
-    The verdict's ``checked`` text carries the URLs it compared. A page criterion
-    used to count any page-arrival verdict at all, so an arrival at a DIFFERENT
-    page verified the criterion. The two share the URL normalisation used above:
-    case and a trailing slash are noise, everything else must match.
+    The verdict's ``checked`` text carries the URLs it compared, so the check is
+    "is the expected page among them", with the same normalisation the arrival
+    check uses (case and a trailing slash are noise).
     """
+    want = _normalise_url(expected_url)
+    if not want:
+        return False
+    seen = {_normalise_url(value) for value in _QUOTED_VALUE_RE.findall(checked)}
+    return want in seen
+
+
+def _arrival_checked_the_golden_url(checked: str, expected_locator: str) -> bool:
+    """Fallback when the key names no ``expected_page``: the URL its golden is."""
     match = _URL_IN_ASSERT_RE.search(expected_locator)
     if not match:
         return False
-    want = _normalise_url(match.group(1))
-    seen = {_normalise_url(value) for value in _QUOTED_VALUE_RE.findall(checked)}
-    return want in seen
+    return _arrival_checked_url(checked, match.group(1))
 
 
 def _gate2_verified(
@@ -464,26 +470,25 @@ def _gate2_verified(
     golden_placeholder: dict[str, Any],
     tolerances: list[str],
 ) -> bool:
-    """Whether GATE 2 may count this criterion as verified (t-1183, t-1188).
+    """Whether GATE 2 may count this criterion as verified (t-1183, t-1188, t-1190).
 
     Stricter than :func:`_classify_verification`, which stays the product's own
-    view (B-100). The owner's rule, 2026-11-02 ("2 go for truth"): a criterion is
-    verified for gate 2 only when the tool can show it checked the thing the
-    golden key names, in the place the key says it belongs.
+    view (B-100). A criterion is verified for gate 2 only when the tool can show
+    it checked the thing the key says belongs to that criterion:
 
       * element verdict - BOTH: the element the tool says it checked IS the golden
         (or a declared tolerance) AND the check is in the criterion's OWN test
-        (``own_golden``). Either one alone is the tool marking its own homework
-        (t-1188 hole 1: a checked golden sitting in another test used to count).
+        (``own_golden``). A checked golden sitting in another test is not proof
+        (t-1188 hole 1).
       * page-arrival verdict - the key marks the criterion ``criterion_kind: page``
-        AND the verdict compared the URL the key names (t-1188 hole 2: any arrival
-        used to count).
+        AND the arrival was at the criterion's own ``expected_page``. For a page
+        criterion the element is the extra; the PAGE is the thing being checked
+        (t-1190). An arrival never verifies an element-kind criterion.
     """
     if own_golden:
         # The criterion's OWN test asserts the golden (or a declared tolerance).
-        # That is both halves of the rule at once - the element is the golden AND
-        # the check sits in the criterion's own test - and no verdict can weaken
-        # it, nor is the tool's own `checked` string needed to confirm it.
+        # That is both halves of the element rule at once, and no verdict can
+        # weaken it, nor is the tool's own `checked` string needed to confirm it.
         return True
     if not verdict:
         return False
@@ -491,9 +496,15 @@ def _gate2_verified(
     checked = str(verdict.get("checked") or "").strip()
     expected = str(golden_placeholder.get("expected_locator") or "")
     if status == "verified_by_page_arrival":
-        return str(golden_placeholder.get("criterion_kind") or "") == "page" and _arrival_checked_the_golden_url(
-            checked, expected
-        )
+        if str(golden_placeholder.get("criterion_kind") or "") != "page":
+            # t-1190: an arrival proves a page, not the element an element-kind
+            # criterion names - so it is not verification for that criterion.
+            return False
+        expected_page = str(golden_placeholder.get("expected_page") or "").strip()
+        if expected_page:
+            return _arrival_checked_url(checked, expected_page)
+        # No page recorded in the key: fall back to the URL its golden names.
+        return _arrival_checked_the_golden_url(checked, expected)
     if status == "verified_by_element":
         # t-1188 hole 1: BOTH halves are required, and the second one is
         # `own_golden` - the check must sit in the criterion's own test. We only
