@@ -70,9 +70,11 @@ class StoryResult:
     # tests ran": tests_failed is the count the record used to lose, tests_not_run
     # is everything the file carried that never got to report, and the clock pair
     # names WHICH limit fired and for how long (746 s against 730 s, sayable).
-    tests_failed: int = 0
-    tests_not_run: int = 0
-    tests_collected: int = 0
+    # t-1163: None means "the run did not record this", which is not the same as
+    # zero - a re-score on older evidence must say absent, never invent a clean 0.
+    tests_failed: int | None = None
+    tests_not_run: int | None = None
+    tests_collected: int | None = None
     tests_kill_clock: str = ""
     tests_kill_limit_s: float | None = None
     tests_kill_elapsed_s: float | None = None
@@ -199,12 +201,19 @@ class HarnessReport:
             # are real outcomes and they ARE in the totals above.
             ids = ", ".join(s.story_id for s in timed_out)
             ran = sum(s.tests_executed for s in timed_out)
-            failed_ran = sum(s.tests_failed for s in timed_out)
-            never_ran = sum(s.tests_not_run for s in timed_out)
+            failed_ran = sum(s.tests_failed or 0 for s in timed_out)
+            never_ran = sum(s.tests_not_run or 0 for s in timed_out)
+            recorded = all(s.tests_failed is not None and s.tests_not_run is not None for s in timed_out)
+            detail = (
+                f"{ran} test(s) ran ({failed_ran} failed), {never_ran} not run"
+                if recorded
+                else f"{ran} test(s) ran; failed/not-run counts not recorded in this run"
+            )
+            clocks = {s.tests_kill_clock for s in timed_out if s.tests_kill_clock}
+            clock_text = f"the {'/'.join(sorted(clocks))} clock" if clocks else "a pytest clock (not recorded)"
             lines.append(
-                f"  Tests killed:             {len(timed_out)} story run(s) killed by the "
-                f"per-file clock: {ids} - {ran} test(s) ran ({failed_ran} failed), {never_ran} "
-                "not run; the ones that ran ARE counted in the totals above"
+                f"  Tests killed:             {len(timed_out)} story run(s) killed by "
+                f"{clock_text}: {ids} - {detail}; the ones that ran ARE counted in the totals above"
             )
         if self.alignment:
             # B-101: report/warn only - a rate, never a verdict.
@@ -240,10 +249,15 @@ class HarnessReport:
             if s.tests_timed_out:
                 elapsed = f" at {s.tests_kill_elapsed_s:g}s" if s.tests_kill_elapsed_s is not None else ""
                 limit = f" (limit {s.tests_kill_limit_s:g}s)" if s.tests_kill_limit_s is not None else ""
-                lines.append(
-                    f"    Tests:        KILLED by the {s.tests_kill_clock or 'per-file'} clock{elapsed}{limit}"
-                    f" - {s.tests_executed} ran, {s.tests_failed} failed, {s.tests_not_run} not run"
+                if s.tests_failed is None or s.tests_not_run is None:
+                    # t-1163: absent is said, never rendered as a clean zero.
+                    counts = f"{s.tests_executed} ran, failed/not-run not recorded"
+                else:
+                    counts = f"{s.tests_executed} ran, {s.tests_failed} failed, {s.tests_not_run} not run"
+                head = (
+                    f"KILLED by the {s.tests_kill_clock} clock" if s.tests_kill_clock else "KILLED (clock not recorded)"
                 )
+                lines.append(f"    Tests:        {head}{elapsed}{limit} - {counts}")
             else:
                 lines.append(
                     f"    Tests:        {s.tests_executed} passed={s.tests_passed} false_pos={s.tests_false_positive}"
@@ -296,9 +310,9 @@ class HarnessReport:
                     tests_false_positive=s_data.get("tests_false_positive", 0),
                     generation_duration_s=s_data.get("generation_duration_s", 0.0),
                     tests_timed_out=s_data.get("tests_timed_out", False),
-                    tests_failed=s_data.get("tests_failed", 0),
-                    tests_not_run=s_data.get("tests_not_run", 0),
-                    tests_collected=s_data.get("tests_collected", 0),
+                    tests_failed=s_data.get("tests_failed"),
+                    tests_not_run=s_data.get("tests_not_run"),
+                    tests_collected=s_data.get("tests_collected"),
                     tests_kill_clock=s_data.get("tests_kill_clock", ""),
                     tests_kill_limit_s=s_data.get("tests_kill_limit_s"),
                     tests_kill_elapsed_s=s_data.get("tests_kill_elapsed_s"),

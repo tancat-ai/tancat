@@ -311,12 +311,16 @@ def _counts_from_outcomes(per_test: dict[str, str]) -> tuple[int, int, int, int]
 _COLLECTED_TEST_RE = re.compile(r"^def (test_\w+)\s*\(", re.MULTILINE)
 
 
-def _collected_tests(test_file: Path) -> int:
-    """How many test functions the file defines; 0 when it cannot be read."""
+def _collected_tests(test_file: Path) -> int | None:
+    """How many test functions the file defines; None when it cannot be read.
+
+    None, not 0: an unreadable file means the count is unknown, and "0 not run"
+    would be a clean-looking invention (t-1163).
+    """
     try:
         return len(_COLLECTED_TEST_RE.findall(test_file.read_text(encoding="utf-8", errors="replace")))
     except OSError:
-        return 0
+        return None
 
 
 def _partial_output(exc: subprocess.TimeoutExpired) -> str:
@@ -540,12 +544,12 @@ def run_full_validation(
         story.tests_failed = failed
         story.tests_count_source = count_source.get("source", "")
         if killed:
-            collected = int(timeout_info.get("tests_collected") or 0)
-            story.tests_not_run = max(collected - total, 0)
+            collected = timeout_info.get("tests_collected")
+            story.tests_collected = collected if isinstance(collected, int) else None
+            story.tests_not_run = max(collected - total, 0) if isinstance(collected, int) else None
             story.tests_kill_clock = str(timeout_info.get("clock") or "")
             story.tests_kill_limit_s = timeout_info.get("limit_s")
             story.tests_kill_elapsed_s = timeout_info.get("elapsed_s")
-            story.tests_collected = collected
         else:
             story.tests_not_run = 0
         if outcomes_out is not None:
