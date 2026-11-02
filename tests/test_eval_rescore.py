@@ -325,8 +325,13 @@ class TestEvidenceGuard:
 
         report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
 
-        assert report.correct_resolutions == expected_correct
-        assert report.total_placeholders == expected_total
+        # t-1185: the dataset gained ONE golden (eval-005's date-of-birth field,
+        # which this evidence already fills). The recorded cell is left exactly as
+        # recorded - it describes a 113-key dataset - so the re-score moves by the
+        # documented delta, not by re-writing the record.
+        dataset_grew_by = 1
+        assert report.correct_resolutions == expected_correct + dataset_grew_by
+        assert report.total_placeholders == expected_total + dataset_grew_by
         assert report.total_false_positives == full["gate2_false_greens"]
 
 

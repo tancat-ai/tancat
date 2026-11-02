@@ -95,8 +95,8 @@ class TestSeedHonoursTheExclusion:
         all_patterns = load_golden_patterns(_DATASET_DIR)
         kept = load_golden_patterns(_DATASET_DIR, exclude=DEFAULT_SPLIT)
 
-        assert len(all_patterns) == 113
-        assert len(kept) == 83
+        assert len(all_patterns) == 114  # t-1185: eval-005 gained the date-of-birth golden
+        assert len(kept) == 84
         # The exact multiset that left the seed is the three held-out files' own
         # keys - no more, no less. Nothing else was removed, nothing stayed.
         dropped = Counter(_keys(all_patterns)) - Counter(_keys(kept))
@@ -110,14 +110,14 @@ class TestSeedHonoursTheExclusion:
         assert _keys(by_name) == _keys(by_stem)
 
     def test_no_exclusion_is_the_shipped_pack(self) -> None:
-        """The product path is unchanged: the default seed is the full 113."""
-        assert len(build_bundled_patterns()) == 113
-        assert len(build_bundled_patterns(exclude=DEFAULT_SPLIT)) == 83
+        """The product path is unchanged: the default seed is the full pack."""
+        assert len(build_bundled_patterns()) == 114  # t-1185: 113 + eval-005 date of birth
+        assert len(build_bundled_patterns(exclude=DEFAULT_SPLIT)) == 84
 
     def test_seeding_threads_the_exclusion_to_the_store(self, tmp_path: Path) -> None:
         store = MagicMock()
         store.is_empty = True
-        store.add_patterns.return_value = 83
+        store.add_patterns.return_value = 84
         store.add_docs.return_value = (0, 0)
 
         result = ensure_bundled_seeded(
@@ -128,7 +128,7 @@ class TestSeedHonoursTheExclusion:
 
         assert result["status"] == "seeded"
         seeded = store.add_patterns.call_args.args[0]
-        assert len(seeded) == 83
+        assert len(seeded) == 84  # t-1185: eval-005's date-of-birth golden stays seeded
         dropped = Counter(_keys(load_golden_patterns(_DATASET_DIR))) - Counter(_keys(seeded))
         assert dropped == Counter(_keys_from_files(DEFAULT_SPLIT))
 
@@ -138,7 +138,7 @@ class TestHeldoutScoreIsComputedFromHeldoutStoriesOnly:
 
     def test_selection_keeps_only_the_heldout_stories(self) -> None:
         everything = _load_golden_placeholders()
-        assert len(everything) == 113
+        assert len(everything) == 114  # t-1185: eval-005 gained the date-of-birth golden
 
         heldout = select_story_placeholders(everything, _EXPECTED_HELDOUT_IDS)
 
@@ -272,7 +272,7 @@ class TestRotation:
         assert split_files(_DATASET_DIR, ", ".join(wanted)) == wanted
         described = describe_split(_DATASET_DIR, wanted)
         assert described["stories"] == ["eval-001", "eval-005", "eval-006"]
-        assert described["placeholders"] == 20 + 24 + 16
+        assert described["placeholders"] == 20 + 25 + 16  # t-1185: eval-005 is 25 now
 
     def test_a_bad_explicit_list_is_refused_not_silently_trimmed(self) -> None:
         with pytest.raises(ValueError, match="not a dataset file"):
@@ -318,7 +318,7 @@ class TestRotation:
 
     def test_the_split_names_itself_in_one_line(self) -> None:
         described = describe_split(_DATASET_DIR, DEFAULT_SPLIT)
-        assert described["label"] == "held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)"
+        assert described["label"] == "held-out: eval-007, eval-008, eval-010 (30 of 114 placeholders)"
         assert described["key"] == "eval-007|eval-008|eval-010"
 
 
@@ -692,4 +692,4 @@ class TestOneListNotTwo:
         assert described["files"] == list(DEFAULT_SPLIT)
         held_out = int(str(described["placeholders"]))
         patterns = build_bundled_patterns(exclude=[str(name) for name in described["files"]])
-        assert len(patterns) == 113 - held_out
+        assert len(patterns) == 114 - held_out  # t-1185: dataset total follows the goldens

@@ -140,7 +140,9 @@ class TestGotoPairOnCommittedEvidence:
         # resolvable in that run). 89 -> 90 is t-1014: eval-004 c0 is a page
         # criterion whose key now accepts the arrival the run emitted, so the
         # corrected key recovers it. Gate 2 is unaffected (ASSERT-only rule).
-        assert (report.correct_resolutions, report.total_placeholders) == (90, 113)
+        # t-1185: the dataset gained eval-005's date-of-birth golden, which this
+        # run fills (#dob) - correct 91 of 114.
+        assert (report.correct_resolutions, report.total_placeholders) == (91, 114)
         assert report.total_false_positives == 0
 
     def test_goto_without_arrival_evidence_stays_a_miss(self) -> None:
@@ -154,8 +156,9 @@ class TestGotoPairOnCommittedEvidence:
         assert gotos["navigate to bill payments"][0] is True
         # 95 is the GOTO-fix number; 98 is t-1014 (eval-001 c2, eval-001 c4 and
         # eval-004 c0 are page criteria whose corrected keys accept the arrival
-        # that run emitted). The GOTO assertion above is this test's subject.
-        assert (report.correct_resolutions, report.total_placeholders) == (98, 113)
+        # that run emitted). t-1185: +1 is eval-005's new date-of-birth golden.
+        # The GOTO assertion above is this test's subject.
+        assert (report.correct_resolutions, report.total_placeholders) == (99, 114)
         assert report.total_false_positives == 0
 
     def test_dataset_has_no_goto_targeting_a_base_url(self) -> None:

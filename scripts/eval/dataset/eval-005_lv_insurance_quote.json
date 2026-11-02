@@ -24,6 +24,7 @@
         { "action": "FILL", "description": "password", "expected_locator": "#password", "tolerance_selectors": ["input[type='password']"], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "FILL", "description": "first name", "expected_locator": "#firstName", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "FILL", "description": "last name", "expected_locator": "#lastName", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
+        { "action": "FILL", "description": "date of birth", "expected_locator": "#dob", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "FILL", "description": "postcode", "expected_locator": "#postcode", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" },
         { "action": "CLICK", "description": "Next button on account page", "expected_locator": "#accountNext", "tolerance_selectors": [], "expected_page": "http://localhost:8781/generated_tests/mock_insurance_site.html" }
       ]
