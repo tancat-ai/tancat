@@ -42,6 +42,16 @@ class ResolutionResult:
     # Why the criterion is unverified; empty when it was verified. A missing
     # product verdict always fills this (B-100: never say unverified silently).
     verification_reason: str = ""
+    # t-1183 (owner's word, 2026-11-02: "2 go for truth"): what GATE 2 counts as
+    # verified. Deliberately stricter than `verification`, which stays the
+    # product's own view (B-100). True only when the element the tool says it
+    # checked IS the golden or a declared tolerance, or when the key marks the
+    # criterion ``criterion_kind: page`` and the tool verified it by page arrival.
+    # A "verified by element" verdict for some other element is the tool marking
+    # its own homework; gate 2 must be able to see it.
+    gate2_verified: bool = False
+    #: What the pipeline's verdict says it checked (for the record and the report).
+    checked_element: str = ""
 
 
 @dataclass
@@ -352,19 +362,13 @@ def count_false_greens(
     for r in story.resolutions:
         if r.action != "ASSERT":
             continue
-        # Verified by the golden answer asserted in THIS criterion's own test, by
-        # a distinctive-element match, or by a URL assertion on the criterion's
-        # page (B-093 gate 2) — none of those is a false green. Only an
-        # unverified ASSERT that still passed.
-        #
-        # t-1179/d-0090: r.matched is deliberately NOT consulted here. It is a
-        # whole-FILE fact - "the golden locator appears somewhere in this file" -
-        # so using it as a shortcut skipped an ASSERT whose golden element happened
-        # to sit in a DIFFERENT test of the same story, and that hollow pass was
-        # never checked against its own criterion. ``verification`` is already
-        # per-criterion (it is "golden" only when own_golden holds), so it is the
-        # only thing that should decide.
-        if (r.verification or "unverified") != "unverified":
+        # Verified for GATE 2 only when the tool can show it checked the thing
+        # the golden key names (t-1183). ``verification`` - the product's own
+        # view - is no longer enough on its own: a "verified by element" verdict
+        # for an element that is not the golden is the tool marking its own
+        # homework. That flag is computed where the verdict and the key meet
+        # (golden_validator._gate2_verified).
+        if r.gate2_verified:
             continue
         if not per_test_known or r.criterion_index is None or not (0 <= r.criterion_index < len(test_names)):
             # No attribution possible — conservative story-level rule.

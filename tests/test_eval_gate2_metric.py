@@ -286,3 +286,106 @@ class TestAMissIsNotDisplayedAsAResolvedLocator:
 
         assert hit["matched"] == 1
         assert hit["resolved_locator"] == "#golden"
+
+
+# ---------------------------------------------------------------------------
+# t-1183: gate 2 must not take the tool's word for what it verified
+# ---------------------------------------------------------------------------
+
+#: One page-kind criterion whose golden is a URL assertion.
+_PAGE_GOLDEN = {
+    "id": "eval-996",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. cart page loaded"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "criterion_kind": "page",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "cart page loaded",
+                    "expected_locator": 'expect(page).to_have_url("https://example.com/cart")',
+                    "tolerance_selectors": ["#cart"],
+                }
+            ],
+        }
+    ],
+}
+
+#: The criterion's own test asserts an ELEMENT, not the URL the key names, so the
+#: row can only be as strong as the pipeline's own verdict.
+_PAGE_CODE = "def test_01_a(page):\n    evidence_tracker.assert_visible('h1.title', label='cart page loaded')\n"
+
+
+class TestGateTwoDoesNotTakeTheToolsWord:
+    """t-1183 (owner, 2026-11-02: "2 go for truth"): a ``verified_by_element``
+    verdict is not proof for gate 2 unless the element is the one the key names."""
+
+    def test_a_subject_row_checked_against_another_element_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _HOLLOW_CODE,
+            _HOLLOW_GOLDEN,
+            verdicts=[
+                {"status": "verified_by_element", "checked": "#first"},
+                {"status": "verified_by_element", "checked": "#other"},
+            ],
+        )
+        row = next(r for r in story.resolutions if r.criterion_index == 1)
+
+        # The product's own view is untouched: it still reads "subject".
+        assert row.verification == "subject"
+        # Gate 2 does not take that word: #other is not the golden.
+        assert row.gate2_verified is False
+        assert row.checked_element == "#other"
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 1
+
+    def test_a_subject_row_checked_against_the_golden_is_not_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _HOLLOW_CODE,
+            _HOLLOW_GOLDEN,
+            verdicts=[
+                {"status": "verified_by_element", "checked": "#first"},
+                {"status": "verified_by_element", "checked": "#golden"},
+            ],
+        )
+        row = next(r for r in story.resolutions if r.criterion_index == 1)
+
+        assert row.verification == "subject"
+        assert row.gate2_verified is True
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 0
+
+    def test_a_page_kind_url_assertion_is_not_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[{"status": "verified_by_page_arrival", "checked": "# Page arrival check: cart"}],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "page"
+        assert row.gate2_verified is True
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 0
+
+    def test_an_element_verdict_on_a_page_kind_criterion_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[{"status": "verified_by_element", "checked": "h1.title"}],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "subject"
+        assert row.gate2_verified is False
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1

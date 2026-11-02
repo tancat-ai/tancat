@@ -430,6 +430,43 @@ def _verification_reason(matched: bool, verdict: dict[str, Any] | None) -> str:
     return reason or "the pipeline reported this criterion unverified"
 
 
+def _gate2_verified(
+    own_golden: bool,
+    verdict: dict[str, Any] | None,
+    golden_placeholder: dict[str, Any],
+    tolerances: list[str],
+) -> bool:
+    """Whether GATE 2 may count this criterion as verified (t-1183).
+
+    Stricter than :func:`_classify_verification`, which stays the product's own
+    view (B-100). The owner's rule, 2026-11-02 ("2 go for truth"): a criterion is
+    verified for gate 2 only when the tool can show it checked the thing the
+    golden key names -
+
+      * its own test asserts the golden or a declared tolerance (``own_golden``);
+      * or the element the tool says it checked IS the golden or a tolerance;
+      * or the key marks the criterion ``criterion_kind: page`` and the tool
+        verified it by page arrival (a URL assertion).
+
+    A ``verified_by_element`` verdict for an element that is neither is the tool
+    marking its own homework, and gate 2 must be able to see it.
+    """
+    if own_golden:
+        return True
+    if not verdict:
+        return False
+    status = str(verdict.get("status") or "")
+    if status == "verified_by_page_arrival":
+        return str(golden_placeholder.get("criterion_kind") or "") == "page"
+    if status == "verified_by_element":
+        checked = str(verdict.get("checked") or "").strip()
+        if not checked:
+            return False
+        expected = str(golden_placeholder.get("expected_locator") or "")
+        return _locators_match(checked, expected, tolerances)
+    return False
+
+
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
     """Check if resolved locator matches expected, with normalization.
 
@@ -561,6 +598,11 @@ def _match_generated_to_golden(
             verdict = verdicts[idx]
         verification = _classify_verification(own_golden, verdict)
         verification_reason = _verification_reason(own_golden, verdict)
+        # t-1183: gate 2 uses a stricter test than the product's own view, and the
+        # element the tool says it checked travels with the row so the record can
+        # show exactly what was - or was not - verified.
+        gate2_verified = _gate2_verified(own_golden, verdict, gp, tolerances)
+        checked_element = str((verdict or {}).get("checked") or "")
 
         if best is None:
             results.append(
@@ -574,11 +616,15 @@ def _match_generated_to_golden(
                     criterion_index=idx,
                     verification=verification,
                     verification_reason=verification_reason,
+                    gate2_verified=gate2_verified,
+                    checked_element=checked_element,
                 )
             )
         else:
             best.verification = verification
             best.verification_reason = verification_reason
+            best.gate2_verified = gate2_verified
+            best.checked_element = checked_element
             results.append(best)
 
     return results
