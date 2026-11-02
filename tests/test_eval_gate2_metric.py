@@ -154,3 +154,441 @@ class TestGateSeparation:
         result = validate_story(code, golden, verdicts=[{"status": "verified_by_page_arrival"}])
         assert result.resolutions[0].matched is False  # gate 1 strict
         assert result.resolutions[0].verification == "page"  # gate 2 reads the verdict
+
+
+# ---------------------------------------------------------------------------
+# t-1179 / d-0090: gate 2 must not take the whole-file match as proof
+# ---------------------------------------------------------------------------
+
+#: Two criteria. Criterion 1's golden is ``#golden``; the code below asserts it in
+#: test_01 and asserts something else (#other) in test_02, which owns the criterion.
+_HOLLOW_GOLDEN = {
+    "id": "eval-997",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. first thing", "2. second thing"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "first thing",
+                    "expected_locator": "#first",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+        {
+            "criterion_index": 1,
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "second thing",
+                    "expected_locator": "#golden",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+    ],
+}
+
+#: #golden appears in test_01, NOT in test_02 - the criterion's own test.
+_HOLLOW_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "    evidence_tracker.assert_visible('#golden', label='probe')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#other', label='second thing')\n"
+)
+
+#: Same shape, but the criterion's own test does assert the golden.
+_OWN_TEST_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#golden', label='second thing')\n"
+)
+
+#: A genuine miss: criterion 1's golden (#golden) is nowhere in the file, and its
+#: own test asserted a different element - the shape that used to print #other as
+#: if it were the resolved locator.
+_MISS_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#other', label='second thing')\n"
+)
+
+
+class TestHollowPassIgnoresTheWholeFileMatch:
+    """d-0090: ``r.matched`` is a whole-FILE fact and must not stand in for proof."""
+
+    def test_a_hollow_assert_whose_golden_lives_in_another_test_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_HOLLOW_CODE, _HOLLOW_GOLDEN)
+        hollow = next(r for r in story.resolutions if r.criterion_index == 1)
+        # The setup must really be the defect: the golden is in the file (so the
+        # old shortcut skipped the row) but not in the criterion's own test.
+        assert hollow.matched is True
+        assert hollow.verification == "unverified"
+
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) >= 1, (
+            "a passed test that never asserted its own criterion's golden is a hollow pass"
+        )
+
+    def test_a_genuinely_verified_assertion_is_not_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_OWN_TEST_CODE, _HOLLOW_GOLDEN)
+        verified = next(r for r in story.resolutions if r.criterion_index == 1)
+        assert verified.matched is True
+        assert verified.verification == "golden"
+
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _OWN_TEST_CODE, per_test, passed=2) == 0
+
+    def test_a_failed_own_test_is_never_a_false_green(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_HOLLOW_CODE, _HOLLOW_GOLDEN)
+        per_test = {"test_01_a": "PASSED", "test_02_b": "FAILED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=1) == 0
+
+
+class TestAMissIsNotDisplayedAsAResolvedLocator:
+    """t-1179: #dob and #quoteSubmit read as picks because the nearest candidate
+    was printed in a column labelled "resolved". Display only - no scoring change."""
+
+    def test_a_missed_placeholder_has_no_resolved_locator(self) -> None:
+        from eval_criteria import MISS_WRONG_ELEMENT, criterion_rows
+
+        story = validate_story(_MISS_CODE, _HOLLOW_GOLDEN)
+        rows = criterion_rows(story, _MISS_CODE, {"test_01_a": "PASSED", "test_02_b": "PASSED"})
+        miss = next(row for row in rows if row["criterion_index"] == 1)
+
+        assert miss["matched"] == 0
+        assert miss["resolved_locator"] is None, "a miss must not display a locator as resolved"
+        # The diagnostic survives: what kind of miss it was is still recorded.
+        assert miss["miss_class"] == MISS_WRONG_ELEMENT
+
+    def test_a_matched_placeholder_keeps_its_resolved_locator(self) -> None:
+        from eval_criteria import criterion_rows
+
+        story = validate_story(_OWN_TEST_CODE, _HOLLOW_GOLDEN)
+        rows = criterion_rows(story, _OWN_TEST_CODE, {"test_01_a": "PASSED", "test_02_b": "PASSED"})
+        hit = next(row for row in rows if row["criterion_index"] == 1)
+
+        assert hit["matched"] == 1
+        assert hit["resolved_locator"] == "#golden"
+
+
+# ---------------------------------------------------------------------------
+# t-1183: gate 2 must not take the tool's word for what it verified
+# ---------------------------------------------------------------------------
+
+#: One page-kind criterion whose golden is a URL assertion.
+_PAGE_GOLDEN = {
+    "id": "eval-996",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. cart page loaded"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "criterion_kind": "page",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "cart page loaded",
+                    "expected_locator": 'expect(page).to_have_url("https://example.com/cart")',
+                    "tolerance_selectors": ["#cart"],
+                }
+            ],
+        }
+    ],
+}
+
+#: The criterion's own test asserts an ELEMENT, not the URL the key names, so the
+#: row can only be as strong as the pipeline's own verdict.
+_PAGE_CODE = "def test_01_a(page):\n    evidence_tracker.assert_visible('h1.title', label='cart page loaded')\n"
+
+
+class TestGateTwoDoesNotTakeTheToolsWord:
+    """t-1183 (owner, 2026-11-02: "2 go for truth"): a ``verified_by_element``
+    verdict is not proof for gate 2 unless the element is the one the key names."""
+
+    def test_a_subject_row_checked_against_another_element_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _HOLLOW_CODE,
+            _HOLLOW_GOLDEN,
+            verdicts=[
+                {"status": "verified_by_element", "checked": "#first"},
+                {"status": "verified_by_element", "checked": "#other"},
+            ],
+        )
+        row = next(r for r in story.resolutions if r.criterion_index == 1)
+
+        # The product's own view is untouched: it still reads "subject".
+        assert row.verification == "subject"
+        # Gate 2 does not take that word: #other is not the golden.
+        assert row.gate2_verified is False
+        assert row.checked_element == "#other"
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 1
+
+    def test_a_subject_row_checked_against_the_golden_in_another_test_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _HOLLOW_CODE,
+            _HOLLOW_GOLDEN,
+            verdicts=[
+                {"status": "verified_by_element", "checked": "#first"},
+                {"status": "verified_by_element", "checked": "#golden"},
+            ],
+        )
+        row = next(r for r in story.resolutions if r.criterion_index == 1)
+
+        assert row.verification == "subject"
+        # t-1188 hole 1: the checked element IS the golden, but the check sits in
+        # test_01 while the criterion's own test is test_02 - so it is not proof
+        # for THIS criterion and gate 2 must count it.
+        assert row.gate2_verified is False
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 1
+
+    def test_a_page_kind_url_assertion_at_the_golden_url_is_not_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/cart', "
+                        "browser observed on 'https://example.com/cart'"
+                    ),
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "page"
+        assert row.gate2_verified is True
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 0
+
+    def test_a_page_arrival_at_a_different_url_is_counted(self) -> None:
+        """t-1188 hole 2: any arrival used to verify a page criterion."""
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/home', "
+                        "browser observed on 'https://example.com/home'"
+                    ),
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "page"
+        assert row.gate2_verified is False, "an arrival at another page does not verify this criterion"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+    def test_a_page_kind_criterion_whose_golden_is_an_element_is_counted(self) -> None:
+        """The eval-001 c0 shape: kind says page, the key asks for an element."""
+        from eval_metrics import count_false_greens
+
+        element_golden = {
+            **_PAGE_GOLDEN,
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "criterion_kind": "page",
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "product list",
+                            "expected_locator": '[data-test="inventory-item"]',
+                            "tolerance_selectors": [],
+                        }
+                    ],
+                }
+            ],
+        }
+        story = validate_story(
+            _PAGE_CODE,
+            element_golden,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": "# Page arrival check: expected 'https://example.com/cart'",
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.gate2_verified is False, "an arrival proves the page, not the element the key names"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+    def test_an_element_verdict_on_a_page_kind_criterion_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[{"status": "verified_by_element", "checked": "h1.title"}],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "subject"
+        assert row.gate2_verified is False
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+
+# ---------------------------------------------------------------------------
+# t-1190: for a page-kind criterion the PAGE is the claim, not the element
+# ---------------------------------------------------------------------------
+
+#: The eval-001 c0 shape: the key marks the criterion a page, names the page, and
+#: keeps an element as the extra the test happens to look at.
+_ELEMENT_ON_PAGE_GOLDEN = {
+    "id": "eval-995",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. product list"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "criterion_kind": "page",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "product list",
+                    "expected_locator": '[data-test="inventory-item"]',
+                    "tolerance_selectors": [],
+                    "expected_page": "https://example.com/inventory.html",
+                }
+            ],
+        }
+    ],
+}
+
+
+class TestAPageCriterionIsVerifiedByItsPage:
+    """t-1190: an arrival at the criterion's own expected_page IS verification."""
+
+    def test_an_arrival_at_the_expected_page_verifies_a_page_kind_criterion(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _ELEMENT_ON_PAGE_GOLDEN,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/inventory.html', "
+                        "browser observed on 'https://example.com/inventory.html'"
+                    ),
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "page"
+        assert row.gate2_verified is True, "the criterion is a page and the browser reached that page"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 0
+
+    def test_an_arrival_at_another_page_does_not_verify_it(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _ELEMENT_ON_PAGE_GOLDEN,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/cart', "
+                        "browser observed on 'https://example.com/cart'"
+                    ),
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.gate2_verified is False, "an arrival somewhere else is not this criterion's page"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+    def test_an_element_kind_criterion_verified_by_an_arrival_does_not_count(self) -> None:
+        """An arrival proves a page; an element-kind criterion asks for an element."""
+        from eval_metrics import count_false_greens
+
+        element_kind: dict[str, Any] = {
+            "id": "eval-995",
+            "site": "test",
+            "base_url": "https://example.com",
+            "conditions": ["1. product list"],
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "criterion_kind": "element",
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "product list",
+                            "expected_locator": '[data-test="inventory-item"]',
+                            "tolerance_selectors": [],
+                            "expected_page": "https://example.com/inventory.html",
+                        }
+                    ],
+                }
+            ],
+        }
+        story = validate_story(
+            _PAGE_CODE,
+            element_kind,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": "# Page arrival check: expected 'https://example.com/inventory.html'",
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.gate2_verified is False
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+    def test_a_subject_row_checked_against_a_different_element_in_its_own_test_counts(self) -> None:
+        """The six known rows: element-kind, checked against something else."""
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _HOLLOW_CODE,
+            _HOLLOW_GOLDEN,
+            verdicts=[
+                {"status": "verified_by_element", "checked": "#first"},
+                {"status": "verified_by_element", "checked": "#other"},
+            ],
+        )
+        row = next(r for r in story.resolutions if r.criterion_index == 1)
+
+        assert row.gate2_verified is False
+        assert count_false_greens(story, _HOLLOW_CODE, {"test_01_a": "PASSED", "test_02_b": "PASSED"}, passed=2) == 1

@@ -430,6 +430,92 @@ def _verification_reason(matched: bool, verdict: dict[str, Any] | None) -> str:
     return reason or "the pipeline reported this criterion unverified"
 
 
+#: ``expect(page).to_have_url("...")`` - the URL a page-kind key names.
+_URL_IN_ASSERT_RE = re.compile(r"""to_have_url\(\s*['\"]([^'\"]+)['\"]""")
+
+#: A quoted value inside a verdict's ``checked`` text.
+_QUOTED_VALUE_RE = re.compile(r"""['\"]([^'\"]+)['\"]""")
+
+
+def _normalise_url(url: str) -> str:
+    """Compare URLs the way the arrival check does: case and a trailing / are noise."""
+    return url.strip().rstrip("/").lower()
+
+
+def _arrival_checked_url(checked: str, expected_url: str) -> bool:
+    """True when a page-arrival verdict compared *expected_url* (t-1188, t-1190).
+
+    The verdict's ``checked`` text carries the URLs it compared, so the check is
+    "is the expected page among them", with the same normalisation the arrival
+    check uses (case and a trailing slash are noise).
+    """
+    want = _normalise_url(expected_url)
+    if not want:
+        return False
+    seen = {_normalise_url(value) for value in _QUOTED_VALUE_RE.findall(checked)}
+    return want in seen
+
+
+def _arrival_checked_the_golden_url(checked: str, expected_locator: str) -> bool:
+    """Fallback when the key names no ``expected_page``: the URL its golden is."""
+    match = _URL_IN_ASSERT_RE.search(expected_locator)
+    if not match:
+        return False
+    return _arrival_checked_url(checked, match.group(1))
+
+
+def _gate2_verified(
+    own_golden: bool,
+    verdict: dict[str, Any] | None,
+    golden_placeholder: dict[str, Any],
+    tolerances: list[str],
+) -> bool:
+    """Whether GATE 2 may count this criterion as verified (t-1183, t-1188, t-1190).
+
+    Stricter than :func:`_classify_verification`, which stays the product's own
+    view (B-100). A criterion is verified for gate 2 only when the tool can show
+    it checked the thing the key says belongs to that criterion:
+
+      * element verdict - BOTH: the element the tool says it checked IS the golden
+        (or a declared tolerance) AND the check is in the criterion's OWN test
+        (``own_golden``). A checked golden sitting in another test is not proof
+        (t-1188 hole 1).
+      * page-arrival verdict - the key marks the criterion ``criterion_kind: page``
+        AND the arrival was at the criterion's own ``expected_page``. For a page
+        criterion the element is the extra; the PAGE is the thing being checked
+        (t-1190). An arrival never verifies an element-kind criterion.
+    """
+    if own_golden:
+        # The criterion's OWN test asserts the golden (or a declared tolerance).
+        # That is both halves of the element rule at once, and no verdict can
+        # weaken it, nor is the tool's own `checked` string needed to confirm it.
+        return True
+    if not verdict:
+        return False
+    status = str(verdict.get("status") or "")
+    checked = str(verdict.get("checked") or "").strip()
+    expected = str(golden_placeholder.get("expected_locator") or "")
+    if status == "verified_by_page_arrival":
+        if str(golden_placeholder.get("criterion_kind") or "") != "page":
+            # t-1190: an arrival proves a page, not the element an element-kind
+            # criterion names - so it is not verification for that criterion.
+            return False
+        expected_page = str(golden_placeholder.get("expected_page") or "").strip()
+        if expected_page:
+            return _arrival_checked_url(checked, expected_page)
+        # No page recorded in the key: fall back to the URL its golden names.
+        return _arrival_checked_the_golden_url(checked, expected)
+    if status == "verified_by_element":
+        # t-1188 hole 1: BOTH halves are required, and the second one is
+        # `own_golden` - the check must sit in the criterion's own test. We only
+        # reach this line when it does not, so the answer is no: the tool checking
+        # the golden SOMEWHERE ELSE in the file does not make this criterion's own
+        # test prove it. A matching `checked` element is therefore never enough
+        # on its own, which is exactly the hole.
+        return False
+    return False
+
+
 def _locators_match(resolved: str, expected: str, tolerances: list[str]) -> bool:
     """Check if resolved locator matches expected, with normalization.
 
@@ -561,6 +647,11 @@ def _match_generated_to_golden(
             verdict = verdicts[idx]
         verification = _classify_verification(own_golden, verdict)
         verification_reason = _verification_reason(own_golden, verdict)
+        # t-1183: gate 2 uses a stricter test than the product's own view, and the
+        # element the tool says it checked travels with the row so the record can
+        # show exactly what was - or was not - verified.
+        gate2_verified = _gate2_verified(own_golden, verdict, gp, tolerances)
+        checked_element = str((verdict or {}).get("checked") or "")
 
         if best is None:
             results.append(
@@ -574,11 +665,15 @@ def _match_generated_to_golden(
                     criterion_index=idx,
                     verification=verification,
                     verification_reason=verification_reason,
+                    gate2_verified=gate2_verified,
+                    checked_element=checked_element,
                 )
             )
         else:
             best.verification = verification
             best.verification_reason = verification_reason
+            best.gate2_verified = gate2_verified
+            best.checked_element = checked_element
             results.append(best)
 
     return results

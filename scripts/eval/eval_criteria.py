@@ -193,7 +193,13 @@ def criterion_rows(
                 "action": r.action,
                 "page": "",
                 "golden_locator": r.expected_locator,
-                "resolved_locator": r.generated_locator,
+                # t-1179: a MISS is not a resolution. ``generated_locator`` holds
+                # the nearest candidate the matcher kept for diagnostics, and
+                # printing it in a column labelled "resolved" is what made #dob and
+                # #quoteSubmit read as picks. Display only - ``matched`` and the
+                # miss class are untouched, and classify_miss still reads the
+                # candidate from the resolution itself.
+                "resolved_locator": r.generated_locator if r.matched else None,
                 "matched": 1 if r.matched else 0,
                 "verification": r.verification or ("unverified" if r.action == "ASSERT" else ""),
                 "outcome": outcome,
