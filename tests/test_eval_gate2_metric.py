@@ -344,7 +344,7 @@ class TestGateTwoDoesNotTakeTheToolsWord:
         per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
         assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 1
 
-    def test_a_subject_row_checked_against_the_golden_is_not_counted(self) -> None:
+    def test_a_subject_row_checked_against_the_golden_in_another_test_is_counted(self) -> None:
         from eval_metrics import count_false_greens
 
         story = validate_story(
@@ -358,23 +358,93 @@ class TestGateTwoDoesNotTakeTheToolsWord:
         row = next(r for r in story.resolutions if r.criterion_index == 1)
 
         assert row.verification == "subject"
-        assert row.gate2_verified is True
+        # t-1188 hole 1: the checked element IS the golden, but the check sits in
+        # test_01 while the criterion's own test is test_02 - so it is not proof
+        # for THIS criterion and gate 2 must count it.
+        assert row.gate2_verified is False
         per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
-        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 0
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) == 1
 
-    def test_a_page_kind_url_assertion_is_not_counted(self) -> None:
+    def test_a_page_kind_url_assertion_at_the_golden_url_is_not_counted(self) -> None:
         from eval_metrics import count_false_greens
 
         story = validate_story(
             _PAGE_CODE,
             _PAGE_GOLDEN,
-            verdicts=[{"status": "verified_by_page_arrival", "checked": "# Page arrival check: cart"}],
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/cart', "
+                        "browser observed on 'https://example.com/cart'"
+                    ),
+                }
+            ],
         )
         row = story.resolutions[0]
 
         assert row.verification == "page"
         assert row.gate2_verified is True
         assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 0
+
+    def test_a_page_arrival_at_a_different_url_is_counted(self) -> None:
+        """t-1188 hole 2: any arrival used to verify a page criterion."""
+        from eval_metrics import count_false_greens
+
+        story = validate_story(
+            _PAGE_CODE,
+            _PAGE_GOLDEN,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": (
+                        "# Page arrival check: expected 'https://example.com/home', "
+                        "browser observed on 'https://example.com/home'"
+                    ),
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.verification == "page"
+        assert row.gate2_verified is False, "an arrival at another page does not verify this criterion"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
+
+    def test_a_page_kind_criterion_whose_golden_is_an_element_is_counted(self) -> None:
+        """The eval-001 c0 shape: kind says page, the key asks for an element."""
+        from eval_metrics import count_false_greens
+
+        element_golden = {
+            **_PAGE_GOLDEN,
+            "golden_resolutions": [
+                {
+                    "criterion_index": 0,
+                    "criterion_kind": "page",
+                    "placeholders": [
+                        {
+                            "action": "ASSERT",
+                            "description": "product list",
+                            "expected_locator": '[data-test="inventory-item"]',
+                            "tolerance_selectors": [],
+                        }
+                    ],
+                }
+            ],
+        }
+        story = validate_story(
+            _PAGE_CODE,
+            element_golden,
+            verdicts=[
+                {
+                    "status": "verified_by_page_arrival",
+                    "checked": "# Page arrival check: expected 'https://example.com/cart'",
+                }
+            ],
+        )
+        row = story.resolutions[0]
+
+        assert row.gate2_verified is False, "an arrival proves the page, not the element the key names"
+        assert count_false_greens(story, _PAGE_CODE, {"test_01_a": "PASSED"}, passed=1) == 1
 
     def test_an_element_verdict_on_a_page_kind_criterion_is_counted(self) -> None:
         from eval_metrics import count_false_greens

@@ -327,15 +327,16 @@ class TestEvidenceGuard:
 
         assert report.correct_resolutions == expected_correct
         assert report.total_placeholders == expected_total
-        # t-1183: the recorded cell still says gate 2 = 0, but under the narrowed
-        # rule - a "verified by element" verdict counts only when the element is
-        # the golden or a declared tolerance - the SAME committed evidence now
-        # finds 4 hollow passes. The cell was left alone on purpose: it is the
-        # record of what was measured then, not a number to be adjusted to
-        # today's rule. Both sides are stated here so the disagreement is
-        # visible rather than silent.
+        # t-1183/t-1188: the recorded cell still says gate 2 = 0, but under the
+        # narrowed rule - a "verified by element" verdict counts only when the
+        # element is the golden in the criterion's own test, and a page-arrival
+        # verdict only when it compared the key's URL - the SAME committed
+        # evidence finds 6 hollow passes. The cell was left alone on purpose: it
+        # is the record of what was measured then, not a number to be adjusted to
+        # today's rule. Both sides are stated here so the disagreement is visible
+        # rather than silent.
         assert full["gate2_false_greens"] == 0
-        assert report.total_false_positives == 4
+        assert report.total_false_positives == 6
 
 
 class TestHarnessEvidenceHook:
@@ -527,7 +528,7 @@ class TestGateTwoUnderTheNarrowedRule:
 
         assert report.correct_resolutions == 102
         assert report.total_placeholders == 113
-        assert report.total_false_positives == 6, (
+        assert report.total_false_positives == 8, (
             "t-1183: eval-002 c3/c5, eval-003 c0/c5 and eval-006 c2/c7 are verified by "
             "an element that is not the golden"
         )
