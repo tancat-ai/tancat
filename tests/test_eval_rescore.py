@@ -332,7 +332,16 @@ class TestEvidenceGuard:
         dataset_grew_by = 1
         assert report.correct_resolutions == expected_correct + dataset_grew_by
         assert report.total_placeholders == expected_total + dataset_grew_by
-        assert report.total_false_positives == full["gate2_false_greens"]
+        # t-1183/t-1188/t-1190: the recorded cell still says gate 2 = 0, but under
+        # the narrowed rule - a "verified by element" verdict counts only when the
+        # element is the golden in the criterion's own test, and a page-arrival
+        # verdict only when it reached the criterion's own expected_page - the
+        # SAME committed evidence finds 4 hollow passes. The cell was left alone on
+        # purpose: it is the record of what was measured then, not a number to be
+        # adjusted to today's rule. Both sides are stated here so the disagreement
+        # is visible rather than silent.
+        assert full["gate2_false_greens"] == 0
+        assert report.total_false_positives == 4
 
 
 class TestHarnessEvidenceHook:
@@ -512,3 +521,47 @@ class TestKilledStoryRescore:
         summary = report.to_summary()
         assert "KILLED" not in summary
         assert "Tests:        1 passed=1 false_pos=1" in summary, summary
+
+
+class TestGateTwoUnderTheNarrowedRule:
+    """t-1183: gate 2 counts only what the tool can prove it checked."""
+
+    def test_the_committed_leg_reports_its_hollow_passes(self) -> None:
+        """Gate 1 follows the dataset; gate 2 now shows the six rows the tool had blessed."""
+        run_dir = _REPO_ROOT / "fixtures" / "heldout_runs" / "2026-10-31" / "leg1_rag_on_bundled"
+        report = rescore.rescore(run_dir, _REPO_ROOT / "scripts" / "eval" / "dataset")
+
+        # t-1185/t-1195: the committed cell still says 102/113; the dataset gained
+        # eval-005's date-of-birth golden, which this leg fills, so the same
+        # evidence re-scores to 103/114. The recorded cell is what was measured
+        # then and is not rewritten.
+        assert report.correct_resolutions == 103
+        assert report.total_placeholders == 114
+        assert report.total_false_positives == 6, (
+            "t-1183: eval-002 c3/c5, eval-003 c0/c5 and eval-006 c2/c7 are verified by "
+            "an element that is not the golden"
+        )
+
+    def test_a_story_whose_own_tests_assert_the_golden_still_reads_zero(self, tmp_path: Path) -> None:
+        """The narrowing must not turn a genuinely verified story into a false green."""
+        dataset_dir = tmp_path / "dataset"
+        dataset_dir.mkdir()
+        (dataset_dir / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+        clean_code = "def test_01_a(page):\n    evidence_tracker.assert_visible('#backpack', label='backpack')\n"
+        run_dir = tmp_path / "run"
+        write_run_evidence(
+            run_dir,
+            code_map={"eval-999": clean_code},
+            results=[validate_story(clean_code, _GOLDEN)],
+            verdict_map={"eval-999": [{"status": "unverified", "reason": "no element check"}]},
+            summary="clean run",
+            metadata={"mode": "full", "dataset": str(dataset_dir)},
+        )
+        junit_dir = run_dir / "junit"
+        junit_dir.mkdir(parents=True, exist_ok=True)
+        (junit_dir / f"{emitted_filename('eval-999').replace('.py', '.xml')}").write_text(_JUNIT, encoding="utf-8")
+
+        report = rescore.rescore(run_dir, dataset_dir)
+
+        assert report.correct_resolutions == 1
+        assert report.total_false_positives == 0

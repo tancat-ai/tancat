@@ -139,11 +139,17 @@ class TestGotoPairOnCommittedEvidence:
         # 87 under the pre-fix validator; +2 is the GOTO pair (both were
         # resolvable in that run). 89 -> 90 is t-1014: eval-004 c0 is a page
         # criterion whose key now accepts the arrival the run emitted, so the
-        # corrected key recovers it. Gate 2 is unaffected (ASSERT-only rule).
-        # t-1185: the dataset gained eval-005's date-of-birth golden, which this
-        # run fills (#dob) - correct 91 of 114.
+        # corrected key recovers it. t-1185: the dataset gained eval-005's
+        # date-of-birth golden, which this run fills (#dob) - correct 91 of 114.
         assert (report.correct_resolutions, report.total_placeholders) == (91, 114)
-        assert report.total_false_positives == 0
+        # t-1183/t-1188/t-1190: gate 2 is NOT unaffected any more. Under the
+        # narrowed rule - a "verified by element" verdict counts only when the
+        # element is the golden in the criterion's own test, and a page-arrival
+        # verdict only when it reached the criterion's own expected_page - this
+        # same evidence finds 4 hollow passes, where the recorded cell says 0. The
+        # cell is left alone as the record of what was measured then; the re-score
+        # states today's rule.
+        assert report.total_false_positives == 4
 
     def test_goto_without_arrival_evidence_stays_a_miss(self) -> None:
         """The 2026-10-13 draw emitted no arrival assertion for the transfer
@@ -159,7 +165,9 @@ class TestGotoPairOnCommittedEvidence:
         # that run emitted). t-1185: +1 is eval-005's new date-of-birth golden.
         # The GOTO assertion above is this test's subject.
         assert (report.correct_resolutions, report.total_placeholders) == (99, 114)
-        assert report.total_false_positives == 0
+        # t-1183/t-1188/t-1190: 6 under the narrowed gate-2 rule, where the
+        # recorded cell says 0.
+        assert report.total_false_positives == 6
 
     def test_dataset_has_no_goto_targeting_a_base_url(self) -> None:
         """Guard for the navigate-extraction semantics: no held-out GOTO golden

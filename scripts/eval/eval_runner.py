@@ -807,9 +807,12 @@ def eval_rollup(db_path: str | Path, story_id: str | None = None) -> str:
             classes[key] = classes.get(key, 0) + 1
         lines.append(f"  FAILED CRITERIA: {len(misses)}; classes: {classes}")
         for c in misses:
+            # t-1179: a miss has no resolved locator. Say so, instead of printing
+            # the matcher's nearest candidate under the word "resolved".
+            resolved = c["resolved_locator"] or "(unresolved)"
             lines.append(
                 f"    [{c['miss_class']}] {c['placeholder']} | page {c['page'] or '-'}"
-                f" | golden {c['golden_locator']} | resolved {c['resolved_locator']}"
+                f" | golden {c['golden_locator']} | resolved {resolved}"
             )
 
         basis: dict[str, int] = {}
