@@ -154,3 +154,135 @@ class TestGateSeparation:
         result = validate_story(code, golden, verdicts=[{"status": "verified_by_page_arrival"}])
         assert result.resolutions[0].matched is False  # gate 1 strict
         assert result.resolutions[0].verification == "page"  # gate 2 reads the verdict
+
+
+# ---------------------------------------------------------------------------
+# t-1179 / d-0090: gate 2 must not take the whole-file match as proof
+# ---------------------------------------------------------------------------
+
+#: Two criteria. Criterion 1's golden is ``#golden``; the code below asserts it in
+#: test_01 and asserts something else (#other) in test_02, which owns the criterion.
+_HOLLOW_GOLDEN = {
+    "id": "eval-997",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. first thing", "2. second thing"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "first thing",
+                    "expected_locator": "#first",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+        {
+            "criterion_index": 1,
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "second thing",
+                    "expected_locator": "#golden",
+                    "tolerance_selectors": [],
+                }
+            ],
+        },
+    ],
+}
+
+#: #golden appears in test_01, NOT in test_02 - the criterion's own test.
+_HOLLOW_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "    evidence_tracker.assert_visible('#golden', label='probe')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#other', label='second thing')\n"
+)
+
+#: Same shape, but the criterion's own test does assert the golden.
+_OWN_TEST_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#golden', label='second thing')\n"
+)
+
+#: A genuine miss: criterion 1's golden (#golden) is nowhere in the file, and its
+#: own test asserted a different element - the shape that used to print #other as
+#: if it were the resolved locator.
+_MISS_CODE = (
+    "def test_01_a(page):\n"
+    "    evidence_tracker.assert_visible('#first', label='first thing')\n"
+    "\n\n"
+    "def test_02_b(page):\n"
+    "    evidence_tracker.assert_visible('#other', label='second thing')\n"
+)
+
+
+class TestHollowPassIgnoresTheWholeFileMatch:
+    """d-0090: ``r.matched`` is a whole-FILE fact and must not stand in for proof."""
+
+    def test_a_hollow_assert_whose_golden_lives_in_another_test_is_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_HOLLOW_CODE, _HOLLOW_GOLDEN)
+        hollow = next(r for r in story.resolutions if r.criterion_index == 1)
+        # The setup must really be the defect: the golden is in the file (so the
+        # old shortcut skipped the row) but not in the criterion's own test.
+        assert hollow.matched is True
+        assert hollow.verification == "unverified"
+
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=2) >= 1, (
+            "a passed test that never asserted its own criterion's golden is a hollow pass"
+        )
+
+    def test_a_genuinely_verified_assertion_is_not_counted(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_OWN_TEST_CODE, _HOLLOW_GOLDEN)
+        verified = next(r for r in story.resolutions if r.criterion_index == 1)
+        assert verified.matched is True
+        assert verified.verification == "golden"
+
+        per_test = {"test_01_a": "PASSED", "test_02_b": "PASSED"}
+        assert count_false_greens(story, _OWN_TEST_CODE, per_test, passed=2) == 0
+
+    def test_a_failed_own_test_is_never_a_false_green(self) -> None:
+        from eval_metrics import count_false_greens
+
+        story = validate_story(_HOLLOW_CODE, _HOLLOW_GOLDEN)
+        per_test = {"test_01_a": "PASSED", "test_02_b": "FAILED"}
+        assert count_false_greens(story, _HOLLOW_CODE, per_test, passed=1) == 0
+
+
+class TestAMissIsNotDisplayedAsAResolvedLocator:
+    """t-1179: #dob and #quoteSubmit read as picks because the nearest candidate
+    was printed in a column labelled "resolved". Display only - no scoring change."""
+
+    def test_a_missed_placeholder_has_no_resolved_locator(self) -> None:
+        from eval_criteria import MISS_WRONG_ELEMENT, criterion_rows
+
+        story = validate_story(_MISS_CODE, _HOLLOW_GOLDEN)
+        rows = criterion_rows(story, _MISS_CODE, {"test_01_a": "PASSED", "test_02_b": "PASSED"})
+        miss = next(row for row in rows if row["criterion_index"] == 1)
+
+        assert miss["matched"] == 0
+        assert miss["resolved_locator"] is None, "a miss must not display a locator as resolved"
+        # The diagnostic survives: what kind of miss it was is still recorded.
+        assert miss["miss_class"] == MISS_WRONG_ELEMENT
+
+    def test_a_matched_placeholder_keeps_its_resolved_locator(self) -> None:
+        from eval_criteria import criterion_rows
+
+        story = validate_story(_OWN_TEST_CODE, _HOLLOW_GOLDEN)
+        rows = criterion_rows(story, _OWN_TEST_CODE, {"test_01_a": "PASSED", "test_02_b": "PASSED"})
+        hit = next(row for row in rows if row["criterion_index"] == 1)
+
+        assert hit["matched"] == 1
+        assert hit["resolved_locator"] == "#golden"

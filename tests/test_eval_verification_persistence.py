@@ -148,7 +148,9 @@ class TestPersistedRun:
         }
         c0 = next(r for r in rows if r["criterion_index"] == 0)
         assert c0["golden_locator"] == "#backpack"
-        assert c0["resolved_locator"] == "#wrong"
+        # t-1179: a miss has no resolved locator. The nearest candidate the matcher
+        # kept used to be printed here, which made a miss read as a pick.
+        assert c0["resolved_locator"] is None
         assert c0["matched"] == 0
         assert c0["miss_class"] == MISS_WRONG_ELEMENT
 

@@ -352,10 +352,19 @@ def count_false_greens(
     for r in story.resolutions:
         if r.action != "ASSERT":
             continue
-        # Verified by the golden answer, by a distinctive-element match, or by
-        # a URL assertion on the criterion's page (B-093 gate 2) — none of
-        # those is a false green. Only an unverified ASSERT that still passed.
-        if r.matched or (r.verification or "unverified") != "unverified":
+        # Verified by the golden answer asserted in THIS criterion's own test, by
+        # a distinctive-element match, or by a URL assertion on the criterion's
+        # page (B-093 gate 2) — none of those is a false green. Only an
+        # unverified ASSERT that still passed.
+        #
+        # t-1179/d-0090: r.matched is deliberately NOT consulted here. It is a
+        # whole-FILE fact - "the golden locator appears somewhere in this file" -
+        # so using it as a shortcut skipped an ASSERT whose golden element happened
+        # to sit in a DIFFERENT test of the same story, and that hollow pass was
+        # never checked against its own criterion. ``verification`` is already
+        # per-criterion (it is "golden" only when own_golden holds), so it is the
+        # only thing that should decide.
+        if (r.verification or "unverified") != "unverified":
             continue
         if not per_test_known or r.criterion_index is None or not (0 <= r.criterion_index < len(test_names)):
             # No attribution possible — conservative story-level rule.

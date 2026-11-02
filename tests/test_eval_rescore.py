@@ -507,3 +507,15 @@ class TestKilledStoryRescore:
         summary = report.to_summary()
         assert "KILLED" not in summary
         assert "Tests:        1 passed=1 false_pos=1" in summary, summary
+
+
+class TestGateTwoIsUnchangedOnCleanEvidence:
+    """t-1179: removing the whole-file shortcut must not disturb a clean run."""
+
+    def test_the_committed_leg_rescores_to_the_same_gate_numbers(self) -> None:
+        run_dir = _REPO_ROOT / "fixtures" / "heldout_runs" / "2026-10-31" / "leg1_rag_on_bundled"
+        report = rescore.rescore(run_dir, _REPO_ROOT / "scripts" / "eval" / "dataset")
+
+        assert report.correct_resolutions == 102
+        assert report.total_placeholders == 113
+        assert report.total_false_positives == 0
