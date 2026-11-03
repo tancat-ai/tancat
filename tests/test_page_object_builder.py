@@ -150,6 +150,10 @@ def test_evidence_aware_pom_navigate_delegates_to_tracker() -> None:
     # there exactly as a flat-mode goto is (j-0226).
     assert "self.tracker.navigate(self.URL, expected_page=self.URL)" in page_object.module_source
     assert "self.page.goto" not in page_object.module_source
+    # t-1202: the emitted text ships inside the generated page object, so it must
+    # not name our internal tracker ids. The reason lives in the builder's own code.
+    assert "d-0043" not in page_object.module_source
+    assert "j-0226" not in page_object.module_source
 
 
 def test_evidence_aware_pom_label_derived_from_method_name() -> None:
