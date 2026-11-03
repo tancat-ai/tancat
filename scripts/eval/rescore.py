@@ -134,6 +134,10 @@ def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
         passed = sum(1 for outcome in per_test.values() if outcome == "PASSED")
         story.tests_executed = len(per_test)
         story.tests_passed = passed
+        # t-1243: the skip count lives in the kept junit; the re-score used to
+        # leave it at 0, so a leg with skipped checks printed "skipped (no
+        # evidence): 0" while its own junit held a skipped testcase.
+        story.tests_skipped = sum(1 for outcome in per_test.values() if outcome == "SKIPPED")
         story.tests_false_positive = count_false_greens(story, code, per_test, passed)
         # t-1163: a killed story must not re-score as a clean partial.
         _carry_kill_state(story, kept.get(story.story_id), per_test)

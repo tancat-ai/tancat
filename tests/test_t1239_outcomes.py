@@ -248,3 +248,137 @@ def test_report_says_zero_skips_plainly() -> None:
     text = report.to_summary()
     assert "Checks skipped (no evidence): 0" in text
     assert "skipped=0" in text
+
+
+# ─── t-1243: each shape, through the EMITTER, verbatim ──────────────────────
+
+
+def _emit(resolved_value: str) -> str:
+    """Render the line the generated test carries for a resolved value."""
+    from src.code_postprocessor import replace_token_in_line
+
+    line = "    {{ASSERT:order success message}}"
+    return replace_token_in_line(
+        line,
+        "ASSERT",
+        "{{ASSERT:order success message}}",
+        resolved_value,
+        set(),
+        description="order success message",
+    ).strip()
+
+
+@pytest.mark.asyncio
+async def test_emitted_no_evidence_line_is_a_skip_with_its_reason() -> None:
+    value = await _resolve(_deferred(), PLACE_ORDER)
+    assert _emit(value) == (
+        "pytest.skip(\"check not run: the walk never recorded a page after 'Place Order', "
+        'so there was nothing to check against")'
+    )
+
+
+@pytest.mark.asyncio
+async def test_emitted_interference_line_is_a_fail_with_its_reason() -> None:
+    value = await _resolve(
+        _deferred(previous_click_error="waiting for element to be visible, enabled and stable"),
+        PLACE_ORDER,
+    )
+    assert _emit(value) == (
+        "pytest.fail(\"check failed: something on the page was covering the target when 'Place Order' ran\")"
+    )
+
+
+@pytest.mark.asyncio
+async def test_emitted_wrong_page_line_is_a_fail() -> None:
+    value = await _resolve(
+        _deferred(previous_landing=SUCCESS, previous_landing_url=SUCCESS), PLACE_ORDER, stubborn=True
+    )
+    emitted = _emit(value)
+    assert emitted.startswith("pytest.fail(\"check failed: the nearest element for 'order success message' is on ")
+    assert CHECKOUT in emitted and SUCCESS in emitted
+
+
+@pytest.mark.asyncio
+async def test_emitted_stayed_put_line_is_a_fail() -> None:
+    value = await _resolve(_deferred(previous_stayed_put=True), PLACE_ORDER)
+    assert _emit(value) == (
+        "pytest.fail(\"check failed: the click on 'Place Order' never left the page and the walk "
+        'recorded nothing after it, so the check would sit on the page from before the click")'
+    )
+
+
+@pytest.mark.asyncio
+async def test_emitted_same_address_landing_line_is_a_normal_assert() -> None:
+    value = await _resolve(
+        _deferred(previous_landing_dom=[{"selector": ".text-center", "text": "added"}], previous_landing_url=CHECKOUT),
+        ".text-center",
+    )
+    emitted = _emit(value)
+    assert emitted.startswith("evidence_tracker.assert_visible(")
+    assert ".text-center" in emitted
+
+
+def test_silent_blocker_is_a_fail_not_a_green() -> None:
+    """The click landed, changed nothing, and raised nothing: interference."""
+    assert PlaceholderOrchestrator._landing_shows_no_change(  # noqa: SLF001 - the unit under test
+        [{"selector": "#x", "text": "same", "is_visible": "True"}],
+        [{"selector": "#x", "text": "same", "is_visible": "True"}],
+    )
+    assert not PlaceholderOrchestrator._landing_shows_no_change(  # noqa: SLF001
+        [{"selector": "#x", "text": "same", "is_visible": "True"}],
+        [{"selector": "#x", "text": "same", "is_visible": "False"}],
+    )
+
+
+@pytest.mark.asyncio
+async def test_stayed_put_false_green_is_closed_on_the_real_path() -> None:
+    """d-0107: driven through _replace_placeholders_sequentially, not by hand.
+
+    A click the trail saw stay put, with no post-click landing recorded: the
+    assert must FAIL. The old order returned "resolved" first because the
+    stayed-put click's to_url canonises to the page it was already on.
+    """
+    from src.journey_models import ObservedStep, ObservedTrail
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    def ph(action: str, desc: str, line: int, token: str) -> PlaceholderUse:
+        return PlaceholderUse(token=token, action=action, description=desc, line_number=line, raw_line=token)
+
+    journey = TestJourney(
+        test_name="test_place_order",
+        start_line=1,
+        end_line=3,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line="page.click('{{CLICK:Place Order}}')",
+                placeholders=[ph("CLICK", "Place Order", 2, "{{CLICK:Place Order}}")],
+            ),
+            TestStep(
+                line_number=3,
+                raw_line="assert '{{ASSERT:order success message}}'",
+                placeholders=[ph("ASSERT", "order success message", 3, "{{ASSERT:order success message}}")],
+            ),
+        ],
+    )
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(0, "click", description="Place Order", from_url=CHECKOUT, to_url=CHECKOUT, navigated=False),
+            ObservedStep(1, "scrape", description="order success message", from_url=CHECKOUT, to_url=CHECKOUT),
+        ]
+    )
+    orchestrator = PlaceholderOrchestrator(starting_url=CHECKOUT)
+
+    emitted = await orchestrator._replace_placeholders_sequentially(  # noqa: SLF001 - the unit under test
+        skeleton_code="def test_place_order(page):\n    page.click('{{CLICK:Place Order}}')\n    assert '{{ASSERT:order success message}}'\n",
+        journeys=[journey],
+        page_requirements=[PageRequirement(keyword="checkout")],
+        seed_urls=[CHECKOUT],
+        scraped_data=_scraped(),
+        scraped_errors={},
+        observed_trails={"test_place_order": trail},
+    )
+
+    assert "pytest.fail(\"check failed: the click on 'Place Order' never left the page" in emitted, emitted
+    assert "assert_visible('#place-order'" not in emitted, "the false green must be gone"

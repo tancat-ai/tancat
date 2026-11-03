@@ -1635,6 +1635,17 @@ class PlaceholderOrchestrator:
                         # it - the modal/panel the assert is about - not the DOM
                         # captured before it.
                         pages_to_search = {cursor: list(landing_dom)}
+                        if self._landing_shows_no_change(landing_dom, scraped_data.get(cursor, [])):
+                            # t-1243: the silent blocker. The click landed and left
+                            # the page exactly as it was, with no error to read - a
+                            # pop-up eating the click, or a dead control. Nothing
+                            # could have opened for this check, so it is
+                            # interference and it fails; it is never a green.
+                            refusal = (
+                                self.LANDING_INTERFERENCE,
+                                f"the click on '{description}' changed nothing on the page, "
+                                "so nothing could have opened for this check",
+                            )
                     elif landing and not _same_page(landing, cursor):
                         expected_page = landing
                         pages_to_search = {landing: scraped_data.get(landing, [])}
@@ -2546,6 +2557,20 @@ class PlaceholderOrchestrator:
         return cls.LANDING_OUTCOMES[kind].format(reason=reason.replace('"', "'"))
 
     @staticmethod
+    def _landing_shows_no_change(landing: list[dict[str, Any]], before: list[dict[str, Any]]) -> bool:
+        """True when the post-click look is identical to the pre-click capture.
+
+        t-1243: this is the only evidence a silent blocker leaves. The click landed,
+        raised nothing, and the page is byte-for-byte the same as before it - so
+        the step did nothing, and a check written after it cannot have run. Both
+        sides are compared in full (selector, text and visibility), because the
+        same selector can be present but hidden before a click and shown after it.
+        """
+        if not landing or not before:
+            return False
+        return sorted(map(str, landing)) == sorted(map(str, before))
+
+    @staticmethod
     def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> tuple[str, str] | None:
         """Why an element ASSERT after a click must be refused, or ``None``.
 
@@ -2581,7 +2606,27 @@ class PlaceholderOrchestrator:
             return None
         step = str(da.get("previous_description") or "the step before it")
         error = str(da.get("previous_click_error") or "").lower()
-        if error and any(word in error for word in ("intercept", "overlay", "modal", "pop-up", "popup")):
+        # t-1243: the ways a page can get in the way. A pointer interception is
+        # the loud one; a visibility timeout, a target outside the viewport, a
+        # detached target and pointer-events:none are the quiet ones - they all
+        # mean the click could not reach what it aimed at.
+        blocked = (
+            "intercept",
+            "overlay",
+            "pop-up",
+            "popup",
+            "not visible",
+            "to be visible",
+            "timeout exceeded",
+            "outside of the viewport",
+            "not in the viewport",
+            "detached",
+            "not attached",
+            "pointer-events",
+            "pointer events",
+            "element is not stable",
+        )
+        if error and any(word in error for word in blocked):
             return (
                 PlaceholderOrchestrator.LANDING_INTERFERENCE,
                 f"something on the page was covering the target when '{step}' ran",
@@ -2594,6 +2639,15 @@ class PlaceholderOrchestrator:
                 PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
                 f"the walk looked at the page after '{step}' and found nothing to check against",
             )
+        # t-1243: this must come BEFORE the "landing is a fact" branch. For a click
+        # seen to stay put, the landing it names proves is the page it was already
+        # on, so that branch returned "resolved" and the false green survived.
+        if da.get("previous_stayed_put"):
+            return (
+                PlaceholderOrchestrator.LANDING_WRONG_ANSWER,
+                f"the click on '{step}' never left the page and the walk recorded nothing after it, "
+                "so the check would sit on the page from before the click",
+            )
         landing = da.get("previous_landing")
         if landing:
             return None
@@ -2602,12 +2656,6 @@ class PlaceholderOrchestrator:
             return (
                 PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
                 f"the page '{step}' went to was never recorded, so there was nothing to check against",
-            )
-        if da.get("previous_stayed_put"):
-            return (
-                PlaceholderOrchestrator.LANDING_WRONG_ANSWER,
-                f"the click on '{step}' never left the page and the walk recorded nothing after it, "
-                "so the check would sit on the page from before the click",
             )
         return (
             PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
