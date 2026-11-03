@@ -60,6 +60,26 @@ class _Matcher:
                     return [dict(element)]
         return [None]
 
+    async def find_best_element_for_current_page(
+        self,
+        action: str,
+        description: str,
+        current_url: str | None,
+        pages_data: dict[str, list[dict[str, str]]],
+        excluded_selectors: set[str] | None = None,
+        resolved_steps: list[str] | None = None,
+        golden_patterns: Any = None,
+        site_hash: str | None = None,
+    ) -> dict[str, str] | None:
+        """Same stub for the single-placeholder path (the CLICK step uses it)."""
+        results = await self.find_best_elements_batch(
+            [{"action": action, "description": description}],
+            current_url,
+            pages_data,
+            excluded_selectors,
+        )
+        return results[0]
+
 
 def _scraped() -> dict[str, list[dict[str, str]]]:
     return {
@@ -99,6 +119,7 @@ def _deferred(**overrides: Any) -> dict[str, Any]:
         "previous_landing_dom": None,
         "previous_stayed_put": False,
         "previous_click_error": None,
+        "previous_landing_available": True,
     }
     da.update(overrides)
     return da
@@ -318,18 +339,6 @@ async def test_emitted_same_address_landing_line_is_a_normal_assert() -> None:
     assert ".text-center" in emitted
 
 
-def test_silent_blocker_is_a_fail_not_a_green() -> None:
-    """The click landed, changed nothing, and raised nothing: interference."""
-    assert PlaceholderOrchestrator._landing_shows_no_change(  # noqa: SLF001 - the unit under test
-        [{"selector": "#x", "text": "same", "is_visible": "True"}],
-        [{"selector": "#x", "text": "same", "is_visible": "True"}],
-    )
-    assert not PlaceholderOrchestrator._landing_shows_no_change(  # noqa: SLF001
-        [{"selector": "#x", "text": "same", "is_visible": "True"}],
-        [{"selector": "#x", "text": "same", "is_visible": "False"}],
-    )
-
-
 @pytest.mark.asyncio
 async def test_stayed_put_false_green_is_closed_on_the_real_path() -> None:
     """d-0107: driven through _replace_placeholders_sequentially, not by hand.
@@ -382,3 +391,134 @@ async def test_stayed_put_false_green_is_closed_on_the_real_path() -> None:
 
     assert "pytest.fail(\"check failed: the click on 'Place Order' never left the page" in emitted, emitted
     assert "assert_visible('#place-order'" not in emitted, "the false green must be gone"
+
+
+# ─── t-1246: no "looks unchanged" evidence; positive signals only ────────────
+
+
+def _same_capture() -> list[dict[str, str]]:
+    return [
+        {"selector": "#aggree", "role": "radio", "classes": "form-check", "text": "", "is_visible": "True"},
+        {"selector": "#other", "role": "text", "classes": "", "text": "Type here", "is_visible": "True"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_radio_tick_is_not_interference() -> None:
+    """A ticked radio (checked is not captured) leaves the look identical - not a blocker."""
+    value = await _resolve(
+        _deferred(previous_landing_dom=_same_capture(), previous_landing_url=CHECKOUT),
+        "#aggree",
+    )
+    assert not value.startswith("pytest.fail("), value
+
+
+@pytest.mark.asyncio
+async def test_a_scroll_is_not_interference() -> None:
+    """A scroll (position is not captured) leaves the look identical - not a blocker."""
+    value = await _resolve(
+        _deferred(previous_landing_dom=_same_capture(), previous_landing_url=CHECKOUT),
+        "#other",
+    )
+    assert not value.startswith("pytest.fail("), value
+
+
+@pytest.mark.asyncio
+async def test_target_present_but_unreachable_is_interference_naming_the_click() -> None:
+    """The positive signal: the check's target is on the page but not reachable."""
+    landing = [{"selector": "#total", "role": "text", "text": "0", "is_visible": "False"}]
+    values = await _resolve_lines(
+        _deferred(previous_landing_dom=landing, previous_landing_url=CHECKOUT),
+        "#total",
+    )
+    assert values.startswith('pytest.fail("check failed: '), values
+    assert "could not be reached after the click on 'Place Order'" in values
+    assert "order success message" in values
+
+
+@pytest.mark.asyncio
+async def test_journey_mode_with_no_look_is_a_skip() -> None:
+    """The user-provided journey executor records no look: that is no evidence."""
+    value = await _resolve(
+        _deferred(previous_landing_available=False, previous_stayed_put=True),
+        PLACE_ORDER,
+    )
+    assert value.startswith('pytest.skip("check not run: '), value
+    assert "does not look at the page after a click" in value
+
+
+async def _resolve_lines(da: dict[str, Any], selector: str | None) -> str:
+    """Resolve, then render the emitted line through the real emitter."""
+    return _emit(await _resolve(da, selector))
+
+
+def test_interference_message_names_the_click_on_the_real_path() -> None:
+    """Drive the real path: the fail must name the click, never the assert."""
+    import asyncio
+
+    from src.journey_models import ObservedStep, ObservedTrail
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+    def ph(action: str, desc: str, line: int) -> PlaceholderUse:
+        token = f"{{{{{action}:{desc}}}}}"
+        return PlaceholderUse(token=token, action=action, description=desc, line_number=line, raw_line=token)
+
+    journey = TestJourney(
+        test_name="test_place_order",
+        start_line=1,
+        end_line=3,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line="page.click('{{CLICK:Place Order}}')",
+                placeholders=[ph("CLICK", "Place Order", 2)],
+            ),
+            TestStep(
+                line_number=3,
+                raw_line="assert '{{ASSERT:order success message}}'",
+                placeholders=[ph("ASSERT", "order success message", 3)],
+            ),
+        ],
+    )
+    hidden_target = [{"selector": PLACE_ORDER, "role": "button", "text": "Place Order", "is_visible": "False"}]
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "click",
+                description="Place Order",
+                from_url=CHECKOUT,
+                to_url=CHECKOUT,
+                navigated=False,
+                landing_checked=True,
+                landing_dom=hidden_target,
+            ),
+            ObservedStep(1, "scrape", description="order success message", from_url=CHECKOUT, to_url=CHECKOUT),
+        ]
+    )
+    scraped = {
+        CHECKOUT: [{"selector": PLACE_ORDER, "role": "button", "text": "Place Order", "assertion_type": "toBeVisible"}]
+    }
+    orchestrator = PlaceholderOrchestrator(starting_url=CHECKOUT)
+    # A stub ranker returns the pool element (the LLM would pick it at run time);
+    # everything around it - the trail, the classifier, the emitter - is real.
+    orchestrator._element_matcher = _Matcher(PLACE_ORDER)  # type: ignore[assignment]  # noqa: SLF001
+
+    emitted = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001 - the unit under test
+            skeleton_code=(
+                "def test_place_order(page):\n"
+                "    page.click('{{CLICK:Place Order}}')\n"
+                "    assert '{{ASSERT:order success message}}'\n"
+            ),
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="checkout")],
+            seed_urls=[CHECKOUT],
+            scraped_data=scraped,
+            scraped_errors={},
+            observed_trails={"test_place_order": trail},
+        )
+    )
+
+    assert "could not be reached after the click on 'Place Order'" in emitted, emitted
+    assert "the click on 'order success message'" not in emitted

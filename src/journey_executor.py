@@ -248,7 +248,7 @@ def _execute_journey_sync(
         failed_steps=failed_steps,
         error_message=error_message,
         redirected_urls=redirected_urls,
-        trail=ObservedTrail(steps=trail_steps),
+        trail=ObservedTrail(steps=trail_steps, records_landings=False),
     )
 
 

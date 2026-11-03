@@ -648,6 +648,10 @@ class PlaceholderOrchestrator:
                 if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
                     print(f"[resolve] {journey.test_name} observed trail: [{trail_urls}]", flush=True, file=sys.stderr)
             trail_by_occurrence = self._map_trail_to_placeholders(journey, trail_steps)
+            # t-1246: the user-provided journey executor records no post-click look.
+            # A walk that cannot look has NO evidence for an assert after a
+            # same-address click - that is a skip, not the false green.
+            trail_records_landings = bool(getattr(trail, "records_landings", True)) if trail else True
             # Canonicaliser: trail URLs come straight from page.url (trailing
             # slashes etc.) while scraped_data keys are normalised — resolve
             # every membership check through this map.
@@ -664,6 +668,7 @@ class PlaceholderOrchestrator:
                 diverged_now: bool,
                 _trail_steps: list[ObservedStep] = trail_steps,
                 _by_occurrence: dict[tuple[int, str], ObservedStep] = trail_by_occurrence,
+                _records_landings: bool = trail_records_landings,
             ) -> dict[str, Any]:
                 """t-1222/t-1225/t-1229: the page state the CLICK before this ASSERT produced.
 
@@ -695,6 +700,7 @@ class PlaceholderOrchestrator:
                 """
                 off: dict[str, Any] = {
                     "previous_interaction": False,
+                    "previous_landing_available": _records_landings,
                     "previous_landing": None,
                     "previous_landing_url": None,
                     "previous_landing_dom": None,
@@ -709,6 +715,7 @@ class PlaceholderOrchestrator:
                 raw = str(prev_obs.to_url or "").strip() or None
                 info = {
                     "previous_interaction": True,
+                    "previous_landing_available": _records_landings,
                     "previous_landing": canon(raw),
                     "previous_landing_url": raw,
                     "previous_landing_dom": list(prev_obs.landing_dom or []) if prev_obs.landing_checked else None,
@@ -1635,17 +1642,14 @@ class PlaceholderOrchestrator:
                         # it - the modal/panel the assert is about - not the DOM
                         # captured before it.
                         pages_to_search = {cursor: list(landing_dom)}
-                        if self._landing_shows_no_change(landing_dom, scraped_data.get(cursor, [])):
-                            # t-1243: the silent blocker. The click landed and left
-                            # the page exactly as it was, with no error to read - a
-                            # pop-up eating the click, or a dead control. Nothing
-                            # could have opened for this check, so it is
-                            # interference and it fails; it is never a green.
-                            refusal = (
-                                self.LANDING_INTERFERENCE,
-                                f"the click on '{description}' changed nothing on the page, "
-                                "so nothing could have opened for this check",
-                            )
+                        # t-1246: "the page looks unchanged" is NOT evidence of a
+                        # blocker. The capture holds only selector, text, role,
+                        # classes and visibility - it cannot see a ticked radio, a
+                        # focused field, a scroll, an opened native menu or a cart
+                        # written to storage alone. That rule failed all of those.
+                        # A blocker must be shown by a positive signal: an error
+                        # that says so, or the check's own target present before
+                        # the click and unreachable after it (below).
                     elif landing and not _same_page(landing, cursor):
                         expected_page = landing
                         pages_to_search = {landing: scraped_data.get(landing, [])}
@@ -1684,6 +1688,35 @@ class PlaceholderOrchestrator:
                 matched = batch_results[0] if batch_results else None
 
                 if matched is not None:
+                    landing_was_looked_at = da.get("previous_landing_dom") is not None
+                    matched_visibility = matched.get("is_visible", True)
+                    if (
+                        landing_was_looked_at
+                        and str(matched_visibility).lower() in {"false", "0"}
+                        and action == "ASSERT"
+                    ):
+                        # t-1246: the positive signal tied to the check's own
+                        # target - it is on the page after the click but the page
+                        # says it cannot be reached. Something is in the way.
+                        click_name = str(da.get("previous_description") or "the click")
+                        reason = (
+                            f"'{description}' was on the page but could not be reached after "
+                            f"the click on '{click_name}', so something was in the way"
+                        )
+                        logger.info("t-1246: interference for '%s' - %s", description, reason)
+                        line_resolutions.setdefault(placeholder.line_number, []).append(
+                            (
+                                placeholder.token,
+                                action,
+                                self._landing_outcome_value(self.LANDING_INTERFERENCE, reason),
+                                description,
+                                fill_value,
+                                cursor,
+                                None,
+                            )
+                        )
+                        continue
+
                     # B-069: fallback-resolved assertions are unverified. Emit an honest
                     # skip instead of a passing assert against a generic container.
                     if matched.get("unverified") is True:
@@ -2557,20 +2590,6 @@ class PlaceholderOrchestrator:
         return cls.LANDING_OUTCOMES[kind].format(reason=reason.replace('"', "'"))
 
     @staticmethod
-    def _landing_shows_no_change(landing: list[dict[str, Any]], before: list[dict[str, Any]]) -> bool:
-        """True when the post-click look is identical to the pre-click capture.
-
-        t-1243: this is the only evidence a silent blocker leaves. The click landed,
-        raised nothing, and the page is byte-for-byte the same as before it - so
-        the step did nothing, and a check written after it cannot have run. Both
-        sides are compared in full (selector, text and visibility), because the
-        same selector can be present but hidden before a click and shown after it.
-        """
-        if not landing or not before:
-            return False
-        return sorted(map(str, landing)) == sorted(map(str, before))
-
-    @staticmethod
     def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> tuple[str, str] | None:
         """Why an element ASSERT after a click must be refused, or ``None``.
 
@@ -2630,6 +2649,12 @@ class PlaceholderOrchestrator:
             return (
                 PlaceholderOrchestrator.LANDING_INTERFERENCE,
                 f"something on the page was covering the target when '{step}' ran",
+            )
+        if da.get("previous_landing_available") is False:
+            return (
+                PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
+                f"the walk that produced this test does not look at the page after a click, "
+                f"so there was nothing to check against after '{step}'",
             )
         landing_dom = da.get("previous_landing_dom")
         if landing_dom is not None:
