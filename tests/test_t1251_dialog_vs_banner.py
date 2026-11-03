@@ -206,3 +206,102 @@ def test_the_click_path_is_unchanged() -> None:
     ranked = PlaceholderResolver().rank_candidates("CLICK", "accept cookies", elements)
 
     assert str(ranked[0][1].get("selector")) == "#cookie-accept"
+
+
+# ---------------------------------------------------------------------------
+# t-1255: the narrowing went too far - the vendor banners are back
+# ---------------------------------------------------------------------------
+
+import pytest  # noqa: E402 - kept beside the tests that use it
+
+VENDOR_BANNERS = [
+    ("our mock, consent root", "#consent-root"),
+    ("our mock, funding choices", ".fc-consent-root"),
+    ("our mock, vignette", "#google_vignette"),
+    ("OneTrust banner", "#onetrust-banner-sdk"),
+    ("OneTrust consent sdk", "#onetrust-consent-sdk"),
+    ("OneTrust dark filter", ".onetrust-pc-dark-filter"),
+    ("Google FC dialog", ".fc-dialog-container"),
+    ("Cookiebot", "#CybotCookiebotDialog"),
+    ("Didomi", "#didomi-host"),
+    ("Osano", ".cc-window"),
+    ("Quantcast", "#qc-cmp2-container"),
+    ("Usercentrics", "#usercentrics-root"),
+    ("TrustArc", "#truste-consent-track"),
+    ("consentmanager", "#cmpbox"),
+    ("CookieYes", ".cky-consent-container"),
+    ("Complianz", ".cmplz-cookiebanner"),
+    ("generic cookie bar", ".cookie-bar"),
+    ("generic cookie notice", "#cookie-notice"),
+]
+
+
+@pytest.mark.parametrize(("vendor", "selector"), VENDOR_BANNERS)
+def test_every_vendor_banner_is_recognised(vendor: str, selector: str) -> None:
+    """t-1255: the membership narrowing dropped the vendors real sites ship.
+
+    The selector must be in the membership list AND in the banner half, or the
+    probe finds the container but classifies it as a dialog - which the click rule
+    would then be free to flip to content.
+    """
+    assert selector in OVERLAY_MEMBERSHIP_SELECTOR, f"{vendor} ({selector}) is not recognised as an overlay"
+    assert selector in OVERLAY_BANNER_SELECTOR, f"{vendor} ({selector}) is not classified as a banner"
+
+
+def test_the_dialog_shapes_survive_the_restored_list() -> None:
+    for selector in ("#cartModal", ".modal", "[role='dialog']", "[aria-modal='true']"):
+        assert selector in OVERLAY_MEMBERSHIP_SELECTOR
+        assert selector in OVERLAY_DIALOG_SELECTOR
+        assert selector not in OVERLAY_BANNER_SELECTOR
+
+
+def test_the_broad_class_match_is_still_out() -> None:
+    """The restored list does not re-introduce the wrapper-subtree defect."""
+    assert "[class*='cookie']" not in OVERLAY_MEMBERSHIP_SELECTOR
+    assert "[class*='consent']" not in OVERLAY_MEMBERSHIP_SELECTOR
+
+
+# ---------------------------------------------------------------------------
+# t-1255: an unknown marker is not evidence of content
+# ---------------------------------------------------------------------------
+
+
+def test_an_unknown_marker_is_demoted_not_promoted() -> None:
+    """The probe could not say whether the element is in an overlay.
+
+    Before this fix ``in_overlay=None`` scored 0, so the unknown element won a
+    visibility assert on nothing but a failed question.
+    """
+    elements = [
+        _heading("#page-confirm"),
+        _heading("#unknown-confirm", in_overlay=None, overlay_container=None, overlay_kind=None),
+    ]
+
+    ranked = _rank(elements)
+
+    assert ranked[0] == "#page-confirm", f"an unknown marker won the assert: {ranked}"
+    assert PlaceholderResolver._assert_stand_behind("ASSERT", CONFIRM_TEXT, elements[1]) == 1
+
+
+def test_an_element_never_asked_is_not_demoted() -> None:
+    """No ``in_overlay`` key at all: the probe never saw this pool."""
+    element = _heading("#page-confirm")
+
+    assert PlaceholderResolver._assert_stand_behind("ASSERT", CONFIRM_TEXT, element) == 0
+
+
+def test_an_all_unknown_pool_still_resolves_to_the_best_of_them() -> None:
+    """What an all-unknown pool does now: demoted together, still resolves.
+
+    Nothing is dropped - the assert still points at the best-scoring candidate,
+    and the report can say the question was not answered for any of them.
+    """
+    elements = [
+        _heading("#unknown-a", in_overlay=None),
+        _heading("#unknown-b", in_overlay=None),
+    ]
+
+    ranked = _rank(elements)
+
+    assert len(ranked) == 2, "an all-unknown pool stopped resolving"
+    assert all(PlaceholderResolver._assert_stand_behind("ASSERT", CONFIRM_TEXT, e) == 1 for e in elements)
