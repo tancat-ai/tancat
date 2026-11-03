@@ -665,23 +665,29 @@ class PlaceholderOrchestrator:
                 _trail_steps: list[ObservedStep] = trail_steps,
                 _by_occurrence: dict[tuple[int, str], ObservedStep] = trail_by_occurrence,
             ) -> tuple[bool, str | None, str | None]:
-                """t-1222: the page the trail saw the step before this ASSERT land on.
+                """t-1222/t-1225: the page the trail saw the CLICK before this ASSERT land on.
 
                 An element ASSERT written after a click answers "is the target
                 there on the page the click PRODUCED". The trail names that page
                 (``ObservedStep.to_url``) and the scraper already captured its DOM
                 when the URL changed, so the resolver needs no new capture.
 
-                Returns ``(previous_interaction, landing_key, landing_url)``:
+                Only a CLICK raises the landing rules (t-1225). A FILL does not
+                navigate, so it makes no claim about a landing page - and an ASSERT
+                with no click before it is not a landing claim at all. Both keep
+                the pre-t-1222 behaviour exactly.
+
+                Returns ``(landing_rules_apply, landing_key, landing_url)``:
                   - ``(False, None, None)``: no preceding click (or no trail at
                     all) - the cursor page stands, exactly as before;
                   - ``(True, None, <url or None>)``: a click ran but the trail
-                    named no landing (no observation, a failed step, or a route
-                    we diverged from) - the caller refuses instead of guessing;
+                    named no landing for it (no observation, a failed step, or a
+                    route we diverged from) - the caller refuses, because the
+                    pre-click DOM would be a green on a step that never happened;
                   - ``(True, <scraped key>, <url>)``: the landing is a fact, and
                     the caller resolves the assert against that page's elements.
                 """
-                if not _trail_steps or prev is None or prev.action not in {"CLICK", "FILL"}:
+                if not _trail_steps or prev is None or prev.action != "CLICK":
                     return (False, None, None)
                 prev_obs = _by_occurrence.get((prev.line_number, prev.token))
                 if prev_obs is None or diverged_now:
@@ -1660,11 +1666,18 @@ class PlaceholderOrchestrator:
                         continue
 
                     source_page = self._verify_page_context(description, matched, expected_page, scraped_data)
-                    if source_page is not None and not _same_page(source_page, expected_page):
+                    if (
+                        da.get("previous_interaction")
+                        and source_page is not None
+                        and not _same_page(source_page, expected_page)
+                    ):
                         # t-1222: the nearest element on another page is the
                         # substitution this slice removes. A check whose target is
                         # not on the page the click produced is not verified - it
                         # is not asserted against whatever element was closest.
+                        # t-1225: only a CLICK raises this. With no click before the
+                        # assert the match is not a landing claim, so the parent's
+                        # behaviour stands byte for byte (cross-page match included).
                         refusal = (
                             f"nearest match for '{description}' is on "
                             f"'{normalize_url(source_page)}', not on the expected page "
@@ -2489,6 +2502,10 @@ class PlaceholderOrchestrator:
         step, a failed step, or a route we already diverged from - there is no
         page to check against, and the nearest element of the pre-click DOM would
         be a green on a step that never happened. So the caller refuses.
+
+        t-1225: only a CLICK reaches here. A FILL does not navigate, so it makes
+        no landing claim, and an ASSERT with no click before it is not a landing
+        claim either - both keep the pre-t-1222 behaviour.
 
         Returns the reason (a short phrase naming what was missing), or ``None``
         when the assert may be resolved - including the "landing is the cursor"

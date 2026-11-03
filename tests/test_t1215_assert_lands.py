@@ -139,7 +139,11 @@ async def _resolve(
 
 @pytest.mark.asyncio
 async def test_assert_resolves_against_the_landed_page() -> None:
-    """The target lives on the page the click produced, so that page is the pool."""
+    """A (regression pin, not the fix): a known landing page supplies the element.
+
+    The parent commit already did this; this test exists so the t-1225 narrowing
+    cannot lose it.
+    """
     resolutions, matcher = await _resolve(_deferred(), SUCCESS_TITLE)
 
     assert list(matcher.pools[0]) == [SUCCESS], "the resolver must search the landed page only"
@@ -151,8 +155,13 @@ async def test_assert_resolves_against_the_landed_page() -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_landing_page_refuses_instead_of_substituting() -> None:
-    """No landing named -> a refusal, never the nearest element of the pre-click DOM."""
+async def test_click_with_no_trail_entry_refuses() -> None:
+    """B: a click the trail never recorded -> a skip, never the pre-click DOM.
+
+    This is the shape that kills the false green (eval-006 c7): the order step ran,
+    nothing was observed after it, and the old code asserted on the Place Order
+    button of the page before it.
+    """
     resolutions, _matcher = await _resolve(
         _deferred(previous_landing=None, previous_landing_url=None),
         PLACE_ORDER,
@@ -166,7 +175,23 @@ async def test_no_landing_page_refuses_instead_of_substituting() -> None:
 
 
 @pytest.mark.asyncio
-async def test_match_on_another_page_refuses() -> None:
+async def test_landing_named_but_not_scraped_refuses() -> None:
+    """A landing the trail named but the scraper never captured -> a skip."""
+    unscraped = "http://localhost:8781/checkout_success.html?session=9"
+    resolutions, _matcher = await _resolve(
+        _deferred(previous_landing=None, previous_landing_url=unscraped),
+        PLACE_ORDER,
+    )
+
+    (entry,) = resolutions[10]
+    resolved_value = entry[2]
+    assert resolved_value.startswith('pytest.skip("assertion target not verified: ')
+    assert "was not scraped" in resolved_value
+    assert unscraped in resolved_value
+
+
+@pytest.mark.asyncio
+async def test_match_on_another_page_after_a_click_refuses() -> None:
     """A nearest element on a page the click did not produce is the defect itself."""
     # The matcher insists on the Place Order button - an element of the PREVIOUS page.
     resolutions, _matcher = await _resolve(_deferred(), PLACE_ORDER, stubborn=True)
@@ -189,8 +214,28 @@ async def test_target_absent_from_the_landed_page_is_not_asserted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_assert_with_no_preceding_click_is_unchanged() -> None:
-    """An assert that follows no interaction keeps the cursor page, exactly as before."""
+@pytest.mark.parametrize("selector", [PLACE_ORDER, SUCCESS_TITLE])
+async def test_no_preceding_click_is_unchanged_same_and_cross_page(selector: str) -> None:
+    """D: no click before the assert -> the parent's behaviour, cross-page included.
+
+    Same-page: the cursor page supplies the element. Cross-page: the match is still
+    emitted (the parent emitted it) - a click-less assert is not a landing claim.
+    """
+    resolutions, matcher = await _resolve(
+        _deferred(previous_interaction=False, previous_landing=None, previous_landing_url=None),
+        selector,
+        stubborn=True,
+    )
+
+    assert list(matcher.pools[0]) == [CHECKOUT]
+    (entry,) = resolutions[10]
+    assert entry[2] == repr(selector), "the parent emitted this match; it must not become a skip"
+    assert entry[5] == CHECKOUT
+
+
+@pytest.mark.asyncio
+async def test_fill_before_the_assert_is_unchanged() -> None:
+    """E: a fill is not a landing claim - no refusal even when the fill is unrecorded."""
     resolutions, matcher = await _resolve(
         _deferred(previous_interaction=False, previous_landing=None, previous_landing_url=None),
         PLACE_ORDER,
@@ -199,4 +244,4 @@ async def test_assert_with_no_preceding_click_is_unchanged() -> None:
     assert list(matcher.pools[0]) == [CHECKOUT]
     (entry,) = resolutions[10]
     assert entry[2] == repr(PLACE_ORDER)
-    assert entry[5] == CHECKOUT
+    assert not str(entry[2]).startswith("pytest.skip")
