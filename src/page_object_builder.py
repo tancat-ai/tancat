@@ -15,13 +15,15 @@ from src.pipeline_models import GeneratedPageObject, ScrapedPage
 # t-1211: the strings below land inside the generated page object in the user's own
 # repository, so they name no internal ticket id. The guard they describe is tracked
 # as B-028 here, in builder-side code only — where it is read by us and never shipped.
+# j-0259 (t-1201) added *must_move* to the injected click(): the reason lives in this
+# comment, the emitted docstring keeps it in plain words.
 _CLICK_METHOD_SOURCE_ET = (
     "    def click(self, description: str, selector: str | None = None, must_move: bool = False) -> None:\n"
     '        """Click by semantic description — resolve to POM method or delegate to tracker.\n'
     "        When *selector* is provided (resolved during generation) it is used directly;\n"
     "        the runtime semantic matching below is a fallback only.\n"
     "        *must_move* is set by the generator only when the scrape trail showed this\n"
-    '        click changing the page (j-0259); it arms the tracker stop for a dead click."""\n'
+    '        click changing the page; it arms the tracker stop for a dead click."""\n'
     "        if selector:\n"
     "            self.tracker.click(selector, label=description, must_move=must_move)\n"
     "            return\n"

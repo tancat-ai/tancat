@@ -2,14 +2,24 @@
 
 import re
 
+import pytest
+
 from src.code_postprocessor import strip_evidence_from_pom
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import ScrapedPage
 
-# t-1211: the shape of one of our internal ids - a short letter block, a dash, digits
-# (B-028, d-0043, j-0226). The generated page object is written into the user's own
-# repository, where such a number means nothing and only adds noise.
-_INTERNAL_ID_PATTERN = re.compile(r"\b[A-Za-z]{1,5}-\d{2,5}\b")
+# t-1211: an internal id - the letter block of one of our families, a dash, digits -
+# must not reach a file that lands in the user's own repository, where such a number
+# means nothing and only adds noise.
+#
+# t-1216: the first version matched ANY short letter block (``\b[A-Za-z]{1,5}-\d{2,5}\b``),
+# so a page's own text failed the guard: a Bootstrap grid class (``#col-12``), a URL
+# path segment (``p-12``), an element's own label. The pattern now names the id families
+# this repo actually uses - B, AI, and the lowercase tracker families d, t, j, q - so it
+# still catches every id we write and no longer reads a page as if it were one of ours.
+# A real id of ours must keep firing: if a family is missing, add it here deliberately,
+# never by widening the letter block back out.
+_INTERNAL_ID_PATTERN = re.compile(r"\b(?:B|AI|[dtjq])-\d{3,4}\b")
 
 
 def test_build_page_object_uses_home_page_defaults() -> None:
@@ -187,6 +197,64 @@ def test_emitted_and_exported_pom_carry_no_internal_ids() -> None:
         for label, source in (("emitted", emitted), ("exported", exported)):
             found = _INTERNAL_ID_PATTERN.findall(source)
             assert not found, f"{label} page object (tracker={use_evidence_tracker}) names internal ids: {found}"
+
+
+@pytest.mark.parametrize("ticket_id", ["B-028", "AI-052", "d-0043", "t-1201", "j-0226", "j-0259", "q-0007"])
+def test_the_guard_catches_every_id_family_we_write(ticket_id: str) -> None:
+    """t-1216: the narrow pattern must catch every id this repo actually writes.
+
+    One case per family - B, AI, and the lowercase tracker families d/t/j/q - taken
+    from ids that exist in this repo. j-0259 is included on purpose: it is the id a
+    live CI run reported in emitted text, and tightening the pattern must not turn a
+    real finding into a pass.
+    """
+    emitted_comment = "        # Name the page this object expects - see " + ticket_id + " in the builder.\n"
+
+    assert _INTERNAL_ID_PATTERN.search(emitted_comment), f"the guard let a real id through: {ticket_id}"
+
+
+def test_the_id_bearing_lines_the_builder_emitted_at_d1fbb15_are_caught() -> None:
+    """The other direction, verbatim: the text that commit shipped is still caught.
+
+    d1fbb15 is the merge before the id removal landed (bb9fa2c); its builder emitted
+    ``B-028`` in two strings of the generated module - the element-index comment and
+    the click fallback comment, in both the tracker and the plain variant. These are
+    those strings, quoted, so a tightened pattern cannot quietly stop noticing them
+    without a git checkout of an old commit.
+    """
+    shipped_at_d1fbb15 = (
+        "    # B-028: DOM-existence index \u2014 label words -> scraped selector.\n"
+        "        # Last resort: element-index lookup (B-028 DOM-existence guard).\n"
+    )
+
+    found = _INTERNAL_ID_PATTERN.findall(shipped_at_d1fbb15)
+
+    assert found == ["B-028", "B-028"], f"the id the old builder shipped is no longer caught: {found}"
+
+
+def test_a_page_that_looks_like_an_id_passes_the_guard() -> None:
+    """t-1216: the guard reads our ids, not the page's own text.
+
+    A Bootstrap grid class (``#col-12``), a URL path segment (``p-12``) and an element
+    whose own label carries the same shape are a page's facts, not our tickets. The old
+    letter-block pattern failed this build and listed them as if they were ours.
+    """
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/order/p-12",
+        element_count=2,
+        elements=[
+            {"selector": "#col-12", "role": "button", "text": "Continue"},
+            {"selector": 'a[href="/order/p-12/next"]', "role": "a", "text": "col-12"},
+        ],
+    )
+
+    for use_evidence_tracker in (True, False):
+        emitted = builder.build_page_object(scraped_page, use_evidence_tracker=use_evidence_tracker).module_source
+        for label, source in (("emitted", emitted), ("exported", strip_evidence_from_pom(emitted))):
+            found = _INTERNAL_ID_PATTERN.findall(source)
+            assert not found, f"{label} page object (tracker={use_evidence_tracker}) is failed by page text: {found}"
+            assert "col-12" in source, f"{label} source no longer carries the page's own selector: {source}"
 
 
 def test_evidence_aware_pom_label_derived_from_method_name() -> None:
