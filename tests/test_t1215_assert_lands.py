@@ -99,6 +99,8 @@ def _deferred(
     previous_landing: str | None = SUCCESS,
     previous_landing_url: str | None = SUCCESS,
     landing_dom: list[dict[str, str]] | None = None,
+    stayed_put: bool = False,
+    click_error: str | None = None,
 ) -> dict[str, Any]:
     return {
         "placeholder": _Placeholder(),
@@ -112,6 +114,8 @@ def _deferred(
         "previous_landing": previous_landing,
         "previous_landing_url": previous_landing_url,
         "previous_landing_dom": landing_dom,
+        "previous_stayed_put": stayed_put,
+        "previous_click_error": click_error,
     }
 
 
@@ -171,8 +175,8 @@ async def test_click_with_no_trail_entry_refuses() -> None:
 
     (entry,) = resolutions[10]
     resolved_value = entry[2]
-    assert resolved_value.startswith('pytest.skip("assertion target not verified: ')
-    assert "no landing page was recorded for 'Place Order'" in resolved_value
+    assert resolved_value.startswith('pytest.skip("check not run: ')
+    assert "the walk never recorded a page after 'Place Order'" in resolved_value
     assert PLACE_ORDER not in resolved_value
 
 
@@ -187,9 +191,9 @@ async def test_landing_named_but_not_scraped_refuses() -> None:
 
     (entry,) = resolutions[10]
     resolved_value = entry[2]
-    assert resolved_value.startswith('pytest.skip("assertion target not verified: ')
-    assert "was not scraped" in resolved_value
-    assert unscraped in resolved_value
+    assert resolved_value.startswith('pytest.skip("check not run: ')
+    assert "was never recorded" in resolved_value
+    assert "Place Order" in resolved_value
 
 
 @pytest.mark.asyncio
@@ -200,8 +204,8 @@ async def test_match_on_another_page_after_a_click_refuses() -> None:
 
     (entry,) = resolutions[10]
     resolved_value = entry[2]
-    assert resolved_value.startswith('pytest.skip("assertion target not verified: ')
-    assert "nearest match for 'order success message'" in resolved_value
+    assert resolved_value.startswith('pytest.fail("check failed: ')
+    assert "the nearest element for 'order success message'" in resolved_value
     assert CHECKOUT in resolved_value
     assert SUCCESS in resolved_value
 
@@ -287,8 +291,8 @@ async def test_same_address_look_that_found_nothing_refuses() -> None:
     )
 
     (entry,) = resolutions[10]
-    assert entry[2].startswith('pytest.skip("assertion target not verified: ')
-    assert "the page showed nothing after 'Place Order'" in entry[2]
+    assert entry[2].startswith('pytest.skip("check not run: ')
+    assert "looked at the page after 'Place Order' and found nothing" in entry[2]
 
 
 @pytest.mark.asyncio

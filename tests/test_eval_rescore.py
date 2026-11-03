@@ -520,7 +520,7 @@ class TestKilledStoryRescore:
         assert story.tests_failed is None and story.tests_not_run is None
         summary = report.to_summary()
         assert "KILLED" not in summary
-        assert "Tests:        1 passed=1 false_pos=1" in summary, summary
+        assert "Tests:        1 passed=1 skipped=0 false_pos=1" in summary, summary
 
 
 class TestGateTwoUnderTheNarrowedRule:

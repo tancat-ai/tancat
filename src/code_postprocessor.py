@@ -804,7 +804,7 @@ def page_fact_from_description(description: str, resolved_selector: str = "") ->
     image_word = re.search(r"\b(?:image|images|screenshot|screenshots|artwork|photo|picture)\b", lowered)
     loaded_word = re.search(r"\bload(?:ed|s|ing)?\b", lowered)
     if "natural width" in lowered or "finished loading" in lowered or (image_word and loaded_word):
-        if resolved_selector and not resolved_selector.lstrip().startswith("pytest.skip"):
+        if resolved_selector and not is_outcome_statement(resolved_selector):
             return PageFactAssertion("assert_natural_width", selector=resolved_selector)
         return None
 
@@ -989,6 +989,20 @@ def _assertion_type_to_et_method(assertion_type: str) -> str:
 _EXPECTED_PAGE_METHODS = frozenset({"click", "fill", "assert_visible", "assert_hidden"})
 
 
+#: t-1243: a resolved value that is an OUTCOME STATEMENT - the whole line the
+#: resolver decided on. ``pytest.skip`` means "no evidence, do not run";
+#: ``pytest.fail`` means "interference or a wrong page". Both are emitted as-is
+#: and never become an assertion's locator (which used to turn a fail into
+#: ``assert_visible('pytest.fail(...)')`` - valid Python, but the user read
+#: Playwright's invalid-selector error instead of the reason).
+_OUTCOME_PREFIXES = ("pytest.skip(", "pytest.fail(")
+
+
+def is_outcome_statement(value: str) -> bool:
+    """True when the resolved value is a whole outcome statement, not a selector."""
+    return value.lstrip().startswith(_OUTCOME_PREFIXES)
+
+
 def replace_token_in_line(
     line: str,
     action: str,
@@ -1126,7 +1140,8 @@ def _replace_token_in_line_impl(
         if page_fact is not None:
             return _emit_page_fact_assertion(indent, page_fact, description)
 
-    if "pytest.skip" in resolved_value:
+    if is_outcome_statement(resolved_value) or "pytest.skip" in resolved_value:
+        # t-1243: skip and fail are both complete statements.
         return f"{indent}{resolved_value}"
 
     # B-021: URL assertions are already complete Playwright expressions
@@ -1136,7 +1151,7 @@ def _replace_token_in_line_impl(
 
     step_label = description if description else token
 
-    if "pytest.skip" in resolved_value and "label=" in stripped:
+    if (is_outcome_statement(resolved_value) or "pytest.skip" in resolved_value) and "label=" in stripped:
         return f"{indent}{resolved_value}"
 
     if action == "CLICK":

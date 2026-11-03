@@ -542,6 +542,7 @@ def run_full_validation(
         story.tests_executed = total
         story.tests_passed = passed
         story.tests_failed = failed
+        story.tests_skipped = skipped  # t-1240: computed, and no longer dropped
         story.tests_count_source = count_source.get("source", "")
         if killed:
             collected = timeout_info.get("tests_collected")

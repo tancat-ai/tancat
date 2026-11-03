@@ -131,6 +131,12 @@ class ObservedTrail:
     """
 
     steps: list[ObservedStep] = field(default_factory=list)
+    #: t-1246: whether the walk that produced this trail looks at the page after
+    #: a same-address click (j-0267). The discovery walk does; the user-provided
+    #: journey executor does not. False means "this walk records no landing", so
+    #: an assert after a same-address click has NO evidence and must skip - it is
+    #: not the false green, which is a walk that could have looked and did not.
+    records_landings: bool = True
 
     @property
     def pages_visited(self) -> list[str]:
@@ -144,13 +150,13 @@ class ObservedTrail:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dictionary (JSON-friendly)."""
-        return {"steps": [asdict(s) for s in self.steps]}
+        return {"steps": [asdict(s) for s in self.steps], "records_landings": self.records_landings}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ObservedTrail:
         """Deserialize from a plain dictionary."""
         steps = [ObservedStep(**s) for s in data.get("steps", []) if isinstance(s, dict)]
-        return cls(steps=steps)
+        return cls(steps=steps, records_landings=bool(data.get("records_landings", True)))
 
 
 @dataclass
