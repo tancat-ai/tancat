@@ -98,6 +98,7 @@ def _deferred(
     previous_interaction: bool = True,
     previous_landing: str | None = SUCCESS,
     previous_landing_url: str | None = SUCCESS,
+    landing_dom: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     return {
         "placeholder": _Placeholder(),
@@ -110,6 +111,7 @@ def _deferred(
         "previous_interaction": previous_interaction,
         "previous_landing": previous_landing,
         "previous_landing_url": previous_landing_url,
+        "previous_landing_dom": landing_dom,
     }
 
 
@@ -239,6 +241,68 @@ async def test_fill_before_the_assert_is_unchanged() -> None:
     resolutions, matcher = await _resolve(
         _deferred(previous_interaction=False, previous_landing=None, previous_landing_url=None),
         PLACE_ORDER,
+    )
+
+    assert list(matcher.pools[0]) == [CHECKOUT]
+    (entry,) = resolutions[10]
+    assert entry[2] == repr(PLACE_ORDER)
+    assert not str(entry[2]).startswith("pytest.skip")
+
+
+# ─── t-1229: a click that did not change the address still has a landing ─────
+
+MODAL = [
+    {"selector": "#cartModal", "role": "dialog", "tag": "div", "text": "Added!", "is_visible": "True"},
+    {
+        "selector": ".text-center",
+        "role": "paragraph",
+        "tag": "p",
+        "text": "Your product has been added to cart.",
+        "is_visible": "True",
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_same_address_landing_dom_is_the_pool() -> None:
+    """A modal click's landing: the assert searches what the page showed AFTER it."""
+    resolutions, matcher = await _resolve(
+        _deferred(previous_landing=None, previous_landing_url=CHECKOUT, landing_dom=MODAL),
+        ".text-center",
+    )
+
+    assert list(matcher.pools[0]) == [CHECKOUT]
+    assert matcher.pools[0][CHECKOUT] == MODAL, "the pool is the recorded post-click DOM"
+    (entry,) = resolutions[10]
+    assert ".text-center" in str(entry[2]), "the emitted selector comes from the landing"
+    assert entry[5] == CHECKOUT, "a same-address landing stays on the cursor's URL"
+
+
+@pytest.mark.asyncio
+async def test_same_address_look_that_found_nothing_refuses() -> None:
+    """The look is recorded plainly when empty - the refusal follows, no invention."""
+    resolutions, _matcher = await _resolve(
+        _deferred(previous_landing=None, previous_landing_url=CHECKOUT, landing_dom=[]),
+        PLACE_ORDER,
+    )
+
+    (entry,) = resolutions[10]
+    assert entry[2].startswith('pytest.skip("assertion target not verified: ')
+    assert "the page showed nothing after 'Place Order'" in entry[2]
+
+
+@pytest.mark.asyncio
+async def test_a_journey_with_no_trail_resolves_as_before_with_a_note() -> None:
+    """d-0109: no trail at all -> resolve as before, never a blanket refusal.
+
+    With no observation there is nothing to refuse against, and refusing would
+    turn every assert of every trail-free journey into a skip. The choice is
+    stated in ``_assert_landing``; this pins it.
+    """
+    resolutions, matcher = await _resolve(
+        _deferred(previous_interaction=False, previous_landing=None, previous_landing_url=None),
+        PLACE_ORDER,
+        stubborn=True,
     )
 
     assert list(matcher.pools[0]) == [CHECKOUT]
