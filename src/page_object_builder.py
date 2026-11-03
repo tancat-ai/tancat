@@ -12,13 +12,17 @@ from src.pipeline_models import GeneratedPageObject, ScrapedPage
 # Click method injected into POM classes — allows home_page.click('Dress category link')
 # to resolve to click_dress_category_link() or fall back to self.page.locator().click().
 # Two versions: one for evidence tracker (uses self.tracker) and one for plain POMs.
+# t-1211: the strings below land inside the generated page object in the user's own
+# repository, so they name no internal ticket id. Those ids live here instead, in
+# builder-side code that is read by us and never shipped: B-028 for the element-index
+# guard, j-0259 for the must_move flag.
 _CLICK_METHOD_SOURCE_ET = (
     "    def click(self, description: str, selector: str | None = None, must_move: bool = False) -> None:\n"
     '        """Click by semantic description — resolve to POM method or delegate to tracker.\n'
     "        When *selector* is provided (resolved during generation) it is used directly;\n"
     "        the runtime semantic matching below is a fallback only.\n"
     "        *must_move* is set by the generator only when the scrape trail showed this\n"
-    '        click changing the page (j-0259); it arms the tracker stop for a dead click."""\n'
+    '        click changing the page; it arms the tracker stop for a dead click."""\n'
     "        if selector:\n"
     "            self.tracker.click(selector, label=description, must_move=must_move)\n"
     "            return\n"
@@ -84,7 +88,7 @@ _CLICK_METHOD_SOURCE_ET = (
     "        if best_method and best_score > 0.5:\n"
     "            getattr(self, best_method)()\n"
     "            return\n"
-    "        # Last resort: element-index lookup (B-028 DOM-existence guard).\n"
+    "        # Last resort: element-index lookup (DOM-existence guard).\n"
     "        # Only click selectors that were actually scraped — never emit\n"
     "        # text=... locators from unresolved descriptions (hallucination).\n"
     "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
@@ -154,7 +158,7 @@ _CLICK_METHOD_SOURCE_PLAIN = (
     "        if best_method and best_score > 0.5:\n"
     "            getattr(self, best_method)()\n"
     "            return\n"
-    "        # Last resort: element-index lookup (B-028 DOM-existence guard).\n"
+    "        # Last resort: element-index lookup (DOM-existence guard).\n"
     "        # Only click selectors that were actually scraped — never emit\n"
     "        # text=... locators from unresolved descriptions (hallucination).\n"
     "        want = {w for w in re.sub(r'[^a-z0-9 ]', ' ', description.lower()).split() if w not in self._NOISE_WORDS}\n"
@@ -549,7 +553,7 @@ class PageObjectBuilder:
             f"class {class_name}:\n"
             f'    """Page Object for {url}. Scraped elements: {element_count}."""\n\n'
             f'    URL = "{url}"\n\n'
-            "    # B-028: DOM-existence index — label words -> scraped selector.\n"
+            "    # DOM-existence index — label words -> scraped selector.\n"
             "    # The generic click() fallback may only target these selectors.\n"
             f"{index_source}\n"
             "    _NOISE_WORDS = frozenset({\n"
