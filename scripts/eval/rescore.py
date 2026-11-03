@@ -35,6 +35,7 @@ for _path in (str(_PROJECT_ROOT), str(_EVAL_DIR)):
 
 from eval_evidence import MissingEvidenceError, RunEvidence, read_run_evidence  # noqa: E402
 from eval_metrics import HarnessReport, StoryResult, count_false_greens  # noqa: E402
+from gate_record import full_dataset_label  # noqa: E402
 from golden_validator import validate_dataset  # noqa: E402
 
 # The last re-score that was recorded, before the evidence was deleted. The next
@@ -100,6 +101,17 @@ def _carry_kill_state(
     story.tests_kill_clock = str(recorded.get("tests_kill_clock") or "")
     story.tests_kill_limit_s = recorded.get("tests_kill_limit_s")
     story.tests_kill_elapsed_s = recorded.get("tests_kill_elapsed_s")
+
+
+def _full_dataset_label() -> str:
+    """Name the dataset the gate is read against, without a number that drifts.
+
+    t-1187: the old wording said "the full 113", which went stale the moment a
+    golden was added. t-1195: the count comes from the record's own helper
+    (``gate_record.full_dataset_label``), so the printout, the record's
+    statements and the guard all read one number.
+    """
+    return full_dataset_label(_EVAL_DIR / "dataset")
 
 
 def rescore(run_dir: Path, dataset_dir: Path) -> HarnessReport:
@@ -199,7 +211,8 @@ def main(argv: list[str] | None = None) -> int:
         print("\n" + "=" * 70)
         print(
             f"GATE 1 (resolution accuracy): {correct}/{total} = {report.resolution_accuracy():.1f}%  "
-            "(the >= 90% target is read against the full 113 in full --regenerate mode - see scripts/eval/README.md)"
+            f"(the >= 90% target is read against {_full_dataset_label()} in full --regenerate mode "
+            "- see scripts/eval/README.md)"
         )
         print(f"GATE 2 (hollow passes):       {hollow}  (need 0)")
         print("=" * 70)

@@ -181,27 +181,27 @@ labels: **mode** (what produced it), **seed** (what the RAG store held) and
 **split** (which story files were held out, and how many placeholders that is).
 
 - **The headline is the held-out split: 12/30 (40.0%)**, split
-  `held-out: eval-007, eval-008, eval-010 (30 of 113 placeholders)`, mode
+  `held-out: eval-007, eval-008, eval-010 (30 of the dataset's placeholders)`, mode
   `static resolver-only leg` (frozen scraped pages, no model, no generated
   tests), seed `bundled pack minus the 3 held-out story files` - stories whose
   golden keys the RAG seed never contained, so this number cannot be recall.
-- **The with-pack number over all 113 stories is 48/113 (42.5%)**, split
+- **The with-pack number over the whole dataset is 48/113 (42.5%)**, split
   `full dataset: all 9 story files`, seed `full bundled pack` - the same
   measurement in the same mode but on stories the seed holds the answers for, so
   part of it is recall; it is the cell to compare against the 89/113 full-mode
   record (same stories, same seed, a different mode), never the headline.
 
-**The 90% gate-1 target is read against the full 113 placeholders, in full
-`--regenerate` (model) mode** - every story, every placeholder, with the model writing
-and running the tests. Owner's decision, 2026-10-31, his words: *"i think it should stay
+**The 90% gate-1 target is read against the full dataset - every story file, every
+placeholder (the count is read from `dataset/`, never hard-coded) - in full
+`--regenerate` (model) mode**, with the model writing and running the tests. Owner's decision, 2026-10-31, his words: *"i think it should stay
 on the harder gate which is the 113"*. The static full-113 cell is **48/113**: a
 different mode (no model, no generated tests), so it is **not** the figure the target is
 read against - neither mode may be read as the other. The held-out split stays as a
 measurement and as a diagnostic of how much of a score is recall, but it is no longer the
 target's home. The target itself is unchanged (`>=90%` gate 1, zero hollow passes gate 2).
 
-**The full 113 in full `--regenerate` (model) mode is the only gate** - run at milestones and
-at release. **The held-out 30 is not a gate**: it is a static regression check run on every
+**The full dataset in full `--regenerate` (model) mode is the only gate** - run at
+milestones and at release. **The held-out 30 is not a gate**: it is a static regression check run on every
 change (resolver only, no model, no GPU), held to "no worse than the recorded 12/30", and it
 is reviewed as a **pre-launch check** at launch. Owner's decision, 2026-11-01, his words:
 *"i don't really understand the second gate yes so just regression for now but we should
@@ -210,7 +210,7 @@ threshold that failed; and the static full-113 cell (48/113) is not a target eit
 
 `--heldout` on `eval_resolver.py` produces the held-out figure: it excludes the
 split's story files from the seed and scores only those stories, in a store of
-its own. The shipped product pack is unchanged - all 113 patterns ship.
+its own. The shipped product pack is unchanged - the whole packaged pattern set ships.
 
 **The split rotates over whole sites, not single files** (owner's decision,
 2026-10-30; corrected 2026-10-30 by t-1119). The default stays

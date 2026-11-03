@@ -325,8 +325,13 @@ class TestEvidenceGuard:
 
         report = rescore.rescore(run_dir, _EVAL_DIR / "dataset")
 
-        assert report.correct_resolutions == expected_correct
-        assert report.total_placeholders == expected_total
+        # t-1185: the dataset gained ONE golden (eval-005's date-of-birth field,
+        # which this evidence already fills). The recorded cell is left exactly as
+        # recorded - it describes a 113-key dataset - so the re-score moves by the
+        # documented delta, not by re-writing the record.
+        dataset_grew_by = 1
+        assert report.correct_resolutions == expected_correct + dataset_grew_by
+        assert report.total_placeholders == expected_total + dataset_grew_by
         # t-1183/t-1188/t-1190: the recorded cell still says gate 2 = 0, but under
         # the narrowed rule - a "verified by element" verdict counts only when the
         # element is the golden in the criterion's own test, and a page-arrival
@@ -522,12 +527,16 @@ class TestGateTwoUnderTheNarrowedRule:
     """t-1183: gate 2 counts only what the tool can prove it checked."""
 
     def test_the_committed_leg_reports_its_hollow_passes(self) -> None:
-        """Gate 1 unmoved; gate 2 now shows the six rows the tool had blessed."""
+        """Gate 1 follows the dataset; gate 2 now shows the six rows the tool had blessed."""
         run_dir = _REPO_ROOT / "fixtures" / "heldout_runs" / "2026-10-31" / "leg1_rag_on_bundled"
         report = rescore.rescore(run_dir, _REPO_ROOT / "scripts" / "eval" / "dataset")
 
-        assert report.correct_resolutions == 102
-        assert report.total_placeholders == 113
+        # t-1185/t-1195: the committed cell still says 102/113; the dataset gained
+        # eval-005's date-of-birth golden, which this leg fills, so the same
+        # evidence re-scores to 103/114. The recorded cell is what was measured
+        # then and is not rewritten.
+        assert report.correct_resolutions == 103
+        assert report.total_placeholders == 114
         assert report.total_false_positives == 6, (
             "t-1183: eval-002 c3/c5, eval-003 c0/c5 and eval-006 c2/c7 are verified by "
             "an element that is not the golden"

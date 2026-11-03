@@ -8,8 +8,9 @@ whole story files that are excluded from the seed (``exclude=`` on
 
 The 90% gate-1 target is **not** read against that split (owner's decision,
 2026-10-31, his words: "i think it should stay on the harder gate which is the
-113"): the target is read against the full 113 placeholders in full
-``--regenerate`` (model) mode. The split stays as a measurement - how much of a
+113"): the target is read against the full dataset in full
+``--regenerate`` (model) mode (the placeholder count is read from the dataset,
+never hard-coded). The split stays as a measurement - how much of a
 score is recall - and **which files are held back rotates each run**, so the
 sample grows instead of the same 30 placeholders being scored forever.
 
@@ -25,7 +26,7 @@ why a rotated split can carry four files where it used to carry three.
 
 * The default is still ``eval-007``, ``eval-008``, ``eval-010`` - which is
   already two whole groups - so the figure recorded on 2026-10-30 keeps
-  reproducing itself (30 of the 113 placeholders) and stays comparable with
+  reproducing itself (30 of the dataset's placeholders) and stays comparable with
   itself. Rotation is opted into.
 * Rotation is deterministic: a SHA-256 of the selector and the group key, never
   Python's ``hash()`` (randomised per process), never filesystem order. Two runs
@@ -74,7 +75,7 @@ __all__ = [
 ]
 
 #: How many whole **site groups** a rotated split holds. Three keeps the split
-#: at roughly 25-40 of the 113 scored placeholders, the size the first split
+#: at roughly 25-40 of the dataset's scored placeholders, the size the first split
 #: used; because a group can hold two files, a rotated split can carry four.
 SPLIT_SIZE = 3
 

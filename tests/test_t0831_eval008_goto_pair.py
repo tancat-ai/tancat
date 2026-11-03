@@ -139,8 +139,9 @@ class TestGotoPairOnCommittedEvidence:
         # 87 under the pre-fix validator; +2 is the GOTO pair (both were
         # resolvable in that run). 89 -> 90 is t-1014: eval-004 c0 is a page
         # criterion whose key now accepts the arrival the run emitted, so the
-        # corrected key recovers it. Gate 1 is unaffected by t-1183.
-        assert (report.correct_resolutions, report.total_placeholders) == (90, 113)
+        # corrected key recovers it. t-1185: the dataset gained eval-005's
+        # date-of-birth golden, which this run fills (#dob) - correct 91 of 114.
+        assert (report.correct_resolutions, report.total_placeholders) == (91, 114)
         # t-1183/t-1188/t-1190: gate 2 is NOT unaffected any more. Under the
         # narrowed rule - a "verified by element" verdict counts only when the
         # element is the golden in the criterion's own test, and a page-arrival
@@ -161,8 +162,9 @@ class TestGotoPairOnCommittedEvidence:
         assert gotos["navigate to bill payments"][0] is True
         # 95 is the GOTO-fix number; 98 is t-1014 (eval-001 c2, eval-001 c4 and
         # eval-004 c0 are page criteria whose corrected keys accept the arrival
-        # that run emitted). The GOTO assertion above is this test's subject.
-        assert (report.correct_resolutions, report.total_placeholders) == (98, 113)
+        # that run emitted). t-1185: +1 is eval-005's new date-of-birth golden.
+        # The GOTO assertion above is this test's subject.
+        assert (report.correct_resolutions, report.total_placeholders) == (99, 114)
         # t-1183/t-1188/t-1190: 6 under the narrowed gate-2 rule, where the
         # recorded cell says 0.
         assert report.total_false_positives == 6
