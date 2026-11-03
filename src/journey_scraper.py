@@ -337,6 +337,8 @@ class JourneyScraper:
 
                 for step_index, step in enumerate(steps):
                     last_error: Exception | None = None
+                    # t-1229: what the click saw right after it ran (None = no look).
+                    click_landing: list[dict[str, Any]] | None = None
                     self._debug(f"Step {step_index + 1}/{len(steps)}: {step.action} '{step.description}'")
 
                     # AI-052: begin recording this step's observed transition.
@@ -439,7 +441,13 @@ class JourneyScraper:
                                                     elements = self._scrape_current_page(page, current_url, context)
                                 if selector:
                                     observed.selector_used = selector
-                                    self._click_selector(page, selector, step.timeout_ms)
+                                    click_landing = self._click_selector(
+                                        page,
+                                        selector,
+                                        step.timeout_ms,
+                                        capture_landing=True,
+                                        landing_context=context,
+                                    )
 
                             elif step.action == "fill":
                                 selector = step.selector
@@ -518,6 +526,25 @@ class JourneyScraper:
                                 self._debug(f"Click caused navigation: {current_url} -> {new_url}")
                                 elements = self._scrape_current_page(page, new_url, context)
                                 output[new_url] = elements
+                            elif (
+                                click_landing is not None
+                                and step.action == "click"
+                                and current_url
+                                and new_url == current_url
+                            ):
+                                # t-1229: a click that did not move the browser can
+                                # still change what the page SHOWS (a modal, a cart
+                                # drawer, a panel). The look was taken by the click
+                                # itself, before the overlay was dismissed; record it
+                                # as this step's landing, so the assert written after
+                                # the click resolves against what the click produced -
+                                # never the DOM captured before it.
+                                observed.landing_checked = True
+                                observed.landing_dom = click_landing
+                                self._debug(
+                                    f"Same-address click landing recorded: "
+                                    f"{len(observed.landing_dom)} element(s) on {current_url}"
+                                )
 
                             # AI-052: record the observed transition (facts only).
                             # selector_used may have been mutated by retries on this
@@ -1215,13 +1242,31 @@ class JourneyScraper:
             return page.url
         return full_url
 
-    def _click_selector(self, page: Any, selector: str, timeout_ms: int) -> None:
-        """Click an element by selector, with scroll-into-view and retry."""
+    def _click_selector(
+        self,
+        page: Any,
+        selector: str,
+        timeout_ms: int,
+        *,
+        capture_landing: bool = False,
+        landing_context: Any | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Click an element by selector, with scroll-into-view and retry.
+
+        t-1229: with ``capture_landing`` the method also takes one look at the page
+        right after the click and returns what it saw - but only when the address
+        did NOT change, because a click that navigated has its landing page scraped
+        by the caller. The look has to happen HERE, before the dismissal below: the
+        overlay that would block the next click is often the very confirmation the
+        assert is about, and dismissing it first would record nothing. Returns
+        ``None`` when no look was taken.
+        """
         self._debug(f"Attempting to click selector: {selector}")
+        before_url = getattr(page, "url", "")
         locator = page.locator(selector).first
         if locator.count() == 0:
             self._debug(f"Click failed: Locator {selector} not found on page.")
-            return
+            return None
 
         # Reveal hidden SPA sections before interacting
         self._reveal_hidden_sections(page)
@@ -1249,8 +1294,13 @@ class JourneyScraper:
                 self._debug(f"Click exception: {e}")
                 raise
         page.wait_for_timeout(500)
+        # t-1229: one look, now, while the click's own effect is still on screen.
+        landing: list[dict[str, Any]] | None = None
+        if capture_landing and page.url == before_url:
+            landing = self._scrape_current_page(page, page.url, landing_context)
         self._dismiss_consent_overlays(page)
         self._dismiss_modals(page)
+        return landing
 
     def _fill_selector(self, page: Any, selector: str, text: str, timeout_ms: int) -> None:
         """Fill an input element by selector."""

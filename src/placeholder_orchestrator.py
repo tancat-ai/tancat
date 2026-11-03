@@ -664,36 +664,40 @@ class PlaceholderOrchestrator:
                 diverged_now: bool,
                 _trail_steps: list[ObservedStep] = trail_steps,
                 _by_occurrence: dict[tuple[int, str], ObservedStep] = trail_by_occurrence,
-            ) -> tuple[bool, str | None, str | None]:
-                """t-1222/t-1225: the page the trail saw the CLICK before this ASSERT land on.
+            ) -> tuple[bool, str | None, str | None, list[dict[str, str]] | None]:
+                """t-1222/t-1225/t-1229: the page state the CLICK before this ASSERT produced.
 
                 An element ASSERT written after a click answers "is the target
-                there on the page the click PRODUCED". The trail names that page
-                (``ObservedStep.to_url``) and the scraper already captured its DOM
-                when the URL changed, so the resolver needs no new capture.
+                there on the page the click PRODUCED". Two shapes, one rule:
+
+                - the click changed the address: the trail names the landing page
+                  (``ObservedStep.to_url``) and the scraper captured its DOM;
+                - the click did NOT change the address: the walk took one more look
+                  at the page (t-1229, ``ObservedStep.landing_checked``) and that
+                  DOM is the landing - a modal, a drawer, a panel.
 
                 Only a CLICK raises the landing rules (t-1225). A FILL does not
                 navigate, so it makes no claim about a landing page - and an ASSERT
                 with no click before it is not a landing claim at all. Both keep
-                the pre-t-1222 behaviour exactly.
+                the pre-t-1222 behaviour exactly. A journey with no trail keeps it
+                too (d-0109): with no evidence there is nothing to refuse against,
+                and refusing would turn every such assert into a skip.
 
-                Returns ``(landing_rules_apply, landing_key, landing_url)``:
-                  - ``(False, None, None)``: no preceding click (or no trail at
-                    all) - the cursor page stands, exactly as before;
-                  - ``(True, None, <url or None>)``: a click ran but the trail
-                    named no landing for it (no observation, a failed step, or a
-                    route we diverged from) - the caller refuses, because the
-                    pre-click DOM would be a green on a step that never happened;
-                  - ``(True, <scraped key>, <url>)``: the landing is a fact, and
-                    the caller resolves the assert against that page's elements.
+                Returns ``(landing_rules_apply, landing_key, landing_url, landing_dom)``.
+                ``landing_dom`` is not None only for a same-address click that was
+                looked at; an empty list means the look found nothing (the caller
+                refuses rather than inventing a landing).
                 """
                 if not _trail_steps or prev is None or prev.action != "CLICK":
-                    return (False, None, None)
+                    return (False, None, None, None)
                 prev_obs = _by_occurrence.get((prev.line_number, prev.token))
                 if prev_obs is None or diverged_now:
-                    return (True, None, None)
+                    return (True, None, None, None)
                 raw = str(prev_obs.to_url or "").strip() or None
-                return (True, canon(raw), raw)
+                if prev_obs.landing_checked:
+                    # Same-address click: the post-click look IS the landing.
+                    return (True, canon(raw), raw, list(prev_obs.landing_dom or []))
+                return (True, canon(raw), raw, None)
 
             current_url = self._select_initial_page_url(
                 journey,
@@ -1078,7 +1082,7 @@ class PlaceholderOrchestrator:
                                 )
                                 continue
                         # Defer element-based ASSERT for batch resolution.
-                        prev_interaction, prev_landing, prev_landing_url = _assert_landing(
+                        prev_interaction, prev_landing, prev_landing_url, prev_landing_dom = _assert_landing(
                             previous_placeholder, diverged
                         )
                         deferred_asserts.append(
@@ -1093,6 +1097,7 @@ class PlaceholderOrchestrator:
                                 "previous_interaction": prev_interaction,
                                 "previous_landing": prev_landing,
                                 "previous_landing_url": prev_landing_url,
+                                "previous_landing_dom": prev_landing_dom,
                             }
                         )
                         continue
@@ -1607,9 +1612,16 @@ class PlaceholderOrchestrator:
                 # button of the page BEFORE the order was placed).
                 expected_page = cursor
                 refusal = self._assert_landing_refusal(da, cursor)
-                if refusal is None and da.get("previous_landing"):
-                    landing = str(da["previous_landing"])
-                    if not _same_page(landing, cursor):
+                if refusal is None and da.get("previous_interaction"):
+                    landing_dom = da.get("previous_landing_dom")
+                    landing = da.get("previous_landing")
+                    if landing_dom is not None:
+                        # t-1229: same-address landing. The click did not move the
+                        # browser, so the page pool is what the page SHOWED after
+                        # it - the modal/panel the assert is about - not the DOM
+                        # captured before it.
+                        pages_to_search = {cursor: list(landing_dom)}
+                    elif landing and not _same_page(landing, cursor):
                         expected_page = landing
                         pages_to_search = {landing: scraped_data.get(landing, [])}
                 if refusal is not None:
@@ -1665,7 +1677,12 @@ class PlaceholderOrchestrator:
                         )
                         continue
 
-                    source_page = self._verify_page_context(description, matched, expected_page, scraped_data)
+                    source_page = self._verify_page_context(
+                        description,
+                        matched,
+                        expected_page,
+                        {**scraped_data, **pages_to_search},
+                    )
                     if (
                         da.get("previous_interaction")
                         and source_page is not None
@@ -2507,16 +2524,24 @@ class PlaceholderOrchestrator:
         no landing claim, and an ASSERT with no click before it is not a landing
         claim either - both keep the pre-t-1222 behaviour.
 
+        t-1229: a click that did not change the address still produces a landing -
+        the page state the walk looked at right after it. An empty look is refused
+        plainly: the page showed nothing the click could have produced.
+
         Returns the reason (a short phrase naming what was missing), or ``None``
-        when the assert may be resolved - including the "landing is the cursor"
-        case, where the click stayed put and the target really is on that page.
+        when the assert may be resolved.
         """
         if not da.get("previous_interaction"):
             return None
+        step = str(da.get("previous_description") or "the step before it")
+        landing_dom = da.get("previous_landing_dom")
+        if landing_dom is not None:
+            if landing_dom:
+                return None
+            return f"the page showed nothing after '{step}'"
         landing = da.get("previous_landing")
         if landing:
             return None
-        step = str(da.get("previous_description") or "the step before it")
         named = str(da.get("previous_landing_url") or "").strip()
         if named:
             return f"the page '{step}' landed on was not scraped (trail named '{named}'" + ")"

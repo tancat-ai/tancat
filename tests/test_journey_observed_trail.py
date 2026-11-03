@@ -140,7 +140,9 @@ def _make_scraper() -> JourneyScraper:
     scraper._discover_selector_relaxed = lambda page, action, desc: None  # type: ignore[method-assign,assignment]
     scraper._match_discovered_url = staticmethod(lambda desc, urls: None)  # type: ignore[method-assign,assignment]
     scraper._try_quantity_stepper_fallback = lambda page, step: False  # type: ignore[method-assign,assignment]
-    scraper._click_selector = staticmethod(lambda page, sel, ms: page.click(sel))  # type: ignore[method-assign,assignment]
+    scraper._click_selector = staticmethod(  # type: ignore[method-assign,assignment]
+        lambda page, sel, ms, **_kw: page.click(sel)
+    )
     scraper._fill_selector = staticmethod(lambda page, sel, text, ms: None)  # type: ignore[method-assign,assignment]
     # No DNS in tests: the SSRF guard resolves the starting host eagerly.
     scraper._url_guard_patched = True  # type: ignore[attr-defined]
@@ -359,3 +361,86 @@ def test_subprocess_embeds_trail_in_payload() -> None:
     assert "__trail__" in data
     assert data["__trail__"]["steps"] == []
     assert data["http://a"] == [{"selector": "a"}]
+
+
+# ─── t-1229: the same-address click's landing look ───────────────────────────
+
+
+def test_observed_step_landing_survives_a_json_round_trip() -> None:
+    """The landing must survive the subprocess boundary (asdict -> JSON -> from_dict)."""
+    step = ObservedStep(
+        1,
+        "click",
+        description="Add to cart",
+        from_url="http://x/",
+        to_url="http://x/",
+        landing_checked=True,
+        landing_dom=[{"selector": "p.text-center", "text": "added", "is_visible": True}],
+    )
+    restored = ObservedTrail.from_dict(json.loads(json.dumps(ObservedTrail(steps=[step]).to_dict())))
+    assert restored.steps[0].landing_checked is True
+    assert restored.steps[0].landing_dom == [{"selector": "p.text-center", "text": "added", "is_visible": True}]
+
+
+def test_click_selector_looks_once_when_the_address_did_not_change(monkeypatch: Any) -> None:
+    """A same-address click takes exactly one look; a navigating click takes none."""
+    from src.journey_scraper import JourneyScraper
+
+    looks: list[str] = []
+    landing = [{"selector": "p.text-center", "text": "added", "is_visible": True}]
+
+    monkeypatch.setattr(JourneyScraper, "_reveal_hidden_sections", staticmethod(lambda _page: None))
+    monkeypatch.setattr(JourneyScraper, "_dismiss_consent_overlays", staticmethod(lambda _page: None))
+    monkeypatch.setattr(JourneyScraper, "_dismiss_modals", staticmethod(lambda _page: None))
+
+    def fake_scrape(_self: Any, _page: Any, url: str, _context: Any = None) -> list[dict[str, Any]]:
+        looks.append(url)
+        return landing
+
+    class _Loc:
+        """Playwright-shaped locator: ``first`` is a property, not a method."""
+
+        def __init__(self, page: Any, selector: str) -> None:
+            self._page, self._selector = page, selector
+
+        first = property(lambda self: self)
+
+        def count(self) -> int:
+            return 1
+
+        def scroll_into_view_if_needed(self, timeout: int = 0) -> None:
+            return None
+
+        def click(self, timeout: int = 0) -> None:
+            self._page.click(self._selector)
+
+    class _Page:
+        """A page whose URL changes only for the title link, as in FakePage."""
+
+        url = "http://fake"
+
+        def locator(self, selector: str) -> _Loc:
+            return _Loc(self, selector)
+
+        def click(self, selector: str) -> None:
+            if selector == "#title_link":
+                self.url = "http://fake/inventory-item.html?id=4"
+
+        def wait_for_timeout(self, _ms: int) -> None:
+            return None
+
+    monkeypatch.setattr(JourneyScraper, "_scrape_current_page", fake_scrape)
+    scraper = JourneyScraper(starting_url="http://fake")
+
+    same_click = scraper._click_selector(_Page(), "#x", 1000, capture_landing=True)  # noqa: SLF001
+    assert same_click == landing, "the post-click page must be recorded as the landing"
+    assert looks == ["http://fake"], "exactly one look for a click that stayed put"
+
+    # A click that navigates: the destination page is scraped by the caller instead.
+    nav_click = scraper._click_selector(_Page(), "#title_link", 1000, capture_landing=True)  # noqa: SLF001
+    assert nav_click is None
+    assert len(looks) == 1, "a navigating click must take no extra look"
+
+    # No capture requested: nothing extra, for any click.
+    assert scraper._click_selector(_Page(), "#x", 1000) is None  # noqa: SLF001
+    assert len(looks) == 1

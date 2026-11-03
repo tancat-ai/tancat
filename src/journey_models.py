@@ -93,6 +93,15 @@ class ObservedStep:
         error: Exception message when the step failed after all retries.
         timestamp: When the step was observed (epoch seconds). 0.0 means the
             producer did not stamp it (older saved trails).
+        landing_checked: True when the walk took a second look at the page right
+            AFTER this step (t-1229). Only a click whose address did not change
+            gets one, because that is the step shape whose result lives on the
+            same URL - a modal, a drawer, a panel. False means no look was taken
+            (the step was not a click, or the click navigated and the landing page
+            was scraped normally) - never "the page was empty".
+        landing_dom: The elements that look found, in scrape order. Empty with
+            ``landing_checked`` True means the look found nothing the click could
+            have produced; the resolver then refuses rather than inventing one.
     """
 
     index: int
@@ -105,6 +114,8 @@ class ObservedStep:
     scraped: bool = False
     error: str | None = None
     timestamp: float = 0.0
+    landing_checked: bool = False
+    landing_dom: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
