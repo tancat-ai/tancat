@@ -1,7 +1,15 @@
 """Tests for page object generation from scraped pages."""
 
+import re
+
+from src.code_postprocessor import strip_evidence_from_pom
 from src.page_object_builder import PageObjectBuilder
 from src.pipeline_models import ScrapedPage
+
+# t-1211: the shape of one of our internal ids - a short letter block, a dash, digits
+# (B-028, d-0043, j-0226). The generated page object is written into the user's own
+# repository, where such a number means nothing and only adds noise.
+_INTERNAL_ID_PATTERN = re.compile(r"\b[A-Za-z]{1,5}-\d{2,5}\b")
 
 
 def test_build_page_object_uses_home_page_defaults() -> None:
@@ -150,10 +158,35 @@ def test_evidence_aware_pom_navigate_delegates_to_tracker() -> None:
     # there exactly as a flat-mode goto is (j-0226).
     assert "self.tracker.navigate(self.URL, expected_page=self.URL)" in page_object.module_source
     assert "self.page.goto" not in page_object.module_source
-    # t-1202: the emitted text ships inside the generated page object, so it must
-    # not name our internal tracker ids. The reason lives in the builder's own code.
-    assert "d-0043" not in page_object.module_source
-    assert "j-0226" not in page_object.module_source
+
+
+def test_emitted_and_exported_pom_carry_no_internal_ids() -> None:
+    """t-1211: no internal id reaches a file that lands in a user's repository.
+
+    Covers both the emitted module source and the export copy, for both the
+    evidence-aware and the plain variant, because the defect showed up in each
+    path separately (B-028 in the click fallback comment and in the element index).
+
+    The reason behind each guard belongs in this builder's own source, where it is
+    read by us and never shipped - see the comments above ``navigate_code`` and
+    ``_build_element_index_source``.
+    """
+    builder = PageObjectBuilder()
+    scraped_page = ScrapedPage(
+        url="https://example.com/",
+        element_count=2,
+        elements=[
+            {"selector": "#username", "role": "text", "placeholder": "Username"},
+            {"selector": "#login", "role": "button", "text": "Log in"},
+        ],
+    )
+
+    for use_evidence_tracker in (True, False):
+        emitted = builder.build_page_object(scraped_page, use_evidence_tracker=use_evidence_tracker).module_source
+        exported = strip_evidence_from_pom(emitted)
+        for label, source in (("emitted", emitted), ("exported", exported)):
+            found = _INTERNAL_ID_PATTERN.findall(source)
+            assert not found, f"{label} page object (tracker={use_evidence_tracker}) names internal ids: {found}"
 
 
 def test_evidence_aware_pom_label_derived_from_method_name() -> None:
