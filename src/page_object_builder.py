@@ -13,10 +13,9 @@ from src.pipeline_models import GeneratedPageObject, ScrapedPage
 # to resolve to click_dress_category_link() or fall back to self.page.locator().click().
 # Two versions: one for evidence tracker (uses self.tracker) and one for plain POMs.
 # t-1211: the strings below land inside the generated page object in the user's own
-# repository, so they name no internal ticket id. The guard they describe is tracked
-# as B-028 here, in builder-side code only — where it is read by us and never shipped.
-# j-0259 (t-1201) added *must_move* to the injected click(): the reason lives in this
-# comment, the emitted docstring keeps it in plain words.
+# repository, so they name no internal ticket id. Those ids live here instead, in
+# builder-side code that is read by us and never shipped: B-028 for the element-index
+# guard, j-0259 for the must_move flag.
 _CLICK_METHOD_SOURCE_ET = (
     "    def click(self, description: str, selector: str | None = None, must_move: bool = False) -> None:\n"
     '        """Click by semantic description — resolve to POM method or delegate to tracker.\n'
