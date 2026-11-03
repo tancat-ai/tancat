@@ -275,7 +275,7 @@ def test_click_fallback_uses_dom_existence_index() -> None:
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
 
-        def click(self, locator: str, label: str = "") -> None:
+        def click(self, locator: str, label: str = "", must_move: bool = False) -> None:
             self.calls.append((locator, label))
 
     tracker = FakeTracker()

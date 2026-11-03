@@ -189,6 +189,7 @@ def get_pom_method_call(
     resolved_selector: str,
     pom_instance_name: str,
     fill_value: str = "",
+    must_move: bool = False,
 ) -> str | None:
     """Generate a POM method call for the given action.
 
@@ -197,6 +198,12 @@ def get_pom_method_call(
     - FILL -> {instance}.fill("label", "value")
     - GOTO/URL -> page.goto(url) (navigation stays direct)
     - ASSERT -> evidence_tracker.assert_visible() (assertions stay direct)
+
+    Args:
+        must_move: True only when the observed scrape trail shows that this
+            click changed the page (j-0259). The page object forwards it to
+            ``self.tracker.click(...)``, which stops the journey when the
+            browser does not move. Off means "no fact", never "known dead".
     """
     if action == "ASSERT":
         return None
@@ -209,9 +216,12 @@ def get_pom_method_call(
     # selector through — deferring to the runtime matcher for unresolved ones.
     selector_ok = bool(resolved_selector) and not str(resolved_selector).startswith("pytest.skip")
     if action == "CLICK":
+        # j-0259: the stop arms on the browser moving, not on the target being
+        # named, so a trail-proven click still carries the flag with no selector.
+        move_arg = ", must_move=True" if must_move else ""
         if selector_ok:
-            return f"{pom_instance_name}.click({label!r}, selector={_selector_literal(resolved_selector)})"
-        return f"{pom_instance_name}.click({label!r})"
+            return f"{pom_instance_name}.click({label!r}, selector={_selector_literal(resolved_selector)}{move_arg})"
+        return f"{pom_instance_name}.click({label!r}{move_arg})"
     if action == "FILL":
         if selector_ok:
             return (

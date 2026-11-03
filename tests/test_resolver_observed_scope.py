@@ -48,6 +48,25 @@ def _token(action: str, description: str) -> str:
     return "{{" + f"{action}:{description}" + "}}"
 
 
+def _observation(
+    mapping: dict[tuple[int, str], Any],
+    journey: TestJourney,
+    action: str,
+    description: str,
+) -> Any:
+    """Return the trail step mapped to one placeholder OCCURRENCE (t-1208).
+
+    The map is keyed by (line, token) because a token text repeats - two
+    "Continue" clicks share one - so a lookup by token alone would read another
+    occurrence's fact.
+    """
+    for step in journey.steps:
+        for placeholder in step.placeholders:
+            if placeholder.action == action and placeholder.description == description:
+                return mapping[(placeholder.line_number, placeholder.token)]
+    raise AssertionError(f"no {action} placeholder named {description!r} in {journey.test_name}")
+
+
 def _build(name: str, placeholders: list[tuple[str, str]]) -> tuple[str, TestJourney]:
     """Build a skeleton (with a real `def test_` line) + matching TestJourney."""
     lines = [f"def {name}(page) -> None:"]
@@ -799,8 +818,8 @@ def test_trail_map_matches_by_description_across_action_kinds() -> None:
     mapping = PlaceholderOrchestrator._map_trail_to_placeholders(journey, trail_steps)
     # GOTO "products" produced no navigate step → unmatched.
     assert len(mapping) == 2
-    assert mapping[_token("CLICK", "login button")].to_url == INVENTORY
-    assert mapping[_token("ASSERT", "inventory visible")].action == "scrape"
+    assert _observation(mapping, journey, "CLICK", "login button").to_url == INVENTORY
+    assert _observation(mapping, journey, "ASSERT", "inventory visible").action == "scrape"
 
 
 def test_strict_scope_never_returns_all_pages_fallback() -> None:
