@@ -999,6 +999,7 @@ def replace_token_in_line(
     fill_value: str = "",
     assertion_type: str = "toBeVisible",
     expected_page: str = "",
+    must_move: bool = False,
 ) -> str:
     """Replace a single placeholder token within a code line.
 
@@ -1009,6 +1010,11 @@ def replace_token_in_line(
         expected_page: The page this placeholder was resolved against, emitted
             as ``expected_page=`` so the evidence sidecar can flag a step that
             runs somewhere else (AI-067). Empty means "do not check".
+        must_move: True only when the observed scrape trail shows that THIS
+            click changed the page (j-0259). Emitted as ``must_move=True`` so
+            the tracker's carry-on rule stops the journey when the click does
+            not move the browser. Off means "no fact", never "known not to
+            move".
     """
     emitted = _replace_token_in_line_impl(
         line,
@@ -1020,7 +1026,7 @@ def replace_token_in_line(
         fill_value=fill_value,
         assertion_type=assertion_type,
     )
-    return _annotate_expected_page(emitted, expected_page)
+    return _annotate_click_must_move(_annotate_expected_page(emitted, expected_page), must_move)
 
 
 def _annotate_expected_page(emitted: str, expected_page: str) -> str:
@@ -1039,6 +1045,23 @@ def _annotate_expected_page(emitted: str, expected_page: str) -> str:
     if method not in _EXPECTED_PAGE_METHODS:
         return emitted
     return f"{emitted.rstrip()[:-1]}, expected_page={expected_page!r})"
+
+
+def _annotate_click_must_move(emitted: str, must_move: bool) -> str:
+    """Attach ``must_move=True`` to an emitted click the trail proved moved.
+
+    j-0259: the carry-on rules (j-0240) stop a journey when a step whose job is
+    to change page does not change it. Only ``click`` can arm that stop, and
+    only the observed trail can say the click really moved - so the flag is
+    attached to a ``click`` call and nothing else. Leaving it off is the safe
+    direction: a click with no trail entry keeps the old behaviour.
+    """
+    if not must_move:
+        return emitted
+    stripped = emitted.strip()
+    if not stripped.startswith("evidence_tracker.click(") or not stripped.endswith(")"):
+        return emitted
+    return f"{emitted.rstrip()[:-1]}, must_move=True)"
 
 
 def _replace_token_in_line_impl(

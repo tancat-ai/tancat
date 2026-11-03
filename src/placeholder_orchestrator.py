@@ -629,6 +629,11 @@ class PlaceholderOrchestrator:
         # all-pages batch fallback below — that would resurrect exactly the
         # cross-page locator this fix removes.
         strict_skipped_tokens: set[str] = set()
+        # j-0259: the clicks the WALKED TRAIL proved moved the browser, keyed by
+        # (line, token) — one token text may appear on several lines. Only a
+        # trail entry that says the page changed is recorded; a missing entry
+        # stays missing, because "no fact" is not "it stayed put".
+        click_must_move: set[tuple[int, str]] = set()
 
         # 1. Resolve placeholders inside test functions
         for journey in journeys:
@@ -756,6 +761,12 @@ class PlaceholderOrchestrator:
                                 "page": current_url,
                                 "error": obs.error,
                             }
+                            # j-0259: the trail says this click moved the browser,
+                            # so the emitted click carries the stop for a dead
+                            # one. The stop asks only whether the browser moved,
+                            # so a click that names no target still gets it.
+                            if obs.navigated and not diverged:
+                                click_must_move.add((placeholder.line_number, placeholder.token))
                         target_key = canon(obs.to_url)
                         if target_key:
                             current_url = target_key
@@ -1197,6 +1208,20 @@ class PlaceholderOrchestrator:
                                 "page": current_url,
                                 "error": (obs.error if obs is not None else None),
                             }
+                            # j-0259: the trail's own fact about this click. A
+                            # click the browser was observed to follow carries the
+                            # stop for a dead one; a click with no trail entry
+                            # keeps the flag off. `diverged` means our route
+                            # already left the observed one, so this click is not
+                            # the one the trail measured - never arm on a guess.
+                            if (
+                                action == "CLICK"
+                                and obs is not None
+                                and obs.error is None
+                                and obs.navigated
+                                and not diverged
+                            ):
+                                click_must_move.add((placeholder.line_number, placeholder.token))
 
                     if trail_steps:
                         # AI-052: advance the verified anchor on OBSERVED,
@@ -1368,6 +1393,7 @@ class PlaceholderOrchestrator:
                 current_url,
                 assertion_type,
             ) in line_resolutions.get(line_number, []):
+                must_move = (line_number, token) in click_must_move
                 if self._pom_mode and action in {"CLICK", "FILL"}:
                     instance_name = get_pom_instance_name(current_url, self._generated_page_objects)
                     if instance_name:
@@ -1377,6 +1403,7 @@ class PlaceholderOrchestrator:
                             resolved_selector=resolved_value,
                             pom_instance_name=instance_name,
                             fill_value=fill_value,
+                            must_move=must_move,
                         )
                         if pom_call:
                             indent = line[: len(line) - len(line.lstrip())]
@@ -1402,6 +1429,7 @@ class PlaceholderOrchestrator:
                     fill_value=fill_value,
                     assertion_type=assertion_type or "toBeVisible",
                     expected_page=current_url or "",
+                    must_move=must_move,
                 )
             final_lines.append(updated_line)
 
@@ -2754,7 +2782,15 @@ class PlaceholderOrchestrator:
         resolved_selector: str,
         pom_instance_name: str,
         fill_value: str = "",
+        must_move: bool = False,
     ) -> str | None:
         if not self._pom_mode:
             return None
-        return get_pom_method_call(action, description, resolved_selector, pom_instance_name, fill_value)
+        return get_pom_method_call(
+            action,
+            description,
+            resolved_selector,
+            pom_instance_name,
+            fill_value,
+            must_move=must_move,
+        )
