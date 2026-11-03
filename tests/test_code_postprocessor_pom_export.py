@@ -469,3 +469,49 @@ class TestStripEvidenceAssertFamily:
         result = strip_evidence_from_pom(code)
         assert "self.tracker" not in result
         assert "expect(self.page.locator('p.text-center')).to_be_hidden()" in result
+
+
+class TestStripEvidenceFromTestCodePomToFlat:
+    """t-1208: a POM-mode test exported flat must not keep an armed POM click.
+
+    The flat export inlines POM calls as plain locator calls and drops the page
+    object's import and instantiation. A click carrying ``must_move=True`` did
+    not match the old pattern, so the call survived while its class was gone -
+    a NameError at run time, and nothing to arm (a flat test has no tracker).
+    """
+
+    def test_an_armed_page_object_click_is_converted_not_left_behind(self) -> None:
+        code = (
+            "from playwright.sync_api import Page\n"
+            "from pages.shop_page import ShopPage\n"
+            "\n"
+            "def test_checkout(page: Page, evidence_tracker):\n"
+            "    shop_page = ShopPage(page, evidence_tracker)\n"
+            "    shop_page.click('Submit order', selector='#submit-order', must_move=True)\n"
+        )
+
+        result = strip_evidence_from_test_code(code)
+
+        assert "from pages.shop_page import ShopPage" not in result
+        assert "ShopPage(" not in result
+        assert "shop_page." not in result
+        assert "must_move" not in result
+        assert "page.locator('#submit-order').click()" in result
+        compile(result, "<exported>", "exec")
+
+    def test_an_armed_page_object_click_with_no_selector_is_converted_too(self) -> None:
+        code = (
+            "from playwright.sync_api import Page\n"
+            "from pages.shop_page import ShopPage\n"
+            "\n"
+            "def test_checkout(page: Page, evidence_tracker):\n"
+            "    shop_page = ShopPage(page, evidence_tracker)\n"
+            "    shop_page.click('Submit order', must_move=True)\n"
+        )
+
+        result = strip_evidence_from_test_code(code)
+
+        assert "shop_page." not in result
+        assert "must_move" not in result
+        assert "page.get_by_text('Submit order').first.click()" in result
+        compile(result, "<exported>", "exec")

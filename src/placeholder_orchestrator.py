@@ -647,7 +647,7 @@ class PlaceholderOrchestrator:
                 trail_urls = " -> ".join(dict.fromkeys(s.to_url for s in trail_steps if s.to_url))
                 if os.getenv("PIPELINE_DEBUG", "").strip() == "1":
                     print(f"[resolve] {journey.test_name} observed trail: [{trail_urls}]", flush=True, file=sys.stderr)
-            trail_by_token = self._map_trail_to_placeholders(journey, trail_steps)
+            trail_by_occurrence = self._map_trail_to_placeholders(journey, trail_steps)
             # Canonicaliser: trail URLs come straight from page.url (trailing
             # slashes etc.) while scraped_data keys are normalised — resolve
             # every membership check through this map.
@@ -708,7 +708,14 @@ class PlaceholderOrchestrator:
                     # ── AI-052 S3: observation over inference ──────────────
                     # Where is this step's page? Ask the trail (a browser
                     # fact), not a guesser.
-                    obs = trail_by_token.get(placeholder.token)
+                    #
+                    # t-1208: the map is keyed by the placeholder OCCURRENCE
+                    # (line, token), not by the token. A repeated description
+                    # shares one token text, so a token-keyed lookup handed BOTH
+                    # "Continue" clicks whichever observation was recorded last
+                    # - and a click the trail saw stay put was armed with the
+                    # other click's move, stopping a good journey.
+                    obs = trail_by_occurrence.get((placeholder.line_number, placeholder.token))
                     if trail_steps:
                         if pending_evidence:
                             # We emitted a navigation click to an unscraped page
@@ -2379,8 +2386,8 @@ class PlaceholderOrchestrator:
     def _map_trail_to_placeholders(
         journey: TestJourney,
         trail_steps: list[ObservedStep],
-    ) -> dict[str, ObservedStep]:
-        """Map skeleton placeholder tokens to their observed trail steps (AI-052 S3).
+    ) -> dict[tuple[int, str], ObservedStep]:
+        """Map skeleton placeholder occurrences to their observed trail steps (AI-052 S3).
 
         The trail was captured from the SAME journey:
         ``_scrape_journeys_statefully`` flattens placeholders in the same order
@@ -2390,17 +2397,24 @@ class PlaceholderOrchestrator:
         appended — so placeholders are matched to trail steps by
         ``(action, description)`` with a monotonic cursor. Unmatched
         placeholders get no entry → treated as the "unknown" state.
+
+        The key is the OCCURRENCE - ``(placeholder.line_number, token)``, the
+        same key the skip counts use - because a token is only
+        ``{{ACTION:description}}``: two "Continue" clicks share it, and a
+        token-keyed map gave both of them one observation (t-1208). Each
+        occurrence now keeps the trail step the cursor matched to it.
         """
         action_map = {"GOTO": "navigate", "ASSERT": "scrape"}
-        mapping: dict[str, ObservedStep] = {}
+        mapping: dict[tuple[int, str], ObservedStep] = {}
         cursor = 0
         for step in journey.steps:
             for placeholder in step.placeholders:
+                occurrence = (placeholder.line_number, placeholder.token)
                 expected_action = action_map.get(placeholder.action, placeholder.action.lower())
                 for i in range(cursor, len(trail_steps)):
                     candidate = trail_steps[i]
                     if candidate.action == expected_action and candidate.description == placeholder.description:
-                        mapping[placeholder.token] = candidate
+                        mapping[occurrence] = candidate
                         cursor = i + 1
                         break
                 else:
@@ -2414,7 +2428,7 @@ class PlaceholderOrchestrator:
                         for i in range(cursor, len(trail_steps)):
                             candidate = trail_steps[i]
                             if candidate.action == "click" and candidate.description == placeholder.description:
-                                mapping[placeholder.token] = candidate
+                                mapping[occurrence] = candidate
                                 cursor = i + 1
                                 break
                     # t-0978: a page-state ASSERT after a click that really
@@ -2436,7 +2450,7 @@ class PlaceholderOrchestrator:
                                 # The nearest mover did not move (or failed): an
                                 # earlier mover is not evidence for this arrival.
                                 break
-                            mapping[placeholder.token] = ObservedStep(
+                            mapping[occurrence] = ObservedStep(
                                 index=candidate.index,
                                 action="scrape",
                                 description=placeholder.description,

@@ -1705,15 +1705,21 @@ def strip_evidence_from_test_code(code: str, *, preserve_pom_calls: bool = False
             result,
             flags=re.MULTILINE,
         )
-        # home_page.click('label', selector='sel') -> page.locator('sel').click()
+        # home_page.click('label', selector='sel'[, must_move=True]) ->
+        # page.locator('sel').click().
+        # t-1208: the armed form (j-0259) ended with must_move=True, which the old
+        # pattern refused, so the call survived while its import and instantiation
+        # were dropped - a NameError in the exported test. A flat test has no
+        # tracker to arm, so the keyword is dropped with the call.
         result = re.sub(
-            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*,\s*selector=\s*(['\"])(.*?)\3\s*\)",
+            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*,\s*selector=\s*(['\"])(.*?)\3(?:\s*,\s*must_move\s*=\s*(?:True|False))?\s*\)",
             r"page.locator('\4').click()",
             result,
         )
-        # home_page.click('label') -> page.get_by_text('label').first.click() (best effort)
+        # home_page.click('label'[, must_move=True]) ->
+        # page.get_by_text('label').first.click() (best effort). Same armed form.
         result = re.sub(
-            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1\s*\)",
+            r"\w+_page\.click\(\s*(['\"])([^'\"]*)\1(?:\s*,\s*must_move\s*=\s*(?:True|False))?\s*\)",
             r"page.get_by_text('\2').first.click()",
             result,
         )

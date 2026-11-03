@@ -43,6 +43,24 @@ def _token(action: str, description: str) -> str:
     return "{{" + f"{action}:{description}" + "}}"
 
 
+def _observation(
+    mapping: dict[tuple[int, str], Any],
+    journey: TestJourney,
+    action: str,
+    description: str,
+) -> Any:
+    """Return the trail step mapped to one placeholder OCCURRENCE (t-1208).
+
+    A token text repeats across occurrences, so the map is keyed by
+    (line, token); a token-only lookup would read another line's fact.
+    """
+    for step in journey.steps:
+        for placeholder in step.placeholders:
+            if placeholder.action == action and placeholder.description == description:
+                return mapping[(placeholder.line_number, placeholder.token)]
+    raise AssertionError(f"no {action} placeholder named {description!r} in {journey.test_name}")
+
+
 def _build(name: str, placeholders: list[tuple[str, str]]) -> tuple[str, TestJourney]:
     lines = [f"def {name}(page) -> None:"]
     steps: list[TestStep] = []
@@ -133,7 +151,7 @@ def test_goto_maps_to_the_trail_click_that_performed_it() -> None:
         ],
     )
     assert mapping, "the GOTO found no observation in the trail"
-    assert mapping[_token("GOTO", "cart")].to_url == CART
+    assert _observation(mapping, journey, "GOTO", "cart").to_url == CART
 
 
 def test_the_navigation_is_emitted_as_the_proven_click() -> None:

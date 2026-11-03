@@ -207,6 +207,7 @@ def _scraped() -> dict[str, list[dict[str, Any]]]:
         SHOP: [
             {"selector": "#submit-order", "text": "Submit order", "tag": "button", "role": "button"},
             {"selector": "#add-to-cart", "text": "Add to cart", "tag": "button", "role": "button"},
+            {"selector": "#continue", "text": "Continue", "tag": "button", "role": "button"},
         ],
         CART: [{"selector": "h1", "text": "Cart", "tag": "h1", "role": "heading"}],
     }
@@ -372,3 +373,57 @@ def test_a_walked_goto_replayed_as_a_click_still_carries_the_flag() -> None:
     assert "evidence_tracker.click(" in code
     assert "must_move=True" in code
     compile(code, "<generated>", "exec")
+
+
+def test_a_repeated_description_arms_only_the_click_the_trail_saw_move() -> None:
+    """t-1208 (reviewer's run): the trail maps by token, and the token repeats.
+
+    Two "Continue" clicks share the token ``{{CLICK:Continue}}``. The first one
+    stayed put, the second moved - one observation, and before this fix it armed
+    BOTH lines, so the good journey stopped at the first, dead click. The trail
+    must be keyed by the occurrence, so only the click it proved carries the flag.
+    """
+    token = "{{CLICK:Continue}}"
+    first = f"    page.click('{token}')  # first screen"
+    second = f"    page.click('{token}')  # second screen"
+    skeleton = "\n".join(["def test_checkout(page) -> None:", first, second])
+    steps = [
+        TestStep(
+            line_number=line_number,
+            raw_line=raw_line,
+            placeholders=[
+                PlaceholderUse(
+                    token=token,
+                    action="CLICK",
+                    description="Continue",
+                    line_number=line_number,
+                    raw_line=raw_line,
+                )
+            ],
+        )
+        for line_number, raw_line in ((2, first), (3, second))
+    ]
+    journey = TestJourney(test_name="test_checkout", start_line=1, end_line=3, steps=steps)
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(0, "click", description="Continue", from_url=SHOP, to_url=SHOP, navigated=False),
+            ObservedStep(1, "click", description="Continue", from_url=SHOP, to_url=CART, navigated=True),
+        ]
+    )
+    orch = PlaceholderOrchestrator(starting_url=SHOP)
+
+    code = asyncio.run(
+        orch._replace_placeholders_sequentially(  # noqa: SLF001
+            skeleton_code=skeleton,
+            journeys=[journey],
+            page_requirements=[],
+            seed_urls=[SHOP],
+            scraped_data=_scraped(),
+            observed_trails={"test_checkout": trail},
+        )
+    )
+
+    lines = [line for line in code.splitlines() if "evidence_tracker.click(" in line]
+    assert len(lines) == 2, code
+    assert "must_move" not in lines[0], f"the click the trail saw stay put was armed:\n{code}"
+    assert "must_move=True" in lines[1], f"the click the trail saw move was not armed:\n{code}"
