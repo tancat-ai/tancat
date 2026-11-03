@@ -659,6 +659,36 @@ class PlaceholderOrchestrator:
                     return None
                 return _map.get(normalize_url(url))
 
+            def _assert_landing(
+                prev: Any,
+                diverged_now: bool,
+                _trail_steps: list[ObservedStep] = trail_steps,
+                _by_occurrence: dict[tuple[int, str], ObservedStep] = trail_by_occurrence,
+            ) -> tuple[bool, str | None, str | None]:
+                """t-1222: the page the trail saw the step before this ASSERT land on.
+
+                An element ASSERT written after a click answers "is the target
+                there on the page the click PRODUCED". The trail names that page
+                (``ObservedStep.to_url``) and the scraper already captured its DOM
+                when the URL changed, so the resolver needs no new capture.
+
+                Returns ``(previous_interaction, landing_key, landing_url)``:
+                  - ``(False, None, None)``: no preceding click (or no trail at
+                    all) - the cursor page stands, exactly as before;
+                  - ``(True, None, <url or None>)``: a click ran but the trail
+                    named no landing (no observation, a failed step, or a route
+                    we diverged from) - the caller refuses instead of guessing;
+                  - ``(True, <scraped key>, <url>)``: the landing is a fact, and
+                    the caller resolves the assert against that page's elements.
+                """
+                if not _trail_steps or prev is None or prev.action not in {"CLICK", "FILL"}:
+                    return (False, None, None)
+                prev_obs = _by_occurrence.get((prev.line_number, prev.token))
+                if prev_obs is None or diverged_now:
+                    return (True, None, None)
+                raw = str(prev_obs.to_url or "").strip() or None
+                return (True, canon(raw), raw)
+
             current_url = self._select_initial_page_url(
                 journey,
                 page_requirements,
@@ -685,6 +715,7 @@ class PlaceholderOrchestrator:
 
             last_selector: str | None = None
             last_description: str | None = None
+            last_placeholder: Any | None = None
             resolved_steps: list[str] = []
             deferred_asserts: list[dict[str, Any]] = []
             # t-0890: the last interaction we emitted in THIS test, kept so a
@@ -697,6 +728,12 @@ class PlaceholderOrchestrator:
                     current_url = self._select_fallback_page_url(page_requirements, seed_urls, scraped_data)
 
                 for placeholder in step.placeholders:
+                    # t-1222: the placeholder immediately before this one. An
+                    # element ASSERT after a click is a claim about the page that
+                    # click LANDED on, so the batch resolver is handed that page -
+                    # never left to re-use the DOM captured before the click.
+                    previous_placeholder = last_placeholder
+                    last_placeholder = placeholder
                     fill_value = ""
                     action = placeholder.action
                     description = placeholder.description
@@ -1035,6 +1072,9 @@ class PlaceholderOrchestrator:
                                 )
                                 continue
                         # Defer element-based ASSERT for batch resolution.
+                        prev_interaction, prev_landing, prev_landing_url = _assert_landing(
+                            previous_placeholder, diverged
+                        )
                         deferred_asserts.append(
                             {
                                 "placeholder": placeholder,
@@ -1044,6 +1084,9 @@ class PlaceholderOrchestrator:
                                 "current_url": current_url,
                                 "previous_selector": last_selector,
                                 "previous_description": last_description,
+                                "previous_interaction": prev_interaction,
+                                "previous_landing": prev_landing,
+                                "previous_landing_url": prev_landing_url,
                             }
                         )
                         continue
@@ -1550,6 +1593,34 @@ class PlaceholderOrchestrator:
                     continue
                 pages_to_search = pages_data if pages_data else scraped_data
 
+                # t-1222: an element ASSERT after a click is a claim about the page
+                # that click PRODUCED, not about the DOM captured before it. The
+                # trail names that page; when it named none there is nothing to
+                # check against, and a nearest-element match would be a green on a
+                # step that never happened (eval-006 c7 sat on the Place Order
+                # button of the page BEFORE the order was placed).
+                expected_page = cursor
+                refusal = self._assert_landing_refusal(da, cursor)
+                if refusal is None and da.get("previous_landing"):
+                    landing = str(da["previous_landing"])
+                    if not _same_page(landing, cursor):
+                        expected_page = landing
+                        pages_to_search = {landing: scraped_data.get(landing, [])}
+                if refusal is not None:
+                    logger.info("t-1222: assert not verified for '%s' - %s", description, refusal)
+                    line_resolutions.setdefault(placeholder.line_number, []).append(
+                        (
+                            placeholder.token,
+                            action,
+                            f'pytest.skip("assertion target not verified: {refusal}")',
+                            description,
+                            fill_value,
+                            cursor,
+                            None,
+                        )
+                    )
+                    continue
+
                 # Each ASSERT excludes the selector of the step immediately
                 # before IT, not the group's first step (B-014 applied per assert).
                 excluded = self._build_excluded_selectors(
@@ -1588,8 +1659,33 @@ class PlaceholderOrchestrator:
                         )
                         continue
 
-                    source_page = self._verify_page_context(description, matched, cursor, scraped_data)
-                    robust_selector = build_robust_locator(matched, page_elements=pages_to_search.get(cursor, []))
+                    source_page = self._verify_page_context(description, matched, expected_page, scraped_data)
+                    if source_page is not None and not _same_page(source_page, expected_page):
+                        # t-1222: the nearest element on another page is the
+                        # substitution this slice removes. A check whose target is
+                        # not on the page the click produced is not verified - it
+                        # is not asserted against whatever element was closest.
+                        refusal = (
+                            f"nearest match for '{description}' is on "
+                            f"'{normalize_url(source_page)}', not on the expected page "
+                            f"'{normalize_url(expected_page)}'"
+                        )
+                        logger.info("t-1222: assert not verified for '%s' - %s", description, refusal)
+                        line_resolutions.setdefault(placeholder.line_number, []).append(
+                            (
+                                placeholder.token,
+                                action,
+                                f'pytest.skip("assertion target not verified: {refusal}")',
+                                description,
+                                fill_value,
+                                cursor,
+                                None,
+                            )
+                        )
+                        continue
+                    robust_selector = build_robust_locator(
+                        matched, page_elements=pages_to_search.get(expected_page, [])
+                    )
                     if not robust_selector:
                         robust_selector = str(matched.get("selector", "")).strip()
                     selector = repr(robust_selector)
@@ -1605,7 +1701,7 @@ class PlaceholderOrchestrator:
                             selector,
                             description,
                             fill_value,
-                            cursor,
+                            expected_page,
                             assertion_type,
                         )
                     )
@@ -2381,6 +2477,33 @@ class PlaceholderOrchestrator:
             # would be worse than the wrong assertion it replaces.
             reason += f" (that step failed: {error})"
         return reason
+
+    @staticmethod
+    def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> str | None:
+        """Why an element ASSERT after a click must be refused, or ``None``.
+
+        t-1222. An ASSERT that follows a click asks whether the target exists on
+        the page the click PRODUCED. The observed trail names that page for the
+        click (``ObservedStep.to_url``) and the scraper captured its DOM when the
+        URL changed. When the trail named no landing - no observation for the
+        step, a failed step, or a route we already diverged from - there is no
+        page to check against, and the nearest element of the pre-click DOM would
+        be a green on a step that never happened. So the caller refuses.
+
+        Returns the reason (a short phrase naming what was missing), or ``None``
+        when the assert may be resolved - including the "landing is the cursor"
+        case, where the click stayed put and the target really is on that page.
+        """
+        if not da.get("previous_interaction"):
+            return None
+        landing = da.get("previous_landing")
+        if landing:
+            return None
+        step = str(da.get("previous_description") or "the step before it")
+        named = str(da.get("previous_landing_url") or "").strip()
+        if named:
+            return f"the page '{step}' landed on was not scraped (trail named '{named}'" + ")"
+        return f"no landing page was recorded for '{step}'"
 
     @staticmethod
     def _map_trail_to_placeholders(
