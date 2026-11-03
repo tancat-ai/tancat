@@ -104,14 +104,52 @@ POLARITY_TERMS: tuple[str, ...] = (
 )
 
 
+#: t-1251: words that ask to SEE something. When one of these appears un-negated
+#: the criterion is a presence check, whatever else it says.
+POSITIVE_TERMS: tuple[str, ...] = (
+    "shown",
+    "visible",
+    "appears",
+    "reappears",
+    "present",
+    "displayed",
+)
+
+#: t-1251: a positive word is not positive when it is denied right before it.
+_NEGATIONS_BEFORE_POSITIVE = ("not ", "never ", "no longer ", "isn't ", "aren't ", "is not ", "no ")
+
+
+def _whole_word_pattern(term: str) -> re.Pattern[str]:
+    """Match ``term`` as a whole word, so "closed" never fires inside "disclosed"."""
+    return re.compile(rf"(?<![\w-]){re.escape(term)}(?![\w-])")
+
+
+_POLARITY_PATTERNS = tuple(_whole_word_pattern(t) for t in POLARITY_TERMS)
+_POSITIVE_PATTERNS = tuple((t, _whole_word_pattern(t)) for t in POSITIVE_TERMS)
+
+
 def polarity_assertion_type(description: str) -> str | None:
     """Return ``"toBeHidden"`` for negative-state ASSERT descriptions, else None.
 
     "popup closed" / "item removed" assert the ABSENCE of the element, so the
     emitted assertion must be ``assert_hidden(...)`` — not ``assert_visible``.
+
+    t-1251: two rules keep this predicate from swallowing presence checks.
+    1. Every term match is WHOLE WORD, so "the enclosed receipt" and "details
+       disclosed" are not absence checks (the old substring match read "closed"
+       inside both), and "the removed item reappears" is not read as "appears".
+    2. A POSITIVE term wins when both appear - "the hidden discount is now
+       shown", "the dismissed items list is visible" ask to SEE something. A
+       positive word that is itself denied ("is not visible", "no longer shown")
+       does not win.
     """
     lowered = description.replace("_", " ").lower()
-    if any(term in lowered for term in POLARITY_TERMS):
+    for _term, pattern in _POSITIVE_PATTERNS:
+        for match in pattern.finditer(lowered):
+            before = lowered[max(0, match.start() - 14) : match.start()]
+            if not any(before.endswith(negation) for negation in _NEGATIONS_BEFORE_POSITIVE):
+                return None
+    if any(pattern.search(lowered) for pattern in _POLARITY_PATTERNS):
         return "toBeHidden"
     return None
 
