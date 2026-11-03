@@ -525,10 +525,14 @@ class PageObjectBuilder:
                 "        self.page = page\n"
                 "        self.tracker = tracker\n\n"
             )
+            # d-0043 (j-0226): name the page this object expects, so a redirect there
+            # is judged like a flat-mode goto instead of recorded only. The reason is
+            # kept here, in builder-side code: the emitted text below ships inside the
+            # generated page object, so it carries no internal tracker ids.
             navigate_code = (
                 "    def navigate(self) -> None:\n"
-                "        # d-0043: name the page this object expects, so a redirect there is\n"
-                "        # judged like a flat-mode goto (j-0226) instead of recorded only.\n"
+                "        # Name the page this object expects, so a redirect to it is judged\n"
+                "        # like a flat-mode goto instead of being recorded only.\n"
                 "        self.tracker.navigate(self.URL, expected_page=self.URL)\n\n"
             )
         else:
