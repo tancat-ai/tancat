@@ -206,3 +206,116 @@ async def test_batch_resolve_applies_polarity() -> None:
     assert 5 in line_resolutions
     assert line_resolutions[5][0][6] == "toBeHidden"
     assert journey_unresolved == {}
+
+
+# ─── t-1251: whole words, and a positive term wins ──────────────────────────
+
+#: Each case is (description, expected assertion type). t-1251 pins both the
+#: presence checks the substring match used to swallow and the true absences
+#: that must not change.
+_T1251_CASES: list[tuple[str, str | None]] = [
+    # presence checks the old substring match read as absence
+    ("the hidden discount is now shown", None),
+    ("the removed item reappears", None),
+    ("the dismissed items list is visible", None),
+    ("the enclosed receipt is shown", None),
+    ("details disclosed", None),
+    # positive word that is itself denied: still an absence
+    ("the promo banner is not visible", "toBeHidden"),
+    ("the discount is no longer shown", "toBeHidden"),
+    # true absences that must NOT change
+    ("the promo banner closed", "toBeHidden"),
+    ("the success message is gone", "toBeHidden"),
+    ("the error was dismissed", "toBeHidden"),
+    ("popup closed", "toBeHidden"),
+    ("item removed", "toBeHidden"),
+    # t-1253: the two presence verbs added to the positive set
+    ("the hidden menu opens", None),
+    ("the hidden field is revealed", None),
+    # the traps the whole-word boundary and the denial rule must keep closed
+    ("the dismissed popup reopens", "toBeHidden"),
+    ("the hidden field is not revealed", "toBeHidden"),
+    # a colour state: no positive term, and the predicate cannot read it
+    ("the cart badge is no longer grey", "toBeHidden"),
+]
+
+
+async def _emitted_assertion(description: str) -> str:
+    """Resolve one ASSERT through the real path and return the emitted call name."""
+
+    from src.journey_models import ObservedStep, ObservedTrail
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+    from src.placeholder_orchestrator import PlaceholderOrchestrator
+
+    url = "https://example.com/page"
+    token = f"{{{{ASSERT:{description}}}}}"
+    journey = TestJourney(
+        test_name="test_polarity",
+        start_line=1,
+        end_line=2,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line=token,
+                placeholders=[
+                    PlaceholderUse(token=token, action="ASSERT", description=description, line_number=2, raw_line=token)
+                ],
+            )
+        ],
+    )
+    scraped = {
+        url: [
+            {"selector": "#target", "role": "text", "text": "x", "assertion_type": "toBeVisible"},
+        ]
+    }
+    trail = ObservedTrail(
+        steps=[ObservedStep(0, "scrape", description=description, from_url=url, to_url=url)],
+        records_landings=False,
+    )
+    orchestrator = PlaceholderOrchestrator(starting_url=url)
+
+    class _M:
+        async def find_best_element_for_current_page(self, *_a: Any, **_k: Any) -> dict[str, str]:
+            return dict(scraped[url][0])
+
+        async def find_best_elements_batch(self, requests: list[dict[str, Any]], *_a: Any, **_k: Any) -> list[Any]:
+            return [dict(scraped[url][0])]
+
+    orchestrator._element_matcher = _M()  # type: ignore[assignment]  # noqa: SLF001
+    emitted = await orchestrator._replace_placeholders_sequentially(  # noqa: SLF001 - the unit under test
+        skeleton_code=f"def test_polarity(page):\n    {token}\n",
+        journeys=[journey],
+        page_requirements=[PageRequirement(keyword="page")],
+        seed_urls=[url],
+        scraped_data=scraped,
+        scraped_errors={},
+        observed_trails={"test_polarity": trail},
+    )
+    line = next(line for line in emitted.splitlines() if "assert_" in line)
+    return str(line.strip().split("(")[0].split(".")[-1])
+
+
+def test_t1251_predicate_types() -> None:
+    for description, expected in _T1251_CASES:
+        assert polarity_assertion_type(description) == expected, description
+
+
+def test_t1251_emitted_assertion_type() -> None:
+    """The predicate reaches the emitted call: assert_hidden or assert_visible."""
+    import asyncio
+
+    for description, expected in _T1251_CASES:
+        call = asyncio.run(_emitted_assertion(description))
+        want = "assert_hidden" if expected == "toBeHidden" else "assert_visible"
+        assert call == want, f"{description}: emitted {call}, wanted {want}"
+
+
+def test_t1253_the_two_traps_hold() -> None:
+    """The new verbs must not flip a real absence check.
+
+    "reopens" is not "opens" (whole-word boundary, the same rule that keeps
+    "closed" out of "disclosed"); "is not revealed" is a denied positive, so it
+    stays on the absence side.
+    """
+    assert polarity_assertion_type("the dismissed popup reopens") == "toBeHidden"
+    assert polarity_assertion_type("the hidden field is not revealed") == "toBeHidden"
