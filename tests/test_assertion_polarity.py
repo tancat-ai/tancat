@@ -229,9 +229,13 @@ _T1251_CASES: list[tuple[str, str | None]] = [
     ("the error was dismissed", "toBeHidden"),
     ("popup closed", "toBeHidden"),
     ("item removed", "toBeHidden"),
-    # residue: a positive verb outside the agreed set - reported, not fixed here
-    ("the hidden menu opens", "toBeHidden"),
-    ("the hidden field is revealed", "toBeHidden"),
+    # t-1253: the two presence verbs added to the positive set
+    ("the hidden menu opens", None),
+    ("the hidden field is revealed", None),
+    # the traps the whole-word boundary and the denial rule must keep closed
+    ("the dismissed popup reopens", "toBeHidden"),
+    ("the hidden field is not revealed", "toBeHidden"),
+    # a colour state: no positive term, and the predicate cannot read it
     ("the cart badge is no longer grey", "toBeHidden"),
 ]
 
@@ -304,3 +308,14 @@ def test_t1251_emitted_assertion_type() -> None:
         call = asyncio.run(_emitted_assertion(description))
         want = "assert_hidden" if expected == "toBeHidden" else "assert_visible"
         assert call == want, f"{description}: emitted {call}, wanted {want}"
+
+
+def test_t1253_the_two_traps_hold() -> None:
+    """The new verbs must not flip a real absence check.
+
+    "reopens" is not "opens" (whole-word boundary, the same rule that keeps
+    "closed" out of "disclosed"); "is not revealed" is a denied positive, so it
+    stays on the absence side.
+    """
+    assert polarity_assertion_type("the dismissed popup reopens") == "toBeHidden"
+    assert polarity_assertion_type("the hidden field is not revealed") == "toBeHidden"

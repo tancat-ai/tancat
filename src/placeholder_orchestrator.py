@@ -113,6 +113,11 @@ POSITIVE_TERMS: tuple[str, ...] = (
     "reappears",
     "present",
     "displayed",
+    # t-1253: the two presence verbs the first slice left out. Whole-word, so
+    # "reopens" is not "opens", and the denied-positive rule keeps "is not
+    # revealed" on the absence side.
+    "opens",
+    "revealed",
 )
 
 #: t-1251: a positive word is not positive when it is denied right before it.
