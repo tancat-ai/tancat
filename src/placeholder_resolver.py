@@ -606,10 +606,18 @@ class PlaceholderResolver:
 
         ``0`` - an element a visibility assert can honestly point at: the page
         showed it, and it is not part of a banner or modal overlay.
-        ``1`` - the look recorded it hidden, or inside ``OVERLAY_CONTAINER_SELECTOR``.
-        It is demoted below every candidate that scored ``0``, never dropped: an
-        ASSERT that only has such elements still resolves (today's behaviour), and
-        the caller can see which kind it got.
+        ``1`` - the look recorded it hidden, or inside an overlay container, or
+        could not say whether it is (``in_overlay`` is None). It is demoted below
+        every candidate that scored ``0``, never dropped: an ASSERT that only has
+        such elements still resolves to the best of them, and the caller can see
+        which kind it got.
+
+        t-1255: an UNKNOWN marker is demoted too. The old test was
+        ``is True``, so ``None`` - the probe's "could not be evaluated" - scored 0
+        and could win a visibility assert on nothing but a failed question. Unknown
+        is not evidence of content. An element with no ``in_overlay`` key at all
+        was never asked the question (a pool the probe did not see) and stays at
+        ``0``.
 
         Three cases stay at ``0`` on purpose:
 
@@ -627,7 +635,12 @@ class PlaceholderResolver:
         if action != "ASSERT":
             return 0
         recorded_hidden = element.get("is_visible") is False
-        in_overlay = element.get("in_overlay") is True
+        # Asked and answered "yes": True. Asked and unanswered: None, and that
+        # is not evidence of content either. Never asked (no key): not our
+        # question - the class-list answer is the default, and it is 0 here.
+        overlay_marker = element.get("in_overlay")
+        answered_no = "in_overlay" in element and overlay_marker is False
+        in_overlay = not answered_no and "in_overlay" in element
         if not (recorded_hidden or in_overlay):
             return 0
         # Import here: the absence vocabulary has one home, in the ASSERT

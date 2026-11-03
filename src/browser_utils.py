@@ -51,6 +51,86 @@ OVERLAY_CONTAINER_SELECTOR = ", ".join(
     )
 )
 
+#: Containers whose SUBTREE is an overlay, for asking "is this element inside an
+#: overlay?" (t-1251, d-0112).
+#:
+#: t-1255: the first narrowing went too far and stopped recognising the common
+#: consent banners - including our own mock's ``#consent-root`` and
+#: ``.fc-consent-root``. The banner half below names the vendors a real site
+#: actually ships, so a banner is an obstacle again. What keeps that from
+#: re-creating the dialog defect is not a shorter list: it is
+#: ``PlaceholderOrchestrator._mark_landing_overlays``, which turns a DIALOG that
+#: only the post-click look has into content. The two goals do not compete - a
+#: banner is recognised as an obstacle, and a dialog the click opened is content.
+#:
+#: Still NOT here: the broad ``[class*='cookie']`` / ``[class*='consent']``. A
+#: layout wrapper named ``cookie-policy`` is page content, and a membership test
+#: with a broad class match flags its whole subtree.
+OVERLAY_DIALOG_SELECTOR = ", ".join(
+    (
+        "#cartModal",
+        ".modal",
+        "[role='dialog']",
+        "[aria-modal='true']",
+    )
+)
+
+#: The consent/banner half of the membership list. A banner is an obstacle
+#: whether or not the click showed it - nobody opens a cookie banner on purpose
+#: in a journey - so it is never flipped to content.
+OVERLAY_BANNER_SELECTOR = ", ".join(
+    (
+        # Our own mock site (and the shapes its pages use).
+        "#consent-root",
+        ".fc-consent-root",
+        "#google_vignette",
+        # OneTrust.
+        "#onetrust-banner-sdk",
+        "#onetrust-consent-sdk",
+        ".onetrust-pc-dark-filter",
+        # Google funding-choices dialog.
+        ".fc-dialog-container",
+        # Cookiebot.
+        "#CybotCookiebotDialog",
+        # Didomi.
+        "#didomi-host",
+        # Osano / the classic cookie-consent window class.
+        ".cc-window",
+        # Quantcast.
+        "#qc-cmp2-container",
+        # Usercentrics.
+        "#usercentrics-root",
+        # TrustArc.
+        "#truste-consent-track",
+        # consentmanager.
+        "#cmpbox",
+        # CookieYes.
+        ".cky-consent-container",
+        # Complianz.
+        ".cmplz-cookiebanner",
+        # Generic banner names.
+        ".cookie-bar",
+        "#cookie-notice",
+        "[class*='consent-banner']",
+        "[class*='consent-modal']",
+        "[class*='cookie-banner']",
+        "[class*='cookie-notice']",
+        "[class*='cookie-consent']",
+        "[class*='cookiebar']",
+        "[id*='cookie-banner']",
+        "[id*='consent-banner']",
+    )
+)
+
+#: Containers whose subtree counts as an overlay: dialogs and banners together.
+OVERLAY_MEMBERSHIP_SELECTOR = ", ".join((OVERLAY_DIALOG_SELECTOR, OVERLAY_BANNER_SELECTOR))
+
+#: Playwright-only selector syntax that a browser-side ``querySelector`` cannot
+#: read. An element found by one of these is resolved through Playwright instead,
+#: and when even that fails the answer is "could not be evaluated" (None), never
+#: a silent "not in an overlay" (t-1251).
+PLAYWRIGHT_ONLY_SELECTOR_MARKERS = (":has-text(", ":visible", ":text(", ">>", "text=", ":has(")
+
 
 def dismiss_blocking_modals(page: Page) -> bool:
     """Click the dismiss control of an open confirmation/dialog overlay.
