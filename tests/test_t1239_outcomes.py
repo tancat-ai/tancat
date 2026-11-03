@@ -522,3 +522,84 @@ def test_interference_message_names_the_click_on_the_real_path() -> None:
 
     assert "could not be reached after the click on 'Place Order'" in emitted, emitted
     assert "the click on 'order success message'" not in emitted
+
+
+# ─── t-1248: an absence check is not interference ───────────────────────────
+
+
+def test_absence_after_a_click_emits_assert_hidden_on_the_real_path() -> None:
+    """A closed banner is recorded hidden - that is the PASS, not a blocker."""
+    import asyncio
+
+    from src.journey_models import ObservedStep, ObservedTrail
+    from src.pipeline_models import PageRequirement, PlaceholderUse, TestJourney, TestStep
+
+    def ph(action: str, desc: str, line: int) -> PlaceholderUse:
+        token = f"{{{{{action}:{desc}}}}}"
+        return PlaceholderUse(token=token, action=action, description=desc, line_number=line, raw_line=token)
+
+    journey = TestJourney(
+        test_name="test_close_banner",
+        start_line=1,
+        end_line=3,
+        steps=[
+            TestStep(
+                line_number=2,
+                raw_line="page.click('{{CLICK:Close the promo banner}}')",
+                placeholders=[ph("CLICK", "Close the promo banner", 2)],
+            ),
+            TestStep(
+                line_number=3,
+                raw_line="assert '{{ASSERT:promo banner closed}}'",
+                placeholders=[ph("ASSERT", "promo banner closed", 3)],
+            ),
+        ],
+    )
+    banner_hidden = [{"selector": "#promo", "role": "banner", "text": "50% off", "is_visible": "False"}]
+    trail = ObservedTrail(
+        steps=[
+            ObservedStep(
+                0,
+                "click",
+                description="Close the promo banner",
+                from_url=CHECKOUT,
+                to_url=CHECKOUT,
+                navigated=False,
+                landing_checked=True,
+                landing_dom=banner_hidden,
+            ),
+            ObservedStep(1, "scrape", description="promo banner closed", from_url=CHECKOUT, to_url=CHECKOUT),
+        ]
+    )
+    scraped = {
+        CHECKOUT: [
+            {"selector": "#promo", "role": "banner", "text": "50% off", "assertion_type": "toBeVisible"},
+            {
+                "selector": PLACE_ORDER,
+                "role": "button",
+                "text": "Place Order",
+                "assertion_type": "toBeVisible",
+            },
+        ]
+    }
+    orchestrator = PlaceholderOrchestrator(starting_url=CHECKOUT)
+    orchestrator._element_matcher = _Matcher("#promo")  # type: ignore[assignment]  # noqa: SLF001
+
+    emitted = asyncio.run(
+        orchestrator._replace_placeholders_sequentially(  # noqa: SLF001 - the unit under test
+            skeleton_code=(
+                "def test_close_banner(page):\n"
+                "    page.click('{{CLICK:Close the promo banner}}')\n"
+                "    {{ASSERT:promo banner closed}}\n"
+            ),
+            journeys=[journey],
+            page_requirements=[PageRequirement(keyword="checkout")],
+            seed_urls=[CHECKOUT],
+            scraped_data=scraped,
+            scraped_errors={},
+            observed_trails={"test_close_banner": trail},
+        )
+    )
+
+    assert "evidence_tracker.assert_hidden(" in emitted, emitted
+    assert "pytest.fail(" not in emitted, "an absence check must not be blamed on the page"

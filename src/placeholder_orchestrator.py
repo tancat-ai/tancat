@@ -1694,6 +1694,12 @@ class PlaceholderOrchestrator:
                         landing_was_looked_at
                         and str(matched_visibility).lower() in {"false", "0"}
                         and action == "ASSERT"
+                        # t-1248: an ABSENCE check wants the element hidden. "The
+                        # banner is gone after you close it" records the banner as
+                        # hidden, and assert_hidden passes on exactly that. Only a
+                        # check that asks to SEE something can be blocked, so a
+                        # polarity description is never interference.
+                        and polarity_assertion_type(description) is None
                     ):
                         # t-1246: the positive signal tied to the check's own
                         # target - it is on the page after the click but the page
