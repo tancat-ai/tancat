@@ -13,15 +13,18 @@ from src.pipeline_models import GeneratedPageObject, ScrapedPage
 # to resolve to click_dress_category_link() or fall back to self.page.locator().click().
 # Two versions: one for evidence tracker (uses self.tracker) and one for plain POMs.
 # t-1211: the strings below land inside the generated page object in the user's own
-# repository, so they name no internal ticket id. The guard they describe is tracked
-# as B-028 here, in builder-side code only — where it is read by us and never shipped.
+# repository, so they name no internal ticket id. Those ids live here instead, in
+# builder-side code that is read by us and never shipped: B-028 for the element-index
+# guard, j-0259 for the must_move flag.
 _CLICK_METHOD_SOURCE_ET = (
-    "    def click(self, description: str, selector: str | None = None) -> None:\n"
+    "    def click(self, description: str, selector: str | None = None, must_move: bool = False) -> None:\n"
     '        """Click by semantic description — resolve to POM method or delegate to tracker.\n'
     "        When *selector* is provided (resolved during generation) it is used directly;\n"
-    '        the runtime semantic matching below is a fallback only."""\n'
+    "        the runtime semantic matching below is a fallback only.\n"
+    "        *must_move* is set by the generator only when the scrape trail showed this\n"
+    '        click changing the page; it arms the tracker stop for a dead click."""\n'
     "        if selector:\n"
-    "            self.tracker.click(selector, label=description)\n"
+    "            self.tracker.click(selector, label=description, must_move=must_move)\n"
     "            return\n"
     "        import re\n"
     "        clean = description.lower().strip().strip(chr(39) + chr(34))\n"
@@ -98,17 +101,19 @@ _CLICK_METHOD_SOURCE_ET = (
     "            if _score >= min_score and _score > best_score:\n"
     "                best_score, best_sel = _score, _sel\n"
     "        if best_sel:\n"
-    "            self.tracker.click(best_sel, label=description)\n"
+    "            self.tracker.click(best_sel, label=description, must_move=must_move)\n"
     "            return\n"
     "        import pytest\n"
     "        pytest.skip(f\"No element matches '{description}' on {self.__class__.__name__} — the scraper may have missed it.\")\n"
 )
 
 _CLICK_METHOD_SOURCE_PLAIN = (
-    "    def click(self, description: str, selector: str | None = None) -> None:\n"
+    "    def click(self, description: str, selector: str | None = None, must_move: bool = False) -> None:\n"
     '        """Click by semantic description — resolve to POM method or fall back to page.locator.\n'
     "        When *selector* is provided (resolved during generation) it is used directly;\n"
-    '        the runtime semantic matching below is a fallback only."""\n'
+    "        the runtime semantic matching below is a fallback only.\n"
+    "        *must_move* is accepted so a generated call always type-checks; a plain page\n"
+    '        object has no tracker, so nothing can be armed here."""\n'
     "        if selector:\n"
     "            self.page.locator(selector).first.click(timeout=3000)\n"
     "            return\n"
