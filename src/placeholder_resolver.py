@@ -13,6 +13,7 @@ import re
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
+from src.content_scoping import is_image_criterion, is_image_element
 from src.intent_matcher import IntentMatcher
 from src.page_identity import same_page
 from src.placeholder_scorers import PlaceholderScorer
@@ -569,8 +570,24 @@ class PlaceholderResolver:
             id(element): _loses_to_tied_neighbour(score, element) for score, element in ranked if action == "CLICK"
         }
 
+        # d-0111 / d-0112 (t-1238): the ASSERT path used to choose an element the
+        # walk RECORDED as not visible (a hidden heading whose text matched still
+        # won on text evidence), and an element that sat inside a consent banner or
+        # promo overlay. Both only fail when the test runs. The bucket puts the
+        # candidate we can stand behind first: an assert that asks to SEE something
+        # never prefers a recorded-hidden or in-overlay element while a content
+        # element qualifies. A "gone/closed/removed" criterion is the opposite ask
+        # and is left alone, and an image criterion keeps the B-092 exemption.
+        stand_behind = {
+            id(element): PlaceholderResolver._assert_stand_behind(action, description, element)
+            for _score, element in ranked
+        }
+
         ranked.sort(
             key=lambda item: (
+                # Negated: ``reverse=True`` below, and a bucket of 1 must sort
+                # LAST, not first.
+                -stand_behind.get(id(item[1]), 0),
                 textual.get(id(item[1]), 0),
                 item[0],
                 not demoted.get(id(item[1]), False),
@@ -582,6 +599,46 @@ class PlaceholderResolver:
 
         # Enforce global slice cap across all available pool items
         return ranked[:20]
+
+    @staticmethod
+    def _assert_stand_behind(action: str, description: str, element: dict[str, Any]) -> int:
+        """Rank of an ASSERT candidate by what the walk actually recorded (d-0111).
+
+        ``0`` - an element a visibility assert can honestly point at: the page
+        showed it, and it is not part of a banner or modal overlay.
+        ``1`` - the look recorded it hidden, or inside ``OVERLAY_CONTAINER_SELECTOR``.
+        It is demoted below every candidate that scored ``0``, never dropped: an
+        ASSERT that only has such elements still resolves (today's behaviour), and
+        the caller can see which kind it got.
+
+        Three cases stay at ``0`` on purpose:
+
+        - an ABSENCE criterion ("popup closed", "item removed") asks for the
+          element to be GONE, so a hidden target is the correct answer;
+        - an image criterion keeps its B-092 exemption (an ``<img>`` often becomes
+          visible only after the click the assert follows);
+        - anything that is not an ASSERT - CLICK and FILL have their own rules and
+          this one must not touch them.
+
+        Only this method decides "is this element good enough to assert on". The
+        owner's rule q-0364 will make the hidden-only case fail loudly; that change
+        belongs here, not spread through the ranking.
+        """
+        if action != "ASSERT":
+            return 0
+        recorded_hidden = element.get("is_visible") is False
+        in_overlay = element.get("in_overlay") is True
+        if not (recorded_hidden or in_overlay):
+            return 0
+        # Import here: the absence vocabulary has one home, in the ASSERT
+        # polarity helper, and importing it at module level would cycle.
+        from src.placeholder_orchestrator import polarity_assertion_type
+
+        if polarity_assertion_type(description) is not None:
+            return 0
+        if is_image_criterion(description) and is_image_element(element):
+            return 0
+        return 1
 
     @staticmethod
     def _discover_urls_from_elements(pages_data: dict[str, list[dict[str, Any]]]) -> set[str]:

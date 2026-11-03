@@ -917,6 +917,14 @@ class ElementMatcher:
                         action, description, element, str(element.get("selector", ""))
                     ):
                         continue
+                    # d-0111 / d-0112 (t-1238): the fast text path returns the
+                    # FIRST match, so it bypassed the ASSERT ranking and handed
+                    # back an element the look recorded as hidden (a heading that
+                    # matched the words but never showed) or one inside a consent
+                    # banner. Skip those here too and let the ranked path decide;
+                    # the bucket is the single place that rules on it.
+                    if action == "ASSERT" and PlaceholderResolver._assert_stand_behind(action, description, element):
+                        continue
                     return element
 
         return None
