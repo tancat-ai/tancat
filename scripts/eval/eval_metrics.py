@@ -65,6 +65,10 @@ class StoryResult:
     resolutions: list[ResolutionResult] = field(default_factory=list)
     tests_executed: int = 0
     tests_passed: int = 0
+    # t-1240: checks the tool could not verify because it had no evidence. A
+    # skip is an outcome, and the report says it out loud - a pass rate that
+    # ignored them would read as if every check had run.
+    tests_skipped: int = 0
     tests_false_positive: int = 0
     # d-0050: which source produced the counts above - "junit" (the XML the
     # runner receives), "log" (pytest's final summary line only), or "none".
@@ -119,6 +123,11 @@ class HarnessReport:
     @property
     def total_tests_passed(self) -> int:
         return sum(s.tests_passed for s in self.stories)
+
+    @property
+    def total_skipped(self) -> int:
+        """t-1240: checks not run for want of evidence, across every story."""
+        return sum(s.tests_skipped for s in self.stories)
 
     @property
     def total_false_positives(self) -> int:
@@ -237,8 +246,17 @@ class HarnessReport:
                 f"FIXED+PROPERTY {self.alignment.get('fixed_property', 0)}, "
                 f"{self.alignment.get('rate_pct', 0.0)}%)"
             )
+        lines += [f"  Checks skipped (no evidence): {self.total_skipped}"]
+        if self.total_skipped:
+            # t-1240: a pass rate printed alone over a set that included skips
+            # reads as the whole story. Say what the figure covers.
+            lines += [
+                f"  Test pass rate:           {self.test_pass_rate():.1f}% of the tests that RAN"
+                f" - {self.total_skipped} check(s) were not run for want of evidence and are not in that figure",
+            ]
+        else:
+            lines += [f"  Test pass rate:           {self.test_pass_rate():.1f}%"]
         lines += [
-            f"  Test pass rate:           {self.test_pass_rate():.1f}%",
             "  Pass-rate note:           page-arrival mismatches now fail honestly; expected: gate 1 unchanged (not measured in this run); gate 2 stays clean because a failing test cannot be a hollow pass (a false green requires the test to pass).",
             f"  False positives:          {self.total_false_positives}",
             f"  False positive rate:      {self.false_positive_rate():.1f}%",
@@ -270,7 +288,8 @@ class HarnessReport:
                 lines.append(f"    Tests:        {head}{elapsed}{limit} - {counts}")
             else:
                 lines.append(
-                    f"    Tests:        {s.tests_executed} passed={s.tests_passed} false_pos={s.tests_false_positive}"
+                    f"    Tests:        {s.tests_executed} passed={s.tests_passed} "
+                    f"skipped={s.tests_skipped} false_pos={s.tests_false_positive}"
                 )
             # B-097: a skipped test hides all its resolved steps; name the split.
             partial = [c for c in s.test_resolution_counts if c.get("unresolved")]
@@ -317,6 +336,7 @@ class HarnessReport:
                     resolutions=resolutions,
                     tests_executed=s_data.get("tests_executed", 0),
                     tests_passed=s_data.get("tests_passed", 0),
+                    tests_skipped=s_data.get("tests_skipped", 0),
                     tests_false_positive=s_data.get("tests_false_positive", 0),
                     generation_duration_s=s_data.get("generation_duration_s", 0.0),
                     tests_timed_out=s_data.get("tests_timed_out", False),

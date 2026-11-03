@@ -664,7 +664,7 @@ class PlaceholderOrchestrator:
                 diverged_now: bool,
                 _trail_steps: list[ObservedStep] = trail_steps,
                 _by_occurrence: dict[tuple[int, str], ObservedStep] = trail_by_occurrence,
-            ) -> tuple[bool, str | None, str | None, list[dict[str, str]] | None]:
+            ) -> dict[str, Any]:
                 """t-1222/t-1225/t-1229: the page state the CLICK before this ASSERT produced.
 
                 An element ASSERT written after a click answers "is the target
@@ -683,21 +683,39 @@ class PlaceholderOrchestrator:
                 too (d-0109): with no evidence there is nothing to refuse against,
                 and refusing would turn every such assert into a skip.
 
-                Returns ``(landing_rules_apply, landing_key, landing_url, landing_dom)``.
-                ``landing_dom`` is not None only for a same-address click that was
-                looked at; an empty list means the look found nothing (the caller
-                refuses rather than inventing a landing).
+                t-1240: the facts the classifier needs travel with the decision -
+                whether the click was seen to stay put, and whether it recorded an
+                error. A click that stayed put with no post-click look means the
+                pool is still the DOM from BEFORE the click: that is not "no
+                evidence", it is the wrong page to check, and the caller must fail.
+
+                Returns a dict with ``previous_interaction``, ``previous_landing``,
+                ``previous_landing_url``, ``previous_landing_dom``,
+                ``previous_stayed_put`` and ``previous_click_error``.
                 """
+                off: dict[str, Any] = {
+                    "previous_interaction": False,
+                    "previous_landing": None,
+                    "previous_landing_url": None,
+                    "previous_landing_dom": None,
+                    "previous_stayed_put": False,
+                    "previous_click_error": None,
+                }
                 if not _trail_steps or prev is None or prev.action != "CLICK":
-                    return (False, None, None, None)
+                    return off
                 prev_obs = _by_occurrence.get((prev.line_number, prev.token))
                 if prev_obs is None or diverged_now:
-                    return (True, None, None, None)
+                    return {**off, "previous_interaction": True}
                 raw = str(prev_obs.to_url or "").strip() or None
-                if prev_obs.landing_checked:
-                    # Same-address click: the post-click look IS the landing.
-                    return (True, canon(raw), raw, list(prev_obs.landing_dom or []))
-                return (True, canon(raw), raw, None)
+                info = {
+                    "previous_interaction": True,
+                    "previous_landing": canon(raw),
+                    "previous_landing_url": raw,
+                    "previous_landing_dom": list(prev_obs.landing_dom or []) if prev_obs.landing_checked else None,
+                    "previous_stayed_put": not prev_obs.navigated,
+                    "previous_click_error": (str(prev_obs.error).strip() or None) if prev_obs.error else None,
+                }
+                return info
 
             current_url = self._select_initial_page_url(
                 journey,
@@ -1082,9 +1100,7 @@ class PlaceholderOrchestrator:
                                 )
                                 continue
                         # Defer element-based ASSERT for batch resolution.
-                        prev_interaction, prev_landing, prev_landing_url, prev_landing_dom = _assert_landing(
-                            previous_placeholder, diverged
-                        )
+                        landing_info = _assert_landing(previous_placeholder, diverged)
                         deferred_asserts.append(
                             {
                                 "placeholder": placeholder,
@@ -1094,10 +1110,7 @@ class PlaceholderOrchestrator:
                                 "current_url": current_url,
                                 "previous_selector": last_selector,
                                 "previous_description": last_description,
-                                "previous_interaction": prev_interaction,
-                                "previous_landing": prev_landing,
-                                "previous_landing_url": prev_landing_url,
-                                "previous_landing_dom": prev_landing_dom,
+                                **landing_info,
                             }
                         )
                         continue
@@ -1387,8 +1400,9 @@ class PlaceholderOrchestrator:
                     # B-069: fallback-resolved assertions are not trustworthy. Emit an honest skip
                     # instead of a passing assert against a generic container.
                     if matched.get("unverified") is True:
-                        resolved_value = (
-                            f"pytest.skip(\"Assertion for '{description}' could not be verified on this page\")"
+                        resolved_value = self._landing_outcome_value(
+                            self.LANDING_NO_EVIDENCE,
+                            f"nothing on the page matched '{description}' well enough to check",
                         )
                     else:
                         resolved_value = repr(selector) if selector else f'pytest.skip("No match for: {description}")'
@@ -1625,12 +1639,13 @@ class PlaceholderOrchestrator:
                         expected_page = landing
                         pages_to_search = {landing: scraped_data.get(landing, [])}
                 if refusal is not None:
-                    logger.info("t-1222: assert not verified for '%s' - %s", description, refusal)
+                    kind, reason = refusal
+                    logger.info("t-1240: %s for '%s' - %s", kind, description, reason)
                     line_resolutions.setdefault(placeholder.line_number, []).append(
                         (
                             placeholder.token,
                             action,
-                            f'pytest.skip("assertion target not verified: {refusal}")',
+                            self._landing_outcome_value(kind, reason),
                             description,
                             fill_value,
                             cursor,
@@ -1695,17 +1710,20 @@ class PlaceholderOrchestrator:
                         # t-1225: only a CLICK raises this. With no click before the
                         # assert the match is not a landing claim, so the parent's
                         # behaviour stands byte for byte (cross-page match included).
-                        refusal = (
-                            f"nearest match for '{description}' is on "
-                            f"'{normalize_url(source_page)}', not on the expected page "
-                            f"'{normalize_url(expected_page)}'"
+                        # t-1240 (site #7): the expected page WAS captured and the
+                        # target is not on it - that is a wrong answer, not missing
+                        # evidence, so it fails and names both pages.
+                        reason = (
+                            f"the nearest element for '{description}' is on "
+                            f"'{normalize_url(source_page)}', not on the page the check "
+                            f"expects '{normalize_url(expected_page)}'"
                         )
-                        logger.info("t-1222: assert not verified for '%s' - %s", description, refusal)
+                        logger.info("t-1240: wrong_answer for '%s' - %s", description, reason)
                         line_resolutions.setdefault(placeholder.line_number, []).append(
                             (
                                 placeholder.token,
                                 action,
-                                f'pytest.skip("assertion target not verified: {refusal}")',
+                                self._landing_outcome_value(self.LANDING_WRONG_ANSWER, reason),
                                 description,
                                 fill_value,
                                 cursor,
@@ -2508,8 +2526,27 @@ class PlaceholderOrchestrator:
             reason += f" (that step failed: {error})"
         return reason
 
+    #: t-1240: the three outcomes of a check the tool cannot verify, in the
+    #: owner's words. Page arrivals already split this way (t-0929).
+    LANDING_NO_EVIDENCE = "no_evidence"
+    LANDING_INTERFERENCE = "interference"
+    LANDING_WRONG_ANSWER = "wrong_answer"
+
+    #: t-1240: the emitted form of each outcome. A skip is counted out loud by
+    #: the eval harness; a fail names what went wrong in plain words.
+    LANDING_OUTCOMES = {
+        LANDING_NO_EVIDENCE: 'pytest.skip("check not run: {reason}")',
+        LANDING_INTERFERENCE: 'pytest.fail("check failed: {reason}")',
+        LANDING_WRONG_ANSWER: 'pytest.fail("check failed: {reason}")',
+    }
+
+    @classmethod
+    def _landing_outcome_value(cls, kind: str, reason: str) -> str:
+        """Render one landing outcome as the line the generated test carries."""
+        return cls.LANDING_OUTCOMES[kind].format(reason=reason.replace('"', "'"))
+
     @staticmethod
-    def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> str | None:
+    def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> tuple[str, str] | None:
         """Why an element ASSERT after a click must be refused, or ``None``.
 
         t-1222. An ASSERT that follows a click asks whether the target exists on
@@ -2528,24 +2565,54 @@ class PlaceholderOrchestrator:
         the page state the walk looked at right after it. An empty look is refused
         plainly: the page showed nothing the click could have produced.
 
-        Returns the reason (a short phrase naming what was missing), or ``None``
-        when the assert may be resolved.
+        t-1240: returns ``(kind, reason)`` - the classification BESIDE the reason,
+        so the caller decides skip or fail instead of treating every refusal as
+        "no evidence":
+          - ``no_evidence``: the walk never recorded a page to check against;
+          - ``interference``: something on the page blocked the click that should
+            have produced it (an overlay that would not close);
+          - ``wrong_answer``: the page WAS captured and is not the page the check
+            was written for - including the case where the click was seen to stay
+            put and the pool is still the DOM from before it, which is the false
+            green.
+        ``None`` means the assert may be resolved.
         """
         if not da.get("previous_interaction"):
             return None
         step = str(da.get("previous_description") or "the step before it")
+        error = str(da.get("previous_click_error") or "").lower()
+        if error and any(word in error for word in ("intercept", "overlay", "modal", "pop-up", "popup")):
+            return (
+                PlaceholderOrchestrator.LANDING_INTERFERENCE,
+                f"something on the page was covering the target when '{step}' ran",
+            )
         landing_dom = da.get("previous_landing_dom")
         if landing_dom is not None:
             if landing_dom:
                 return None
-            return f"the page showed nothing after '{step}'"
+            return (
+                PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
+                f"the walk looked at the page after '{step}' and found nothing to check against",
+            )
         landing = da.get("previous_landing")
         if landing:
             return None
         named = str(da.get("previous_landing_url") or "").strip()
         if named:
-            return f"the page '{step}' landed on was not scraped (trail named '{named}'" + ")"
-        return f"no landing page was recorded for '{step}'"
+            return (
+                PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
+                f"the page '{step}' went to was never recorded, so there was nothing to check against",
+            )
+        if da.get("previous_stayed_put"):
+            return (
+                PlaceholderOrchestrator.LANDING_WRONG_ANSWER,
+                f"the click on '{step}' never left the page and the walk recorded nothing after it, "
+                "so the check would sit on the page from before the click",
+            )
+        return (
+            PlaceholderOrchestrator.LANDING_NO_EVIDENCE,
+            f"the walk never recorded a page after '{step}', so there was nothing to check against",
+        )
 
     @staticmethod
     def _map_trail_to_placeholders(
