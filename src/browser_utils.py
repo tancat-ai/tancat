@@ -51,6 +51,63 @@ OVERLAY_CONTAINER_SELECTOR = ", ".join(
     )
 )
 
+#: Containers whose SUBTREE is an overlay, for asking "is this element inside an
+#: overlay?" (t-1251, d-0112). Deliberately narrower than
+#: ``OVERLAY_CONTAINER_SELECTOR``: a membership test with ``[class*='cookie']``
+#: treats any layout wrapper whose name mentions cookies (``cookie-policy``,
+#: ``cookie-settings-link``) as a container, and then flags its whole subtree -
+#: page content marked as a banner. Membership asks for real containers: a dialog
+#: (``role=dialog``, ``aria-modal``, ``.modal``, ``#*Modal``) or a consent/cookie
+#: BANNER by name, not any class that happens to contain the word.
+OVERLAY_MEMBERSHIP_SELECTOR = ", ".join(
+    (
+        "#cartModal",
+        ".modal",
+        "[role='dialog']",
+        "[aria-modal='true']",
+        "[class*='consent-banner']",
+        "[class*='consent-modal']",
+        "[class*='cookie-banner']",
+        "[class*='cookie-notice']",
+        "[class*='cookie-consent']",
+        "[class*='cookiebar']",
+        "[id*='cookie-banner']",
+        "[id*='consent-banner']",
+    )
+)
+
+#: The dialog half of the membership list. A dialog is CONTENT when the click
+#: opened it - see ``PlaceholderOrchestrator._mark_landing_overlays``.
+OVERLAY_DIALOG_SELECTOR = ", ".join(
+    (
+        "#cartModal",
+        ".modal",
+        "[role='dialog']",
+        "[aria-modal='true']",
+    )
+)
+
+#: The consent/banner half. A banner is an obstacle whether or not the click
+#: showed it - nobody opens a cookie banner on purpose in a journey.
+OVERLAY_BANNER_SELECTOR = ", ".join(
+    (
+        "[class*='consent-banner']",
+        "[class*='consent-modal']",
+        "[class*='cookie-banner']",
+        "[class*='cookie-notice']",
+        "[class*='cookie-consent']",
+        "[class*='cookiebar']",
+        "[id*='cookie-banner']",
+        "[id*='consent-banner']",
+    )
+)
+
+#: Playwright-only selector syntax that a browser-side ``querySelector`` cannot
+#: read. An element found by one of these is resolved through Playwright instead,
+#: and when even that fails the answer is "could not be evaluated" (None), never
+#: a silent "not in an overlay" (t-1251).
+PLAYWRIGHT_ONLY_SELECTOR_MARKERS = (":has-text(", ":visible", ":text(", ">>", "text=", ":has(")
+
 
 def dismiss_blocking_modals(page: Page) -> bool:
     """Click the dismiss control of an open confirmation/dialog overlay.

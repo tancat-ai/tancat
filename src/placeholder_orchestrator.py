@@ -1641,7 +1641,20 @@ class PlaceholderOrchestrator:
                         # browser, so the page pool is what the page SHOWED after
                         # it - the modal/panel the assert is about - not the DOM
                         # captured before it.
-                        pages_to_search = {cursor: list(landing_dom)}
+                        # t-1251: the look records an overlay container per
+                        # element. A DIALOG the click opened holds the very
+                        # confirmation the criterion names (the mock's
+                        # #cartModal) - it is content, not an obstacle. The page
+                        # as it was BEFORE the click decides: a container the
+                        # earlier scrape already had was an obstacle; one that
+                        # only appears here was opened by the click. A banner is
+                        # an obstacle either way.
+                        pages_to_search = {
+                            cursor: self._mark_landing_overlays(
+                                list(landing_dom),
+                                scraped_data.get(cursor, []),
+                            )
+                        }
                         # t-1246: "the page looks unchanged" is NOT evidence of a
                         # blocker. The capture holds only selector, text, role,
                         # classes and visibility - it cannot see a ticked radio, a
@@ -2594,6 +2607,54 @@ class PlaceholderOrchestrator:
     def _landing_outcome_value(cls, kind: str, reason: str) -> str:
         """Render one landing outcome as the line the generated test carries."""
         return cls.LANDING_OUTCOMES[kind].format(reason=reason.replace('"', "'"))
+
+    @staticmethod
+    def _mark_landing_overlays(
+        landing_dom: list[dict[str, Any]],
+        before_click_dom: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Decide which overlay containers in a landing look are obstacles (t-1251).
+
+        d-0112 marked every element inside ``#cartModal`` / ``.modal`` /
+        ``[role='dialog']`` the same as one inside a cookie banner, so the
+        confirmation a click had just opened was demoted behind comparable page
+        content. What tells them apart is not a class name - it is what the click
+        did, and the page before the click can say it:
+
+        - a DIALOG container that the page already had before the click was there
+          on its own: an obstacle, and its content stays demoted;
+        - a DIALOG container that only the look has was opened by the click: that
+          is the confirmation the criterion names, so ``in_overlay`` becomes
+          False (content);
+        - a BANNER (consent/cookie/promo) is an obstacle either way - a journey
+          never opens one on purpose;
+        - no evidence either way (no container key, or no before-click DOM to
+          compare with, or a marker the probe could not evaluate) leaves the
+          class-list verdict standing, which is the conservative answer.
+
+        The trail has already decided that this look IS the landing (the click
+        stayed on the address, ``ObservedStep.landing_checked``); the DOM then
+        decides which container is new. Nothing here guesses from text.
+        """
+        before = {
+            str(element.get("overlay_container") or "")
+            for element in before_click_dom
+            if element.get("overlay_container")
+        }
+        for element in landing_dom:
+            if element.get("in_overlay") is not True:
+                continue
+            if str(element.get("overlay_kind") or "") != "dialog":
+                continue  # a banner keeps its demotion
+            key = str(element.get("overlay_container") or "")
+            if not key or not before_click_dom:
+                # No container key to compare, or no earlier page to compare with:
+                # the class-list answer stands (conservative).
+                continue
+            if key not in before:
+                element["in_overlay"] = False  # the click opened it
+                element["overlay_opened_by_click"] = True
+        return landing_dom
 
     @staticmethod
     def _assert_landing_refusal(da: dict[str, Any], cursor: str) -> tuple[str, str] | None:
