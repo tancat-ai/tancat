@@ -50,6 +50,20 @@ PROVIDER_LABELS: dict[str, str] = {
 LOCAL_MODEL_LIST_TIMEOUT = 15
 
 
+def validate_provider(provider: str) -> str:
+    """Return *provider* unchanged, or raise for a name the tool does not know.
+
+    d-0132: one message, one rule, so the CLI, the health probe and the UI all
+    refuse a misspelt provider the same way instead of defaulting silently.
+
+    Raises:
+        ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
+    """
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"unknown LLM provider '{provider}' - choose one of: {', '.join(SUPPORTED_PROVIDERS)}")
+    return provider
+
+
 def get_provider_defaults(provider: str) -> tuple[str, str]:
     """Return (base_url, model) defaults for the given provider.
 
@@ -63,7 +77,15 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
 
     Azure OpenAI has no default base URL or model either: the endpoint embeds
     the customer's resource name and the "model" is a deployment they created.
+
+    d-0132: an unknown provider is REFUSED here instead of silently receiving
+    the Ollama defaults. A misspelt ``--provider`` used to run against
+    localhost:11434 and read as a dead endpoint, which hid the real mistake.
+
+    Raises:
+        ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
     """
+    validate_provider(provider)
     if provider == "lm-studio":
         return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
     if provider == LOCAL_OPENAI_PROVIDER:
@@ -80,6 +102,7 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
     if provider == OPENROUTER_PROVIDER:
         # OpenRouter has a fixed endpoint but a huge catalogue — name the model.
         return "https://openrouter.ai/api/v1", ""
+    # Ollama: the only branch left, because every other name is refused above.
     return "http://localhost:11434", "qwen3.5:35b"
 
 

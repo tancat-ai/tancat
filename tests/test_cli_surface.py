@@ -51,9 +51,21 @@ def test_help_exits_zero_with_usage(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_version_exits_zero(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli_main.main(["--version"]) == 0
-    out = capsys.readouterr().out.strip()
+    lines = capsys.readouterr().out.strip().splitlines()
+    # d-0132: the version block is now three lines - version+commit, the Python
+    # build, and the provider/model - so a bug report carries the build facts.
+    assert lines[0].startswith("tancat ")
+    assert lines[0].split()[1][0].isdigit()
+    assert "(commit " in lines[0]
+    assert lines[1].startswith("Python ")
+    assert lines[2].startswith("Provider ")
+
+
+def test_short_version_flag_matches_long(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli_main.main(["-V"]) == 0
+    out = capsys.readouterr().out
     assert out.startswith("tancat ")
-    assert out.split()[-1][0].isdigit()
+    assert "-V" in cli_main._USAGE
 
 
 def test_unknown_flag_exits_two(capsys: pytest.CaptureFixture[str]) -> None:
