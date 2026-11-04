@@ -200,6 +200,22 @@ class TestSessionSeeding:
         assert session.pom_mode is True
         assert session.jira_project_key == "PAYMENTS"
 
+    def test_persisted_provider_outranks_env_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """B-036 (restored by d-0132): the saved provider beats a stale env var.
+
+        The env var is a fallback for a session that saved nothing; it must not
+        hijack the provider the user chose inside the tool.
+        """
+        from src.cli.session import create_session
+
+        save_settings({"provider": "lm-studio"})
+        monkeypatch.setenv("LLM_PROVIDER", "openai")
+        assert create_session().provider == "lm-studio"
+
+        save_settings({"provider": "bogus"})
+        with pytest.raises(ValueError, match="unknown LLM provider 'bogus'"):
+            create_session()
+
     def test_create_session_defaults_without_settings(self) -> None:
         from src.cli.session import create_session
 

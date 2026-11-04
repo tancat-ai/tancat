@@ -17,7 +17,10 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import os
+import platform
 import sys
+from pathlib import Path
 
 # Force UTF-8 encoding on Windows Git Bash (MINGW64)
 if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", "CP65001"):
@@ -29,7 +32,7 @@ if sys.stdout.encoding and sys.stdout.encoding.upper() not in ("UTF-8", "UTF8", 
 
 from src.journey_scraper import CredentialProfile, JourneyStep
 from src.llm_client import LLMClient
-from src.provider_config import resolve_openai_api_key, sync_openai_api_key_to_env
+from src.provider_config import get_provider_defaults, resolve_openai_api_key, sync_openai_api_key_to_env
 from src.settings_store import save_setting, save_settings
 
 from .color import green, yellow
@@ -597,12 +600,19 @@ def _clear_loaded_package(session: Session) -> None:
 
 _USAGE = """TanCat - generate Playwright pytest tests from a user story with your own LLM.
 
+First run - paste this (it needs a local LLM on :8080; 'tancat check-llm' probes one):
+  tancat run --story "Add one item to the cart and check the badge shows 1" --url https://www.saucedemo.com --danger-zone
+
+  saucedemo.com is a public demo site, so it needs --danger-zone. A localhost,
+  staging, *-dev, *.test or *.local URL needs no flag; 'tancat run --help'
+  prints the exact allow-list generated from the code.
+
 Usage:
   tancat                     Start the interactive session (the default).
   tancat run [options]       Generate tests headlessly (CI/script friendly).
   tancat check-llm [options] Probe the configured LLM endpoint.
   tancat --help              Show this message.
-  tancat --version           Show the version.
+  tancat --version, -V       Version, commit, Python, platform and provider/model.
 
 Run 'tancat run --help' or 'tancat check-llm --help' for the options.
 
@@ -610,11 +620,22 @@ The interactive session walks through:
   1. Configure LLM      pick your provider, base URL and model
   2. Check LLM          probe the endpoint before generating
   3. Enter User Story   paste a story or upload a file
-  4. Generate + run     write Playwright pytest tests, run them, read evidence
+  4. Enter Target URLs  name the site(s) the generated tests will drive
+Then, all optional: Consent Mode, POM Mode (off by default), authentication,
+journey, the test plan - and finally 'Run Intelligent Pipeline' writes
+Playwright pytest tests, runs them, and reads the evidence.
+
+Evidence search and export (AI-028):
+  python -m cli.evidence_cli search --query "cart" --status failed
+  python -m cli.evidence_cli detail 3
+  python -m cli.evidence_cli export --format csv -o evidence.csv
 
 For the Streamlit UI: bash launch_ui.sh
 Docs: https://github.com/tancat-ai/tancat (README.md, docs/ci.md)
 """
+
+
+_PROVIDER_DEFAULTS_NOTE = "saved setting, then $LLM_PROVIDER, else the provider's default"
 
 
 def _version() -> str:
@@ -625,6 +646,57 @@ def _version() -> str:
         return version("tancat")
     except PackageNotFoundError:
         return "0.1.0"
+
+
+def _commit() -> str:
+    """Return the short commit this checkout is on, or 'unknown'.
+
+    ``$AITEST_COMMIT`` wins (CI can stamp it), then git, then 'unknown' - the
+    line says which, so a build with no commit cannot pass for one.
+    """
+    stamped = os.environ.get("AITEST_COMMIT", "").strip()
+    if stamped:
+        return stamped
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).resolve().parents[2],
+        )
+    except OSError, subprocess.SubprocessError:
+        return "unknown"
+    return out.stdout.strip() if out.returncode == 0 and out.stdout.strip() else "unknown"
+
+
+def _version_info() -> str:
+    """Return the multi-line version block printed by ``tancat --version``.
+
+    d-0132: a bug report needs the commit and the Python build, not only a
+    version number, and the provider/model says which LLM the CLI is talking
+    about. The provider uses the SAME precedence the CLI uses (the saved
+    setting, then ``$LLM_PROVIDER``, then the default); ``--version`` still
+    succeeds on an unknown name, and says so rather than inventing one.
+    """
+    from .session import resolve_session_provider
+
+    model = os.environ.get("LLM_MODEL", "").strip()
+    try:
+        provider = resolve_session_provider()
+    except ValueError:
+        provider = "unknown (set in the saved setting or $LLM_PROVIDER)"
+        provider_model = "(not set)"
+    else:
+        provider_model = get_provider_defaults(provider)[1] or "(not set)"
+    lines = [
+        f"tancat {_version()} (commit {_commit()})",
+        f"Python {platform.python_version()} on {platform.platform()}",
+        f"Provider {provider}, model {model or provider_model} ({_PROVIDER_DEFAULTS_NOTE})",
+    ]
+    return "\n".join(lines)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -647,6 +719,11 @@ def _run_interactive() -> int:
     except KeyboardInterrupt:
         print("\n\nInterrupted. Goodbye!")
         return 130
+    except ValueError as exc:
+        # d-0132: an unknown LLM_PROVIDER (env or persisted) is refused with the
+        # one message, not a traceback and not a silent Ollama default.
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:  # top-level guard: no raw traceback for the user
         print(f"\nUnexpected error: {exc}")
         return 1
@@ -667,7 +744,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_USAGE)
         return 0
     if args in (["--version"], ["-V"]):
-        print(f"tancat {_version()}")
+        print(_version_info())
         return 0
 
     parser = build_parser()

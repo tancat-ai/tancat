@@ -20,6 +20,9 @@ SUPPORTED_PROVIDERS: tuple[str, ...] = (
     OPENROUTER_PROVIDER,
 )
 
+# The documented default (AGENTS.md §5, README): llama.cpp on :8080.
+DEFAULT_PROVIDER = LOCAL_OPENAI_PROVIDER
+
 # The environment variable that carries each provider's API key. Keep this the
 # single source of truth so the UI field, the CLI prompt and the provider
 # factory all read and write the same variable.
@@ -50,6 +53,51 @@ PROVIDER_LABELS: dict[str, str] = {
 LOCAL_MODEL_LIST_TIMEOUT = 15
 
 
+def validate_provider(provider: str) -> str:
+    """Return *provider* unchanged, or raise for a name the tool does not know.
+
+    d-0132: one message, one rule, so every CLI entry point refuses a misspelt
+    provider the same way instead of defaulting silently.
+
+    Precedence is NOT the same on every entry point, so each one is named here:
+
+    - ``tancat run --provider``: the flag only; its default is openai-local.
+      The environment is never consulted on this path, and no session is built.
+    - ``tancat check-llm --provider``: flag, then the persisted session setting,
+      then ``$LLM_PROVIDER``, then openai-local. A valid flag outranks a stale
+      environment variable, and a saved choice outranks one too (B-036) - a
+      stale env var must never hijack the provider the user saved in the tool.
+    - ``tancat`` (interactive): the persisted session setting, then
+      ``$LLM_PROVIDER``, then openai-local.
+
+    Raises:
+        ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
+    """
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"unknown LLM provider '{provider}' - choose one of: {', '.join(SUPPORTED_PROVIDERS)}")
+    return provider
+
+
+def resolve_provider(*, flag: str = "", persisted: str = "", env: str = "") -> str:
+    """Pick and validate the provider: flag, then saved setting, then env, then the default.
+
+    d-0132: a name set in any of those places is validated, and the FIRST one
+    that is set wins - so a valid --provider still wins over a stale
+    ``$LLM_PROVIDER``, and the provider the user saved in the tool wins over a
+    stale environment variable (B-036). An unknown name in a HIGHER-precedence
+    source is refused rather than skipped: an explicitly wrong flag is a
+    mistake, not a default.
+
+    Raises:
+        ValueError: when the winning name is not in ``SUPPORTED_PROVIDERS``.
+    """
+    for candidate in (flag, persisted, env):
+        name = candidate.strip()
+        if name:
+            return validate_provider(name)
+    return DEFAULT_PROVIDER
+
+
 def get_provider_defaults(provider: str) -> tuple[str, str]:
     """Return (base_url, model) defaults for the given provider.
 
@@ -63,7 +111,15 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
 
     Azure OpenAI has no default base URL or model either: the endpoint embeds
     the customer's resource name and the "model" is a deployment they created.
+
+    d-0132: an unknown provider is REFUSED here instead of silently receiving
+    the Ollama defaults. A misspelt ``--provider`` used to run against
+    localhost:11434 and read as a dead endpoint, which hid the real mistake.
+
+    Raises:
+        ValueError: when *provider* is not in ``SUPPORTED_PROVIDERS``.
     """
+    validate_provider(provider)
     if provider == "lm-studio":
         return "http://localhost:1234", "lmstudio-community/Qwen2.5-7B-Instruct-GGUF"
     if provider == LOCAL_OPENAI_PROVIDER:
@@ -80,6 +136,7 @@ def get_provider_defaults(provider: str) -> tuple[str, str]:
     if provider == OPENROUTER_PROVIDER:
         # OpenRouter has a fixed endpoint but a huge catalogue — name the model.
         return "https://openrouter.ai/api/v1", ""
+    # Ollama: the only branch left, because every other name is refused above.
     return "http://localhost:11434", "qwen3.5:35b"
 
 

@@ -34,7 +34,7 @@ from urllib.parse import urlparse
 
 from src.ci_ignore import load_ignore_spec
 from src.journey_models import CredentialProfile
-from src.provider_config import get_provider_defaults
+from src.provider_config import SUPPORTED_PROVIDERS, get_provider_defaults
 from src.storage import init_storage
 from src.ui_pipeline import PipelineSessionState, run_pipeline
 from src.url_guard import UrlGuard
@@ -45,15 +45,29 @@ EXIT_CONFIG_ERROR = 2
 
 # Safe-by-default allow-list (Q3 grilling, 2026-08-13). Anything else requires
 # --danger-zone or an --allowed-domains extension.
+#
+# d-0132: these three tuples are the ONLY source of the allow rule, and the
+# printed safe-host list is built from them by _safe_host_help(). Adding a
+# token here changes the rule AND the help text together, so the text cannot
+# drift from what the code actually accepts.
+_SAFE_HOST_EXACT = ("localhost", "127.0.0.1", "::1")
 _SAFE_HOST_SUBSTRINGS = (".staging.", ".test.", "-dev.", "staging.", "test.")
 _SAFE_HOST_SUFFIXES = ("-dev", ".local")
+
+
+def _safe_host_help() -> str:
+    """Return the human form of the allow rule, built from the rule's tokens."""
+    exact = ", ".join(_SAFE_HOST_EXACT)
+    contains = ", ".join(f"*{s}*" for s in _SAFE_HOST_SUBSTRINGS)
+    ends = ", ".join(f"*{s}" for s in _SAFE_HOST_SUFFIXES)
+    return f"{exact}; a host containing {contains}; or a host ending in {ends}"
 
 
 def _is_allowed_url(url: str, allowed_domains: Sequence[str]) -> bool:
     """Return True when *url* is on the safe allow-list (or explicitly allowed)."""
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    if host in {"localhost", "127.0.0.1", "::1"}:
+    if host in _SAFE_HOST_EXACT:
         return True
     if any(host == d.lower() or host.endswith("." + d.lower()) for d in allowed_domains):
         return True
@@ -69,8 +83,8 @@ def _check_danger_zone(url: str, danger_zone: bool, allowed_domains: Sequence[st
     if danger_zone or _is_allowed_url(url, allowed_domains):
         return
     raise ValueError(
-        f"target URL '{url}' is not on the safe allow-list "
-        "(localhost, *.staging.*, *-dev, *.test.*). Generated tests can fill forms, "
+        f"target URL '{url}' is not on the safe allow-list ({_safe_host_help()}). "
+        "Generated tests can fill forms, "
         "place orders, and mutate data — CI must run against staging, not production. "
         "Set --danger-zone explicitly (prod smoke/load testing only) or extend the list "
         "via --allowed-domains."
@@ -172,8 +186,8 @@ async def _run_pipeline_async(
 
 _RUN_EPILOG = (
     "Exit codes: 0 generated, 1 generation error, 2 configuration error.\n"
-    "Target URL safety: only localhost/127.0.0.1, *.staging.*, *-dev, *.test.*\n"
-    "are allowed without --danger-zone."
+    f"Target URL safety: {_safe_host_help()} -- no --danger-zone needed.\n"
+    "Anything else needs --danger-zone or --allowed-domains."
 )
 
 
@@ -197,9 +211,14 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
         help="Base directory for the workspace (default: repo root). The CI action passes "
         "$GITHUB_WORKSPACE so generated artifacts persist to the runner.",
     )
-    parser.add_argument("--pom", action="store_true", help="Page Object Model mode")
+    parser.add_argument("--pom", action="store_true", help="Page Object Model mode (off by default)")
     parser.add_argument(
-        "--provider", default="openai-local", help="LLM provider (openai-local, lm-studio, ollama, openai)"
+        "--provider",
+        default="openai-local",
+        help=(
+            f"LLM provider ({', '.join(SUPPORTED_PROVIDERS)}); default: openai-local. "
+            "An unknown name is refused (exit code 2), not defaulted."
+        ),
     )
     parser.add_argument("--model", default="", help="Model name (defaults to the provider's default)")
     parser.add_argument(
@@ -209,7 +228,12 @@ def _add_run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--credential-profile", default="", help='JSON: {"label","username","password"} for login-required sites'
     )
-    parser.add_argument("--ignore-file", default="", help="Path to .ai-test-ignore.yml (validated; gating lands in 7b)")
+    parser.add_argument(
+        "--ignore-file",
+        default="",
+        help="Path to .ai-test-ignore.yml. Today run loads it and counts its entries "
+        "(printed as 'ignores loaded'); it does not gate generation yet.",
+    )
     parser.add_argument(
         "--danger-zone", action="store_true", help="Allow a non-allow-listed URL (prod smoke/load testing only)"
     )
@@ -284,8 +308,14 @@ def run(args: argparse.Namespace) -> int:
         return EXIT_CONFIG_ERROR
 
     provider = args.provider
-    base_url = args.llm_base_url or get_provider_defaults(provider)[0]
-    model_name = args.model or get_provider_defaults(provider)[1]
+    try:
+        base_url = args.llm_base_url or get_provider_defaults(provider)[0]
+        model_name = args.model or get_provider_defaults(provider)[1]
+    except ValueError as exc:
+        # d-0132: an unknown --provider refuses here instead of inheriting the
+        # Ollama defaults and failing later as an unreachable endpoint.
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
 
     # --- license validation (Phase 6e, spec §5.4) ---------------------------
     # Report-only by default (open-core adoption on-ramp — §9 Q1). Paid
@@ -406,7 +436,12 @@ def add_check_llm_parser(subparsers: Any) -> argparse.ArgumentParser:
         description="Run the same BYO-LLM health probe as the UI/CLI 'Check LLM' action.",
     )
     parser.add_argument(
-        "--provider", default="", help="Provider (default: persisted setting, then $LLM_PROVIDER, then openai-local)"
+        "--provider",
+        default="",
+        help=(
+            f"Provider ({', '.join(SUPPORTED_PROVIDERS)}); default: --provider, then "
+            "the saved setting, then $LLM_PROVIDER, then openai-local"
+        ),
     )
     parser.add_argument(
         "--model", default="", help="Model name (default: persisted/env setting, then the provider default)"
@@ -420,11 +455,18 @@ def add_check_llm_parser(subparsers: Any) -> argparse.ArgumentParser:
 
 def check_llm_main(args: argparse.Namespace) -> int:
     """Run the health probe. Exit 0 when healthy, 1 otherwise."""
-    from src.cli.session import create_session
+    from src.cli.session import create_session, resolve_session_provider
     from src.llm_health import build_client, check_llm, render_report
 
-    session = create_session()
-    provider = args.provider or session.provider
+    # d-0132: resolve and validate BEFORE the session is built, with the flag
+    # first and the environment second. A stale $LLM_PROVIDER used to raise out
+    # of create_session as a traceback even when a valid --provider was given.
+    try:
+        provider = resolve_session_provider(args.provider)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    session = create_session(provider=provider)
     base_url = args.llm_base_url or session.provider_base_url
     model = args.model or session.model_name
     result = check_llm(
