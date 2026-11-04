@@ -157,8 +157,11 @@ class TestFullValidation:
         from eval_metrics import HarnessReport
 
         summary = HarnessReport(stories=results).to_summary()
-        assert "TIMED OUT" in summary
-        assert "Tests timed out" in summary
+        # d-0129: the summary has said "Tests killed:" since the B-061/d-0084
+        # wording change (eb20c2f). The old "TIMED OUT" phrasing is gone, so this
+        # assertion was red on every checkout whether or not anything else changed.
+        assert "Tests killed:" in summary
+        assert "story run(s) killed by" in summary
 
     def test_false_green_is_attributed_to_its_own_test(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Gate 2 (B-093): a false green requires the criterion's OWN test to pass.
