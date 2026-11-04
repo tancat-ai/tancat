@@ -305,9 +305,30 @@ def _cmd_rebuild(args: argparse.Namespace) -> int:
     from eval_runner import rebuild_run_from_evidence
 
     db_path = _DB_PATH if getattr(args, "db", None) is None else Path(args.db)
-    run_ids = rebuild_run_from_evidence(args.evidence_dir, db_path)
+    dataset_dir = Path(args.dataset) if getattr(args, "dataset", None) else None
+    # j-0273: every value the evidence cannot carry must be declared here, or it
+    # stays unknown. `--rag-enabled` is tri-state: omitted means "not recorded".
+    rag_enabled: bool | None = None
+    if getattr(args, "rag_enabled", None) == "on":
+        rag_enabled = True
+    elif getattr(args, "rag_enabled", None) == "off":
+        rag_enabled = False
+    run_ids = rebuild_run_from_evidence(
+        args.evidence_dir,
+        db_path,
+        dataset_dir,
+        run_group=getattr(args, "run_group", None),
+        rag_enabled=rag_enabled,
+        rag_store=getattr(args, "rag_store", None),
+        dataset_size=getattr(args, "dataset_size", None),
+        provider=getattr(args, "provider", None),
+        model=getattr(args, "model", None),
+        temperature_sent=getattr(args, "temperature", None),
+        thinking=getattr(args, "thinking", None),
+        settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
+    )
     print(f"Rebuilt {len(run_ids)} eval_runs row(s): {', '.join(run_ids)}")
-    print("Query them with: python scripts/eval/eval_harness.py report")
+    print("Query them with: python scripts/eval/eval_harness.py runs")
     return 0
 
 
@@ -492,6 +513,21 @@ def main(argv: list[str] | None = None) -> int:
     rebuild_parser = subparsers.add_parser("rebuild", help="Rebuild an eval_runs row from kept evidence")
     rebuild_parser.add_argument("--evidence-dir", required=True, help="Run directory kept by --evidence-dir")
     rebuild_parser.add_argument("--db", help="Path to the SQLite database")
+    rebuild_parser.add_argument("--dataset", help="Golden keys to re-score against (default: the run's own)")
+    rebuild_parser.add_argument("--run-group", help="Name this leg (j-0273)")
+    rebuild_parser.add_argument(
+        "--rag-enabled",
+        choices=["on", "off"],
+        default=None,
+        help="RAG master for this leg. Omit when the evidence does not record it (stays unknown).",
+    )
+    rebuild_parser.add_argument("--rag-store", help="What the RAG store held, e.g. 'bundled:113 golden + 35 docs'")
+    rebuild_parser.add_argument("--dataset-size", type=int, help="Placeholders the dataset held (e.g. 113)")
+    rebuild_parser.add_argument("--provider", help="LLM provider this leg ran against")
+    rebuild_parser.add_argument("--model", help="Model this leg ran against")
+    rebuild_parser.add_argument("--temperature", type=float, help="Sampling temperature the leg sent")
+    rebuild_parser.add_argument("--thinking", help="Thinking mode this leg ran (e.g. off)")
+    rebuild_parser.add_argument("--settings-json", help="JSON file of further settings, each with its source")
 
     # --- dataset ---
     dataset_parser = subparsers.add_parser("dataset", help="Validate golden keys")

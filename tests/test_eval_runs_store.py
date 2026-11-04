@@ -35,10 +35,13 @@ from eval_metrics import ResolutionResult, StoryResult  # noqa: E402
 from eval_runner import (  # noqa: E402
     _EVAL_SCHEMA_SQL,
     _ensure_eval_table,
+    _resolve_dataset_dir,
     dataset_key,
+    describe_model,
     load_eval_history,
     persist_policy_error,
     persist_results,
+    rebuild_run_from_evidence,
 )
 
 # The table as it stood before j-0273: no leg identity, no settings JSON.
@@ -224,3 +227,153 @@ class TestLegIdentityInTheStore:
         assert dataset_key(two) != key_one  # a different sample is a different key
         assert dataset_key(two) == dataset_key(two)  # and it is stable
         assert dataset_key(tmp_path / "missing") is None
+
+
+from eval_evidence import write_run_evidence  # noqa: E402
+from golden_validator import validate_story  # noqa: E402
+
+_GOLDEN = {
+    "id": "eval-999",
+    "site": "test",
+    "base_url": "https://example.com",
+    "conditions": ["1. Backpack in cart"],
+    "golden_resolutions": [
+        {
+            "criterion_index": 0,
+            "criterion_kind": "element",
+            "placeholders": [
+                {
+                    "action": "ASSERT",
+                    "description": "backpack in cart",
+                    "expected_locator": "#backpack",
+                    "tolerance_selectors": [],
+                },
+            ],
+        },
+    ],
+}
+_CODE = "def test_01_a(page):\n    evidence_tracker.assert_visible('#backpack', label='backpack in cart')\n"
+
+
+def _evidence(tmp_path: Path, **metadata: object) -> Path:
+    """One run directory holding one story, as `--evidence-dir` leaves it."""
+    dataset_dir = tmp_path / "dataset"
+    dataset_dir.mkdir()
+    (dataset_dir / "eval-999.json").write_text(json.dumps(_GOLDEN), encoding="utf-8")
+    run_dir = tmp_path / "run"
+    story = validate_story(_CODE, _GOLDEN)
+    write_run_evidence(
+        run_dir,
+        code_map={"eval-999": _CODE},
+        results=[story],
+        verdict_map={},
+        summary="synthetic",
+        metadata={"mode": "full", "pipeline": "linear", "dataset": str(dataset_dir), **metadata},
+    )
+    # A full-mode run must carry its per-test outcomes, or it cannot be re-scored.
+    junit_dir = run_dir / "junit"
+    junit_dir.mkdir(parents=True, exist_ok=True)
+    (junit_dir / "test_eval_999.xml").write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite>'
+        '<testcase name="test_01_a[chromium]" /></testsuite></testsuites>',
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+class TestRebuildKeepsWhatIsKnowable:
+    """A rebuilt row carries the run's own facts and nothing invented."""
+
+    def test_the_run_keeps_its_own_date_and_size(self, tmp_path: Path) -> None:
+        run_dir = _evidence(
+            tmp_path,
+            created_at="2026-10-31T19:49:14.074731+00:00",
+            gate1_placeholders_total=113,
+            git_commit="f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd",
+        )
+        db = tmp_path / "run_results.sqlite"
+
+        rebuild_run_from_evidence(run_dir, db, run_group="2026-10-31-leg1")
+
+        row = load_eval_history(db)[0]
+        assert row["created_at"] == "2026-10-31T19:49:14.074731+00:00"  # not "now"
+        assert row["dataset_size"] == 113
+        assert row["git_commit"] == "f538d4bb4d7626e1ed5ddff04df17eb1b0bc8dbd"
+        assert row["run_group"] == "2026-10-31-leg1"
+
+    def test_an_undeclared_model_is_recorded_as_unknown_not_as_empty(self, tmp_path: Path) -> None:
+        run_dir = _evidence(tmp_path)
+        db = tmp_path / "run_results.sqlite"
+
+        rebuild_run_from_evidence(run_dir, db)
+
+        row = load_eval_history(db)[0]
+        # The column predates this change and is NOT NULL DEFAULT '', so the row
+        # cannot hold NULL there; what it CAN do is say the value is unknown.
+        assert row["model"] == ""
+        assert row["provider"] == ""
+        settings = json.loads(row["run_settings"])
+        assert {"model", "provider", "rag_enabled", "temperature_sent", "thinking"} <= set(settings["unknown"])
+        assert row["rag_store"] is None
+        # And a reader is told, never shown an empty string as if it were a model.
+        assert describe_model(row["provider"], row["model"]) == "unknown"
+
+    def test_a_declared_model_and_leg_settings_are_stored(self, tmp_path: Path) -> None:
+        run_dir = _evidence(tmp_path)
+        db = tmp_path / "run_results.sqlite"
+
+        rebuild_run_from_evidence(
+            run_dir,
+            db,
+            run_group="2026-11-04-leg1",
+            rag_enabled=True,
+            rag_store="bundled:113 golden + 35 docs",
+            provider="openai-local",
+            model="Qwen3.8-27B-UD-Q4_K_XL_v2.gguf",
+            temperature_sent=0.0,
+            thinking="off",
+        )
+
+        row = load_eval_history(db)[0]
+        assert row["rag_enabled"] == 1
+        assert row["rag_store"] == "bundled:113 golden + 35 docs"
+        assert row["temperature_sent"] == 0.0
+        assert row["thinking"] == "off"
+        assert "Qwen3.8-27B" in describe_model(row["provider"], row["model"])
+        unknown = json.loads(row["run_settings"])["unknown"]
+        assert "model" not in unknown and "rag_enabled" not in unknown
+
+    def test_a_rebuilt_run_keys_the_same_dataset_as_a_live_run(self, tmp_path: Path) -> None:
+        """One key for one sample, whether the row came from a run or a rebuild."""
+        run_dir = _evidence(tmp_path)
+        db = tmp_path / "run_results.sqlite"
+
+        rebuild_run_from_evidence(run_dir, db)
+
+        assert load_eval_history(db)[0]["dataset_key"] == dataset_key(tmp_path / "dataset")
+
+
+class TestRebuildDatasetResolution:
+    def test_a_relative_recorded_dataset_is_not_read_against_the_cwd(self) -> None:
+        r"""`..\..\scripts\eval\dataset` is what the t1261 manifests record."""
+        default = _EVAL_DIR / "dataset"
+        assert _resolve_dataset_dir(r"..\..\scripts\eval\dataset", None) == default
+
+    def test_an_explicit_dataset_wins(self, tmp_path: Path) -> None:
+        assert _resolve_dataset_dir(str(tmp_path), tmp_path) == tmp_path
+
+    def test_a_missing_explicit_dataset_is_a_refusal(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="dataset directory not found"):
+            _resolve_dataset_dir(None, tmp_path / "nope")
+
+
+class TestDescribeModel:
+    def test_empty_is_rendered_as_unknown(self) -> None:
+        assert describe_model("", "") == "unknown"
+        assert describe_model(None, None) == "unknown"
+
+    def test_an_endpoint_without_a_model_says_which_part_is_missing(self) -> None:
+        assert describe_model("openai-local", "") == "unknown model (openai-local)"
+
+    def test_a_named_model_keeps_its_endpoint(self) -> None:
+        assert describe_model("openai-local", "qwen.gguf") == "qwen.gguf (openai-local)"

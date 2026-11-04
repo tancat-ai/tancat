@@ -126,18 +126,49 @@ def dataset_key(dataset_dir: Path) -> str | None:
     """A stable identity for the story files a run was scored on.
 
     Two runs whose golden files differ are scores on different samples and must
-    not be compared. The key is the sorted story filenames, so adding, removing
-    or renaming a story changes it; the placeholder count is stored beside it as
+    not be compared. The key is the sorted story ids, so adding, removing or
+    renaming a story changes it; the placeholder count is stored beside it as
     ``dataset_size`` because a story can also gain a criterion.
+
+    Story ids, not filenames: a run rebuilt from kept evidence knows its story
+    ids and not the golden filenames, and both sides must produce the same key
+    for the same sample.
     """
+    ids: list[str] = []
     try:
-        names = sorted(path.name for path in dataset_dir.glob("*.json"))
-    except OSError:
+        for path in sorted(dataset_dir.glob("*.json")):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            ids.append(str(data.get("id") or path.stem))
+    except OSError, ValueError:
         return None
-    if not names:
+    return dataset_key_from_story_ids(ids)
+
+
+def dataset_key_from_story_ids(story_ids: list[str] | tuple[str, ...]) -> str | None:
+    """The same key from story ids alone (used by the rebuild from evidence)."""
+    ids = sorted({str(sid) for sid in story_ids if str(sid).strip()})
+    if not ids:
         return None
-    digest = hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()[:12]
-    return f"{len(names)}:{digest}"
+    digest = hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:12]
+    return f"{len(ids)}:{digest}"
+
+
+def describe_model(provider: str | None, model: str | None) -> str:
+    """Render the model a run used, or say it is unknown.
+
+    The ``model`` column is NOT NULL DEFAULT '' (it predates this change), so an
+    unrecorded model is an empty string in the row. It must never print as an
+    empty string - a reader would take that for a model named "".
+    """
+    name = (model or "").strip()
+    endpoint = (provider or "").strip()
+    if name and endpoint:
+        return f"{name} ({endpoint})"
+    if name:
+        return name
+    if endpoint:
+        return f"unknown model ({endpoint})"
+    return "unknown"
 
 
 def _dataset_size(dataset_dir: Path) -> int | None:
@@ -673,7 +704,7 @@ def persist_results(
     *,
     pipeline: str = "linear",
     generation_mode: str = "captured",
-    rag_enabled: bool = False,
+    rag_enabled: bool | None = None,
     pom_mode: bool = False,
     provider: str = "",
     model: str = "",
@@ -692,6 +723,7 @@ def persist_results(
     dataset_size: int | None = None,
     rag_store: str | None = None,
     run_settings: str | None = None,
+    created_at: str | None = None,
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -719,6 +751,9 @@ def persist_results(
             "empty:0"). ``rag_enabled`` alone cannot tell those two legs apart.
         run_settings: JSON of the settings the leg ran at. ``None`` = the run
             recorded none.
+        created_at: When the run happened. ``None`` = now. A backfill passes the
+            run's own timestamp, so the history does not read as if every leg had
+            been run on the day it was recovered.
 
     Returns:
         List of run_ids inserted.
@@ -731,7 +766,7 @@ def persist_results(
     try:
         _ensure_eval_table(conn)
         run_ids: list[str] = []
-        timestamp = datetime.now(UTC).isoformat()
+        timestamp = created_at or datetime.now(UTC).isoformat()
 
         for story in stories:
             report = HarnessReport(stories=[story])
@@ -836,10 +871,46 @@ def load_eval_history(
         conn.close()
 
 
+def _resolve_dataset_dir(recorded: Any, dataset_dir: Path | None) -> Path:
+    """Which golden keys a rebuild scores against, or a refusal naming why.
+
+    The manifest records the dataset as the path the run was started with - often
+    relative (``..\\..\\scripts\\eval\\dataset``), so resolving it against the
+    current working directory silently scores the wrong sample. Only an absolute
+    recorded path that exists is used; otherwise the caller's ``--dataset``, then
+    the dataset beside this script.
+    """
+    if dataset_dir is not None:
+        if not dataset_dir.is_dir():
+            raise ValueError(f"dataset directory not found: {dataset_dir}")
+        return dataset_dir
+    if recorded:
+        candidate = Path(str(recorded))
+        if candidate.is_absolute() and candidate.is_dir():
+            return candidate
+    default_dataset = Path(__file__).resolve().parent / "dataset"
+    if default_dataset.is_dir():
+        return default_dataset
+    raise ValueError(
+        f"no dataset to score against: the manifest records {recorded!r} and the default "
+        f"{default_dataset} does not exist. Pass --dataset."
+    )
+
+
 def rebuild_run_from_evidence(
     evidence_dir: str | Path,
     db_path: str | Path,
     dataset_dir: Path | None = None,
+    *,
+    run_group: str | None = None,
+    rag_enabled: bool | None = None,
+    rag_store: str | None = None,
+    dataset_size: int | None = None,
+    provider: str | None = None,
+    model: str | None = None,
+    temperature_sent: float | None = None,
+    thinking: str | None = None,
+    settings_declared: dict[str, Any] | None = None,
 ) -> list[str]:
     """Rebuild an eval_runs row + its criteria from a run's kept evidence (B-093).
 
@@ -848,23 +919,85 @@ def rebuild_run_from_evidence(
     re-validated against the golden keys and the kept per-test outcomes give
     each criterion the outcome of its own test. This is how a row lost from the
     database is recovered without re-running the held-out set.
+
+    What the manifest holds is read from it (mode, generation_mode, pipeline,
+    git_commit, the run's own created_at, and the placeholder count it scored).
+    Everything else - the leg name, the model, the RAG store, the temperature -
+    is only knowable from the operator who ran it, so it is a keyword argument
+    and, when absent, it stays unknown. Nothing here invents a value: a parameter
+    left as ``None`` is recorded in ``run_settings`` as not recorded, so a reader
+    can tell "no model" from "nobody wrote down the model".
     """
     import rescore as _rescore
     from eval_evidence import read_run_evidence
 
     evidence = read_run_evidence(evidence_dir)
-    recorded_dataset = evidence.manifest.get("dataset")
-    default_dataset = Path(__file__).resolve().parent / "dataset"
-    dataset = dataset_dir or (Path(recorded_dataset) if recorded_dataset else default_dataset)
-    report = _rescore.rescore(Path(evidence_dir), Path(dataset))
+    manifest = evidence.manifest
+    dataset = _resolve_dataset_dir(manifest.get("dataset"), dataset_dir)
+    report = _rescore.rescore(Path(evidence_dir), dataset)
     outcomes = {story_id: evidence.per_test(story_id) for story_id in evidence.code_map}
+
+    # The run's own count, when it recorded one; today's dataset recount only as
+    # a fallback, and never a guessed number.
+    recorded_size = manifest.get("gate1_placeholders_total")
+    if dataset_size is not None:
+        size: int | None = dataset_size
+    elif recorded_size is not None and str(recorded_size).strip().isdigit():
+        size = int(str(recorded_size).strip())
+    else:
+        size = None
+
+    declared: dict[str, Any] = dict(settings_declared or {})
+    for name, value in (
+        ("rag_enabled", rag_enabled),
+        ("rag_store", rag_store),
+        ("provider", provider),
+        ("model", model),
+        ("temperature_sent", temperature_sent),
+        ("thinking", thinking),
+        ("dataset_size", size),
+    ):
+        if value is not None:
+            declared[name] = value
+    unknown = [
+        name
+        for name, value in (
+            ("rag_enabled", rag_enabled),
+            ("rag_store", rag_store),
+            ("provider", provider),
+            ("model", model),
+            ("temperature_sent", temperature_sent),
+            ("thinking", thinking),
+            ("server_defaults", None),
+            ("dataset_size", size),
+        )
+        if value is None
+    ]
+    settings = {
+        "source": "rebuild from kept evidence",
+        "evidence_dir": str(evidence_dir),
+        "dataset_dir": str(dataset),
+        "declared": declared,
+        "unknown": unknown,
+    }
     return persist_results(
         Path(db_path),
         report.stories,
-        mode=str(evidence.manifest.get("mode", "static")),
-        generation_mode=str(evidence.manifest.get("generation_mode", "regenerated")),
-        pipeline=str(evidence.manifest.get("pipeline", "linear")),
-        git_commit=str(evidence.manifest.get("git_commit", "")),
+        mode=str(manifest.get("mode", "static")),
+        generation_mode=str(manifest.get("generation_mode", "regenerated")),
+        pipeline=str(manifest.get("pipeline", "linear")),
+        git_commit=str(manifest.get("git_commit", "")),
+        provider=provider or "",
+        model=model or "",
+        temperature_sent=temperature_sent,
+        thinking=thinking,
+        rag_enabled=rag_enabled,
+        rag_store=rag_store,
+        run_group=run_group,
+        dataset_key=dataset_key_from_story_ids(list(evidence.code_map)),
+        dataset_size=size,
+        run_settings=json.dumps(settings),
+        created_at=(str(manifest["created_at"]) if manifest.get("created_at") else None),
         code_map=evidence.code_map,
         outcomes=outcomes,
     )
