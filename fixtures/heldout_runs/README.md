@@ -22,11 +22,46 @@ Published runs are machine-neutral: pytest's `hostname` attribute is removed fro
 `junit/*.xml`, and absolute local paths inside skip messages are made relative. Test names and
 outcome counts are unchanged. The normalisation is documented per run (see `2026-10-24/README.md`).
 
-Re-score:
+A run directory may also carry the settings the store needs, when the evidence itself does not hold
+them:
+
+- `leg-settings.json` - one entry per leg: its `run_group`, the RAG store it ran against, and for
+every value the artefact it came from - or `null` with a source that says `unknown`. Nothing is
+inferred. `2026-10-31` and `2026-11-04` both carry one, because their model and launch config were
+only ever written in a gitignored run log.
+- `launch-settings.json` - the flat form of the same values, passed to `--settings-json` so the
+per-file clock and the server launch config land in the store row.
+
+## Re-score
 
 ```bash
 python scripts/eval/rescore.py --run-dir fixtures/heldout_runs/2026-10-12
 ```
+
+A run scored against a dataset that has since changed needs the dataset as it stood: the
+2026-10-31 legs score 113 placeholders and today's dataset holds 114, so pass
+`--dataset <dir>` (see `2026-10-31/README.md` for the `git archive` line that produces it).
+Without it, `rescore` scores the old evidence against today's golden keys and the number moves.
+
+## Put a run's legs in the store
+
+The single place for run numbers is `evidence/run_results.sqlite` (`eval_runs`), read with
+`eval_harness.py runs`. Kept evidence that is not in the store yet goes in with `rebuild`, which
+re-scores the kept code and needs no model, no browser and no site:
+
+```bash
+python scripts/eval/eval_harness.py rebuild \
+  --evidence-dir fixtures/heldout_runs/2026-11-04/leg1_rag_on_bundled \
+  --run-group 2026-11-04-t1261-leg1 \
+  --rag-enabled on --rag-store "bundled pack (entry count not recorded)" \
+  --dataset-size 114 --provider openai-local --model Qwen3.8-27B-UD-Q4_K_XL_v2.gguf \
+  --temperature 0.0 --thinking off \
+  --settings-json fixtures/heldout_runs/2026-11-04/launch-settings.json
+```
+
+One `--run-group` per leg: that is the name `runs` lists and `diff-runs` takes. A rebuild never
+invents a setting - anything not passed stays unknown in `run_settings`, and `runs` prints
+`unknown`, not an empty string.
 
 The numbers are pinned against `scripts/eval/known_gate_scores.json` by
 `tests/test_eval_rescore.py`. A run with no committed evidence cannot be re-scored - the tool says
