@@ -59,7 +59,15 @@ CREATE TABLE IF NOT EXISTS eval_runs (
     thinking         TEXT,
     verified_by_element INTEGER NOT NULL DEFAULT 0,
     verified_by_page    INTEGER NOT NULL DEFAULT 0,
-    unverified          INTEGER NOT NULL DEFAULT 0
+    unverified          INTEGER NOT NULL DEFAULT 0,
+    -- j-0273: one place for every run, with its leg identity and its settings.
+    -- All nullable on purpose: NULL means "this run did not record it" and must
+    -- never be read as a measured empty value.
+    run_group    TEXT,
+    dataset_key  TEXT,
+    dataset_size INTEGER,
+    rag_store    TEXT,
+    run_settings TEXT
 )
 """
 
@@ -77,6 +85,9 @@ def _story_test_filename(story_id: str) -> str:
 
 
 _EVAL_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_story ON eval_runs(story_id)"
+# j-0273: the leg is the unit the owner compares, so it needs to be cheap to
+# select. Without this index a group lookup scans the whole table.
+_EVAL_GROUP_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_group ON eval_runs(run_group)"
 
 
 def _get_git_commit() -> str:
@@ -112,11 +123,20 @@ def _ensure_eval_table(conn: sqlite3.Connection) -> None:
         "verified_by_element INTEGER NOT NULL DEFAULT 0",
         "verified_by_page INTEGER NOT NULL DEFAULT 0",
         "unverified INTEGER NOT NULL DEFAULT 0",
+        # j-0273: leg identity + the settings a leg ran at. No default: an
+        # existing row honestly has no group, and the readers say so instead of
+        # inventing one.
+        "run_group TEXT",
+        "dataset_key TEXT",
+        "dataset_size INTEGER",
+        "rag_store TEXT",
+        "run_settings TEXT",
     ):
         try:
             conn.execute(f"ALTER TABLE eval_runs ADD COLUMN {column_decl}")
         except sqlite3.OperationalError:
             pass  # column already exists (fresh table or previously migrated)
+    conn.execute(_EVAL_GROUP_INDEX_SQL)
     # B-093: per-criterion rows live in the SAME database, beside eval_runs.
     from eval_criteria import ensure_criteria_table
 
