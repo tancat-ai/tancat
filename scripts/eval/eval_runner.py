@@ -568,11 +568,15 @@ def run_generated_tests(
         if junit_dir is not None:
             junit_dir.mkdir(parents=True, exist_ok=True)
             (junit_dir / f"{test_file.stem}.xml").write_text(xml_path.read_text(encoding="utf-8"), encoding="utf-8")
+        # d-0131: read the counts while the XML still exists. ``xml_path`` is inside
+        # the tempdir, so calling this after the ``with`` block let every live run
+        # fall through to the console and record source "log" - the "junit" branch
+        # could never appear.
+        total, passed, failed, skipped, duration, count_source = _test_counts(xml_path, output)
     if log_dir is not None:
         log_dir.mkdir(parents=True, exist_ok=True)
         (log_dir / f"{test_file.stem}.log").write_text(output, encoding="utf-8")
 
-    total, passed, failed, skipped, duration, count_source = _test_counts(xml_path, output)
     if count_source_out is not None:
         count_source_out["source"] = count_source
 
