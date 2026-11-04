@@ -10,6 +10,7 @@ Pure orchestration — delegates to eval_metrics.py and golden_validator.py.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -88,6 +89,68 @@ _EVAL_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_story ON eval_runs(s
 # j-0273: the leg is the unit the owner compares, so it needs to be cheap to
 # select. Without this index a group lookup scans the whole table.
 _EVAL_GROUP_INDEX_SQL = "CREATE INDEX IF NOT EXISTS idx_eval_runs_group ON eval_runs(run_group)"
+
+
+def persist_policy_error(mode: str, no_persist: bool, run_group: str | None) -> str | None:
+    """Return why this run may not be started as asked, or ``None`` if it may.
+
+    The owner wants one place for every run (j-0273). ``--no-persist`` was built
+    to keep the cheap static CI check from filling ``eval_runs`` with model-less
+    rows, and that is still its only honest use. A run that spends a model and a
+    live site is a measurement someone will quote later, so it must be stored:
+
+    * ``--no-persist`` is refused for ``full`` and ``resolver``. ``static`` keeps
+      it, because that is what ``scripts/gate_full.py`` gate 3 needs.
+    * A persisting ``full``/``resolver`` run must name its leg (``--run-group``).
+      Without a group a leg is nine unrelated rows, which is exactly what the
+      four 2026-11-04 legs became when they ran with ``--no-persist``.
+
+    Returns one sentence naming the rule and the fix, so the CLI prints it as-is.
+    """
+    model_bearing = mode in ("full", "resolver")
+    if no_persist and model_bearing:
+        return (
+            f"--no-persist is not allowed with --mode {mode}: a model-bearing run is a "
+            "measurement someone will quote, so it must land in eval_runs. Run it without "
+            "--no-persist and name the leg with --run-group <id>."
+        )
+    if model_bearing and not no_persist and not (run_group or "").strip():
+        return (
+            f"--mode {mode} must carry --run-group <id> (e.g. --run-group 2026-11-04-leg1). "
+            "Without a group the leg's rows cannot be selected or compared."
+        )
+    return None
+
+
+def dataset_key(dataset_dir: Path) -> str | None:
+    """A stable identity for the story files a run was scored on.
+
+    Two runs whose golden files differ are scores on different samples and must
+    not be compared. The key is the sorted story filenames, so adding, removing
+    or renaming a story changes it; the placeholder count is stored beside it as
+    ``dataset_size`` because a story can also gain a criterion.
+    """
+    try:
+        names = sorted(path.name for path in dataset_dir.glob("*.json"))
+    except OSError:
+        return None
+    if not names:
+        return None
+    digest = hashlib.sha256("\n".join(names).encode("utf-8")).hexdigest()[:12]
+    return f"{len(names)}:{digest}"
+
+
+def _dataset_size(dataset_dir: Path) -> int | None:
+    """Placeholders the dataset holds right now, or ``None`` when unreadable.
+
+    Read from the golden files, never from the run's own numerator: a run that
+    missed a story must not look like a smaller dataset.
+    """
+    try:
+        from gate_record import dataset_placeholder_count
+    except ImportError:  # importing eval_runner without scripts/eval on sys.path
+        return None
+    return dataset_placeholder_count(dataset_dir) or None
 
 
 def _get_git_commit() -> str:
@@ -624,6 +687,11 @@ def persist_results(
     thinking: str | None = "",
     code_map: dict[str, str] | None = None,
     outcomes: dict[str, dict[str, str]] | None = None,
+    run_group: str | None = None,
+    dataset_key: str | None = None,
+    dataset_size: int | None = None,
+    rag_store: str | None = None,
+    run_settings: str | None = None,
 ) -> list[str]:
     """Write eval results to SQLite eval_runs table.
 
@@ -642,6 +710,15 @@ def persist_results(
             ``eval_criteria`` row is written per resolution (B-093).
         outcomes: Optional story_id -> per-test outcomes. Gives each criterion
             row the outcome of its own test function.
+        run_group: The leg this row belongs to (j-0273). ``None`` means the
+            caller did not name one; the row then reads as ungrouped.
+        dataset_key: Identity of the story files scored (see
+            :func:`dataset_key`). ``None`` = not recorded.
+        dataset_size: Placeholders the dataset held, when the caller knows it.
+        rag_store: What the RAG store held (e.g. "bundled:113 golden + 35 docs",
+            "empty:0"). ``rag_enabled`` alone cannot tell those two legs apart.
+        run_settings: JSON of the settings the leg ran at. ``None`` = the run
+            recorded none.
 
     Returns:
         List of run_ids inserted.
@@ -669,8 +746,9 @@ def persist_results(
                      skeleton_completeness, generation_duration, mode, raw_report, created_at,
                      pipeline, generation_mode, rag_enabled, pom_mode, provider, model, git_commit,
                      temperature_sent, server_defaults, thinking,
-                     verified_by_element, verified_by_page, unverified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     verified_by_element, verified_by_page, unverified,
+                     run_group, dataset_key, dataset_size, rag_store, run_settings)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -700,6 +778,13 @@ def persist_results(
                     split["golden"] + split["element"],
                     split["page"],
                     split["unverified"],
+                    # j-0273: the leg and what it ran at. Stored as given; an
+                    # undeclared value stays NULL rather than becoming a fact.
+                    run_group,
+                    dataset_key,
+                    dataset_size,
+                    rag_store,
+                    run_settings,
                 ),
             )
             run_ids.append(run_id)
@@ -893,6 +978,9 @@ class EvalRunner:
         regenerate: bool = False,
         use_graph: bool = False,
         evidence_dir: Path | None = None,
+        run_group: str | None = None,
+        rag_store: str | None = None,
+        settings_declared: dict[str, Any] | None = None,
     ) -> None:
         self.dataset_dir = dataset_dir
         self.code_dir = code_dir
@@ -900,6 +988,12 @@ class EvalRunner:
         self.test_output_dir = test_output_dir
         self.regenerate = regenerate
         self.use_graph = use_graph
+        # j-0273: the leg identity, what the RAG store held, and any setting the
+        # operator declares for this run (a launch config the pipeline cannot
+        # see, e.g. the llama-server args). None = not recorded.
+        self.run_group = run_group
+        self.rag_store = rag_store
+        self.settings_declared = dict(settings_declared or {})
         # B-093: when set, every run keeps its evidence here (emitted tests,
         # per-test outcomes, raw pytest output, per-placeholder result) so the
         # score can be recomputed with no model and no live run. See
@@ -1137,6 +1231,20 @@ class EvalRunner:
             git_commit = _get_git_commit()
             provider, model = self._loaded_model_identity()
             temperature_sent, server_defaults, thinking = self._sampling_identity(self.use_graph)
+            # j-0273: the leg identity and the settings this leg actually ran at.
+            # dataset_size is the DATASET's placeholder count, not the run's
+            # numerator, so "113 vs 114" cannot be read as a score difference.
+            settings: dict[str, Any] = {
+                "mode": mode,
+                "regenerate": self.regenerate,
+                "use_graph": self.use_graph,
+                "pytest_timeout": pytest_timeout,
+                "temperature_sent": temperature_sent,
+                "thinking": thinking,
+                "rag_store": self.rag_store,
+            }
+            if self.settings_declared:
+                settings["declared"] = self.settings_declared
             run_ids = persist_results(
                 self.db_path,
                 results,
@@ -1153,6 +1261,11 @@ class EvalRunner:
                 # B-093: store the per-criterion verification basis beside the row.
                 code_map=code_map,
                 outcomes=outcomes,
+                run_group=self.run_group,
+                dataset_key=dataset_key(self.dataset_dir),
+                dataset_size=_dataset_size(self.dataset_dir),
+                rag_store=self.rag_store,
+                run_settings=json.dumps(settings),
             )
             logger.info("Persisted %d eval results: %s", len(run_ids), run_ids)
 

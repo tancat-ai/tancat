@@ -71,6 +71,13 @@ def _setup_logging(verbose: bool = False) -> None:
     )
 
 
+def _load_settings_json(path: str | None) -> dict:
+    """Read a declared-settings JSON file; an unreadable one is an error, not silence."""
+    if not path:
+        return {}
+    return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
 # ---------------------------------------------------------------------------
 # Subcommand: run
 # ---------------------------------------------------------------------------
@@ -78,9 +85,17 @@ def _setup_logging(verbose: bool = False) -> None:
 
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute the evaluation harness."""
+    from eval_runner import persist_policy_error
+
+    # j-0273: refuse the wrong run BEFORE it costs a model or a live site.
+    refusal = persist_policy_error(args.mode, args.no_persist, getattr(args, "run_group", None))
+    if refusal is not None:
+        print(f"ERROR: {refusal}", file=sys.stderr)
+        return 2
+
     # t-0515: keep the eval's RAG reads/writes (and the generated-test
     # conftest's learning, which inherits the env) in the eval's own store.
-    from scripts.eval.eval_resolver import isolate_eval_store
+    from eval_resolver import isolate_eval_store
 
     isolate_eval_store()
 
@@ -127,6 +142,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         regenerate=args.regenerate,
         use_graph=args.use_graph,
         evidence_dir=evidence_dir,
+        run_group=getattr(args, "run_group", None),
+        rag_store=getattr(args, "rag_store", None),
+        settings_declared=_load_settings_json(getattr(args, "settings_json", None)),
     )
 
     report = runner.run(
@@ -412,7 +430,28 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument(
         "--no-persist",
         action="store_true",
-        help="Skip persisting results to SQLite",
+        help=(
+            "Skip persisting results to SQLite. Allowed with --mode static only: a "
+            "model-bearing run must land in eval_runs (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--run-group",
+        help=(
+            "Name this leg so its rows can be selected and compared, e.g. "
+            "2026-11-04-leg1. Required for --mode full and --mode resolver (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--rag-store",
+        help=(
+            "What the RAG store held for this leg, e.g. 'bundled:113 golden + 35 docs' or "
+            "'empty:0'. rag_enabled alone cannot tell those two legs apart (j-0273)."
+        ),
+    )
+    run_parser.add_argument(
+        "--settings-json",
+        help="JSON file of settings this run cannot see itself (launch config, box notes)",
     )
     run_parser.add_argument(
         "--semantic",

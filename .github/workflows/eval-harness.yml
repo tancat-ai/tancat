@@ -50,11 +50,23 @@ jobs:
         run: uv sync --frozen
 
       - name: Run eval harness
+        shell: bash
+        # j-0273: --no-persist is now a static-only flag. A model-bearing mode is a
+        # measurement, so it must land in a store; CI writes its throwaway run to
+        # its own database and never into the owner's eval_runs.
         run: |
-          uv run python scripts/eval/eval_harness.py run \
-            --mode ${{ inputs.mode }} \
-            --min-accuracy ${{ inputs.min_accuracy }} \
-            --no-persist
+          if [ "${{ inputs.mode }}" = "static" ]; then
+            uv run python scripts/eval/eval_harness.py run \
+              --mode static \
+              --min-accuracy ${{ inputs.min_accuracy }} \
+              --no-persist
+          else
+            uv run python scripts/eval/eval_harness.py run \
+              --mode "${{ inputs.mode }}" \
+              --min-accuracy ${{ inputs.min_accuracy }} \
+              --run-group "ci-${{ github.sha }}" \
+              --db ci_eval.sqlite
+          fi
         continue-on-error: true
 
       - name: Generate markdown summary
