@@ -133,6 +133,23 @@ class HarnessReport:
     def total_false_positives(self) -> int:
         return sum(s.tests_false_positive for s in self.stories)
 
+    @property
+    def tests_count_source(self) -> str:
+        """d-0050: which source produced the test counts, across every story.
+
+        The per-story values are "junit" (the XML the runner received), "log"
+        (pytest's final summary line only) or "none". A report whose stories
+        recorded no source - an older baseline, say - reads "none" rather than
+        raising: the count is still shown, and the absence of a source is said
+        beside it instead of a bare zero passing for data.
+        """
+        sources = sorted({s.tests_count_source for s in self.stories if s.tests_count_source})
+        if not sources:
+            return "none"
+        if len(sources) == 1:
+            return sources[0]
+        return "mixed (" + ", ".join(sources) + ")"
+
     def resolution_accuracy(self) -> float:
         """% of placeholders that resolved to the correct locator."""
         if not self.total_placeholders:
@@ -210,7 +227,7 @@ class HarnessReport:
             f"    by page arrival (URL assertion)  {vc['page']}",
             f"    unverified                       {vc['unverified']}",
             "",
-            f"  Tests executed:           {self.total_tests_executed}",
+            f"  Tests executed:           {self.total_tests_executed} (count source: {self.tests_count_source})",
             f"  Tests passed:             {self.total_tests_passed}",
         ]
         timed_out = [s for s in self.stories if s.tests_timed_out]
@@ -289,7 +306,8 @@ class HarnessReport:
             else:
                 lines.append(
                     f"    Tests:        {s.tests_executed} passed={s.tests_passed} "
-                    f"skipped={s.tests_skipped} false_pos={s.tests_false_positive}"
+                    f"skipped={s.tests_skipped} false_pos={s.tests_false_positive} "
+                    f"count_source={s.tests_count_source or 'none'}"
                 )
             # B-097: a skipped test hides all its resolved steps; name the split.
             partial = [c for c in s.test_resolution_counts if c.get("unresolved")]
@@ -338,6 +356,10 @@ class HarnessReport:
                     tests_passed=s_data.get("tests_passed", 0),
                     tests_skipped=s_data.get("tests_skipped", 0),
                     tests_false_positive=s_data.get("tests_false_positive", 0),
+                    # d-0050: a baseline round-trip must not drop which source
+                    # produced the counts. An older record without the key reads
+                    # empty ("not recorded"), never an error.
+                    tests_count_source=s_data.get("tests_count_source", ""),
                     generation_duration_s=s_data.get("generation_duration_s", 0.0),
                     tests_timed_out=s_data.get("tests_timed_out", False),
                     tests_failed=s_data.get("tests_failed"),
